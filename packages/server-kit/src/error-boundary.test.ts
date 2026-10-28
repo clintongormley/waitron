@@ -221,6 +221,42 @@ describe("createErrorBoundary (the shared error boundary till-api and management
       ]);
     });
 
+    it("an AppError storage.disk_full keeps its own params", async () => {
+      const lines: Line[] = [];
+      const res = await respond(
+        {},
+        new AppError("storage.disk_full", { restartDeletesLogs: false }),
+        lines,
+      );
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual({
+        error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+      });
+    });
+
+    it("a wrapped AppError storage.disk_full answers no params, even when it carries some", async () => {
+      const res = await respond(
+        {},
+        new Error("Failed to run the query 'x'", {
+          cause: new AppError("storage.disk_full", { restartDeletesLogs: true }),
+        }),
+        [],
+      );
+      expect(await res.json()).toEqual(answer);
+    });
+
+    it("another code's AppError with a full disk beneath it answers no params, not its own", async () => {
+      const res = await respond(
+        {},
+        Object.assign(new AppError("management.request_invalid", { field: "name" }), {
+          cause: engineFull(),
+        }),
+        [],
+      );
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual(answer);
+    });
+
     it("answers the same when a wrapper carries it", async () => {
       const lines: Line[] = [];
       const res = await respond(

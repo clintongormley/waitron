@@ -19,6 +19,12 @@ installed” do not provide a self-service remedy. The only exception is a state
 can cause: establish that at its site and identify it as a fault in Waitron. No guard enforces this
 rule.
 
+A second exception, the owner's of 2026-10-28 (A1127 Q4): the till and handheld full-disk strip
+keeps «Tell a manager». A waiter at a stopped till has no step of their own to take, and the
+in-place sign-in that would have given them one (A1127's slice 4) was declined. It is stated at the
+strip's words, `FIXED` in `apps/till/src/i18n/staff-notices.ts`. The till's other full-disk refusal
+words also say «Tell a manager» and are not covered by this answer (backlog).
+
 The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
 administrator or installer. Their passing tests exercised those messages and existing retries;
 they did not establish a self-service remedy for a persistent refusal. All four need separate
@@ -1111,7 +1117,7 @@ setup repair page selected instead, when there is one (the heartbeat fallback is
 conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
 week (a start at a backup recovery's repair stage only when the logs folder, followed through links,
-is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
+is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), and never at the repair stage, it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below the 256 MiB floor, or the folders the
 start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the

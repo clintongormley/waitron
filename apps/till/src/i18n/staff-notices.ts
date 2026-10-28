@@ -6,6 +6,8 @@ const TELL_MANAGER = "staff_notice.tell_manager";
 const UNKNOWN = { main: "staff_notice.unknown", hint: TELL_MANAGER } as const;
 
 const FIXED = {
+  // Its "Tell a manager" is the owner's stated exception to never sending the person elsewhere: a
+  // waiter at a stopped till has no step of their own (2026-10-28, A1127 Q4).
   "storage.disk_full": "staff_notice.storage.disk_full",
   "clock.unusable": "staff_notice.clock.unusable",
   "clock.behind_chain": "staff_notice.clock.behind_chain",

@@ -169,6 +169,8 @@ import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
+import { isUnset } from "./env-value.js";
+import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import {
   createFreeSpaceState,
   FREE_SPACE_CHECK_MS,
@@ -303,7 +305,7 @@ import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
-import { freeBytes } from "./free-bytes.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -820,6 +822,10 @@ function makeStartedServer(
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
   appendOnlyWatch?: { intervalMs?: number };
+  /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
+  spareBytes?: number;
+  /** For the free-space watch and the spare's room check only. */
+  freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   requestFromBox?: (c: Context) => boolean;
 }
@@ -992,10 +998,27 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
-  const diskFull = createDiskFullState({ dir: config.venueDir, now, log });
+  // Set by the start when it boots from folders other than the configured ones.
+  const spareDir = isUnset(env.WAITRON_SPARE_SPACE_DIR)
+    ? config.stateDir
+    : env.WAITRON_SPARE_SPACE_DIR;
+  const released = () => spareReleased(spareDir, log);
+  const restoreSpare = spareRestorer({
+    stateDir: spareDir,
+    venueDir: config.venueDir,
+    bytes: seams.spareBytes ?? SPARE_SPACE_BYTES,
+    log,
+    ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
+  });
+  const diskFull = createDiskFullState({
+    dir: config.venueDir,
+    now,
+    log,
+    spareReleased: released,
+  });
   const stopWatchingDisk = watchForDiskFull(diskFull, [store.venue, store.node]);
   undoOnFailure.push(async () => stopWatchingDisk());
-  await noteFullAtStart(diskFull, { dir: config.venueDir, log });
+  await noteFullAtStart(diskFull, { dir: config.venueDir, log, spareReleased: released });
   const freeSpace = createFreeSpaceState({ log });
   const db = store.venue;
   // After migrating, which reinstalls a missing trigger but leaves a same-name altered one in place.
@@ -2294,9 +2317,11 @@ async function bootServer(
     dir: config.venueDir,
     state: freeSpace,
     disk: diskFull,
-    intervalMs: FREE_SPACE_CHECK_MS,
+    intervalMs: seams.freeSpaceWatch?.intervalMs ?? FREE_SPACE_CHECK_MS,
     now,
     log,
+    restoreSpare,
+    ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
   });
   undoOnFailure.push(async () => freeSpaceWatch.stop());
   const emailNoticeLog = createStaffNoticeLog(log);
@@ -2489,6 +2514,7 @@ async function bootServer(
         venueDir: config.venueDir,
         space: freeSpace,
         disk: diskFull,
+        restoreSpare,
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),

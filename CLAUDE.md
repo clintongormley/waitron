@@ -210,7 +210,7 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exception is a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), and the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields are marked; invalid fields get inline errors and one localized bottom message on its
   own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals
@@ -459,11 +459,14 @@ called weaker than its name, the topic file lists what it does not see.
 - **A full disk is not one error code; code 14 also names a missing folder.**
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
-- **Within the server, only the start's emptying of a discarded recovery and the repair page's
-  Start-again flow delete `<state>/spare-space`, on a nearly full disk (`waitron.sh reset` deletes it
-  too), and only a start with room writes it back; it is
-  never venue data, and a recovery's originals walk leaves it out.** Cost if not: on a full disk the
-  venue locks cannot be taken, so a recovery's copy could never be freed (A1127). Guard:
+- **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
+  emptying of a discarded recovery and the repair page's Start-again flow delete
+  `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
+  `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
+  until a start with room, the free-space watch or Box status's Free button has written the spare
+  back whole. It is never venue data, and a recovery's originals walk leaves both out.** Cost if
+  not: on a full disk the venue locks cannot be taken, so a recovery's copy could never be freed, and
+  a full disk with nothing else to free would serve only the full-disk page (A1127). Guard:
   `scripts/spare-space.test.ts`, weaker than its name: reads text.
   [Detail](docs/developers/conventions-data.md#the-boxs-spare-file).
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
@@ -601,8 +604,9 @@ browser test** — most of these rules exist because a test passed while proving
   interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 - **Full-disk start tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` for the second file: two
-  files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can run them at once), otherwise skips locally and fails CI. Interrupted
+  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` and
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE` for the second and third files: two files filling one
+  filesystem could fail each other, as the server's `maxWorkers: 4` can run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the

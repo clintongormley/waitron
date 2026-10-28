@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupBackupWorkspace } from "./first-setup-backup-workspace.js";
-import { SPARE_SPACE_FILE } from "./spare-space-name.js";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
 
 vi.mock("node:fs/promises", { spy: true });
 
@@ -30,4 +30,23 @@ it("a spare file deleted between the folder's listing and its own read leaves th
   });
   expect(await store.inspect(id)).toBe(before);
   expect(vi.mocked(lstat)).toHaveBeenCalledWith(spare);
+});
+
+it("the spare's marker deleted between the folder's listing and its own read leaves the originals digest unchanged", async () => {
+  root = await realpath(await mkdtemp(join(tmpdir(), "backup-workspace-marker-race-")));
+  const anchor = { venueDir: join(root, "venue"), stateDir: join(root, "state") };
+  for (const path of Object.values(anchor)) await mkdir(path);
+  await writeFile(join(anchor.venueDir, "venue.db"), "unchanged database bytes");
+  const store = createFirstSetupBackupWorkspace(anchor);
+  const id = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
+  const before = await store.inspect(id);
+  const marker = join(anchor.stateDir, SPARE_SPACE_RELEASED_FILE);
+  await writeFile(marker, "");
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises");
+  vi.mocked(lstat).mockImplementation(async (path, options) => {
+    if (path === marker) await unlink(marker);
+    return actual.lstat(path, options);
+  });
+  expect(await store.inspect(id)).toBe(before);
+  expect(vi.mocked(lstat)).toHaveBeenCalledWith(marker);
 });

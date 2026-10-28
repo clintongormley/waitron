@@ -807,16 +807,26 @@ export function mountFirstSetupResolutionApi(
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
     /** The lower free space of the setup's folders; given, the Start-again flow can say the disk is full. */
     freeSpace?: () => Promise<number | null>;
+    /** Whether the box's next start deletes old logs; undefined where that cannot be read. */
+    restartDeletesLogs?: () => Promise<boolean | undefined>;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
   const freeSpace = async () => (await options.freeSpace?.().catch(() => null)) ?? null;
+  const diskFull = async () => {
+    const deletes = await options.restartDeletesLogs?.().catch(() => undefined);
+    return new AppError(
+      "storage.disk_full",
+      typeof deletes === "boolean" ? { restartDeletesLogs: deletes } : {},
+    );
+  };
   // A refused record write reaches here as setup.attempt_invalid with no cause, so on a nearly full
   // disk it is taken for a full disk, as recovery-start-again.ts does for its own form.
   const diskFullOr = async <T>(body: () => Promise<T>): Promise<T> => {
     try {
       return await body();
     } catch (error) {
+      if (isAppError(error) && error.code === "storage.disk_full") throw await diskFull();
       const candidate = isAppError(error)
         ? error.code === "setup.attempt_invalid"
         : fullDiskFailure(error, 0);
@@ -832,7 +842,7 @@ export function mountFirstSetupResolutionApi(
             errno: errnoOf(error) ?? null,
             errcode: sqliteFailureOf(error)?.errcode ?? null,
           });
-          throw new AppError("storage.disk_full", {});
+          throw await diskFull();
         }
       }
       throw error;
@@ -846,11 +856,22 @@ export function mountFirstSetupResolutionApi(
   app.get(START_AGAIN_ROUTES.inspect.path, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
-      const inspection = await host.resolution.inspectFirstSetupResolution();
+      const inspection = await host.resolution
+        .inspectFirstSetupResolution()
+        .catch(async (error) => {
+          if (isAppError(error) && error.code === "storage.disk_full") throw await diskFull();
+          if (
+            options.freeSpace !== undefined &&
+            !isAppError(error) &&
+            fullDiskFailure(error, await freeSpace())
+          )
+            throw await diskFull();
+          throw error;
+        });
       // On a full disk the database cannot be judged, which would hide Start again without a word.
       if (inspection.database === "unknown" || inspection.database === "partial") {
         const free = await freeSpace();
-        if (free !== null && free < FULL_DISK_BYTES) throw new AppError("storage.disk_full", {});
+        if (free !== null && free < FULL_DISK_BYTES) throw await diskFull();
       }
       return c.json(inspection);
     }),

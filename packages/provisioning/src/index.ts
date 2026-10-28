@@ -204,7 +204,7 @@ export {
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
 export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-export { SPARE_SPACE_FILE } from "./spare-space-name.js";
+export { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
 export {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,

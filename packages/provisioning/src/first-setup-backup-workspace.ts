@@ -11,7 +11,7 @@ import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { SPARE_SPACE_FILE } from "./spare-space-name.js";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
 export interface BackupRepairTarget {
@@ -312,7 +312,9 @@ async function originals(
   );
   const pointers = new Set(currentPaths(anchor));
   const recoveries = join(anchor.stateDir, NAMESPACE);
-  const spare = join(anchor.stateDir, SPARE_SPACE_FILE);
+  const spareFiles = new Set(
+    [SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE].map((name) => join(anchor.stateDir, name)),
+  );
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
@@ -335,11 +337,11 @@ async function originals(
     try {
       info = await lstat(path);
     } catch (error) {
-      if (missing(error) && (isRoot || path === spare)) return;
+      if (missing(error) && (isRoot || spareFiles.has(path))) return;
       throw error;
     }
-    // The spare file is deleted and written back around a full disk; it holds nothing.
-    if (path === spare && !isRoot && info.isFile()) return;
+    // The spare file and its marker come and go around a full disk; they hold nothing.
+    if (spareFiles.has(path) && !isRoot && info.isFile()) return;
     if (info.isSymbolicLink()) invalid();
     if (info.isDirectory()) {
       if (!isRoot && !containers.has(path))

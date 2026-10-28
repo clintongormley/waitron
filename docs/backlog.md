@@ -512,11 +512,16 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
-- **On a full disk, boot fully from the spare file, then prompt to delete old backups.** The
-  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Designed and
-  answered; slices 2–3 approved, slice 3 and the full-disk page's button open to A1167's Q3–Q4. Left
-  open by A1127.
-  [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
+- **Other full-disk words still send the person elsewhere or end with the short reinstall
+  sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
+  Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the
+  owner. Left open by A1127.
+  [Detail](backlog/setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence)
+
+- **A start from a selected backup recovery cleans the recovery's own logs, not the box's**, so on a
+  full disk it frees no log space in the box's log folder, and the repair page makes no promise
+  there. Believed to predate A1127 (#2043).
+  [Detail](backlog/setup.md#a-start-from-a-selected-backup-recovery-cleans-the-recoverys-own-logs-not-the-boxs)
 
 - **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
   stopped recovery, read not run. Left open by A1127.
@@ -528,11 +533,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **The repair page draws a Start-again error twice**, under the password and under the tick box.
   [Detail](backlog/setup.md#the-repair-page-draws-a-start-again-error-twice)
-
-- **The repair page's full-disk words wait for the owner, with two known gaps** — the restart
-  sentence is untrue where logs live inside the state folder, and the reinstall sentence is shorter
-  than the full-disk page's. Left open by A1127.
-  [Detail](backlog/setup.md#the-repair-pages-full-disk-words-wait-for-the-owner-with-two-known-gaps)
 
 - **Two spare-file releases at once log the same bytes twice.** Log only. Left open by A1127.
   [Detail](backlog/setup.md#two-spare-file-releases-at-once-log-the-same-bytes-twice)
@@ -4750,7 +4750,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   backups (never the newest, never one from before the last restore) and tells an administrator; a
   backup that still has no room is refused before it copies anything and a manager is told. Also closes
   the measured gap where a backup to a folder on the box's own disk passes its space check and then
-  fills the disk. Designed, waiting for the owner's four answers.
+  fills the disk. Designed; the owner answered its four questions on 2026-10-28
+  (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
   [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
 
 - **Backup destination failures log no elapsed time or operation phase.**
@@ -4777,7 +4778,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
   (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
-  recover, summary and start-again routes (A1127); every other route still answers
+  recover, summary and start-again routes and its inspection read (A1127); every other route still answers
   `server.internal`, because adding it to `diskFullIn` changes every route's answer.
 
 - **The recovery page served at once on a full disk does not notice freed space by itself.** It

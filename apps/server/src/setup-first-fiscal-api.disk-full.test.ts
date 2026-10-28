@@ -1,7 +1,7 @@
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -46,16 +46,20 @@ function appWith(options: {
   authorize?: () => Promise<never>;
   log?: Parameters<typeof mountFirstSetupResolutionApi>[2];
   onFreeRead?: () => void;
+  inspect?: () => Promise<unknown>;
+  restartDeletesLogs?: () => Promise<boolean | undefined>;
 }) {
   const refuse = async (): Promise<never> => {
     throw options.refusal;
   };
   const host = {
     resolution: {
-      inspectFirstSetupResolution: async () => ({
-        ...IDS,
-        database: options.database ?? "missing",
-      }),
+      inspectFirstSetupResolution:
+        options.inspect ??
+        (async () => ({
+          ...IDS,
+          database: options.database ?? "missing",
+        })),
     },
     owner: { recoverFirstSetupOwner: refuse, authorize: options.authorize ?? refuse },
   } as unknown as Host;
@@ -69,6 +73,7 @@ function appWith(options: {
       if (options.free instanceof Error) throw options.free;
       return options.free;
     },
+    ...(options.restartDeletesLogs ? { restartDeletesLogs: options.restartDeletesLogs } : {}),
   });
   return app;
 }
@@ -106,6 +111,114 @@ async function answer(response: Response) {
 }
 
 const DISK_FULL = { status: 507, code: "storage.disk_full" };
+
+async function refusal(response: Response) {
+  return {
+    status: response.status,
+    error: ((await response.json()) as { error?: unknown }).error,
+  };
+}
+
+const READS = {
+  ...STEPS,
+  "GET /resolution": (app: Hono) => app.request(ROUTE, { method: "GET" }, tls()),
+};
+
+describe.each([true, false])("where restarting the box deletes logs: %s", (deletes) => {
+  it.each(Object.entries(READS))(
+    "the %s answer's 507 carries restartDeletesLogs",
+    async (_step, send) => {
+      const app = appWith({
+        free: NEARLY_FULL,
+        refusal: cannotOpen(),
+        database: "unknown",
+        restartDeletesLogs: async () => deletes,
+      });
+      expect(await refusal(await send(app))).toEqual({
+        status: 507,
+        error: { code: "storage.disk_full", params: { restartDeletesLogs: deletes } },
+      });
+    },
+  );
+});
+
+it.each(Object.entries(READS))(
+  "the %s answer's 507 carries no field when the box cannot tell whether a restart deletes logs",
+  async (_step, send) => {
+    for (const restartDeletesLogs of [
+      async () => undefined,
+      async (): Promise<boolean> => {
+        throw new Error("the recovery's stage could not be read");
+      },
+    ]) {
+      const app = appWith({
+        free: NEARLY_FULL,
+        refusal: cannotOpen(),
+        database: "unknown",
+        restartDeletesLogs,
+      });
+      expect(await refusal(await send(app))).toEqual({
+        status: 507,
+        error: { code: "storage.disk_full", params: {} },
+      });
+    }
+  },
+);
+
+const inspectionFailing = (error: unknown, free: number) =>
+  appWith({
+    free,
+    inspect: async () => {
+      throw error;
+    },
+    restartDeletesLogs: async () => true,
+  });
+const inspect = (app: Hono) => app.request(ROUTE, { method: "GET" }, tls());
+
+it("a cannot-open failure inside GET /resolution's inspection on a nearly full disk answers 507 with the field", async () => {
+  expect(await refusal(await inspect(inspectionFailing(cannotOpen(), NEARLY_FULL)))).toEqual({
+    status: 507,
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+  });
+});
+
+it("…and on a disk with room stays a 500", async () => {
+  expect(await answer(await inspect(inspectionFailing(cannotOpen(), ROOM)))).toEqual({
+    status: 500,
+    code: "server.internal",
+  });
+});
+
+it("an engine full-disk failure inside GET /resolution's inspection carries the field", async () => {
+  const full = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  expect(await refusal(await inspect(inspectionFailing(full, ROOM)))).toEqual({
+    status: 507,
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+  });
+});
+
+it("the inspection's own storage.disk_full refusal carries the field, as the steps' does", async () => {
+  const app = inspectionFailing(new AppError("storage.disk_full", {}), ROOM);
+  expect(await refusal(await inspect(app))).toEqual({
+    status: 507,
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: true } },
+  });
+});
+
+it.each(Object.entries(STEPS))(
+  "the %s step's own storage.disk_full refusal carries the field too",
+  async (_step, send) => {
+    const app = appWith({
+      free: ROOM,
+      refusal: new AppError("storage.disk_full", {}),
+      restartDeletesLogs: async () => false,
+    });
+    expect(await refusal(await send(app))).toEqual({
+      status: 507,
+      error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+    });
+  },
+);
 
 it.each(Object.entries(STEPS))(
   "the %s step failing with an engine full-disk error on a nearly full disk answers 507 storage.disk_full",

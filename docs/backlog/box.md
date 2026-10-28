@@ -74,9 +74,9 @@ It reuses A1127's rules for which backups may be deleted, changes what A1127 sli
 full-disk page's button are for, and fixes a measured gap: a backup to a folder on the box's own disk
 needs about three copies of the database at its peak while its space check counts two, so with room
 for between two and three the copy into the folder fails `ENOSPC` with nothing stored
-(`~/waitron-campaign/a1167-measure/`). Nothing is built until the owner answers its four questions
+(`~/waitron-campaign/a1167-measure/`). The owner answered its four questions on 2026-10-28
 (who is told of automatic deletions; whether a refused backup is emailed; A1127 slice 3's dialog; the
-full-disk page's button).
+full-disk page's button; `~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
 
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
@@ -847,7 +847,7 @@ once released. Belongs with A1016.
 **A798-B clock, disk and printer decisions.**
 
 The owner's four answers: no reserved
-  space on the disk (2026-10-28, A1127: the box now keeps an 8 MiB spare file, released only by a start emptying a discarded backup recovery and by the setup repair page's Start again (`waitron.sh reset` also deletes it); a trading server never releases it. See [conventions-data.md, "The box's spare file"](../developers/conventions-data.md#the-boxs-spare-file)), a warning and an email at 2 GB free; when a printer stops, every till and
+  space on the disk (2026-10-28, A1127: the box now keeps an 8 MiB spare file, released by a start on a nearly full disk, by a start emptying a discarded backup recovery and by the setup repair page's Start again (`waitron.sh reset` also deletes it); a release leaves a marker that holds the till stop until the spare is written back; a trading server never releases it. See [conventions-data.md, "The box's spare file"](../developers/conventions-data.md#the-boxs-spare-file)), a warning and an email at 2 GB free; when a printer stops, every till and
   handheld is told at two minutes; while the box's clock reads earlier than its last recorded
   sale, every action that takes or gives back money, or would write a fiscal record, stops on every
   device — reversing D8 and A364 for that case only — until the clock is set (design §4.8; the

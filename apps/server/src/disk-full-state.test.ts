@@ -3,6 +3,7 @@ import { FULL_DISK_BYTES } from "./boot-failure.js";
 import {
   createDiskFullState,
   diskFullRefusal,
+  type DiskFullState,
   noteFullAtStart,
   watchForDiskFull,
 } from "./disk-full-state.js";
@@ -39,7 +40,7 @@ function recordingLog() {
   return { log, lines, events: (event: string) => lines.filter((line) => line.event === event) };
 }
 
-function setup() {
+function setup(options: { spareReleased?: () => Promise<boolean> } = {}) {
   const disk = stubStatfs();
   const logs = recordingLog();
   let current = new Date("2026-10-21T10:00:00.000Z");
@@ -54,8 +55,15 @@ function setup() {
     now: clock.now,
     log: logs.log,
     statfs: disk.statfs,
+    ...options,
   });
   return { disk, logs, clock, state };
+}
+
+/** A release marker the case sets and clears. */
+function marker(present: boolean) {
+  const flag = { present, spareReleased: async () => flag.present };
+  return flag;
 }
 
 describe("createDiskFullState", () => {
@@ -185,7 +193,78 @@ describe("createDiskFullState", () => {
   });
 });
 
+describe("createDiskFullState with the spare's marker", () => {
+  it("stays full at 16 MiB free while the marker exists, and lifts at the next reading once it is gone, logging storage.disk_space_back once", async () => {
+    const spare = marker(true);
+    const { disk, logs, state } = setup({ spareReleased: spare.spareReleased });
+    state.noteRefused();
+    disk.free(FULL_DISK_BYTES);
+    expect(await state.full()).toBe(true);
+    expect(state.noted()).toBe(true);
+    expect(logs.events("storage.disk_space_back")).toHaveLength(0);
+    spare.present = false;
+    expect(await state.full()).toBe(false);
+    expect(state.noted()).toBe(false);
+    expect(await state.full()).toBe(false);
+    expect(logs.events("storage.disk_space_back")).toEqual([
+      { level: "info", event: "storage.disk_space_back", fields: { freeBytes: FULL_DISK_BYTES } },
+    ]);
+  });
+
+  it("keeps the stop when a refusal is noted while the marker is read", async () => {
+    const spareReleased = async () => {
+      state.noteRefused();
+      return false;
+    };
+    const set = setup({ spareReleased });
+    const state: DiskFullState = set.state;
+    state.noteRefused();
+    set.disk.free(FULL_DISK_BYTES);
+    expect(await state.full()).toBe(true);
+    expect(state.noted()).toBe(true);
+  });
+});
+
 describe("noteFullAtStart", () => {
+  it("starts full when the spare's marker exists, whatever the free space", async () => {
+    const spare = marker(true);
+    const { disk, logs, state } = setup({ spareReleased: spare.spareReleased });
+    disk.free(1024 ** 3);
+    await noteFullAtStart(state, {
+      dir: DIR,
+      log: logs.log,
+      statfs: disk.statfs,
+      spareReleased: spare.spareReleased,
+    });
+    expect(state.noted()).toBe(true);
+  });
+
+  it("starts full when the marker exists and free space cannot be read", async () => {
+    const spare = marker(true);
+    const { disk, logs, state } = setup({ spareReleased: spare.spareReleased });
+    disk.fail();
+    await noteFullAtStart(state, {
+      dir: DIR,
+      log: logs.log,
+      statfs: disk.statfs,
+      spareReleased: spare.spareReleased,
+    });
+    expect(state.noted()).toBe(true);
+  });
+
+  it("starts clear with plenty of room when the marker does not exist", async () => {
+    const spare = marker(false);
+    const { disk, logs, state } = setup({ spareReleased: spare.spareReleased });
+    disk.free(1024 ** 3);
+    await noteFullAtStart(state, {
+      dir: DIR,
+      log: logs.log,
+      statfs: disk.statfs,
+      spareReleased: spare.spareReleased,
+    });
+    expect(state.noted()).toBe(false);
+  });
+
   it("starts full on a folder with less than 16 MiB free", async () => {
     const { disk, logs, state } = setup();
     disk.free(FULL_DISK_BYTES - 1);

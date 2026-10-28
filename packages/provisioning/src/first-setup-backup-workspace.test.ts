@@ -8,7 +8,7 @@ import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { SPARE_SPACE_FILE } from "./spare-space-name.js";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -234,6 +234,41 @@ it("a spare file written, grown or deleted in the box's state folder leaves a re
   expect(await f.store.inspect(recoveryId)).toBe(before);
   await rm(spare);
   expect(await f.store.inspect(recoveryId)).toBe(before);
+});
+
+it("the spare's marker written or deleted in the box's state folder leaves a recovery's originals digest unchanged", async () => {
+  const f = await fixture();
+  const marker = join(f.anchor.stateDir, SPARE_SPACE_RELEASED_FILE);
+  const before = await f.store.inspect(recoveryId);
+  await writeFile(marker, "");
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+  await rm(marker);
+  expect(await f.store.inspect(recoveryId)).toBe(before);
+});
+
+it("a folder named like the spare's marker in the box's state folder is still one of the originals", async () => {
+  const f = await fixture();
+  const evidence = join(f.anchor.stateDir, SPARE_SPACE_RELEASED_FILE, "retained-evidence.json");
+  await mkdir(join(f.anchor.stateDir, SPARE_SPACE_RELEASED_FILE));
+  await writeFile(evidence, "before");
+  const input = await f.input();
+  await f.store.append(input);
+  await writeFile(evidence, "after");
+  await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
+});
+
+it("a file named like the spare's marker in a venue folder apart from the state folder is still one of the originals", async () => {
+  const f = await fixture();
+  const file = join(f.anchor.venueDir, SPARE_SPACE_RELEASED_FILE);
+  await writeFile(file, "before");
+  const input = await f.input();
+  await f.store.append(input);
+  await writeFile(file, "after");
+  await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
 });
 
 it("any other new file in the box's state folder changes a recovery's originals digest", async () => {

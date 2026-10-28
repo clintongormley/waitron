@@ -6,6 +6,7 @@ import {
   lstat,
   mkdir,
   mkdtemp,
+  realpath,
   readFile,
   readlink,
   rm,
@@ -2266,6 +2267,111 @@ describe("the box's spare file", () => {
     const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
     await runEntry(deps({ stateDir, statfs: free(1024 * MiB) }));
     expect((await stat(spareIn(stateDir))).size).toBe(8_388_608);
+  });
+
+  const markerIn = (stateDir: string) => join(stateDir, "spare-space.released");
+  const planted = async (over: Partial<Parameters<typeof runEntry>[0]>) => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await writeFile(spareIn(stateDir), Buffer.alloc(4096, 1));
+    const d = deps({ stateDir, spareBytes: 4096, ...over });
+    await runEntry(d);
+    return { stateDir, d };
+  };
+  const failedFor = (lastErrorCode: string) =>
+    vi.fn(() => Promise.resolve({ ...FRESH, failures: 1, lastErrorCode }));
+
+  it("a start with 6 MiB free deletes the spare and writes the marker", async () => {
+    const { stateDir, d } = await planted({ statfs: free(6 * MiB) });
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+    expect((await lstat(markerIn(stateDir))).isFile()).toBe(true);
+    expect(d.log).toHaveBeenCalledWith("warn", "storage.spare_released", { bytes: 4096 });
+  });
+
+  it("a start with 12 MiB free keeps the spare", async () => {
+    const { stateDir } = await planted({ statfs: free(12 * MiB) });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+    expect(existsSync(markerIn(stateDir))).toBe(false);
+  });
+
+  it("a start that did not move hands the boot no spare folder", async () => {
+    // Resolved: the start compares its folders after resolving links, and tmpdir() is one on macOS.
+    const stateDir = await realpath(await mkdtemp(join(tmpdir(), "wt-entry-spare-")));
+    const d = deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 4096 });
+    await runEntry(d);
+    expect(d.startServer).toHaveBeenCalledOnce();
+    expect(vi.mocked(d.startServer).mock.calls[0]![0]).not.toHaveProperty(
+      "WAITRON_SPARE_SPACE_DIR",
+    );
+  });
+
+  it("a start with exactly 8 MiB free keeps the spare", async () => {
+    const { stateDir } = await planted({ statfs: free(8 * MiB) });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start whose clean-up frees enough keeps the spare", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const logDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-log-"));
+    await writeFile(join(logDir, "waitron.log.2"), "old");
+    await writeFile(spareIn(stateDir), Buffer.alloc(4096, 1));
+    // 16 MiB after the clean-up, not more: from 16 MiB + 4096 the top-up would refill a deleted spare.
+    const statfs = async () => ({
+      bavail: existsSync(join(logDir, "waitron.log.2")) ? 6 * MiB : 16 * MiB,
+      frsize: 1,
+    });
+    const d = deps({ stateDir, logDir, statfs, spareBytes: 4096 });
+    await runEntry(d);
+    expect(existsSync(join(logDir, "waitron.log.2"))).toBe(false);
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+    expect(existsSync(markerIn(stateDir))).toBe(false);
+    expect(d.startServer).toHaveBeenCalledOnce();
+  });
+
+  it("a start with 12 MiB free after a start that failed for a full disk deletes the spare", async () => {
+    const { stateDir } = await planted({
+      statfs: free(12 * MiB),
+      readRecoveryState: failedFor("storage.disk_full"),
+    });
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+    expect(existsSync(markerIn(stateDir))).toBe(true);
+  });
+
+  it("a start with 12 MiB free after a failure of any other code keeps the spare", async () => {
+    const { stateDir } = await planted({
+      statfs: free(12 * MiB),
+      readRecoveryState: failedFor("server.boot_incomplete"),
+    });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start with 16 MiB free after a start that failed for a full disk keeps the spare", async () => {
+    const { stateDir } = await planted({
+      statfs: free(16 * MiB),
+      readRecoveryState: failedFor("storage.disk_full"),
+    });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start whose free space cannot be read keeps the spare", async () => {
+    const unreadable = () => Promise.reject(Object.assign(new Error("x"), { code: "EIO" }));
+    const { stateDir } = await planted({
+      statfs: unreadable,
+      readRecoveryState: failedFor("storage.disk_full"),
+    });
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+  });
+
+  it("a start at the recovery level on a nearly full disk deletes the spare and still serves the recovery page", async () => {
+    const { stateDir, d } = await planted({
+      statfs: free(6 * MiB),
+      readRecoveryState: vi.fn(() =>
+        Promise.resolve({ ...FRESH, failures: 3, level: levelFor(3) }),
+      ),
+    });
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+    expect(existsSync(markerIn(stateDir))).toBe(true);
+    expect(d.serveRecovery).toHaveBeenCalledOnce();
+    expect(d.startServer).not.toHaveBeenCalled();
   });
 
   it("spareBytes 0 keeps no spare", async () => {

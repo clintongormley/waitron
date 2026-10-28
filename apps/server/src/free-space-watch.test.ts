@@ -13,6 +13,7 @@ import {
 import type { Logger, LogLevel } from "./logger.js";
 
 const GIB = 1024 ** 3;
+const MIB = 1024 ** 2;
 const DIR = "/venue";
 
 type Line = [LogLevel, string, Record<string, unknown> | undefined];
@@ -128,6 +129,7 @@ describe("startFreeSpaceWatch", () => {
       disk?: Pick<DiskFullState, "noted" | "full">;
       statfs?: Statfs;
       log?: Logger;
+      restoreSpare?: () => Promise<void>;
     } = {},
   ) {
     const spy = logSpy();
@@ -151,6 +153,7 @@ describe("startFreeSpaceWatch", () => {
       now: () => now,
       log,
       statfs,
+      ...(options.restoreSpare ? { restoreSpare: options.restoreSpare } : {}),
       timer: (ms, fn) => {
         const entry = { ms, fn, cancelled: false };
         armed.push(entry);
@@ -264,6 +267,90 @@ describe("startFreeSpaceWatch", () => {
     await vi.waitFor(() => expect(w.armed).toHaveLength(2));
     expect(stop.disk.noted()).toBe(true);
     expect(stop.events("storage.disk_space_back")).toHaveLength(0);
+  });
+
+  it("each reading writes the spare back before it asks the stop to re-check", async () => {
+    const calls: string[] = [];
+    const disk = {
+      noted: () => true,
+      full: async () => {
+        calls.push("full");
+        return false;
+      },
+    };
+    const restoreSpare = async () => {
+      calls.push("restore");
+    };
+    const w = watch({ disk, restoreSpare });
+    await w.tick();
+    await w.tick();
+    expect(calls).toEqual(["restore", "full", "restore", "full"]);
+  });
+
+  it("a reading calls restoreSpare whether or not a stop is noted", async () => {
+    const restoreSpare = vi.fn(async () => {});
+    const w = watch({ restoreSpare });
+    await w.tick();
+    await w.tick();
+    expect(restoreSpare).toHaveBeenCalledTimes(2);
+  });
+
+  it("a reading reads free space once, after the restore", async () => {
+    const restoreSpare = async () => {
+      w.reading.free = 3 * GIB - 8 * MIB;
+    };
+    const w = watch({ restoreSpare });
+    w.reading.free = 3 * GIB;
+    await w.tick();
+    expect(w.state.current().freeBytes).toBe(3 * GIB - 8 * MIB);
+    expect(w.seen).toEqual([DIR]);
+  });
+
+  it("a restore that throws is logged as storage.spare_restore_failed, and the same reading still records and asks the stop to re-check", async () => {
+    const disk = { noted: () => true, full: vi.fn(async () => true) };
+    const restoreSpare = async (): Promise<void> => {
+      throw Object.assign(new Error("no space"), { code: "ENOSPC" });
+    };
+    const w = watch({ disk, restoreSpare });
+    await w.tick();
+    expect(w.lines).toContainEqual(["warn", "storage.spare_restore_failed", { errno: "ENOSPC" }]);
+    expect(w.state.current().freeBytes).toBe(10 * GIB);
+    expect(disk.full).toHaveBeenCalledTimes(1);
+    await w.tick();
+    expect(disk.full).toHaveBeenCalledTimes(2);
+  });
+
+  it("stop() answers only once a write-back in flight has finished", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let restoring = false;
+    const restoreSpare = async () => {
+      restoring = true;
+      await held;
+    };
+    const w = watch({ restoreSpare });
+    w.armed[0]!.fn();
+    await vi.waitFor(() => expect(restoring).toBe(true));
+    let stopped = false;
+    const stopping = w.handle.stop().then(() => (stopped = true));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    release();
+    await stopping;
+    expect(w.armed).toHaveLength(1);
+    expect(w.state.current().freeBytes).toBeNull();
+  });
+
+  it("a stop during the restore records and arms nothing", async () => {
+    const restoreSpare = async () => {
+      void w.handle.stop();
+    };
+    const w = watch({ restoreSpare });
+    w.armed[0]!.fn();
+    await new Promise((resolve) => setImmediate(resolve));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(w.armed).toHaveLength(1);
+    expect(w.state.current().freeBytes).toBeNull();
   });
 
   it("a reading that throws is logged and the next is still armed", async () => {

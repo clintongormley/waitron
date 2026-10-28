@@ -1,5 +1,5 @@
-import { lstat, readdir, rm, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, readdir, realpath, rm, stat } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { LOG_FILE_NAME, isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
 import { BACKUP_ENCRYPT_DIR_PREFIX, BACKUP_KEY_PREFIX } from "./backup-keys.js";
@@ -17,6 +17,17 @@ export const CRASH_REPORT = /^holder-frozen-.*\.json$/;
 /** `dumpFileName`'s copy, and the `.partial` name `archiveTo` writes it under first
  *  (`packages/store/src/archive.ts`). */
 export const STAGED_DUMP = new RegExp(`^${BACKUP_KEY_PREFIX}\\d{8}T\\d{6}Z\\.dump(\\.partial)?$`);
+
+/** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
+export async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
+  const real = async (p: string) => realpath(p).catch(() => resolve(p));
+  const target = await real(path);
+  for (const root of roots) {
+    const base = await real(root);
+    if (target === base || target.startsWith(base + sep)) return true;
+  }
+  return false;
+}
 
 /** The lowest free space among `dirs` that can report; null when none can. */
 export async function lowestFreeBytes(

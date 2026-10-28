@@ -49,7 +49,9 @@ When nothing is wrong, each row says:
   the tax agency**.
 - **Disk space**: how much space is free out of the total, and how much the database, the backups
   kept on the box, the logs and the rest of the disk take. The rest of the disk includes about 8 MB
-  the box keeps spare so that, on a full disk, it can still delete what it no longer needs.
+  the box keeps spare so that, on a full disk, it can still start and delete what it no longer
+  needs. After a start that used that space, the tills stay stopped until about 24 MB is free and
+  the box has put the 8 MB aside again.
 
 After a send to the tax agency has failed, the **Tax agency** row says how many records are
 waiting, and whether the box is retrying them by itself or a manager needs to sort some of them

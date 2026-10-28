@@ -9,8 +9,7 @@ export { serveRecovery, recoveryTlsFiles } from "./recovery-listener.js";
 export type { RecoveryServeOptions } from "./recovery-listener.js";
 export { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { realpathSync } from "node:fs";
-import { realpath } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
@@ -57,10 +56,15 @@ import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
-import { SPARE_SPACE_BYTES, topUpSpare } from "./spare-space.js";
+import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
-import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
+import {
+  START_FREE_SPACE_FLOOR,
+  freeSpaceAtStart,
+  insideAny,
+  lowestFreeBytes,
+} from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { maskPersonalData } from "./log-personal-data.js";
@@ -262,6 +266,27 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
 }
 
 /**
+ * Deletes the box's spare file when the start may lack room to boot: under SPARE_SPACE_BYTES free,
+ * or under FULL_DISK_BYTES when the last start failed for a full disk. A folder whose free space
+ * cannot be read is left out of the lowest; when none can be read, nothing is released.
+ */
+async function releaseSpareToStart(
+  deps: EntryDeps,
+  roots: { stateDir: string; venueDir: string },
+): Promise<void> {
+  const lowest = await lowestFreeBytes(
+    [...new Set([deps.stateDir, deps.venueDir, roots.stateDir, roots.venueDir])],
+    deps.statfs,
+  );
+  if (lowest === null || lowest >= FULL_DISK_BYTES) return;
+  if (
+    lowest < SPARE_SPACE_BYTES ||
+    (await deps.readRecoveryState(roots.stateDir)).lastErrorCode === "storage.disk_full"
+  )
+    await releaseSpare(deps.stateDir, deps.log);
+}
+
+/**
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
@@ -344,12 +369,19 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
               : (deps.logDir ?? join(deps.stateDir, "logs")),
         });
 
+  if (backupEntry.kind !== "repair") await releaseSpareToStart(deps, cleanupRoots);
+
   const admission = await resolveFirstSetupEntry(
     deps,
     deps.baseEnv,
     () => (deps.exit ?? DEFAULT_EXIT)(0),
     deps.log,
-    { stateDir: deps.stateDir, statfs: deps.statfs },
+    {
+      stateDir: deps.stateDir,
+      venueDir: deps.venueDir,
+      logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+      statfs: deps.statfs,
+    },
   );
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);
@@ -381,6 +413,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
       ...deps.baseEnv,
       WAITRON_STATE_DIR: admission.roots.stateDir,
       WAITRON_VENUE_DIR: admission.roots.venueDir,
+      // The spare stays in the configured state folder; a start that did not move boots from `deps`.
+      WAITRON_SPARE_SPACE_DIR: deps.stateDir,
     },
   };
   const dirs = [rooted.stateDir, rooted.venueDir];
@@ -489,17 +523,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   return admission.run((venueHeld) =>
     runAdmittedEntry(selected, transport, venueHeld, discardedCopy),
   );
-}
-
-/** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
-async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
-  const real = async (p: string) => realpath(p).catch(() => resolve(p));
-  const target = await real(path);
-  for (const root of roots) {
-    const base = await real(root);
-    if (target === base || target.startsWith(base + sep)) return true;
-  }
-  return false;
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };

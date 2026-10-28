@@ -1,5 +1,7 @@
 # A1127: on a full disk, the box frees a recovery's copy with the help of a spare file
 
+**2026-10-28, A1127 slice 2:** the start also releases the spare on a nearly full disk; a release writes `spare-space.released`, which holds the till stop until a start, the free-space watch or Box status's Free button writes the spare back (`conventions-data.md`, "The box's spare file").
+
 The owner chose this on 2026-10-26 at 01:15 CET ("A1042 full disk: A", `~/waitron-campaign/questions.md`,
 heading "OWNER ANSWER — A1042 full disk: A", answering "A1042 build — a full disk while a discarded
 recovery's copy still fills it" with its Examples 1 and 2):

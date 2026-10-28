@@ -1306,6 +1306,19 @@ database, made earlier, does not). In `start-full-disk.e2e.test.ts`, `entryDeps`
 `startedBefore` uses) sets `spareBytes` to 1 MiB, so a start with room writes a 1 MiB spare; a case
 passes `spareBytes: 0` for none, as the discarded-recovery case without a spare does.
 
+**A third real-disk file boots a real server from the spare.** `apps/server/src/start-from-spare.e2e.test.ts`
+(A1127 slice 2) runs `runEntry` with a real `startServer` on a full disk: with a spare the server
+boots and the tills are stopped; without one the full-disk page is served; after a release the
+stop holds across a restart; and the running box writes the spare back and lifts it. It needs the
+`@hono/node-server` module mock, which must not reach the other two files, so it is a file of its
+own. It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE")`, and CI mounts a third 32 MiB tmpfs
+at `$RUNNER_TEMP/full-disk-from-spare` in the same step. The boot-from-zero case uses the real 8 MiB
+spare (a boot of its venue with 8 MiB free resolved with about 4 MiB left; 4 MiB was refused). The
+restart, no-release and write-back cases use a 6 MiB spare, because on a 32 MiB image a booted server holding
+its 4 MiB change log leaves about 23.18 MiB free, so the real 24 MiB write-back rule cannot be met.
+The two cases that rest on free space being above 16 MiB (the restart and the no-release case)
+assert it while the server is up, so a run on the edge fails rather than passing on free space alone. These figures are HFS+; CI's tmpfs is the first Linux run.
+
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
 it. Find it, detach it by its mount path, then remove its folder:
@@ -1337,7 +1350,7 @@ the full-disk page's words quoted below are the ones that run asserted.
   `freeSpaceAtStart` deleted that folder the box stuck: `serveRecovery` was called once and
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
   `staged-recovery` is gone, and `restore-staging` and its `archive-download-x` folder stay.
-- A start with nothing to delete serves the recovery page at once: over HTTPS, trusting the box's
+- A start with nothing to delete and no spare file serves the recovery page at once: over HTTPS, trusting the box's
   own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
   temporary copies, old logs and crash reports it can make again, and the disk is still full." (and
   not "left by a recovery from backup") and "Free space on the box's disk: 0 MB.";

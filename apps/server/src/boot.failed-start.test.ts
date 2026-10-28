@@ -186,7 +186,7 @@ async function spyOnAppendOnlyWatchStop() {
 async function spyOnFreeSpaceWatchStop() {
   const { startFreeSpaceWatch: realStart } =
     await vi.importActual<typeof import("./free-space-watch.js")>("./free-space-watch.js");
-  const stop = vi.fn<() => void>();
+  const stop = vi.fn<() => Promise<void>>();
   vi.mocked(startFreeSpaceWatch).mockImplementationOnce((deps) => {
     const watch = realStart(deps);
     stop.mockImplementation(() => watch.stop());

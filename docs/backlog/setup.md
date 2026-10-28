@@ -435,24 +435,32 @@ given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d
 `packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
 `packages/backups/src/recovery.ts`, `recovery_active`).
 
-## On a full disk, boot fully from the spare file, then prompt to delete old backups
+## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
-The owner's answer to A1127 Q1 (2026-10-28, `~/waitron-campaign/questions.md`, "OWNER ANSWER … A1127
-Q1"): when the disk is full, the box deletes its spare file (`<state>/spare-space`, A1127) to make
-room and starts NORMALLY; once up, it prompts the person to delete old backups kept on the box,
-oldest first, naming what each choice does, with the administrator sign-in in place and a safe Stop;
-only if the person does not follow those prompts, or nothing can be freed, does today's explain-only
-full-disk page apply (A1127's words, `storage.disk_full` in `apps/server/src/recovery-surface.ts`).
-Designed 2026-10-28, waiting for the owner's answers to its five questions before any build:
-[the design](../superpowers/specs/2026-10-28-a1127-full-boot-and-old-backups-design.md), pictures in
-[mockups/a1127-full-boot](mockups/a1127-full-boot/README.md). It also settles the repair page's two
-wording gaps below.
+The owner's 2026-10-28 answers covered the till strip («Tell a manager», a stated exception, Q4) and
+"both pages" (the repair page and the full-disk page, the longer reinstall sentence). Three more
+full-disk texts are outside them, for the owner:
 
-The owner answered all five on 2026-10-28 (~06:57 and ~08:20) and approved building slices 2–3; the
-full-disk page gains a no-sign-in button to delete old backups, as its own slice. A1167's design
-([backups make room for themselves](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
-Q3 and Q4) asks whether slice 3's dialog and that button are still wanted once the box deletes old
-backups by itself.
+- the till's other full-disk refusals also say «Tell a manager» (`apps/till/src/i18n/codes.ts`,
+  `storage.disk_full`; `apps/till/src/i18n/strings.ts`), which Q4's answer, naming the strip, does
+  not cover;
+- the recovery page's Start-again form's `diskFull` words (`apps/server/src/recovery-start-again.ts`,
+  English and Spanish) still end with the short reinstall sentence ("everything on it is lost, these
+  files included");
+- the managers' full-disk email (`apps/server/src/i18n/box-emails.ts`) says "ask whoever installed
+  the box", the never-send-the-person-elsewhere class.
+
+## A start from a selected backup recovery cleans the recovery's own logs, not the box's
+
+At a selected backup recovery, `runEntry` (`apps/server/src/node-entry.ts`) cleans
+`<recovery target's state>/logs` below the free-space floor, while the server it boots keeps the
+box's configured `WAITRON_LOG_DIR` (`/var/lib/waitron/logs` on a box, `deploy/Dockerfile`), so the
+box's rotated logs and crash reports are not deleted to make room (probe in A1127 slice 2's Task 9a2
+review, `~/waitron-campaign/a1127-measure/slice2-task9a2-review.md`). The repair page therefore
+promises nothing about restarting at that stage. The line came with #2043 (40eed0cde), which gives no
+reason for the folder; believed to keep the recovery's originals untouched, as the repair stage does.
+Fix: also clean the configured log folder when it is outside both configured folders, as the repair
+stage does, and let the page promise it.
 
 ## A resume can use the room the spare file gave
 
@@ -480,16 +488,6 @@ under the tick box; with A1127's longer full-disk words that is about half a pho
 (`~/waitron-campaign/a1127-measure/look/`). Believed to predate A1127: both slots show the same
 stored error, and a plain 500 also shows twice (look check of 2026-10-28, run on the branch, not on
 `main`).
-
-## The repair page's full-disk words wait for the owner, with two known gaps
-
-A1127 (#2175) shipped `shell.first_setup.disk_full` (`apps/setup/src/i18n/strings/shell.ts`) for the
-owner's approval, and its review named two gaps the owner should see when approving: "Restart the
-box: as it starts, it removes old logs and crash reports to make room" is not true where the `logs`
-folder is inside the state or venue folder, because a repair-stage start deletes logs only outside
-both (`apps/server/src/node-entry.ts`, the repair-stage clean-up); and its reinstall sentence ends
-"everything on it is lost", where the full-disk page adds "sales included, unless a backup is
-restored afterwards". Settle both with the full-boot design above, which rewrites these pages anyway.
 
 ## Two spare-file releases at once log the same bytes twice
 

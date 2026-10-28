@@ -1,5 +1,7 @@
 # A1127 slices 2–4: on a full disk, start fully from the spare file, then offer to delete old backups
 
+**2026-10-28, owner answers:** Q1 A as corrected (`questions.md`, "CORRECTION to the A1127 Q1 answer"); Q2 A, Q3 A, Q4 A (keep «Tell a manager» as a stated exception; no slice 4), Q5 A; the 08:25 wording answer replaces §5's proposed sentences (built in slice 2); A1167 Q3 A drops §3's dialog and Box status button, and A1167 Q4 A replaces the full-disk page's button with the box deleting old backups by itself ([A1167's design](2026-10-28-a1167-backups-make-room-design.md)); slice 2's plan narrows §2: the running box writes the spare back only while the marker exists (its decision 9). Slice 2 measured that the bucket stream does not use the spare's room on an idle box (`conventions-data.md`, "The box's spare file").
+
 The owner's answer to A1127 Q1, 2026-10-28 ~03:10 CET (`~/waitron-campaign/questions.md`, "OWNER
 ANSWER … A1127 Q1"):
 

@@ -7,6 +7,7 @@ import { isAppError } from "@waitron/shared";
 import {
   ABANDONABLE_BACKUP_PHASES,
   SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
   createFirstSetupBackupWorkspace,
   isEmptiedTombstone,
   type FirstSetupRoots,
@@ -31,11 +32,15 @@ export interface SpareHandle {
 
 export type OpenSpare = (path: string, flags: number, mode: number) => Promise<SpareHandle>;
 
+type Unlink = (path: string) => Promise<void>;
+
 /**
  * Appends random bytes to the box's spare file until it holds `bytes`; random so a compressing
  * filesystem cannot store it in less room (design M5b). A link or folder at its path
  * is left alone. `hasRoom` is asked only when the spare is not already a full-size file, and
- * nothing is written or logged when it answers false. Nothing is thrown.
+ * nothing is written or logged when it answers false. Once the spare is whole, or with room a link
+ * or folder stands at its path (it can never be whole), the release marker is deleted. Nothing is
+ * thrown.
  */
 export async function topUpSpare(options: {
   stateDir: string;
@@ -43,19 +48,22 @@ export async function topUpSpare(options: {
   log: Logger;
   hasRoom?: () => Promise<boolean>;
   open?: OpenSpare;
+  unlink?: Unlink;
 }): Promise<void> {
   const { stateDir, bytes, log, hasRoom = async () => true, open = openFile } = options;
   const path = join(stateDir, SPARE_SPACE_FILE);
+  const clearMarker = (restored = true) =>
+    deleteMarker(stateDir, restored ? bytes : null, log, options.unlink ?? unlinkFile);
   try {
     const info = await lstat(path).catch((error: unknown) => {
       if (errnoOf(error) === "ENOENT") return null;
       throw error;
     });
-    if (info?.isFile() && info.size >= bytes) return;
+    if (info?.isFile() && info.size >= bytes) return await clearMarker();
     if (!(await hasRoom())) return;
     if (info && !info.isFile()) {
       log("warn", "storage.spare_unusable", { kind: kindOf(info) });
-      return;
+      return await clearMarker(false);
     }
     const { O_WRONLY, O_APPEND, O_CREAT, O_NOFOLLOW } = constants;
     const handle = await open(path, O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0o600);
@@ -74,8 +82,100 @@ export async function topUpSpare(options: {
     } finally {
       await folder.close();
     }
+    await clearMarker();
   } catch (error) {
     log("warn", "storage.spare_write_failed", { errno: errnoOf(error) ?? null });
+  }
+}
+
+/** `restored` is the whole spare's size, or null when the marker goes without one. */
+async function deleteMarker(
+  stateDir: string,
+  restored: number | null,
+  log: Logger,
+  unlink: Unlink,
+): Promise<void> {
+  try {
+    await unlink(join(stateDir, SPARE_SPACE_RELEASED_FILE));
+    if (restored !== null) log("info", "storage.spare_restored", { bytes: restored });
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (errno !== "ENOENT")
+      log("warn", "storage.spare_marker_delete_failed", { errno: errno ?? null });
+  }
+}
+
+/** Whether the release marker is a regular file in `stateDir`; an unreadable one answers true. */
+export async function spareReleased(stateDir: string, log: Logger): Promise<boolean> {
+  try {
+    return (await lstat(join(stateDir, SPARE_SPACE_RELEASED_FILE))).isFile();
+  } catch (error) {
+    const errno = errnoOf(error);
+    if (errno === "ENOENT") return false;
+    log("warn", "storage.spare_marker_unread", { errno: errno ?? null });
+    return true;
+  }
+}
+
+/**
+ * The running box's write-back: only while the marker exists (otherwise every booted server with
+ * room would write the spare), and only with the spare plus 16 MiB free in both folders. A call
+ * while one is under way answers that one's promise, so two callers cannot both write.
+ */
+export function spareRestorer(options: {
+  stateDir: string;
+  venueDir: string;
+  bytes: number;
+  log: Logger;
+  statfs?: Statfs;
+}): () => Promise<void> {
+  const { stateDir, venueDir, bytes, log, statfs } = options;
+  let running: Promise<void> | null = null;
+  async function restore(): Promise<void> {
+    if (!(await spareReleased(stateDir, log))) return;
+    await topUpSpare({
+      stateDir,
+      bytes,
+      log,
+      hasRoom: async () => {
+        const lowest = await lowestFreeBytes([stateDir, venueDir], statfs);
+        return lowest !== null && lowest >= bytes + FULL_DISK_BYTES;
+      },
+    });
+  }
+  return () =>
+    (running ??= restore().finally(() => {
+      running = null;
+    }));
+}
+
+async function writeMarker(stateDir: string, log: Logger, open: OpenSpare): Promise<void> {
+  try {
+    const { O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = constants;
+    const path = join(stateDir, SPARE_SPACE_RELEASED_FILE);
+    try {
+      const handle = await open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600);
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (errnoOf(error) !== "EEXIST") throw error;
+      const info = await lstat(path);
+      if (!info.isFile()) {
+        log("warn", "storage.spare_marker_write_failed", { errno: "EEXIST", kind: kindOf(info) });
+        return;
+      }
+    }
+    const folder = await open(stateDir, constants.O_RDONLY | constants.O_DIRECTORY, 0);
+    try {
+      await folder.sync();
+    } finally {
+      await folder.close();
+    }
+  } catch (error) {
+    log("warn", "storage.spare_marker_write_failed", { errno: errnoOf(error) ?? null });
   }
 }
 
@@ -84,14 +184,17 @@ function kindOf(info: { isSymbolicLink(): boolean; isDirectory(): boolean }): st
 }
 
 /**
- * Deletes the box's spare file so a nearly full disk has room to take a venue folder's lock; answers
- * the bytes it held. A link or folder at its path is left alone. Nothing is thrown.
+ * Deletes the box's spare file so a nearly full disk has room to start or to take a venue folder's
+ * lock; answers the bytes it held. A spare that held bytes leaves the release marker behind it (a
+ * marker that cannot be written is logged). A link or folder at its path is left alone. Nothing is
+ * thrown.
  */
 export async function releaseSpare(
   stateDir: string,
   log: Logger,
-  fs: { unlink: (path: string) => Promise<void> } = { unlink: unlinkFile },
+  fs: { unlink?: Unlink; open?: OpenSpare } = {},
 ): Promise<number> {
+  const { unlink = unlinkFile, open = openFile } = fs;
   const path = join(stateDir, SPARE_SPACE_FILE);
   try {
     const info = await lstat(path);
@@ -99,8 +202,11 @@ export async function releaseSpare(
       log("warn", "storage.spare_unusable", { kind: kindOf(info) });
       return 0;
     }
-    await fs.unlink(path);
-    if (info.size > 0) log("warn", "storage.spare_released", { bytes: info.size });
+    await unlink(path);
+    if (info.size > 0) {
+      log("warn", "storage.spare_released", { bytes: info.size });
+      await writeMarker(stateDir, log, open);
+    }
     return info.size;
   } catch (error) {
     const errno = errnoOf(error);
