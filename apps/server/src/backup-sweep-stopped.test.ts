@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
@@ -145,6 +146,24 @@ it("records a failure that is not an AppError as unknown", async () => {
   expect(outcomes.runStopped).toEqual({ code: "unknown", at: STAMP.toISOString() });
 });
 
+it("records no sizes for a run that stops on an AppError other than staging_space_low", async () => {
+  const controller = new AbortController();
+  const { deps, outcomes } = await loopDeps({
+    signal: controller.signal,
+    sleep: async () => controller.abort(),
+    buildManifest: async () => {
+      throw new AppError("backup.archive_invalid", { reason: "test" });
+    },
+  });
+
+  await runBackupSweep(deps);
+
+  expect(outcomes.runStopped).toStrictEqual({
+    code: "backup.archive_invalid",
+    at: STAMP.toISOString(),
+  });
+});
+
 it("clears the stopped run once a later run stores, even when that run's clean-up then fails", async () => {
   const controller = new AbortController();
   let free = 1999;
@@ -191,7 +210,7 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
   expect(deps.log).toHaveBeenCalledWith("warn", "backup.failed", { errorCode: "unknown" });
 });
 
-it("a run whose second check refuses leaves the earlier runStopped; one that passes it clears it", async () => {
+it("a run keeps the earlier runStopped while its second check runs; a refusal there replaces it, and a pass clears it", async () => {
   const controller = new AbortController();
   let run = 0;
   let calls = 0;

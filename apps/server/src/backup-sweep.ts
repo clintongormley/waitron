@@ -101,12 +101,14 @@ export interface BackupSweepDeps {
   now?: () => Date;
   /**
    * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
-   * staged copy and its ciphertext) plus this once more for each local destination on the same disk
-   * (each folder copy's working file), and refuses when free space there is under that plus
-   * `spaceFloorBytes`; after the copy it refuses when free space is under the copy's own size; and
-   * after encrypting, when a local destination is on that disk, it needs the encrypted file's size
-   * once per such destination plus `spaceFloorBytes`. Advisory: nothing is reserved, and without
-   * this there is no check.
+   * staged copy and its ciphertext) plus this once more for each local destination counted as on
+   * the same disk (each folder copy's working file). When free space there is short, it first
+   * deletes old backups, oldest first and only those `installationStartedAt` allows, and refuses
+   * only when that cannot bring free space to the need plus `spaceFloorBytes`. After the copy it
+   * refuses when free space is under the copy's own size. After encrypting, when at least one
+   * local destination is counted as on that disk (one whose disk could not be read is counted), a
+   * second check does the same with the encrypted file's size once per such destination.
+   * Advisory: nothing is reserved, and without this there is no check.
    */
   stagingEstimateBytes?: () => Promise<number>;
   /** Free space a tick keeps beyond its need; defaults to `START_FREE_SPACE_FLOOR`. */
