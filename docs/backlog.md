@@ -3527,10 +3527,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **A department's Receipts preview does not redraw when the theme in use changes while it is open**
   (A841 slice 9, [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).
 
-- **A department's Receipts preview logs nothing when its saved logo's read fails.**
-  Pass the same diagnostic, with a test that a failed read warns.
-  [Detail](backlog/printers.md#a-departments-receipts-preview-logs-nothing-when-its-saved-logos-read-fails)
-
 - **Half of an older receipt test can no longer fail.**
   Owner's call: delete the old test, or keep only its corrupt-picture half.
   [Detail](backlog/printers.md#half-of-an-older-receipt-test-can-no-longer-fail)
@@ -3693,11 +3689,6 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **One "Receipts" settings page, with a live preview (C116, #989; C120, #1000; C121, #996) — still
   open:**
   [Detail](backlog/printers.md#one-receipts-settings-page-with-a-live-preview-c116-989-c120-1000-c121-996--still-open)
-
-- **The Receipts preview redraws the whole receipt once per highlighted part** — left open by W111
-  (#1261, the receipt's top block). W111 took the marks from 2 to 6, so one preview can draw the
-  receipt up to 7 times, and the screen asks for a preview after each pause in typing. Not measured.
-  [Detail](backlog/printers.md#the-receipts-preview-redraws-the-whole-receipt-once-per-highlighted-part)
 
 - **Left open by #1261's review (W111):** database enforcement of logo retention remains open.
   A theme's logo (A841 slice 7) is a second image whose deletion only the app refuses; this entry

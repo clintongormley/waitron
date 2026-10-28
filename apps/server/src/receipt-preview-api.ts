@@ -30,6 +30,7 @@ import {
   type PrintJobPreview,
   type PrintPreviewBlock,
 } from "./print-job-preview.js";
+import type { ReceiptPart } from "./receipt-document.js";
 import { drawReceipt } from "./receipt-ticket.js";
 import { createLogoCache, drawLibraryLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
@@ -69,53 +70,49 @@ export interface ReceiptPreviewResponse {
   /** The widths of the location's active devices' active receipt printers, narrowest first. */
   paperWidths: PaperWidth[];
   /** The blocks each part of the trim adds; `null` for one that prints nothing. */
-  marks: Record<
-    "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo",
-    BlockRange | null
-  >;
+  marks: Record<ReceiptPart, BlockRange | null>;
 }
 
+type Marks = ReceiptPreviewResponse["marks"];
+
 /**
- * Where `withField` differs from `without`: the blocks between their common start and end, less
- * any of `withField`'s `rules` at either end, which belong to the section a field opens or closes,
- * not to the field.
+ * Where each part of the trim shows in `preview`, a drawing of `drawn`, less any rules at either
+ * end, which belong to the section a part opens or closes. While the line after a mark draws the
+ * same as the mark's first line, the mark moves down a line, so a part whose lines draw the same
+ * as the lines after it is marked on the last such place.
+ * Holds while the receipt sends no native `qr()` and the preview drops no picture
+ * (`omittedGraphics`), so picture n is the preview's nth image.
  */
-function addedBlocks(
-  without: PrintPreviewBlock[],
-  withField: PrintPreviewBlock[],
-  rules: ReadonlySet<number>,
-): BlockRange {
+export function previewMarks(
+  preview: PrintJobPreview,
+  drawn: Pick<ReturnType<typeof drawReceipt>, "rules" | "parts">,
+): Marks {
+  const { blocks } = preview;
+  const imageBlocks = blocks.flatMap((block, index) => (block.kind === "image" ? [index] : []));
+  const rules = new Set(drawn.rules.map((picture) => imageBlocks[picture]!));
   const same = (a: PrintPreviewBlock | undefined, b: PrintPreviewBlock | undefined) =>
     JSON.stringify(a) === JSON.stringify(b);
-  let start = 0;
-  while (start < without.length && same(without[start], withField[start])) start++;
-  let tail = 0;
-  while (
-    tail < without.length - start &&
-    tail < withField.length - start &&
-    same(without.at(-1 - tail), withField.at(-1 - tail))
-  )
-    tail++;
-  let end = withField.length - tail;
-  while (start < end && rules.has(start)) start++;
-  while (end > start && rules.has(end - 1)) end--;
-  return { start, end };
-}
-
-/**
- * The indexes of `preview`'s blocks that show the job's pictures numbered `pictures`. Holds while
- * the receipt sends no native `qr()` and the preview drops no picture (`omittedGraphics`).
- */
-function pictureBlocks(preview: PrintJobPreview, pictures: number[]): Set<number> {
-  const wanted = new Set(pictures);
-  const blocks = new Set<number>();
-  let picture = 0;
-  preview.blocks.forEach((block, index) => {
-    if (block.kind !== "image") return;
-    if (wanted.has(picture)) blocks.add(index);
-    picture++;
-  });
-  return blocks;
+  const mark = (part: keyof Marks): BlockRange | null => {
+    const pictures = drawn.parts[part];
+    if (pictures === undefined) return null;
+    let start = imageBlocks[pictures.start]!;
+    let end = imageBlocks[pictures.end - 1]! + 1;
+    while (end < blocks.length && same(blocks[start], blocks[end])) {
+      start++;
+      end++;
+    }
+    while (start < end && rules.has(start)) start++;
+    while (end > start && rules.has(end - 1)) end--;
+    return { start, end };
+  };
+  return {
+    headerSubtitle: mark("headerSubtitle"),
+    footerMessage: mark("footerMessage"),
+    phone: mark("phone"),
+    email: mark("email"),
+    address: mark("address"),
+    logo: mark("logo"),
+  };
 }
 
 /** The paper setting of each active device's resolved, switched-on receipt printer, by device name. */
@@ -251,43 +248,28 @@ async function renderDraftPreview(
         (current === null
           ? null
           : await drawLibraryLogo(deps.db, logoCache, filename, current, printer.paperWidth)));
-  const widthDots = textGrid(printer.paperWidth, printer.resolution).widthDots;
-  const job = (trim: ReceiptConfig, venueAddress = address, picture = logo) =>
-    drawReceipt({
-      result: sample,
-      receipt: trim,
-      printer,
-      invoiceLocale: locale,
-      receiptHeader,
-      issuer,
-      venueAddress,
-      logo: picture,
-      simulated: deps.cfg.practiceMode,
-    });
-  const draw = (...args: Parameters<typeof job>) =>
-    previewPrintJob(job(...args).bytes, { widthDots });
-  const drawn = job(receipt);
-  const preview = previewPrintJob(drawn.bytes, { widthDots });
-  const rules = pictureBlocks(preview, drawn.rules);
-  const without = (other: PrintJobPreview) => addedBlocks(other.blocks, preview.blocks, rules);
-  const markOf = (field: "headerSubtitle" | "footerMessage" | "phone" | "email") =>
-    receipt[field] ? without(draw({ ...receipt, [field]: undefined })) : null;
-  const response: ReceiptPreviewResponse = {
+  const drawn = drawReceipt({
+    result: sample,
+    receipt,
+    printer,
+    invoiceLocale: locale,
+    receiptHeader,
+    issuer,
+    venueAddress: address,
+    logo,
+    simulated: deps.cfg.practiceMode,
+  });
+  const preview = previewPrintJob(drawn.bytes, {
+    widthDots: textGrid(printer.paperWidth, printer.resolution).widthDots,
+  });
+  return {
     preview,
     paperWidth: printer.paperWidth,
     paperWidths: printPaperWidth.enumValues.filter((width) =>
       available.some((setting) => setting.paperWidth === width),
     ),
-    marks: {
-      headerSubtitle: markOf("headerSubtitle"),
-      footerMessage: markOf("footerMessage"),
-      phone: markOf("phone"),
-      email: markOf("email"),
-      address: address.length ? without(draw(receipt, [])) : null,
-      logo: logo === null ? null : without(draw(receipt, address, null)),
-    },
+    marks: previewMarks(preview, drawn),
   };
-  return response;
 }
 
 export function mountReceiptPreviewApi(
@@ -379,7 +361,7 @@ export function mountReceiptPreviewApi(
             savedLogo = (
               await VENUE_SERVICE.readPrintedDepartmentReceipt(
                 tx,
-                checked.scope,
+                { ...checked.scope, receiptDiagnostic: diagnostic },
                 id,
                 printer.paperWidth,
               )
