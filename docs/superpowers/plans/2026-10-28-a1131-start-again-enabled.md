@@ -17,7 +17,7 @@ Words used here:
 - **setup database**: `<venue>/venue.db` of the interrupted first setup — the file the repair page
   inspects (`inspectFirstSetupResolution`,
   `packages/provisioning/src/first-setup-resolution-inspection.ts:260`, which reads the database
-  through `inspectDatabase`, `:77-138`). Its pair `<venue>/node.db` has no tables, even after a
+  through `inspectDatabase`, `:77-126`). Its pair `<venue>/node.db` has no tables, even after a
   complete Live setup and the trading restart (A1042 plan round 3,
   `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md:96-98,126`).
 - **recovery target**: where a backup recovery places the restored venue,
@@ -494,14 +494,15 @@ Files: `apps/setup/src/screens/initial-owner-strings.ts`, `apps/setup/src/setup-
 | `heldNoInvoicesOne` | It is not an invoice, so no invoice was sent to AEAT. | No es una factura, así que no se envió ninguna factura a la AEAT. |
 | `heldLost` | Start again deletes them with this attempt. You will enter this setup's details again. | Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración. |
 
-  Worked example (N from Task 0): "The setup database already holds N saved items. None of them is
+  Worked example (105 from Task 0 (a); a box whose activation writes other rows shows its own
+  count): "The setup database already holds 105 saved items. None of them is
   an invoice, so no invoice was sent to AEAT. Start again deletes them with this attempt. You will
   enter this setup's details again." then today's "A recovery from backup started on … and did not
   finish. Start again deletes it." and "Deletes this attempt. This box will not use its invoice
   series names again."
 - `startUnavailableOccupied` stays, shown only for a database that holds records with no stopped
   recovery.
-- Failing tests first (both locales): (a) the test at `setup-app-resolution.test.ts:1940-1960`
+- Failing tests first (both locales): (a) the test at `setup-app-resolution.test.ts:1942-1961`
   changes (see "Tests whose checks change"); (b) after the password the held lines appear in order,
   `heldRowsOne`/`heldNoInvoicesOne` for `rows: 1`; (c) still refused: a database that holds
   records with no stopped recovery keeps Start again disabled with `startUnavailableOccupied`.
@@ -596,7 +597,7 @@ section `{#interrupted-setup}` (headings and ids unchanged).
 
 | Test | Today's assertion | New assertion |
 | --- | --- | --- |
-| `apps/setup/src/setup-app-resolution.test.ts:1940-1960` "with the database present and holding records beside a stopped recovery, the disabled Start again says why" | `start-again` disabled; text contains `startUnavailableOccupied` | `start-again` enabled; no `startUnavailableOccupied`; renamed "… Start again is offered and, after the password, says what the database holds" |
+| `apps/setup/src/setup-app-resolution.test.ts:1942-1961` "with the database present and holding records beside a stopped recovery, the disabled Start again says why" | `start-again` disabled; text contains `startUnavailableOccupied` | `start-again` enabled; no `startUnavailableOccupied`; renamed "… Start again is offered and, after the password, says what the database holds" |
 | `apps/server/src/first-setup-start-again-backup-discard.test.ts:826-846`, row "the venue database holds rows" | summary refuses `setup.not_ready` | moved to Task 4b's legitimate case on Task 2's real held database (the `databasePresent(host, "occupied")` stub cannot be read by the holdings reader); row "the attempt reached activation" stays unedited |
 
 Before Tasks 4b and 8, grep for any other assertion of today's refusal:
@@ -628,7 +629,54 @@ recovery, or an empty one, is not edited.
 
 ## Task 0 findings
 
-(Filled in by Task 0.)
+Run 2026-10-28 on this branch rebased onto `914d55202`. Main changed none of the files this plan
+cites between `fe4872ac2` and `914d55202` (`git diff --stat`); every reference was re-read, and
+two ranges were corrected: `inspectDatabase` is `:77-126` (was `:77-138`), and the page test
+"with the database present and holding records beside a stopped recovery…" is
+`setup-app-resolution.test.ts:1942-1961` (was `:1940-1960`). `databasePresent(` still has 8 hits,
+all in `first-setup-start-again-backup-discard.test.ts`.
+
+**Probe.** A throwaway `apps/server/src/zz-a1131-task0-probe.test.ts` (deleted): the
+`fixture("publication")` of `first-fiscal-interruption.test.ts`, changed in three ways — the
+host's modules are every module in `ALL_MODULES` (the fiscal module's `provisioningSecret` stubbed
+as that file does), the venue database is opened with `openVenueDatabase` in the fixture's own
+`venue` folder with every `TEST_MIGRATIONS` set applied to `venue.db` (as `useVenueDb` does), and
+the fixture is given that workspace. `confirm()`, `activate()` (fails at publication), then the
+store was closed and both files were read with a read-only `DatabaseSync`. Excluded from (a):
+names starting `sqlite_` or `_litestream_`, and every `manifestSets()[i].table`. Failing cases,
+written before running: the attempt not `committed` or no rows (probe invalid); any append-only
+table with rows other than ones the fiscal module's activation writes, or any
+`registros_facturacion` row; any table in `node.db` (stop).
+Command: `env -u AI_AGENT -u CLAUDECODE pnpm --filter @waitron/server exec vitest run src/zz-a1131-task0-probe.test.ts`
+(1 test passed).
+
+```
+PROBE activate status 500 attempt committed
+PROBE inspection database occupied emptyDatabase false
+PROBE (a) tables with rows {"adjustment_reasons":9,"cadenas":1,"catalogue_settings":1,"catalogues":1,"content_languages":1,"department_day_ranges":20,"department_days":28,"department_sale_policies":1,"departments":1,"deployment":1,"device_profile_service_access":2,"device_profiles":3,"fiscal_allocations":1,"floor_zones":1,"invoice_series":3,"kitchen_stations":1,"location_catalogues":1,"locations":1,"management_sessions":1,"menu_details":1,"menu_periods":1,"node_membership":1,"node_roles":1,"nodes":1,"persons":1,"registro_sif":1,"seasons":4,"sections":2,"service_steps":3,"tenant_credentials":2,"tenants":1,"unit_seed_states":1,"units":5,"zone_sale_policies":1,"zone_service_policies":1} tables 35 total 105 of 246 tables in file
+PROBE (b) append-only with rows {"fiscal_allocations":1}
+PROBE (c) owners {"fiscal_allocations":"fiscal-verifactu (module fiscal-verifactu)"}
+PROBE every append-only table's count {"sales":0,"sale_lines":0,"tenders":0,"sale_settlements":0,"sale_voids":0,"sale_substitutions":0,"receipt_reprints":0,"sale_receipt_guests":0,"invoice_pdf_downloads":0,"daily_closes":0,"membership_removals":0,"membership_clearances":0,"bill_payment_lines":0,"unpaid_departures":0,"order_amendments":0,"order_group_events":0,"order_draft_events":0,"menu_versions":0,"menu_version_images":0,"sale_receipt_headers":0,"time_entries":0,"pay_period_closures":0,"payment_resolutions":0,"payment_holds":0,"payment_hold_outcomes":0,"registros_facturacion":0,"filing_cases":0,"filing_case_events":0,"fiscal_allocations":1,"fiscal_reservations":0,"clock_stop_restarts":0,"clock_checks":0,"clock_confirmations":0,"fiscal_certificate_installs":0,"adjustments":0,"adjustment_refunds":0}
+PROBE (d) node.db sqlite_schema []
+```
+
+- **(a)** 35 tables hold rows, 105 rows in all (list above). 105 replaces "N" in Task 8a's worked
+  example.
+- **(b)** One append-only table holds rows: `fiscal_allocations` (1). Every other table in any
+  set's `appendOnlyTables` is empty, `registros_facturacion` included.
+- **(c)** `fiscal_allocations` belongs to the `fiscal-verifactu` set, owned by module
+  `fiscal-verifactu`. So Task 1b's `startAgainDeletable` is exactly `["fiscal_allocations"]` on
+  the fiscal module, and no other module declares one.
+- **(d)** `node.db` has an empty `sqlite_schema` with the attempt at `committed`, so the node-file
+  check does not refuse the held state; no stop.
+
+Limits: the trading-settings write is still the fixture's stub (`persistTrading` only crashes), so
+no `trading.env` was written — it changes no database row. Migrations were applied to `venue.db`
+only, as `useVenueDb` does, so (d) shows that activation itself creates nothing in `node.db`; what
+a boot does to `node.db` is A1042's measurement. The module configuration is
+`parseModuleConfig({}, ALL_MODULES)`'s defaults, as the fixture's `provision` builds it; a venue
+with other choices may hold a different count, so 105 is one real activation's count, not a
+constant. Task 2's order probe (its Step 1) is recorded here when Task 2 runs.
 
 ## Review round 1 (2026-10-28) — what changed
 
