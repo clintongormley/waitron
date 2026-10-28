@@ -80,8 +80,14 @@ export type ReceiptElement =
   | { kind: "qr"; text: string }
   | { kind: "table"; table: ReceiptTable };
 
+/** A part of the trim the dashboard's preview highlights. */
+export type ReceiptPart =
+  "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo";
+
 export interface ReceiptDocument {
   elements: readonly ReceiptElement[];
+  /** Elements `[start, end)` of each part present. */
+  parts: Partial<Record<ReceiptPart, { start: number; end: number }>>;
   duplicate: boolean;
   practice: boolean;
 }
@@ -138,6 +144,12 @@ export function buildReceiptDocument({
   const itemAmount = (value: string): string =>
     simplified ? formatAmount(value, locale) : formatMoney(value, locale);
   const elements: ReceiptElement[] = [];
+  const parts: ReceiptDocument["parts"] = {};
+  const part = (name: ReceiptPart, add: () => void): void => {
+    const start = elements.length;
+    add();
+    parts[name] = { start, end: elements.length };
+  };
   const text = (text: string, indent: ReceiptIndent = 0, style?: ReceiptStyle): void => {
     elements.push({ kind: "text", text, indent, ...(style ? { style } : {}) });
   };
@@ -184,20 +196,21 @@ export function buildReceiptDocument({
   }
 
   align("center");
-  elements.push({ kind: "logo" });
+  part("logo", () => elements.push({ kind: "logo" }));
   const tradingName = receiptHeader?.tradingName?.trim();
   const printsTradingName =
     receiptHeader?.printTradingName === true &&
     !!tradingName &&
     tradingName !== issuer.venueName.trim();
   if (printsTradingName) text(tradingName, 0, { bold: true });
-  if (receipt.headerSubtitle) text(receipt.headerSubtitle);
+  const { headerSubtitle, phone, email, footerMessage } = receipt;
+  if (headerSubtitle) part("headerSubtitle", () => text(headerSubtitle));
   text(issuer.venueName, 0, printsTradingName ? undefined : { bold: true });
   text(`${label.nif}: ${issuer.nif}`);
   const venueLines = surface === "thermal" ? venueAddress : [];
-  for (const line of venueLines) text(line);
-  if (receipt.phone) text(`${label.phone} ${receipt.phone}`);
-  if (receipt.email) text(receipt.email);
+  if (venueLines.length > 0) part("address", () => venueLines.forEach((line) => text(line)));
+  if (phone) part("phone", () => text(`${label.phone} ${phone}`));
+  if (email) part("email", () => text(email));
   if (!simplified && issuer.domicile) {
     if (venueLines.length === 0) text(issuer.domicile);
     else if (!sameAddress(venueLines, issuer.domicile)) {
@@ -427,9 +440,9 @@ export function buildReceiptDocument({
     rule();
   }
 
-  if (receipt.footerMessage) {
+  if (footerMessage) {
     align("center");
-    text(receipt.footerMessage);
+    part("footerMessage", () => text(footerMessage));
     align("left");
   }
   if (simulated) {
@@ -438,5 +451,5 @@ export function buildReceiptDocument({
   }
   if (elements.at(-1)?.kind === "rule") elements.pop();
 
-  return { elements, duplicate, practice: simulated };
+  return { elements, parts, duplicate, practice: simulated };
 }

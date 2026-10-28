@@ -18,6 +18,7 @@ import {
   buildReceiptDocument,
   type ReceiptDocumentInput,
   type ReceiptIndent,
+  type ReceiptPart,
   type ReceiptStyle,
 } from "./receipt-document.js";
 export type { ReceiptIssuer, ReceiptTrim } from "./receipt-document.js";
@@ -54,13 +55,21 @@ export function formatReceipt(input: FormatReceiptInput): Uint8Array {
   return drawReceipt(input).bytes;
 }
 
+/** Pictures `[start, end)` of a drawn receipt, counted from 0. */
+export interface PictureRange {
+  start: number;
+  end: number;
+}
+
 /**
- * The receipt's commands, and which of the pictures they draw, counted from 0, are the rules that
- * end its sections, so a preview can tell a rule from a trim line of dashes that draws the same.
+ * The receipt's commands; which of the pictures they draw are the rules that end its sections, so a
+ * preview can tell a rule from a trim line of dashes that draws the same; and the pictures each
+ * part of the trim draws, for a part that draws any.
  */
 export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInput): {
   bytes: Uint8Array;
   rules: number[];
+  parts: Partial<Record<ReceiptPart, PictureRange>>;
 } {
   const rules: number[] = [];
   const document = buildReceiptDocument({
@@ -77,7 +86,9 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
     return width > available / 2 ? 2 : width;
   };
   let afterRule = false;
+  const firstPictures: number[] = [];
   for (const element of document.elements) {
+    firstPictures.push(b.pictures);
     if (element.kind !== "align" && element.kind !== "logo") afterRule = element.kind === "rule";
     switch (element.kind) {
       case "text": {
@@ -153,5 +164,15 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
       }
     }
   }
-  return { bytes: b.feedAndCut().bytes(), rules };
+  firstPictures.push(b.pictures);
+  const parts: Partial<Record<ReceiptPart, PictureRange>> = {};
+  for (const [part, elements] of Object.entries(document.parts) as [
+    ReceiptPart,
+    { start: number; end: number },
+  ][]) {
+    const start = firstPictures[elements.start]!;
+    const end = firstPictures[elements.end]!;
+    if (end > start) parts[part] = { start, end };
+  }
+  return { bytes: b.feedAndCut().bytes(), rules, parts };
 }
