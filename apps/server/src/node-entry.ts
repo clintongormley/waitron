@@ -9,8 +9,7 @@ export { serveRecovery, recoveryTlsFiles } from "./recovery-listener.js";
 export type { RecoveryServeOptions } from "./recovery-listener.js";
 export { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { realpathSync } from "node:fs";
-import { realpath } from "node:fs/promises";
-import { join, resolve, sep } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
@@ -60,7 +59,12 @@ import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failu
 import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
-import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
+import {
+  START_FREE_SPACE_FLOOR,
+  freeSpaceAtStart,
+  insideAny,
+  lowestFreeBytes,
+} from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { maskPersonalData } from "./log-personal-data.js";
@@ -372,7 +376,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     deps.baseEnv,
     () => (deps.exit ?? DEFAULT_EXIT)(0),
     deps.log,
-    { stateDir: deps.stateDir, statfs: deps.statfs },
+    {
+      stateDir: deps.stateDir,
+      venueDir: deps.venueDir,
+      logDir: deps.logDir ?? join(deps.stateDir, "logs"),
+      statfs: deps.statfs,
+    },
   );
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);
@@ -514,17 +523,6 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   return admission.run((venueHeld) =>
     runAdmittedEntry(selected, transport, venueHeld, discardedCopy),
   );
-}
-
-/** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
-async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
-  const real = async (p: string) => realpath(p).catch(() => resolve(p));
-  const target = await real(path);
-  for (const root of roots) {
-    const base = await real(root);
-    if (target === base || target.startsWith(base + sep)) return true;
-  }
-  return false;
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };

@@ -40,7 +40,7 @@ import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
 import { releaseSpare, releaseSpareBeforeStartAgain } from "./spare-space.js";
-import { lowestFreeBytes } from "./start-space.js";
+import { insideAny, lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
   const pair = await host.store.readResumable();
@@ -96,10 +96,32 @@ export async function resolveFirstSetupEntry(
   return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log, spare);
 }
 
-/** The box's configured state folder, where its spare file lives, and how its free space is read. */
+/** The box's configured folders (its spare file lives in `stateDir`) and how free space is read. */
 export interface SpareOption {
   stateDir: string;
+  venueDir: string;
+  logDir: string;
   statfs?: Statfs;
+}
+
+/**
+ * Whether the box's next start deletes old logs to make room, as `runEntry` decides it: at a
+ * backup recovery's repair stage only when the log folder is outside both configured folders, and
+ * on every other path always below its free-space floor, which a full disk always is. Undefined
+ * when the recovery's stage cannot be read.
+ */
+async function restartDeletesLogs(spare: SpareOption): Promise<boolean | undefined> {
+  try {
+    const entry = await resolveFirstSetupBackupEntry({
+      stateDir: spare.stateDir,
+      venueDir: spare.venueDir,
+    });
+    return (
+      entry.kind !== "repair" || !(await insideAny(spare.logDir, [spare.stateDir, spare.venueDir]))
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 const START_REFUSALS = [
@@ -378,6 +400,7 @@ async function resolutionApp(
     startAgain: actions.startAgainFirstSetup,
     summary: actions.startAgainSummary,
     freeSpace: () => lowestFreeBytes([roots.stateDir, roots.venueDir], spare?.statfs),
+    ...(spare === undefined ? {} : { restartDeletesLogs: () => restartDeletesLogs(spare) }),
     ...(moduleConfig === undefined
       ? {}
       : {

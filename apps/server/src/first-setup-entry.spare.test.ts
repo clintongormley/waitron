@@ -14,9 +14,11 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import * as backupEntry from "./first-setup-backup-entry.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import type { Statfs } from "./free-bytes.js";
+import * as resolutionApi from "./setup-first-fiscal-api.js";
 
 vi.mock("@waitron/provisioning", { spy: true });
 vi.mock("./first-setup-backup-entry.js", { spy: true });
+vi.mock("./setup-first-fiscal-api.js", { spy: true });
 
 const ID = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
 const MiB = 1024 * 1024;
@@ -103,7 +105,10 @@ it("a discarded recovery on a nearly full disk: the spare is gone before the emp
   plantSpare();
   const seen = await spareAtEmptying();
   const log = vi.fn();
-  await resolveFirstSetupEntry(anchor, {}, undefined, log, { stateDir, statfs: freeIs(MiB) });
+  await resolveFirstSetupEntry(anchor, {}, undefined, log, {
+    ...spareOption(),
+    statfs: freeIs(MiB),
+  });
   expect(seen).toEqual([false]);
   expect(log).toHaveBeenCalledWith("warn", "storage.spare_released", { bytes: 4096 });
   expect(await isEmptiedTombstone(anchor, ID)).toBe(true);
@@ -114,7 +119,7 @@ it("a discarded recovery with 16 MiB or more free: the spare is kept", async () 
   plantSpare();
   const seen = await spareAtEmptying();
   await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
-    stateDir,
+    ...spareOption(),
     statfs: freeIs(16 * MiB),
   });
   expect(seen).toEqual([true]);
@@ -126,13 +131,19 @@ it("an emptied tombstone on a nearly full disk keeps the spare", async () => {
   await discardedRecovery();
   await emptyAbandonedBackupRecovery(anchor, ID);
   plantSpare();
-  await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), { stateDir, statfs: freeIs(MiB) });
+  await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
+    ...spareOption(),
+    statfs: freeIs(MiB),
+  });
   expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
 });
 
 it("no recovery on a nearly full disk keeps the spare", async () => {
   plantSpare();
-  await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), { stateDir, statfs: freeIs(MiB) });
+  await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
+    ...spareOption(),
+    statfs: freeIs(MiB),
+  });
   expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
 });
 
@@ -147,12 +158,56 @@ it("with no spare option given, nothing is released", async () => {
 
 const INSPECTION = "/setup-api/first-setup/resolution";
 
+const spareOption = (logDir = join(stateDir, "logs")) => ({
+  stateDir,
+  venueDir: anchor.venueDir,
+  logDir,
+});
+
+/** The repair app's answer to "does the next start delete old logs", as its routes ask it. */
+async function restartDeletesLogsIn(logDir?: string) {
+  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), spareOption(logDir));
+  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
+  const options = vi.mocked(resolutionApi.mountFirstSetupResolutionApi).mock.lastCall?.[3];
+  const ask = () => options!.restartDeletesLogs!();
+  return { ask, dispose: entry.dispose };
+}
+
+it("the repair app says a restart deletes logs when the log folder is outside the state and venue folders", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn(join(root, "logs"));
+  expect(await repair.ask()).toBe(true);
+  await repair.dispose();
+});
+
+it("…says it does not at a repair stage whose log folder is inside the state folder", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn();
+  expect(await repair.ask()).toBe(false);
+  await repair.dispose();
+});
+
+it("…says it does on a box with no backup recovery, whatever the log folder", async () => {
+  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+  const repair = await restartDeletesLogsIn();
+  expect(await repair.ask()).toBe(true);
+  await repair.dispose();
+});
+
+it("…cannot say when the recovery's stage cannot be read", async () => {
+  await stoppedRecovery();
+  const repair = await restartDeletesLogsIn();
+  vi.mocked(backupEntry.resolveFirstSetupBackupEntry).mockRejectedValueOnce(new Error("EIO"));
+  expect(await repair.ask()).toBeUndefined();
+  await repair.dispose();
+});
+
 it("the repair app releases the spare on its inspection read when a stopped recovery fills the disk", async () => {
   await stoppedRecovery();
   plantSpare();
   const log = vi.fn();
   const entry = await resolveFirstSetupEntry(anchor, {}, undefined, log, {
-    stateDir,
+    ...spareOption(),
     statfs: freeIs(MiB),
   });
   if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
@@ -167,7 +222,7 @@ it("…and so does the repair app of a box that started with no recovery folder"
   writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
   plantSpare();
   const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
-    stateDir,
+    ...spareOption(),
     statfs: freeIs(MiB),
   });
   if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
@@ -181,7 +236,7 @@ it("the repair app with room keeps the spare", async () => {
   await stoppedRecovery();
   plantSpare();
   const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
-    stateDir,
+    ...spareOption(),
     statfs: freeIs(16 * MiB),
   });
   if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
@@ -208,7 +263,7 @@ it("the release runs before the fence", async () => {
     return service;
   });
   const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
-    stateDir,
+    ...spareOption(),
     statfs: freeIs(MiB),
   });
   if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);

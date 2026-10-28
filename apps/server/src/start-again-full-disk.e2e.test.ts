@@ -73,6 +73,13 @@ function tls() {
 
 const ROUTE = "https://box.test/setup-api/first-setup/resolution";
 
+/** The folders `runEntry` hands first-setup resolution when it is given no log folder. */
+const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
+  stateDir: roots.stateDir,
+  venueDir: roots.venueDir,
+  logDir: join(roots.stateDir, "logs"),
+});
+
 type Owner = {
   state: { attemptId: string; revision: number; ownerGeneration: number };
   capability: string;
@@ -169,7 +176,7 @@ it("with the box's spare file, the password step, the summary and Start again al
     { WAITRON_ENV: "preproduction" },
     undefined,
     () => {},
-    { stateDir: f.roots.stateDir },
+    spareOption(f.roots),
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
   small.fill();
@@ -202,7 +209,7 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
     { WAITRON_ENV: "preproduction" },
     undefined,
     () => {},
-    { stateDir: f.roots.stateDir },
+    spareOption(f.roots),
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
   // With 64 KiB left the refusal came before the placement was recorded, and the recovery still
@@ -239,7 +246,7 @@ it("without a spare file, the password step of the Start-again flow on a full di
     { WAITRON_ENV: "preproduction" },
     undefined,
     () => {},
-    { stateDir: f.roots.stateDir },
+    spareOption(f.roots),
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
   const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
@@ -263,7 +270,11 @@ it("without a spare file, the password step of the Start-again flow on a full di
   );
 
   expect(recovered.status, await recovered.clone().text()).toBe(507);
-  expect(await recovered.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+  // Its logs are in <state>/logs, inside the state folder, so a restart at this repair stage
+  // deletes none (runEntry's rule).
+  expect(await recovered.json()).toEqual({
+    error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+  });
 });
 
 it("in the held state, with the box's spare file, the summary answers with what the setup database holds and Start again completes on a full disk", async (ctx) => {
@@ -279,7 +290,7 @@ it("in the held state, with the box's spare file, the summary answers with what 
     { WAITRON_ENV: "preproduction" },
     undefined,
     () => {},
-    { stateDir: f.roots.stateDir },
+    spareOption(f.roots),
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
   const recoveryId = (await f.workspace.read()).at(-1)!.target.recoveryId;
