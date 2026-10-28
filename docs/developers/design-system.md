@@ -5482,8 +5482,11 @@ of its bills hold an open New order of this person's with lines; a party that is
 a table in a zone the device does not show keeps its button. The table on screen is the selected
 tab, with or without ✎, and Floor is selected when no button is. A table left for another table
 keeps its ✎ while its save is out, then until a floor read started after the save answered takes its
-place, and for as long as the save has failed. When the buttons do not fit, the strip scrolls
-sideways. Order has no tab on a handheld.
+place, and for as long as the save has failed. Floor and the buttons start straight after the brand
+mark, so Floor does not move as buttons come and go (A1122). When the buttons do not fit, Floor stays
+put and only the buttons scroll sideways, in a `role="none"` box inside the tab list; an end that
+hides a button fades, as `wt-tabs`'s strip does, and the selected button is scrolled clear of the
+fade (A1121). Order has no tab on a handheld.
 
 Above phone width the bar fits itself, and only two things ever leave it: the brand mark first, then
 the name, which moves into More with its clock actions. The brand mark (the venue's logo,
@@ -5498,7 +5501,8 @@ My schedule, Profile and Transfers, each where offered; a `role="group"` headed 
 then, while a venue logo is in use and has not failed, `wt-powered-by` with `login.powered_by`
 (A1096). With the name on the bar, its menu holds only the clock actions, My hours and Fix my hours,
 and without the clock the name is drawn alone. Opening More holds its contents steady until it
-closes.
+closes. More opens under ☰ and, when it is taller than the room below, scrolls rather than moving up
+over the bar (A1123).
 Floor, tapped after a table, opens the Floor on that table's zone when the device shows that zone
 (`#floorReturnZone` in `till-app.ts`).
 

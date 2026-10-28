@@ -1216,7 +1216,7 @@ describe("a handheld's table buttons", () => {
         })),
       });
       await frame();
-      const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+      const strip = el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs .bar-tables")!;
       expect(strip.querySelectorAll("[data-bar-table]")).toHaveLength(10);
       expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
       const header = el.shadowRoot!.querySelector("header")!.getBoundingClientRect();
@@ -1240,7 +1240,7 @@ describe("a handheld's table buttons", () => {
         held: false,
       }));
     const stripOf = (el: TillShell) =>
-      el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs")!;
+      el.shadowRoot!.querySelector<HTMLElement>("header nav.tabs .bar-tables")!;
     const expectInStrip = (el: TillShell, tableId: string) => {
       const strip = stripOf(el).getBoundingClientRect();
       const box = buttonOf(el, tableId).getBoundingClientRect();

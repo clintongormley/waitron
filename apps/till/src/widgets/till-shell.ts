@@ -41,6 +41,9 @@ import "./guide-sheet.js";
 /** The screens a tab names: a handheld draws no Order tab. */
 type TabScreen = Exclude<BuiltInScreen, "order">;
 
+/** The table buttons' fade spans this many `--wt-space-6`, as `wt-tabs`'s does. */
+const FADE_SPACES = 2;
+
 /** The product WORDMARK: a fixed name, never translated UI copy. */
 const BRAND = "Waitron";
 
@@ -165,6 +168,43 @@ export class TillShell extends LitElement {
         overflow-x: auto;
         align-items: center;
         gap: var(--wt-space-2);
+      }
+
+      .head > .tabs {
+        flex: 1 1 auto;
+      }
+
+      .bar-tables {
+        display: flex;
+        flex: 0 1 auto;
+        min-width: 0;
+        overflow-x: auto;
+        align-items: center;
+        gap: var(--wt-space-2);
+        --fade-start: 0px;
+        --fade-end: 0px;
+        --fade-towards: to right;
+      }
+      .bar-tables:dir(rtl) {
+        --fade-towards: to left;
+      }
+      .bar-tables[data-overflow="start"],
+      .bar-tables[data-overflow="both"] {
+        --fade-start: var(--fade-width);
+      }
+      .bar-tables[data-overflow="end"],
+      .bar-tables[data-overflow="both"] {
+        --fade-end: var(--fade-width);
+      }
+      /* A mask reads only alpha, and the background token is opaque in every theme. */
+      .bar-tables[data-overflow] {
+        mask-image: linear-gradient(
+          var(--fade-towards),
+          transparent 0,
+          var(--wt-color-bg) var(--fade-start),
+          var(--wt-color-bg) calc(100% - var(--fade-end)),
+          transparent 100%
+        );
       }
 
       .till-strip {
@@ -381,6 +421,10 @@ export class TillShell extends LitElement {
         max-height: calc(100dvh - 2 * var(--wt-space-2));
         overflow-y: auto;
       }
+      /* A handheld's More opens under ☰ and scrolls rather than moving up over the bar. */
+      wt-row-actions[data-test="more-menu"]::part(popup) {
+        max-height: calc(100dvh - var(--more-top, var(--wt-space-2)) - var(--wt-space-2));
+      }
 
       .visually-hidden {
         ${visuallyHiddenStyles}
@@ -509,6 +553,16 @@ export class TillShell extends LitElement {
     if (this.#stepBackOwed) void this.#fit();
   };
   readonly #onZonePopupToggle = () => void this.#measureCounterLogo();
+  /** Runs inside `showPopover`, before `wt-row-actions` places the popup, so it is placed at its
+   * capped height under ☰ rather than moved up over the bar to fit. */
+  readonly #onPopupOpening = (event: Event) => {
+    if ((event as ToggleEvent).newState !== "open") return;
+    const menu = this.renderRoot.querySelector<HTMLElement>(
+      'wt-row-actions[data-test="more-menu"]',
+    )!;
+    const trigger = menu.shadowRoot!.querySelector("button")!;
+    menu.style.setProperty("--more-top", `${trigger.getBoundingClientRect().bottom}px`);
+  };
 
   /** An open More can hold the name though `steps` puts it on the bar; once it has closed, above
    * phone width, raise `steps` to cover it, so closing it moves nothing back before the fit steps
@@ -558,7 +612,10 @@ export class TillShell extends LitElement {
       void this.#fit();
     }
     this.#retryHiddenLogo();
-    if (changed.has("barTables")) void this.#revealSelectedTable();
+    if (changed.has("barTables")) {
+      void this.#revealSelectedTable();
+      void this.#settled().then(() => this.#markOverflow());
+    }
   }
 
   /** Scrolls the strip, never the page, to show the selected table's button whenever the buttons
@@ -578,10 +635,45 @@ export class TillShell extends LitElement {
     );
     if (!button) return;
     const strip = button.parentElement!;
+    // Stop short of a faded end wherever another button lies beyond it, so that one is the faint one.
+    const fade = this.#sizeFade(strip);
+    const before = button.previousElementSibling ? fade : 0;
+    const after = button.nextElementSibling ? fade : 0;
+    const rtl = getComputedStyle(strip).direction === "rtl";
     const box = button.getBoundingClientRect();
     const view = strip.getBoundingClientRect();
-    if (box.left < view.left) strip.scrollLeft -= view.left - box.left;
-    else if (box.right > view.right) strip.scrollLeft += box.right - view.right;
+    const toLeft = box.left - view.left - (rtl ? after : before);
+    const toRight = box.right - view.right + (rtl ? before : after);
+    if (toLeft < 0) strip.scrollLeft += toLeft;
+    else if (toRight > 0) strip.scrollLeft += toRight;
+    this.#markOverflow();
+  }
+
+  /** The fade is never wider than half the room beside the widest button, so a button revealed
+   * between two fades is never faded itself. */
+  #sizeFade(strip: HTMLElement): number {
+    const widest = Math.max(...[...strip.children].map((b) => b.getBoundingClientRect().width));
+    const room = strip.getBoundingClientRect().width - widest;
+    const full = parseFloat(getComputedStyle(strip).getPropertyValue("--wt-space-6")) * FADE_SPACES;
+    const fade = Math.max(0, Math.min(full, room / 2));
+    strip.style.setProperty("--fade-width", `${fade}px`);
+    return fade;
+  }
+
+  readonly #onBarTablesScroll = () => this.#markOverflow();
+
+  /** Marks which ends of the table buttons' strip hide a button, which fades that end. Scroll
+   * offsets are negative right to left, so the distance from the start is their size. */
+  #markOverflow(): void {
+    const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
+    if (!strip) return;
+    this.#sizeFade(strip);
+    const fromStart = Math.abs(strip.scrollLeft);
+    const start = fromStart >= 1;
+    const end = strip.scrollWidth - strip.clientWidth - fromStart >= 1;
+    const overflow = start && end ? "both" : start ? "start" : end ? "end" : undefined;
+    if (overflow) strip.dataset.overflow = overflow;
+    else delete strip.dataset.overflow;
   }
 
   /** A failed logo's box retries only while it is on the page, so while the bar leaves the logo out
@@ -631,7 +723,9 @@ export class TillShell extends LitElement {
     const popup = this.#popup();
     if (popup !== this.#watchedPopup) {
       this.#watchedPopup?.removeEventListener("toggle", this.#onPopupToggle);
+      this.#watchedPopup?.removeEventListener("beforetoggle", this.#onPopupOpening);
       popup?.addEventListener("toggle", this.#onPopupToggle);
+      popup?.addEventListener("beforetoggle", this.#onPopupOpening);
       this.#watchedPopup = popup;
     }
   }
@@ -639,11 +733,12 @@ export class TillShell extends LitElement {
   /** A strip that changes width can leave the selected table's button outside it, so its reveal
    * runs again then; a redraw at the same width leaves a person's own scroll alone. */
   #observeStrip(): void {
-    const strip = this.renderRoot.querySelector(".head .tabs") ?? undefined;
+    const strip = this.renderRoot.querySelector(".head .bar-tables") ?? undefined;
     if (strip === this.#watchedStrip) return;
     this.#stripObserver ??= new ResizeObserver(() => {
       this.#revealedBar = undefined;
       void this.#revealSelectedTable();
+      this.#markOverflow();
     });
     if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
     if (strip) this.#stripObserver.observe(strip);
@@ -740,7 +835,8 @@ export class TillShell extends LitElement {
     const head = this.renderRoot.querySelector<HTMLElement>(".head");
     const tabs = this.renderRoot.querySelector<HTMLElement>(".head .tabs");
     if (!head || !tabs) return false;
-    return head.scrollWidth > head.clientWidth || tabs.scrollWidth > tabs.clientWidth;
+    const tables = tabs.querySelector<HTMLElement>(".bar-tables");
+    return [head, tabs, tables].some((box) => box !== null && box.scrollWidth > box.clientWidth);
   }
 
   /** Adds steps while the bar wraps. Takes steps away only when `#stepBackOwed`, and never while
@@ -1202,7 +1298,13 @@ export class TillShell extends LitElement {
               </button>
             `,
       )}
-      ${tables.map((table) => this.#barTable(table))}
+      ${
+        tables.length > 0
+          ? html`<div class="bar-tables" role="none" @scroll=${this.#onBarTablesScroll}>
+              ${tables.map((table) => this.#barTable(table))}
+            </div>`
+          : nothing
+      }
     </nav>`;
   }
 
