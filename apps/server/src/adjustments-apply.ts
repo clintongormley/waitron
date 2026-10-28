@@ -83,6 +83,7 @@ import {
   partyAfterEdit,
   quantityOfLine,
   type OrderAttendance,
+  readLockedLines,
   readOrderRevision,
   refusePaymentInFlight,
   removeFromLine,
@@ -91,6 +92,7 @@ import {
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
+import { readPortionBindings } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import "./errors.js";
 
@@ -393,6 +395,70 @@ function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
   });
 }
 
+/**
+ * A whole-bill discount over the rows the bill files (plan D29): bound portions grouped as
+ * {@link readLockedLines} groups them for filing, each group spread as one line at its first member's
+ * line number, then the group's rows handed to its portions in ordinal order, the higher price first.
+ * A bill holding no bound portion is spread line by line.
+ */
+async function spreadOverFiledRows(
+  tx: Transaction,
+  orderId: string,
+  subjects: readonly Subject[],
+  discount: Decimal,
+): Promise<Change[]> {
+  const bindings = await readPortionBindings(
+    tx,
+    subjects.map(({ row }) => row.id),
+  );
+  if (bindings.size === 0) return spread(subjects, discount);
+  const subjectOf = new Map(subjects.map((subject) => [subject.row.id, subject]));
+  const groups = (await readLockedLines(tx, orderId)).map(({ identity }) =>
+    (identity.lineIds ?? [identity.id]).map((id) => subjectOf.get(id)!),
+  );
+  const results = spreadBillDiscount(
+    groups.map((members) => {
+      const { row, exact } = members[0]!;
+      const quantity = members.reduce((sum, member) => sum + member.quantity, 0);
+      return {
+        lineId: row.id,
+        addedOrder: row.lineNo,
+        gross: gross(row, quantity),
+        quantity: thousandthsToDecimal(quantity),
+        priceQuantity: thousandthsToDecimal(row.priceQuantity),
+        grossUnit: centsToDecimal(row.unit),
+        exact,
+      };
+    }),
+    discount,
+  );
+  const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
+  return groups.flatMap((members) => {
+    const pieces = results
+      .get(members[0]!.row.id)!
+      .rows.map((piece) => ({ ...piece, left: decimalToThousandths(piece.quantity) }));
+    return [...members]
+      .sort((a, b) => ordinal(a) - ordinal(b))
+      .flatMap(({ row, quantity, carved }) => {
+        const rows: PricedRow[] = [];
+        const cuts: Decimal[] = [];
+        for (let need = quantity; need > 0;) {
+          const piece = pieces.find((candidate) => candidate.left > 0)!;
+          const take = Math.min(need, piece.left);
+          piece.left -= take;
+          need -= take;
+          rows.push({ quantity: thousandthsToDecimal(take), unitGross: piece.unitGross });
+          cuts.push(
+            subtractDecimal(gross(row, take), gross(row, take, decimalToCents(piece.unitGross))),
+          );
+        }
+        const reduction = sumDecimals(cuts);
+        if (compareDecimal(reduction, ZERO) === 0) return [];
+        return [{ row, carved, rows, reduction }];
+      });
+  });
+}
+
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
  * whose total merely rounds to nothing. */
 function zeroed(subjects: readonly Subject[]): Change[] {
@@ -453,7 +519,9 @@ export async function planAdjustment(
     if (ask.quantity !== undefined) throw invalid("quantity");
     const families = new Set(rows.flatMap((row) => row.parentLineId ?? []));
     before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
-    changes = spread(
+    changes = await spreadOverFiledRows(
+      tx,
+      orderId,
       rows.map((row) => ({
         row,
         quantity: row.quantity,

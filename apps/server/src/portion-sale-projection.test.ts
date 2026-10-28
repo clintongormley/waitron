@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import {
   createExtraList,
   createProduct,
@@ -30,6 +30,9 @@ import {
 import { transferItems } from "./testing/bill-action-fixture.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
+import { addPortionRound, portionBill as registeredPortionBill } from "./testing/portion-bill.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import type { PortionRef } from "./order-portions.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
 import type { DeviceRequestConfig } from "./till-config.js";
@@ -818,6 +821,404 @@ describe("A803 monetary comparison: operations on portions through the real path
         expect.stringMatching(/^Croqueta 1\.000 gross 3\.33 base 3\.03 /),
       ]);
       expect(baseOf(today, "10.00")).toBe("6.06");
+    });
+  });
+});
+
+describe("A803 monetary comparison: a whole-bill discount over registered portions", () => {
+  const suite = useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+  });
+  let db: Database;
+  let cfg: DeviceRequestConfig;
+  let offers: ZoneOffers;
+  let ids: {
+    drink: string;
+    plate: string;
+    burger: string;
+    cheese: string;
+    toppings: string;
+    water: string;
+    steak: string;
+    bread: string;
+    salad: string;
+    reasonId: string;
+  };
+
+  beforeAll(() => {
+    db = suite.db;
+    useSplitExtrasDb(db);
+  });
+
+  beforeEach(async () => {
+    const venue = await setupVenue();
+    cfg = venue.cfg;
+    ids = await withTransaction(db, async (tx) => {
+      const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+      const product = async (name: string, price: string, vatClass: VatClass = "reduced") =>
+        (
+          await createProduct(tx, {
+            catalogueId: venue.catalogueId,
+            categoryId: null,
+            name,
+            customerName: { [defaultLanguage]: `${name} (customer)` },
+            kitchenName: name.toUpperCase(),
+            pricingUnit: "each",
+            unitPrice: price,
+            vatClass,
+          })
+        ).id;
+      const drink = await product("Drink", "3.33", "general");
+      const plate = await product("Plate", "5.00");
+      const burger = await product("Burger", "9.50");
+      const cheese = await product("Cheese", "1.00");
+      const water = await product("Water", "2.00");
+      const steak = await product("Steak", "2.00");
+      const bread = await product("Bread", "1.00");
+      const salad = await product("Salad", "1.50");
+      const toppings = (
+        await createExtraList(
+          tx,
+          {
+            name: "Toppings",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [{ productId: cheese, maxQuantity: 2, preselected: false, price: null }],
+          },
+          cfg.locale,
+        )
+      ).id;
+      await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
+      await tx.insert(persons).values({ id: OPERATOR, displayName: "Ana", role: "supervisor" });
+      const reasonId = (
+        await createAdjustmentReason(tx, {
+          name: "House",
+          names: {},
+          kind: "comp",
+          actions: ["comp", "discount_percent", "discount_amount"],
+          maxPercentBp: null,
+          maxAmount: null,
+          applyRoles: ["staff", "supervisor", "manager", "admin"],
+          approverRoles: ["staff", "supervisor", "manager", "admin"],
+          noteRequired: false,
+        })
+      ).id;
+      offers = await offerProducts(tx, cfg, { zone: "tables" });
+      return { drink, plate, burger, cheese, toppings, water, steak, bread, salad, reasonId };
+    });
+  });
+
+  const many = (productId: string, count: number): ProductLine => ({
+    productId,
+    quantity: String(count),
+  });
+  const burgersWithCheese = (count: number): ProductLine => ({
+    productId: ids.burger,
+    quantity: String(count),
+    extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
+  });
+
+  /** Today's bill, each round line one row, and the same round as registered portions. */
+  async function bills(
+    tx: Transaction,
+    lines: ProductLine[],
+  ): Promise<{ today: string; bill: string; portions: PortionRef[] }> {
+    const today = await createTableKitchenOrder(tx, cfg, lines);
+    const { billId, portions } = await registeredPortionBill(
+      tx,
+      cfg,
+      offers.zoneId,
+      offers.toOfferLines(lines),
+    );
+    return { today, bill: billId, portions };
+  }
+
+  async function adjust(
+    tx: Transaction,
+    billId: string,
+    action: "discount_amount" | "comp",
+    lineId: string | null,
+    amount?: string,
+  ): Promise<void> {
+    const [order] = await tx
+      .select({ revision: workingOrders.revision })
+      .from(workingOrders)
+      .where(eq(workingOrders.id, billId));
+    await applyAdjustment(
+      tx,
+      cfg,
+      {
+        orderId: billId,
+        expectedEdit: await readBillEditState(tx, billId),
+        submissionId: randomUUID(),
+        expectedRevision: order!.revision,
+        lineId,
+        reasonId: ids.reasonId,
+        action,
+        ...(amount === undefined ? {} : { amount: decimal(amount) }),
+        note: null,
+        operatorId: OPERATOR,
+      },
+      cfg.locale,
+    );
+  }
+
+  const discountBill = (tx: Transaction, billId: string, amount: string) =>
+    adjust(tx, billId, "discount_amount", null, amount);
+
+  /**
+   * What the bill files, as every filing path reads it (`readLockedLines` groups bound portions)
+   * and hands it to `recordSale` (`withReceiptListPrices`): its rows, total and VAT by rate, and
+   * `gross`, each row's name, quantity and gross alone.
+   */
+  async function filedOf(tx: Transaction, billId: string) {
+    const lines = await readLockedLines(tx, billId);
+    const priced = rateLines(grossLockedLines(lines.map((line) => line.locked)), DAY);
+    const rows = withReceiptListPrices(
+      priced.lines,
+      lines.map((line) => line.identity),
+    );
+    return {
+      rows: rows
+        .map(
+          (row) =>
+            `${row.name} ${row.quantity} gross ${row.lineGross} base ${row.lineTotal} @${row.vatRate} list ${row.listGross ?? "-"} each ${row.listUnitPriceGross ?? "-"}`,
+        )
+        .sort(),
+      gross: rows.map((row) => `${row.name} ${row.quantity} gross ${row.lineGross}`).sort(),
+      total: priced.total,
+      vat: [...priced.vatBreakdown].sort((a, b) => a.rate.localeCompare(b.rate)),
+    };
+  }
+
+  /** Each portion's dish price now, in the portion's ordinal order within its round line. */
+  async function pricesByOrdinal(tx: Transaction, portions: readonly PortionRef[]) {
+    const rows = await tx
+      .select({ id: workingOrderLines.id, unit: workingOrderLines.unitPriceGross })
+      .from(workingOrderLines)
+      .where(
+        inArray(
+          workingOrderLines.id,
+          portions.map((portion) => portion.lineId),
+        ),
+      );
+    const unitOf = new Map(rows.map((row) => [row.id, row.unit]));
+    return [...portions]
+      .sort((a, b) => a.ordinal - b.ordinal)
+      .map((portion) => unitOf.get(portion.lineId));
+  }
+
+  /** Each line of the bill as its line number and name, in line order. */
+  async function dishLines(tx: Transaction, billId: string): Promise<string[]> {
+    const rows = await tx
+      .select({ lineNo: workingOrderLines.lineNo, name: workingOrderLines.name })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(asc(workingOrderLines.lineNo));
+    return rows.map((row) => `${row.lineNo} ${row.name}`);
+  }
+
+  it("A803 monetary comparison: €1.00 off 3 × €3.33 at 21% and 1 × €5.00 at 10%", async () => {
+    await withTransaction(db, async (tx) => {
+      const { today, bill } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);
+      await discountBill(tx, today, "1.00");
+      await discountBill(tx, bill, "1.00");
+
+      const expected = await filedOf(tx, today);
+      expect(expected.gross).toEqual([
+        "Drink 1.000 gross 3.10",
+        "Drink 2.000 gross 6.22",
+        "Plate 1.000 gross 4.67",
+      ]);
+      expect(await filedOf(tx, bill)).toEqual(expected);
+    });
+  });
+
+  it("A803 monetary comparison: €1.00 off 3 burgers €9.50 with €1.00 cheese, and a €2.00 water", async () => {
+    await withTransaction(db, async (tx) => {
+      const { today, bill } = await bills(tx, [burgersWithCheese(3), many(ids.water, 1)]);
+      await discountBill(tx, today, "1.00");
+      await discountBill(tx, bill, "1.00");
+
+      const expected = await filedOf(tx, today);
+      expect(expected.gross).toEqual([
+        "Burger 3.000 gross 27.66",
+        "Cheese 3.000 gross 2.91",
+        "Water 1.000 gross 1.93",
+      ]);
+      expect(await filedOf(tx, bill)).toEqual(expected);
+    });
+  });
+
+  // Owner decision 2026-10-28 (A803 slice 1, option a): from the second discount on, a group of
+  // portions breaks an odd-cent tie at its first portion's line number, so the cent can fall on a
+  // different dish than today's; the bill's total is unchanged.
+  it("A803 monetary comparison: two bill discounts in turn move one odd cent between dishes, totals unchanged", async () => {
+    await withTransaction(db, async (tx) => {
+      const { today, bill } = await bills(tx, [
+        many(ids.steak, 2),
+        many(ids.bread, 2),
+        many(ids.salad, 1),
+      ]);
+      for (const billId of [today, bill]) {
+        await discountBill(tx, billId, "0.59");
+        await discountBill(tx, billId, "0.62");
+      }
+
+      const before = await filedOf(tx, today);
+      const after = await filedOf(tx, bill);
+      expect(before.gross).toEqual([
+        "Bread 1.000 gross 0.83",
+        "Bread 1.000 gross 0.84",
+        "Salad 1.000 gross 1.26",
+        "Steak 1.000 gross 1.68",
+        "Steak 1.000 gross 1.68",
+      ]);
+      expect(after.gross).toEqual([
+        "Bread 2.000 gross 1.68",
+        "Salad 1.000 gross 1.26",
+        "Steak 1.000 gross 1.67",
+        "Steak 1.000 gross 1.68",
+      ]);
+      expect(after.total).toBe(before.total);
+    });
+  });
+
+  // The same owner decision: a group sits at its first remaining portion's line number. The plan's
+  // version cancels the first steak; until Task 7 unbinds a removed portion, it moves to another bill.
+  it("A803 monetary comparison: a raised dish's first portion moved away, then €0.01 off", async () => {
+    await withTransaction(db, async (tx) => {
+      const today = await createTableKitchenOrder(tx, cfg, [
+        many(ids.steak, 2),
+        many(ids.bread, 2),
+      ]);
+      await splitPartyBill(tx, cfg, today, [{ lineNo: 1, quantity: "1" }]);
+      const { billId: bill } = await registeredPortionBill(
+        tx,
+        cfg,
+        offers.zoneId,
+        offers.toOfferLines([many(ids.steak, 1)]),
+      );
+      await addPortionRound(tx, cfg, bill, offers.toOfferLines([many(ids.bread, 2)]));
+      await addPortionRound(tx, cfg, bill, offers.toOfferLines([many(ids.steak, 1)]));
+      expect(await dishLines(tx, bill)).toEqual(["1 Steak", "2 Bread", "3 Bread", "4 Steak"]);
+      await splitPartyBill(tx, cfg, bill, [{ lineNo: 1 }]);
+      await discountBill(tx, today, "0.01");
+      await discountBill(tx, bill, "0.01");
+
+      const before = await filedOf(tx, today);
+      const after = await filedOf(tx, bill);
+      expect(before.gross).toEqual(["Bread 2.000 gross 2.00", "Steak 1.000 gross 1.99"]);
+      expect(after.gross).toEqual([
+        "Bread 1.000 gross 0.99",
+        "Bread 1.000 gross 1.00",
+        "Steak 1.000 gross 2.00",
+      ]);
+      expect(after.total).toBe(before.total);
+    });
+  });
+
+  it("A803 monetary comparison: €1.50 off the first bill files the same rows (a behaviour check: one-row and grouped spreads agree here)", async () => {
+    await withTransaction(db, async (tx) => {
+      const { today, bill } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);
+      await discountBill(tx, today, "1.50");
+      await discountBill(tx, bill, "1.50");
+
+      const expected = await filedOf(tx, today);
+      expect(expected.gross).toEqual([
+        "Drink 1.000 gross 2.99",
+        "Drink 2.000 gross 6.00",
+        "Plate 1.000 gross 4.50",
+      ]);
+      expect(await filedOf(tx, bill)).toEqual(expected);
+    });
+  });
+
+  it("A803 monetary comparison: a two-price result gives the higher price to the earlier portions", async () => {
+    await withTransaction(db, async (tx) => {
+      const { bill, portions } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);
+      await discountBill(tx, bill, "1.00");
+
+      const drinks = portions.filter(
+        (portion) => portion.pricingCohortId === portions[0]!.pricingCohortId,
+      );
+      expect(await pricesByOrdinal(tx, drinks)).toEqual([311, 311, 310]);
+    });
+  });
+
+  it("A803 monetary comparison: the higher price follows the portions' ordinals, not their line numbers", async () => {
+    await withTransaction(db, async (tx) => {
+      const { bill, portions } = await bills(tx, [many(ids.drink, 3), many(ids.plate, 1)]);
+      const moved = await splitPartyBill(tx, cfg, bill, [{ lineNo: 1 }]);
+      const party = await partyRevisionOfOrder(tx, moved.billId);
+      await transferItems(tx, cfg, moved.billId, bill, [{ lineNo: 1 }], {
+        expectedPartyRevision: party!.revision,
+        operatorId: OPERATOR,
+      });
+      expect(await dishLines(tx, bill)).toEqual(["2 Drink", "3 Drink", "4 Plate", "5 Drink"]);
+      await discountBill(tx, bill, "1.00");
+
+      const drinks = portions.filter(
+        (portion) => portion.pricingCohortId === portions[0]!.pricingCohortId,
+      );
+      expect(await pricesByOrdinal(tx, drinks)).toEqual([311, 311, 310]);
+    });
+  });
+
+  it("A803 monetary comparison: a group breaks a tie at its first portion's line number, not its last", async () => {
+    await withTransaction(db, async (tx) => {
+      const { bill } = await bills(tx, [many(ids.bread, 2), many(ids.steak, 1)]);
+      const moved = await splitPartyBill(tx, cfg, bill, [{ lineNo: 1 }]);
+      const party = await partyRevisionOfOrder(tx, moved.billId);
+      await transferItems(tx, cfg, moved.billId, bill, [{ lineNo: 1 }], {
+        expectedPartyRevision: party!.revision,
+        operatorId: OPERATOR,
+      });
+      expect(await dishLines(tx, bill)).toEqual(["2 Bread", "3 Steak", "4 Bread"]);
+      await discountBill(tx, bill, "0.01");
+
+      expect((await filedOf(tx, bill)).gross).toEqual([
+        "Bread 1.000 gross 0.99",
+        "Bread 1.000 gross 1.00",
+        "Steak 1.000 gross 2.00",
+      ]);
+    });
+  });
+
+  it("A803 monetary comparison: a portion whose share is nothing is left untouched", async () => {
+    await withTransaction(db, async (tx) => {
+      const { bill, portions } = await bills(tx, [many(ids.drink, 3)]);
+      await discountBill(tx, bill, "0.02");
+
+      expect(await pricesByOrdinal(tx, portions)).toEqual([333, 332, 332]);
+      const lists = await tx
+        .select({ id: workingOrderLines.id, list: workingOrderLines.listUnitPriceGross })
+        .from(workingOrderLines)
+        .where(
+          inArray(
+            workingOrderLines.id,
+            portions.map((portion) => portion.lineId),
+          ),
+        );
+      const listOf = new Map(lists.map((row) => [row.id, row.list]));
+      expect(
+        [...portions]
+          .sort((a, b) => a.ordinal - b.ordinal)
+          .map((portion) => listOf.get(portion.lineId)),
+      ).toEqual([null, 333, 333]);
+    });
+  });
+
+  it("A803 monetary comparison: a comp of one portion leaves the others' prices", async () => {
+    await withTransaction(db, async (tx) => {
+      const { bill, portions } = await bills(tx, [many(ids.drink, 3)]);
+      await adjust(tx, bill, "comp", portions[1]!.lineId);
+
+      expect(await pricesByOrdinal(tx, portions)).toEqual([333, 0, 333]);
     });
   });
 });
