@@ -990,18 +990,14 @@ failing test first.
   scrolled. Letting long names wrap at narrow widths may free the room; not tried.
   [Detail](catalogue.md#on-the-structure-tab-at-390px-the-trees-own-box-scrolls-sideways-under-the-pinned-)
 
-## Menu names outside Copy
-
-Creating two menus with the same name and renaming a third to that name are accepted by the
-management API. Copy refuses a name already held by any menu, ignoring surrounding whitespace
-and case. Decide whether creation and Rename should apply that rule too, then check both forms
-and both server writers. This is separate from A1172's named-copy flow.
-
 ## Decisions and deliberate limits
 
 - **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before
   saving the copy, matching floor plan sets. Cancel saves nothing. The browser and server refuse
-  a name another menu holds; the source keeps its working state.
+  a name another menu holds; the source keeps its working state. Create and Rename apply the same
+  rule. Case, surrounding whitespace and Unicode composition do not distinguish names; accents
+  and interior spacing do. Existing duplicates remain until renamed, and do not block presentation
+  edits (owner, 2026-10-28).
 
 - Changing the catalogue that opens first keeps the previous default sellable as a member.
   Which catalogues you sell and which opens first are independent choices. The default-change

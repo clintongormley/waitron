@@ -34,6 +34,7 @@ import {
   requireMenuRoot,
 } from "./menu-structure.js";
 import { batches } from "./batches.js";
+import { assertMenuNameFree } from "./menu-names.js";
 import { loadSectionGraph, placementsByProduct, type SectionGraph } from "./section-graph.js";
 import { addMember, sectionPatchValues } from "./sections.js";
 import { archiveProducts } from "./archive.js";
@@ -344,6 +345,7 @@ export async function createCatalogue(
 
 /** The menu's own row alone; the caller writes its root and home sections and its `menu_details` row. */
 export async function insertCatalogue(tx: Transaction, name: string): Promise<Catalogue> {
+  await assertMenuNameFree(tx, name);
   const [row] = await tx.insert(catalogues).values({ name }).returning(CATALOGUE_COLUMNS);
   return row!;
 }
@@ -863,11 +865,13 @@ export async function updateMenuDetails(
     undefined,
     stored?.names,
   );
-  if (presentation.internalName !== undefined)
+  if (presentation.internalName !== undefined) {
+    await assertMenuNameFree(tx, presentation.internalName, catalogueId);
     await tx
       .update(catalogues)
       .set({ name: presentation.internalName, updatedAt: now() })
       .where(eq(catalogues.id, catalogueId));
+  }
   if (Object.keys(presentation).length > 0)
     await tx.update(sections).set(presentation).where(eq(sections.id, rootSectionId));
 }

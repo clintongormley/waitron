@@ -32,6 +32,7 @@ import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
+import { foldName } from "@waitron/catalogue/src/name-uniqueness.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
 import {
@@ -1411,7 +1412,8 @@ export class MenusScreen extends LitElement {
         await this.api.createCatalogue(internalName, details);
       } else await this.api.updateMenuDetails(form.id, input);
     } catch (error) {
-      const errors = refusal(error);
+      const errors =
+        codeOf(error) === "menu.name_taken" ? { name: t("menus.name_taken") } : refusal(error);
       this.menuFormErrors = errors.name ? { internalName: errors.name } : errors;
       this.busy = false;
       return;
@@ -2332,6 +2334,14 @@ export class MenusScreen extends LitElement {
       data-test="menu-form"
       .nameLabel=${t("menus.name")}
       .nameRequired=${t("menus.name_required")}
+      .validateName=${(name: string) => {
+        if (this.menuForm?.id && name === this.menuForm.name) return "";
+        return this.menus.some(
+          (menu) => menu.id !== this.menuForm?.id && foldName(menu.name) === foldName(name),
+        )
+          ? t("menus.name_taken")
+          : "";
+      }}
       .open=${this.menuForm !== null}
       .busy=${this.busy}
       .api=${this.api}

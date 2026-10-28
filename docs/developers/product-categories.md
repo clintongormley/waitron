@@ -145,6 +145,13 @@ would make no cycle as `{ id, name, rootSectionId }`; `includedBy` lists direct 
 `{ id, name }`. Write the menu's top level through the member routes on `rootSectionId`. An
 unknown menu answers `catalogue.not_found` (404).
 
+Creating a menu (`POST /management-api/catalogues`) and renaming one
+(`PATCH /management-api/catalogues/:id`, with `{ name }`) also refuse a name held by another menu
+with `menu.name_taken` (409, `field: "name"`). Inactive menus hold their names too. Comparisons
+ignore case, Unicode composition and surrounding whitespace, but retain accents and interior
+spacing. Existing duplicate names do not block presentation edits that keep the stored name;
+changing that name must pass the check.
+
 `POST /management-api/catalogues/:id/duplicate`, with `{ name }`, makes a new menu holding a copy
 of this menu's working copy and answers 201 with the new menu (`{ id, name, active, version }`). It
 copies the menu's own sections and their members, its Home shortcuts, its display settings, its

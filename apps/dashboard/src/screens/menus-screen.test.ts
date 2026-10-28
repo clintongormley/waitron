@@ -2045,6 +2045,159 @@ it("creating a menu needs a name: an empty one is explained beside the field and
     expect(read).toHaveBeenCalledOnce();
 });
 
+describe("unique menu names on Create and Rename", () => {
+  it.each(
+    [390, 1280].flatMap((width) =>
+      ["en", "es"].flatMap((locale) =>
+        ["light", "dark"].flatMap((theme) =>
+          ["create", "rename"].map((mode) => ({
+            width,
+            locale,
+            theme: theme as "light" | "dark",
+            mode,
+          })),
+        ),
+      ),
+    ),
+  )(
+    "shows the name refusal on $mode at $width $locale $theme",
+    async ({ width, locale, theme, mode }) => {
+      const previous = currentLocale();
+      const viewport = [window.innerWidth, window.innerHeight] as const;
+      try {
+        setLocale(locale);
+        await page.viewport(width, 844);
+        const client = api();
+        const el = await mount(client, "/manage/menus", theme);
+        if (mode === "create") await click(el, "add-menu");
+        else await inTable(el, "rename-menu-lunch");
+        const name = inModal<HTMLElementTagNameMap["wt-input"]>(
+          el,
+          "menu-form",
+          'wt-input[name="name"]',
+        );
+        type(name, "  DINNER MENU  ");
+        await el.updateComplete;
+        inModal(el, "menu-form", '[data-test="menu-save"]').click();
+        await vi.waitFor(() => expect(name.error).toBe(t("menus.name_taken")));
+        expect(await bottom(el, "menu-form")).toBe(t("form.fix_fields"));
+        await name.updateComplete;
+        const native = name.shadowRoot!.querySelector("input")!;
+        expect(native.getAttribute("aria-invalid")).toBe("true");
+        const dialog = modal(el, "menu-form").shadowRoot!.querySelector("dialog")!;
+        const box = dialog.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(0);
+        expect(box.right).toBeLessThanOrEqual(width);
+        await expectNoA11yViolations(el.parentElement!);
+        await page.screenshot({
+          path: `__screenshots__/a1172-unique/${mode}-${locale}-${theme}-${width}.png`,
+        });
+        expect(client.createCatalogue).not.toHaveBeenCalled();
+        expect(client.updateMenuDetails).not.toHaveBeenCalled();
+      } finally {
+        setLocale(previous);
+        await page.viewport(...viewport);
+      }
+    },
+  );
+
+  it.each(["create", "rename"] as const)(
+    "refuses a held name locally on %s, then accepts a correction",
+    async (mode) => {
+      const client = api();
+      const el = await mount(client);
+      if (mode === "create") await click(el, "add-menu");
+      else await inTable(el, "rename-menu-lunch");
+      const name = inModal<HTMLElementTagNameMap["wt-input"]>(
+        el,
+        "menu-form",
+        'wt-input[name="name"]',
+      );
+      type(name, "  DINNER MENU  ");
+      await el.updateComplete;
+      expect(name.error).toBe("");
+      inModal(el, "menu-form", '[data-test="menu-save"]').click();
+      await vi.waitFor(() => expect(name.error).toBe(t("menus.name_taken")));
+      expect(await bottom(el, "menu-form")).toBe(t("form.fix_fields"));
+      expect(
+        inModal<HTMLElementTagNameMap["wt-button"]>(el, "menu-form", '[data-test="menu-save"]')
+          .disabled,
+      ).toBe(true);
+      expect(client.createCatalogue).not.toHaveBeenCalled();
+      expect(client.updateMenuDetails).not.toHaveBeenCalled();
+      type(name, "Brunch");
+      await el.updateComplete;
+      await vi.waitFor(() => expect(name.error).toBe(""));
+      inModal(el, "menu-form", '[data-test="menu-save"]').click();
+      await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+      if (mode === "create")
+        expect(client.createCatalogue).toHaveBeenCalledExactlyOnceWith("Brunch", {
+          names: {},
+          image: null,
+          color: null,
+        });
+      else
+        expect(client.updateMenuDetails).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
+          internalName: "Brunch",
+          names: {},
+          image: null,
+          color: null,
+        });
+    },
+  );
+
+  it.each(["create", "rename"] as const)(
+    "puts a late server conflict under the name on %s and permits retry",
+    async (mode) => {
+      const client = api();
+      const save = mode === "create" ? client.createCatalogue : client.updateMenuDetails;
+      save.mockRejectedValueOnce({ code: "menu.name_taken", params: { field: "name" } });
+      const el = await mount(client);
+      if (mode === "create") await click(el, "add-menu");
+      else await inTable(el, "rename-menu-lunch");
+      const name = inModal<HTMLElementTagNameMap["wt-input"]>(
+        el,
+        "menu-form",
+        'wt-input[name="name"]',
+      );
+      type(name, "Brunch");
+      await el.updateComplete;
+      inModal(el, "menu-form", '[data-test="menu-save"]').click();
+      await vi.waitFor(() => expect(name.error).toBe(t("menus.name_taken")));
+      expect(await bottom(el, "menu-form")).toBe(t("form.fix_fields"));
+      expect(modal(el, "menu-form").open).toBe(true);
+      expect(name.value).toBe("Brunch");
+      expect(
+        inModal<HTMLElementTagNameMap["wt-button"]>(el, "menu-form", '[data-test="menu-save"]')
+          .disabled,
+      ).toBe(false);
+      inModal(el, "menu-form", '[data-test="menu-save"]').click();
+      await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+      expect(save).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("allows presentation edits when the menu name already has a duplicate", async () => {
+    const client = api({
+      listCatalogues: vi
+        .fn()
+        .mockResolvedValue(menus.map((menu) => ({ ...menu, name: "Lunch Menu" }))),
+    });
+    const el = await mount(client);
+    await inTable(el, "rename-menu-lunch");
+    type(inModal(el, "menu-form", 'wt-input[name="names-en"]'), "Midday");
+    await el.updateComplete;
+    inModal(el, "menu-form", '[data-test="menu-save"]').click();
+    await vi.waitFor(() => expect(modal(el, "menu-form").open).toBe(false));
+    expect(client.updateMenuDetails).toHaveBeenCalledExactlyOnceWith("menu-lunch", {
+      internalName: "Lunch Menu",
+      names: { en: "Midday" },
+      image: null,
+      color: null,
+    });
+  });
+});
+
 it("saves a name on Enter in its field", async () => {
   const client = api();
   const el = await mount(client);

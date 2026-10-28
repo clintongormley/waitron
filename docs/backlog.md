@@ -753,10 +753,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 ### Menus and the catalogue
 
-- **Menu creation and Rename still accept a name another menu holds.** Copy now refuses a taken
-  name. Decide whether the same check should cover creation and renaming, then apply it in the
-  browser and server together. [Detail](backlog/catalogue.md#menu-names-outside-copy).
-
 - **A1075. On the Courses page the row dividers stop short of the card's sides** (mock-up 02 runs
   them to the edge; needs `course-list.ts` styles), and an error under the list would sit on the
   card's bottom border (read from the code, not seen). Left open by #1854, A756.

@@ -594,10 +594,14 @@ const suite = useVenueDb({
   },
 });
 
-// Every test here shares one database, and a category's name is unique among its siblings and an
-// Active product's across the venue. Before each test the rows earlier tests left are renamed, so
-// a name an earlier test used is free again; the rows themselves remain.
+// Shared rows keep their identities; their menu, category and product names must be free for the next case.
 beforeEach(async () => {
+  await suite.db.execute(
+    sql`update catalogues set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+  );
+  await suite.db.execute(
+    sql`update sections set internal_name = 'earlier test ' || owner_menu_id where role = 'menu_root'`,
+  );
   await suite.db.execute(
     sql`update categories set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
@@ -1192,6 +1196,27 @@ describe("mountCatalogueApi — catalogues", () => {
         error: { code: "management.request_invalid", params: { field: "name" } },
       });
       expect(await count()).toBe(before);
+    },
+  );
+
+  it.each(["create", "rename"] as const)(
+    "refuses a taken menu name on %s with the name field and no writes",
+    async (mode) => {
+      const app = mountApp();
+      await createCatalogueVia(app, "Unique held menu");
+      const other = await createCatalogueVia(app, "Unique other menu");
+      const before = await (await send(app, "GET", "/management-api/catalogues")).json();
+      const response = await send(
+        app,
+        mode === "create" ? "POST" : "PATCH",
+        mode === "create" ? "/management-api/catalogues" : `/management-api/catalogues/${other}`,
+        { body: { name: "  UNIQUE HELD MENU  " } },
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "menu.name_taken", params: { field: "name" } },
+      });
+      expect(await (await send(app, "GET", "/management-api/catalogues")).json()).toEqual(before);
     },
   );
 
