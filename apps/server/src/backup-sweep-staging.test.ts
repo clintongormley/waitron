@@ -721,6 +721,7 @@ it("a copy larger than the estimate is refused before any destination when no ba
   expect(outcomes.runStopped).toEqual({
     code: "backup.staging_space_low",
     at: stamp.toISOString(),
+    since: stamp.toISOString(),
     sizes: { neededBytes: seen.encrypted + 10, availableBytes: seen.encrypted + 9 },
   });
   expect(folder.puts + bucket.puts).toBe(0);

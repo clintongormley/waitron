@@ -216,9 +216,11 @@ describe("the running server's managers' email check", () => {
 
       await bootServer(booted, venue);
       const sizes = { neededBytes: 3 * 1024 ** 3, availableBytes: 1024 ** 3 };
+      const stoppedAt = new Date().toISOString();
       holder.outcomes!.runStopped = {
         code: "backup.staging_space_low",
-        at: new Date().toISOString(),
+        at: stoppedAt,
+        since: stoppedAt,
         sizes,
       };
 

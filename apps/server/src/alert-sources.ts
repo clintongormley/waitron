@@ -132,6 +132,9 @@ export interface BackupOutcomeHolder {
   runStopped?: {
     code: string;
     at: string;
+    /** The `at` of the first of the unbroken string of runs that stopped on `code`, so a reader
+     * that misses a run in between can tell a new string from the same one. */
+    since: string;
     sizes?: { neededBytes: number; availableBytes: number };
   };
 }

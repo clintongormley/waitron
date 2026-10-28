@@ -687,6 +687,7 @@ const DELETED: EmailedIncident = {
 const REFUSED = {
   code: "backup.staging_space_low",
   at: "2026-10-28T03:00:00.000Z",
+  since: "2026-10-28T03:00:00.000Z",
   sizes: { neededBytes: 6_300_000_000, availableBytes: 1_900_000_000 },
 };
 
@@ -779,9 +780,46 @@ describe("startBoxEmailDuty for backups", () => {
     expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
   });
 
+  it("emails a refusal again when a backup succeeded and was refused again between two checks", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    d.state.backupStopped = {
+      code: "backup.staging_space_low",
+      at: "2026-10-28T03:00:40.000Z",
+      since: "2026-10-28T03:00:40.000Z",
+      sizes: { neededBytes: 2_000_000_000, availableBytes: 200_000_000 },
+    };
+    await d.tick();
+    expect(d.sent().map((message) => message.text)).toEqual([
+      "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
+      "Backup not made: it needs 2 GB free and the disk has 200 MB.",
+    ]);
+  });
+
+  it("emails a string of refusals with no success between them once", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    d.state.backupStopped = {
+      ...REFUSED,
+      at: "2026-10-28T04:00:00.000Z",
+      sizes: { neededBytes: 2_000_000_000, availableBytes: 200_000_000 },
+    };
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(BEN)]);
+  });
+
   it("does not email a backup run that stopped on anything else", async () => {
     const d = duty();
-    d.state.backupStopped = { code: "backup.recovery_key_missing", at: REFUSED.at };
+    d.state.backupStopped = {
+      code: "backup.recovery_key_missing",
+      at: REFUSED.at,
+      since: REFUSED.at,
+    };
     await d.tick();
     await d.tick();
     expect(d.send).not.toHaveBeenCalled();

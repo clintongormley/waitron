@@ -49,7 +49,8 @@ export interface EmailedIncident {
   readonly params: Readonly<Record<string, unknown>>;
 }
 
-/** Emailed while the backup run's `runStopped` names `backup.staging_space_low`. */
+/** Emailed once per unbroken string of backup runs whose `runStopped` names
+ * `backup.staging_space_low`. */
 export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
 
 type EmailCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;
@@ -218,6 +219,8 @@ export function startBoxEmailDuty(deps: {
 }): { stop: () => Promise<void> } {
   const timer = deps.timer ?? unrefTimer;
   const episodes = new Map<string, Episode>();
+  /** The refusal episode's `runStopped.since`; a different one is a new refusal. */
+  let refusedSince: string | undefined;
   let stopped = false;
   let reading: Promise<unknown> | null = null;
 
@@ -318,12 +321,13 @@ export function startBoxEmailDuty(deps: {
         });
       }
       const stoppedRun = deps.backupStopped();
-      if (stoppedRun?.code !== "backup.staging_space_low") {
-        episodes.delete(BACKUP_REFUSED_EMAIL_CODE);
-      } else {
+      const refusal = stoppedRun?.code === "backup.staging_space_low" ? stoppedRun : undefined;
+      if (refusal?.since !== refusedSince) episodes.delete(BACKUP_REFUSED_EMAIL_CODE);
+      refusedSince = refusal?.since;
+      if (refusal) {
         due.push({
           episode: begin(BACKUP_REFUSED_EMAIL_CODE, BACKUP_REFUSED_EMAIL_CODE, undefined, {
-            ...stoppedRun.sizes,
+            ...refusal.sizes,
           }),
         });
       }

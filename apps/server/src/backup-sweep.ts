@@ -310,7 +310,14 @@ export async function runOnce(
   } catch (err) {
     // Only a step before the destination calls lands here: `Promise.allSettled` never rejects.
     if (!deps.signal.aborted && deps.outcomes) {
-      deps.outcomes.runStopped = { code: codeOf(err), at: stamp.toISOString() };
+      const code = codeOf(err);
+      const at = stamp.toISOString();
+      const previous = deps.outcomes.runStopped;
+      deps.outcomes.runStopped = {
+        code,
+        at,
+        since: previous?.code === code ? previous.since : at,
+      };
       if (isAppError(err) && hasCode(err, "backup.staging_space_low")) {
         const { neededBytes, availableBytes } = err.params;
         deps.outcomes.runStopped.sizes = { neededBytes, availableBytes };

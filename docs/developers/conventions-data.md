@@ -4578,8 +4578,11 @@ the run's calendar day in the venue's time zone) with the `backup` origin throug
 logged `backup.archives_deleted_alert_failed` and never changes the run's outcome. Core's
 `CORE_ALERTS` claims `backup.` for `system.manage` (`packages/db/src/alerts.ts`). The managers' email
 duty emails the open alert (it is in `INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`),
-and emails a refusal while the run's in-memory `runStopped` names `backup.staging_space_low`
-(`BACKUP_REFUSED_EMAIL_CODE`); a run that passes its room checks clears `runStopped`.
+and emails a refusal once for each unbroken string of runs whose in-memory `runStopped` names
+`backup.staging_space_low` (`BACKUP_REFUSED_EMAIL_CODE`). A run that passes its room checks clears
+`runStopped`, and a run that stops on the same code as the one before keeps that one's
+`runStopped.since`, so the duty, which checks once a minute, tells a new string from the same one
+by `since` even when it missed the run that cleared it.
 
 **Limits.**
 

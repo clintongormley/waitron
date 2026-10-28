@@ -363,6 +363,7 @@ describe("backupAlertSource and a run that stopped before any destination", () =
     runStopped: {
       code: "backup.staging_space_low",
       at: "2026-09-15T11:58:00Z",
+      since: "2026-09-15T11:58:00Z",
       sizes: { neededBytes: 6_300_000_000, availableBytes: 1_900_000_000 },
     },
   });
@@ -388,7 +389,11 @@ describe("backupAlertSource and a run that stopped before any destination", () =
   it("marks a space refusal that carries no sizes as a space refusal still", async () => {
     const outcomes: BackupOutcomeHolder = {
       failed: new Map(),
-      runStopped: { code: "backup.staging_space_low", at: "2026-09-15T11:58:00Z" },
+      runStopped: {
+        code: "backup.staging_space_low",
+        at: "2026-09-15T11:58:00Z",
+        since: "2026-09-15T11:58:00Z",
+      },
     };
     const [alert] = await src(configured, outcomes).read(ctx);
     expect(alert!.params).toEqual({ errorCode: "backup.staging_space_low", spaceLow: true });
@@ -397,7 +402,11 @@ describe("backupAlertSource and a run that stopped before any destination", () =
   it("names only the code for a run that stopped on anything else", async () => {
     const outcomes: BackupOutcomeHolder = {
       failed: new Map(),
-      runStopped: { code: "recovery.state_incomplete", at: "2026-09-15T11:58:00Z" },
+      runStopped: {
+        code: "recovery.state_incomplete",
+        at: "2026-09-15T11:58:00Z",
+        since: "2026-09-15T11:58:00Z",
+      },
     };
     const [alert] = await src(configured, outcomes).read(ctx);
     expect(alert!.params).toEqual({ errorCode: "recovery.state_incomplete" });
