@@ -250,6 +250,7 @@ retired. Every other D-number lands in A758-1 to A758-5 below.
    and counting a bill comp against items added after it both err toward asking (Open point 2). No migration: `reduction` and `nominal_value` are on every row
    (`schema/adjustments.ts:72-74`); today's `readLinePercents` sums `percent_bp` only
    (`record.ts:113-134`), which is why a €12 amount took a burger to €0 under a 20% cap (design §2.2).
+   **2026-10-28:** superseded by a price floor counting every discount on the item, from any reason or on the whole bill — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D36.
 4. **The bill's comp limit** (§3.5, D6) counts what comps took off the items still on the bill:
    Σ over the bill's rows of `max(0, list value − price)` at the row's quantity. Cancelled rows are
    gone, so their comps leave the count; free items count (a free item is a comp, D5). It replaces

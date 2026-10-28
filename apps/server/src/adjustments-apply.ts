@@ -1016,9 +1016,11 @@ async function judgeComp(
 }
 
 /**
- * Each dish `writes` takes something off, as the floor reads it (plan D36 readings 3 to 5): a dish
- * without extras once for each price its change leaves it at; a dish with extras once, its lines
- * summed at the quantity of it the request covers.
+ * Each dish `writes` names, as the floor reads it (plan D36 readings 3 to 5): a dish without extras
+ * once for each price its change leaves it at; a dish with extras once, its lines summed at the
+ * quantity of it the request covers. A portion of a row the request takes nothing off is named too;
+ * {@link standInRow} admits only portions of one price, so it is below its floor only when one the
+ * request reduces is too.
  */
 function dishPrices(
   writes: readonly Change[],
@@ -1027,7 +1029,6 @@ function dishPrices(
 ): DishPrice[] {
   const byDish = new Map<string, Change[]>();
   for (const change of writes) {
-    if (compareDecimal(change.reduction, ZERO) === 0) continue;
     const dishId = change.row.parentLineId ?? change.row.id;
     byDish.set(dishId, [...(byDish.get(dishId) ?? []), change]);
   }

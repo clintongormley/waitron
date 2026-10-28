@@ -55,7 +55,8 @@ const en = {
     "They enter their PIN when anyone else asks, or above a limit.",
   "adjustments.field.actions": "How it can be taken off",
   "adjustments.field.max_percent": "Most off one item",
-  "adjustments.field.max_percent_hint": "Everything this reason took off the item counts.",
+  "adjustments.field.max_percent_hint":
+    "Counts every discount on the item, from any reason or on the whole bill.",
   "adjustments.field.max_amount": "Most off one bill",
   "adjustments.field.max_amount_hint":
     "The venue's own amount. Above it, someone who can approve it is asked.",
@@ -225,7 +226,8 @@ const es: Record<keyof typeof en, string> = {
     "Introducen su PIN cuando lo pide otra persona o se pasa un límite.",
   "adjustments.field.actions": "Cómo se descuenta",
   "adjustments.field.max_percent": "Máximo por artículo",
-  "adjustments.field.max_percent_hint": "Cuenta todo lo que este motivo ha quitado del artículo.",
+  "adjustments.field.max_percent_hint":
+    "Cuenta todos los descuentos del artículo, sea cual sea su motivo, también los de toda la cuenta.",
   "adjustments.field.max_amount": "Máximo por cuenta",
   "adjustments.field.max_amount_hint":
     "Lo fija el local. Por encima, se pide a alguien que pueda autorizarlo.",

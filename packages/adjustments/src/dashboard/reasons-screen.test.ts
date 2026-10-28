@@ -1192,7 +1192,7 @@ describe("the editor", () => {
     [
       "en",
       "No limit",
-      "Everything this reason took off the item counts.",
+      "Counts every discount on the item, from any reason or on the whole bill.",
       "The venue's own amount. Above it, someone who can approve it is asked.",
     ],
     [

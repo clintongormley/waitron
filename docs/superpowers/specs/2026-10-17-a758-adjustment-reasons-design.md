@@ -179,6 +179,8 @@ A new venue gets one reason, "Entry error": cancel, staff apply it, a supervisor
 | Most off one bill (€) | — | optional: everything this reason comped on the bill |
 | Note required | switch | switch |
 
+**2026-10-28:** "Most off one item" is now a price floor counting every discount on the item, from any reason or on the whole bill — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D36.
+
 A Void reason is a label for the record (D13): who may cancel is the same under every one (§3.2).
 
 - **A Comp's two role lists** are a `wt-combobox` with `multiple` over today's four roles. Neither may be

@@ -2161,4 +2161,43 @@ describe("A803 portions: the per-dish floor (plan D36)", () => {
     expect(await oneVerdict(pizzas, "Pizza", ofOne("0.76"), [], "Pizza")).toBeNull();
     expect(await oneVerdict(pizzas, "Pizza", ofOne("0.77"), [], "Pizza")).toMatchObject(ASKS);
   });
+  it("A803 portions: Crew meal 50% off 0.350 kg of Ham goes through and 60% asks", async () => {
+    const ham: RoundLine[] = [{ name: "Ham", quantity: "0.350" }, bread];
+    const crewAt = (percentBp: number) => async (_: string, dish: Target) =>
+      crew(dish, undefined, percentBp);
+    expect(await oneVerdict(ham, "Ham", crewAt(5000))).toBeNull();
+    expect(await oneVerdict(ham, "Ham", crewAt(6000))).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: a reason allowing 80% takes 40% off a burger (€7.20); Crew meal 20% more (€5.76) asks and the 80% reason's 30% more (€5.04) goes through", async () => {
+    const reasonId = await reasonAllowing(8000);
+    const generous = (percentBp: number) => async (_: string, dish: Target) => ({
+      ...crew(dish, undefined, percentBp),
+      reasonId,
+    });
+    const crewAt = (percentBp: number) => async (_: string, dish: Target) =>
+      crew(dish, undefined, percentBp);
+    expect(await oneVerdict(burgers("1"), "Burger", crewAt(2000), [generous(4000)])).toMatchObject(
+      ASKS,
+    );
+    expect(await oneVerdict(burgers("1"), "Burger", generous(3000), [generous(4000)])).toBeNull();
+  });
+
+  it("A803 portions: Crew meal's 10% off the whole bill asks where it would take a burger Crew meal already took 50% off to €5.40, and goes through on a bill none of whose dishes is at its floor", async () => {
+    const tenOffBill = async () => wholeBill(1000, venue.reasonId.staffMeal);
+    const half = async (_: string, dish: Target) => crew(dish);
+    expect(await oneVerdict(burgers("1"), "Burger", tenOffBill, [half])).toMatchObject(ASKS);
+    expect(await oneVerdict(burgers("1"), "Burger", tenOffBill)).toBeNull();
+  });
+
+  it("A803 portions: a free dish takes nothing of a whole-bill discount and is not checked: a burger given free, then Crew meal's 10% off the whole bill goes through", async () => {
+    const free = async (_: string, dish: Target): Promise<Ask> => ({
+      ...dish,
+      action: "comp",
+      reasonId: venue.reasonId.complaint,
+      operatorId: venue.managerId,
+    });
+    const tenOffBill = async () => wholeBill(1000, venue.reasonId.staffMeal);
+    expect(await oneVerdict(burgers("1"), "Burger", tenOffBill, [free])).toBeNull();
+  });
 });
