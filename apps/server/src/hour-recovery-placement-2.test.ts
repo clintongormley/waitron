@@ -38,6 +38,7 @@ import { promisify } from "node:util";
 import { createHash } from "node:crypto";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
   it.each(["archive", "stream"] as const)(
@@ -504,7 +505,7 @@ describe("selected-hour admission before archive placement", () => {
           async (args) => { await restoreFromArtifactFile(args); process.kill(process.pid, "SIGKILL"); },
           async (args) => { await writeStreamRestore(args); process.kill(process.pid, "SIGKILL"); });
       `;
-      await expect(
+      await expectChildKilled(
         promisify(execFile)(
           process.execPath,
           [
@@ -517,7 +518,8 @@ describe("selected-hour admission before archive placement", () => {
           ],
           { timeout: 45_000 },
         ),
-      ).rejects.toMatchObject({ signal: "SIGKILL" });
+        { signal: "SIGKILL" },
+      );
       expect(
         JSON.parse(await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8")),
       ).toMatchObject({ placementStarted: true });

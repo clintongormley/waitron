@@ -48,6 +48,7 @@ import { decodeRegistroRow, fromRegistroRow } from "@waitron/fiscal-verifactu/sr
 import { saleInput, steadyClock } from "@waitron/fiscal-verifactu/test/write-path-fixtures.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { encodeRecoveryKit } from "@waitron/stream";
+import { expectChildKilled } from "./testing/child-process-death.js";
 
 describe("selected-hour admission before archive placement", () => {
   it("the default restore command refuses a wrong node key before replacing the destination", async () => {
@@ -831,7 +832,7 @@ describe("selected-hour admission before archive placement", () => {
       }});
       const { runStagedRestore } = await import(${JSON.stringify(new URL("./restore-request.ts", import.meta.url).href)});
       await runStagedRestore({ ...JSON.parse(process.argv[1]), log() {} });`;
-      await expect(
+      await expectChildKilled(
         promisify(execFile)(
           process.execPath,
           [
@@ -844,7 +845,8 @@ describe("selected-hour admission before archive placement", () => {
           ],
           { timeout: 45_000 },
         ),
-      ).rejects.toMatchObject({ signal: "SIGKILL", stdout: "activation-writes-before-commit\n" });
+        { signal: "SIGKILL", stdout: "activation-writes-before-commit\n" },
+      );
       const marker = await readFile(join(f.roots.stateDir, "restore-request.json"), "utf8");
       expect(JSON.parse(marker)).toMatchObject({ placementStarted: true });
       expect(await readdir(f.roots.stateDir)).not.toContain("trading.env");
