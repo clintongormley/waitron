@@ -1,6 +1,9 @@
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { observedGroupCompositionBody } from "./testing/group-composition-fixture.js";
+import {
+  observedGroupCompositionBody,
+  placeGroupedRound,
+} from "./testing/group-composition-fixture.js";
 import { deleteCourse } from "./course-delete.js";
 import { clearRoutingCell, setRoutingCell } from "@waitron/venue-service";
 import { sessions, setProfileAdmission } from "@waitron/identity";
@@ -100,6 +103,26 @@ async function submit(
     groups,
     ...extra,
   });
+}
+
+/**
+ * Places each group as {@link placeGroupedRound} does, one row per input line, and answers in the
+ * route's shape: its status is always 200, and the party's revision is not moved.
+ */
+async function submitGrouped(
+  party: Seated,
+  groups: { lines: ReturnType<typeof dish>[]; release: "fire" | "hold" }[],
+) {
+  const placed = await inTx(venue, async (tx) => {
+    const answers = [];
+    for (const group of groups)
+      answers.push(
+        ...(await placeGroupedRound(tx, venue.cfg, party, group, venue.operatorId)).groups,
+      );
+    return answers;
+  });
+  const answer = { tabId: party.tabId, revision: await revisionOf(party.partyId), groups: placed };
+  return { status: 200, json: answer as unknown as Record<string, unknown> };
 }
 
 interface SubmitAnswer {
@@ -1335,9 +1358,7 @@ describe("POST /api/parties/:id/served refusals that need their own setup", () =
 describe("the served routes while a card payment runs on the bill", () => {
   it("takes each served route while a card payment runs on the bill, moving the party's revision and never the bill's", async () => {
     const party = await seated();
-    const submitted = await submit(party.partyId, [
-      { lines: [dish("Caña", "2")], release: "fire" },
-    ]);
+    const submitted = await submitGrouped(party, [{ lines: [dish("Caña", "2")], release: "fire" }]);
     const fired = (submitted.json as unknown as SubmitAnswer).groups[0]!;
     const lineId = fired.lineIds[0]!;
     // Taken before the setup serve, so a stray write every served mark makes alike still shows.
@@ -2028,7 +2049,7 @@ describe("POST /api/parties/:id/groups/:gid/unsnooze", () => {
 describe("POST /api/parties/:id/groups/split-line", () => {
   it("splits the stored quantity into single units under one revision and replays without writing", async () => {
     const party = await seated();
-    const submitted = await submit(party.partyId, [
+    const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "4")], release: "hold" },
     ]);
     expect(submitted.status).toBe(200);
@@ -2120,7 +2141,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
   });
   it("rolls back the first unit when a later split is refused, including revisions, kitchen items and command history", async () => {
     const party = await seated();
-    const submitted = await submit(party.partyId, [
+    const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "4")], release: "hold" },
     ]);
     expect(submitted.status).toBe(200);
@@ -2208,7 +2229,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
   );
   it("refuses a missing body line with 400 and accepts the stored UUID in upper case", async () => {
     const party = await seated();
-    const submitted = await submit(party.partyId, [
+    const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "2")], release: "hold" },
     ]);
     expect(submitted.status).toBe(200);
@@ -2261,7 +2282,7 @@ describe("POST /api/parties/:id/groups/split-line", () => {
   });
   it.each([1, 2])("keeps %s paid units on the source or refuses the entire split", async (paid) => {
     const party = await seated();
-    const submitted = await submit(party.partyId, [
+    const submitted = await submitGrouped(party, [
       { lines: [dish("Tarta", "5")], release: "hold" },
     ]);
     expect(submitted.status).toBe(200);

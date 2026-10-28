@@ -3,12 +3,18 @@ import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { isUuid } from "@waitron/shared";
 import { readBillEditState } from "../bill-editing.js";
+import type { AllergyPatch } from "@waitron/module";
+import { enqueueKitchenAllergyChanges } from "../kitchen-allergy.js";
 import {
   placeGroups as place,
   submitGroups as submit,
+  type GroupLine,
+  type GroupRelease,
   type PlaceGroupsInput,
   type SubmitGroupsInput,
 } from "../order-groups.js";
+import { applyPartyAllergyPatch, assertPartyAllergyAnswered } from "../party-allergy.js";
+import { insertTabRound, priceTabRound } from "../working-order.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { partyMainBill } from "../parties.js";
 import type { OriginConfig } from "../trading-context.js";
@@ -68,6 +74,54 @@ export async function placeGroups(
         input.expectedEdit ?? (await observation(tx, cfg, partyId, input.billId, false)),
     },
     attendance,
+  );
+}
+
+/**
+ * One group placed with each input line stored as one row, for tests of a line holding several
+ * dishes. Allergy ticks name lines as `submitGroups`' do (`groupIndex` 0) and are applied before
+ * anything prints, as there. Unlike `submitGroups` it records no replay, leaves the party's
+ * revision alone, does not normalise the allergy patch, and checks the party's allergy answer only
+ * when given a patch.
+ */
+export async function placeGroupedRound(
+  tx: Transaction,
+  cfg: OriginConfig,
+  seat: { partyId: string; tabId: string },
+  group: { lines: GroupLine[]; release: GroupRelease },
+  operatorId: string,
+  allergy?: AllergyPatch,
+) {
+  const round = await priceTabRound(tx, cfg, seat.tabId, group.lines, "checked");
+  const rows = await insertTabRound(
+    tx,
+    cfg,
+    round,
+    round.rows.map((row) => ({ ...row, creditedTo: operatorId })),
+  );
+  const dishes = rows.filter((row) => row.parentLineId == null).map((row) => row.id);
+  return place(
+    tx,
+    cfg,
+    seat.partyId,
+    {
+      operatorId,
+      billId: seat.tabId,
+      expectedEdit: await readBillEditState(tx, seat.tabId),
+      groups: [{ release: group.release, lines: [], existingLineIds: dishes }],
+    },
+    undefined,
+    async () => {
+      if (allergy === undefined) return;
+      const targets = dishes.map((id, lineIndex) => ({
+        ref: { kind: "submitted" as const, groupIndex: 0, lineIndex },
+        draftLineId: null,
+        workingLineId: id,
+      }));
+      const changes = await applyPartyAllergyPatch(tx, seat.partyId, allergy, operatorId, targets);
+      await enqueueKitchenAllergyChanges(tx, cfg, changes);
+      await assertPartyAllergyAnswered(tx, seat.partyId);
+    },
   );
 }
 

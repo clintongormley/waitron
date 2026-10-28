@@ -12,7 +12,7 @@ import type { TradingContext } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 import { observedGroupSubmitBody } from "./group-submit-fixture.js";
 export * from "../order-groups.js";
-export { placeGroups, submitGroups } from "./group-submit-fixture.js";
+export { placeGroupedRound, placeGroups, submitGroups } from "./group-submit-fixture.js";
 
 export function observedGroupSender(
   database: () => Database,

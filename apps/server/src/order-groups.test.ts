@@ -63,11 +63,9 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
-  insertTabRound,
   listExpoQueue,
   listStationQueue,
   parkOrder,
-  priceTabRound,
   splitUnitsWithinOrder,
   splitLinesWithinOrder,
   type TillSaleDeps,
@@ -80,7 +78,7 @@ import {
   fireGroup,
   fireHeldLine,
   listOrderGroups,
-  placeGroups,
+  placeGroupedRound,
   readCurrentOrders,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
@@ -300,7 +298,6 @@ async function submit(
   );
 }
 
-/** Places each group's lines as one row per input line, the shape a line of several dishes keeps. */
 async function submitGrouped(
   v: Venue,
   s: { partyId: string; tabId: string },
@@ -308,27 +305,8 @@ async function submitGrouped(
 ) {
   return inTx(async (tx) => {
     const placed = [];
-    for (const group of groups) {
-      const round = await priceTabRound(tx, v.cfg, s.tabId, group.lines, "checked");
-      const rows = await insertTabRound(
-        tx,
-        v.cfg,
-        round,
-        round.rows.map((row) => ({ ...row, creditedTo: ALEX })),
-      );
-      const answer = await placeGroups(tx, v.cfg, s.partyId, {
-        operatorId: ALEX,
-        billId: s.tabId,
-        groups: [
-          {
-            release: group.release,
-            lines: [],
-            existingLineIds: rows.filter((row) => row.parentLineId == null).map((row) => row.id),
-          },
-        ],
-      });
-      placed.push(...answer.groups);
-    }
+    for (const group of groups)
+      placed.push(...(await placeGroupedRound(tx, v.cfg, s, group, ALEX)).groups);
     return { groups: placed };
   });
 }
@@ -481,7 +459,8 @@ interface SpecExample extends Seated {
 
 /**
  * Spec §3's example, submitted as a waiter would: fire the drinks, fire the cold starters, hold the
- * warm starters, then hold the mains and the desserts as two groups in one submission.
+ * warm starters, then hold the mains and the desserts as two groups in one submission. The
+ * "grouped" shape stores each line as one row and places each group on its own.
  */
 async function specExample(v: Venue, shape?: "grouped"): Promise<SpecExample> {
   const seat = await seated(v);

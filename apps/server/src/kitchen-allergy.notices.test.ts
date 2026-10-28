@@ -37,6 +37,7 @@ import { republishMenus } from "./testing/publish-menu.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { recallToDraft } from "./draft-recall.js";
 import { submitGroups } from "./order-groups.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { registerPortions } from "./order-portions.js";
 import { moveDishesToStation } from "./station-move.js";
@@ -120,38 +121,41 @@ async function sent(
   release: "fire" | "hold" = "fire",
   assigned = true,
   extras?: { listId: string; picks: { productId: string; quantity: number }[] }[],
+  shape?: "grouped",
 ) {
   const tableId = await v.table(`Notice ${randomUUID().slice(0, 8)}`);
   const p = await seat(v, tableId);
-  await inTx(v, async (tx) =>
-    submitGroups(tx, v.cfg, p.partyId, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: p.revision,
-      operatorId: OPERATOR,
-      expectedEdit: await readBillEditState(tx, p.tabId),
-      groups: [
-        {
-          release,
-          lines: [
-            {
-              menuItemId: v.item("Burger"),
-              quantity: "3",
-              note: "Dish note",
-              ...(extras === undefined ? {} : { extras }),
-            },
-          ],
-        },
-      ],
-      allergy: {
-        party: { answer: "allergies", guests: [guest] },
-        ticks: [
-          {
-            line: { kind: "submitted", groupIndex: 0, lineIndex: 0 },
-            guestIndex: assigned ? 0 : null,
-          },
-        ],
+  const group = {
+    release,
+    lines: [
+      {
+        menuItemId: v.item("Burger"),
+        quantity: "3",
+        note: "Dish note",
+        ...(extras === undefined ? {} : { extras }),
       },
-    }),
+    ],
+  };
+  const allergy: AllergyPatch = {
+    party: { answer: "allergies", guests: [guest] },
+    ticks: [
+      {
+        line: { kind: "submitted", groupIndex: 0, lineIndex: 0 },
+        guestIndex: assigned ? 0 : null,
+      },
+    ],
+  };
+  await inTx(v, async (tx) =>
+    shape === "grouped"
+      ? placeGroupedRound(tx, v.cfg, p, group, OPERATOR, allergy)
+      : submitGroups(tx, v.cfg, p.partyId, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: p.revision,
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+          groups: [group],
+          allergy,
+        }),
   );
   const [ticket] = await v.db
     .select()
@@ -268,7 +272,7 @@ describe("A669 notices", () => {
     expect(await copies(p)).toEqual({ originalBlock: original, currentBlock: original });
   });
   it("corrects only remaining service quantity after serving and cancellation", async () => {
-    const p = await sent();
+    const p = await sent("fire", true, undefined, "grouped");
     await v.db
       .update(workingOrderLines)
       .set({ servedQuantity: 1000 })
@@ -385,9 +389,12 @@ describe("A669 notices", () => {
       await printer();
       if (release === "hold")
         await inTx(v, (tx) => setStationPrinting(tx, { printHeldWork: true }));
-      const p = await sent(release, true, [
-        { listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] },
-      ]);
+      const p = await sent(
+        release,
+        true,
+        [{ listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] }],
+        release === "fire" ? "grouped" : undefined,
+      );
       const tickets = await v.db
         .select()
         .from(ticketItems)

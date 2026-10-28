@@ -28,6 +28,7 @@ import {
 import { routeProductTo } from "./testing/zone-offers.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { submitGroups, fireGroup } from "./order-groups.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { submitDraft } from "./order-drafts.js";
 import { recallToDraft } from "./draft-recall.js";
 import {
@@ -81,35 +82,38 @@ beforeEach(async () => {
 async function sent(
   release: "fire" | "hold" = "fire",
   extras?: { listId: string; picks: { productId: string; quantity: number }[] }[],
+  shape?: "grouped",
 ) {
   const p = await seat(v, await v.table("Lifecycle"));
-  await inTx(v, async (tx) =>
-    submitGroups(tx, v.cfg, p.partyId, {
-      submissionId: randomUUID(),
-      expectedPartyRevision: p.revision,
-      operatorId: OPERATOR,
-      expectedEdit: await readBillEditState(tx, p.tabId),
-      groups: [
-        {
-          release,
-          lines: [
-            {
-              menuItemId: v.item("Burger"),
-              quantity: "3",
-              note: "Dish note",
-              ...(extras === undefined ? {} : { extras }),
-            },
-          ],
-        },
-      ],
-      allergy: {
-        party: {
-          answer: "allergies",
-          guests: [{ who: original.who, allergens: original.allergens, note: original.note }],
-        },
-        ticks: [{ line: { kind: "submitted", groupIndex: 0, lineIndex: 0 }, guestIndex: 0 }],
+  const group = {
+    release,
+    lines: [
+      {
+        menuItemId: v.item("Burger"),
+        quantity: "3",
+        note: "Dish note",
+        ...(extras === undefined ? {} : { extras }),
       },
-    }),
+    ],
+  };
+  const allergy: AllergyPatch = {
+    party: {
+      answer: "allergies",
+      guests: [{ who: original.who, allergens: original.allergens, note: original.note }],
+    },
+    ticks: [{ line: { kind: "submitted", groupIndex: 0, lineIndex: 0 }, guestIndex: 0 }],
+  };
+  await inTx(v, async (tx) =>
+    shape === "grouped"
+      ? placeGroupedRound(tx, v.cfg, p, group, OPERATOR, allergy)
+      : submitGroups(tx, v.cfg, p.partyId, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: p.revision,
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+          groups: [group],
+          allergy,
+        }),
   );
   const [ticket] = await v.db
     .select()
@@ -169,7 +173,7 @@ describe("A669 lifecycle", () => {
   it.each(["partial", "units"] as const)(
     "%s splits retain both blocks, assignments and financial totals",
     async (kind) => {
-      const p = await sent();
+      const p = await sent("fire", undefined, "grouped");
       await edit(p);
       const jobs = await v.db.select().from(printJobs);
       await inTx(v, (tx) =>
@@ -385,9 +389,11 @@ describe("A669 lifecycle", () => {
       await republishMenus(tx);
       return { list, side, station };
     });
-    const p = await sent("fire", [
-      { listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] },
-    ]);
+    const p = await sent(
+      "fire",
+      [{ listId: extra.list.id, picks: [{ productId: extra.side.id, quantity: 2 }] }],
+      "grouped",
+    );
     await inTx(v, (tx) =>
       splitLinesWithinOrder(tx, v.cfg, p.tabId, [{ lineNo: 1, quantity: "1" }], {
         splitExtras: true,
