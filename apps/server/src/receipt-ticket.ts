@@ -16,6 +16,7 @@ import { qrModules } from "./qr-matrix.js";
 import { tableLines, type ReceiptTable, type ReceiptTableRow } from "./receipt-table.js";
 import {
   buildReceiptDocument,
+  type ElementRange,
   type ReceiptDocumentInput,
   type ReceiptIndent,
   type ReceiptPart,
@@ -166,10 +167,7 @@ export function drawReceipt({ printer, logo = null, ...input }: FormatReceiptInp
   }
   firstPictures.push(b.pictures);
   const parts: Partial<Record<ReceiptPart, PictureRange>> = {};
-  for (const [part, elements] of Object.entries(document.parts) as [
-    ReceiptPart,
-    { start: number; end: number },
-  ][]) {
+  for (const [part, elements] of Object.entries(document.parts) as [ReceiptPart, ElementRange][]) {
     const start = firstPictures[elements.start]!;
     const end = firstPictures[elements.end]!;
     if (end > start) parts[part] = { start, end };

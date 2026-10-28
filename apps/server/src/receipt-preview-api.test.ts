@@ -1035,6 +1035,38 @@ describe("the receipt preview's top block", () => {
       }
     }
 
+    /**
+     * Runs `fn` with the department's receipts table renamed during each printed read, collecting
+     * each read's answer. The table comes back inside the same transaction: reading the image's
+     * current details (readCurrentImageMetadata) counts its uses, which reads department_receipts
+     * after the snapshot's transaction ends.
+     */
+    async function hidingReceiptsDuringPrintedRead<T>(
+      fn: () => Promise<T>,
+    ): Promise<{ result: T; answers: unknown[] }> {
+      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
+      const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
+      const answers: unknown[] = [];
+      const spy = vi
+        .spyOn(VENUE_SERVICE, "readPrintedDepartmentReceipt")
+        .mockImplementation(async (...args) => {
+          const tx = args[0] as unknown as Database;
+          await hide.apply(tx, at());
+          try {
+            const answer = await printed(...args);
+            answers.push(answer);
+            return answer;
+          } finally {
+            await hide.undo(tx, at());
+          }
+        });
+      try {
+        return { result: await fn(), answers };
+      } finally {
+        spy.mockRestore();
+      }
+    }
+
     it("a draft with no logo draws the theme's dots for the paper, and marks them", async () => {
       await putThemeInUse(suite.db);
       const wide = await rendered({});
@@ -1132,31 +1164,7 @@ describe("the receipt preview's top block", () => {
         logoRasters: { "58mm": raster, "80mm": raster },
       });
       expect(sizes(await rendered({ logo }))).toEqual([[16, 2]]);
-      // The table comes back inside the same transaction: reading the image's current details
-      // (readCurrentImageMetadata) counts its uses, which reads department_receipts after the
-      // snapshot's transaction ends.
-      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
-      const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
-      const answers: unknown[] = [];
-      const spy = vi
-        .spyOn(VENUE_SERVICE, "readPrintedDepartmentReceipt")
-        .mockImplementation(async (...args) => {
-          const tx = args[0] as unknown as Database;
-          await hide.apply(tx, at());
-          try {
-            const answer = await printed(...args);
-            answers.push(answer);
-            return answer;
-          } finally {
-            await hide.undo(tx, at());
-          }
-        });
-      let result: ReceiptPreviewResponse;
-      try {
-        result = await rendered({ logo });
-      } finally {
-        spy.mockRestore();
-      }
+      const { result, answers } = await hidingReceiptsDuringPrintedRead(() => rendered({ logo }));
       expect(answers).toEqual([{ receipt: {}, logo: null, unreadable: true }]);
       expect(sizes(result)).toEqual(fromImage);
     });
@@ -1164,29 +1172,15 @@ describe("the receipt preview's top block", () => {
     it("a draft naming its saved logo reports a failed printed read", async () => {
       const logo = await libraryImage(48);
       await suite.db.insert(departmentReceipts).values({ departmentId, receipt: { logo } });
-      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
-      const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
-      const spy = vi
-        .spyOn(VENUE_SERVICE, "readPrintedDepartmentReceipt")
-        .mockImplementation(async (...args) => {
-          const tx = args[0] as unknown as Database;
-          await hide.apply(tx, at());
-          try {
-            return await printed(...args);
-          } finally {
-            await hide.undo(tx, at());
-          }
-        });
       const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
       try {
-        await rendered({ logo });
+        await hidingReceiptsDuringPrintedRead(() => rendered({ logo }));
         expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
           operation: "readPrintedDepartmentReceipt",
           departmentId,
           code: "receipt.read_failed",
         });
       } finally {
-        spy.mockRestore();
         warning.mockRestore();
       }
     });

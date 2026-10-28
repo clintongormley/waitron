@@ -30,6 +30,7 @@ import {
   type PrintJobPreview,
   type PrintPreviewBlock,
 } from "./print-job-preview.js";
+import type { ReceiptPart } from "./receipt-document.js";
 import { drawReceipt } from "./receipt-ticket.js";
 import { createLogoCache, drawLibraryLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
@@ -69,18 +70,16 @@ export interface ReceiptPreviewResponse {
   /** The widths of the location's active devices' active receipt printers, narrowest first. */
   paperWidths: PaperWidth[];
   /** The blocks each part of the trim adds; `null` for one that prints nothing. */
-  marks: Record<
-    "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo",
-    BlockRange | null
-  >;
+  marks: Record<ReceiptPart, BlockRange | null>;
 }
 
 type Marks = ReceiptPreviewResponse["marks"];
 
 /**
  * Where each part of the trim shows in `preview`, a drawing of `drawn`, less any rules at either
- * end, which belong to the section a part opens or closes. A part whose lines draw the same as the
- * lines after it cannot be told from them in the preview, and is marked on the last such place.
+ * end, which belong to the section a part opens or closes. While the line after a mark draws the
+ * same as the mark's first line, the mark moves down a line, so a part whose lines draw the same
+ * as the lines after it is marked on the last such place.
  * Holds while the receipt sends no native `qr()` and the preview drops no picture
  * (`omittedGraphics`), so picture n is the preview's nth image.
  */

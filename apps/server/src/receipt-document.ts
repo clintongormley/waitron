@@ -84,10 +84,19 @@ export type ReceiptElement =
 export type ReceiptPart =
   "headerSubtitle" | "footerMessage" | "phone" | "email" | "address" | "logo";
 
+/** Elements `[start, end)` of a receipt document. */
+export interface ElementRange {
+  start: number;
+  end: number;
+}
+
 export interface ReceiptDocument {
   elements: readonly ReceiptElement[];
-  /** Elements `[start, end)` of each part present. */
-  parts: Partial<Record<ReceiptPart, { start: number; end: number }>>;
+  /**
+   * Elements `[start, end)` of each part the document holds; the logo's is always there, since
+   * only the drawing knows whether a picture prints.
+   */
+  parts: Partial<Record<ReceiptPart, ElementRange>>;
   duplicate: boolean;
   practice: boolean;
 }
