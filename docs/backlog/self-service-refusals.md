@@ -932,6 +932,36 @@ Waitron fault, or offers its corresponding repair. Build that workflow with any 
 at the action. Changing the file/type, retrying or cancelling does not establish that every
 persistent refusal has a repair. The wording change does not qualify that missing workflow.
 
+#### 2026-10-28 diagnosis audit
+
+The remaining work is a diagnostic workflow, rather than another wording change.
+At source revision `1b841a8ff`, the following boundaries were traced:
+
+| Boundary | Observed behavior and receipt |
+| --- | --- |
+| Check result | `packages/fiscal-verifactu/src/certificate-check.ts:25` reduces transport failures to five refusal reasons. The existing `EPROTO` fixture and a local HTTPS server returning an unparseable HTTP 200 answer both produce `check_failed` (`certificate-check.test.ts:178`, `:203`). Neither result establishes a Waitron bug. |
+| HTTP refusal | The local mutual-TLS HTTP 403 case returns `aeat_http` with status 403 (`certificate-check.test.ts:194`). This experiment does not establish the cause of a live AEAT refusal or whether waiting would help. |
+| Installation | `packages/fiscal-verifactu/src/certificate-install.ts:207` checks the candidate before its vault write. Its refusal cases compare the saved state before and after (`certificate-install.test.ts:310`, `:335`). This is the replacement flow, not an independent diagnostic action for the installed certificate. |
+| Authority | `apps/server/src/fiscal-certificate-api.ts:51` mounts a card read authorised by `fiscal.view`; `:69` mounts replacement authorised by `system.manage`. That route file mounts no separate diagnostic endpoint. |
+| Evidence | The refusal log retains reason and optional field (`packages/fiscal-verifactu/src/certificate-install.ts:170`). The HTTP refusal logging test expects the reason alone (`certificate-install.test.ts:619`). Those logged fields do not distinguish the two `check_failed` causes above. |
+
+Executed in the registered `docs/a1089-certificate-diagnosis` worktree:
+
+```sh
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/certificate-check.test.ts src/certificate-install.test.ts src/certificate-install.concurrency.test.ts
+# 3 files, 60 tests passed
+pnpm --filter @waitron/server exec vitest run src/fiscal-certificate-api.test.ts src/fiscal-certificate-api.verifactu.test.ts
+# 2 files, 21 tests passed
+```
+
+These existing tests qualify the named local fixtures, installation preservation and route
+boundaries. They do not exercise a proposed diagnostic screen, live AEAT, or a host-network
+repair. No production code or test assertion changed in this audit.
+
+The [proposed diagnostic cut](../superpowers/specs/2026-10-28-a1089-aeat-certificate-diagnosis-design.md)
+separates observed failures from unproved causes. It awaits the owner's choice between a partial
+evidence-first workflow and designing complete recovery first. Persistent repair stays open.
+
 ### tls-repair
 
 2026-10-25: the public connection page now names the installer as the next step after a repeated
