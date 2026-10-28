@@ -1,13 +1,17 @@
 /**
- * Only the allowed files name the box's spare file or the functions that delete and write it: the
- * start on a nearly full disk (`node-entry.ts`), the start's emptying and the repair host
- * (`first-setup-entry.ts`) release it, and a start with room (`node-entry.ts`) and the running box
- * (`boot.ts`) write it back.
+ * Only the allowed files name the box's spare file, its release marker, or the functions that
+ * delete and write the spare: the start on a nearly full disk (`node-entry.ts`), the start's
+ * emptying and the repair host (`first-setup-entry.ts`) release it; a start with room
+ * (`node-entry.ts`) writes it back with `topUpSpare`, and the running box (`boot.ts`) through
+ * `spareRestorer`, the one write-back the free-space watch and Box status's Free button share.
+ * Reading the marker (`spareReleased`) is not guarded: it changes nothing, and an options field of
+ * that name would match it.
  *
  * Weaker than its name: it reads TEXT — a non-test `.ts` file under `apps/<app>/src` or
- * `packages/<package>/src` naming `SPARE_SPACE_FILE`, the literal `"spare-space"`, `releaseSpare`,
- * `releaseSpareBeforeStartAgain` or `topUpSpare` — so a path built another way, or a function
- * reached under another name, escapes it.
+ * `packages/<package>/src` naming `SPARE_SPACE_FILE`, the literal `"spare-space"`,
+ * `SPARE_SPACE_RELEASED_FILE`, the literal `"spare-space.released"`, `releaseSpare`,
+ * `releaseSpareBeforeStartAgain`, `topUpSpare` or `spareRestorer` — so a path built another way, or
+ * a function reached under another name, escapes it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -34,12 +38,21 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     ],
   },
   {
-    pattern: /\btopUpSpare\b/,
+    pattern: /\bSPARE_SPACE_RELEASED_FILE\b|"spare-space\.released"/,
     allowed: [
-      "apps/server/src/boot.ts",
-      "apps/server/src/node-entry.ts",
       "apps/server/src/spare-space.ts",
+      "packages/provisioning/src/first-setup-backup-workspace.ts",
+      "packages/provisioning/src/index.ts",
+      "packages/provisioning/src/spare-space-name.ts",
     ],
+  },
+  {
+    pattern: /\btopUpSpare\b/,
+    allowed: ["apps/server/src/node-entry.ts", "apps/server/src/spare-space.ts"],
+  },
+  {
+    pattern: /\bspareRestorer\b/,
+    allowed: ["apps/server/src/boot.ts", "apps/server/src/spare-space.ts"],
   },
 ];
 
@@ -126,6 +139,42 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
       "apps/server/src/first-setup-entry.ts: \\btopUpSpare\\b",
       "apps/server/src/free-space-now.ts: \\breleaseSpare\\b|\\breleaseSpareBeforeStartAgain\\b",
       'apps/server/src/start-space.ts: \\bSPARE_SPACE_FILE\\b|"spare-space"',
+    ]);
+  });
+
+  it("passes the start's release, the running box's write-back and a marker option, and refuses them elsewhere", () => {
+    expect(
+      strays([
+        {
+          path: "apps/server/src/node-entry.ts",
+          text: 'import { releaseSpare, topUpSpare } from "./spare-space.js";',
+        },
+        {
+          path: "apps/server/src/boot.ts",
+          text: 'import { spareReleased, spareRestorer } from "./spare-space.js";',
+        },
+        {
+          path: "apps/server/src/disk-full-state.ts",
+          text: "spareReleased?: () => Promise<boolean>;",
+        },
+      ]),
+    ).toEqual([]);
+    expect(
+      strays([
+        {
+          path: "apps/server/src/boot.ts",
+          text: 'import { topUpSpare } from "./spare-space.js";',
+        },
+        {
+          path: "apps/server/src/free-space-watch.ts",
+          text: 'import { spareRestorer } from "./spare-space.js";',
+        },
+        { path: "apps/server/src/start-space.ts", text: 'join(stateDir, "spare-space.released")' },
+      ]),
+    ).toEqual([
+      "apps/server/src/boot.ts: \\btopUpSpare\\b",
+      "apps/server/src/free-space-watch.ts: \\bspareRestorer\\b",
+      'apps/server/src/start-space.ts: \\bSPARE_SPACE_RELEASED_FILE\\b|"spare-space\\.released"',
     ]);
   });
 });
