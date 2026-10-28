@@ -69,10 +69,12 @@ it("calls restaurant menus cartas in Spanish, keeping the account menu distinct"
   expect(t("nav.account_menu", "es-ES")).toBe("Menú de cuenta");
 });
 
+// Weaker than its name: reads strings.ts's es table and one code message (product.on_live_menu),
+// not the rest of codes.ts, alert-messages.ts, domain.ts or any module's catalogue.
 it("says menú in Spanish only for an on-screen menu, never a restaurant one", () => {
   const menu = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
   const saysMenu = Object.entries(es)
-    .filter(([, text]) => menu.test(text.replace(/\{\w+\}/g, "")))
+    .filter(([, text]) => menu.test(text.replace(/\{[^}]*\}/g, "")))
     .map(([key]) => key);
   expect(saysMenu.sort()).toEqual(["appearance.colour.surface-raised", "nav.account_menu"]);
   expect(codeMessage("product.on_live_menu", "es")).not.toMatch(menu);

@@ -3,7 +3,6 @@ import { page, userEvent } from "vitest/browser";
 import type { WtDataTable } from "@waitron/ui/src/components/wt-data-table.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { en, es } from "../i18n/strings.js";
 import {
   billOptions,
   billRow,
@@ -583,12 +582,6 @@ it("in English the state filter calls an order set aside on the till Parked", as
       "State: Parked",
     ),
   );
-});
-it.each([
-  ["English", en],
-  ["Spanish", es],
-])("in %s the state filter's word for a set-aside order is the Parked orders list's", (_, table) => {
-  expect(table["held.title"].toLowerCase()).toContain(table["find_page.held"].toLowerCase());
 });
 it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
   const { el, fetcher } = await mount();

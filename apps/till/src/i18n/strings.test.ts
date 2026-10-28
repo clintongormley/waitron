@@ -135,6 +135,15 @@ describe("the floor's held chip, the Waiting chip's own word, and no retenido in
   });
 });
 
+describe("the Find a bill state filter calls a set-aside order by the Parked orders list's word", () => {
+  it.each([
+    ["English", en],
+    ["Spanish", es],
+  ])("in %s", (_, table) => {
+    expect(table["held.title"].toLowerCase()).toContain(table["find_page.held"].toLowerCase());
+  });
+});
+
 describe("the words for an order's item counts", () => {
   const counts = ["items", "unsent", "held", "waiting", "ready"] as const;
 
