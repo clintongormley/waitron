@@ -5456,6 +5456,13 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **The receipt-guests upgrade test reinstalls the append-only triggers itself** (left open by
+  A1164, #2176). `packages/db/src/schema/sale-receipt-guests-upgrade.test.ts` calls
+  `installAppendOnlyTriggers` by hand after migrating, so it does not prove `applyMigrations` puts
+  them back; `packages/migrations/src/order-group-events-rebuild.test.ts` runs the real one. The
+  "copy the migrations, cut the journal, migrate to there" setup is also repeated across the
+  `*-upgrade.test.ts` files with no shared helper.
+
 - **Audit the other coverage download actions for retained refused responses.**
   The server helper closes this response; other merge jobs still use the action exercised by
   the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).
