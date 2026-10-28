@@ -32,7 +32,7 @@ function balanceOf(over: Partial<BillBalance> = {}): BillBalance {
   };
 }
 
-const paella: PayLine = {
+const mainDish: PayLine = {
   lineNo: 1,
   name: "Paella",
   quantity: "1",
@@ -47,7 +47,7 @@ const tiramisu: PayLine = {
   total: "6.00",
   unitTotal: null,
 };
-const lines = [paella, beers, tiramisu];
+const lines = [mainDish, beers, tiramisu];
 
 async function mount(over: Partial<TillBillPayDialog> = {}) {
   const { el } = await mountWidget<TillBillPayDialog>("till-bill-pay-dialog", {
@@ -1524,7 +1524,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
   it("shows the field on chosen items that pay the rest", async () => {
     const el = await mount({
       balance: balanceOf({ total: "35.00", outstanding: "35.00" }),
-      lines: [paella],
+      lines: [mainDish],
       asksGuests: true,
       receiptGuests: 4,
     });
