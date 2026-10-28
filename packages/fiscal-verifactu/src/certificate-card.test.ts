@@ -6,7 +6,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { makeAuthority, type Candidate } from "../test/certificate-fixtures.js";
 import { seedPendingEnvios } from "../test/drain-fixtures.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { lastAcceptedQuery, readCertificateCard } from "./certificate-card.js";
 import { recordInstall } from "./certificate-record.js";
@@ -103,7 +103,7 @@ async function recordDashboardInstall(): Promise<void> {
 
 describe("readCertificateCard", () => {
   it("answers no revision and nothing installed for an empty vault", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await expect(readCertificateCard(depsFor(TENANT_A.nodeId), NOW)).resolves.toEqual({
       revision: null,
       timeZone: "Europe/Madrid",
@@ -112,7 +112,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers the vault's revision and nothing installed when the vault has no install row", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await withTransaction(suite.db, (tx) =>
       putCredential(tx, testRing(), {
         purpose: "fiscal.aeat",
@@ -129,7 +129,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers every fact of a setup install, and none of the certificate's personal fields", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(TENANT_A.nodeId);
     const nameOf = vi.fn(async () => "Never asked");
 
@@ -148,7 +148,7 @@ describe("readCertificateCard", () => {
   });
 
   it("names the person who installed a dashboard install, asked inside the read transaction", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(TENANT_A.nodeId);
     await recordDashboardInstall();
     let seenTx: Transaction | null = null;
@@ -175,7 +175,7 @@ describe("readCertificateCard", () => {
   });
 
   it("says the tax ID does not match when the certificate names another taxpayer", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(
       TENANT_A.nodeId,
       authority.issue({
@@ -188,7 +188,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers null for the match when the certificate names no tax ID", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(
       TENANT_A.nodeId,
       authority.issue({
@@ -201,7 +201,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers expired, with negative days left, for a certificate past its end", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(TENANT_A.nodeId);
     const card = await readCertificateCard(
       depsFor(TENANT_A.nodeId),
@@ -211,7 +211,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers the latest acceptance at or after the install, either accepted state, on any node", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const seeded = await seedPendingEnvios(suite.db, { count: 5 });
     const other = await seedPendingEnvios(suite.db, { count: 1 });
     await sealSetup(seeded.nodeId);
@@ -256,7 +256,7 @@ describe("readCertificateCard", () => {
   });
 
   it("answers no acceptance when every accepted envío predates the install", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const seeded = await seedPendingEnvios(suite.db, { count: 1 });
     await sealSetup(seeded.nodeId);
     await setEnvio(seeded.registroIds[0] as string, "aceptado", "2026-09-30T23:00:00.000Z");
@@ -272,7 +272,7 @@ describe("readCertificateCard", () => {
   });
 
   it("runs authorize first, inside the one read transaction, and reads nothing after it refuses", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await sealSetup(TENANT_A.nodeId);
     await recordDashboardInstall();
     const refusal = new Error("not permitted");

@@ -1430,7 +1430,7 @@ declare module "@waitron/shared" {
      */
     "restore.unexpected_entry": { name: string };
     /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
-     * hooks need (`WAITRON_TILL_NODE_ID`/`LOCATION_ID`/`SERIES_ID`; an empty value is
+     * hooks need (`WAITRON_TILL_NODE_ID`/`WAITRON_TILL_LOCATION_ID`; an empty value is
      * missing). Validation refuses with the target intact, before identity set-aside or database
      * restore. `missing` is the fixed key or file name. */
     "restore.identity_incomplete": { missing: string };

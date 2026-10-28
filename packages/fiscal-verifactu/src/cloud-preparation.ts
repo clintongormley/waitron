@@ -73,7 +73,7 @@ export function createCloudAllocationPreparation(configuration: {
       if (
         operator === undefined ||
         held.binding.module !== "fiscal-verifactu" ||
-        !["setup", "restore", "re-register"].includes(held.binding.action)
+        !["setup", "restore"].includes(held.binding.action)
       )
         refuse("reauthentication_required");
       if (!exact(held.input, ["allocation", "approval", "receipt"])) refuse("malformed_allocation");
@@ -248,7 +248,7 @@ export async function readCloudAllocationReport(
   const approval = receipt.payload.approval!;
   if (
     binding.module !== "fiscal-verifactu" ||
-    !["setup", "restore", "re-register"].includes(binding.action as string) ||
+    !["setup", "restore"].includes(binding.action as string) ||
     binding.targetNodeId !== node.nodeId ||
     binding.targetNodeId !== approval.targetNodeId ||
     binding.sourceId !== approval.sourceId ||

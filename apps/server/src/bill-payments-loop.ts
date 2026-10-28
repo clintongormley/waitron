@@ -45,7 +45,7 @@ export function refundLookupGapMs(sentAgeMs: number): number {
 const lastLookupsOf = perDatabase(() => new Map<string, number>());
 
 export interface BillPaymentsLoopDeps extends BillPaymentDeps {
-  /** The box's till configuration; an invoice is filed on the bill payment's own till. */
+  /** The box's till configuration; an invoice is recorded on the bill payment's node. */
   cfg: TillConfig;
   /** The card providers pending refunds are looked up at; without it none is looked up. */
   refundProviderFor?: RefundProviderFor;

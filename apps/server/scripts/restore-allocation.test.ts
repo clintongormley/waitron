@@ -5,7 +5,6 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { isNull } from "drizzle-orm";
 import {
   invoiceSeries,
   locations,
@@ -29,7 +28,6 @@ import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
 import type { WaitronModule } from "@waitron/module";
 import { locationId, nodeId } from "@waitron/shared";
 import { mintBreakGlassSecret } from "../src/break-glass.js";
-import { registerTill } from "./register-till.js";
 import { runRestore } from "../src/restore-command.js";
 import { restoreFromArtifactFile } from "../src/restore.js";
 import { writeStreamRestore } from "../src/restore-stream.js";
@@ -52,7 +50,7 @@ const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toSt
 const fingerprint = paperCustodianFingerprint(publicKey)!;
 const binding = {
   module: "fiscal-verifactu",
-  action: "re-register",
+  action: "restore",
   eventId: "reimage-42",
   sourceId: "reimaged-box-42",
   targetNodeId: NODE,
@@ -164,7 +162,7 @@ beforeEach(async () => {
     registerSif(tx, { nodeId: NODE, nif: "50000000R", idSistemaInformatico: "W1" }),
   );
   secret = await mintBreakGlassSecret(suite.db, NODE);
-  root = await mkdtemp(join(tmpdir(), "register-till-allocation-"));
+  root = await mkdtemp(join(tmpdir(), "restore-allocation-"));
   venueDir = join(root, "venue");
   await mkdir(venueDir);
   await suite.db.archiveTo(join(venueDir, "venue.db"));
@@ -204,114 +202,6 @@ async function rows() {
     await store.close();
   }
 }
-it("re-registers with the file's signed identity and the current node key through the historical harness", async () => {
-  const before = await rows();
-  const result = registerTill(NODE, env());
-  await expect(result).resolves.toEqual([
-    { module: "fiscal-verifactu", report: expect.stringContaining("installation P000042") },
-  ]);
-  const after = await rows();
-  expect(after.sifs).toHaveLength(2);
-  expect(after.sifs.find((row) => row.id === before.sifs[0]!.id)).toEqual({
-    ...before.sifs[0],
-    revocadoEn: expect.any(Date),
-  });
-  expect(after.sifs.find((row) => row.revocadoEn === null)).toMatchObject({
-    numeroInstalacion: "P000042",
-  });
-  for (const old of before.series)
-    expect(after.series.find((row) => row.id === old.id)).toEqual({
-      ...old,
-      retiredAt: expect.any(Date),
-    });
-  expect(
-    after.series
-      .filter((row) => row.retiredAt === null)
-      .map(({ code, purpose, nextNumber }) => ({ code, purpose, nextNumber })),
-  ).toEqual([
-    { code: "A-P000042", purpose: "standard", nextNumber: 1 },
-    { code: "FF-P000042", purpose: "full", nextNumber: 1 },
-    { code: "R-P000042", purpose: "rectificative", nextNumber: 1 },
-  ]);
-  expect(after.allocations.map((row) => row.approval)).toEqual([approval]);
-});
-it("uses the state-directory default and retains committed counters on an authorised replay", async () => {
-  const args = { ...env(), WAITRON_VENUE_DIR: undefined, WAITRON_STATE_DIR: root };
-  await expect(registerTill(NODE, args)).resolves.toHaveLength(1);
-  const store = await openVenueDatabase(venueDir);
-  try {
-    await store.venue
-      .update(invoiceSeries)
-      .set({ nextNumber: 37 })
-      .where(isNull(invoiceSeries.retiredAt));
-  } finally {
-    await store.close();
-  }
-  const before = await rows();
-  await writeFile(
-    join(root, "current.json"),
-    JSON.stringify({ ...confirmation, priorActivation: "committed" }),
-  );
-  await expect(registerTill(NODE, args)).resolves.toHaveLength(1);
-  expect(await rows()).toEqual(before);
-});
-it.each([undefined, "", "wrong"])(
-  "refuses an absent or wrong node key %# before consulting missing outside evidence",
-  async (key) => {
-    const before = await rows();
-    await rm(join(root, "current.json"));
-    await expect(
-      registerTill(NODE, { ...env(), WAITRON_NODE_RECOVERY_KEY: key }),
-    ).rejects.toMatchObject({ code: "promotion.break_glass_invalid" });
-    expect(await rows()).toEqual(before);
-  },
-);
-it("refuses a restore request on the re-registration entry point", async () => {
-  const before = await rows();
-  await writeFile(file, JSON.stringify({ ...request, binding: { ...binding, action: "restore" } }));
-  await expect(registerTill(NODE, env())).rejects.toMatchObject({
-    code: "module.operation_invalid",
-    params: { module: "fiscal-verifactu" },
-  });
-  expect(await rows()).toEqual(before);
-});
-it("refuses malformed file input before creating the selected venue directory", async () => {
-  await writeFile(file, "synthetic-secret-invalid-json");
-  const absent = join(root, "absent-venue");
-  await expect(registerTill(NODE, { ...env(), WAITRON_VENUE_DIR: absent })).rejects.toMatchObject({
-    code: "server.config_invalid",
-    params: { variable: "WAITRON_RECOVERY_OPERATION_FILE", reason: "invalid_operation" },
-  });
-  await expect(readFile(join(absent, "venue.db"))).rejects.toMatchObject({ code: "ENOENT" });
-});
-it("refuses a different target without consuming local allocation state", async () => {
-  const before = await rows();
-  await expect(registerTill("c0000000-0000-4000-8000-000000000099", env())).rejects.toMatchObject({
-    code: "module.operation_invalid",
-  });
-  expect(await rows()).toEqual(before);
-});
-it("rolls back the allocated identity and all series when another module's seed refuses", async () => {
-  const before = await rows();
-  modules.push(
-    fakeModule("later", {
-      provisioning: {
-        seed: {
-          summary: "refuse",
-          run: async () => {
-            throw new Error("later-refused");
-          },
-        },
-      },
-    }),
-  );
-  await expect(registerTill(NODE, env())).rejects.toThrow("later-refused");
-  expect(await rows()).toEqual(before);
-  expect(JSON.parse(await readFile(join(root, "current.json"), "utf8")).currentEntryState).toBe(
-    "consumed-for-event",
-  );
-});
-
 it.each(["archive", "bucket"])(
   "activates signed fiscal recovery through the %s command and preserves its complete old series",
   async (kind) => {

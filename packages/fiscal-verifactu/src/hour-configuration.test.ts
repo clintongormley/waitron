@@ -66,9 +66,7 @@ it("a setup without a host cannot generate names from paper serials", () => {
 
 it.each([
   ["ambient", "restore"],
-  ["ambient", "re-register"],
   ["configured", "restore"],
-  ["configured", "re-register"],
 ] as const)(
   "%s %s cannot use an old signed Cloud receipt as activation authority",
   async (mode, action) => {

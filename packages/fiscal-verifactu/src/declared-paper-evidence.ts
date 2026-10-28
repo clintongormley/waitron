@@ -217,9 +217,7 @@ export function readDeclaredPaperInput(value: unknown) {
     reservation.binding.module !== "fiscal-verifactu" ||
     (candidate.source === "initial-paper"
       ? reservation.binding.action !== "setup"
-      : !["restore", "re-register", "promote", "reserve"].includes(
-          reservation.binding.action as string,
-        ))
+      : !["restore", "promote", "reserve"].includes(reservation.binding.action as string))
   )
     refuse("event_mismatch");
   return freeze(structuredClone(value) as unknown as DeclaredPaperConfirmation["input"]);

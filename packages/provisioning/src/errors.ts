@@ -1,9 +1,6 @@
 import "@waitron/shared";
 
 /**
- * `provisioning.*` is standing a DEPLOYMENT up, not this package's name. A code about a NODE's
- * provisioning (`apps/server/src/provision-till.ts`'s `provisionNode`) should not land here.
- *
  * NO PARAM HERE EVER CARRIES A GENERATED PASSWORD, A KEY, OR A CONNECTION STRING: `src/bin.ts` and
  * `src/cli.ts`'s `reportFailure` print `${error.code} ${JSON.stringify(error.params)}` to stderr,
  * straight into an operator's scrollback.

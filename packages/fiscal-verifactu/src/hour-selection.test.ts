@@ -16,7 +16,6 @@ const binding: OperationBinding = {
 };
 const setup: OperationBinding = { ...binding, action: "setup" };
 const restore: OperationBinding = { ...binding, action: "restore" };
-const reRegister: OperationBinding = { ...binding, action: "re-register" };
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 const bases = [
   { code: "A", purpose: "standard" },
@@ -722,7 +721,7 @@ it.each([
   const f = fixture();
   withHistory(f, [activationRow("0CNNW", at(floor))]);
   f.at(at("2026-10-24T09:00:10Z"), 0);
-  const result = f.run(reRegister);
+  const result = f.run(binding);
   if (outcome === "refused")
     await expect(result).rejects.toMatchObject({
       params: { reason: "minute_not_later", allowedFromMs: at(target) },
@@ -730,7 +729,7 @@ it.each([
   else
     expect(await result).toEqual({ status: "waiting", targetMs: at(target), remainingMs: 110_000 });
 });
-it.each([reRegister, binding])("$action with no later history selects at once", async (base) => {
+it.each([binding])("$action with no later history selects at once", async (base) => {
   const f = fixture();
   withHistory(f, [activationRow("0CNNW", at("2026-10-16T11:40:00Z"))]);
   f.at(at("2026-10-24T09:00:10Z"), 0);
@@ -850,7 +849,7 @@ it("records the intent durably before the select resolves selected", async () =>
   order.push(`resolved ${result.status}`);
   expect(order).toEqual(["replace true", "resolved selected"]);
 });
-it.each([restore, setup, binding, reRegister])(
+it.each([restore, setup, binding])(
   "a $action preview with no recorded wait never counts down a target it has not saved",
   async (base) => {
     const f = fixture();

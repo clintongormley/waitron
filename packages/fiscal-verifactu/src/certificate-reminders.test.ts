@@ -3,7 +3,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import type { CertKind } from "./aeat-transport.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { recordInstall } from "./certificate-record.js";
@@ -76,7 +76,7 @@ async function rows(): Promise<Record<string, unknown>[]> {
 
 describe("claimReminder", () => {
   it("has nothing to send when the node has no install, or before the first stage", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await expect(claimAt(WARNING)).resolves.toBeNull();
     await install(TENANT_A.nodeId);
     await expect(claimAt("2026-08-25T10:00:00Z")).resolves.toBeNull();
@@ -84,7 +84,7 @@ describe("claimReminder", () => {
   });
 
   it("claims each recipient once per stage, lowest person id first, then nothing", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const first = await claimAt(WARNING, [BEA, ANA]);
     expect(first).toEqual({
@@ -107,7 +107,7 @@ describe("claimReminder", () => {
   });
 
   it("claims again when the certificate moves from warning to urgent", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const warning = await claimAt(WARNING, [ANA]);
     await reportAt(warning!.id, "sent", WARNING);
@@ -123,7 +123,7 @@ describe("claimReminder", () => {
   });
 
   it("claims a rejected send again only once more than 24 hours have passed since its report", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const claimed = await claimAt(WARNING, [ANA]);
     const reported = new Date("2026-08-26T10:05:00Z");
@@ -139,7 +139,7 @@ describe("claimReminder", () => {
   });
 
   it("never claims again a row left claimed or reported unknown", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     await claimAt(WARNING, [ANA]);
     const bea = await claimAt(WARNING, [BEA]);
@@ -155,7 +155,7 @@ describe("claimReminder", () => {
   });
 
   it("records a sent report with its time", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const claimed = await claimAt(WARNING, [ANA]);
     await reportAt(claimed!.id, "sent", "2026-08-26T10:01:00Z");
@@ -164,7 +164,7 @@ describe("claimReminder", () => {
   });
 
   it("leaves a reported row as it is when a second report arrives", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const claimed = await claimAt(WARNING, [ANA]);
     await reportAt(claimed!.id, "sent", "2026-08-26T10:01:00Z");
@@ -175,7 +175,7 @@ describe("claimReminder", () => {
   });
 
   it("leaves a row claimed when the report names another node", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const claimed = await claimAt(WARNING, [ANA]);
     await reportAt(claimed!.id, "sent", "2026-08-26T10:01:00Z", TENANT_A.nodeId2);
@@ -184,7 +184,7 @@ describe("claimReminder", () => {
   });
 
   it("never claims again a row that names another node", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     const claimed = await claimAt(WARNING, [ANA]);
     await reportAt(claimed!.id, "rejected", "2026-08-26T10:01:00Z");
@@ -196,7 +196,7 @@ describe("claimReminder", () => {
   });
 
   it("writes to a Spanish recipient in Spanish", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     await expect(claimAt(WARNING, [BEA])).resolves.toEqual({
       id: expect.any(String),
@@ -207,7 +207,7 @@ describe("claimReminder", () => {
   });
 
   it("says the certificate expired, in each language, from the instant it ends", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     await expect(claimAt(EXPIRED, [ANA])).resolves.toMatchObject({
       subject: "AEAT certificate expired on 25 Oct 2026",
@@ -220,7 +220,7 @@ describe("claimReminder", () => {
   });
 
   it("has nothing to send about another node's certificate", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId2);
     await expect(claimAt(WARNING)).resolves.toBeNull();
     await expect(claimAt(WARNING, [ANA], TENANT_A.nodeId2)).resolves.toMatchObject({
@@ -229,7 +229,7 @@ describe("claimReminder", () => {
   });
 
   it("stores no email address", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await install(TENANT_A.nodeId);
     await claimAt(WARNING);
     await claimAt(WARNING);

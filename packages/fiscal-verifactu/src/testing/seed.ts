@@ -29,7 +29,7 @@ export const TEST_SISTEMA: SistemaInformatico = {
  * A seeded fiscal fixture: one NODE (the SIF/chain/series owner) and one till device at its
  * location, where a sale rings.
  */
-export interface SeededTill {
+export interface SeededNode {
   deviceId: DeviceId;
   nodeId: NodeId;
   seriesId: string;
@@ -78,7 +78,7 @@ async function insertLocation(tx: Transaction, label: string): Promise<string> {
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
-  if (locationRow === undefined) throw new Error("seedTill: location insert returned no row");
+  if (locationRow === undefined) throw new Error("seedNode: location insert returned no row");
   return locationRow.id;
 }
 
@@ -88,16 +88,16 @@ async function insertNode(tx: Transaction, location: string, label: string): Pro
     .insert(nodes)
     .values({ locationId: location, name: "Node " + label })
     .returning({ id: nodes.id });
-  if (nodeRow === undefined) throw new Error("seedTill: node insert returned no row");
+  if (nodeRow === undefined) throw new Error("seedNode: node insert returned no row");
   return brandNodeId(nodeRow.id);
 }
 
 /** Adds one node (+ location + a node-keyed series + a live SIF registration). */
-async function addTill(
+async function addNode(
   tx: Transaction,
   nif: string,
   label: string,
-): Promise<Omit<SeededTill, "deviceId"> & { locationId: string }> {
+): Promise<Omit<SeededNode, "deviceId"> & { locationId: string }> {
   const location = await insertLocation(tx, label);
   const node = await insertNode(tx, location, label);
 
@@ -105,7 +105,7 @@ async function addTill(
     .insert(invoiceSeries)
     .values({ nodeId: node, code: "G" + label, purpose: "standard", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
-  if (seriesRow === undefined) throw new Error("seedTill: series insert returned no row");
+  if (seriesRow === undefined) throw new Error("seedNode: series insert returned no row");
 
   const sif = await registerSif(tx, {
     nodeId: node,
@@ -121,11 +121,11 @@ async function addTill(
  * for the node, returning every id `appendToChain` needs. Each call gets its OWN fresh NIF and
  * node.
  */
-export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
+export async function seedNode(db: Database, label = "A"): Promise<SeededNode> {
   const nif = freshNif();
   const seeded = await db.transaction(async (tx) => {
     await ensureTaxpayer(tx, nif);
-    return addTill(tx, nif, label);
+    return addNode(tx, nif, label);
   });
   const { locationId, ...ids } = seeded;
   const { deviceId } = await seedDevice(db, { locationId });
@@ -133,29 +133,19 @@ export async function seedTill(db: Database, label = "A"): Promise<SeededTill> {
 }
 
 /**
- * Adds a SECOND till device (+ its own node-keyed series) at the SAME node of an already-seeded
- * fixture, sharing the original's `nodeId`/`sifId`: for "two tills, one node → one chain".
+ * Adds a second device without allocating another node identity or invoice series.
  */
-export async function addTillToNode(
-  db: Database,
-  seed: SeededTill,
-  label: string,
-): Promise<SeededTill> {
+export async function addDeviceToNode(db: Database, seed: SeededNode): Promise<SeededNode> {
   const added = await db.transaction(async (tx) => {
     const [locationRow] = await tx
       .select({ locationId: nodes.locationId })
       .from(nodes)
       .where(eq(nodes.id, seed.nodeId));
-    if (locationRow === undefined) throw new Error("addTillToNode: node not found");
-    const [seriesRow] = await tx
-      .insert(invoiceSeries)
-      .values({ nodeId: seed.nodeId, code: "G" + label, purpose: "standard", nextNumber: 1 })
-      .returning({ id: invoiceSeries.id });
-    if (seriesRow === undefined) throw new Error("addTillToNode: series insert returned no row");
+    if (locationRow === undefined) throw new Error("addDeviceToNode: node not found");
     return {
       locationId: locationRow.locationId,
       nodeId: seed.nodeId,
-      seriesId: seriesRow.id,
+      seriesId: seed.seriesId,
       sifId: seed.sifId,
     };
   });
@@ -196,16 +186,16 @@ export async function seedNodesForSifContention(
  */
 export async function seedSale(
   db: Database | Transaction,
-  till: SeededTill,
+  node: SeededNode,
   invoiceNumber: number,
 ): Promise<SaleId> {
   const [row] = await db
     .insert(sales)
     .values({
       source: "device",
-      deviceId: till.deviceId,
-      nodeId: till.nodeId,
-      seriesId: till.seriesId,
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
+      seriesId: node.seriesId,
       invoiceNumber,
       issuedAt: "2026-07-20T19:20:30+02:00",
       issuedOffsetMinutes: 120,
@@ -228,7 +218,7 @@ export async function seedSale(
  * the union of both shapes.
  */
 export function altaFor(
-  till: Pick<SeededTill, "deviceId">,
+  node: Pick<SeededNode, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -259,7 +249,7 @@ export function altaFor(
   return {
     tipo: "alta",
     saleId,
-    origin: deviceOrigin(till.deviceId),
+    origin: deviceOrigin(node.deviceId),
     entorno,
     input,
   };
@@ -267,7 +257,7 @@ export function altaFor(
 
 /** A minimal anulación against an already-issued invoice; see `altaFor`. */
 export function anulacionFor(
-  till: Pick<SeededTill, "deviceId">,
+  node: Pick<SeededNode, "deviceId">,
   saleId: SaleId,
   invoiceNumber: number,
   seconds: number,
@@ -284,7 +274,7 @@ export function anulacionFor(
   return {
     tipo: "anulacion",
     saleId,
-    origin: deviceOrigin(till.deviceId),
+    origin: deviceOrigin(node.deviceId),
     entorno,
     nombreRazonEmisor: "Waitron SL",
     input,

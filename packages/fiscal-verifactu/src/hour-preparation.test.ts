@@ -363,7 +363,7 @@ it("a non-transferable uploaded input refuses with the domain code", async () =>
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
-it.each(["restore", "re-register", "promote", "reserve"])(
+it.each(["restore", "promote", "reserve"])(
   "initial setup preparation cannot authorise %s",
   async (action) => {
     const f = fixture();

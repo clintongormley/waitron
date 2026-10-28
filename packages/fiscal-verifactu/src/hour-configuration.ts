@@ -55,7 +55,7 @@ function configured(host?: ModuleOperationHost): ModuleOperationPreparation {
         return hostedHourPreparation(requireHost()).prepare(operation, run);
       if (
         host?.readRecoveryFacts !== undefined &&
-        ["restore", "re-register", "promote"].includes(operation.binding.action)
+        ["restore", "promote"].includes(operation.binding.action)
       )
         return hostedHourRecovery(host).prepare(operation, run);
       throw new AppError("sif.allocation_invalid", { reason: "outside_confirmation_missing" });

@@ -1066,10 +1066,10 @@ describe("drain — Route B's lookup and the write transaction", () => {
       sale = withTransaction(suite.db, (tx) =>
         recordSale(tx, backend, saleInput({ ...venue, clock: afterSeeded })),
       );
-      const stillWaiting = new Promise<"still waiting">((resolve) => {
+      const waitingRows = new Promise<"still waiting">((resolve) => {
         timer = setTimeout(() => resolve("still waiting"), 2_000);
       });
-      expect(await Promise.race([sale.then(() => "recorded" as const), stillWaiting])).toBe(
+      expect(await Promise.race([sale.then(() => "recorded" as const), waitingRows])).toBe(
         "recorded",
       );
     } finally {

@@ -91,7 +91,7 @@ authorised notifications; A9/Cloud reporting and A1016 backup/support choices re
 
 **The series-name note** (owner, 2026-10-24, A1042 Q5): rollback keeps the newer floor. An ordinary
 upgrade never advances it or chooses a new installation name. Moving it when setup, restore,
-re-registration, promotion or an exceptional provider-name change chooses a name remains the
+promotion or an exceptional provider-name change chooses a name remains the
 separate setup entry, “Move the start-again note whenever a series name is put into use, and when
 a plain reset ends an unfinished setup”. Preserve future name/damage-unknown evidence, not just
 known-name notes; no downgrade bypass or direct recovery/lock-file rewrite is proposed.

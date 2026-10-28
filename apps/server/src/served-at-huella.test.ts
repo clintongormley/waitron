@@ -160,12 +160,12 @@ interface Shop {
 }
 
 /**
- * Provision a shop in ITS OWN database, RE-REGISTER its node's SIF under the SHARED emisor NIF,
+ * Provision a shop in ITS OWN database, register its node's SIF under the SHARED emisor NIF,
  * seed an IDENTICAL two-product catalogue, and create one dining table.
  *
  * The huella hashes the AEAT identity fields that `registros_identidad_uq` makes unique, so the two
  * records a test compares must share them — which only separate databases allow. The shared emisor
- * NIF keeps `IDEmisorFactura` identical; re-registering (`registerSif` revokes the old identity,
+ * NIF keeps `IDEmisorFactura` identical; restoring (`registerSif` revokes the old identity,
  * mints a fresh installation number and resets the chain) makes each shop file a first record under
  * it. The NumeroInstalacion is not hashed, so it cannot move the huella.
  */

@@ -84,7 +84,7 @@ export function createEmergencyAllocationPreparation(configuration: {
       if (
         operator === undefined ||
         held.binding.module !== "fiscal-verifactu" ||
-        !["restore", "re-register"].includes(held.binding.action)
+        !["restore"].includes(held.binding.action)
       )
         refuse("reauthentication_required");
       const input = held.input;

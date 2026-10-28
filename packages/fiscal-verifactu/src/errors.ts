@@ -48,10 +48,6 @@ declare module "@waitron/shared" {
      */
     "series.code_too_long": { code: string };
 
-    /** Thrown by `currentSif` for a node with no LIVE `registro_sif` row — never provisioned, or
-     * provisioned once and then revoked by a re-registration that has not yet completed. A node
-     * cannot be provisioned offline, so the caller gets a translatable refusal rather than a
-     * locally invented installation number. See ./registro-sif.ts. */
     "sif.not_registered": { nodeId: string };
 
     /** `IdSistemaInformatico` is empty or longer than AEAT's two-character cap. Thrown by

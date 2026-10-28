@@ -127,7 +127,7 @@ export function createSelectedRecoveryPreparation(options: Options): {
       binding.sourceId !== (selected.activationSourceId ?? selected.sourceId) ||
       binding.targetNodeId !== node.nodeId ||
       node.nodeId !== selected.nodeId ||
-      !["restore", "re-register"].includes(binding.action)
+      !["restore"].includes(binding.action)
     )
       refuse();
   };

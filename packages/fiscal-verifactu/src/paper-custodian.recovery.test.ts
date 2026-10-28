@@ -179,29 +179,6 @@ it("refuses to overwrite a retained operation", async () => {
   });
 });
 
-it("exports re-registration only with its own current outside action binding", async () => {
-  await fixture(async (files, args, out, err) => {
-    args[args.indexOf("--action") + 1] = "re-register";
-    const current = JSON.parse(await readFile(files.confirmation!, "utf8"));
-    await writeFile(
-      files.confirmation!,
-      JSON.stringify({ ...current, binding: { ...binding, action: "re-register" } }),
-    );
-    expect(
-      await runPaperCustodian(args, {
-        stdout: (line) => out.push(line),
-        stderr: (line) => err.push(line),
-      }),
-    ).toBe(0);
-    expect(JSON.parse(await readFile(files.output!, "utf8")).binding).toEqual({
-      ...binding,
-      action: "re-register",
-    });
-    expect(out).toEqual([]);
-    expect(err).toEqual([]);
-  });
-});
-
 it("requires fresh outside evidence again after a completed export", async () => {
   await fixture(async (files, args, out, err) => {
     const io = {

@@ -1525,7 +1525,7 @@ describe("print-on-sale hook (auto-enqueue + cash drawer kick, post-filing outbo
 
 describe("every device whose profile allows the drawer opens its chosen drawer", () => {
   /** Another till device at the venue's location, and the config a sale there runs under. */
-  async function addTill(
+  async function addNode(
     cfg: DeviceRequestConfig,
     name: string,
     capabilities: string[] = [...CAPABILITY_FLAGS],
@@ -1573,7 +1573,7 @@ describe("every device whose profile allows the drawer opens its chosen drawer",
   ) {
     const base = await setupVenue(orderFlow);
     const cfg = await deviceRequestCfg(suite.db, { ...base.cfg });
-    const other = await addTill(cfg, "Caja 2", otherCapabilities);
+    const other = await addNode(cfg, "Caja 2", otherCapabilities);
     const printerId = await makePrinter(cfg);
     await configureReceipt(cfg, { mode: "auto", printerId });
     await configureReceipt(other, { printerId });

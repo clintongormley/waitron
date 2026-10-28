@@ -173,7 +173,7 @@ under `docs/backlog/`.
 ### Fiscal records, invoices and the asesor
 
 - **A1154: remove the obsolete till-registration command and per-device fiscal fixtures.** The
-  [implementation plan](superpowers/plans/2026-10-27-a1154-node-registration.md) preserves setup, restore and promotion. Execution waits for the owner to resolve the two protected fixture references in `inmutabilidad.test.ts`; product removal remains open and its eventual PR is owner-held.
+  [implementation plan](superpowers/plans/2026-10-27-a1154-node-registration.md) preserves setup, restore and promotion. The owner approved the two protected helper references on 2026-10-28. The command/action removal, shared node fixtures and recurrence guard are implemented and under qualification. The eventual PR remains owner-held.
 
 - **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
   connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
@@ -332,7 +332,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   [Detail](backlog/fiscal.md#pin-the-clocks-future-finished-sample-refusal).
 
 - **A679 follow-up: pin committed hour preparation's action boundary.** A serial review fault
-  removing its restore/re-register-only check survived the owning suites. Test that internal
+  removing its restore-only check survived the owning suites. Test that internal
   boundary separately from the real public promotion retry, which already preserves its result.
   [Detail](backlog/fiscal.md#pin-committed-hour-preparations-action-boundary).
 
@@ -2126,11 +2126,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
   in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
-
-- **Review follow-up: the venue-service seed can take over a zone a manager made.** Measured
-  2026-10-27: with no active counter-default zone in an active department, running the seed again
-  (`provisionNode`) makes an active zone with the starter counter name the counter default, in the
-  default department. [Detail](backlog/till.md#the-venue-service-seed-can-take-over-a-zone-a-manager-made)
 
 - **Review follow-up: nutrition for extras in Sent.** The Current orders wire's extra summaries
   carry no nutrition. The Sent dish window can recover an extra's nutrition from matching bill
@@ -4516,7 +4511,7 @@ _Formerly A5, and the logging part of A9._ Detail: [backlog/alerts.md](backlog/a
   [Detail](backlog/alerts.md#the-alert-registrys-per-source-savepoint-has-no-test-that-fails-without-it)
 
 - **`redact-secrets.ts` was written against the PostgreSQL connection-string parser** — found by
-  #620 while pruning comments. `pg` is now installed only for `bench/pglite-throughput`; whether a
+  #620 while pruning comments. the former `pg` dependency was used by the retired PGlite comparison; whether a
   credential-bearing URL can still reach the log is unchecked.
   [Detail](backlog/alerts.md#redact-secretsts-was-written-against-the-postgresql-connection-string-parser)
 
@@ -5650,9 +5645,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **A sixth: a CI shard exited 1 with every test passing (PR #414) — the exit-1 path closed by the Vitest 4.1.11 upgrade (#437); why the call went unanswered is still open.**
   [Detail](backlog/ci.md#a-sixth-a-ci-shard-exited-1-with-every-test-passing-pr-414).
 
-- **`bench/pglite-throughput` starts a container `pnpm reap` cannot see — OPEN (T2, 2026-09-23).**
-  [Detail](backlog/ci.md#benchpglite-throughput-starts-a-container-pnpm-reap-cannot-see).
-
 - **A throwaway script found six comments that described code that was no longer there, and it is not a guard yet**
   [Detail](backlog/ci.md#a-throwaway-script-found-six-comments-that-described-code-that-was-no-longer-there-and-it-is-not-a-guard-yet).
 
@@ -5673,12 +5665,6 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **The shard layout was measured against an engine that is gone** — OPEN.
   [Detail](backlog/ci.md#the-shard-layout-was-measured-against-an-engine-that-is-gone).
-
-- **The PGlite throughput bench no longer matches the shape it says it matches** — OPEN.
-  [Detail](backlog/ci.md#the-pglite-throughput-bench-no-longer-matches-the-shape-it-says-it-matches).
-
-- **The PGlite throughput bench fails while seeding** — OPEN.
-  [Detail](backlog/ci.md#the-pglite-throughput-bench-fails-while-seeding).
 
 - **`packages/db`'s static mutants are not in its mutation score** — OPEN. Owner's call.
   [Detail](backlog/ci.md#packagesdbs-static-mutants-are-not-in-its-mutation-score).

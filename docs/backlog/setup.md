@@ -387,7 +387,7 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
 Left open by A1042 (owner, 2026-10-25: point 1 answered A). Today only Start again writes the
 start-again note (`first-setup-start-again.json` in the state folder, the floor below which no new
 invoice series name is taken). Wanted: the note also moves when setup's fiscal step finishes, when
-a restore finishes, at a re-registration and at a promotion — designed so the name chooser never
+a restore finishes, at a promotion — designed so the name chooser never
 refuses its own request. Written at the moment a path picks its name, the note would make the
 chooser refuse that same request's pick until the next minute starts: it re-takes the request's
 existing pick (`packages/fiscal-verifactu/src/hour-selection.ts:326-328`) and refuses
@@ -694,7 +694,7 @@ the start (`setup.workspace_unsupported`), and the page asks for Waitron to be r
   Start again past a damaged name record it may hold no name, only the time floor). A write only ever replaces
   it with a later moment, and no backup carries it: a restore archive or recovery bundle holding it
   is refused.
-- **The floor:** first setup, a restore, a re-registration and a promotion all read the note as a
+- **The floor:** first setup, a restore and a promotion all read the note as a
   time floor (the earliest moment a new name may be taken), so none of them issues a production
   series name before it.
 - **Q1:** with the venue database missing, the repair page asks instead of refusing: it says the box

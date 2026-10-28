@@ -272,9 +272,7 @@ found a healthy container with a requested TCP binding but an empty published-po
 focused rerun passed without explaining the first failure. During #329's full gate `docker inspect`
 showed `HostConfig.PortBindings["5432/tcp"] = [{ HostIp: "", HostPort: "0" }]` beside
 `NetworkSettings.Ports["5432/tcp"] = []`. Nothing under `packages/`
-or `apps/` starts a container now, so the live subjects are the two `bench/` rigs that start a
-container, both of which publish a port: `bench/pglite-throughput/src/bench.ts` starts a
-`PostgreSqlContainer`, and `bench/sqlite-failover/src/store.ts:76` publishes a port with
+or `apps/` starts a container now, so the live subject is `bench/sqlite-failover/src/store.ts`, which publishes a port with
 `withExposedPorts(9000)` and reads it back with `getMappedPort(9000)`, which is the same shape the
 failure above took. The rule was briefly pruned from `CLAUDE.md` §4 on 2026-09-23 on the ground that
 no PACKAGE fixture binds a port — true, and narrower than "the tree" — and restored with that hedge
@@ -872,9 +870,9 @@ for both suites above, every variable accounted for.
 
 ## `TESTCONTAINERS_RYUK_DISABLED=true` is required locally, for the `bench/` rigs.
 
-Two rigs start a container: `bench/sqlite-failover`, whose `startStore` opens a MinIO container
-(`bench/sqlite-failover/src/store.ts`), and `bench/pglite-throughput`, which starts a PostgreSQL one
-(`bench/pglite-throughput/src/bench.ts`). Ryuk hangs on this machine, so it has to be off; with it off
+`bench/sqlite-failover` opens a MinIO container through `startStore`
+(`bench/sqlite-failover/src/store.ts`). The earlier PGlite comparison is retired; its source is
+[archived](../research/2026-07-20-pglite-throughput-source.ts.txt). Ryuk hangs on this machine, so it has to be off; with it off
 an interrupted run leaks, which is the next section.
 
 No test suite under `packages/` or `apps/` starts a container; the rigs under `bench/` do, so a
@@ -889,7 +887,7 @@ The bloat (once: 173 volumes, 23 GB) starved the `freePort` race in `apps/server
 end-to-end suites, while an isolated re-run passed and proved nothing. Run `pnpm reap` when that
 bites. The command (`scripts/reap-testcontainers.mjs`) removes containers labelled
 `com.waitron.reapable` — stamped by `startStore` in `bench/sqlite-failover/src/store.ts`, which
-nothing pins, and NOT by `bench/pglite-throughput`, whose container `pnpm reap` leaves behind — AND older than 2 h —
+nothing pins, and NOT by the retired PGlite comparison, whose containers `pnpm reap` cannot identify — AND older than 2 h —
 so another repo's or a live watch-mode container survives — with their anon volumes. It never
 touches images and there is no blanket `docker volume prune` (it would reach other projects and the
 named dev volumes). `docker volume inspect` before any manual `rm`. Once a leaked container is gone
@@ -2322,9 +2320,9 @@ same outcome. Reproduced locally (A1163) by holding the child for 1.1 s of real 
 clock reading and the re-check: both of that file's process-death cases (archive and stream)
 then exited with code 1 and `clock_corrected`. Freezing `performance.now` beside `Date` made both pass with the hold in
 place. The same hold made `hour-recovery-placement-2.test.ts`'s two process-death cases exit 1
-with `clock_corrected`, and a hold in `hour-promotion.test.ts`'s built register-till child made it
-refuse (`second_clock_missing`); freezing `performance.now` made each pass. Unlike the in-process
-experiment, these holds stay in the three tests, so a child whose clocks disagree fails every run.
+with `clock_corrected`. The recovery-placement tests retain their holds. The built-command
+case was retired by A1154 on 28 October 2026; its original receipt is preserved in the
+[changed-check inventory](../operations/a1154-changed-checks.md#a1163-clock-receipt-before-command-retirement).
 `expectChildKilled` (`apps/server/src/testing/child-process-death.ts`) prints the exit code,
 stdout and stderr when a child is not killed as expected.
 

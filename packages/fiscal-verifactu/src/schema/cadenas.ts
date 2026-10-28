@@ -21,7 +21,7 @@ export const cadenas = table(
       /* v8 ignore start */
       .references(() => nodes.id),
     /* v8 ignore stop */
-    // Monotonic across SIF identities and NEVER reset. Re-registration breaks the chain POINTER
+    // Monotonic across SIF identities and NEVER reset. A replacement identity resets the chain POINTER
     // (below), not the counter: resetting to zero would collide head-on with
     // `registros_tenant_node_secuencia_uq`, and the sequence is ours anyway.
     secuencia: count("secuencia").notNull().default(0),
@@ -34,7 +34,7 @@ export const cadenas = table(
   /* v8 ignore start */
   (t) => [
     primaryKey({ columns: [t.nodeId] }),
-    // Both null (a fresh or re-registered chain) or neither. A half-set pointer would make
+    // Both null (a fresh or restored chain) or neither. A half-set pointer would make
     // PrimerRegistro ambiguous, and PrimerRegistro must follow from local state unambiguously.
     check("cadenas_puntero_ck", sql`(${t.ultimoRegistroId} is null) = (${t.ultimaHuella} is null)`),
   ],

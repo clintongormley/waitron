@@ -8,7 +8,7 @@ const NODE = "c0000000-0000-4000-8000-000000000001";
 const valid = {
   binding: {
     module: "test-regime",
-    action: "re-register",
+    action: "restore",
     eventId: "event-42",
     sourceId: "box-42",
     targetNodeId: NODE,
@@ -24,7 +24,7 @@ afterEach(async () => {
   for (const dir of dirs.splice(0)) await rm(dir, { recursive: true, force: true });
 });
 
-it.each(["restore", "re-register", "promote"])(
+it.each(["restore", "promote"])(
   "parses and detaches %s input while normalising the target UUID",
   (action) => {
     expect(pending.parseRecoveryOperationInput).toBeTypeOf("function");

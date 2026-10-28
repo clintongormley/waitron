@@ -175,7 +175,7 @@ async function selectAfterWait(operations: Operations, operation: Operation) {
   return select();
 }
 
-it.each(["restore", "re-register", "promote"])(
+it.each(["restore", "promote"])(
   "prepares %s only from the selected hour with the correct authenticated operator",
   async (action) => {
     const f = fixture();

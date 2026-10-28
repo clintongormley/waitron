@@ -223,7 +223,7 @@ it("the setup seed creates exactly the supplied SIF and every purpose without sc
   expect(await suite.db.select().from(fiscalAllocations)).toHaveLength(1);
 });
 
-it.each(["restore", "re-register"])(
+it.each(["restore"])(
   "%s replaces all live identities once and returns no series for the host to recreate",
   async (action) => {
     await attempt("setup", (tx, operation) => seed.run(tx, node, operation));
@@ -365,7 +365,7 @@ it.each([
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
-it.each(["setup", "restore", "re-register"])(
+it.each(["setup", "restore"])(
   "committed %s retries retain the exact series ids and counters",
   async (action) => {
     if (action !== "setup")
@@ -387,7 +387,7 @@ it.each(["setup", "restore", "re-register"])(
   },
 );
 
-it.each(["setup", "restore", "re-register"])(
+it.each(["setup", "restore"])(
   "a promotion hook cannot consume a prepared %s operation",
   async (action) => {
     await expect(

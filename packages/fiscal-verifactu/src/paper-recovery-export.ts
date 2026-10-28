@@ -49,7 +49,7 @@ export async function preparePaperRecoveryExport(
     typeof supplied.targetNodeId !== "string" ||
     !isUuid(supplied.targetNodeId) ||
     operatorId === null ||
-    !["restore", "re-register"].includes(values.action as string) ||
+    !["restore"].includes(values.action as string) ||
     !["production", "preproduction"].includes(values.environment as string) ||
     !text(values.taxpayer)
   )

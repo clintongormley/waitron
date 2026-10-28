@@ -704,7 +704,7 @@ export async function setAsideExistingIdentity(stateDir: string, log: Logger): P
 /**
  * The identity the restored box will take, read from the ARTIFACT's `secrets/trading.env` — never the
  * target box's file, which may hold a stale or foreign identity. Every key is required and non-empty
- * (`isUnset`): a backup of a never-provisioned box has no node to re-register. `validateArtifact`
+ * (`isUnset`): a backup of a never-provisioned box has no node identity to restore. `validateArtifact`
  * checks this before set-aside or database restore unless `skipSecrets` keeps the target's identity.
  */
 export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {

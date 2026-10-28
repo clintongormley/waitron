@@ -238,14 +238,6 @@ again on the next sighting rather than re-running to green.
   [ci-and-gates.md](../developers/ci-and-gates.md) rather than fixed (owner decision 2026-09-18); keep
   the job log on the next sighting — it is the cheapest evidence there is.
 
-## `bench/pglite-throughput` starts a container `pnpm reap` cannot see
-
-  `bench/pglite-throughput/src/bench.ts` starts a real `postgres:18-alpine` through Testcontainers and
-  stamps NO label, so an interrupted run of that rig leaks a container the reaper's label filter will
-  never match; `bench/sqlite-failover` is the only rig that stamps `com.waitron.reapable`
-  ([ci-and-gates.md](../developers/ci-and-gates.md) carries the receipt naming each rig). Either stamp
-  the label in that rig or accept cleaning it by hand — but the rig's schema is three storage
-  decisions out of date anyway (its own entry, _The PGlite throughput bench no longer matches the shape it says it matches_), so the two decisions belong together.
 
 ## A throwaway script found six comments that described code that was no longer there, and it is not a guard yet
 
@@ -304,23 +296,7 @@ The shard counts and their sizing arguments were all measured against PGlite.
 has not been re-cut from those times. No local command produces the numbers, so re-cutting it has
 to wait for a real run.
 
-## The PGlite throughput bench no longer matches the shape it says it matches
 
-`bench/pglite-throughput/src/bench.ts:18` calls itself "a faithful SHAPE
-match" of the write path, and its `create table` statements are three landed storage decisions
-behind: `numeric` money and quantity columns where the real columns are now whole-number counts
-(#475 and task P6), and a `tenant_id` column the real schema no longer has. Either bring the three
-decisions across and re-baseline, or change the sentence to say what it is.
-
-## The PGlite throughput bench fails while seeding
-
-`seed` in `bench/pglite-throughput/src/bench.ts` runs
-`insert into bench_chains (till_id, sequence, last_hash) values ($2, 0, '')` with two values
-(`"tenant-1"` and the till id). PGlite answers `42P18: could not determine data type of parameter
-$1`. Codex got the same error on pglite 0.5.9 and 0.5.10, so the pglite bump did not cause it. The
-mismatch came in with #378 (91caf00d9), which took `tenant_id` and `$1` out of the SQL but left both
-values. Fix: pass only the till id and write `$1`. It belongs with the entry above: either one
-re-baselines the bench.
 
 ## `packages/ui/src/vitest-park-pointer.ts` is mutated and has no tests
 

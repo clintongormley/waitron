@@ -34,9 +34,8 @@ separate retained preproduction sample database.
 invoice series, then runs each composed module's provisioning seed (the fiscal module's registers the
 node as a SIF and starts its chain) — replacing the retired `apps/server/sql/bootstrap-tenant.sql`
 (removed 2026-08-04, #57).
-`register-till` (`apps/server`) remains the standalone path for an EXISTING node: it runs the same
-module seeds against one node — a reimaged node getting a fresh chain, or a node that otherwise has
-no fiscal identity.
+An existing venue does not rerun those seeds on a setup retry. Recover a replacement box through
+[restore](../../docs/operations/hour-recovery.md), or promote an admitted spare.
 
 ```text
 usage: waitron-provision <command> [options]

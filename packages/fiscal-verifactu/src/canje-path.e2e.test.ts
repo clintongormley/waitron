@@ -6,7 +6,7 @@ import type { Cabecera, EnvioRegistro, RegistroAlta } from "@waitron/verifactu";
 import { decodeRegistroRow, fromRegistroRow, toRegistroRow } from "./registro-row.js";
 import type { RegistroRow } from "./registro-row.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { seedSale, seedTill, TEST_NIF, TEST_SISTEMA, type SeededTill } from "./testing/seed.js";
+import { seedSale, seedNode, TEST_NIF, TEST_SISTEMA, type SeededNode } from "./testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { deviceOrigin } from "@waitron/shared";
@@ -18,10 +18,10 @@ import { deviceOrigin } from "@waitron/shared";
  */
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-let till: SeededTill;
+let node: SeededNode;
 
 beforeEach(async () => {
-  till = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
 });
 
 /** An F3 canje record carrying BOTH the substituted ticket's identity (FacturasSustituidas) and the
@@ -64,11 +64,11 @@ function f3CanjeRecord(): RegistroAlta {
 
 /** Insert the flattened record under a fresh sale and return the sale id. */
 async function storeF3(record: RegistroAlta): Promise<string> {
-  const saleId = await seedSale(suite.db, till, 1);
+  const saleId = await seedSale(suite.db, node, 1);
   const row = toRegistroRow(record, {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
-    sifId: till.sifId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
+    sifId: node.sifId,
     saleId,
     secuencia: 1,
     // Must equal the record's own offsetMinutes so `fromRegistroRow` reproduces the exact

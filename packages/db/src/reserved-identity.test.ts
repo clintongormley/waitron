@@ -120,8 +120,6 @@ describe("reserved-identity accessors", () => {
   });
 
   it("readStandardSeriesId returns the node's standard series id, not the rectificative", async () => {
-    // A node with both purposes reserved: the standard series is the one a promote points
-    // config.till.seriesId at, never the rectificative sitting beside it.
     const node = await seedNode(suite.db, locationId);
     await withTransaction(suite.db, (tx) =>
       insertReservedSeriesTx(tx, [

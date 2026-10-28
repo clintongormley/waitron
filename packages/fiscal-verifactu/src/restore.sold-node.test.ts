@@ -9,23 +9,25 @@ import { appendToChain } from "./chain.js";
 import { currentSif, esPrimerRegistro } from "./registro-sif.js";
 import { ALLOCATED_FISCAL_RESTORE } from "./allocated-lifecycle.js";
 import { allocationFixture } from "../test/allocation-fixture.js";
-import { altaFor, seedSale, seedTill } from "./testing/seed.js";
+import { altaFor, seedSale, seedNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
 describe("restoreFiscal", () => {
-  it("re-registers a sold node onto the supplied SIF with an empty chain head", async () => {
-    const till = await seedTill(suite.db);
+  it("restores a sold node onto the supplied SIF with an empty chain head", async () => {
+    const seededNode = await seedNode(suite.db);
     const { rows } = await suite.db.execute<{ location_id: string }>(
-      sql`select location_id from nodes where id = ${till.nodeId}`,
+      sql`select location_id from nodes where id = ${seededNode.nodeId}`,
     );
     const node: ProvisionedNode = {
       locationId: brandLocationId(rows[0]!.location_id),
-      nodeId: till.nodeId,
+      nodeId: seededNode.nodeId,
     };
-    const sale = await seedSale(suite.db, till, 1);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));
-    const before = await withTransaction(suite.db, (tx) => currentSif(tx, till.nodeId));
+    const sale = await seedSale(suite.db, seededNode, 1);
+    await suite.db.transaction((tx) =>
+      appendToChain(tx, seededNode.nodeId, altaFor(seededNode, sale, 1, 1)),
+    );
+    const before = await withTransaction(suite.db, (tx) => currentSif(tx, seededNode.nodeId));
 
     await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
     const fixture = allocationFixture({
@@ -39,13 +41,15 @@ describe("restoreFiscal", () => {
       ALLOCATED_FISCAL_RESTORE(tx, node, operation),
     );
 
-    const after = await withTransaction(suite.db, (tx) => currentSif(tx, till.nodeId));
+    const after = await withTransaction(suite.db, (tx) => currentSif(tx, seededNode.nodeId));
     expect(after.id).not.toBe(before.id);
     expect(after.numeroInstalacion).toBe("P000042");
     expect(after.numeroInstalacion).not.toBe(before.numeroInstalacion);
-    expect(await withTransaction(suite.db, (tx) => esPrimerRegistro(tx, till.nodeId))).toBe(true);
+    expect(await withTransaction(suite.db, (tx) => esPrimerRegistro(tx, seededNode.nodeId))).toBe(
+      true,
+    );
     const { rows: ledger } = await suite.db.execute<{ n: number }>(
-      sql`select count(*) as n from registros_facturacion where node_id = ${till.nodeId}`,
+      sql`select count(*) as n from registros_facturacion where node_id = ${seededNode.nodeId}`,
     );
     expect(ledger[0]?.n).toBe(1);
     expect(outcome.series).toBeUndefined();

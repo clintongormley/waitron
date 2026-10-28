@@ -131,10 +131,9 @@ export function createNodeOperationPreparation(options: {
     const heldContext = Object.freeze({ ...context });
     const heldCredentials = structuredClone(credentials);
     if (!modules.some((module) => module.name === binding.module)) return invalid(binding);
-    if (!["reserve", "establish", "promote", "re-register"].includes(binding.action))
-      return invalid(binding);
+    if (!["reserve", "establish", "promote"].includes(binding.action)) return invalid(binding);
     if (binding.targetNodeId !== node.nodeId) return invalid(binding);
-    if (binding.action === "promote" || binding.action === "re-register") {
+    if (binding.action === "promote") {
       if (heldContext.oldNodeNeutralised !== true)
         throw new AppError("promotion.fence_not_attested", {});
       if (heldContext.noParallelRecovery !== true) return invalid(binding);
@@ -180,7 +179,7 @@ export function createNodeOperationPreparation(options: {
       client: OperationClient,
     ): Promise<unknown> {
       const binding = Object.freeze({ ...suppliedBinding });
-      if (!["promote", "re-register"].includes(binding.action)) return invalid(binding);
+      if (!["promote"].includes(binding.action)) return invalid(binding);
       const held = structuredClone(proposal);
       return invoke(binding, credentials, context, async (authority) => {
         const contribution = modules.find((module) => module.name === binding.module)?.operations;

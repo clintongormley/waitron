@@ -16,11 +16,6 @@ import { registroSif } from "./schema/sif.js";
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
-/**
- * The database does not enforce this: `registro_sif` carries no CHECK on the column, and every
- * registro copies the value onto a record that can only be superseded by re-registering onto a
- * fresh chain. So it is checked HERE, before the registration writes anything.
- */
 function assertUsableIdSistema(value: string): void {
   if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
     throw new AppError("sif.id_sistema_invalid", { value, maxLength: ID_SISTEMA_MAX_LENGTH });
@@ -191,7 +186,7 @@ export async function currentSif(tx: Transaction, nodeId: NodeId): Promise<SifRe
  * SIF+NIF; that warning is a useful re-provisioning signal only because this value reports what
  * the database holds rather than what a caller believes. No chain row at all is also a first
  * record — a node registered but never sold — and a chain row whose pointer was just reset by
- * `registerSif` reports the same thing, which is the point: re-registration begins a new chain.
+ * `registerSif` reports the same thing, which is the point: a replacement identity begins a new chain.
  */
 export async function esPrimerRegistro(tx: Transaction, nodeId: NodeId): Promise<boolean> {
   const [row] = await tx

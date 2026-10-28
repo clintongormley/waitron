@@ -289,8 +289,6 @@ function collect(
   return (level, event, fields) => lines.push({ level, event, fields: fields ?? {} });
 }
 
-/** The till's config for the seeded tenant. `seriesId` is unused by these routes, so it carries a
- * fresh uuid. */
 function makeCfg(locationId: string, nodeId: string): TillConfig {
   return {
     nodeId: brandNodeId(nodeId),

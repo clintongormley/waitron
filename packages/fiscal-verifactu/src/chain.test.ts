@@ -8,16 +8,16 @@ import { buildAltaRecord, computeHuella, formatDateTime } from "@waitron/verifac
 import { registrosFacturacion } from "./schema/registros.js";
 import { appendToChain, readChainHead } from "./chain.js";
 import { currentSif } from "./registro-sif.js";
-import { altaFor, anulacionFor, seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+import { altaFor, anulacionFor, seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
-let till: SeededTill;
+let node: SeededNode;
 
 // This file covers append ordering and error handling; the simultaneously-started cases live in
 // chain.concurrency.test.ts.
 beforeEach(async () => {
-  till = await seedTill(suite.db);
+  node = await seedNode(suite.db);
 });
 
 async function records(): Promise<
@@ -41,15 +41,15 @@ async function records(): Promise<
       num_serie_factura: registrosFacturacion.numSerieFactura,
     })
     .from(registrosFacturacion)
-    .where(eq(registrosFacturacion.nodeId, till.nodeId))
+    .where(eq(registrosFacturacion.nodeId, node.nodeId))
     .orderBy(registrosFacturacion.secuencia);
 }
 
 describe("appendToChain", () => {
   it("assigns secuencia 1 to the first record of a chain", async () => {
-    const saleId = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, node, 1);
     const result = await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till, saleId, 1, 1)),
+      appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1)),
     );
     expect(result.secuencia).toBe(1);
   });
@@ -58,8 +58,8 @@ describe("appendToChain", () => {
     // On the first record the predecessor huella field is present but
     // EMPTY, and the record's own huella is still computed and stored. A start-of-chain is a
     // normal state, not an absence of hashing.
-    const saleId = await seedSale(suite.db, till, 1);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, saleId, 1, 1)));
+    const saleId = await seedSale(suite.db, node, 1);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1)));
     const [first] = await records();
     expect(first?.primer_registro).toBe(true);
     expect(first?.huella).toMatch(/^[0-9A-F]{64}$/);
@@ -69,10 +69,10 @@ describe("appendToChain", () => {
   });
 
   it("chains the second record to the first via the four-part pointer", async () => {
-    const a = await seedSale(suite.db, till, 1);
-    const b = await seedSale(suite.db, till, 2);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, b, 2, 2)));
+    const a = await seedSale(suite.db, node, 1);
+    const b = await seedSale(suite.db, node, 2);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, b, 2, 2)));
     const [first, second] = await records();
     expect(second?.secuencia).toBe(2);
     expect(second?.primer_registro).toBe(false);
@@ -80,12 +80,12 @@ describe("appendToChain", () => {
   });
 
   it("advances the chain head to the record just written", async () => {
-    const a = await seedSale(suite.db, till, 1);
+    const a = await seedSale(suite.db, node, 1);
     const { huella } = await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)),
+      appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)),
     );
     const { rows } = await suite.db.execute<{ secuencia: number; ultima_huella: string }>(sql`
-      select secuencia, ultima_huella from cadenas where node_id = ${till.nodeId}
+      select secuencia, ultima_huella from cadenas where node_id = ${node.nodeId}
     `);
     expect(rows[0]?.secuencia).toBe(1);
     expect(rows[0]?.ultima_huella).toBe(huella);
@@ -94,13 +94,13 @@ describe("appendToChain", () => {
   it("interleaves alta and anulación in one chain in generation order", async () => {
     // It is a RECORD chain, not an invoice chain. A void does not start a second
     // chain and does not jump the queue.
-    const a = await seedSale(suite.db, till, 1);
-    const b = await seedSale(suite.db, till, 2);
-    const c = await seedSale(suite.db, till, 3);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, b, 2, 2)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, anulacionFor(till, b, 2, 3)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, c, 3, 4)));
+    const a = await seedSale(suite.db, node, 1);
+    const b = await seedSale(suite.db, node, 2);
+    const c = await seedSale(suite.db, node, 3);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, b, 2, 2)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, anulacionFor(node, b, 2, 3)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, c, 3, 4)));
     const rows = await records();
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3, 4]);
     // The anulación links to the ALTA that preceded it in generation order, not to the record it
@@ -114,12 +114,12 @@ describe("appendToChain", () => {
     // impossible if position tracks the counter. This test fails the moment someone "helpfully"
     // couples them — by ordering on the number, by validating contiguity, or by deriving one from
     // the other.
-    const a = await seedSale(suite.db, till, 500);
-    const b = await seedSale(suite.db, till, 7);
-    const c = await seedSale(suite.db, till, 44);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 500, 1)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, b, 7, 2)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, c, 44, 3)));
+    const a = await seedSale(suite.db, node, 500);
+    const b = await seedSale(suite.db, node, 7);
+    const c = await seedSale(suite.db, node, 44);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 500, 1)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, b, 7, 2)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, c, 44, 3)));
     const rows = await records();
     expect(rows.map((r) => r.secuencia)).toEqual([1, 2, 3]);
     expect(rows.map((r) => r.num_serie_factura)).toEqual(["A/500", "A/7", "A/44"]);
@@ -128,10 +128,10 @@ describe("appendToChain", () => {
   it("keeps chain positions contiguous across a gap in invoice numbers", async () => {
     // Burned invoice numbers are permitted (a crash between allocation and commit). Chain
     // positions are ours and have no gaps.
-    const a = await seedSale(suite.db, till, 1);
-    const b = await seedSale(suite.db, till, 9);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)));
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, b, 9, 2)));
+    const a = await seedSale(suite.db, node, 1);
+    const b = await seedSale(suite.db, node, 9);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)));
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, b, 9, 2)));
     expect((await records()).map((r) => r.secuencia)).toEqual([1, 2]);
   });
 
@@ -141,8 +141,8 @@ describe("appendToChain", () => {
     // literal and hash differently. Checked against a locally rebuilt record rather than a
     // hard-coded digest, so the test still names the property if AEAT's canonical string ever
     // gains a field.
-    const a = await seedSale(suite.db, till, 1);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)));
+    const a = await seedSale(suite.db, node, 1);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)));
     const { rows } = await suite.db.execute<{
       importe_total: string;
       cuota_total: string;
@@ -151,7 +151,7 @@ describe("appendToChain", () => {
       offset_minutos: number;
     }>(sql`
       select importe_total, cuota_total, huella, fecha_hora_huso_gen_registro, offset_minutos
-      from registros_facturacion where node_id = ${till.nodeId} and secuencia = 1
+      from registros_facturacion where node_id = ${node.nodeId} and secuencia = 1
     `);
     const row = rows[0];
     expect(row?.importe_total).toBe("123.45");
@@ -163,16 +163,16 @@ describe("appendToChain", () => {
       "2026-07-20T19:20:01+02:00",
     );
     const expected = buildAltaRecord({
-      ...altaFor(till, a, 1, 1).input,
+      ...altaFor(node, a, 1, 1).input,
       Encadenamiento: { PrimerRegistro: "S" },
     });
     expect(computeHuella(expected)).toBe(row?.huella);
   });
 
   it("records the environment the registro was generated for", async () => {
-    const saleId = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, node, 1);
     const appended = await suite.db.transaction((tx) =>
-      appendToChain(tx, till.nodeId, altaFor(till, saleId, 1, 1, "preproduction")),
+      appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1, "preproduction")),
     );
 
     const { rows } = await suite.db.execute<{ entorno: string }>(
@@ -182,17 +182,17 @@ describe("appendToChain", () => {
   });
 
   it("rejects a second record claiming an occupied chain position", async () => {
-    const a = await seedSale(suite.db, till, 1);
-    const b = await seedSale(suite.db, till, 2);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, a, 1, 1)));
+    const a = await seedSale(suite.db, node, 1);
+    const b = await seedSale(suite.db, node, 2);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, a, 1, 1)));
     // Bypasses appendToChain entirely: this is the backstop, and it must hold against a writer
     // that never went through it.
     const error = await captureError(() =>
       suite.db.insert(registrosFacturacion).values({
         source: "device",
-        deviceId: till.deviceId,
-        nodeId: till.nodeId,
-        sifId: till.sifId,
+        deviceId: node.deviceId,
+        nodeId: node.nodeId,
+        sifId: node.sifId,
         saleId: b,
         secuencia: 1,
         tipoRegistro: "alta",
@@ -226,12 +226,12 @@ describe("appendToChain", () => {
     // `tx.transaction(...)` with a plain `attemptAppend(tx, …)` leaves it passing, and the stubbed
     // cases below fail that deletion only because their stub has nothing but `transaction`. No case
     // in this file holds the savepoint.
-    const occupied = await seedSale(suite.db, till, 1);
+    const occupied = await seedSale(suite.db, node, 1);
     await suite.db.insert(registrosFacturacion).values({
       source: "device",
-      deviceId: till.deviceId,
-      nodeId: till.nodeId,
-      sifId: till.sifId,
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
+      sifId: node.sifId,
       saleId: occupied,
       secuencia: 1,
       tipoRegistro: "alta",
@@ -247,21 +247,21 @@ describe("appendToChain", () => {
       huella: "1".repeat(64),
     });
 
-    const saleId = await seedSale(suite.db, till, 2);
+    const saleId = await seedSale(suite.db, node, 2);
     const error = await suite.db
-      .transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, saleId, 2, 2)))
+      .transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, saleId, 2, 2)))
       .catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("chain.append_contention");
     expect((error as AppError).params).toEqual({
-      nodeId: till.nodeId,
+      nodeId: node.nodeId,
       attempts: 3,
     });
   });
 
   it("surfaces exhausted retries as a structured AppError, never a bare string", async () => {
-    const saleId = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, node, 1);
     // Every savepoint attempt loses its race. Contention cannot produce three collisions, because
     // one write transaction runs on the venue file at a time. The stub is exactly the one method
     // appendToChain calls on `tx`, so a wider fake cannot hide the retry loop doing something else.
@@ -276,14 +276,14 @@ describe("appendToChain", () => {
 
     const error = await appendToChain(
       alwaysCollides,
-      till.nodeId,
-      altaFor(till, saleId, 1, 1),
+      node.nodeId,
+      altaFor(node, saleId, 1, 1),
     ).catch((caught: unknown) => caught);
 
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError).code).toBe("chain.append_contention");
     expect((error as AppError).params).toEqual({
-      nodeId: till.nodeId,
+      nodeId: node.nodeId,
       attempts: 3,
     });
   });
@@ -297,8 +297,8 @@ describe("appendToChain", () => {
     // attempt passes straight through. The only thing wrapped is `transaction`, the one method
     // appendToChain calls on `tx`.
     // The controls that fail it are in the pull request that added it.
-    const decoy = await seedSale(suite.db, till, 1);
-    const saleId = await seedSale(suite.db, till, 2);
+    const decoy = await seedSale(suite.db, node, 1);
+    const saleId = await seedSale(suite.db, node, 2);
     let calls = 0;
     let firstRefusal: unknown;
 
@@ -311,9 +311,9 @@ describe("appendToChain", () => {
             .transaction(async (nested) => {
               await nested.insert(registrosFacturacion).values({
                 source: "device",
-                deviceId: till.deviceId,
-                nodeId: till.nodeId,
-                sifId: till.sifId,
+                deviceId: node.deviceId,
+                nodeId: node.nodeId,
+                sifId: node.sifId,
                 saleId: decoy,
                 secuencia: 1,
                 tipoRegistro: "alta",
@@ -336,7 +336,7 @@ describe("appendToChain", () => {
             });
         },
       } as never;
-      return appendToChain(refusedOnce, till.nodeId, altaFor(till, saleId, 2, 2));
+      return appendToChain(refusedOnce, node.nodeId, altaFor(node, saleId, 2, 2));
     });
 
     expect(calls).toBe(2);
@@ -352,7 +352,7 @@ describe("appendToChain", () => {
         huella: registrosFacturacion.huella,
       })
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, till.nodeId));
+      .where(eq(registrosFacturacion.nodeId, node.nodeId));
     expect(rows).toEqual([{ id: result.id, saleId, secuencia: 1, huella: result.huella }]);
     expect(result.secuencia).toBe(1);
     const { rows: head } = await suite.db.execute<{
@@ -360,7 +360,7 @@ describe("appendToChain", () => {
       ultimo_registro_id: string;
       ultima_huella: string;
     }>(sql`
-      select secuencia, ultimo_registro_id, ultima_huella from cadenas where node_id = ${till.nodeId}
+      select secuencia, ultimo_registro_id, ultima_huella from cadenas where node_id = ${node.nodeId}
     `);
     expect(head).toEqual([
       { secuencia: 1, ultimo_registro_id: result.id, ultima_huella: result.huella },
@@ -370,7 +370,7 @@ describe("appendToChain", () => {
   it("does not retry an error that is not a chain collision", async () => {
     // A foreign-key violation retried three times is three identical failures reported as
     // contention, sending whoever reads the incident after a race that never happened.
-    const saleId = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, node, 1);
     const refusal = refusalError({ foreignKey: true });
     let calls = 0;
     const alwaysFk = {
@@ -380,7 +380,7 @@ describe("appendToChain", () => {
       },
     } as never;
 
-    const error = await appendToChain(alwaysFk, till.nodeId, altaFor(till, saleId, 1, 1)).catch(
+    const error = await appendToChain(alwaysFk, node.nodeId, altaFor(node, saleId, 1, 1)).catch(
       (caught: unknown) => caught,
     );
 
@@ -391,32 +391,32 @@ describe("appendToChain", () => {
 
 describe("appendToChain — pre-fetched SIF", () => {
   it("rejects a SIF that belongs to a different node", async () => {
-    const saleId = await seedSale(suite.db, till, 1);
+    const saleId = await seedSale(suite.db, node, 1);
     await expect(
       suite.db.transaction(async (tx) => {
-        const sif = await currentSif(tx, till.nodeId);
+        const sif = await currentSif(tx, node.nodeId);
         // A fabricated UUID stands in for another node.
         const wrongSif = {
           ...sif,
           nodeId: "ffffffff-0000-4000-8000-000000000000" as typeof sif.nodeId,
         };
-        return appendToChain(tx, till.nodeId, altaFor(till, saleId, 1, 1), wrongSif);
+        return appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1), wrongSif);
       }),
     ).rejects.toThrow(/SIF/i);
   });
 });
 
 describe("readChainHead", () => {
-  it("creates the chain head row from scratch when a till has none yet", async () => {
+  it("creates the chain head row from scratch when a node has none yet", async () => {
     // seedTill's registerSif already wrote a cadenas row, so every other test skips readChainHead's
     // create-the-head branch. Deleting that row reproduces the cold start.
-    await suite.db.execute(sql`delete from cadenas where node_id = ${till.nodeId}`);
+    await suite.db.execute(sql`delete from cadenas where node_id = ${node.nodeId}`);
 
-    const head = await suite.db.transaction((tx) => readChainHead(tx, till.nodeId));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
     expect(head).toEqual({ secuencia: 0, ultimoRegistroId: null, ultimaHuella: null });
 
     const { rows } = await suite.db.execute<{ secuencia: number }>(
-      sql`select secuencia from cadenas where node_id = ${till.nodeId}`,
+      sql`select secuencia from cadenas where node_id = ${node.nodeId}`,
     );
     expect(rows).toHaveLength(1);
     expect(rows[0]?.secuencia).toBe(0);
@@ -425,16 +425,16 @@ describe("readChainHead", () => {
   it("locks the existing head row rather than creating a second one", async () => {
     // The common case, exercised directly rather than only through appendToChain: a till that
     // already sold once must have readChainHead read that same row, not silently create a rival.
-    const saleId = await seedSale(suite.db, till, 1);
-    await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, saleId, 1, 1)));
+    const saleId = await seedSale(suite.db, node, 1);
+    await suite.db.transaction((tx) => appendToChain(tx, node.nodeId, altaFor(node, saleId, 1, 1)));
 
-    const head = await suite.db.transaction((tx) => readChainHead(tx, till.nodeId));
+    const head = await suite.db.transaction((tx) => readChainHead(tx, node.nodeId));
     expect(head.secuencia).toBe(1);
     expect(head.ultimoRegistroId).not.toBeNull();
     expect(head.ultimaHuella).not.toBeNull();
 
     const { rows } = await suite.db.execute<{ count: number }>(
-      sql`select count(*) as count from cadenas where node_id = ${till.nodeId}`,
+      sql`select count(*) as count from cadenas where node_id = ${node.nodeId}`,
     );
     expect(rows[0]?.count).toBe(1);
   });

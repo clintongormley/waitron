@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { TENANT_A, seedTenantTillSif } from "../test/fixtures.js";
+import { TENANT_A, seedTenantNodeSif } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 
 /**
@@ -26,7 +26,7 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
  */
 const pg = useVenueDb({
   migrations: TEST_MIGRATIONS,
-  setup: seedTenantTillSif,
+  setup: seedTenantNodeSif,
   resetPerTest: false,
 });
 

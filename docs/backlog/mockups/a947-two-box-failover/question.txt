@@ -1,3 +1,6 @@
+Historical owner questions. 2026-10-28: the old operator chain-reset path is retired; see
+docs/superpowers/plans/2026-10-27-a1154-node-registration.md.
+
 A947 — go-live on two local boxes: SECOND REVISION, for your answers of about 22:25. One question.
 Design: docs/superpowers/specs/2026-10-21-a947-two-box-failover-design.md (second revision note at
 the top; §6.5 and §6.7).

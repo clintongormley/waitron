@@ -4,7 +4,7 @@ import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { describe, expect, it } from "vitest";
 import { makeAuthority } from "../test/certificate-fixtures.js";
-import { seedTenantTillSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantNodeSif, TENANT_A } from "../test/fixtures.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
 import { latestInstall, recordInstall } from "./certificate-record.js";
 import { sealAeatSecret } from "./provisioning-secret.js";
@@ -39,7 +39,7 @@ function installRows() {
 
 describe("sealAeatSecret's install record", () => {
   it("setup's seal writes the vault entry and one install row when the file opens", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
 
     await sealAeatSecret(
@@ -73,7 +73,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("a seal with no clock stamps the row with the current time", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const before = new Date();
 
     await sealAeatSecret(
@@ -88,7 +88,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("a resumed setup sealing the same file writes no second row", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
     const deps = { db: suite.db, ring, nodeId: TENANT_A.nodeId };
 
@@ -99,7 +99,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("a different file writes a second row", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
     const deps = { db: suite.db, ring, nodeId: TENANT_A.nodeId };
 
@@ -112,7 +112,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("a different file sealed under a clock stepped back is still the latest install", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
     const deps = { db: suite.db, ring, nodeId: TENANT_A.nodeId };
 
@@ -129,7 +129,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("a file that does not open is sealed with no install row", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
     const cert = {
       pfxBase64: randomBytes(48).toString("base64"),
@@ -147,7 +147,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("latestInstall reads only the asking node's rows", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     await withTransaction(suite.db, (tx) =>
       recordInstall(tx, {
         nodeId: TENANT_A.nodeId2,
@@ -167,7 +167,7 @@ describe("sealAeatSecret's install record", () => {
   });
 
   it("the install row and the vault entry commit together", async () => {
-    await seedTenantTillSif(suite.db);
+    await seedTenantNodeSif(suite.db);
     const ring = testRing();
 
     const error = await sealAeatSecret(

@@ -108,7 +108,7 @@ it("stores the first hour and every configured base through the unchanged writer
   expect(saved.allocations[0]!.allocation).toEqual(fixture().input.allocation);
 });
 
-it.each(["restore", "re-register"])(
+it.each(["restore"])(
   "retires the old series on %s without changing recovered counters",
   async (action) => {
     await activate();
@@ -365,7 +365,7 @@ it("keeps hour admission bound to the exact authenticated recovery action", asyn
       operation,
       { requiredBases: bases, priorActivation: "none" },
       async (evidence) => {
-        const otherBinding = { ...f.binding, action: "re-register" };
+        const otherBinding = { ...f.binding, action: "promote" };
         await withOperationAuthority(otherBinding, f.operatorId, async (otherAuthority) => {
           await expect(
             withTransaction(suite.db, (tx) =>

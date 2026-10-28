@@ -62,8 +62,8 @@ checks, never as a timeout escape from a possible filing assignment.
 
 This relay accords with [A947 §7.1](../superpowers/specs/2026-10-21-a947-two-box-failover-design.md#71-the-tail-and-the-fix-for-the-failed-prototype-scenario):
 “the receiver files it and AEAT's duplicate handling settles it”. [Asesor Q2](../compliance/asesor-questions.md#q2-may-a-node-other-than-the-till-transmit-the-tills-records-to-aeat)
-requires “the **generating till's** `IdSistemaInformatico` and `NumeroInstalacion`, never the
-relaying node's”. The [5 October observation beside Q34](../compliance/asesor-questions.md#q34-sending-the-old-installations-unsent-records-after-the-switch-added-2026-10-03)
+requires the generating installation's `IdSistemaInformatico` and `NumeroInstalacion`, rather
+than the relaying node's identity. The [5 October observation beside Q34](../compliance/asesor-questions.md#q34-sending-the-old-installations-unsent-records-after-the-switch-added-2026-10-03)
 reports “`EstadoRegistro: "Correcto"` for each of its two first records”; it does not verify
 old-tail continuation after M2's new chain starts, interleaving or resending an old-server-filed
 record. The authorised A1034 [run 39970201368](https://github.com/waitron-io/verifactu/actions/runs/39970201368)
@@ -165,8 +165,7 @@ for this docs task; no provider work is authorised.
   `reconcileMembershipOnBoot` is called in `apps/server/src/boot.ts`.
   `shouldFenceRestart` (`membership-fence.ts`) has no caller outside its test (`git grep`);
   `enrol-rate-limit.ts` keeps
-  one global limit whose stated reason (snitun) is gone; `provision-till.test.ts` inserts its
-  tenant with `onConflictDoNothing`, so a second call's new NIF is silently kept out;
+  one global limit whose stated reason (snitun) is gone;
   `provision.ts` stamps the deployment in its own transaction before `applyVenue`, a split with no
   commented decision (believed to predate #617, not checked); and `setup-operation.ts` (around
   lines 128–133) may treat a lock written by a different store as a previous boot's, so a live

@@ -12,7 +12,7 @@ import {
 } from "../packages/migrations/src/index.js";
 import { ALL_MODULES } from "../packages/composition/src/index.js";
 import { appendToChain } from "../packages/fiscal-verifactu/src/chain.js";
-import { altaFor, seedSale, seedTill } from "../packages/fiscal-verifactu/src/testing/seed.js";
+import { altaFor, seedSale, seedNode } from "../packages/fiscal-verifactu/src/testing/seed.js";
 
 const { sql } = createRequire(new URL("../packages/db/package.json", import.meta.url))(
   "drizzle-orm",
@@ -63,7 +63,7 @@ for (const kind of ["empty", "populated", "orphan", "unchecked-orphan"] as const
   afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
   it(`upgrades the ${kind} fiscal database without losing historical records`, async () => {
-    const till = await seedTill(suite.db);
+    const till = await seedNode(suite.db);
     if (kind !== "empty") {
       const sale = await seedSale(suite.db, till, 1);
       await suite.db.transaction((tx) => appendToChain(tx, till.nodeId, altaFor(till, sale, 1, 1)));

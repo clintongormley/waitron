@@ -46,7 +46,7 @@ vi.mock("@waitron/verifactu", async (importOriginal) => {
 });
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-let till: Awaited<ReturnType<typeof seedTenantWithSif>>;
+let node: Awaited<ReturnType<typeof seedTenantWithSif>>;
 let backend: VerifactuBackend;
 let fullSeries: ReturnType<typeof brandSeriesId>;
 let correctionSeries: ReturnType<typeof brandSeriesId>;
@@ -60,13 +60,13 @@ beforeEach(async () => {
   fault.mode = "none";
   fault.issues = [];
   resolveClient.mockClear();
-  till = await seedTenantWithSif(suite.db);
+  node = await seedTenantWithSif(suite.db);
   await suite.db.update(tenants).set({ taxpayerDomicile: "1 Market Street" });
   const [full, correction] = await suite.db
     .insert(invoiceSeries)
     .values([
-      { nodeId: till.nodeId, code: "F", purpose: "full" },
-      { nodeId: till.nodeId, code: "R", purpose: "rectificative" },
+      { nodeId: node.nodeId, code: "F", purpose: "full" },
+      { nodeId: node.nodeId, code: "R", purpose: "rectificative" },
     ])
     .returning();
   fullSeries = brandSeriesId(full!.id);
@@ -76,7 +76,7 @@ beforeEach(async () => {
     .values({ displayName: "Manager", role: "admin", pinHash: hashPin("1234") })
     .returning();
   const session = await withTransaction(suite.db, (tx) =>
-    loginWithPin(tx, { personId: person!.id, deviceId: till.deviceId, pin: "1234" }),
+    loginWithPin(tx, { personId: person!.id, deviceId: node.deviceId, pin: "1234" }),
   );
   sessionId = session.id;
   backend = new VerifactuBackend({
@@ -93,9 +93,9 @@ afterEach(() => {
 
 function input() {
   return saleInput({
-    nodeId: till.nodeId,
-    seriesId: till.seriesId,
-    origin: deviceOrigin(till.deviceId),
+    nodeId: node.nodeId,
+    seriesId: node.seriesId,
+    origin: deviceOrigin(node.deviceId),
   });
 }
 
@@ -130,7 +130,7 @@ async function operation(kind: "F2" | "F1" | "R5" | "F3" | "cancellation") {
     if (kind === "R5")
       return recordCorrection(tx, backend, {
         origin: value.origin,
-        nodeId: till.nodeId,
+        nodeId: node.nodeId,
         seriesId: correctionSeries,
         correctsSaleId: original!.saleId,
         total: "-14.41",
@@ -145,7 +145,7 @@ async function operation(kind: "F2" | "F1" | "R5" | "F3" | "cancellation") {
     if (kind === "F3")
       return recordSubstitution(tx, backend, {
         origin: value.origin,
-        nodeId: till.nodeId,
+        nodeId: node.nodeId,
         seriesId: fullSeries,
         substitutedSaleIds: [original!.saleId],
         counterparty: recipient,
@@ -192,7 +192,7 @@ describe("new-record fingerprint refusal", () => {
         code: "fiscal.fingerprint_mismatch",
         params: {},
         saleId: null,
-        deviceId: till.deviceId,
+        deviceId: node.deviceId,
         severity: "error",
         detectedAt: "2026-03-01T12:05:00.000Z",
       });

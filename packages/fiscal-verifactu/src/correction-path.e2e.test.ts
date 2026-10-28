@@ -16,7 +16,7 @@ import { decodeRegistroRow, fromRegistroRow, toAeatDate } from "./registro-row.j
 import type { RegistroRow } from "./registro-row.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { seedSale, seedTill, type SeededTill } from "./testing/seed.js";
+import { seedSale, seedNode, type SeededNode } from "./testing/seed.js";
 import { fakeClient, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
@@ -28,19 +28,19 @@ import { TEST_MIGRATIONS } from "../test/migrations.js";
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 
 let backend: VerifactuBackend;
-let till: SeededTill;
+let node: SeededNode;
 // A SECOND series, `purpose = 'rectificative'`, for the corrective sales — a rectificativa draws
 // its number from its own series (RD 1619/2012 art. 6.1.a), and `sales` is unique on
 // (series_id, invoice_number), so the corrective cannot reuse the original's series+number.
 let rectificativeSeriesId: string;
 
 beforeEach(async () => {
-  till = await seedTill(suite.db, "A");
+  node = await seedNode(suite.db, "A");
   // Through the table: `id` and `created_at` are `$defaultFn` generators that only the insert
   // BUILDER runs.
   const [series] = await suite.db
     .insert(invoiceSeries)
-    .values({ nodeId: till.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
+    .values({ nodeId: node.nodeId, code: "R", purpose: "rectificative", nextNumber: 1 })
     .returning({ id: invoiceSeries.id });
   rectificativeSeriesId = series!.id;
   backend = new VerifactuBackend({
@@ -56,8 +56,8 @@ beforeEach(async () => {
 /** The corrective's OWN data — a rectificativa por diferencias with negative lines and total. */
 function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
     saleId: brandSaleId(saleId),
     // `seriesId` is never read by `recordCorrection` (it uses `seriesCode`/`invoiceNumber` for the
     // NumSerieFactura); branded only to satisfy the type. Enforcing that this is a `rectificative`
@@ -78,10 +78,10 @@ function correctiveSaleFor(saleId: string, invoiceNumber: number): SaleForFiscal
  * NumSerieFactura "A/1". */
 function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRecord {
   return {
-    origin: deviceOrigin(till.deviceId),
-    nodeId: till.nodeId,
+    origin: deviceOrigin(node.deviceId),
+    nodeId: node.nodeId,
     saleId: brandSaleId(saleId),
-    seriesId: brandSeriesId(till.seriesId),
+    seriesId: brandSeriesId(node.seriesId),
     seriesCode: "A",
     invoiceNumber,
     issuedAt: new Date("2026-03-01T12:05:00.000Z"),
@@ -96,7 +96,7 @@ function originalSaleFor(saleId: string, invoiceNumber: number): SaleForFiscalRe
 /** Records the original F2 alta (seeding its `sales` row first). Returns the original sale's id —
  * the `correctsSaleId` a correction points at. */
 async function recordOriginal(): Promise<string> {
-  const originalId = await seedSale(suite.db, till, 1);
+  const originalId = await seedSale(suite.db, node, 1);
   await withTransaction(suite.db, async (tx) => {
     await backend.recordSale(tx, originalSaleFor(originalId, 1));
   });
@@ -115,8 +115,8 @@ async function seedCorrectiveRow(
     .insert(sales)
     .values({
       source: "device",
-      deviceId: till.deviceId,
-      nodeId: till.nodeId,
+      deviceId: node.deviceId,
+      nodeId: node.nodeId,
       seriesId: rectificativeSeriesId,
       invoiceNumber,
       issuedAt: "2026-03-02T12:05:00+01:00",
@@ -189,7 +189,7 @@ describe("recordCorrection against the real Veri*Factu backend", () => {
     const row = await registro(correctiveId);
     expect({ source: row.source, deviceId: row.deviceId }).toEqual({
       source: "device",
-      deviceId: till.deviceId,
+      deviceId: node.deviceId,
     });
   });
 
@@ -331,7 +331,7 @@ describe("recordCorrection from five callers started together", () => {
     const rows = await suite.db
       .select()
       .from(registrosFacturacion)
-      .where(eq(registrosFacturacion.nodeId, till.nodeId))
+      .where(eq(registrosFacturacion.nodeId, node.nodeId))
       .orderBy(asc(registrosFacturacion.secuencia));
 
     // Original at 1, the five corrections at 2..6 — distinct, contiguous, no gaps.

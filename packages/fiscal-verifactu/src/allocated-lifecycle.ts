@@ -26,7 +26,7 @@ export const ALLOCATED_FISCAL_SEED: NodeSeed = {
   async run(tx, node, operation) {
     if ((await readTenant(tx)) === null)
       throw new Error("fiscal seed: tenants is empty, so there is no taxpayer to file under");
-    return activate(tx, node, operation, ["setup", "re-register"]);
+    return activate(tx, node, operation, ["setup"]);
   },
   series: {
     async resolve(tx, node, bases) {
@@ -52,7 +52,7 @@ export const ALLOCATED_FISCAL_RESTORE: RestoreHook = async (tx, node, operation)
   } catch (error) {
     if (isAppError(error) && error.code === "sif.not_registered")
       return {
-        report: `node ${node.nodeId} holds no live SIF; nothing re-registered, series unchanged`,
+        report: `node ${node.nodeId} holds no live SIF; no identity activated, series unchanged`,
       };
     throw error;
   }

@@ -3201,7 +3201,6 @@ lock, not that every writer of the file takes it.
 | `apps/server/src/rejoin-command.ts` | `waitron-rejoin` (server stopped) | takes the lock before its first read and holds it through the wipe and re-migrate. Refused while another process holds the folder |
 | `packages/migrations/src/apply.ts` | boot, restore, rejoin, dev scripts | locks (default), inside its own `migrations.lock` |
 | `packages/provisioning/src/bin.ts` (`waitron-provision venue`) | once per venue | locks; refused while another process holds the folder, printed as `provisioning.database_in_use {"database":…}` |
-| `apps/server/scripts/register-till.ts` | registers a node as a Veri\*Factu SIF, closing any previous chain | locks; refused while another process holds the folder |
 | `apps/server/scripts/dev-setup.ts`, `dev-onboard` through `applyMigrations` | before a dev server starts | locks; refused while another process, such as a dev server, holds the same folder |
 | the dev server, `tsx watch` (`apps/server/scripts/dev-server.mjs`) | development | locks, as the server does. A restart waits for the old process's `exit` event before starting the new one: `killProcess` in `tsx@4.23.13`'s `dist/cli.mjs`, read, not run |
 | `apps/server/src/break-glass-command.ts` | beside the server (`deploy/README.md`) | `exclusive: false` |
@@ -3692,7 +3691,7 @@ second clock and no history check, and is refused outside preproduction
 (`packages/fiscal-verifactu/src/hour-throwaway-allocation.test.ts`).
 
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts` is weaker than its name: it
-has restore cases and one promotion, no setup or re-registration case, and a reference clock more
+has restore cases and one promotion, no setup case, and a reference clock more
 than 15 seconds wrong can still repeat a name (its ±45.5 s control).
 
 Cold restore checks the key saved in the selected backup; live takeover checks the live
@@ -4747,10 +4746,10 @@ requests they name. Receipt:
 records differing only in it hash identically. In `computeHuella` it would make every chain
 unverifiable under the other environment.
 
-### Re-registering a filing node starts a new chain under a new installation name.
+### Restore and promotion start a new chain under a new installation name.
 
-**Re-registering a filing node starts a new chain under a new installation name.** Correct for a
-reimaged box, destructive for a working one. A setup, restore, re-registration or promotion names
+**Restore and promotion start a new chain under a new installation name.** A working box keeps its
+identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
 every name in the history it can read and no earlier than the start-again note's floor
@@ -4779,3 +4778,32 @@ while no second process files from the database: the server opens the folder exc
 tools that open it with `exclusive: false` file nothing. Guards: `apps/server/src/restart-reset.test.ts`
 and a case in `apps/server/src/boot.test.ts`, weaker than the rule — nothing checks that a
 non-exclusive tool never files. Detail: [conventions-data.md](conventions-data.md).
+
+
+## The node owns fiscal identity
+
+A1154 retires the old operator command and chain-reset action. Setup seeds a new venue; a retry
+keeps its existing seeds. Recovery restores a replacement box, or promotes an admitted spare.
+Two devices use the same node identity and invoice series. The cross-device chain test also checks
+that adding a device leaves the node's series rows unchanged.
+
+`scripts/no-till-as-issuer.test.ts` scans text files for retired spellings and uses the TypeScript
+parser for identifiers in fiscal workspace packages, including tests and newly added fiscal packages.
+It inspects fiscal tables in a database built by the current migrations, including node ownership
+keys on series, SIF identities and chain heads. Device origins on recorded sales remain valid.
+Historical specs, plans, named compliance/research records and immutable migration directories are
+excluded from the text check. The scanner lists specific old-setting negative-test files; those
+files may mention those settings, but they still cannot contain a retired command spelling.
+Examples in the scanner tests assemble the retired spellings from fragments; neither scanner file
+has a whole-file exception.
+
+The scan cannot recognize the same concept under a different word or in an explanation that uses
+none of its exact spellings. It ignores dependencies, build output and symlinks, and only reads its
+listed text extensions. The schema check covers the fiscal modules' classified tables and the
+core node, sale and series tables, not every possible future ownership relationship.
+
+The text rules recognize their literal spellings, not every variant: the action is lowercase and
+hyphenated, its inflections and unhyphenated spelling are not checked, and an underscore is not
+the retired command's separator. Text extensions are case-sensitive. The fiscal parser checks
+ordinary and private identifiers; quoted property keys remain string literals and are not
+identifier checks. These limits also apply to source comments and prose that use different words.

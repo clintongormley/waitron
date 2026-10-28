@@ -245,7 +245,7 @@ export function formatScope({ kind, packages, root, deploy }) {
  * STDOUT and both exit **0**:
  *
  *   pnpm --filter "@waitron/nope" test:coverage          → No projects matched the filters in "…"
- *   pnpm --filter "...@waitron/bench-pglite" test:cov…   → None of the selected packages has a
+ *   pnpm --filter "...@waitron/bench-sqlite-failover" test:cov…   → None of the selected packages has a
  *                                                          "test:coverage" script
  *
  * The message is not what is checked here — a wording change would silently switch the guard off,

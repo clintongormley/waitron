@@ -769,7 +769,7 @@ describe("reconcile — in-flight tolerance and non-cases", () => {
   });
 
   it("no records for the period → checked 0, and never contacts AEAT", async () => {
-    await seedTenantWithSif(suite.db); // a venue with a till/SIF but no envios
+    await seedTenantWithSif(suite.db); // a venue with a node/SIF but no envios
     const throwing: VerifactuClient = {
       submit: () => Promise.reject(new Error("reconcile must not submit")),
       consultar: () => Promise.reject(new Error("reconcile must not consult an empty period")),
@@ -837,7 +837,7 @@ describe("reconcile — malformed consulta paging", () => {
 describe("reconcile — lazy client resolution", () => {
   it("a zero-row period never resolves a client, even one that would throw", async () => {
     // A zero-row period must not fail because the venue's credential is missing or unusable.
-    await seedTenantWithSif(suite.db); // a venue with a till/SIF but no envios
+    await seedTenantWithSif(suite.db); // a venue with a node/SIF but no envios
     let calls = 0;
     const resolveClient = (): Promise<VerifactuClient> => {
       calls += 1;

@@ -1,3 +1,5 @@
+> **2026-10-28:** A1154 retired this executable workspace member. The original README is preserved below as a historical record. See the [measurement note](2026-07-20-pglite-throughput.md) and [archived source](2026-07-20-pglite-throughput-source.ts.txt).
+
 # @waitron/bench-pglite
 
 > **2026-09-22 — the product's storage engine has changed since this was written.** Waitron no

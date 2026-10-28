@@ -741,6 +741,10 @@ browser test** — most of these rules exist because a test passed while proving
 
 ## 5. Fiscal invariants — the unrecoverable ones
 
+- **The node owns the fiscal identity, chain and invoice series; a till is a cash register.**
+  Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text; misses the same idea
+  under another word (terminal, device, caja) and in prose. Limits: [conventions-data.md](docs/developers/conventions-data.md#the-node-owns-fiscal-identity).
+
 Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26),
 [printing](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26) and
 [stream tests](docs/developers/testing-guide.md#root-detail-moved-on-2026-10-26).
@@ -783,8 +787,7 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   route suites, weaker than the rule: only named routes/readings/requests; new money routes unguarded.
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
-- **Re-registering starts a new chain under a new installation name; it is destructive for a
-  working node.** Setup/restore/re-registration/promotion use five symbols for the box's UTC minute,
+- **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
   after another machine's clock agrees within 30 seconds (no confirmation) and strictly later than
   all readable historical names and no earlier than the start-again note's floor (`first-setup-start-again.json` in the state
   folder; a Start again Move or a Start again past a damaged name record raises it, if lower, to a minute taken from file times, A1098 and A1099, detail in [conventions-data.md](docs/developers/conventions-data.md)), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard

@@ -261,7 +261,7 @@ export function createHourSelection(options: {
       const operator = readOperationAuthority(request.authority, request.binding);
       if (
         request.binding.module !== "fiscal-verifactu" ||
-        !["setup", "restore", "re-register", "promote"].includes(request.binding.action) ||
+        !["setup", "restore", "promote"].includes(request.binding.action) ||
         operator === undefined
       )
         refuse("reauthentication_required");
@@ -369,8 +369,7 @@ export function createHourSelection(options: {
         return refuse("event_mismatch");
       // Exact restore replay validates the committed writer result; it selects no fresh hour.
       if (mode === "committed") {
-        if (!["restore", "re-register"].includes(request.binding.action))
-          return refuse("event_mismatch");
+        if (!["restore"].includes(request.binding.action)) return refuse("event_mismatch");
         return material(intent!);
       }
       const waits = sameEvent.filter((entry): entry is Wait => entry.kind === "wait");

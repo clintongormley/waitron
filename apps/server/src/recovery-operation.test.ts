@@ -50,7 +50,7 @@ function perform<T>(
 }
 
 describe("scoped recovery-key authority", () => {
-  it.each(["promote", "restore", "re-register"])(
+  it.each(["promote", "restore"])(
     "authorises %s with only the current node key, creates no session and revokes authority after use",
     async (action) => {
       const scope = { ...binding, action };
