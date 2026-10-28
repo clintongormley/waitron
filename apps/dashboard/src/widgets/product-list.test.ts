@@ -5300,7 +5300,7 @@ describe("a colour a row inherits", () => {
 });
 
 describe("variant media slot", () => {
-  const pollo = () =>
+  const roastChicken = () =>
     product({
       id: "pollo",
       name: "Pollo asado",
@@ -5319,7 +5319,7 @@ describe("variant media slot", () => {
         },
       ],
     });
-  const tortilla = () =>
+  const omelette = () =>
     product({
       id: "tortilla",
       name: "Tortilla",
@@ -5331,7 +5331,7 @@ describe("variant media slot", () => {
   async function mountOpen() {
     const { el, table, root } = await mountTree({
       categories: [food],
-      products: [pollo(), tortilla()],
+      products: [roastChicken(), omelette()],
     });
     await openRow(el, "folder:f");
     for (const key of ["pollo", "tortilla"]) {
