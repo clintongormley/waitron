@@ -861,6 +861,33 @@ The effective-key diagnosis and correction workflow remains open.
 
 **Fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
 
+**2026-10-29 integrity/validation recheck**, against `1cd34678b`:
+
+The [proposed evidence inspection](../superpowers/specs/2026-10-29-a1089-fiscal-integrity-recovery-design.md)
+awaits an owner scope decision. This milestone changes no alert wording or fiscal behavior.
+The inventory above remains a record of its earlier tree.
+
+| Boundary | Source finding and exercised limit |
+| --- | --- |
+| Stored predecessor check | `packages/fiscal-verifactu/src/verify.ts:50` reads at most the node's last two records. It checks the latest predecessor's hash and its link where applicable, not the entire chain or every column. `verify.test.ts` exercises the empty/first/two-record states, three issue kinds and a continuing append after deliberate fixture corruption. |
+| Event association | `packages/core/src/record-sale.ts:203`, `packages/core/src/record-correction.ts:236`, `packages/core/src/record-void.ts:49` and `packages/core/src/record-substitution.ts:147` map the reported issues into an incident. The issue IDs name predecessors; the incident's sale link names the operation that detected them. These reports alone do not refuse the operation. Five focused core cases exercise continuation with a fake fiscal backend. |
+| Local validation | `packages/fiscal-verifactu/src/chain.ts:186` validates a newly built record at its generation instant. Errors and malformed fingerprint warnings refuse it; totals warnings are separate. Other warnings produce `fiscal.record_flagged` beside the appended record. The warning fixture injects most extra issues; its missing-IPSI-regime-code case exercises a real local warning. None proves an AEAT acceptance. |
+| Retained evidence | `packages/fiscal-verifactu/src/chain.ts:248` keeps field/code arrays paired by position, without field values or an exact fiscal-record ID. `packages/core/src/errors.ts:132` keeps chain issue facts but not the verifier's checked count. The first-open-incident key can suppress later evidence (`packages/db/src/schema/incidents.ts:69`). Do not guess a warning's record or label saved facts as a current or complete audit. |
+| Existing actions | Core chain and fiscal claims require `fiscal.view`, without an inspection target. `apps/server/src/alerts-api.ts:129` authorises Mark handled; `packages/core/src/incidents.ts:307` acknowledges the incident. The alert screen offers that action and any supplied target. Acknowledgement does not repair records or establish agency acceptance. |
+
+Unchanged local commands run for this recheck:
+
+- `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/verify.test.ts src/chain.validation-warnings.test.ts src/chain.record-validation.test.ts src/write-path.e2e.test.ts src/inmutabilidad.test.ts`: 57 passed, including the 20 protected write-path/immutability cases.
+- `pnpm --filter @waitron/core exec vitest run src/record-sale.test.ts src/record-correction.test.ts src/record-void.test.ts src/record-substitution.test.ts -t 'chain verification fails'`: 5 passed, 214 unrelated skipped.
+- `pnpm --filter @waitron/server exec vitest run src/alerts.test.ts src/alerts-api.test.ts`: 56 passed.
+
+Logs are in `/Users/clintongormley/waitron-campaign-e/receipts/a1089-fiscal-integrity-20261029/`.
+These local fixtures do not qualify live AEAT, a complete chain audit, persistent repair or a rendered
+inspection screen. The proposal separates saved evidence from fresh reads, offers sign-in at the
+action and a safe Stop, and grants no write or repair authority. Choose planning inspection first,
+leaving persistent repair open, or designing the complete recovery/decision path before a build.
+Both options require separate implementation approval; the product referrals remain open.
+
 ### fiscal-cases
 
 **Fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.

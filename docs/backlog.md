@@ -212,6 +212,9 @@ under `docs/backlog/`.
 
 - **A1089: fiscal integrity and validation alerts need evidence-preserving next steps.** Replace support-only guidance without editing records or treating every warning as a proven Waitron bug. A substantial missing recovery workflow requires an owner decision.
   [Audit](backlog/self-service-refusals.md#fiscal-integrity).
+  The [proposed evidence inspection](superpowers/specs/2026-10-29-a1089-fiscal-integrity-recovery-design.md)
+  awaits the owner's scope decision. Saved predecessor-check issues and local validation warnings
+  are distinct; inspection does not provide persistent repair or establish AEAT acceptance.
 
 _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's fiscal items; part of A9._ Detail: [backlog/fiscal.md](backlog/fiscal.md).
 
