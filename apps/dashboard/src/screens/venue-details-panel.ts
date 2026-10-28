@@ -146,6 +146,7 @@ export class VenueDetailsPanel extends LitElement {
   #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
+  #retries = new AbortController();
   /** Each read and each save takes the next place when it is sent, a dialog's answer when it
    * arrives; the card shows a value only if its place is later than the one it shows. */
   #places = 0;
@@ -173,11 +174,13 @@ export class VenueDetailsPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation += 1;
+    this.#retries = new AbortController();
     this.#registerDraft();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation += 1;
+    this.#retries.abort();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -216,6 +219,7 @@ export class VenueDetailsPanel extends LitElement {
     void readAfterSave(
       () => this.#load(),
       () => generation === this.#generation && this.#shownPlace <= answeredAt,
+      this.#retries.signal,
     );
   }
   #show(place: number, model: VenueDetailsModel): void {

@@ -88,6 +88,7 @@ export class VenueDefaultsPanel extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
+  #retries = new AbortController();
   /** Each read and each save answer takes the next place when it begins (an answer when it
    * arrives); the card shows a value only if its place is later than the one it shows. */
   #places = 0;
@@ -120,11 +121,13 @@ export class VenueDefaultsPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
+    this.#retries = new AbortController();
     this.#registerDraft();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation++;
+    this.#retries.abort();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -242,6 +245,7 @@ export class VenueDefaultsPanel extends LitElement {
         void readAfterSave(
           () => this.#reread(),
           () => generation === this.#generation && this.#shownPlace <= answeredAt,
+          this.#retries.signal,
         );
     } catch (error) {
       if (draft !== this.draft) return;

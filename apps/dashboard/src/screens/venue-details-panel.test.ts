@@ -981,6 +981,7 @@ it("a card removed after its failed follow-up read after a save reads nothing mo
     const el = await savedBehindReconnectReadThenFollowUpFails(r);
     const reads = vi.mocked(r.api.getVenueDetails).mock.calls.length;
     el.remove();
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(vi.mocked(r.api.getVenueDetails).mock.calls.length).toBe(reads);
   } finally {
@@ -1005,6 +1006,31 @@ it("a failed read after the legal-name dialog's answer is tried again and ends o
     await vi.advanceTimersByTimeAsync(2000);
     await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
     expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a failed read after the business-day editor's answer is tried again and ends on the stored values", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  const fixture = venueDetailsFixture();
+  const answer = { ...fixture, businessDayClock: { ...fixture.businessDayClock, revision: 1 } };
+  r.set({
+    ...venueDetailsFixture({ name: "Other manager" }),
+    businessDayClock: answer.businessDayClock,
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+    q(el, "dashboard-business-day-start-editor")!.dispatchEvent(
+      new CustomEvent("saved", { detail: answer, bubbles: true, composed: true }),
+    );
+    await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+    expect(text(q(el, "[data-test=saved-name]"))).toBe("Venue");
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
     expect(q(el, "[data-test=read-error]")).toBeNull();
   } finally {
     vi.useRealTimers();

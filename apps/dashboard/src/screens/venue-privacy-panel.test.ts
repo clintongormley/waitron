@@ -859,7 +859,10 @@ it("a refusal that arrives after the card turned read-only and back leaves the n
   expect(saveButton(el).loading).toBe(false);
 });
 
-async function savedOverNewerLiveValueThenFollowUpFails(r: ReturnType<typeof withBackground>) {
+async function savedOverNewerLiveValueThenFollowUpFails(
+  r: ReturnType<typeof withBackground>,
+  { putBack = false } = {},
+) {
   const pending = deferred<VenuePrivacy>();
   r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
   const el = await mount(r.api);
@@ -868,7 +871,11 @@ async function savedOverNewerLiveValueThenFollowUpFails(r: ReturnType<typeof wit
   await save(el);
   const reads = r.background.getVenuePrivacy.mock.calls.length;
   r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
-  r.liveData.invalidate([{ type: "tenants" }]);
+  if (putBack) {
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+  } else r.liveData.invalidate([{ type: "tenants" }]);
   await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
   await expect
     .poll(() => (el as unknown as { model?: VenuePrivacy }).model?.privacyEmail)
@@ -893,12 +900,25 @@ it("a failed read after a save answered over a newer live value is tried again a
   }
 });
 
+it("a card put back during a save still tries a failed follow-up read again", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r, { putBack: true });
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("a card removed after its failed follow-up read reads nothing more", async () => {
   const r = withBackground();
   try {
     const el = await savedOverNewerLiveValueThenFollowUpFails(r);
     const reads = r.background.getVenuePrivacy.mock.calls.length;
     el.remove();
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(r.background.getVenuePrivacy.mock.calls.length).toBe(reads);
   } finally {

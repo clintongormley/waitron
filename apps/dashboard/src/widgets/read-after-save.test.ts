@@ -14,7 +14,7 @@ it("waits 2, 4, 8 and 16 seconds between tries", () => {
 
 it("reads once when the first read succeeds", async () => {
   const read = vi.fn(async () => true);
-  await readAfterSave(read, () => true);
+  await readAfterSave(read, () => true, new AbortController().signal);
   await vi.advanceTimersByTimeAsync(60_000);
   expect(read).toHaveBeenCalledTimes(1);
 });
@@ -24,7 +24,7 @@ it("reads again 2 seconds after a failed read, and stops at the first success", 
     .fn(async () => false)
     .mockResolvedValueOnce(false)
     .mockResolvedValueOnce(true);
-  const done = readAfterSave(read, () => true);
+  const done = readAfterSave(read, () => true, new AbortController().signal);
   await vi.advanceTimersByTimeAsync(1999);
   expect(read).toHaveBeenCalledTimes(1);
   await vi.advanceTimersByTimeAsync(1);
@@ -36,7 +36,7 @@ it("reads again 2 seconds after a failed read, and stops at the first success", 
 
 it("a read that never succeeds is tried five times in all, then no more", async () => {
   const read = vi.fn(async () => false);
-  const done = readAfterSave(read, () => true);
+  const done = readAfterSave(read, () => true, new AbortController().signal);
   await vi.advanceTimersByTimeAsync(2000);
   expect(read).toHaveBeenCalledTimes(2);
   await vi.advanceTimersByTimeAsync(4000);
@@ -53,11 +53,25 @@ it("a read that never succeeds is tried five times in all, then no more", async 
 it("reads nothing more once it is no longer wanted", async () => {
   const read = vi.fn(async () => false);
   let wanted = true;
-  const done = readAfterSave(read, () => wanted);
+  const done = readAfterSave(read, () => wanted, new AbortController().signal);
   await vi.advanceTimersByTimeAsync(2000);
   expect(read).toHaveBeenCalledTimes(2);
   wanted = false;
   await vi.advanceTimersByTimeAsync(60_000);
   await done;
   expect(read).toHaveBeenCalledTimes(2);
+});
+
+it("aborting during a wait clears the pending timer and reads nothing more", async () => {
+  const read = vi.fn(async () => false);
+  const retries = new AbortController();
+  const done = readAfterSave(read, () => true, retries.signal);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(1);
+  retries.abort();
+  expect(vi.getTimerCount()).toBe(0);
+  await vi.advanceTimersByTimeAsync(60_000);
+  await done;
+  expect(read).toHaveBeenCalledTimes(1);
 });

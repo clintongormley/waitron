@@ -1061,7 +1061,10 @@ it("a VAT refusal and its value survive a live read", async () => {
   expect(saveButton(el).disabled).toBe(false);
 });
 
-async function savedOverNewerLiveValueThenFollowUpFails(r: ReturnType<typeof withBackground>) {
+async function savedOverNewerLiveValueThenFollowUpFails(
+  r: ReturnType<typeof withBackground>,
+  { putBack = false } = {},
+) {
   setLocale("en-GB");
   const pending = deferred<VenueDefaults>();
   r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
@@ -1071,7 +1074,11 @@ async function savedOverNewerLiveValueThenFollowUpFails(r: ReturnType<typeof wit
   await save(el);
   const reads = r.background.getVenueDefaults.mock.calls.length;
   r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
-  r.liveData.invalidate([{ type: "locations" }]);
+  if (putBack) {
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+  } else r.liveData.invalidate([{ type: "locations" }]);
   await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(reads + 1);
   await expect
     .poll(() => (el as unknown as { model?: VenueDefaults }).model?.receiptLanguage)
@@ -1096,12 +1103,25 @@ it("a failed read after a save answered over a newer live value is tried again a
   }
 });
 
+it("a card put back during a save still tries a failed follow-up read again", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r, { putBack: true });
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => savedLanguage(el)).toBe("Galician");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it("a card removed after its failed follow-up read reads nothing more", async () => {
   const r = withBackground();
   try {
     const el = await savedOverNewerLiveValueThenFollowUpFails(r);
     const reads = r.background.getVenueDefaults.mock.calls.length;
     el.remove();
+    expect(vi.getTimerCount()).toBe(0);
     await vi.advanceTimersByTimeAsync(60_000);
     expect(r.background.getVenueDefaults.mock.calls.length).toBe(reads);
   } finally {
