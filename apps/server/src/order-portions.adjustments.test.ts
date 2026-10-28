@@ -4,18 +4,23 @@ import { describe, expect, it } from "vitest";
 import { adjustments, type AdjustmentAction } from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
+  billPayments,
+  lineServiceCancellations,
   parties,
   saleLines,
   sales,
+  tenants,
   workingOrderLines,
   workingOrders,
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { decimal, sumDecimals, toScale } from "@waitron/shared";
+import { decimal, decimalToCents, sumDecimals, toScale } from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { completeBillPayment } from "./bill-payments.js";
+import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -37,6 +42,7 @@ import {
   fireLines,
   insertTabRound,
   priceTabRound,
+  readStoredOrder,
   type TabRoundLine,
 } from "./working-order.js";
 import "./errors.js";
@@ -272,7 +278,16 @@ async function outcomeOf(billId: string) {
     ),
     total: sale!.total,
     vat: sale!.vatBreakdown,
-    receiptLines: sortedJson(result.lines),
+    // Each extra names its dish by what it shows, not by its position (stated difference 1).
+    receiptLines: sortedJson(
+      result.lines.map(({ parentLineNo, ...line }) => {
+        const dish = parentLineNo == null ? undefined : result.lines[parentLineNo - 1];
+        return {
+          ...line,
+          under: dish === undefined ? null : `${dish.descriptions["es-ES"]} ${dish.gross}`,
+        };
+      }),
+    ),
     billAdjustments: result.billAdjustments ?? null,
     printed: sortedJson(blocks),
     printedTotal: printed.find((line) => line.startsWith("TOTAL")),
@@ -447,6 +462,299 @@ describe("A803 portions: a discount or comp on a whole row of identical portions
   });
 });
 
+/** Files the bill as a full invoice to a business, paid by card, and answers the invoice's lines. */
+async function invoiceOf(billId: string) {
+  const [taxpayer] = await inTx(venue, (tx) => tx.select().from(tenants));
+  try {
+    await inTx(venue, (tx) =>
+      tx
+        .update(tenants)
+        .set({ taxpayerDomicile: "Calle Fiscal 8, Madrid" })
+        .where(eq(tenants.id, 1)),
+    );
+    const [order] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrders).where(eq(workingOrders.id, billId)),
+    );
+    await setOrderInvoiceChoice(venue.db, venue.backend, venue.cfg, billId, {
+      revision: order!.revision,
+      invoiceType: "F1",
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Cliente SL",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        countryCode: "ES",
+      },
+    });
+    return await inTx(venue, async (tx) => {
+      const stored = await readStoredOrder(tx, billId);
+      const [payment] = await tx
+        .insert(billPayments)
+        .values({
+          workingOrderId: billId,
+          submissionId: randomUUID(),
+          fingerprint: `a803-portions-f1-${billId}`,
+          kind: "contribution",
+          method: "card",
+          applied: decimalToCents(sumDecimals(stored.gross.lines.map((line) => line.lineGross))),
+          state: "pending",
+          requestedBy: venue.supervisorId,
+          source: venue.cfg.origin.source,
+          deviceId: venue.cfg.origin.deviceId,
+        })
+        .returning();
+      return (await completeBillPayment(tx, venue, venue.cfg, payment!.id, new Date())).invoice!
+        .lines;
+    });
+  } finally {
+    await inTx(venue, (tx) =>
+      tx
+        .update(tenants)
+        .set({ taxpayerDomicile: taxpayer!.taxpayerDomicile })
+        .where(eq(tenants.id, 1)),
+    );
+  }
+}
+
+/** A full invoice's lines as `[name, quantity, gross, family, entries]`, as a set. */
+const invoiceRows = (lines: Awaited<ReturnType<typeof invoiceOf>>) =>
+  sortedJson(
+    lines.map((line) => [
+      line.descriptions["es-ES"],
+      line.quantity,
+      line.gross,
+      line.dishFamily ?? null,
+      line.adjustments ?? [],
+    ]),
+  );
+
+/** Each working line as `[name, unit price, list price]`, in line order. */
+const pricesOf = async (billId: string) =>
+  (await rowsOf(venue, billId)).map((row) => [
+    row.name,
+    row.unitPriceGross,
+    row.listUnitPriceGross,
+  ]);
+
+describe("A803 portions: part of a row, and a row's extras", () => {
+  it("A803 portions: 10% off 1 of a row of three takes the last portion, keeps the other two at €3.33 with their list price stamped, and records 1 of 3 on the row's first portion with a split to the portion taken", async () => {
+    const lines = [{ name: "Croquetas", quantity: "3" }, bread];
+    const ask = { ...tenOff, quantity: "1" };
+    const { grouped, portions, portionsBill: bill } = await bothShapes(lines, "Croquetas", ask);
+
+    expect(grouped.record).toMatchObject({ reduction: 33, quantity: 1000, lineQuantity: 3000 });
+    expectSameMoney(grouped, portions);
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Croquetas", "3.33", "3.33"],
+      ["Croquetas", "3.33", "3.33"],
+      ["Croquetas", "3.00", "3.33"],
+      ["Bread", "2.50", null],
+    ]);
+    const members = await dishesNamed(bill.billId, "Croquetas");
+    expect(await recordedOn(bill.billId)).toMatchObject([
+      { lineId: members[0], splits: [{ from: members[0], to: members[2] }] },
+    ]);
+
+    // A full invoice places the entry under the portion taken and marks the family, as today.
+    const groupedF1 = await groupedBill(lines);
+    const portionsF1 = await portionsBill(lines);
+    const [line] = await dishesNamed(groupedF1.billId, "Croquetas");
+    const row = await dishesNamed(portionsF1.billId, "Croquetas");
+    await adjust(groupedF1.billId, { ...ask, lineId: line! });
+    await adjust(portionsF1.billId, { ...ask, lineId: row[0]!, lineIds: row });
+    const today = await invoiceOf(groupedF1.billId);
+    expect(today.some((one) => one.dishFamily === 0)).toBe(true);
+    expect(invoiceRows(await invoiceOf(portionsF1.billId))).toEqual(invoiceRows(today));
+  });
+
+  it("A803 portions: 10% off 2 of a row of three croquetas prices them €3.00 and €2.99 and records today's second-price split from the first portion taken", async () => {
+    const {
+      grouped,
+      portions,
+      portionsBill: bill,
+    } = await bothShapes([{ name: "Croquetas", quantity: "3" }, bread], "Croquetas", {
+      ...tenOff,
+      quantity: "2",
+    });
+
+    expectSameMoney(grouped, portions);
+    expect(grouped.record.splits).toHaveLength(2);
+    const members = await dishesNamed(bill.billId, "Croquetas");
+    expect((await pricesOf(bill.billId)).map(([, unit]) => unit)).toEqual([
+      "3.33",
+      "3.00",
+      "2.99",
+      "2.50",
+    ]);
+    expect(await recordedOn(bill.billId)).toMatchObject([
+      {
+        splits: [
+          { from: members[0], to: members[1] },
+          { from: members[1], to: members[2] },
+        ],
+      },
+    ]);
+  });
+
+  it("A803 portions: €0.01 off 2 of a row of three breads files the full-price bread taken with the one not taken, as one row (a stated difference from today's three rows)", async () => {
+    const { grouped, portions } = await bothShapes([{ name: "Bread", quantity: "3" }], "Bread", {
+      action: "discount_amount",
+      amount: "0.01",
+      quantity: "2",
+    });
+    // Each filed row as [quantity, base, gross], in thousandths and cents.
+    const shape = (filed: string[]) =>
+      filed
+        .map((row) => {
+          const { quantity, base, gross } = JSON.parse(row) as Record<string, number>;
+          return [quantity, base, gross];
+        })
+        .sort((x, y) => x[0]! - y[0]! || x[2]! - y[2]!);
+
+    expect(portions.total).toBe(grouped.total);
+    expect(portions.record).toEqual(grouped.record);
+    expect(shape(grouped.filed)).toEqual([
+      [1000, 226, 249],
+      [1000, 227, 250],
+      [1000, 227, 250],
+    ]);
+    expect(shape(portions.filed)).toEqual([
+      [1000, 226, 249],
+      [2000, 455, 500],
+    ]);
+  });
+
+  it("A803 portions: a comp of 1 of a row of two pizzas with an olive each takes the last pizza and its olive, with a split for each", async () => {
+    const {
+      grouped,
+      portions,
+      portionsBill: bill,
+    } = await bothShapes([{ name: "Pizza", quantity: "2", olives: 1 }, bread], "Pizza", {
+      action: "comp",
+      reasonId: venue.reasonId.complaint,
+      quantity: "1",
+    });
+
+    expect(grouped.record).toMatchObject({ reduction: 1050, quantity: 1000, lineQuantity: 2000 });
+    expectSameMoney(grouped, portions);
+    expect(await pricesOf(bill.billId)).toEqual([
+      ["Pizza", "9.00", "9.00"],
+      ["Olives", "1.50", "1.50"],
+      ["Pizza", "0.00", "9.00"],
+      ["Olives", "0.00", "1.50"],
+      ["Bread", "2.50", null],
+    ]);
+    const ids = (await rowsOf(venue, bill.billId)).map((row) => row.id);
+    expect(await recordedOn(bill.billId)).toMatchObject([
+      {
+        lineId: ids[0],
+        splits: [
+          { from: ids[0], to: ids[2] },
+          { from: ids[1], to: ids[3] },
+        ],
+      },
+    ]);
+  });
+
+  /** The olives of the bill's pizzas: today's one line, or every portion's, in line order. */
+  const olivesOf = async (billId: string) =>
+    (await rowsOf(venue, billId)).filter((row) => row.name === "Olives").map((row) => row.id);
+
+  it("A803 portions: the olives of a row of two pizzas, named together, are discounted as one olives line", async () => {
+    const lines = [{ name: "Pizza", quantity: "2", olives: 2 }, bread];
+    const grouped = await groupedBill(lines);
+    const portions = await portionsBill(lines);
+    const [line] = await olivesOf(grouped.billId);
+    const members = await olivesOf(portions.billId);
+    expect(members).toHaveLength(2);
+    const ask = { action: "discount_amount", amount: "0.03" } as const;
+    await adjust(grouped.billId, { ...ask, lineId: line! });
+    await adjust(portions.billId, { ...ask, lineId: members[1]!, lineIds: members });
+
+    const today = await outcomeOf(grouped.billId);
+    // Today's olives line takes a whole cent off each olive.
+    expect(today.record).toMatchObject({ reduction: 4, lineQuantity: 4000 });
+    const rows = await outcomeOf(portions.billId);
+    expectSameMoney(today, rows);
+    expect(await recordedOn(portions.billId)).toMatchObject([{ lineId: members[0] }]);
+  });
+
+  it("A803 portions: part of a row takes the last portion not already cancelled", async () => {
+    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquetas");
+    await inTx(venue, (tx) =>
+      tx.insert(lineServiceCancellations).values({
+        lineId: members[2]!,
+        quantity: 1000,
+        cancelledAt: new Date().toISOString(),
+        wasStarted: true,
+        actorId: venue.staffId,
+      }),
+    );
+
+    await adjust(billId, { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "1" });
+
+    expect((await pricesOf(billId)).map(([, unit]) => unit)).toEqual(["3.33", "3.00", "3.33"]);
+  });
+
+  it("A803 portions: half a portion of a row is refused adjustment.quantity_invalid", async () => {
+    const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
+    const members = await dishesNamed(billId, "Croquetas");
+
+    await refusedWith(
+      billId,
+      { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "1.5" },
+      "adjustment.quantity_invalid",
+    );
+  });
+
+  it("A803 portions: a row's olives are refused when one of their pizzas was paid by item, as today's olives line is", async () => {
+    const lines = [{ name: "Pizza", quantity: "2", olives: 1 }, bread];
+    const grouped = await groupedBill(lines);
+    const portions = await portionsBill(lines);
+    // A dish with extras is paid by item only whole, with its extras.
+    const payOne = async (billId: string, lineNo: number, amount: string) => {
+      const answer = await send(
+        venue.app,
+        venue.cookie.staff,
+        "POST",
+        `/api/working-orders/${billId}/payments`,
+        {
+          submissionId: randomUUID(),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+          tip: "0.00",
+          kind: "items",
+          lines: [{ lineNo }],
+          method: "cash",
+          tendered: amount,
+          applied: amount,
+        },
+      );
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    };
+    await payOne(grouped.billId, 1, "21.00");
+    await payOne(portions.billId, 3, "10.50");
+    const [line] = await olivesOf(grouped.billId);
+    const members = await olivesOf(portions.billId);
+
+    const today = await refusalOf(grouped.billId, { ...tenOff, lineId: line! });
+    expect(today).toEqual({ code: "bill.line_paid" });
+    expect(
+      await refusalOf(portions.billId, { ...tenOff, lineId: members[0]!, lineIds: members }),
+    ).toEqual(today);
+  });
+
+  it("A803 portions: part of a row's olives is refused adjustment.quantity_invalid, changing nothing", async () => {
+    const { billId } = await portionsBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const members = await olivesOf(billId);
+
+    await refusedWith(
+      billId,
+      { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "1" },
+      "adjustment.quantity_invalid",
+    );
+  });
+});
+
 /** Everything an adjustment could change on a bill, to show that a refused one changed nothing. */
 async function stateOf(billId: string) {
   const state = await inTx(venue, async (tx) => {
@@ -598,15 +906,88 @@ describe("A803 portions: refusing a row the till could not have drawn", () => {
     );
   });
 
-  it("A803 portions: part of a row is refused until a part can be taken", async () => {
+  it("A803 portions: more of a row than it holds is refused adjustment.quantity_invalid", async () => {
     const { billId } = await portionsBill([{ name: "Croquetas", quantity: "3" }]);
     const members = await dishesNamed(billId, "Croquetas");
 
     await refusedWith(
       billId,
-      { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "1" },
+      { ...tenOff, lineId: members[0]!, lineIds: members, quantity: "4" },
       "adjustment.quantity_invalid",
     );
+  });
+
+  it("A803 portions: olives of two different rows' pizzas named together are refused management.request_invalid on lineIds", async () => {
+    const { billId } = await portionsBill([{ name: "Pizza", olives: 1 }]);
+    await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, billId, [
+        { ...roundOf([{ name: "Pizza", olives: 1 }])[0]!, note: "well done" },
+      ]),
+    );
+    const olives = (await rowsOf(venue, billId))
+      .filter((row) => row.parentLineId !== null)
+      .map((row) => row.id);
+    expect(olives).toHaveLength(2);
+
+    await refusedWith(
+      billId,
+      { ...tenOff, lineId: olives[0]!, lineIds: olives },
+      "management.request_invalid",
+      fieldLineIds,
+    );
+  });
+
+  describe("A803 portions: a row's pizzas each holding olives and capers", () => {
+    /** A row of two pizzas, each with its olive and, copied from it, a second extra named Capers;
+     * answers each pizza's `[olives, capers]` ids. */
+    async function twoExtras(billId: string): Promise<string[][]> {
+      return inTx(venue, async (tx) => {
+        const rows = await tx
+          .select()
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId))
+          .orderBy(workingOrderLines.lineNo);
+        let lineNo = Math.max(...rows.map((row) => row.lineNo));
+        const olives = rows.filter((row) => row.parentLineId !== null);
+        const pairs: string[][] = [];
+        for (const olive of olives) {
+          const capers = { ...olive, id: randomUUID(), lineNo: ++lineNo, name: "Capers" };
+          await tx.insert(workingOrderLines).values(capers);
+          pairs.push([olive.id, capers.id]);
+        }
+        return pairs;
+      });
+    }
+
+    it("A803 portions: two extras of one pizza named together are refused management.request_invalid on lineIds", async () => {
+      const { billId } = await portionsBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+      const [[olives, capers]] = await twoExtras(billId);
+      // The control: the capers of both pizzas are a row's extras.
+      const control = await portionsBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+      const [[, first], [, second]] = await twoExtras(control.billId);
+      expect(
+        await refusalOf(control.billId, { ...tenOff, lineId: first!, lineIds: [first!, second!] }),
+      ).toBeNull();
+
+      await refusedWith(
+        billId,
+        { ...tenOff, lineId: olives!, lineIds: [olives!, capers!] },
+        "management.request_invalid",
+        fieldLineIds,
+      );
+    });
+
+    it("A803 portions: the olives of one pizza and the capers of the other are refused the same way", async () => {
+      const { billId } = await portionsBill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+      const [[olives], [, capers]] = await twoExtras(billId);
+
+      await refusedWith(
+        billId,
+        { ...tenOff, lineId: olives!, lineIds: [olives!, capers!] },
+        "management.request_invalid",
+        fieldLineIds,
+      );
+    });
   });
 
   it("A803 portions: a row one of whose portions was paid by item is refused as a line paid in part is today", async () => {

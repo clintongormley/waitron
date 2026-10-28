@@ -212,6 +212,9 @@ interface Plan {
   changes: Change[];
   /** What is written: `changes`, or on a row, each of its portions' share of them. */
   writes: Change[];
+  /** On a row, every line of each stand-in line the action prices, taken or not: each gets its list
+   * price, as today's whole line does before part of it is carved off (plan D32). */
+  stamped: string[];
   /** On a row, the split today's second price would have recorded (plan D33). */
   rowSplits: AdjustmentSplit[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
@@ -478,10 +481,40 @@ function handOut(
   });
 }
 
+/**
+ * The dish lines a part of a row takes (plan D32): the last `covered` portions by line number not
+ * already cancelled, so the row's first portion, which the record names, stays while any of the row
+ * does. Else `adjustment.quantity_invalid`, as more than today's line holds is.
+ */
+async function takenPortions(
+  tx: Transaction,
+  orderId: string,
+  dish: Row,
+  members: readonly Row[],
+  covered: number,
+): Promise<Set<string>> {
+  const cancelled = await readLineCancellations(
+    tx,
+    members.map(({ id }) => id),
+  );
+  const active = members.filter(({ id }) => (cancelled.get(id) ?? 0) === 0);
+  const count = covered / 1000;
+  if (count > active.length) {
+    throw new AppError("adjustment.quantity_invalid", {
+      workingOrderId: orderId,
+      lineNo: dish.lineNo,
+      quantity: thousandthsToDecimal(covered),
+    });
+  }
+  return new Set(active.slice(active.length - count).map(({ id }) => id));
+}
+
 /** A row of identical portions as one stand-in line (plan D32), and what it stands for. */
 interface StandIn {
   /** The stand-in dish: the first portion's id, prices and line number, the members' quantity. */
   dish: Row;
+  /** What the request acts on: the stand-in dish, or one of its stand-in extras (plan D34). */
+  line: Row;
   /** The bill's rows with the members and their extras replaced by the stand-in lines. */
   view: Row[];
   /** Every member's dish and extras lines. */
@@ -548,9 +581,10 @@ function cohortFreeKey(groups: readonly StoredOrderLine[], lineId: string): stri
 /**
  * The till row `ask.lineIds` names as one stand-in line, else `management.request_invalid` on
  * `lineIds`: each member a dish line of this bill bound to a whole, unmeasured portion, every one
- * of them in one filed group but for the cohort, with one note and one course (plan D31). The
- * stand-in's extras are the members' extras, one per extra, each at the first member's extra's line
- * number; its served quantity is the members' sum and its kitchen facts the furthest member's (D32).
+ * of them in one filed group but for the cohort, with one note and one course (plan D31) — or one
+ * extra of each such dish, the same extra on every one (D34). The stand-in's extras are the
+ * members' extras, one per extra, each at the first member's extra's line number; its served
+ * quantity is the members' sum and its kitchen facts the furthest member's (D32).
  */
 async function standInRow(
   tx: Transaction,
@@ -564,20 +598,25 @@ async function standInRow(
   if (ids.length < 2 || new Set(ids).size !== ids.length || !ids.includes(ask.lineId!)) {
     throw invalid("lineIds");
   }
-  const members = ids.map((id) => rows.find((row) => row.id === id));
-  if (members.some((member) => member === undefined || member.parentLineId !== null)) {
+  const named = ids.map((id) => rows.find((row) => row.id === id));
+  if (named.some((one) => one === undefined)) throw invalid("lineIds");
+  const extrasRow = named[0]!.parentLineId !== null;
+  if (named.some((one) => (one!.parentLineId !== null) !== extrasRow)) throw invalid("lineIds");
+  const dishIds = extrasRow ? named.map((one) => one!.parentLineId!) : ids;
+  if (new Set(dishIds).size !== dishIds.length) throw invalid("lineIds");
+  const members = dishIds.map((id) => rows.find((row) => row.id === id)!);
+  const whole = await readWholePortionLines(tx, dishIds);
+  if (dishIds.some((id) => !whole.has(id))) throw invalid("lineIds");
+  const groups = await readLockedLines(tx, orderId);
+  if (new Set(dishIds.map((id) => cohortFreeKey(groups, id))).size !== 1) {
     throw invalid("lineIds");
   }
-  const whole = await readWholePortionLines(tx, ids);
-  if (ids.some((id) => !whole.has(id))) throw invalid("lineIds");
-  const groups = await readLockedLines(tx, orderId);
-  if (new Set(ids.map((id) => cohortFreeKey(groups, id))).size !== 1) throw invalid("lineIds");
   // Filing groups dishes whatever their note or course; the till's row does not.
-  if (new Set(members.map((member) => canonical([member!.note, member!.courseId]))).size !== 1) {
+  if (new Set(members.map((member) => canonical([member.note, member.courseId]))).size !== 1) {
     throw invalid("lineIds");
   }
 
-  const dishes = (members as Row[]).sort((a, b) => a.lineNo - b.lineNo);
+  const dishes = members.sort((a, b) => a.lineNo - b.lineNo);
   const extraOrder = (row: Row) => canonical([row.name, row.variantName, row.unit, row.quantity]);
   const families = dishes.map((dish) => ({
     dish,
@@ -613,8 +652,19 @@ async function standInRow(
   });
   const lines = families.flatMap((family) => [family.dish, ...family.extras]);
   const replaced = new Set(lines.map((row) => row.id));
+  let line = dish;
+  if (extrasRow) {
+    const asked = new Set(ids);
+    const extra = extras.find(({ id }) => {
+      const standing = membersOf.get(id)!;
+      return standing.length === asked.size && standing.every((one) => asked.has(one.id));
+    });
+    if (extra === undefined) throw invalid("lineIds");
+    line = extra;
+  }
   return {
     dish,
+    line,
     view: [...rows.filter((row) => !replaced.has(row.id)), dish, ...extras].sort(
       (a, b) => a.lineNo - b.lineNo,
     ),
@@ -675,6 +725,7 @@ export async function planAdjustment(
   let carve: Carve | null = null;
   let changes: Change[] = [];
   let writes: Change[] | null = null;
+  let stamped: string[] = [];
   const rowSplits: AdjustmentSplit[] = [];
   let row: StandIn | null = null;
   let view: readonly Row[] = rows;
@@ -711,20 +762,13 @@ export async function planAdjustment(
       throw new AppError("tab.line_not_found", { tabId: orderId, lineId: ask.lineId });
     if (ask.lineIds !== undefined) {
       row = await standInRow(tx, orderId, ask, rows);
-      ({ dish: line, view } = row);
+      ({ line, view } = row);
     }
     const target = line;
     // An extra has no extras of its own, so it is a family of one.
     const family = [target, ...view.filter((other) => other.parentLineId === target.id)];
     covered = coveredQuantity(orderId, target, ask.quantity);
     const partial = covered < target.quantity;
-    if (row !== null && partial) {
-      throw new AppError("adjustment.quantity_invalid", {
-        workingOrderId: orderId,
-        lineNo: target.lineNo,
-        quantity: ask.quantity!,
-      });
-    }
     const weighed = (target.unitPrecision ?? 0) > 0;
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
@@ -790,17 +834,33 @@ export async function planAdjustment(
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
-      const covering = row === null ? family : row.lines;
+      const standingFor = (one: Row) => (row === null ? [one] : row.membersOf.get(one.id)!);
+      const covering = family.flatMap(standingFor);
       if (ask.action === "comp" && !partial) {
-        compedExtras = (
-          row === null ? family.slice(1) : covering.filter((one) => one.parentLineId !== null)
-        ).map((one) => one.id);
+        compedExtras = family
+          .slice(1)
+          .flatMap(standingFor)
+          .map((one) => one.id);
       }
       if (row !== null) {
         const { membersOf } = row;
+        const taken = partial
+          ? await takenPortions(tx, orderId, target, membersOf.get(target.id)!, covered)
+          : null;
+        const takenOf = (standIn: Row) =>
+          membersOf
+            .get(standIn.id)!
+            .filter((member) => taken === null || taken.has(member.parentLineId ?? member.id));
+        // Today the part is carved off the line and each of its extras (plan D33).
+        if (taken !== null) {
+          for (const standIn of family) {
+            rowSplits.push({ from: standingFor(standIn)[0]!.id, to: takenOf(standIn)[0]!.id });
+          }
+        }
+        stamped = changes.flatMap((change) => standingFor(change.row).map((one) => one.id));
         writes = changes.flatMap((change) => {
           const portions = handOut(
-            membersOf.get(change.row.id)!.map((member) => ({
+            takenOf(change.row).map((member) => ({
               row: member,
               quantity: member.quantity,
               carved: false,
@@ -892,6 +952,7 @@ export async function planAdjustment(
     carve,
     changes,
     writes: writes ?? changes,
+    stamped,
     rowSplits,
     compedExtras,
     reduction,
@@ -1088,8 +1149,9 @@ async function reprice(
   orderId: string,
   carve: Carve | null,
   changes: readonly Change[],
+  stamped: readonly string[],
 ): Promise<AdjustmentSplit[]> {
-  const touched = changes.map(({ row }) => row.id);
+  const touched = [...new Set([...changes.map(({ row }) => row.id), ...stamped])];
   // Before any split, so a split row copies the price its line had (plan D21).
   await tx
     .update(workingOrderLines)
@@ -1181,7 +1243,7 @@ export async function applyAdjustment(
         );
       } else {
         splits = [
-          ...(await reprice(tx, cfg, args.orderId, plan.carve, plan.writes)),
+          ...(await reprice(tx, cfg, args.orderId, plan.carve, plan.writes, plan.stamped)),
           ...plan.rowSplits,
         ];
         await bumpRevision(tx, [args.orderId]);
