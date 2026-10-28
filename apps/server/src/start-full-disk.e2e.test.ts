@@ -158,16 +158,22 @@ function entryDeps(stateDir: string, over: Partial<Parameters<typeof runEntry>[0
     log: vi.fn(),
     exit: vi.fn(),
     freeSpaceFloor: FLOOR,
+    // A 32 MiB image cannot spare 8 MiB per case and still hold the 4 MiB copies.
+    spareBytes: 1024 * 1024,
     ...over,
   };
 }
 
 /** A state folder on the small disk that one earlier start with room has used. */
-async function startedBefore(small: SmallDisk, name: string): Promise<string> {
+async function startedBefore(
+  small: SmallDisk,
+  name: string,
+  over: Partial<Parameters<typeof runEntry>[0]> = {},
+): Promise<string> {
   const stateDir = realpathSync(small.folder(name));
   mkdirSync(join(stateDir, "venue"));
   await writeRecoveryState(stateDir, FRESH);
-  const setup = entryDeps(stateDir);
+  const setup = entryDeps(stateDir, over);
   await runEntry(setup);
   expect(setup.startServer).toHaveBeenCalledTimes(1);
   return stateDir;
@@ -778,14 +784,14 @@ describe("a start on a real full disk", () => {
 
   it("a discarded recovery on a full disk with nothing to delete: the emptying is refused as a full disk, its database stays, and the full-disk page is served; once 1 MiB is freed the next start empties it and boots", async (ctx) => {
     const small = needDisk(ctx);
-    const stateDir = await startedBefore(small, "discarded-full");
+    const stateDir = await startedBefore(small, "discarded-full", { spareBytes: 0 });
     const discarded = await discardedRecovery(stateDir);
     const filler = join(stateDir, "filler");
     writeFileSync(filler, Buffer.alloc(1024 * 1024, 69));
     small.fill();
     expect(small.free()).toBeLessThan(65_536);
 
-    const full = entryDeps(stateDir);
+    const full = entryDeps(stateDir, { spareBytes: 0 });
     await runEntry(full);
     const refused = vi
       .mocked(full.log)
@@ -818,7 +824,7 @@ describe("a start on a real full disk", () => {
     expect(page).toContain(escapeHtml(OPERATOR_TEXT["storage.disk_full"]!["en-GB"].action));
 
     rmSync(filler);
-    const room = entryDeps(stateDir);
+    const room = entryDeps(stateDir, { spareBytes: 0 });
     await runEntry(room);
     expect(vi.mocked(room.log).mock.calls.map(([, event]) => event)).not.toContain(
       "setup.recovery_cleanup_refused",
@@ -834,7 +840,7 @@ describe("a start on a real full disk", () => {
     const stateDir = await startedBefore(small, "discarded-spare");
     const discarded = await discardedRecovery(stateDir);
     const spare = join(stateDir, SPARE_SPACE_FILE);
-    writeFileSync(spare, Buffer.alloc(1024 * 1024, 71));
+    expect(statSync(spare).size).toBe(1024 * 1024);
     small.fill();
     expect(small.free()).toBeLessThan(65_536);
 
@@ -847,6 +853,28 @@ describe("a start on a real full disk", () => {
     expect(() => statSync(discarded.database)).toThrow();
     expect(d.serveRecovery).not.toHaveBeenCalled();
     expect(d.startServer).toHaveBeenCalledTimes(1);
+    // The emptying freed 4 MiB, short of the spare plus 16 MiB: the spare waits for a start with room.
+    expect(() => statSync(spare)).toThrow();
+    small.unfill();
+    await runEntry(entryDeps(stateDir));
+    expect(statSync(spare).size).toBe(1024 * 1024);
+  });
+
+  it("a start with room writes the box's spare file; a full disk with nothing to free keeps it and serves the page", async (ctx) => {
+    const small = needDisk(ctx);
+    const stateDir = await startedBefore(small, "spare-kept");
+    const spare = join(stateDir, SPARE_SPACE_FILE);
+    expect(statSync(spare).size).toBe(1024 * 1024);
+    small.fill();
+    expect(small.free()).toBeLessThan(65_536);
+
+    const d = entryDeps(stateDir);
+    await runEntry(d);
+    expect(d.startServer).not.toHaveBeenCalled();
+    expect(vi.mocked(d.log).mock.calls.map(([, event]) => event)).toContain(
+      "recovery.serving_disk_full",
+    );
+    expect(statSync(spare).size).toBe(1024 * 1024);
   });
 
   it("a discarded recovery on a full disk with a rotated log: the start deletes the log, then empties the recovery and boots", async (ctx) => {

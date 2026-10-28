@@ -324,6 +324,15 @@ async function superviseSelected(
   return { env, surface, statfsCalls };
 }
 
+it("a start running from a selected backup recovery writes the spare in the configured state folder, not the recovery's target folder", async () => {
+  const f = await fixture("selected");
+  await superviseSelected(f, { spareBytes: 4096 });
+  expect((await stat(join(f.roots.stateDir, "spare-space"))).size).toBe(4096);
+  await expect(stat(join(f.target.target.stateDir, "spare-space"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
 it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
   const f = await fixture("selected");
   const backup = await resolveFirstSetupBackupEntry(f.roots);

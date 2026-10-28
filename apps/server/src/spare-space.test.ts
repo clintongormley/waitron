@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, open, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SPARE_SPACE_FILE } from "@waitron/provisioning";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { releaseSpare } from "./spare-space.js";
+import { releaseSpare, topUpSpare } from "./spare-space.js";
 
 let root: string;
 let stateDir: string;
@@ -74,5 +74,77 @@ describe("releaseSpare", () => {
     expect(await releaseSpare(stateDir, log)).toBe(0);
     expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
     expect(log).not.toHaveBeenCalled();
+  });
+});
+
+describe("topUpSpare", () => {
+  const spare = () => join(stateDir, SPARE_SPACE_FILE);
+  const MiB = 1024 * 1024;
+
+  it("writes random bytes up to the cap", async () => {
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 3 * MiB + 5, log });
+    const first = await readFile(spare());
+    expect(first.length).toBe(3 * MiB + 5);
+    await rm(spare());
+    await topUpSpare({ stateDir, bytes: 3 * MiB + 5, log });
+    const second = await readFile(spare());
+    expect(second.length).toBe(3 * MiB + 5);
+    expect(first.equals(second)).toBe(false);
+    expect(first.subarray(0, 4096).equals(Buffer.alloc(4096))).toBe(false);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("tops a short spare up and leaves a full one alone", async () => {
+    const log = vi.fn();
+    await writeFile(spare(), Buffer.alloc(1000, 7));
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    const topped = await readFile(spare());
+    expect(topped.length).toBe(4096);
+    expect(topped.subarray(0, 1000).equals(Buffer.alloc(1000, 7))).toBe(true);
+    const before = (await stat(spare())).mtimeMs;
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    expect((await readFile(spare())).equals(topped)).toBe(true);
+    expect((await stat(spare())).mtimeMs).toBe(before);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("never writes through a symbolic link", async () => {
+    const outside = join(root, "outside");
+    await writeFile(outside, "kept");
+    await symlink(outside, spare());
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    expect(await readFile(outside, "utf8")).toBe("kept");
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "link" }]]);
+  });
+
+  it("a refused write keeps what was written and logs storage.spare_write_failed with its errno", async () => {
+    const log = vi.fn();
+    let written = 0;
+    const refusing: Parameters<typeof topUpSpare>[0]["open"] = async (path, flags, mode) => {
+      const handle = await open(path, flags, mode);
+      return {
+        stat: () => handle.stat(),
+        sync: () => handle.sync(),
+        close: () => handle.close(),
+        write: async (chunk: Buffer) => {
+          if (written >= MiB) throw Object.assign(new Error("no space"), { code: "ENOSPC" });
+          written += chunk.length;
+          return handle.write(chunk);
+        },
+      };
+    };
+    await topUpSpare({ stateDir, bytes: 4 * MiB, log, open: refusing });
+    expect((await stat(spare())).size).toBe(MiB);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_write_failed", { errno: "ENOSPC" }]]);
+  });
+
+  it("writes nothing when the state folder is missing", async () => {
+    const missing = join(root, "missing");
+    const log = vi.fn();
+    await topUpSpare({ stateDir: missing, bytes: 4096, log });
+    expect(existsSync(missing)).toBe(false);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_write_failed", { errno: "ENOENT" }]]);
   });
 });

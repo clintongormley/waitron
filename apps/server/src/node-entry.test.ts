@@ -2198,3 +2198,60 @@ describe("serveRecovery and the box's tls folder", () => {
     },
   );
 });
+
+describe("the box's spare file", () => {
+  const MiB = 1024 * 1024;
+  const free = (bytes: number) => async () => ({ bavail: bytes, frsize: 1 });
+  const spareIn = (stateDir: string) => join(stateDir, "spare-space");
+
+  it("a start with room writes the spare file in the box's configured state folder", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const d = deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 4096 });
+    await runEntry(d);
+    expect((await stat(spareIn(stateDir))).size).toBe(4096);
+    expect(d.startServer).toHaveBeenCalledOnce();
+  });
+
+  it("a start with less than the spare plus 16 MiB free writes none", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await runEntry(deps({ stateDir, statfs: free(16 * MiB + 4095), spareBytes: 4096 }));
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+  });
+
+  it("a start that serves the full-disk page writes none", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    const full = Object.assign(new Error("no space"), { code: "ENOSPC" });
+    const d = deps({
+      stateDir,
+      statfs: free(MiB),
+      spareBytes: 4096,
+      writeRecoveryState: vi.fn(() => Promise.reject(full)),
+    });
+    await runEntry(d);
+    expect(d.serveRecovery).toHaveBeenCalledOnce();
+    expect(d.log).toHaveBeenCalledWith("warn", "recovery.serving_disk_full", expect.anything());
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+  });
+
+  it("a start whose spare path is a folder logs storage.spare_unusable and still boots", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await mkdir(spareIn(stateDir));
+    const d = deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 4096 });
+    await runEntry(d);
+    expect(d.log).toHaveBeenCalledWith("warn", "storage.spare_unusable", { kind: "folder" });
+    expect((await lstat(spareIn(stateDir))).isDirectory()).toBe(true);
+    expect(d.startServer).toHaveBeenCalledOnce();
+  });
+
+  it("runEntry's default spare size is SPARE_SPACE_BYTES", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await runEntry(deps({ stateDir, statfs: free(1024 * MiB) }));
+    expect((await stat(spareIn(stateDir))).size).toBe(8_388_608);
+  });
+
+  it("spareBytes 0 keeps no spare", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-spare-"));
+    await runEntry(deps({ stateDir, statfs: free(1024 * MiB), spareBytes: 0 }));
+    expect(existsSync(spareIn(stateDir))).toBe(false);
+  });
+});

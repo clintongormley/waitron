@@ -54,7 +54,8 @@ import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { SPARE_SPACE_BYTES, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
@@ -123,6 +124,8 @@ export interface EntryDeps {
   freeSpaceFloor?: number;
   /** Reads a folder's filesystem; defaults to the real `statfs`. */
   statfs?: Statfs;
+  /** The spare file's size; defaults to `SPARE_SPACE_BYTES`, and `0` keeps none. */
+  spareBytes?: number;
 }
 
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
@@ -390,6 +393,14 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     );
     deps.log("warn", "recovery.serving_disk_full", { freeBytes: check.freeBytes });
     return;
+  }
+
+  const spareBytes = deps.spareBytes ?? SPARE_SPACE_BYTES;
+  if (spareBytes > 0) {
+    const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+    if (lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES) {
+      await topUpSpare({ stateDir: deps.stateDir, bytes: spareBytes, log: deps.log });
+    }
   }
 
   if (admission.kind === "refused") {
