@@ -453,4 +453,19 @@ describe("duplicateMenu", () => {
       expect(await rowsOf(f.desserts)).toEqual(other);
     },
   );
+  it("compares an inactive menu's composed name without removing accents", async () => {
+    const f = await fixture();
+    const held = await app((tx) => createCatalogue(tx, { name: "Caf\u00e9" }));
+    await app((tx) =>
+      tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, held.id)),
+    );
+    const before = await fx.db.select().from(catalogues);
+    await expect(app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).rejects.toMatchObject({
+      code: "menu.name_taken",
+      params: { field: "name" },
+    });
+    expect(await fx.db.select().from(catalogues)).toEqual(before);
+    const distinct = await app((tx) => duplicateMenu(tx, f.lunch, "Cafe"));
+    expect(distinct.name).toBe("Cafe");
+  });
 });

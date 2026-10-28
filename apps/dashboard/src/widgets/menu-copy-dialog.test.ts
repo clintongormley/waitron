@@ -60,3 +60,21 @@ it.each(
     await page.viewport(...size);
   }
 });
+
+it("keeps a whitespace-only name quiet and disables Copy", async () => {
+  const { el: form } = await mountWidget<MenuCopyDialog>("dashboard-menu-copy-dialog", {
+    open: true,
+    menu: { id: "lunch", name: "Lunch" },
+    api: { duplicateCatalogue: vi.fn() },
+  });
+  const input = form.shadowRoot!.querySelector("wt-input")!;
+  await input.updateComplete;
+  await userEvent.fill(page.elementLocator(input.shadowRoot!.querySelector("input")!), "   ");
+  await form.updateComplete;
+  const copy =
+    form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=copy]")!;
+  expect(copy.disabled).toBe(true);
+  expect(copy.variant).toBe("secondary");
+  expect(input.error).toBe("");
+  expect(form.shadowRoot!.querySelector("wt-form-actions")!.error).toBe("");
+});
