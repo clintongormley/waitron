@@ -177,6 +177,13 @@ export {
   type WtComboboxAppearance,
 } from "./components/wt-combobox.js";
 export { WtColourChooser, type ColourChoice } from "./components/wt-colour-chooser.js";
+export {
+  WtAddressLookup,
+  type AddressChosenDetail,
+  type AddressLookupProvider,
+  type AddressLookupResult,
+  type AddressLookupSuggestion,
+} from "./components/wt-address-lookup.js";
 
 export { readableTextColor, isHexColor, CATEGORY_PALETTE, paleSwatch } from "./category-color.js";
 

@@ -32,6 +32,7 @@ import "../src/components/wt-menu-row.js";
 import "../src/components/wt-help-switch.js";
 import "../src/components/wt-help-tooltip.js";
 import "../src/components/wt-combobox.js";
+import "../src/components/wt-address-lookup.js";
 import "../src/components/wt-colour-chooser.js";
 import "../src/components/wt-count-badge.js";
 import "../src/components/wt-choice-row.js";
@@ -140,6 +141,15 @@ const panel = (theme: "light" | "dark") => `
           allow-add
         ></wt-combobox>
       </div>
+      <wt-address-lookup
+        label="Find the address"
+        placeholder="Street and number"
+        country-code="ES"
+        no-results-label="No address found."
+        unavailable-label="Suggestions are not available."
+        class="demo-address-lookup"
+        style="margin-top:16px"
+      ></wt-address-lookup>
       <div class="row" style="margin-top:16px">
         <wt-colour-chooser
           label="Colour"
@@ -502,6 +512,19 @@ for (const el of app.querySelectorAll<HTMLElement>(".panel")) {
   ];
   const single = el.querySelector<HTMLElementTagNameMap["wt-combobox"]>(".demo-combobox")!;
   single.options = DEMO_TAGS;
+  el.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(".demo-address-lookup")!.provider = {
+    suggest: async ({ query }) => [
+      { id: "1", label: `${query} 1`, secondaryLabel: "28013 Madrid" },
+      { id: "2", label: `${query} 2`, secondaryLabel: "28013 Madrid" },
+    ],
+    resolve: async () => ({
+      lines: ["Calle Mayor 1"],
+      locality: "Madrid",
+      administrativeAreaCode: "28",
+      postalCode: "28013",
+      countryCode: "ES",
+    }),
+  };
   // A property, not a `search-placeholder` attribute: only `allowAdd` declares a kebab-case
   // attribute name, so lit would look for `searchplaceholder` and silently keep the default.
   single.searchPlaceholder = "Search or add new";

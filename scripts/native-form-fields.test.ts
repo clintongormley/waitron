@@ -35,6 +35,7 @@ const EXEMPT_FILES = new Set([
   "packages/ui-core/src/components/wt-input.ts",
   "packages/ui-core/src/components/wt-textarea.ts",
   "packages/ui/src/components/wt-combobox.ts",
+  "packages/ui/src/components/wt-address-lookup.ts",
   "packages/ui/src/components/wt-price-input.ts",
   "packages/ui/src/components/wt-number-stepper.ts",
   "packages/ui/src/components/wt-data-table.ts",

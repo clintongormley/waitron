@@ -104,6 +104,14 @@ export const venueEn = {
     "This text describes the sale on every record sent to the tax agency. Keep the suggested wording for ordinary shop sales. The receipt language does not translate this text. You can change it in the dashboard for future records.",
   "venue.hint.address_line1": "Street and building number",
   "venue.hint.address_line2": "Floor, unit or other detail",
+  "venue.address_lookup.label": "Find the address",
+  "venue.address_lookup.domicile_label": "Find the registered address",
+  "venue.address_lookup.placeholder": "Start typing the street and number",
+  "venue.address_lookup.no_results": "No address found. Type it below.",
+  "venue.address_lookup.unavailable":
+    "Address suggestions are not available. Type the address below.",
+  "venue.address_lookup.other_country":
+    "That address is not in {country}. Choose another or type it below.",
   "venue.hint.postal_code": "Used to suggest the province",
   "venue.hint.city": "Town or city",
   "venue.help.province":
@@ -342,6 +350,14 @@ export const venueEs: Record<keyof typeof venueEn, string> = {
     "Este texto describe la venta en cada registro que se envía a la Agencia Tributaria. Mantén el texto propuesto para las ventas habituales en tienda. El idioma del recibo no traduce este texto. Puedes cambiarlo en el panel de control para los registros futuros.",
   "venue.hint.address_line1": "Calle y número",
   "venue.hint.address_line2": "Piso, puerta u otro detalle",
+  "venue.address_lookup.label": "Buscar la dirección",
+  "venue.address_lookup.domicile_label": "Buscar el domicilio fiscal",
+  "venue.address_lookup.placeholder": "Empieza a escribir la calle y el número",
+  "venue.address_lookup.no_results": "No se ha encontrado la dirección. Escríbela abajo.",
+  "venue.address_lookup.unavailable":
+    "Las sugerencias de direcciones no están disponibles. Escribe la dirección abajo.",
+  "venue.address_lookup.other_country":
+    "Esa dirección no está en {country}. Elige otra o escríbela abajo.",
   "venue.hint.postal_code": "Sirve para proponer la provincia",
   "venue.hint.city": "Pueblo o ciudad",
   "venue.help.province":
