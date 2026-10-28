@@ -16,6 +16,10 @@ pictures belong to that practice restaurant; you still choose and replace pictur
 In the Valencian Community, the demo's photograph library uses Valencian staff names,
 such as **All i pebre** and **Orxata amb fartons**, with its regional pictures.
 
+In Galicia, the demo's photograph library uses Galician staff names such as
+**Empanada galega** and **Filloas**, with the regional pictures. You choose and
+replace these pictures in the same way.
+
 ## Choose your content languages {#languages}
 
 A new venue starts with its content languages already chosen: the languages Waitron keeps enabled

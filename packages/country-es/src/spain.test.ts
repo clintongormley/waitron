@@ -417,7 +417,7 @@ describe("regional demo identities", () => {
     },
   );
   it("leaves the Madrid and other regional demos on the country default", () => {
-    for (const code of ["28", "15"])
+    for (const code of ["28", "41"])
       expect(SPAIN.administrativeAreas.find((area) => area.code === code)?.demo).toBeUndefined();
   });
 });
@@ -430,5 +430,13 @@ it.each(["03", "12", "46"])("selects the Valencian demo only in province %s", (c
   });
   expect(area.defaultLocale).toBe("ca-ES");
   expect(area.defaultContentLocale).toBe("ca-ES-valencia");
+  expect(area.fixedReceiptLocale).toBeUndefined();
+});
+
+it.each(["15", "27", "32", "36"])("selects the Galician demo only in province %s", (code) => {
+  const area = SPAIN.administrativeAreas.find((area) => area.code === code)!;
+  expect(area.demo).toStrictEqual({ dataSet: "casa-delgado-gl", locationName: "A Casa Delgado" });
+  expect(area.defaultLocale).toBe("gl-ES");
+  expect(area.defaultContentLocale).toBe("gl-ES");
   expect(area.fixedReceiptLocale).toBeUndefined();
 });

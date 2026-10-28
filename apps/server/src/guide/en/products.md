@@ -341,6 +341,13 @@ and Drinks includes **Copa de vi de Requena**. Staff and kitchen names use Valen
 while the screens remain English or Spanish. Customer text starts in Valencian,
 Spanish and English; receipts default to Spanish.
 
+
+In Galicia, your demo starts as **A Casa Delgado**. Its **Especialidades da casa**
+section includes **Empanada galega**, **Lacón con grelos** and **Filloas**, and Drinks
+includes **Copa de Albariño**. Staff and kitchen names use Galician in English and
+Spanish screens. Customer text starts in Galician, Spanish and English; receipts
+default to Spanish.
+
 During setup, the suggested restaurant name follows the postcode or province until you edit it.
 Once you type a name, Waitron keeps it when you change the region, including after Review and Back.
 

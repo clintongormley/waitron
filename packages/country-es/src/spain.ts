@@ -274,7 +274,9 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
       ? { demo: { dataSet: "casa-delgado-ca", locationName: "Can Delgado" } }
       : VALENCIAN_PROVINCES.has(code)
         ? { demo: { dataSet: "casa-delgado-valencia", locationName: "Casa Delgado de l'Horta" } }
-        : {}),
+        : GALICIAN.has(code)
+          ? { demo: { dataSet: "casa-delgado-gl", locationName: "A Casa Delgado" } }
+          : {}),
   }),
 );
 

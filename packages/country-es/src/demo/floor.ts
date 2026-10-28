@@ -2,12 +2,24 @@ import type { CountryDemoZone, CountryDemoRawTable } from "@waitron/country";
 export const DEMO_ZONES = [
   {
     key: "dining",
-    name: { en: "Dining room", es: "Comedor", ca: "Menjador", "ca-ES-valencia": "Menjador" },
+    name: {
+      en: "Dining room",
+      es: "Comedor",
+      ca: "Menjador",
+      "ca-ES-valencia": "Menjador",
+      gl: "Comedor",
+    },
     displayOrder: 0,
   },
   {
     key: "terrace",
-    name: { en: "Terrace", es: "Terraza", ca: "Terrassa", "ca-ES-valencia": "Terrassa" },
+    name: {
+      en: "Terrace",
+      es: "Terraza",
+      ca: "Terrassa",
+      "ca-ES-valencia": "Terrassa",
+      gl: "Terraza",
+    },
     displayOrder: 1,
   },
   {
@@ -17,6 +29,7 @@ export const DEMO_ZONES = [
       es: "Bar de abajo",
       ca: "Bar de baix",
       "ca-ES-valencia": "Bar de baix",
+      gl: "Bar de abaixo",
     },
     displayOrder: 2,
   },

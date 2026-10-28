@@ -441,28 +441,9 @@ until A977).
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices
   (`spain.ts:199–235`, already `{ en, es }`). A holiday carrying an English name beside the official
   one may need a schema change — ask before adding one.
-- **A972 — point 6: demo data per country pack and region.** Designed 2026-10-27 in
-  [the A972 design](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md);
-  the owner answered all four questions. Follow the
-  [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md):
-  first move Spain's data and pictures into its pack with shared seeding code, then
-  supply English and Spanish plain names, then add Catalonia with the Balearic
-  Islands, Valencia and Galicia in separate changes. The first cut has an
-  independently captured Madrid database baseline for English and Spanish, with
-  row, relationship, credential and media checks. Its data and unchanged picture
-  bytes now live behind the country pack's secondary demo export; shared server
-  writers adapt its structural records to domain types.
-  Staff and kitchen names now resolve English/Spanish pairs, including modifiers, reporting
-  categories, stations and reused menu periods. The frozen Madrid comparison permits only
-  explicit name-cell changes and their dependent identities/publication hashes, plus the column renames
-  listed in `RENAMED_COLUMNS` (`seed.madrid-baseline.test.ts`; today `sale_receipt_guests.guests` →
-  `guest_count`, A1164), which fail when unused.
-  Catalonia and the Balearic Islands now share Can Delgado, with seven regional dishes, cava and Catalan plain names. Valencia now adds Casa Delgado de l'Horta, seven regional dishes, Requena wine and Valencian plain names. Galicia remains open. Regional restaurant defaults follow the
-  province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
-  staff apps' language. The durable owner decisions are below.
 - **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in
   English/Spanish, both themes and phone/desktop widths when the development stack can start.
-  The Catalan and Valencian cuts' local launches refused at Mailpit's absent Docker socket; their native setup
+  The regional cuts' local launches refused at Mailpit's absent Docker socket; their native setup
   component views and database/media checks do not qualify those live screens.
 - **Demo media regeneration changes the committed Negroni picture.** The moved
   generator produces different pixels for Negroni; a decoded-pixel comparison
@@ -648,7 +629,12 @@ and preserve a name someone has typed. Staff and kitchen names use the region's
 language even when the staff screens are in English or Spanish. This applies to
 demo data only; the A918 starter-content policy below stays separate. The
 [design update](../superpowers/specs/2026-10-27-a972-demo-data-per-country-and-region-design.md)
-records the four answers.
+records the four answers. Spain owns its demo records and pictures behind secondary
+exports; ordinary browser entries stay separate. Madrid keeps its frozen database
+comparison. Catalonia and the Balearic Islands share Can Delgado; Valencia uses
+Casa Delgado de l'Horta and Galicia uses A Casa Delgado. No further country demos
+are included in these five cuts. The [implementation plan](../superpowers/plans/2026-10-27-a972-demo-country-region.md)
+records the delivered scope; live seeded-screen qualification remains separate.
 
 **A918 starter content in the venue's languages (owner, 2026-10-19, 2026-10-20 and 2026-10-27).**
 The owner: "These default starter names in the general module should be in English only, and

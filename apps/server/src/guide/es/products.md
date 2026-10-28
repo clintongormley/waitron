@@ -360,6 +360,13 @@ en valenciano mientras las pantallas siguen en español o inglés. Los textos pa
 el cliente empiezan en valenciano, español e inglés; los tiques salen en español
 por defecto.
 
+
+En Galicia, la demostración empieza como **A Casa Delgado**. Su sección
+**Especialidades da casa** incluye **Empanada galega**, **Lacón con grelos** y
+**Filloas**, y Bebidas incluye **Copa de Albariño**. Los nombres internos y de cocina
+están en gallego aunque las pantallas estén en español o inglés. Los textos para
+el cliente empiezan en gallego, español e inglés; los tiques salen en español por defecto.
+
 Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.
 Después de escribir un nombre, Waitron lo conserva al cambiar de región, también al revisar y volver.
 

@@ -1,5 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
+import {
+  DEMO_BASELINE_FIXTURE_ROOTS,
+  GALICIA_DEMO_TEXT,
+} from "@waitron/country-packs/demo/testing";
 const catalan = (
   JSON.parse(
     await readFile(
@@ -164,6 +167,7 @@ describe("demo data sets", () => {
       es: "Bebidas",
       ca: catalan.drinks,
       "ca-ES-valencia": catalan.drinks,
+      gl: GALICIA_DEMO_TEXT.drinksMenu,
     });
     expect(set).not.toHaveProperty("watcherName");
     expect(set.floor.departmentNames).toEqual({
@@ -172,20 +176,29 @@ describe("demo data sets", () => {
         es: "Restaurante y bar",
         ca: catalan.restaurant,
         "ca-ES-valencia": catalan.restaurant,
+        gl: GALICIA_DEMO_TEXT.restaurantDepartment,
       },
-      deli: { en: "Deli", es: "Charcutería", ca: catalan.deli, "ca-ES-valencia": catalan.deli },
+      deli: {
+        en: "Deli",
+        es: "Charcutería",
+        ca: catalan.deli,
+        "ca-ES-valencia": catalan.deli,
+        gl: GALICIA_DEMO_TEXT.deliDepartment,
+      },
     });
     expect(set.floor.upstairsBarZone).toEqual({
       en: "Upstairs bar",
       es: "Bar de arriba",
       ca: catalan.upstairs,
       "ca-ES-valencia": catalan.upstairs,
+      gl: GALICIA_DEMO_TEXT.upstairsBar,
     });
     expect(set.floor.deliCounterZone).toEqual({
       en: "Deli counter",
       es: "Mostrador de charcutería",
       ca: catalan.counter,
       "ca-ES-valencia": catalan.counter,
+      gl: GALICIA_DEMO_TEXT.counter,
     });
   });
 

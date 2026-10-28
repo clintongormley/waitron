@@ -1,4 +1,4 @@
-import { VALENCIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
+import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
@@ -145,5 +145,38 @@ for (const locale of ["en-GB", "es-ES"] as const)
     const customRestored = await mount({ mode: "demo", ...custom });
     await fill(customRestored, "postalCode", "46001");
     expect((await native(customRestored, "name")).value).toBe(VALENCIA_DEMO_TEXT.locationName);
+    expect((await submit(customRestored))[0]!.demoLocationNameSource).toBe("custom");
+  });
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  it(`keeps automatic and custom Galician names through restored drafts (${locale})`, async () => {
+    setLocale(locale);
+    const el = await mount();
+    await fill(el, "postalCode", "15001");
+    expect((await native(el, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
+    const automatic = (await submit(el))[0]!;
+    expect(automatic).toMatchObject({
+      demoLocationNameSource: "automatic",
+      venue: {
+        location: {
+          name: GALICIA_DEMO_TEXT.locationName,
+          province: GALICIA_DEMO_TEXT.province,
+          invoiceLocales: ["es-ES"],
+        },
+      },
+    });
+    cleanupWidgets();
+    const restored = await mount({ mode: "demo", ...automatic });
+    await fill(restored, "postalCode", "08001");
+    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.catalanLocation);
+    await fill(restored, "name", GALICIA_DEMO_TEXT.locationName);
+    await fill(restored, "postalCode", "28013");
+    expect((await native(restored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
+    const custom = (await submit(restored))[0]!;
+    expect(custom.demoLocationNameSource).toBe("custom");
+    cleanupWidgets();
+    const customRestored = await mount({ mode: "demo", ...custom });
+    await fill(customRestored, "postalCode", "15001");
+    expect((await native(customRestored, "name")).value).toBe(GALICIA_DEMO_TEXT.locationName);
     expect((await submit(customRestored))[0]!.demoLocationNameSource).toBe("custom");
   });

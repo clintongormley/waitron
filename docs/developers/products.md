@@ -941,6 +941,9 @@ demo-only override; customer content remains Catalan, Spanish and English.
 The Valencian Community selects `casa-delgado-valencia`, with Casa Delgado de l'Horta
 as its location default. Its plain names use `ca-ES-valencia`; content starts in
 Valencian, Spanish and English, while its default receipt language stays `es-ES`.
+Galicia selects `casa-delgado-gl`, with A Casa Delgado as its location default.
+Its plain names use `gl`, content starts in Galician, Spanish and English, and
+receipts default to `es-ES`.
 The staff screens remain English or Spanish. Madrid retains English/Spanish
 staff-name selection and its frozen database comparison.
 

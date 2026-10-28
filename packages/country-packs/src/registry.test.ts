@@ -345,3 +345,24 @@ it.each([
     locationName: VALENCIA_DEMO_TEXT.locationName,
   });
 });
+
+it.each([
+  "15",
+  "27",
+  "32",
+  "36",
+  "Coruña, A",
+  "A Coruña",
+  "La Coruña",
+  "Lugo",
+  "Ourense",
+  "Orense",
+  "Pontevedra",
+])("resolves the Galician demo from stored province %s", async (area) => {
+  const { resolveInstalledDemoIdentity } = await import("./registry.js");
+  expect(resolveInstalledDemoIdentity({ country: "ES", area })).toStrictEqual({
+    ...getCountryPack("ES")!.demo,
+    dataSet: "casa-delgado-gl",
+    locationName: "A Casa Delgado",
+  });
+});

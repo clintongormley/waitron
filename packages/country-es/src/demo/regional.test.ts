@@ -274,3 +274,133 @@ describe("Valencian practice restaurant", () => {
     }
   });
 });
+
+describe("Galician practice restaurant", () => {
+  function galician(): CountryDemoData {
+    expect(demos).toHaveProperty("CASA_DELGADO_GL");
+    return (demos as unknown as Record<string, CountryDemoData>).CASA_DELGADO_GL!;
+  }
+  it("adds regional dishes and wine while preserving inherited customer wording", () => {
+    const set = galician();
+    expect(set.id).toBe("casa-delgado-gl");
+    expect(set.mediaDataSet).toBe("casa-delgado-gl");
+    expect(set.plainNameLanguage).toBe("gl");
+    expect(set.contentLanguages).toEqual(["gl", "es", "en"]);
+    const all = (data: CountryDemoData) =>
+      [data.menus.restaurant, data.menus.deli, data.menus.lunch].flatMap((m) =>
+        m.categories.flatMap((c) => c.products),
+      );
+    const products = all(set);
+    const originals = all(demos.CASA_DELGADO_ES);
+    expect(products).toHaveLength(originals.length + 8);
+    for (const original of originals) {
+      const actual = products.find((p) => p.image === original.image)!;
+      expect(actual.customerName).toStrictEqual(original.customerName);
+      expect(actual.description).toStrictEqual(original.description);
+      expect(actual.variants?.map((v) => v.customerName)).toStrictEqual(
+        original.variants?.map((v) => v.customerName),
+      );
+    }
+    const names = [
+      "Empanada galega",
+      "Caldo galego",
+      "Lacón con grelos",
+      "Filloas",
+      "Xoubas fritidas",
+      "Mexillóns ao vapor",
+      "Bica",
+      "Copa de Albariño",
+    ];
+    const images = [
+      "empanada",
+      "caldo",
+      "lacon",
+      "filloas",
+      "xoubas",
+      "mexillons",
+      "bica",
+      "albarino",
+    ];
+    const added = images.map((image) => products.find((p) => p.image === `galicia-${image}.png`)!);
+    expect(added.map((p) => p.staffName?.["gl"])).toEqual(names);
+    expect(added.map((p) => p.unitPrice)).toEqual([
+      "8.50",
+      "6.50",
+      "14.50",
+      "5.50",
+      "9.50",
+      "10.50",
+      "5.50",
+      "4.50",
+    ]);
+    expect(added.map((p) => p.vatClass)).toEqual([...Array(7).fill("reduced"), "general"]);
+    const section = set.menus.restaurant.categories.at(-1)!;
+    expect(section.name["gl"]).toBe("Especialidades da casa");
+    expect(section.station).toBe("kitchen");
+    expect(set.menus.restaurant.categories).toHaveLength(
+      demos.CASA_DELGADO_ES.menus.restaurant.categories.length + 1,
+    );
+    expect(demos.CASA_DELGADO_ES.menus.restaurant.categories.map((c) => c.color)).not.toContain(
+      section.color,
+    );
+    expect(
+      set.menus.restaurant.categories.find((c) => c.products.includes(added[7]!))?.station,
+    ).toBe("bar");
+    expect(new Set(products.map((p) => p.image)).size).toBe(products.length);
+    for (const product of added) {
+      expect(Object.keys(product.customerName).sort()).toEqual(["en", "es", "gl"]);
+      expect(product.pricingUnit).toBe("each");
+      expect(product.variants).toBeUndefined();
+      expect(product.dietaryDeclarations).toBeUndefined();
+    }
+  });
+  it("provides complete Galician plain maps and distinct product names", () => {
+    const set = galician();
+    let pairs = 0;
+    function visit(value: unknown) {
+      if (!value || typeof value !== "object") return;
+      const map = value as Record<string, unknown>;
+      if (typeof map.en === "string" && typeof map.es === "string") {
+        expect(map["gl"], map.en).toBeTypeOf("string");
+        pairs++;
+      } else for (const child of Object.values(map)) visit(child);
+    }
+    visit(set);
+    expect(pairs).toBeGreaterThan(150);
+    for (const m of [set.menus.restaurant, set.menus.deli, set.menus.lunch])
+      for (const c of m.categories)
+        for (const p of c.products) {
+          expect(
+            new Set([
+              p.staffName?.["gl"]?.toLowerCase(),
+              p.kitchenName?.["gl"]?.toLowerCase(),
+              p.customerName["gl"]?.toLowerCase(),
+            ]).size,
+            p.image,
+          ).toBe(3);
+          for (const v of p.variants ?? [])
+            expect(
+              new Set([v.staffName?.["gl"], v.kitchenName?.["gl"], v.customerName["gl"]]).size,
+            ).toBe(3);
+        }
+  });
+  it("provides regional people and unchanged account capabilities without credentials", () => {
+    const people = galician().staff;
+    expect(people.map((p) => p.displayName)).toEqual([
+      "Xoán Varela",
+      "Uxía Castro",
+      "Brais López",
+      "Iria Fernández",
+      "Antón Souto",
+    ]);
+    expect(people.map((p) => p.email)).toEqual(
+      ["manager", "uxia", "brais", "iria", "anton"].map((n) => `${n}@demo.waitron.local`),
+    );
+    expect(people.map((p) => p.role)).toEqual(["manager", "supervisor", "staff", "staff", "staff"]);
+    expect(people.map((p) => p.dashboardLogin)).toEqual([true, false, false, false, false]);
+    for (const p of people) {
+      expect(p).not.toHaveProperty("pin");
+      expect(p).not.toHaveProperty("password");
+    }
+  });
+});

@@ -17,6 +17,10 @@ En la Comunitat Valenciana, la biblioteca de fotografías de demostración usa n
 internos en valenciano, como **All i pebre** y **Orxata amb fartons**, con sus imágenes
 regionales.
 
+En Galicia, la biblioteca de fotografías de demostración usa nombres internos
+en gallego, como **Empanada galega** y **Filloas**, con sus imágenes regionales.
+Las eliges y sustituyes de la misma manera.
+
 ## Elige los idiomas de tu contenido {#languages}
 
 Un local nuevo empieza con los idiomas que Waitron mantiene activados para su región, más el inglés.

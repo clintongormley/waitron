@@ -202,3 +202,15 @@ it.each([
   expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-valencia");
   expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
 });
+
+it.each(["Coruña, A", "Lugo", "Ourense", "Pontevedra"])(
+  "selects Galician demo from stored %s even with a stale Madrid request",
+  async (province) => {
+    await suite.db.execute(
+      sql`update locations set province=${province} where id=${RESULT.locationId}`,
+    );
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
+    expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-gl");
+    expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
+  },
+);
