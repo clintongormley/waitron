@@ -78,45 +78,62 @@ for between two and three the copy into the folder fails `ENOSPC` with nothing s
 (who is told of automatic deletions; whether a refused backup is emailed; A1127 slice 3's dialog; the
 full-disk page's button).
 
-## Automatic upgrades that can be undone until the first order
+<a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
-**A950 design proposal, 2026-10-27; no approval or build.** The
-[proposal](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) keeps the owner's
-2026-10-02 sequence: stop, snapshot the whole state, migrate with sales refused, check, then
-use; restore the matching old state and image if the check fails. “Rolling back is not a fix.”
-The first order, rather than the restart, is the owner's stated point of no return. Automatic
-rollback is required before go-live (owner, 2026-10-21).
+## Automatic upgrades with rollback until a clean, running restart
 
-One policy question remains: a clock-in, PIN change, refund or automatic filing can precede the first new order.
-The proposal recommends closing rollback before the first state-changing use or external effect,
-with a durable host admission marker written before execution. That broader boundary is
-**not approved**. Automatic-on, the 03:00–05:00 quiet window, bounded attempts/quarantine and
-spare-first sequencing are explicitly proposed defaults.
+**A950 revised proposal, 2026-10-28; needs-owner-review for the whole design, no build authority.**
+The [proposal](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
+owner's 28 October answer: rollback closes automatically only after a successful restart of
+the new version, a confirmed clean database upgrade and confirmation that the system is running
+and answering. This supersedes the earlier “until the first order” title and sequence, including
+older summaries elsewhere in this file. Automatic rollback remains required before go-live
+(owner, 2026-10-21). “Rolling back is not a fix.”
 
-The design fits B3's five encrypted subvolumes. It specifies complete stopped-state inventory,
-old images retained by immutable digest plus container references, logs/host recovery evidence
-outside rollback, a monotonic start-again overlay bound after A1099's release, trial suppression
-of every external/background effect, readiness beyond `/health`, frozen bucket/spare heads and
-qualified postcommit publication. Healthy overnight readiness waits for a real staff or scheduled
-action; it has no idle timeout or acceptance button that closes rollback. Stop leaves the screen
-and cannot cancel an admitted operation. It separates app updates from B3 host/TPM updates and proposes
-the signed release manifest/A1049 hold boundary without changing Cloud. Non-B3 disks need a
-separately qualified whole-state copy adapter. Failure reporting stays local with existing
-authorised notifications; A9/Cloud reporting and A1016 backup/support choices remain open.
+The host keeps business writes and external effects suppressed during validation, durably records
+closure after fresh successful checks, then releases normal requests and duties. No first order,
+first real change, scheduled action or acceptance button closes rollback. A healthy checked version
+does not wait overnight for staff. Sign-in, clock-ins, PIN changes, refunds, filing and qualified
+backup publication are no longer held by the updater after closure. A later failure preserves
+current state and needs repair; the saved old state is never offered after closure.
+
+Proposed clean-database checks cover the actual packaged enabled migration sets and dependencies,
+no incomplete/ahead sets, database integrity, foreign keys, full protection definitions and
+identity/fiscal/workforce/history/allocation preservation. Running checks require fresh local
+TLS/listener and representative passive menu/config/history responses bound to the same candidate,
+boot and attempt. Health/setup/recovery 200 or a started process alone is insufficient. No venue
+test sale or forced staff login is required. These are **UNVERIFIED acceptance requirements**.
+Automatic-on, the 03:00–05:00 quiet window, bounded attempts/quarantine and spare-first remain
+proposals awaiting full-design approval, not new owner decisions.
+
+The design retains B3's five encrypted subvolumes, complete stopped-state inventory, old images
+by immutable digest plus container references, logs/host evidence outside rollback and the
+monotonic start-again overlay. Closure/rollback races and lost completion answers use a durable
+host journal; uncertain evidence stops admission rather than guessing. RESTORED retires that
+attempt's restore permission before old service reopens. Normal work needs no per-operation
+updater roundtrip. Bucket/spare publication stays frozen during validation, with qualified
+handoff after closure. The spare closes its own boundary before following newer primary data;
+the primary keeps selling while it validates. Mixed-version contracts and A947 membership remain
+gates. External outages do not block successful local closure or ordinary sales.
+
+App updates remain separate from B3 host/TPM updates. Signed manifest/A1049 Cloud hold checks
+precede freeze without putting Cloud on the sale path. Non-B3 disks need a separately qualified
+whole-state copy adapter. Failure reporting stays local with proposed existing authorised
+notifications; A9/Cloud reporting and A1016 backup/support choices remain separate.
 
 **The series-name note** (owner, 2026-10-24, A1042 Q5): rollback keeps the newer floor. An ordinary
-upgrade never advances it or chooses a new installation name. Moving it when setup, restore,
-promotion or an exceptional provider-name change chooses a name remains the
-separate setup entry, “Move the start-again note whenever a series name is put into use, and when
-a plain reset ends an unfinished setup”. Preserve future name/damage-unknown evidence, not just
-known-name notes; no downgrade bypass or direct recovery/lock-file rewrite is proposed.
+upgrade never advances it or chooses a new installation name. The separate setup entry governs
+when setup, restore, promotion or an exceptional provider-name change puts a name into use. Preserve released name-unknown and
+damage-unknown evidence, not just known-name notes; no downgrade bypass or direct recovery/lock-file
+rewrite is proposed. Bind the overlay against the released helpers and both candidate/old parsers.
 
-Source inspection is READ evidence only, with literal anchors in the proposal. No A950 Linux,
-VM, TPM, btrfs, bucket or two-box runtime qualification has run; A799's actual historical
-qualification, B3's hardware/trust holds and separate build authority remain gates. The
-[proposed static mockups](mockups/a950-automatic-upgrades/README.md) illustrate status only, not
-product-rendering evidence. One fresh builder review is incorporated; the next step is the one
-policy question.
+The source inventory is explicitly historical READ evidence at
+`9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
+A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
+A799 historical qualification, B3 hardware/trust holds and separate build authority remain gates.
+The [revised mockups and EN/ES copy](mockups/a950-automatic-upgrades/README.md) show validation,
+restoration and completion in both themes and at phone/desktop widths. The closing policy
+question is resolved; full design approval is still requested.
 
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 

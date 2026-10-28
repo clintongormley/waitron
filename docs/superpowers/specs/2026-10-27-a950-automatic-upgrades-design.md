@@ -1,23 +1,27 @@
-# A950: automatic app upgrades with a recoverable trial
+<a id="a950-automatic-app-upgrades-with-a-recoverable-trial"></a>
 
-**PROPOSAL, 27 October 2026. No design or build approval is recorded here.**
-You need the box to update without losing yesterday's records or tonight's work. If the
-new version fails its checks before you use it, the proposed updater restores the complete
-stopped state and the exact previous images. Rolling back keeps you trading; it does not
-fix the failed release. A950 is required before go-live, by the owner's 21 October decision.
+# A950: automatic app upgrades with rollback until a clean, running restart
 
-The owner's boundary remains **“the first order taken on the new version”**, not the restart.
-Section 2 asks one unresolved policy question because other acknowledged work can precede
-that order. Until answered, the broader boundary below is a recommendation, not permission
-to implement it. All choices labelled **my call** are proposed and unapproved.
+**PROPOSAL, revised 28 October 2026. Status: needs-owner-review for the whole design.
+No whole-design or build approval is recorded here.**
+You need the box to update without losing yesterday's records or tonight's work. The
+proposed updater keeps the complete stopped state and exact previous images while it checks
+the new version. Rollback closes automatically after a successful restart, a clean database
+upgrade and confirmation that the system is running and answering. Normal work then resumes.
+Rolling back keeps you trading; it does not fix the failed release. A950 is required before
+go-live, by the owner's 21 October decision.
+
+**Dated supersession, 28 October:** the owner's answer replaces the earlier first-order and
+first-real-action boundaries, including any healthy READY wait or acceptance step. It settles
+only the closing rule. Automatic-on, 03:00–05:00, spare-first and all choices labelled **my call**
+remain proposed and unapproved. The complete revised design still needs owner approval.
 
 ## 1. Contracts and evidence status
 
 This is a design, not an implementation plan. It changes no fiscal hash, chain, allocation,
 invoice writer or installation name. An ordinary upgrade continues the same node, keys,
-SIF, series, next number and fiscal/workforce heads. It performs no setup, restore-as-new,
-re-registration or promotion. The ahead-of-image guard stays: rollback means the matching
-old complete state **and** old image, never an old image over migrated data or a downgrade
+SIF, series, next number and fiscal/workforce heads. It performs no setup, restore-as-new or
+promotion. The ahead-of-image guard stays: rollback means the matching old complete state **and** old image, never an old image over migrated data or a downgrade
 bypass. A release requiring a new installation name is an exceptional separately authorised
 operation, outside automatic app updates.
 
@@ -37,9 +41,10 @@ Read together:
 - [A1016 and A1049](../../backlog/box.md): easy updating and off-box copies, and honouring
   a Cloud-held release. This proposal changes no Cloud service or support-retirement policy.
 
-**Source inventory: READ ONLY at `9d5853c310e691ed558d80a8a12d0dbddccab2e7`.**
-The following anchors describe inspected source, not executed behaviour. Every runtime
-consequence is UNVERIFIED. No A950 Linux, VM, Docker, TPM, btrfs, power-cut, bucket or
+**Historical source inventory: READ ONLY at `9d5853c310e691ed558d80a8a12d0dbddccab2e7`.**
+The following anchors describe source inspected at that SHA, not today's tree or executed
+behaviour. Later source changes do not upgrade this inventory into runtime evidence. Every
+runtime consequence is UNVERIFIED. No A950 Linux, VM, Docker, TPM, btrfs, power-cut, bucket or
 two-box qualification has run. The driver ran `docker info --format '{{.ServerVersion}}'`
 on 27 October; it exited 1 because `/Users/clintongormley/.docker/run/docker.sock` was absent.
 That is a host availability result, not a rollback experiment.
@@ -53,8 +58,8 @@ That is a host availability result, not a rollback experiment.
 | `apps/server/src/boot.ts:961`, `:979`, `:988`, `:1002`, `:1640` | Migration and append-only checks precede the mirror/fence HTTP gate. Blocking HTTP writes, a mirror role or a read-only inspection connection does not prevent boot migrations. |
 | `apps/server/src/health.ts:145`, `:166`; `apps/server/src/boot.ts:2831` | Health judges duty freshness and reports stream status separately. A non-primary can advance an empty pass. This is not the proposed upgrade-readiness proof. |
 | `apps/server/src/boot.ts:1841`, `:1859`, `:1884`, `:1910`, `:2237`, `:2255`, `:2272`, `:2304`, `:2812`, `:2881`, `:2935`, `:2964`, `:2972` | Attendance, emails, reminders, backup/sealed-state/stream work, fiscal drain, cards/refunds and Cloud work have startup paths. Trial needs an explicit inventory and gate for every duty, including future webhooks and spare following. |
-| `apps/server/src/stream-host.ts:140`, `:156`, `:192`; `packages/stream/src/supervisor.ts:405`, `:428`, `:441`, `:458`; `packages/stream/src/litestream.ts:13` | Current host constructs a supervisor with node/term/settings; opening claims a fresh generation, starts replication and conditionally moves a pointer after a full copy. Pin is Litestream 0.5.17. An arbitrary old prefix is not a proven rollback/resume interface. |
-| `packages/provisioning/src/first-setup-start-again-note.ts:23`, `:51`, `:57`, `:73`; `packages/provisioning/src/first-setup-start-again-leftovers.ts:245` | Current note requires a nonempty known name/module, raises only to a later floor, and supplies a floor source. It does not establish A1099's future name/damage-unknown representation. |
+| `apps/server/src/stream-host.ts:140`, `:156`, `:192`; `packages/stream/src/supervisor.ts:405`, `:428`, `:441`, `:458`; `packages/stream/src/litestream.ts:13` | At that SHA the host constructs a supervisor with node/term/settings; opening claims a fresh generation, starts replication and conditionally moves a pointer after a full copy. Pin is Litestream 0.5.17. An arbitrary old prefix is not a proven rollback/resume interface. |
+| `packages/provisioning/src/first-setup-start-again-note.ts:23`, `:51`, `:57`, `:73`; `packages/provisioning/src/first-setup-start-again-leftovers.ts:245` | At that SHA the note requires a nonempty known name/module, raises only to a later floor, and supplies a floor source. It does not establish A1099's future name/damage-unknown representation. |
 | `packages/store/src/venue-lock.ts:55`, `:78`; `apps/server/src/recovery-lock.ts:21`; `apps/server/src/recovery-state.ts:229` | Venue and recovery locks have owners; recovery state has an update helper. No unlinking locks or writing `recovery.json` directly belongs in an updater. |
 | `bench/real-upgrade/index.json:1`; `bench/real-upgrade/README.md:1` | Qualification index has no fixtures/epoch. Cuts 1–3 use metadata/comparison/injected admission interfaces. No historical image, issued-F1 preservation or real upgrade is qualified by this source read. |
 
@@ -65,43 +70,38 @@ The only outside facts used here have deliberately small bounds:
 | [Btrfs Subvolumes, Nested subvolumes](https://btrfs.readthedocs.io/en/latest/Subvolumes.html#nested-subvolumes) | “snapshotting is not recursive” | Nested subvolumes need explicit inventory. This does not qualify Docker mount replacement or encrypted-disk behaviour. |
 | [Btrfs Subvolumes](https://btrfs.readthedocs.io/en/latest/Subvolumes.html) | “A snapshot is not a backup” | A local rollback point does not replace a copy off the box. No performance, capacity or power-loss durability claim follows. |
 
-## 2. The one owner question: which use closes rollback?
+<a id="2-the-one-owner-question-which-use-closes-rollback"></a>
 
-**Harbour Kitchen updates overnight. Before its first new order, Ana clocks in and changes
-the till PIN; a refund or queued invoice filing may happen before the first new order. May
-automatic rollback end before the first live change or external action, including automatic
-filing and backup publication? Recommend yes, so none can later disappear. This includes
-sign-in that stores credentials.**
+## 2. Resolved owner boundary: a clean restart and a running system
 
-That is broader than “first order” and requires an explicit answer. If you mean literally
-first order, the alternative is to refuse all other durable changes and external work until
-that order commits. Ana cannot clock in, change a PIN or complete that refund in the trial.
-If sign-in itself needs stored challenges/sessions, it cannot be offered normally before
-commit either. Do not implement “acknowledge now, restore later” under either answer.
+The owner's 28 October answer is: “After a successful restart of the new version we can
+assume that the upgrade is ok. We just want to be sure that the database has upgraded cleanly.”
+The addition is: “And that we have a running system.” The receipt is Lane E's local
+`questions.md`, lines 743–752, relayed at about 01:50–01:52 CET. These are owner instructions,
+not an outside technical claim or whole-design approval.
 
-Concrete boundary cases for the recommended policy:
+Rollback therefore ends only when **all three** hold for this attempt: the new version has
+successfully restarted, its database upgrade is confirmed clean, and fresh local checks
+confirm that the system is up and answering. Section 5 proposes the evidence for those checks;
+none has been runtime-qualified for A950. The host durably closes rollback before releasing
+normal requests and duties. No first order, first real change, scheduled action or owner
+acceptance click closes it. There is no healthy reversible version waiting for morning.
 
-| First attempted use after readiness | Required proposed treatment |
-| --- | --- |
-| Create an order, add to an existing held table, send to kitchen, close/pay a bill | Close rollback durably before the handler can execute. An edit/payment need not create a new order ID. Active/held orders normally defer scheduling, but admission still guards a missed/racing case. |
-| Clock in/out, change settings/menu, invite staff, reset a PIN/password, enrol a passkey/device, issue/renew a live login | Close rollback before the first stored effect or email. Do not lose an acknowledged credential or attendance event. |
-| Login challenge/session/counter, automatic token renewal, a GET that writes last-seen state | Treat by actual effect, not HTTP verb. Use a genuinely passive trial read or close rollback first. |
-| Fiscal outbox, pending card/refund recovery, printing/drawer, mail/webhook, scheduled activation/archive/replication/follow | No execution before irreversible commit. After readiness, an actual due action can request that commit before execution. In-flight or uncertain money already present prevents starting the upgrade. |
-| Read the upgrade screen, inspect readiness, leave the screen | Host-owned passive/status controls remain available without changing rollbackable venue state. Their audit is outside rollback. An explicit authorised rollback uses the separate serialized restoration path. |
+For example, Harbour Kitchen has finished service and meets the proposed quiet-window checks
+at 03:10. The host stops all writers, saves the complete state and starts the new version in
+validation mode. At 03:12 the packaged migrations, database preservation checks and fresh local
+TLS/menu/config/history responses all pass. These times illustrate the sequence, not measured
+durations. The host records rollback closed and releases normal work immediately. Queued
+filing and qualified backup publication can resume at 03:12 without waiting for Ana to arrive.
+At 08:00 Ana signs in, clocks in and changes her PIN normally; the first order has no update role.
 
-**My call, subject to that answer:** after readiness passes, a real scheduled action may ask
-for admission just as a staff action does. Before the first such action executes, the host
-closes rollback durably. This lets a queued filing or backup publication complete an overnight
-upgrade without waiting for staff. No artificial housekeeping write, acceptance button or timer
-closes rollback merely to finish the update.
-
-If no live action is due, a healthy READY candidate stays available, including beyond the quiet
-window and across a restart after revalidation. There is no ten-minute idle rollback. Background
-effects remain suppressed until their admission commits the version; status shows the actual
-copy/filing pause. No second update starts while this attempt is READY. A failed check or lost
-readiness before commit still invokes restoration; an explicit Return to previous version does
-the same. Stop only leaves the screen. This policy, automatic-on default and timing below are
-proposals, not additional owner approvals.
+If migration or local running checks fail **before** closure, the host restores the matching
+old state and images and checks the old service before reopening it. If the new version fails
+at 04:00 **after** closure, it keeps the current state and needs repair of that state. It cannot
+restore the 03:10 snapshot, even if no order has yet been taken. Otherwise it could erase work
+or external effects already acknowledged after closure. A bucket, Cloud, internet or provider
+outage cannot postpone closure when the local checks pass, and cannot block ordinary sales.
+Their own retry, publication and membership rules still apply.
 
 ## 3. Scheduling without putting a release server on the sale path
 
@@ -116,8 +116,9 @@ signatures against its embedded current/spare public keys, platform, minimum hos
 source and immutable app/agent/dependency digests. A1049 adds a fresh authenticated Cloud hold
 answer bound to that exact release; unknown/stale/unavailable status defers offering/applying
 it. A venue with no Cloud account still needs a qualified account-free hold-check contract;
-none is promised here. Recheck immediately before freezing; a hold during trial cancels it.
-A hold arriving after commit blocks future attempts, never orders or a forced downgrade.
+none is promised here. Recheck immediately before freezing; an authenticated hold for this
+release received during validation cancels it while rollback is open. Closing does not wait for another external hold
+roundtrip. A hold arriving after closure blocks future attempts, never orders or a forced downgrade.
 
 Download and verify while the current version trades. A failed manifest, hold check, download,
 status query or lack of disk space leaves that service running. No synchronously fetched
@@ -136,9 +137,9 @@ slipping between the final check and shutdown; a request already admitted makes 
 **My-call budgets:** release/download checks get three bounded attempts per daily check,
 30-second metadata/hold attempts and 10-minute image attempts; no freeze before completion.
 Freeze/drain gets two minutes, migration/readiness five minutes and restoration/old-readiness
-five minutes each. Start no freeze unless the window has room for these budgets. Healthy READY
-waiting is event-driven rather than timed out; crossing the window never rolls back admitted
-work or starts a second attempt.
+five minutes each. Start no freeze unless the window has room for these budgets. Successful
+checks trigger closure immediately, even with nobody present. Crossing the window never
+reopens closed rollback or starts a second attempt while one is unfinished.
 Measure and review these limits before enabling them. An expired phase never implies success
 or permits killing an effect with an unknown result. One failed candidate digest is quarantined
 after one trial; no nightly failure loop. A newer fixed digest is eligible next window. An admin
@@ -184,13 +185,14 @@ journal set without deleting side files. No promise of size-independent timing i
 Do not delete the rollback set to make its candidate fit. Disk-full during pull, journal write,
 snapshot or readiness means defer or restore, according to the phase. Snapshot success does not
 reserve enough blocks for migrations; preflight must measure data/metadata headroom and trial
-must handle exhaustion. No reserved disk allocation is introduced. After commit the snapshot is
+must handle exhaustion. No reserved disk allocation is introduced. After closure the snapshot is
 never offered as a rollback; remove only owned obsolete data after a durable completion record.
 
 For a manually installed/non-B3 disk, **my call:** defer automatic updates unless a separately
 qualified stopped whole-state copy adapter provides the same inventory, capacity and atomic
 restoration contract. Do not silently repartition it or call a database-only copy a substitute.
-Existing manual install remains today's path, with its documented one-way migration risk.
+The historical install path (§1) supplies no A950 rollback contract; this proposal does not
+qualify it.
 
 ### The start-again floor must survive a rollback
 
@@ -205,10 +207,11 @@ For known notes choose the greater floor, retaining the associated name/module e
 floors with conflicting evidence refuse automatic resolution. After **A1099's release**, preserve
 its actual name-unknown and damage-unknown semantics as well: unknown is never converted to an
 absent note or a lower known floor; a newer floor can be retained without inventing a historical
-name, and damage remains an explicit blocker until that released contract resolves it. This
-checkout's parser does not supply that contract (§1). Trace all readers/writers then qualify the
-overlay with both old and new releases; an old parser that cannot honour the retained state is
-ineligible for automatic rollback. Until that binding exists, do not enable this path.
+name, and damage remains an explicit blocker until that released contract resolves it. The
+parser in the historical inventory does not supply that contract (§1); this says nothing about
+today's implementation. Trace all readers/writers then qualify the overlay with both old and
+new releases; an old parser that cannot honour the retained state is ineligible for automatic
+rollback. Until that binding exists, do not enable this path.
 
 Host recovery evidence likewise survives and remains distinct from snapshot `recovery.json`.
 Reconcile app recovery state only through `updateRecoveryState` under its lock, retaining actual
@@ -217,82 +220,118 @@ refusal evidence; never clear refusal flags just to force the old app to trade. 
 
 ## 5. Trial startup and the durable no-return interlock
 
-Add a dedicated upgrade-trial mode, checked at entry **before** recovery/reset/restore effects,
-migrations or any duty startup. It may perform the candidate's real packaged migrations on the
-captured active set; a read-only SQL connection is only an inspection tool. Enumerate allowed
-local migration/boot effects by field/cause. No ordinary request, account/session write,
-background mutation, provider request or hardware action is admitted during validation.
+The following checks and host protocol are **proposed acceptance requirements, UNVERIFIED**.
+They implement the resolved owner boundary without authorising a build.
+
+Add a dedicated upgrade-validation mode, checked at entry **before** recovery/reset/restore
+effects, migrations or duty startup. It performs the candidate's real packaged migrations on
+the active set captured in §4; a read-only SQL connection is only an inspection tool. Enumerate
+allowed local migration/boot effects by field/cause. No business request, normal account/session
+write, background business mutation, provider request or hardware action is admitted during
+validation. Allow only the specified local migration, diagnostic and passive validation work.
 
 Explicitly suppress fiscal filing/reconciliation, all card/refund recovery, drawer/printing,
 mail/webhooks, scheduled activation, Cloud/tunnel renewal, archives, stream uploads/pruning/
 pointer changes and spare following/copy-up. Check every enabled module's contributions and
 every separate process. Defence includes withheld external capabilities/egress/hardware workers
 as well as code gates; network denial alone must not make attempted effects look like a pass.
-The candidate gets no Docker socket or general host/file-write API. Trial exceptions are a
-closed list of local diagnostics, not “all GETs”.
+The candidate gets no Docker socket or general host/file-write API. Validation exceptions are
+a closed list, not “all GETs”; last-seen or session renewal is still a write.
 
-Upgrade readiness is a new structured result, bound to attempt, candidate digest, boot nonce,
-snapshot identity, schema manifests, node/membership identity and admission generation. Require:
+### Successful restart, clean database and running-system evidence
 
-1. Packaged migration completion for enabled sets; disabled retained modules stay intact.
-2. Stopped integrity/foreign-key checks and complete protection definitions; fiscal/workforce
-   chains checked through existing non-writing interfaces. Identity, heads and next allocation
-   remain unchanged. Fail any unexpected fiscal/allocation delta or unexplained local change.
-3. Actual local listener/TLS and authenticated-equivalent passive menu/config/history loading
-   for till and dashboard, with no fabricated login or normal session writes. A bounded local
-   validator capability must be unusable for business actions. Qualify the actual rendered
-   screens separately; a setup/recovery 200, `/health` or a mock alone does not qualify readiness.
-4. Expected primary/waiting role and unchanged signed membership, no live external duty or
-   attempted forbidden effect, required host interlock supported by both versions. Provider,
-   internet, Cloud and bucket availability are not required to prove ordinary local selling.
+Bind every result to the same attempt, candidate image digest, fresh boot nonce, active tree/
+snapshot identity, schema manifests, node/membership identity and admission generation. A stale
+answer from the old process or another boot cannot complete this attempt. Require all of:
+
+1. **Successful restart.** Launch the selected packaged image through its real entry and boot
+   path, using the retained venue's actual configuration and enabled modules. Confirm this
+   candidate owns the intended venue and reaches its normal service path in validation mode.
+   A process exit code, container start or generic health result alone is insufficient.
+2. **Clean database upgrade.** Run the real packaged enabled migration sets and their declared
+   dependencies to completion. Compare recorded sets, hashes and endpoints with the candidate
+   manifests: no pending/incomplete, unknown or ahead-of-image set is accepted, and retained
+   disabled-module data stays intact. Under quiescence, require integrity checks to report
+   clean and foreign-key checks to report no violations for each inventoried database. Confirm
+   foreign-key enforcement is enabled. Compare required constraints, indexes and full append-only/protection definitions with the packaged
+   expectations; matching a trigger name alone is insufficient. Through non-writing checks,
+   compare against independently captured pre-upgrade evidence: node/tenant identity, keys,
+   installation name/SIF, series and next-number allocations, fiscal records and chain heads,
+   workforce history and heads, and other retained history. Permit only migration-declared
+   schema/data transformations and enumerated local boot deltas; no unexplained loss, allocation
+   advance, rewritten fiscal/workforce fact or silently refreshed expectation passes. This
+   runtime comparison complements A799's historical release qualification; it does not replace it.
+3. **Running and answering.** After migration and database checks, make fresh requests through
+   the candidate's actual local TLS listener and normal passive till/dashboard read paths.
+   Require representative menu, configuration and retained-history responses whose bodies match
+   the retained venue and expected schema, with success bound to this same candidate/boot/attempt.
+   Reject cached responses, redirects to setup/recovery, empty success placeholders and an
+   unrelated listener. Use a narrowly scoped local validator capability for protected reads;
+   it grants no business action and creates no normal login credential/session. No synthetic
+   order, payment, fiscal record or forced staff sign-in is part of acceptance. Exact passive
+   routes and capability binding must be qualified against the released APIs before enabling
+   automation; inability to make these reads defers qualification rather than weakening checks.
+
+Also confirm the expected primary/waiting role, unchanged signed membership, all validation
+restrictions still in force and no attempted forbidden effect. Missing or uncertain evidence is
+not a pass. Provider, internet, Cloud, bucket and peer availability are not running-system checks;
+existing A947 membership authority remains a separate gate. Actual screen rendering and continued
+sales are qualified on disposable release-test copies, never by a test sale in the venue.
+
+### Automatic durable closure, then release
 
 The host persists a versioned root-only journal on checked `@host-state`, with attempt ID,
 disk UUID/layout, old/new digests, capture/subvolume identities, phase sequence, admission
-generation, readiness binding, floor evidence, stream/spare heads and bounded redacted outcomes.
+generation, check bindings, floor evidence, stream/spare heads and bounded redacted outcomes.
 Unknown versions, mismatches, corruption or missing state after an attempt never mean idle.
 Use serialized atomic publication with file and directory flushes and validated read-back;
-the exact crash guarantees must be measured. The app cannot fabricate readiness or commit
-authority by supplying a path or an unbound boolean. Host requests authenticate the local caller
-and fixed operation, not merely a server-provided person name.
+the exact crash guarantees must be measured. Host requests authenticate the local caller and
+fixed operation. A path, a server-provided person name or an unbound boolean grants no authority.
 
-Unauthenticated polling, a bad password or a request without permission cannot force commit.
-The trial's rollback control requires an existing authenticated session or a narrowly scoped
-fresh admin proof checked without a venue write. Opening the till is passive navigation,
-not a separate Use control. Any precommit challenge needed for that proof
-is short-lived host memory, grants only this control, and creates no normal login credential.
-Normal sign-in/session issuance follows commit. Bind and qualify password/passkey plus enrolled
-TOTP against released identity APIs; if this cannot work without precommit durable auth changes,
-hold the design binding rather than silently admitting normal login or exposing an
-unauthenticated commit control.
+Once all fresh checks pass, **the host automatically writes and verifies ROLLBACK_CLOSED**,
+bound to those results, before allowing any normal request or duty. A readiness result can be
+transient while that write completes; it is not a healthy READY state awaiting first use, window
+expiry or acceptance. The marker records successful checks and permanent closure, not permission
+for a particular operation. There is no operation-triggered COMMIT_INTENT or acceptance button.
 
-**Proposed irreversible boundary:** before a ready request's handler executes, it asks the host
-to admit its operation ID under the current readiness binding. The host serializes this with
-rollback, durably writes **COMMIT_INTENT**, and only then grants execution. This marker means
-rollback is permanently closed for the attempt, even if that handler later fails or writes
-nothing. Only after that grant may the request execute and acknowledge; ordinary outbox and
-provider idempotency rules then govern its result. Background effects cannot start earlier.
-The grant is bound to the admitted process/boot generation; stale permits cannot start work.
+After confirmed closure, release the matching running generation into normal service. Staff
+sign-in, clock-ins, settings/PIN changes, refunds, fiscal filing and backups are no longer held
+by the updater. They retain their normal permissions, safety checks and qualified publication
+protocols. Do not require a host roundtrip per ordinary operation. Bind the one-time release to
+the checked boot/generation, reject stale releases, and re-establish that binding at process
+startup from the durable journal. This prevents an old validation process or delayed response
+opening another attempt; it is not a new continuing dependency for sales.
 
-The host cannot atomically transact with every database/provider, so it deliberately commits
-too early rather than too late. A lost commit answer requires querying that durable attempt;
-absence of a reply never permits rollback, execution or an unbounded duplicate operation.
-After host/process restart, renew the binding from the journal before admission. A lost readiness
-record may strand a healthy candidate pending a new local check; it must never undo committed
-state. There is no timeout that turns an uncertain commit back into a reversible trial.
+If completion is lost, query the durable attempt before releasing work or choosing restoration.
+A confirmed ROLLBACK_CLOSED record forbids restoration even if power failed before release or
+before anyone saw the completion screen. Recover the current candidate and repair forward.
+Fresh startup checks may be needed, but cannot reopen rollback. If closure is positively absent
+and containment is proven, lost/stale checks can be rerun within the original validation budget;
+a failed check, candidate crash or exhausted budget uses the recorded rollback path. Do not
+loop candidate restarts. If a closure write's
+outcome is uncertain, keep work stopped and resolve the journal. Silence or an expired timer
+never proves that restoration is allowed.
 
-If rollback wins the host's serialized race, record ROLLBACK_INTENT first and reject every
-admission. Shut down all trial writers, recheck ownership/membership, restore the verified
-complete set plus old digest/config, apply the floor/recovery overlay, and validate the old
-version before reopening it. Restoring one database file or relying on Compose tags is refused.
-If admission wins, every later rollback request says it is unavailable and preserves the new
-state, even when the operation response was lost. No acknowledged operation or external effect
-may ever be erased by an automatic restoration.
+An explicit preclose return requires existing authenticated authority or narrowly scoped fresh
+administrator proof checked without a venue write. Offer password/passkey and enrolled TOTP on
+this screen; any challenge is short-lived host memory, grants only this control and creates no
+normal login credential. Bind and qualify this against released identity APIs. If it requires
+unqualified durable auth changes, hold that binding rather than exposing unauthenticated restore.
+Automatic successful closure needs no administrator proof or owner click.
 
-Before any restored old service can accept work, durably record RESTORED with the verified active
-tree and a new admission generation. That record permanently retires this attempt's restore
-permission. A restart may recheck/start this tree, never replace it again from the same snapshot.
-Normal old-version work must also pass that host admission check, so an interrupted completion
-answer cannot resurrect an earlier restore after the old version has acknowledged new work.
+Serialize closure and rollback under the same host fence. Recheck this attempt's fresh results,
+process ownership and membership inside that turn. If rollback wins, durably record
+ROLLBACK_INTENT, reject closure and keep all admissions closed. Stop candidate writers, restore
+the verified complete set plus old images/config, apply the floor/recovery overlay and check the
+old service. If closure wins, every later return request reports it unavailable. Never restore
+after ROLLBACK_CLOSED or overwrite acknowledged work. A newer membership stops stale restoration
+or admission under A947 rather than letting the updater choose a primary.
+
+Before any restored old service can accept work, durably record **RESTORED**, binding the verified
+active tree, old checks and a new admission generation. This permanently retires this attempt's
+restore permission. Release that old generation once; after a restart, consult RESTORED and
+recheck/start the current tree. Never replace it again from the snapshot, including when a restore
+completion answer was lost. Old-version work requires no per-operation host call either.
 
 ## 6. Crash and failure outcomes
 
@@ -303,32 +342,31 @@ substeps; partial replacement is never inferred complete from a directory name.
 | --- | --- |
 | PREPARED: verified downloads/old references, old app still trading | Revalidate inputs/holds/window later. Never restore an earlier state over the still-running old app. |
 | FREEZING: admissions closed, shutdown/capture incomplete | Keep admissions closed while ownership is uncertain. Establish all writers stopped; if no candidate ran, reopen the intact old state only after local checks. Forced shutdown invalidates that capture. |
-| SNAPSHOT_READY | Verify complete capture and old references. Continue a bounded trial or restore the old set; no unrecorded candidate boot. |
-| VALIDATING | Treat migrated state as disposable only while journal proves no commit. Timeout/crash/check failure enters ROLLBACK_INTENT; retain diagnostics. No loop of candidate restarts. |
-| READY: checks passed, rollback still open | Recheck boot/readiness binding after any restart. Await the first real staff/scheduled action or explicit rollback. An idle candidate remains READY beyond the window; Stop only exits the screen. Readiness lost is not commit lost. |
-| COMMIT_INTENT: persisted before permission to execute | Never restore, including power loss before execution, lost host answer, failed handler or lost client response. Recover candidate and reconcile the operation by its ID; tell staff its outcome is unknown when it is. |
-| LIVE: candidate accepted, normal work enabled | Keep current state and repair forward if it fails. A newer fixed image may be installed through a new attempt only from this current state. No reset/downgrade advice. |
-| ROLLBACK_INTENT: admission closed | Resume only the recorded restore substeps with all writers stopped. Preserve the failed tree until replacement/overlay/readiness are proven; never start a mixed set. |
-| RESTORED: exact old set verified, failure quarantined | Start/revalidate old service, preserve attempt/log evidence and overlay. A cut before the completion answer cannot trigger another stale restore after old service has admitted work. |
+| SNAPSHOT_READY | Verify complete capture and old references. Continue bounded validation or restore the old set; no unrecorded candidate boot. |
+| VALIDATING, including transient successful check results | No normal work yet. With positive evidence that closure is absent and containment held, rerun lost checks on the still-running candidate within the original budget. Record ROLLBACK_INTENT on failed checks, candidate crash or timeout. Never wait for a real operation or extend a healthy reversible state overnight. |
+| ROLLBACK_CLOSED: checks passed and closure durable, release may be unacknowledged | Never restore, even before first work. Rebind/start the current candidate, release normal work when its startup checks permit, and repair forward on failure. A lost completion answer cannot reopen rollback. |
+| LIVE: closure durable, matching generation released | Normal service and duties. Keep current state on failure; a separately qualified repair/new attempt starts from this current state. No reset/downgrade advice. |
+| ROLLBACK_INTENT: admissions closed | Resume only recorded restore substeps with all writers stopped. Preserve the failed tree until replacement/overlay/old checks are proven; never start a mixed set. Closure cannot now win. |
+| RESTORED: exact old set verified, restore permission retired | Recheck/start the current old tree and preserve attempt/log evidence and overlay. A cut before completion cannot trigger another stale restore after the old service has accepted work. |
 | Unknown/missing/corrupt/conflicting journal, changed disk or newer membership | No automatic restoration or trading admission on that uncertain boot. Show inspection/recovery choices and Stop. Re-read authoritative host/disk/membership evidence; never guess “nothing happened”. |
 
-Disk-full before freeze leaves current service alone. During trial, stop the candidate and
-restore only when capture, journal and no-return evidence are intact. Failure to durably write
-COMMIT_INTENT admits zero work. If the write's outcome is uncertain, retain the stop until it
-can be read, with no rollback assumption. A durable marker followed by disk-full is committed
-even if the operation fails. Restore/mount/journal failure leaves the host recovery screen,
+Disk-full before freeze leaves current service alone. During validation, stop the candidate and
+restore only when capture, journal and positive evidence of an open rollback are intact. Failure
+to durably close rollback admits zero work. An uncertain write keeps the stop until its outcome
+is established; do not infer permission to restore. A durable closure followed by disk-full
+requires repair of current state. Restore/mount/journal failure leaves the host recovery screen,
 not an empty venue. Do not delete unknown files, locks or shared images to make recovery fit.
 
 ## 7. Bucket continuity and two local boxes
 
-**No candidate data leaves the box before commit.** Before capture stop the publisher and
+**No candidate state is published or followed off the box before closure.** Before capture stop the publisher and
 record the last authoritative pointer/ETag, generation, node/term and observed data head. Freeze
 spare follow, store mutations and offsite mirroring/deletion for this attempt; retain the last
 consistent spare database and its store. Do not overwrite them with migrated trial bytes or
 prune their generations. The freeze is intentional protection unavailability, shown explicitly.
 
-Current supervisor opening (§1) is not a promise that an old local LTX/WAL position can resume
-under a newer image. **My call:** use a fresh generation prefix after commit, and after rollback
+Supervisor opening in the historical inventory (§1) does not qualify resuming an old local
+LTX/WAL position under a newer image. **My call:** use a fresh generation prefix after closure, and after rollback
 if continuity has not been independently qualified for that exact restored set/version. No
 in-place rewrite/reuse of a published prefix. At the same node/term, qualify the actual 0.5.17
 adapter, full-copy readiness and conditional pointer handoff, including crash/retry. A new
@@ -338,14 +376,14 @@ Keep the old published head/prefix and frozen spare data until the new full copy
 and the pointer's compare-and-swap against the recorded authority succeeds. Candidate trial
 objects cannot become a restore source. Restore selection must validate signed membership,
 pointer and complete generation; no “newest object wins” or shared-prefix merge. A changed
-ETag/newer term cancels handoff and requires reconciliation, never overwriting newer authority.
+ETag or newer term cancels handoff and requires reconciliation, never overwriting newer authority.
 Qualify exclusion from both local pruning and A947's deletion-mirroring; keeping just a pointer
 is insufficient if another process deletes its objects.
 
-After local commit, a bucket/spare outage leaves the local version trading with a clear copy
+After local closure, a bucket/spare outage leaves the local version trading with a clear copy
 warning. Publication waits/retries with bounded backoff while retaining the old remote head
 and current local state. An old off-box copy is labelled by its actual age/version; do not
-present it as containing postcommit work. Before rollback, a newer membership or evidence of
+present it as containing postclosure work. Before rollback, a newer membership or evidence of
 another primary stops restoration/admission for reconciliation under A947. No update grants
 authority to promote, assume peer failure or start a new chain.
 
@@ -359,65 +397,82 @@ stands; defer unsupported pairs rather than adding one implicitly.
 While the spare trials, the primary continues selling, with replication deliberately paused
 and last-copy age visible; it must not wait on the update coordinator to make a sale. Snapshot
 the spare's entire stopped store/follower state, leave its old data intact and suppress takeover
-on the trial instance. Before resuming follow or receiving newer primary data, commit the spare's
-own host journal; that first background admission closes its local rollback. Before this,
-failure restores only the untouched matching spare set. After this, repair forward or rebuild
-the spare through separately approved A947 rejoin rules, never restore stale spare data as current.
+on the trial instance. Before resuming follow or receiving newer primary data, close the spare's
+own rollback boundary automatically after its own successful restart, clean-database and fresh
+local running checks. Its passive checks use the retained spare copy and waiting role; they do
+not require following newer data. Durably close before releasing follow, never on its first
+follow admission. Before closure, failure restores only the untouched matching spare set.
+After closure, repair forward or rebuild the spare through separately approved A947 rejoin
+rules, never restore stale spare data as current.
 
 Then require the upgraded spare to catch up to a measured primary head before attempting the
 primary. During primary trial, freeze following/copy-up at that head; the spare is still waiting,
 not a temporary seller. On primary rollback, the upgraded spare must be qualified to follow the
-old version again; on commit it follows the new qualified publication. No auto-promotion or
+old version again; after closure it follows the new qualified publication. No auto-promotion or
 name change occurs merely to update. A manager's separately authorised real takeover terminates
 the upgrade attempt: new membership permanently bars stale primary admission/rollback until
 A947 reconciliation. The updater never undoes an acknowledged takeover.
 
 If the spare is missing/incompatible before starting, **my call:** defer automatic paired upgrades
 and show that reason; an administrator can explicitly choose a qualified single-box attempt,
-accepting loss of the spare. If it is lost during primary trial, restore precommit when authority
-is still proven, otherwise hold for reconciliation; postcommit keep local work and warn. Ordinary
-sales on the already-running primary do not depend on spare/update readiness. After an uncertain
+accepting loss of the spare. If it is lost during primary validation, apply A947's authority
+checks. Loss of the peer alone is not a failed local running check: proven authority and
+successful local checks allow closure; uncertain authority holds for reconciliation. After
+closure keep local work and warn. Ordinary sales on the already-running primary do not depend
+on spare/update readiness. After an uncertain
 restart retain A947's separate membership-wait and manager Continue without spare contract;
 an update cannot silently weaken it. Rejoining a repaired spare remains A947's job.
 
 ## 8. What you see
 
-[Proposed static screens](../../backlog/mockups/a950-automatic-upgrades/README.md) include
-`01-upgrade-check.png` and `02-rollback-complete.png`, in English and Spanish, both themes,
-phone and desktop. These are documentation illustrations, not product-rendering or runtime
-evidence. The table also specifies states not pictured in this first set:
+[Static screen brief and EN/ES copy](../../backlog/mockups/a950-automatic-upgrades/README.md)
+show `01-upgrade-check.png`, `02-rollback-complete.png` and `03-upgrade-complete.png`, with
+English/Spanish, both themes, phone and desktop variants. These illustrations reflect the
+revised boundary below. PNGs are documentation illustrations, not product or runtime proof.
 
 | State | English | Español |
 | --- | --- | --- |
-| Checking | **Checking the update**. “Waitron is checking version {version}. You cannot take orders or make changes yet. If the check fails, the previous version and saved state will be restored.” | **Comprobando la actualización**. «Waitron está comprobando la versión {version}. Aún no puedes tomar pedidos ni hacer cambios. Si falla la comprobación, se restaurarán la versión anterior y el estado guardado.» |
-| Ready, still reversible | **Update checked. Ready to use.** “The first live change or automatic action ends the option to return to the previous version. Opening the till alone does not end it.” Actions: **Open till**, **Return to previous version**, **Leave this screen**. Opening the till is passive navigation; a sign-in that writes state or the first actual staff/scheduled action requests admission. No acceptance button commits by itself; the warning is subject to §2's answer. | **Actualización comprobada. Lista para usar.** «El primer cambio real o acción automática elimina la opción de volver a la versión anterior. Abrir la caja por sí solo no la elimina.» **Abrir caja**, **Volver a la versión anterior**, **Salir**. |
-| Rollback complete, old readiness passed | **Previous version restored**. “Version {failedVersion} failed its checks. Version {oldVersion} and the saved state have been restored. No changes were accepted on the new version. You can take orders again. This update will not be tried automatically again.” Show the actual check failure. **Open till**, **View details**, **Leave this screen**. | **Versión anterior restaurada**. «La versión {failedVersion} no ha superado las comprobaciones. Se han restaurado la versión {oldVersion} y el estado guardado. No se aceptaron cambios en la versión nueva. Ya puedes tomar pedidos. Esta actualización no se volverá a intentar automáticamente.» **Abrir caja**, **Ver detalles**, **Salir de esta pantalla**. |
-| Committed operation outcome unknown | **The previous version cannot be restored**. “A change was admitted on this version. Its result is not yet confirmed. Restoring the old state could remove it.” **Check this operation**, **View details**, **Leave this screen**. | **No se puede restaurar la versión anterior**. «Se ha admitido un cambio en esta versión. Su resultado aún no está confirmado. Restaurar el estado anterior podría eliminarlo.» **Comprobar esta operación**, **Ver detalles**, **Salir de esta pantalla**. |
+| Checking, validation genuinely open | **Checking the update**. “Waitron is checking that version {version} restarted successfully, the database upgraded cleanly and the system is running and answering. Orders and changes are paused during these checks. If a check fails, Waitron will return to the saved previous version and state.” **View details**, **Return to previous version**, **Leave this screen**. | **Comprobando la actualización**. «Waitron está comprobando que la versión {version} se ha reiniciado correctamente, que la base de datos se ha actualizado sin errores y que el sistema funciona y responde. Los pedidos y los cambios están en pausa durante estas comprobaciones. Si alguna falla, Waitron volverá a la versión y al estado anteriores guardados.» **Ver detalles**, **Volver a la versión anterior**, **Salir de esta pantalla**. |
+| Complete, durable closure and release confirmed | **Update complete**. “Version {version} restarted successfully. The database checks passed and Waitron is running and answering. Normal work is enabled.” **Open till**, **View details**, **Leave this screen**. No return or acceptance action. | **Actualización completada**. «La versión {version} se ha reiniciado correctamente. La base de datos ha superado las comprobaciones y Waitron funciona y responde. Ya puedes trabajar con normalidad.» **Abrir caja**, **Ver detalles**, **Salir de esta pantalla**. Sin acción de volver ni de aceptar. |
+| Rollback complete, old checks and release confirmed | **Previous version restored**. “Version {failedVersion} failed its checks. Version {oldVersion} and the saved state have been restored and checked. No changes were accepted on the new version. You can take orders again. This update will not be tried automatically again.” Show the actual check failure. **Open till**, **View details**, **Leave this screen**. | **Versión anterior restaurada**. «La versión {failedVersion} no ha superado las comprobaciones. Se han restaurado y comprobado la versión {oldVersion} y el estado guardado. No se aceptaron cambios en la versión nueva. Ya puedes tomar pedidos. Esta actualización no se volverá a intentar automáticamente.» **Abrir caja**, **Ver detalles**, **Salir de esta pantalla**. |
+| Failure after durable closure | **Waitron needs repair**. “Version {version} passed the restart, database and running-system checks. Returning to the saved previous state is no longer available. Waitron now needs repair using its current state.” Show the current fault and actual service availability separately. **View details**, **Download report**, **Leave this screen**. | **Waitron necesita una reparación**. «La versión {version} ha superado las comprobaciones de reinicio, base de datos y funcionamiento del sistema. Ya no se puede volver al estado anterior guardado. Ahora es necesario reparar Waitron conservando su estado actual.» Mostrar el fallo actual y la disponibilidad real del servicio por separado. **Ver detalles**, **Descargar informe**, **Salir de esta pantalla**. |
 | Restore or journal not verified | **Waitron cannot confirm the saved state**. “Orders are paused. The update record could not be verified. No older state has been opened for trading.” **Inspect update record**, **View details**, **Leave this screen**. | **Waitron no puede confirmar el estado guardado**. «Los pedidos están en pausa. No se ha podido verificar el registro de actualización. No se ha abierto un estado anterior para vender.» **Examinar el registro de actualización**, **Ver detalles**, **Salir de esta pantalla**. |
 
-The safe Stop choice is labelled **Leave this screen**. It exits this screen without changing
-service, admission, the update phase or any already-admitted payment/background operation. It
-never cancels an unknown money outcome. **Return to previous version** is a separate explicit
-choice, available only before commit; it runs the serialized rollback path and explains that
-orders resume only after old-version checks pass. During an uncertain phase, leaving the screen
-leaves its existing admission stop in force; it neither resumes trading nor starts restoration.
-Public status and bounded redacted diagnostics disclose no credentials/person data; any operation requiring admin authority
-offers password/passkey and enrolled TOTP on that screen, rather than sending you to somebody else.
-If a later forward repair is qualified, offer it with its actual effect; otherwise retain inspect,
-download redacted report and Stop. Do not promise retry will cure an unknown cause.
+The safe Stop choice is labelled **Leave this screen**. It exits only the screen without changing
+service, admission, checks, phase or an in-flight payment/background operation. It never cancels
+an unknown money outcome. **Return to previous version** is separate and offered only while the
+host positively confirms validation is open. Explain: “This stops validation and restores the
+saved previous version and state. Orders resume after that version passes its checks.” Spanish:
+«Esta acción detiene la comprobación y restaura la versión y el estado anteriores guardados.
+Los pedidos se reanudan cuando esa versión supera las comprobaciones.» Require on-screen admin
+authorisation from §5, with no acceptance click for a successful version.
+
+Closure can win while an old screen is open or authentication is in progress. Refresh the status,
+remove Return and explain that checks passed and rollback is closed; never treat a stale button
+as authority. During journal uncertainty show the inspection state, not an available return or
+an invented claim that checks passed. A successful explicit return uses “You chose to return
+before checks finished” / «Has elegido volver antes de que terminaran las comprobaciones»,
+instead of saying a check failed. Only confirmed old readiness/release permits “You can take
+orders again”. A spare's completion says it is ready to follow, never that it can take orders.
+
+Public status and bounded redacted diagnostics disclose no credentials/person data. Any operation
+requiring admin authority offers password/passkey and enrolled TOTP on that screen. If a repair
+of the current state is qualified, offer it with its actual effect; otherwise retain inspection,
+download of a redacted report and Stop. Do not promise retry will cure an unknown cause.
 
 Record failure locally on `@host-state` and retained logs before restoration; after old readiness,
 show a persistent Box alert and last-attempt details. **My call:** existing authorised notification
 channels may send a redacted report after service returns, queued if offline. No automatic new
-support/Cloud upload or A9 bug-report capability is assumed. The public rollback claim above is
-shown only with positive no-admission and completed-restore evidence; uncertainty uses its own state.
+support/Cloud upload or A9 bug-report capability is assumed. Show completed rollback only with
+positive containment/no-admission, complete-restore, old-readiness and RESTORED evidence. Show
+completion only with the bound successful checks, durable closure and matching release evidence.
 
 ## 9. Host updates and qualification gates
 
 App updates never bundle an unqualified kernel, boot-loader, firmware, TPM-seal or Docker-line
 transition. B3 §7.4 remains a separate host transaction with its own OS/boot inventory and crash
 evidence. Do not restore `@rootfs` as an app fix, roll back `@host-state`, regenerate a disk key,
-restore another disk's key or let a host helper downgrade erase an admission marker.
+restore another disk's key or let a host helper downgrade erase a closure or RESTORED marker.
 
 Hold startup-changing packages by their measured effect, as B3 requires. Unattended resealing,
 temporary/predicted seals, power cuts and rollback of boot bytes must qualify on the selected
@@ -433,15 +488,16 @@ later separately approved build, not a task plan or evidence that this design is
 
 | Gate | Required discriminating evidence |
 | --- | --- |
-| Policy and host admission | Owner answers §2; real old/new entry and host protocol reject bypasses. Race first-operation/rollback both ways; power-cut before/after journal flush and execution; lost readiness/commit/client answers. Removed admission must allow the forbidden effect in a negative control. |
+| Closure and host admission | Apply §2's resolved boundary. Race successful-check closure against explicit/failed-check rollback both ways; cut power before/after durable closure and release; lose check/completion answers; reject stale boot permits and unknown journals. Prove no effect before closure and no restore after closure or RESTORED, with negative controls. An idle overnight success must close without staff, first work or an acceptance click; normal operations need no ongoing updater roundtrip. |
 | Complete-state durability | Encrypted Linux btrfs rig, pinned Docker store, all writers stopped, exact mount/nested-subvolume inventory, side files and whole-state restoration. Cut every journal/restore phase; prove logs, host marker, key/UUID and newer/unknown/damaged floor survive. Refuse missing host/log mounts and unsupported old parsers. |
-| Capacity and images | Full-data and metadata exhaustion on an owned small throwaway filesystem during image/snapshot/migration/commit/restore. Exact old digests launch offline; supported cleanup cannot prune protected references. No test fills or cleans the real shared disk. |
-| Candidate containment/readiness | Actual packaged entry/migrations and enabled/disabled modules; intercepted attempts to every external/hardware/background seat; no real provider use. Remove each gate and observe failure beside a valid control. Inspect actual EN/ES screens, both themes, phone/desktop, keyboard/accessibility. Static PNGs do not pass this gate. |
+| Capacity and images | Full-data and metadata exhaustion on an owned small throwaway filesystem during image/snapshot/migration/closure/restore. Exact old digests launch offline; supported cleanup cannot prune protected references. No test fills or cleans the real shared disk. |
+| Candidate containment/readiness | Actual packaged entry/migrations and enabled/disabled modules; reject incomplete/ahead sets, damaged integrity/FKs/protection definitions and preservation deltas. Fresh local TLS/menu/config/history checks must reject stale boots, cached/setup/recovery/health-only responses and overbroad validator credentials. Intercept attempts to every external/hardware/background seat; no real provider use or venue test sale. Remove each gate and observe failure beside a valid control. Inspect actual EN/ES screens, both themes, phone/desktop, keyboard/accessibility. Static PNGs do not pass this gate. |
 | A799 release qualification | Oldest-supported and previous-retained sources, equal endpoints once; actual pending migrations distinct from restart; exact independent issued-F1/history/identity preservation, restart and separate continued sale on disposable copies. Empty/missing/skipped evidence blocks release; no automatic retirement or refreshed expectations. |
-| Stream and spare | Actual pinned Litestream/S3, old/new mixed versions, frozen store/follow/copy-up/prune, same-term conditional new-prefix handoff and failed CAS; crash before/after full copy/pointer switch; rollback restores old publication, spare loss/new membership never admits stale primary. Readiness failures must defer updates while current service sells. |
+| Stream and spare | Actual pinned Litestream/S3, old/new mixed versions, frozen store/follow/copy-up/prune, same-term conditional new-prefix handoff and failed CAS; crash before/after full copy/pointer switch; rollback restores old publication, spare loss/new membership never admits stale primary. Spare closure must precede follow; its primary keeps selling during validation. External outages must not delay successful local closure or ordinary sales; publication retries retain authority and old copies. |
 | Host/TPM and clients | B3's separately authorised real Linux/VM/TPM/firmware/disk/Android gates; startup reseal interruption and key-present exceptions. No source read, mock or app upgrade result substitutes for them. |
 
-One fresh builder review identified the Stop, idle overnight trial and early acceptance-button
-ambiguities; this proposal incorporates those corrections. The next owner decision is §2.
-No plan, build, migration, runtime qualification, Cloud change or release approval follows from
-publishing this proposal.
+**Status: needs-owner-review for the whole revised design.** Section 2's owner boundary is
+resolved; do not ask it again. Automatic-on, 03:00–05:00, spare-first and the other labelled
+proposals remain for that full approval. The revised design and illustrations are ready for
+owner review. Publication grants no plan, build, migration, runtime qualification, Cloud change
+or release authority.

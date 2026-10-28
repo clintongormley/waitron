@@ -4909,9 +4909,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades that can be undone until the first order (A950)** — required before go-live; [design proposal](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), no approval or build.
-  One owner question: should the first live change or automatic action, such as a refund or fiscal filing, close rollback before it executes? The broader boundary and automatic scheduling are proposed, not approved.
-  B3 layout/key/Wi-Fi and A1042's newer start-again floor stay; host admission, whole-state rollback, frozen bucket/spare publication and A799/runtime qualification remain gates.
+- **Automatic upgrades with rollback until a clean, running restart (A950)** — required before go-live; [revised design](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), needs-owner-review for full approval, no build authority.
+  Owner answer, 2026-10-28: successful new-version restart, clean database upgrade and a running, answering system close rollback automatically before normal work resumes. No first-order, first-action or acceptance step remains.
+  Packaged migration/preservation and fresh local passive-response checks are proposed and UNVERIFIED. Automatic-on, 03:00–05:00 and spare-first remain unapproved proposals. B3/start-again, complete-state, A799, single-writer, Cloud hold and qualified bucket/spare publication protections remain.
   [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)
