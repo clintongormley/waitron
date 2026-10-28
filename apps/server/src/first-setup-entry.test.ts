@@ -307,8 +307,8 @@ it("does not treat a consumed abandoned marker as permission to trade", async ()
           WAITRON_STATE_DIR: f.stateDir,
           WAITRON_HTTP_HOST: "127.0.0.1",
           WAITRON_HTTP_PORT: String(port),
-          WAITRON_TILL_NODE_ID: "11111111-1111-4111-8111-111111111111",
-          WAITRON_TILL_LOCATION_ID: "22222222-2222-4222-8222-222222222222",
+          WAITRON_NODE_ID: "11111111-1111-4111-8111-111111111111",
+          WAITRON_LOCATION_ID: "22222222-2222-4222-8222-222222222222",
         });
       })(),
     ).rejects.toMatchObject({ code: "setup.attempt_uncertain" });

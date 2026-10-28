@@ -193,9 +193,9 @@ async function seedVenue(db: Database): Promise<void> {
 function primaryEnv(venueDir: string, port: number, nodeId: string): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_NODE_ID: nodeId,
+    WAITRON_NODE_ID: nodeId,
 
-    WAITRON_TILL_LOCATION_ID: LOCATION,
+    WAITRON_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -208,9 +208,9 @@ function primaryEnv(venueDir: string, port: number, nodeId: string): Record<stri
 function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
-    WAITRON_TILL_NODE_ID: NODE_B,
+    WAITRON_NODE_ID: NODE_B,
 
-    WAITRON_TILL_LOCATION_ID: LOCATION,
+    WAITRON_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,

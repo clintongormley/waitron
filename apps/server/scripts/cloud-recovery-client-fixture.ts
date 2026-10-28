@@ -82,7 +82,7 @@ else if (request.command === "stage") {
       assert(trading);
       if (request.expectedSourceNodeId)
         assert.equal(
-          parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
+          parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
           request.expectedSourceNodeId,
         );
       assert(
@@ -126,7 +126,7 @@ else if (request.command === "stage") {
     await store.close();
   }
   assert.equal(
-    parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_TILL_NODE_ID,
+    parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8")).WAITRON_NODE_ID,
     request.expectedSourceNodeId,
   );
   assert.equal(await exists(join(stateDir, "backup.env")), false);
@@ -145,7 +145,7 @@ else if (request.command === "stage") {
 } else if (request.command === "prepareReplacement" || request.command === "statusReplacement") {
   const nodeId = parseEnvFile(
     await readFile(join(stateDir, "trading.env"), "utf8"),
-  ).WAITRON_TILL_NODE_ID;
+  ).WAITRON_NODE_ID;
   assert(nodeId);
   if (request.expectedSourceNodeId) assert.equal(nodeId, request.expectedSourceNodeId);
   const store = await openVenueDatabase(venueDir);

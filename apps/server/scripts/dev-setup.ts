@@ -86,8 +86,8 @@ export interface DevEnv {
   WAITRON_HTTP_PORT: string;
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
-  WAITRON_TILL_NODE_ID: string;
-  WAITRON_TILL_LOCATION_ID: string;
+  WAITRON_NODE_ID: string;
+  WAITRON_LOCATION_ID: string;
   WAITRON_TILL_LOCALE: string;
 }
 
@@ -98,8 +98,8 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_HTTP_PORT",
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
-  "WAITRON_TILL_NODE_ID",
-  "WAITRON_TILL_LOCATION_ID",
+  "WAITRON_NODE_ID",
+  "WAITRON_LOCATION_ID",
   "WAITRON_TILL_LOCALE",
 ];
 
@@ -156,8 +156,8 @@ export function buildDevEnv(input: {
     WAITRON_HTTP_PORT: input.httpPort || "8080",
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_TILL_NODE_ID: ids.nodeId,
-    WAITRON_TILL_LOCATION_ID: ids.locationId,
+    WAITRON_NODE_ID: ids.nodeId,
+    WAITRON_LOCATION_ID: ids.locationId,
     WAITRON_TILL_LOCALE: input.receiptLocale ?? SEED_INVOICE_LOCALE[seedLocale],
   };
 }
@@ -364,7 +364,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
   const expectedLocationId =
-    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_TILL_LOCATION_ID : null;
+    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_LOCATION_ID : null;
   const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedLocationId);
 
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {

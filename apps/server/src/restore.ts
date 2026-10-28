@@ -90,7 +90,7 @@ const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
-const IDENTITY_KEYS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
+const IDENTITY_KEYS = ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
 const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;
@@ -727,8 +727,8 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   }
   return {
     node: {
-      locationId: brandLocationId(env.WAITRON_TILL_LOCATION_ID!),
-      nodeId: brandNodeId(env.WAITRON_TILL_NODE_ID!),
+      locationId: brandLocationId(env.WAITRON_LOCATION_ID!),
+      nodeId: brandNodeId(env.WAITRON_NODE_ID!),
     },
   };
 }

@@ -174,9 +174,7 @@ beforeAll(async () => {
       { name: "db.dump", bytes: await readFile(database) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_TILL_NODE_ID=${ids.node}\nWAITRON_TILL_LOCATION_ID=${ids.location}\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${ids.node}\nWAITRON_LOCATION_ID=${ids.location}\n`),
       },
       {
         name: "secrets/secrets.env",

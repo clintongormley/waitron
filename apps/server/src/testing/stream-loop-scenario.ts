@@ -337,9 +337,9 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     await writeFile(
       join(dirsA.state, "trading.env"),
       formatEnvFile({
-        WAITRON_TILL_NODE_ID: a.nodeId,
+        WAITRON_NODE_ID: a.nodeId,
 
-        WAITRON_TILL_LOCATION_ID: a.locationId,
+        WAITRON_LOCATION_ID: a.locationId,
         WAITRON_ENV: "preproduction",
       }),
     );
@@ -504,7 +504,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     });
     expect(code, said.join("\n")).toBe(0);
     const tradingB = parseEnvFile(await readFile(join(dirsB.state, "trading.env"), "utf8"));
-    expect(tradingB.WAITRON_TILL_NODE_ID).toBe(a.nodeId);
+    expect(tradingB.WAITRON_NODE_ID).toBe(a.nodeId);
     expect(tradingB).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
 
     clock.begin("pointer-b");
@@ -576,7 +576,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     // 8. B sells on the series the restore opened, and the sale reaches B's generation.
     const saleB = await recordOneSale(
       {
-        nodeId: tradingB.WAITRON_TILL_NODE_ID!,
+        nodeId: tradingB.WAITRON_NODE_ID!,
         seriesId: seriesB,
         description: "Agua",
         baseAmount: "2.00",
@@ -594,7 +594,7 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
     //     the bucket would hang with it; the bound sits far below that and far above a healthy sale. Without a
     //     `freeze` the same sales run unfrozen and unbounded, so the record count below holds.
     const idsB = {
-      nodeId: tradingB.WAITRON_TILL_NODE_ID!,
+      nodeId: tradingB.WAITRON_NODE_ID!,
       seriesId: seriesB,
     };
     const timedSale = async (i: number): Promise<{ ms: number; saleId: string }> => {

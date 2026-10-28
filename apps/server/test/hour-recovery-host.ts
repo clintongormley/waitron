@@ -290,7 +290,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(
-          `WAITRON_TILL_NODE_ID=${node.nodeId}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
+          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
         ),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },

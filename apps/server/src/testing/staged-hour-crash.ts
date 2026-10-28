@@ -168,7 +168,7 @@ export async function stagedHourCrash(
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(
-          `WAITRON_TILL_NODE_ID=${node.nodeId}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\nWAITRON_ENV=preproduction\n`,
+          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\nWAITRON_ENV=preproduction\n`,
         ),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },

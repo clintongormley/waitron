@@ -38,7 +38,7 @@ it("accepts cash-register devices, current identity settings, comments and strin
     ["apps/till/src/device.ts", 'const till = { formFactor: "till" };'],
     [
       "apps/server/src/config.ts",
-      "const value = process.env.WAITRON_TILL_NODE_ID ?? process.env.WAITRON_TILL_LOCATION_ID;",
+      "const value = process.env.WAITRON_NODE_ID ?? process.env.WAITRON_LOCATION_ID;",
     ],
     ["packages/fiscal/src/receipt.ts", '// a till device\nconst node = "till";'],
   ])
@@ -192,3 +192,14 @@ it("rejects private fiscal identifiers", () => {
     "packages/fiscal/src/private.ts: fiscal identifier #till",
   ]);
 });
+
+it.each(["NODE", "LOCATION"])(
+  "rejects the retired %s identity setting even in legacy negative-test files",
+  (part) => {
+    const value = `WAITRON_TILL_${part}_ID`;
+    for (const path of ["apps/server/src/config.ts", "apps/server/src/till-config.test.ts"])
+      expect(inspectSource(path, `const value = "${value}";`)).toEqual([
+        `${path}: retired ${value}`,
+      ]);
+  },
+);

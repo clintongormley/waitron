@@ -31,9 +31,9 @@ const LOCATION = "55555555-5555-4555-8555-555555555555";
 const base: Record<string, string | undefined> = {
   WAITRON_STATE_DIR: STATE_DIR,
   WAITRON_VENUE_DIR: VENUE_DIR,
-  WAITRON_TILL_NODE_ID: NODE,
+  WAITRON_NODE_ID: NODE,
 
-  WAITRON_TILL_LOCATION_ID: LOCATION,
+  WAITRON_LOCATION_ID: LOCATION,
 };
 
 type OpenedVenue = { db: Database; close(): Promise<void> };
@@ -108,16 +108,16 @@ describe("waitron-rejoin rejoin", () => {
 
   it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
-      WAITRON_TILL_NODE_ID: undefined,
+      WAITRON_NODE_ID: undefined,
 
-      WAITRON_TILL_LOCATION_ID: undefined,
+      WAITRON_LOCATION_ID: undefined,
     });
     expect(code).toBe(1);
     expect(out.join("\n")).toMatch(/WAITRON_TILL/);
   });
 
   it("reports a partial till config by code (server.config_invalid) and returns 1", async () => {
-    const { code, out } = await run({ WAITRON_TILL_NODE_ID: undefined });
+    const { code, out } = await run({ WAITRON_NODE_ID: undefined });
     expect(code).toBe(1);
     expect(out.join("\n")).toContain("server.config_invalid");
   });
@@ -159,7 +159,7 @@ describe("waitron-rejoin rejoin", () => {
       live.venue.run(sql`create table venue_marker (v text)`);
       live.node.run(sql`create table node_marker (v text)`);
       await live.close();
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
 
       const migrated: string[] = [];
       const rejoin = async (d: RejoinDeps): Promise<RejoinResult> => {
@@ -390,7 +390,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
           }),
         );
         await seeded.close();
-        await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+        await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
         if (source !== undefined) {
           await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
         }
@@ -476,7 +476,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await seeded.close();
       }
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
       await mkdir(join(stateDir, REBUILD_MARKER));
       await writeFile(join(stateDir, REBUILD_MARKER, "retained"), "keep");
       const out: string[] = [];
@@ -494,9 +494,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await reopened.close();
       }
-      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
-        "WAITRON_TILL_NODE_ID=old\n",
-      );
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
       expect(await readFile(join(stateDir, REBUILD_MARKER, "retained"), "utf8")).toBe("keep");
     } finally {
       await rm(stateDir, { recursive: true, force: true });

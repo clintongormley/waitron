@@ -90,9 +90,9 @@ const T = {
   nodeId: "c0000000-0000-4000-8000-000000000008",
 };
 const TRADING_ENV = formatEnvFile({
-  WAITRON_TILL_NODE_ID: T.nodeId,
+  WAITRON_NODE_ID: T.nodeId,
 
-  WAITRON_TILL_LOCATION_ID: T.locationId,
+  WAITRON_LOCATION_ID: T.locationId,
   DATABASE_URL: "postgres://app@localhost/waitron",
   WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron",
   WAITRON_ENV: "preproduction",
@@ -1036,8 +1036,8 @@ describe("restore hooks (identity phase)", () => {
     await writeFile(
       join(stateDir, "trading.env"),
       formatEnvFile({
-        WAITRON_TILL_NODE_ID: "stale",
-        WAITRON_TILL_LOCATION_ID: "stale",
+        WAITRON_NODE_ID: "stale",
+        WAITRON_LOCATION_ID: "stale",
       }),
     );
     const hook = vi.fn(async () => ({ report: "ok" }));
@@ -1054,7 +1054,7 @@ describe("restore hooks (identity phase)", () => {
   it("a pre-existing VALID identity is set aside BEFORE the venue file is replaced", async () => {
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
-      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+      WAITRON_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
     await writeFile(join(stateDir, "trading.env"), existing);
     const blocker = join(stagingDir, "not-a-directory");
@@ -1107,7 +1107,7 @@ describe("restore hooks (identity phase)", () => {
   it("a failed hook leaves NO trading.env, neither the target's nor the artifact's", async () => {
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
-      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+      WAITRON_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
     await writeFile(join(stateDir, "trading.env"), existing);
     const boom: RestoreHook = async () => {
@@ -1125,7 +1125,7 @@ describe("restore hooks (identity phase)", () => {
   });
 
   it("a pre-existing identity is UNTOUCHED under skipSecrets (the rejoin shape keeps its own)", async () => {
-    const own = formatEnvFile({ WAITRON_TILL_NODE_ID: "own" });
+    const own = formatEnvFile({ WAITRON_NODE_ID: "own" });
     await writeFile(join(stateDir, "trading.env"), own);
     await restoreFromArtifact(makeRestoreDeps({ skipSecrets: true }));
     expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(own);
@@ -1290,16 +1290,14 @@ describe("restore hooks (identity phase)", () => {
     async (missing) => {
       const existing = formatEnvFile({
         ...parseEnvFile(TRADING_ENV),
-        WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+        WAITRON_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
       });
       await writeFile(join(stateDir, "trading.env"), existing);
       const entries = FULL_ENTRIES.filter((e) => e.name !== "secrets/trading.env");
       if (missing === "key") {
         entries.push({
           name: "secrets/trading.env",
-          bytes: Buffer.from(
-            formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
-          ),
+          bytes: Buffer.from(formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_NODE_ID: "" })),
         });
       }
       const migrate = vi.fn(async () => {});
@@ -1309,7 +1307,7 @@ describe("restore hooks (identity phase)", () => {
       });
       const error = {
         code: "restore.identity_incomplete",
-        params: { missing: missing === "key" ? "WAITRON_TILL_NODE_ID" : "trading.env" },
+        params: { missing: missing === "key" ? "WAITRON_NODE_ID" : "trading.env" },
       };
 
       await expect(restoreFromArtifact(restoreDeps)).rejects.toMatchObject(error);
@@ -1330,14 +1328,12 @@ describe("restore hooks (identity phase)", () => {
     await expect(
       restoreFromArtifact(
         makeRestoreDeps({
-          artifact: withEnv(
-            formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_TILL_NODE_ID: "" }),
-          ),
+          artifact: withEnv(formatEnvFile({ ...parseEnvFile(TRADING_ENV), WAITRON_NODE_ID: "" })),
         }),
       ),
     ).rejects.toMatchObject({
       code: "restore.identity_incomplete",
-      params: { missing: "WAITRON_TILL_NODE_ID" },
+      params: { missing: "WAITRON_NODE_ID" },
     });
     await expect(
       restoreFromArtifact(makeRestoreDeps({ artifact: buildArtifact(base) })),
@@ -1351,7 +1347,7 @@ describe("restore hooks (identity phase)", () => {
           artifact: withEnv(
             formatEnvFile({
               ...parseEnvFile(TRADING_ENV),
-              WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000ff",
+              WAITRON_NODE_ID: "c0000000-0000-4000-8000-0000000000ff",
             }),
           ),
         }),
@@ -1805,8 +1801,8 @@ describe("clearReplacedDatabases", () => {
 describe("transactional series restore identity", () => {
   it("requires only node and location from the sealed identity", () => {
     const env = formatEnvFile({
-      WAITRON_TILL_NODE_ID: T.nodeId,
-      WAITRON_TILL_LOCATION_ID: T.locationId,
+      WAITRON_NODE_ID: T.nodeId,
+      WAITRON_LOCATION_ID: T.locationId,
     });
     expect(
       readArtifactIdentity([{ name: "secrets/trading.env", bytes: Buffer.from(env) }]),

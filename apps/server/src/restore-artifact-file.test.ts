@@ -102,9 +102,7 @@ async function artifact(f: Awaited<ReturnType<typeof fixture>>) {
     { name: "db.dump", bytes: await readFile(database) },
     {
       name: "secrets/trading.env",
-      bytes: Buffer.from(
-        `WAITRON_TILL_NODE_ID=${ids.node}\nWAITRON_TILL_LOCATION_ID=${ids.location}\n`,
-      ),
+      bytes: Buffer.from(`WAITRON_NODE_ID=${ids.node}\nWAITRON_LOCATION_ID=${ids.location}\n`),
     },
     {
       name: "secrets/secrets.env",
@@ -195,7 +193,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
   for (const rel of RECOVERY_FILES) await writeFile(join(captureState, rel), `${rel}-content`);
   await writeFile(
     join(captureState, "trading.env"),
-    `WAITRON_TILL_NODE_ID=${ids.node}\nWAITRON_TILL_LOCATION_ID=${ids.location}\n`,
+    `WAITRON_NODE_ID=${ids.node}\nWAITRON_LOCATION_ID=${ids.location}\n`,
   );
   const backend = new LocalFsBackend("file", join(f.root, "store"));
   const stamp = new Date("2026-10-06T00:00:00Z");

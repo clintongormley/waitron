@@ -123,8 +123,8 @@ if (savedEnv !== undefined) {
     WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${address.port}`,
     WAITRON_CREDENTIALS_KEY: boxSecrets.WAITRON_CREDENTIALS_KEY,
     WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
-    WAITRON_TILL_LOCATION_ID: result.locationId,
-    WAITRON_TILL_NODE_ID: result.nodeId,
+    WAITRON_LOCATION_ID: result.locationId,
+    WAITRON_NODE_ID: result.nodeId,
     WAITRON_CLOUD_ORIGIN: process.env.CLOUD_TEST_ORIGIN,
     WAITRON_DASHBOARD_APP_DIR: isUnset(process.env.WAITRON_DASHBOARD_APP_DIR)
       ? resolve(import.meta.dirname, "../../dashboard/dist")
@@ -140,7 +140,7 @@ await writeFile(
   JSON.stringify({
     origin: env.WAITRON_MANAGEMENT_ORIGIN,
     port: Number(env.WAITRON_HTTP_PORT),
-    localVenueId: env.WAITRON_TILL_LOCATION_ID,
+    localVenueId: env.WAITRON_LOCATION_ID,
   }),
   { mode: 0o600 },
 );
@@ -149,7 +149,7 @@ await rename(`${readyPath}.tmp`, readyPath);
 const cloud = createCloudConnection({
   stateDir: root,
   origin: env.WAITRON_CLOUD_ORIGIN!,
-  localVenueId: env.WAITRON_TILL_LOCATION_ID!,
+  localVenueId: env.WAITRON_LOCATION_ID!,
   environment: "test",
 });
 process.on("message", (message: unknown) => {

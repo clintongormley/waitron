@@ -279,8 +279,8 @@ describe("runStagedReset", () => {
       });
       expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
       const trading = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
-      expect(trading.WAITRON_TILL_NODE_ID).toBe(standbyNodeId);
-      expect(trading.WAITRON_TILL_LOCATION_ID).toBe(BUNDLE.designated.locationId);
+      expect(trading.WAITRON_NODE_ID).toBe(standbyNodeId);
+      expect(trading.WAITRON_LOCATION_ID).toBe(BUNDLE.designated.locationId);
       const pending = JSON.parse(
         await readFile(join(stateDir, PENDING_ADOPTION_FILE), "utf8"),
       ) as PendingAdoption;
@@ -324,7 +324,7 @@ describe("runStagedReset", () => {
       "trading_configured",
       async (box: { stateDir: string; operationId: string }) => {
         await stageResetRequest(box.stateDir, box.operationId);
-        await writeFile(join(box.stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=x\n");
+        await writeFile(join(box.stateDir, "trading.env"), "WAITRON_NODE_ID=x\n");
       },
     ],
     [

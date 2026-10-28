@@ -108,7 +108,7 @@ it.each(["archive", "stream"] as const)(
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(
-          `WAITRON_TILL_NODE_ID=${node.nodeId}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
+          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
         ),
       },
     ];

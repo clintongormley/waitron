@@ -104,7 +104,7 @@ describe("business-day timeline through cold restore and reset", () => {
           {
             name: "secrets/trading.env",
             bytes: Buffer.from(
-              `WAITRON_TILL_NODE_ID=${venue.cfg.nodeId}\nWAITRON_TILL_LOCATION_ID=${venue.cfg.locationId}\n`,
+              `WAITRON_NODE_ID=${venue.cfg.nodeId}\nWAITRON_LOCATION_ID=${venue.cfg.locationId}\n`,
             ),
           },
         ]),

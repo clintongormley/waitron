@@ -182,11 +182,6 @@ under `docs/backlog/`.
   to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
-- **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
-  open by A1154 (#2172), which removed the till-registration command and kept the fiscal identity on
-  the node. Drop `WAITRON_TILL_LOCATION_ID` too if the database can answer it. Its own PR; demo and
-  test boxes need a venue reset (`wa-wt reset`). Queued in lane E.
-
 - **A1156: split the server's `TillConfig` (`config.till`) into box identity and till-app
   settings.** Left open by A1154; after A1155, as a separate change (owner, 2026-10-27). Queued in
   lane E.

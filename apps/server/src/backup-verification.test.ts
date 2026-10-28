@@ -49,7 +49,7 @@ const server = certificate("verification.test", pair, issuer, "02", validity, [
 ]);
 const recoveryEntries = Object.entries({
   "secrets.env": `WAITRON_CREDENTIALS_KEY=${vault}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
-  "trading.env": `WAITRON_TILL_NODE_ID=${sourceNodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\nWAITRON_ENV=preproduction\n`,
+  "trading.env": `WAITRON_NODE_ID=${sourceNodeId}\nWAITRON_LOCATION_ID=${locationId}\nWAITRON_ENV=preproduction\n`,
   "tls/ca.crt": forge.pki.certificateToPem(ca),
   "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
   "tls/server.crt": forge.pki.certificateToPem(server),

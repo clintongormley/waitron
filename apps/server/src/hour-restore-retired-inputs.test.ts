@@ -266,7 +266,7 @@ it.each(["archive", "stream"] as const)(
     expect(f.journal()).not.toContain(f.key.secret);
     expect(f.journal()).not.toContain(f.encryptionKey);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-      `WAITRON_TILL_NODE_ID=${f.node.nodeId}`,
+      `WAITRON_NODE_ID=${f.node.nodeId}`,
     );
   },
 );
@@ -361,7 +361,7 @@ it("replays its exact committed result after trading-settings publication is int
   expect(await f.snapshot()).toEqual(before);
   expect(before.records).toEqual(f.original);
   expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-    `WAITRON_TILL_NODE_ID=${f.node.nodeId}`,
+    `WAITRON_NODE_ID=${f.node.nodeId}`,
   );
 });
 it("restores offline through current hour authority while retired paper input grants no authority", async () => {

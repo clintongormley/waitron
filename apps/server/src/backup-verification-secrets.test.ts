@@ -54,7 +54,7 @@ const privatePem = forge.pki.privateKeyToPem;
 function entries(): ArchiveEntry[] {
   return Object.entries({
     "secrets.env": `WAITRON_CREDENTIALS_KEY=${key}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`,
-    "trading.env": `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
+    "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_LOCATION_ID=${source.locationId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
     "tls/ca.crt": pem(ca),
     "tls/ca.key": privatePem(caKeys.privateKey),
     "tls/server.crt": pem(leaf),
@@ -176,7 +176,7 @@ describe("private host recovery material", () => {
       expect(await verifyBackupStateSecrets(entries(), source, new Date(at))).toEqual(unavailable);
     },
   );
-  it.each(["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"])(
+  it.each(["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"])(
     "binds captured %s to the source",
     async (name) => {
       const input = entries();
@@ -198,7 +198,7 @@ describe("private host recovery material", () => {
         set(
           entries(),
           "trading.env",
-          `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\nWAITRON_ACCOUNT_KEY=bad`,
+          `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_LOCATION_ID=${source.locationId}\nWAITRON_ACCOUNT_KEY=bad`,
         ),
         source,
         now,
@@ -279,7 +279,7 @@ describe("private host recovery material", () => {
     const wrong = set(
       entries(),
       "trading.env",
-      "WAITRON_TILL_NODE_ID=30000000-0000-4000-8000-000000000003\nWAITRON_TILL_LOCATION_ID=40000000-0000-4000-8000-000000000004\n",
+      "WAITRON_NODE_ID=30000000-0000-4000-8000-000000000003\nWAITRON_LOCATION_ID=40000000-0000-4000-8000-000000000004\n",
     );
     expect(await verifyBackupStateSecrets(entries(), source, now, await seal(wrong))).toEqual({
       status: "invalid",
@@ -351,7 +351,7 @@ describe("actual private key placement", () => {
       set(
         entries(),
         "trading.env",
-        `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
+        `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_LOCATION_ID=${source.locationId}\n`,
       ),
       "backup.env",
       `WAITRON_ACCOUNT_KEY=${account}\n`,
@@ -365,7 +365,7 @@ describe("actual private key placement", () => {
     const input = set(
       entries(),
       "trading.env",
-      `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
+      `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_LOCATION_ID=${source.locationId}\n`,
     );
     expect(await verifyBackupKeyPlacement(input, await place(input))).toBe("passed");
   });
@@ -534,7 +534,7 @@ it("accepts an equal derived account key redundantly supplied by backup.env", as
   const input = set(
     entries(),
     "trading.env",
-    `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
+    `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_LOCATION_ID=${source.locationId}\n`,
   );
   const dir = await place(input);
   const derived = resolveAccountKey(

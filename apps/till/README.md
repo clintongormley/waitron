@@ -106,16 +106,16 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    Invoice issuance reads the live series for the invoice's purpose inside its write transaction,
    so switching series does not require a server restart.
 
-3. **Boot the server** with those ids as the `WAITRON_TILL_*` env. This is the normal server boot
+3. **Boot the server** with `WAITRON_NODE_ID` and `WAITRON_LOCATION_ID`. This is the normal server boot
    ([server README](../server/README.md#running-it)) — the credential key ring and the rest apply
    unchanged, and the server must open the SAME venue directory you provisioned, or the till sells
-   into a database nobody serves. The variables below are the till-specific additions:
+   into a database nobody serves. The variables below identify the box and choose the till settings:
 
    ```bash
    WAITRON_VENUE_DIR=<the directory you provisioned> \
    WAITRON_CREDENTIALS_KEY=<base64, 32 bytes> \
-   WAITRON_TILL_LOCATION_ID=<location_id> \
-   WAITRON_TILL_NODE_ID=<node_id> \
+   WAITRON_LOCATION_ID=<location_id> \
+   WAITRON_NODE_ID=<node_id> \
    WAITRON_TILL_LOCALE=es-ES \
    node apps/server/dist/server.js
    ```
@@ -130,14 +130,21 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
    # → http://localhost:5190
    ```
 
-### The `WAITRON_TILL_*` variables
+### Box identity and till settings
 
-| Variable                   | Required | Default | What it is                                                                                                                                                                                                                                                                                                                                           |
-| -------------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WAITRON_TILL_LOCATION_ID` | yes      | —       | The venue's location on this node.                                                                                                                                                                                                                                                                                                                   |
-| `WAITRON_TILL_NODE_ID`     | yes      | —       | The compute node whose SIF/chain sales file to.                                                                                                                                                                                                                                                                                                      |
-| `WAITRON_TILL_LOCALE`      | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
-| `WAITRON_TILL_TIPS`        | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
+| Variable              | Required | Default | What it is                                                                                                                                                                                                                                                                                                                                           |
+| --------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WAITRON_LOCATION_ID` | yes      | —       | The venue's location on this node.                                                                                                                                                                                                                                                                                                                   |
+| `WAITRON_NODE_ID`     | yes      | —       | The box that records sales and owns the invoice series.                                                                                                                                                                                                                                                                                              |
+| `WAITRON_TILL_LOCALE` | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
+| `WAITRON_TILL_TIPS`   | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
+
+You still supply the location when starting an adopted spare: its local role can exist before
+its own `nodes` row, so that row cannot supply the location during the pending adoption.
+
+After this identity-setting rename, reset your existing throwaway demo or test venue with
+`wa-wt reset demo <worktree-name>` before starting it. Provisioning writes the new settings;
+there is no fallback to the old names.
 
 Each is resolved once at boot by `loadTillConfig` (`apps/server/src/till-config.ts`); a missing or
 malformed value fails the boot loudly (`server.till_config_missing` / `server.till_config_invalid`),

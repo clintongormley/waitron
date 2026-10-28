@@ -809,7 +809,7 @@ it("real HTTPS resolution boot finishes the retained hour database without docum
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ provisioned: true, restarting: true });
     expect(parseEnvFile(await readFile(join(f.stateDir, "trading.env"), "utf8"))).toMatchObject({
-      WAITRON_TILL_NODE_ID: owner.state.nodeId,
+      WAITRON_NODE_ID: owner.state.nodeId,
       WAITRON_ENV: "preproduction",
       WAITRON_ONBOARDING_INTENT: "live",
     });
@@ -908,7 +908,7 @@ it("real HTTPS hour Finish survives a discarded answer and two trading boots wit
     const published = await readFile(join(f.stateDir, "trading.env")).catch(() => null);
     expect(published).not.toBeNull();
     expect(parseEnvFile(published!.toString())).toMatchObject({
-      WAITRON_TILL_NODE_ID: owner.state.nodeId,
+      WAITRON_NODE_ID: owner.state.nodeId,
       WAITRON_ENV: "dev",
       WAITRON_ONBOARDING_INTENT: "live",
     });

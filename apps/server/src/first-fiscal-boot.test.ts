@@ -281,7 +281,7 @@ it.each(["trading", "completion-state", "completion-marker"])(
             : "complete",
       );
       const tradingEnv = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
-      expect(tradingEnv.WAITRON_TILL_NODE_ID).toBe(claim.body.state.nodeId);
+      expect(tradingEnv.WAITRON_NODE_ID).toBe(claim.body.state.nodeId);
       const childFile = join(root, "restart-child.mjs");
       await cp(resolve("src/assets"), join(root, "assets"), { recursive: true });
       await symlink(resolve("node_modules"), join(root, "node_modules"));

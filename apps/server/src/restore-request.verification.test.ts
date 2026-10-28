@@ -434,7 +434,7 @@ describe("comparison immediately before real archive placement", () => {
         {
           name: "secrets/trading.env",
           bytes: Buffer.from(
-            `WAITRON_TILL_NODE_ID=${nodeId}\nWAITRON_TILL_LOCATION_ID=${locationId}\nWAITRON_ENV=preproduction\n`,
+            `WAITRON_NODE_ID=${nodeId}\nWAITRON_LOCATION_ID=${locationId}\nWAITRON_ENV=preproduction\n`,
           ),
         },
       ]),

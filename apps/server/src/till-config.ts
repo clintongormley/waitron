@@ -86,12 +86,8 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
   const tipsEnabled = rawTips === "true" || rawTips === "1";
 
   return {
-    nodeId: brand("WAITRON_TILL_NODE_ID", nodeId, required(env, "WAITRON_TILL_NODE_ID")),
-    locationId: brand(
-      "WAITRON_TILL_LOCATION_ID",
-      locationId,
-      required(env, "WAITRON_TILL_LOCATION_ID"),
-    ),
+    nodeId: brand("WAITRON_NODE_ID", nodeId, required(env, "WAITRON_NODE_ID")),
+    locationId: brand("WAITRON_LOCATION_ID", locationId, required(env, "WAITRON_LOCATION_ID")),
     locale,
     invoiceLocales: [locale],
     localeOverride: rawLocale === undefined || rawLocale === "" ? undefined : rawLocale,
@@ -100,7 +96,7 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
 }
 
 /** Order matters: a partial set names the FIRST missing variable in this order. */
-const TILL_ID_VARS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
+const TILL_ID_VARS = ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const;
 
 /**
  * Neither of the two ids set is setup mode (`undefined`), not a fault. Some but not all set is a

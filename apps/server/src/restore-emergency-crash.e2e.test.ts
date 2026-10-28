@@ -153,7 +153,7 @@ it.each(["archive", "stream"] as const)(
   "keeps the committed %s activation after a process is killed before publishing trading settings",
   async (kind) => {
     const f = await stage(kind);
-    const previousIdentity = `# existing physical box\nWAITRON_TILL_NODE_ID=${f.node.nodeId}\nWAITRON_TILL_LOCATION_ID=${f.node.locationId}\nWAITRON_ENV=preproduction\n`;
+    const previousIdentity = `# existing physical box\nWAITRON_NODE_ID=${f.node.nodeId}\nWAITRON_LOCATION_ID=${f.node.locationId}\nWAITRON_ENV=preproduction\n`;
     await writeFile(join(f.stateDir, "trading.env"), previousIdentity, { mode: 0o600 });
     await f.seedDestination();
     const output = await killRestore(f, "before-publication");

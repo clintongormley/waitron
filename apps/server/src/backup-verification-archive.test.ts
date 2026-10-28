@@ -43,7 +43,7 @@ async function fixture() {
     {
       name: "secrets/trading.env",
       bytes: Buffer.from(
-        `WAITRON_TILL_NODE_ID=${node}\nWAITRON_TILL_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=preproduction\n`,
+        `WAITRON_NODE_ID=${node}\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=preproduction\n`,
       ),
     },
     { name: "secrets/secrets.env", bytes: Buffer.from("private-vault-input") },

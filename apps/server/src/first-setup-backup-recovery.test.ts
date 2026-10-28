@@ -297,7 +297,7 @@ it("valid backup proof discloses only that backup while preserving a different l
   await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
   await writeFile(
     join(f.roots.stateDir, "trading.env"),
-    `WAITRON_TILL_NODE_ID=${localNode}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
+    `WAITRON_NODE_ID=${localNode}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
   );
   const before = await readFile(join(f.roots.venueDir, "venue.db"));
   const inspected = await f.host.resolution.inspectFirstSetupResolution();

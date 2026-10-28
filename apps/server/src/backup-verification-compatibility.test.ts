@@ -137,7 +137,7 @@ beforeEach(async () => {
   entries = RECOVERY_FILES.map((f) => entry("secrets/" + f));
   setEntry(
     "secrets/trading.env",
-    "WAITRON_TILL_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_TILL_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=preproduction\n",
+    "WAITRON_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=preproduction\n",
   );
   bindTarget();
 });
@@ -444,7 +444,7 @@ describe("strict backup compatibility", () => {
       if (mode === "empty identity")
         setEntry(
           "secrets/trading.env",
-          "WAITRON_TILL_NODE_ID=\nWAITRON_TILL_LOCATION_ID=10000000-0000-4000-8000-000000000001",
+          "WAITRON_NODE_ID=\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001",
         );
       await expect(run()).resolves.toBe("invalid");
     },
@@ -456,7 +456,7 @@ describe("strict backup compatibility", () => {
       if (mode === "trading")
         setEntry(
           "secrets/trading.env",
-          "WAITRON_TILL_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_TILL_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=production\n",
+          "WAITRON_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=production\n",
         );
       if (mode === "stamp") execute("update deployment set environment='production'");
       await expect(run()).resolves.toBe("unsupported");
@@ -465,7 +465,7 @@ describe("strict backup compatibility", () => {
   it("accepts a captured development environment as preproduction", async () => {
     setEntry(
       "secrets/trading.env",
-      "WAITRON_TILL_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_TILL_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=dev\n",
+      "WAITRON_NODE_ID=20000000-0000-4000-8000-000000000002\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=dev\n",
     );
     await expect(run()).resolves.toBe("passed");
   });
@@ -610,7 +610,7 @@ describe("strict backup compatibility", () => {
     },
   );
   it("refuses invalid captured UUIDs", async () => {
-    setEntry("secrets/trading.env", "WAITRON_TILL_NODE_ID=bad\nWAITRON_TILL_LOCATION_ID=bad\n");
+    setEntry("secrets/trading.env", "WAITRON_NODE_ID=bad\nWAITRON_LOCATION_ID=bad\n");
     await expect(run()).resolves.toBe("invalid");
   });
   it("refuses non-text vault purpose without publishing it", async () => {

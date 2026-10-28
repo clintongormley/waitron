@@ -1,5 +1,9 @@
 # A1154 Node Registration Implementation Plan
 
+**2026-10-28 follow-up:** A1155 renames the box identity environment settings. Use the
+[current identity settings](../../../apps/till/README.md#box-identity-and-till-settings);
+the original A1154 scope below remains unchanged.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` for inline execution. Read `superpowers:test-driven-development` before editing implementation or tests. Track the checkboxes below; no implementation delegation.
 
 **Goal:** Remove the obsolete operator registration path and the idea that a cash register owns fiscal identity, chain or invoice series; preserve setup, restore and promotion.

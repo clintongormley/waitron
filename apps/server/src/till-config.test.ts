@@ -9,13 +9,13 @@ const NODE = "33333333-3333-4333-8333-333333333333";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base = {
-  WAITRON_TILL_NODE_ID: NODE,
-  WAITRON_TILL_LOCATION_ID: LOCATION,
+  WAITRON_NODE_ID: NODE,
+  WAITRON_LOCATION_ID: LOCATION,
 };
 
 /** The env-var name each id is sourced from — the same list `loadTillConfig` walks. Table-driven so
  * every id gets the missing and invalid cases without a copy of each per variable. */
-const ID_VARS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
+const ID_VARS = ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const;
 
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
@@ -150,6 +150,15 @@ describe("loadTillConfig", () => {
 });
 
 describe("tryLoadTillConfig", () => {
+  it("ignores retired identity keys instead of booting with the wrong box identity", () => {
+    const retired = {
+      [["WAITRON", "TILL", "NODE", "ID"].join("_")]: LOCATION,
+      [["WAITRON", "TILL", "LOCATION", "ID"].join("_")]: NODE,
+    };
+    expect(tryLoadTillConfig(retired)).toBeUndefined();
+    expect(tryLoadTillConfig({ ...retired, ...base })).toEqual(loadTillConfig(base));
+  });
+
   it("returns undefined when NONE of the two ids are set (setup mode)", () => {
     // An unprovisioned box has no venue: that is SETUP MODE, not a misconfiguration.
     expect(tryLoadTillConfig({})).toBeUndefined();
@@ -200,12 +209,12 @@ describe("tryLoadTillConfig", () => {
     const error = captureThrow(() =>
       tryLoadTillConfig({
         ...base,
-        WAITRON_TILL_NODE_ID: undefined,
+        WAITRON_NODE_ID: undefined,
       }),
     );
     expect(codeOf(error)).toBe("server.config_invalid");
     expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TILL_NODE_ID",
+      variable: "WAITRON_NODE_ID",
       reason: "till_config_partial",
     });
   });

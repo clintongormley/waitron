@@ -120,8 +120,8 @@ async function venue(db: Database): Promise<Venue> {
   );
   const cfg = await deviceRequestCfg(db, {
     ...loadTillConfig({
-      WAITRON_TILL_NODE_ID: allocated.nodeId,
-      WAITRON_TILL_LOCATION_ID: allocated.locationId,
+      WAITRON_NODE_ID: allocated.nodeId,
+      WAITRON_LOCATION_ID: allocated.locationId,
     }),
     simplifiedInvoiceLimit: null,
   });

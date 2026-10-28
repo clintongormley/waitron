@@ -417,7 +417,7 @@ it("the real direct entry can finish its retained database and publish trading s
     expect(await readFile(join(f.stateDir, "first-setup-node-key.json"))).toEqual(beforeKey);
     const settings = parseEnvFile(await readFile(join(f.stateDir, "trading.env"), "utf8"));
     expect(settings).toMatchObject({
-      WAITRON_TILL_NODE_ID: owner.state.nodeId,
+      WAITRON_NODE_ID: owner.state.nodeId,
       WAITRON_ENV: "production",
       WAITRON_ONBOARDING_INTENT: "live",
     });

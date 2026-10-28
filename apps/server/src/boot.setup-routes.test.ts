@@ -530,7 +530,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         expect(response.status).toBe(200);
         expect(await response.json()).toEqual({ provisioned: true, restarting: true });
         const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
-        expect(trading.WAITRON_TILL_NODE_ID).toBe(committed.nodeId);
+        expect(trading.WAITRON_NODE_ID).toBe(committed.nodeId);
         expect(trading).not.toHaveProperty("WAITRON_TILL_TILL_ID");
         await poll(() => (kills.length > 0 ? kills.length : undefined));
         expect(kills).toEqual([{ pid: process.pid, signal: "SIGTERM" }]);
@@ -934,9 +934,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             name: "secrets/trading.env",
             bytes: Buffer.from(
               [
-                "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
+                "WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008",
 
-                "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
+                "WAITRON_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                 "",
               ].join("\n"),
             ),
@@ -1279,9 +1279,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
               name: "secrets/trading.env",
               bytes: Buffer.from(
                 [
-                  "WAITRON_TILL_NODE_ID=c0000000-0000-4000-8000-000000000008",
+                  "WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008",
 
-                  "WAITRON_TILL_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
+                  "WAITRON_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
                   "",
                 ].join("\n"),
               ),

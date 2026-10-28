@@ -156,9 +156,9 @@ async function venueWith(
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
-      WAITRON_TILL_NODE_ID: venue.nodeId,
+      WAITRON_NODE_ID: venue.nodeId,
 
-      WAITRON_TILL_LOCATION_ID: venue.locationId,
+      WAITRON_LOCATION_ID: venue.locationId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
     simplifiedInvoiceLimit: null,

@@ -282,7 +282,7 @@ export function useBackupVerificationFixture() {
     );
     const files: Record<string, string> = {
       "secrets.env": `WAITRON_CREDENTIALS_KEY=${vault}\nWAITRON_CREDENTIALS_KEY_VERSION=1\n`,
-      "trading.env": `WAITRON_TILL_NODE_ID=${verificationNode.nodeId}\nWAITRON_TILL_LOCATION_ID=${verificationNode.locationId}\nWAITRON_ENV=production\n`,
+      "trading.env": `WAITRON_NODE_ID=${verificationNode.nodeId}\nWAITRON_LOCATION_ID=${verificationNode.locationId}\nWAITRON_ENV=production\n`,
       "tls/ca.crt": forge.pki.certificateToPem(ca),
       "tls/ca.key": forge.pki.privateKeyToPem(pair.privateKey),
       "tls/server.crt": forge.pki.certificateToPem(server),
