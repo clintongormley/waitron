@@ -124,6 +124,16 @@ fixture now inserts its historical group shape, prices and inserts the recorded 
 lower-level helpers, and retains its submission event and command record. Its five cases passed;
 the full snapshot also checks that A773's recalled-line and service-cancellation tables start empty.
 
+Receipt, 2026-10-28, A963: the database guest-count upgrade and server canvas-retirement fixtures
+failed before reaching their migration checks because today's sales insert named the new recipient
+identity columns. The former now inserts its predecessor's sales column set directly. The latter
+already preapplies named later additions for its current-writer fill; its explicit list gains the
+new nullable identity columns. That composite canvas fixture is not an untouched historical schema.
+All original expectation/matcher calls remain unchanged. Database coverage ran1,505cases; the
+four selected server upgrade files ran9cases. RED/GREEN and assertion inventory:
+`~/waitron-campaign-e/receipts/a963-task8-20261028/` (`upgrade-fixture-red.log`,
+`historical-server-fixtures.log`, `db-coverage.log`, `historical-server-fixtures-green.log`).
+
 ## A migration set gets a whole database-backed suite by calling one function.
 
 `packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top

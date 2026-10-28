@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,7 +14,6 @@ import { captureError, engineErrorMessage } from "../testing/errors.js";
 import { seedDevice, seedNode } from "../testing/seed.js";
 import { useVenueDb } from "../testing/venue-db.js";
 import { isRefusal } from "../unique-violation.js";
-import { sales } from "./sales.js";
 import { invoiceSeries } from "./series.js";
 import { locations, tenants } from "./tenants.js";
 
@@ -55,25 +55,15 @@ async function seedSales(db: Database, count: number): Promise<string[]> {
     .returning({ id: invoiceSeries.id });
   const ids: string[] = [];
   for (let n = 1; n <= count; n++) {
-    const [sale] = await db
-      .insert(sales)
-      .values({
-        source: "device",
-        deviceId,
-        nodeId,
-        seriesId: series!.id,
-        invoiceNumber: n,
-        issuedAt: "2026-10-02T09:00:00Z",
-        issuedOffsetMinutes: 0,
-        total: 100,
-        vatBreakdown: [],
-        locale: "es",
-        invoiceLocales: ["es"],
-        fiscalBackend: "verifactu",
-        fiscalState: "recorded",
-      })
-      .returning({ id: sales.id });
-    ids.push(sale!.id);
+    const id = randomUUID();
+    // Drizzle inserts include current columns that this predecessor does not have.
+    await db.run(sql`insert into sales
+      (id, source, device_id, node_id, series_id, invoice_number, issued_at,
+       issued_offset_minutes, total, vat_breakdown, locale, invoice_locales,
+       fiscal_backend, fiscal_state)
+      values (${id}, 'device', ${deviceId}, ${nodeId}, ${series!.id}, ${n},
+       '2026-10-02T09:00:00Z', 0, 100, '[]', 'es', '["es"]', 'verifactu', 'recorded')`);
+    ids.push(id);
   }
   return ids;
 }
