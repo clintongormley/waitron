@@ -3,6 +3,7 @@ import {
   stat as fsStat,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   realpath,
   rename,
@@ -10,7 +11,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { lstatSync } from "node:fs";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,6 +36,7 @@ afterEach(async () => {
   await rm(root, { recursive: true, force: true });
 });
 
+const DATA_VOLUME = "/System/Volumes/Data";
 const T = new Date("2026-10-01T12:00:00.000Z");
 const hours = (n: number) => new Date(T.getTime() + n * 3_600_000);
 
@@ -68,6 +70,18 @@ describe("listDeletableArchives", () => {
     );
 
     expect(listed.map((e) => e.key)).toEqual([a1, b1]);
+  });
+
+  it("keeps the newest archive whatever order the folder lists its names in", async () => {
+    const a = await folder("a");
+    const first = await archive(a, hours(1));
+    const second = await archive(a, hours(2));
+    await archive(a, hours(3));
+    const newestFirst = async (dir: string) => (await readdir(dir)).sort().reverse();
+
+    const listed = await listDeletableArchives([{ destination: "da", dir: a }], T, newestFirst);
+
+    expect(listed.map((e) => e.key)).toEqual([first, second]);
   });
 
   it("never lists an archive taken before the installation began, nor one in its second", async () => {
@@ -276,6 +290,53 @@ describe("foldersOnDisk", () => {
       ),
     ).toEqual({ folders: [{ destination: "da", dir: a }], copies: 2 });
   });
+
+  it("lists two folders not made yet under one parent as two folders", async () => {
+    const staging = await folder("staging");
+    const a = join(root, "missing", "a");
+    const b = join(root, "missing", "b");
+
+    expect(
+      await foldersOnDisk([new LocalFsBackend("da", a), new LocalFsBackend("db", b)], staging),
+    ).toEqual({
+      folders: [
+        { destination: "da", dir: a },
+        { destination: "db", dir: b },
+      ],
+      copies: 2,
+    });
+  });
+
+  it("lists once a folder reached through a linked parent, and counts both copies", async () => {
+    const staging = await folder("staging");
+    const a = await folder("parent/a");
+    await symlink(join(root, "parent"), join(root, "parent-link"));
+
+    expect(
+      await foldersOnDisk(
+        [new LocalFsBackend("da", a), new LocalFsBackend("db", join(root, "parent-link", "a"))],
+        staging,
+      ),
+    ).toEqual({ folders: [{ destination: "da", dir: a }], copies: 2 });
+  });
+
+  // macOS gives every folder a second real path under its data volume, as a Linux bind mount does.
+  it.runIf(existsSync(join(DATA_VOLUME, realpathSync(tmpdir()))))(
+    "lists once a folder reached by two different real paths, and counts both copies",
+    async () => {
+      const staging = await folder("staging");
+      const a = await folder("a");
+      const alias = join(DATA_VOLUME, a);
+      expect(await realpath(alias)).not.toBe(a);
+
+      expect(
+        await foldersOnDisk(
+          [new LocalFsBackend("da", a), new LocalFsBackend("db", alias)],
+          staging,
+        ),
+      ).toEqual({ folders: [{ destination: "da", dir: a }], copies: 2 });
+    },
+  );
 
   it("counts, but never lists, a folder whose disk cannot be read", async () => {
     const staging = await folder("staging");

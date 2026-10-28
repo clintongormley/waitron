@@ -17,13 +17,13 @@ import {
  * each rename, so a write cancelled before then never replaces the object already stored.
  */
 export class LocalFsBackend implements StorageBackend {
-  readonly localDir: string;
-
   constructor(
     readonly id: string,
     private readonly dir: string,
-  ) {
-    this.localDir = dir;
+  ) {}
+
+  get localDir(): string {
+    return this.dir;
   }
 
   #path(key: string): string {

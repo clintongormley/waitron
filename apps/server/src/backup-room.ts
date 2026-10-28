@@ -1,5 +1,5 @@
 import * as fs from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import { codeOf } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { parseBackupArchiveKey } from "./backup-keys.js";
@@ -32,11 +32,12 @@ export interface DeletableArchive {
 export async function listDeletableArchives(
   folders: readonly BackupFolder[],
   installationStartedAt: Date | null,
+  readdir: (dir: string) => Promise<string[]> = (dir) => fs.readdir(dir),
 ): Promise<DeletableArchive[]> {
   if (installationStartedAt === null) return [];
   const out: DeletableArchive[] = [];
   for (const { destination, dir } of folders) {
-    const archives = await archivesIn(destination, dir);
+    const archives = await archivesIn(destination, dir, readdir);
     archives.sort(byAgeThenKey);
     archives.pop();
     out.push(...archives.filter((a) => a.takenAt.getTime() > installationStartedAt.getTime()));
@@ -50,10 +51,14 @@ function byAgeThenKey(a: DeletableArchive, b: DeletableArchive): number {
   return Number(a.key > b.key) - Number(a.key < b.key);
 }
 
-async function archivesIn(destination: string, dir: string): Promise<DeletableArchive[]> {
+async function archivesIn(
+  destination: string,
+  dir: string,
+  readdir: (dir: string) => Promise<string[]>,
+): Promise<DeletableArchive[]> {
   let names: string[];
   try {
-    names = await fs.readdir(dir);
+    names = await readdir(dir);
   } catch {
     // A folder that cannot be read offers nothing to delete.
     return [];
@@ -76,10 +81,11 @@ async function archivesIn(destination: string, dir: string): Promise<DeletableAr
 }
 
 /**
- * The local backup folders on the working folder's disk. `folders` holds each real folder once, for
- * listing archives; `copies` counts every local destination on the disk, because the run copies to
- * all of them at once and each copy holds a whole working copy before its rename. A folder whose
- * disk cannot be read is counted but never listed.
+ * The local backup folders on the working folder's disk. `folders` holds each folder once (by device
+ * and inode, so two real paths to one folder are one), for listing archives; `copies` counts every
+ * local destination on the disk, because the run copies to all of them at once and each copy holds a
+ * whole working copy before its rename. A destination whose real path or disk cannot be read is
+ * counted but never listed: counting a copy too many can only make the run ask for more room.
  */
 export async function foldersOnDisk(
   backends: readonly Pick<StorageBackend, "id" | "localDir">[],
@@ -89,28 +95,34 @@ export async function foldersOnDisk(
   const staging = await realOrNearest(stagingDir);
   const stagingDevice = await deviceOf(staging.existing);
   const folders: BackupFolder[] = [];
+  const seen = new Set<string>();
   let copies = 0;
   for (const { id, localDir } of backends) {
     if (localDir === undefined) continue;
     let real: string;
     let device: number;
+    let identity: string;
     try {
       const found = await realOrNearest(localDir);
       real = found.real;
       device = await deviceOf(found.existing);
+      const { dev, ino } = await fs.stat(found.existing, { bigint: true });
+      identity = `${dev}:${ino}:${relative(found.existing, found.real)}`;
     } catch {
       copies += 1;
       continue;
     }
     if (device !== stagingDevice) continue;
     copies += 1;
-    if (!folders.some((f) => f.dir === real)) folders.push({ destination: id, dir: real });
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    folders.push({ destination: id, dir: real });
   }
   return { folders, copies };
 }
 
 /** A folder's real path, or for one not made yet, its nearest existing parent's real path with the
- * rest appended: the folder copy creates it there. */
+ * rest appended. */
 async function realOrNearest(path: string): Promise<{ real: string; existing: string }> {
   let current = resolve(path);
   const rest: string[] = [];
