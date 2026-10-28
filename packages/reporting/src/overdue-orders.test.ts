@@ -33,7 +33,7 @@ beforeEach(async () => {
   venue = await seedVenue(suite.db);
   stationId = await seedKitchenStation(suite.db, {
     locationId: brandLocationId(venue.locationId),
-    name: "Cocina",
+    name: "Kitchen",
   });
 });
 
@@ -79,7 +79,7 @@ describe("computeOverdueOrders", () => {
     );
     const rows = await run();
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ orderId, stationName: "Cocina", band: "overdue" });
+    expect(rows[0]).toMatchObject({ orderId, stationName: "Kitchen", band: "overdue" });
     expect(rows[0]!.ageMinutes).toBeLessThan(15);
   });
   it("reads the line's station's own minutes", async () => {
@@ -153,14 +153,14 @@ describe("computeOverdueOrders", () => {
     expect(rows[0]).toMatchObject({
       orderId: forgotten.orderId,
       orderNumber: 2,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       band: "forgotten",
     });
     expect(rows[0]!.ageMinutes).toBeGreaterThanOrEqual(16);
     expect(rows[1]).toMatchObject({
       orderId: overdue.orderId,
       orderNumber: 1,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       band: "overdue",
     });
     expect(rows[1]!.ageMinutes).toBeGreaterThanOrEqual(11);
@@ -223,7 +223,7 @@ describe("computeOverdueOrders", () => {
     // only gives us one. `isDefault: false` avoids colliding with the beforeEach station's own default.
     const barStationId = await seedKitchenStation(suite.db, {
       locationId: brandLocationId(venue.locationId),
-      name: "Barra",
+      name: "Counter",
       isDefault: false,
     });
     const { orderId } = await seedOpenOrder(
@@ -234,10 +234,10 @@ describe("computeOverdueOrders", () => {
     // ONE shared instant for BOTH lines, as lines fired together can share; two `seedFiredLine`
     // calls each backdating from their own clock reading need not tie.
     const tiedQueuedAt = new Date(Date.now() - 11 * 60_000).toISOString();
-    // Fire line_no 2 (station "Barra") FIRST and line_no 1 (station "Cocina") SECOND — insertion order
+    // Fire line_no 2 (station "Counter") FIRST and line_no 1 (station "Kitchen") SECOND — insertion order
     // is the OPPOSITE of line_no order. If the reduction ever fell back to insertion or scan order
-    // instead of the query's own `queued_at, line_no` ORDER BY, this would report "Barra"; the
-    // correct, line_no-ordered answer is "Cocina" (line_no 1).
+    // instead of the query's own `queued_at, line_no` ORDER BY, this would report "Counter"; the
+    // correct, line_no-ordered answer is "Kitchen" (line_no 1).
     await seedFiredLine(
       suite.db,
       { nodeId: venue.nodeId, stationId: barStationId },
@@ -251,7 +251,7 @@ describe("computeOverdueOrders", () => {
 
     const rows = await run();
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ orderId, band: "overdue", stationName: "Cocina" });
+    expect(rows[0]).toMatchObject({ orderId, band: "overdue", stationName: "Kitchen" });
   });
 
   it("excludes a COLLECTED order even if its worst line is forgotten (design §3 — ages until collected)", async () => {
@@ -313,7 +313,7 @@ describe("computeOverdueOrders", () => {
     });
     for (const [orderId, label] of [
       [check.orderId, "T1"],
-      [tab.orderId, "Terraza"],
+      [tab.orderId, "Terrace"],
     ] as const) {
       await suite.db.update(workingOrders).set({ label }).where(eq(workingOrders.id, orderId));
     }
@@ -332,20 +332,20 @@ describe("computeOverdueOrders", () => {
       stationId,
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
-    // Mesa 5 joined first: sorting by table id or by label would both put Mesa 4 first.
+    // Table 5 joined first: sorting by table id or by label would both put Table 4 first.
     await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
       {
         id: `00000000-${randomUUID().slice(9)}`,
-        label: "Mesa 4",
+        label: "Table 4",
         joinedAt: "2026-09-28T20:02:00.000Z",
       },
       {
         id: `ffffffff-${randomUUID().slice(9)}`,
-        label: "Mesa 5",
+        label: "Table 5",
         joinedAt: "2026-09-28T20:00:00.000Z",
       },
       {
-        label: "Mesa 3",
+        label: "Table 3",
         joinedAt: "2026-09-28T20:01:00.000Z",
         leftAt: "2026-09-28T20:03:00.000Z",
       },
@@ -353,7 +353,7 @@ describe("computeOverdueOrders", () => {
 
     const rows = await run();
 
-    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 5, 4" })]);
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Table 5, 4" })]);
   });
 
   it("names a party's bill by its own label once the party holds no table", async () => {
@@ -366,7 +366,7 @@ describe("computeOverdueOrders", () => {
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
     await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
       {
-        label: "Mesa 4",
+        label: "Table 4",
         joinedAt: "2026-09-28T20:00:00.000Z",
         leftAt: "2026-09-28T20:30:00.000Z",
       },
@@ -387,7 +387,11 @@ describe("computeOverdueOrders", () => {
     };
     const { orderId } = await seedFiredOrder(suite.db, seed, { orderNumber: 1, ageMinutes: 11 });
     const moved = await seedPartyAt(suite.db, { locationId: venue.locationId, orderId }, [
-      { label: "Mesa 4", joinedAt: "2026-09-28T20:00:00.000Z", leftAt: "2026-09-28T20:45:00.000Z" },
+      {
+        label: "Table 4",
+        joinedAt: "2026-09-28T20:00:00.000Z",
+        leftAt: "2026-09-28T20:45:00.000Z",
+      },
     ]);
     await suite.db
       .update(workingOrders)
@@ -401,7 +405,7 @@ describe("computeOverdueOrders", () => {
       { locationId: venue.locationId, orderId: middleBill },
       [
         {
-          label: "Mesa 6",
+          label: "Table 6",
           joinedAt: "2026-09-28T20:10:00.000Z",
           leftAt: "2026-09-28T20:50:00.000Z",
         },
@@ -412,8 +416,8 @@ describe("computeOverdueOrders", () => {
       suite.db,
       { locationId: venue.locationId, orderId: survivorBill },
       [
-        { label: "Mesa 7", joinedAt: "2026-09-28T20:20:00.000Z" },
-        { label: "Mesa 8", joinedAt: "2026-09-28T20:21:00.000Z" },
+        { label: "Table 7", joinedAt: "2026-09-28T20:20:00.000Z" },
+        { label: "Table 8", joinedAt: "2026-09-28T20:21:00.000Z" },
       ],
     );
     const closed = { state: "closed" as const, closedAt: "2026-09-28T20:50:00.000Z" };
@@ -428,7 +432,7 @@ describe("computeOverdueOrders", () => {
 
     const rows = await run();
 
-    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Mesa 7, 8" })]);
+    expect(rows).toEqual([expect.objectContaining({ orderId, tableLabel: "Table 7, 8" })]);
   });
 
   it("a bare walk-up (no table) carries a null tableLabel", async () => {
@@ -450,7 +454,7 @@ describe("computeOverdueOrders", () => {
     const nodeB = await seedNodeAndSeries(suite.db, venue);
     const stationB = await seedKitchenStation(suite.db, {
       locationId: brandLocationId(venue.locationId),
-      name: "Barra",
+      name: "Counter",
       isDefault: false,
     });
     await seedFiredOrder(
