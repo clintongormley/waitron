@@ -28,6 +28,15 @@ const full: Partial<TillShell> = {
   loadLocales,
 };
 
+// Copied from till-shell.counter-logo.test.ts.
+const QUIET: Partial<TillShell> = {
+  formFactor: "till",
+  activeScreen: "counter",
+  operatorName: "Ana",
+  legalName: "Bar Lucía SL",
+};
+const LOGO = png(120, 40);
+
 async function atViewport(width: number, height: number, run: () => Promise<void>): Promise<void> {
   const before = { width: window.innerWidth, height: window.innerHeight };
   await page.viewport(width, height);
@@ -319,6 +328,64 @@ describe.each(["light", "dark"] as const)("till-shell a11y (%s theme)", (theme) 
             activeScreen: "floor",
             legalName: "Bar Pepe SL",
           },
+          theme,
+        );
+        const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;
+        const line = menu.querySelector("wt-powered-by")!;
+        expect(line).not.toBeNull();
+        menu.shadowRoot!.querySelector<HTMLElement>("button")!.click();
+        await vi.waitFor(() =>
+          expect(menu.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true),
+        );
+        const lockup = line.shadowRoot!.querySelector<HTMLImageElement>('[part="lockup"]')!;
+        await vi.waitFor(() => expect(lockup.complete && lockup.naturalWidth > 0).toBe(true));
+        await expectNoA11yViolations(host);
+      });
+    } finally {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    }
+  });
+
+  it("the counter bar with a venue logo has no violations", async () => {
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ ...FIXTURE_ANSWER, logo: { light: LOGO, dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      await atViewport(1280, 800, async () => {
+        const loads = nextLogoLoad();
+        const { el, host } = await mountWidget<TillShell>("till-shell", QUIET, theme);
+        const { logo } = await loads;
+        const head = el.shadowRoot!.querySelector(".head")!;
+        expect(head.firstElementChild).toBe(logo);
+        await vi.waitFor(() =>
+          expect(logo.checkVisibility({ visibilityProperty: true })).toBe(true),
+        );
+        await expectNoA11yViolations(host);
+      });
+    } finally {
+      localStorage.removeItem(VENUE_THEME_STORAGE_KEY);
+      startVenueTheme(document.documentElement, {
+        fetchImpl: () => Promise.reject(new TypeError("Failed to fetch")),
+      });
+    }
+  });
+
+  it("a cash register's open More with a venue logo, Powered by at its foot, has no violations", async () => {
+    localStorage.setItem(
+      VENUE_THEME_STORAGE_KEY,
+      JSON.stringify({ ...FIXTURE_ANSWER, logo: { light: LOGO, dark: null } }),
+    );
+    startVenueTheme(document.documentElement, { fetchImpl: () => new Promise(() => {}) });
+    try {
+      await atViewport(1280, 800, async () => {
+        const { el, host } = await mountWidget<TillShell>(
+          "till-shell",
+          { ...full, legalName: "Bar Pepe SL" },
           theme,
         );
         const menu = el.shadowRoot!.querySelector('wt-row-actions[data-test="more-menu"]')!;

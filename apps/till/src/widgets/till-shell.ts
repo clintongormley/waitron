@@ -1117,6 +1117,7 @@ export class TillShell extends LitElement {
             </details>`
           : nothing
       }
+      ${this.#poweredBy()}
     </wt-row-actions>`;
   }
 
