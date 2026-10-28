@@ -1333,8 +1333,9 @@ declare module "@waitron/shared" {
      * secret). Built as data by the backups alert source, never thrown. */
     "backup.destination_failed": { destination: string };
     /** The most recent backup run stopped before reaching any destination; `errorCode` is the code
-     * it threw, `unknown` for an error that is not an AppError. Built as data by the backups alert
-     * source, never thrown. */
+     * it threw, `unknown` for an error that is not an AppError. `spaceLow`, `neededBytes` and
+     * `availableBytes` are set only when `errorCode` is `backup.staging_space_low`, from its params.
+     * Built as data by the backups alert source, never thrown. */
     "backup.run_stopped": {
       errorCode: string;
       spaceLow?: true;
@@ -1349,8 +1350,9 @@ declare module "@waitron/shared" {
      * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
-     * stopped before writing more there. Before the copy, `neededBytes` is the run's need plus the
-     * free-space floor; after it, the copy's size. `availableBytes` is what it reported. */
+     * stopped before writing more there. `neededBytes` is what the step needed: from a room step
+     * (before the copy, and after encrypting), the need plus the free-space floor; from the check
+     * right after the copy, the copy's size. `availableBytes` is what it reported. */
     "backup.staging_space_low": { neededBytes: number; availableBytes: number };
     /** A backup run deleted `count` of its oldest backups to make room for itself; `date` is the
      * venue's calendar day of the deletion, `YYYY-MM-DD`. Recorded as an incident, never thrown. */

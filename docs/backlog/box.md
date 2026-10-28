@@ -73,7 +73,7 @@ Design: [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026
 The owner answered its four questions on 2026-10-28 (`~/waitron-campaign/questions.md`, "OWNER
 ANSWERS — A1167").
 
-Slice 1 landed (PR #TBD; plan
+Slice 1 landed (plan
 [2026-10-28-a1167-1-room-before-backup.md](../superpowers/plans/2026-10-28-a1167-1-room-before-backup.md)):
 before each backup run copies anything, it deletes its oldest deletable backups on the disk that
 holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
@@ -577,9 +577,7 @@ way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Pred
 ## Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.
 
 `apps/dashboard/src/i18n/alert-messages.ts` gives `recovery.state_incomplete` its own sentence on
-the `backup.run_stopped` alert; a renamed code would quietly fall back to "Contact support.".
-(`backup.staging_space_low` left that list on 2026-10-28, A1167 slice 1: the alert's `spaceLow`
-variant draws it, and the server sets `spaceLow` from the code.) The printer word list has such a check
+the `backup.run_stopped` alert; a renamed code would quietly fall back to "Contact support.". The printer word list has such a check
 (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
 
 ## No test covers the supervisor ignoring results from a backup run a reload replaced.

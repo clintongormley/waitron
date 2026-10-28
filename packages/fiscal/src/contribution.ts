@@ -177,7 +177,7 @@ export interface FiscalContribution {
   };
   readonly certificate?: FiscalCertificateSeat;
   readonly outbox?: FiscalOutboxSeat;
-  /** When the current installation began, so the box deletes no backup from before it; null when the
-   * node has no live fiscal identity. A read that fails throws. */
+  /** When the current installation began; null when the node has no live fiscal identity. A read
+   * that fails throws. */
   installationStartedAt?(tx: Transaction, nodeId: NodeId): Promise<Date | null>;
 }

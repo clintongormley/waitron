@@ -442,8 +442,8 @@ puts a bar under the banner of every dashboard page, for everyone signed in, whi
 full-disk stop holds (which slice 2's marker now keeps across restarts). A1167's answer Q3 A
 (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167", 2026-10-28 ~14:10) dropped the
 "Delete old backups…" dialog and its Box status button and kept the bar, which then says the box has
-already deleted what it may; its button goes to Box status. The bar's words follow A1167's §5 words
-answer, still open. Build with or after A1167's automatic deletion.
+already deleted what it may; its button goes to Box status. The bar's words are still to be written.
+A1167 slice 1 built the automatic deletion before each backup run.
 
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 

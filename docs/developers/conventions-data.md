@@ -2684,6 +2684,11 @@ and the email settings in one `withWriteLock` turn with no drain (`readBoxEmailC
 case is "the managers' email reads its context on a full disk with a change waiting" in
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
+Since A1167 slice 1, a backup run reads the installation start in one `withWriteLock` turn with no
+drain (`createBackupRoomHooks`, `apps/server/src/backup-deletion-alert.ts`). Its case, "reads with a
+change waiting in the change list and leaves it waiting" in
+`apps/server/src/backup-deletion-alert.test.ts`, uses a waiting change, not a full disk.
+
 Since A980 S2a1, the staff personal-data downloads (`GET /management-api/me/personal-data/export`
 and, for an admin, `GET /management-api/staff/:id/personal-data/export`, both in
 `apps/server/src/personal-data-export-api.ts`) read in two `withWriteLock` turns with no drain —

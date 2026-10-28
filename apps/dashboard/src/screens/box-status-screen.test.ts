@@ -176,7 +176,9 @@ describe("dashboard-box-status-screen", () => {
       const guidance = text(q(el, "[data-test=fillers]"));
       expect(guidance).toContain(t("backup.title"));
       if (locale === "en") {
-        expect(guidance).toContain("only after a new backup succeeds");
+        expect(guidance).toContain(
+          "only after a new backup succeeds, or before a backup that is short of room",
+        );
         expect(guidance).toContain("cannot free a full disk now");
         expect(guidance).toContain("Leave without changes to stop");
         expect(guidance).toContain("database, recovery keys and saved backups");

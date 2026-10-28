@@ -142,8 +142,7 @@ async function checkStagingSpace(
 }
 
 /** The local destinations on the working folder's disk. When that disk cannot be read, every local
- * destination is counted as on it and none is offered for deletion; the room check still runs, and
- * lets the run through if free space cannot be read either. */
+ * destination is counted as on it and none is offered for deletion. */
 async function localFoldersOnDisk(
   deps: Pick<BackupSweepDeps, "backends" | "stagingDir" | "deviceOf" | "log">,
 ): Promise<{ folders: BackupFolder[]; copies: number }> {
