@@ -1161,6 +1161,36 @@ describe("the receipt preview's top block", () => {
       expect(sizes(result)).toEqual(fromImage);
     });
 
+    it("a draft naming its saved logo reports a failed printed read", async () => {
+      const logo = await libraryImage(48);
+      await suite.db.insert(departmentReceipts).values({ departmentId, receipt: { logo } });
+      const hide = UNTRUSTED_CASES.find((c) => c.name === "the read throws")!;
+      const printed = VENUE_SERVICE.readPrintedDepartmentReceipt;
+      const spy = vi
+        .spyOn(VENUE_SERVICE, "readPrintedDepartmentReceipt")
+        .mockImplementation(async (...args) => {
+          const tx = args[0] as unknown as Database;
+          await hide.apply(tx, at());
+          try {
+            return await printed(...args);
+          } finally {
+            await hide.undo(tx, at());
+          }
+        });
+      const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        await rendered({ logo });
+        expect(warning).toHaveBeenCalledWith("receipt.optional_read_failed", {
+          operation: "readPrintedDepartmentReceipt",
+          departmentId,
+          code: "receipt.read_failed",
+        });
+      } finally {
+        spy.mockRestore();
+        warning.mockRestore();
+      }
+    });
+
     it.each(
       UNTRUSTED_CASES.filter(
         (c) => c.name !== "the read throws" && c.name !== "a department not in this location",

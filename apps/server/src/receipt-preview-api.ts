@@ -379,7 +379,7 @@ export function mountReceiptPreviewApi(
             savedLogo = (
               await VENUE_SERVICE.readPrintedDepartmentReceipt(
                 tx,
-                checked.scope,
+                { ...checked.scope, receiptDiagnostic: diagnostic },
                 id,
                 printer.paperWidth,
               )
