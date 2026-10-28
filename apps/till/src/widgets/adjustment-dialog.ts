@@ -76,6 +76,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
       return "note";
     case "adjustment.exceeds_amount":
     case "adjustment.no_reduction":
+    case "adjustment.free_not_allowed":
       return kind === "discount" ? "value" : null;
     case "adjustment.action_not_allowed":
     case "adjustment_reason.not_found":
@@ -442,20 +443,26 @@ export class TillAdjustmentDialog extends LitElement {
       errors.set("quantity", codeMessage("adjustment.quantity_invalid"));
     if (this.combined ? this.compKind !== "free" : this.kind === "discount" && !this.#billFree()) {
       const number = this.#typedNumber();
+      // Everything off is Free by another name, which only a reason offering Free allows. A
+      // percentage that rounds to everything is left to the server's refusal of the same code.
+      const withoutFree = reason !== undefined && !reason.actions.includes("comp");
       if ((this.combined ? this.compKind : this.discountKind) === "percent") {
         const percent = Number(number);
         if (!TYPED_AMOUNT.test(number) || percent <= 0 || percent > 100)
           errors.set("value", t("adjust.percent_invalid"));
+        else if (percent === 100 && withoutFree)
+          errors.set("value", codeMessage("adjustment.free_not_allowed"));
       } else if (!TYPED_AMOUNT.test(number) || Number(number) <= 0) {
         errors.set("value", t("adjust.amount_invalid"));
-      } else if (
-        !errors.has("quantity") &&
-        compareDecimal(decimal(number), decimal(this.#covered())) > 0
-      ) {
-        errors.set(
-          "value",
-          t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
-        );
+      } else if (!errors.has("quantity")) {
+        const versus = compareDecimal(decimal(number), decimal(this.#covered()));
+        if (versus > 0)
+          errors.set(
+            "value",
+            t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
+          );
+        else if (versus === 0 && withoutFree)
+          errors.set("value", codeMessage("adjustment.free_not_allowed"));
       }
     }
     return errors;

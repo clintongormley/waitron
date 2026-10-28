@@ -716,6 +716,7 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
     "adjustment.no_common_approver",
+    "adjustment.free_not_allowed",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
@@ -764,6 +765,26 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(sent).toEqual([]);
   });
 
+  it("puts the server's refusal of everything off under the value, in both languages", async () => {
+    const el = await mount({ kind: "discount", target: steaks });
+    await chooseReason(el, "Regular");
+    await type(el, "percent", "99.99");
+    el.refusal = "adjustment.free_not_allowed";
+    await el.updateComplete;
+    expect(field(el, "percent").error).toBe(
+      "This reason can't take everything off. Take less off, choose a reason that allows Free, or Close to change nothing.",
+    );
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(field(el, "percent").error).toBe(
+      "Este motivo no puede quitarlo todo. Quita menos, elige un motivo que permita dejarlo gratis o pulsa Cerrar para no cambiar nada.",
+    );
+    await type(el, "percent", "90");
+    expect(field(el, "percent").error).toBe("");
+  });
+
   it("says nobody can approve it in Spanish", async () => {
     setLocale("es");
     const el = await mount({
@@ -806,6 +827,8 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.exceeds_amount", "comp", false)).toBeNull();
     expect(refusalField("adjustment.no_reduction", "discount", false)).toBe("value");
     expect(refusalField("adjustment.no_reduction", "comp", true)).toBeNull();
+    expect(refusalField("adjustment.free_not_allowed", "discount", false)).toBe("value");
+    expect(refusalField("adjustment.free_not_allowed", "comp", false)).toBeNull();
     expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
   });
 });
@@ -836,7 +859,8 @@ for (const locale of ["en", "es"]) {
     const el = await mount({ kind: "discount", target: steaks });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await choose(el, "discountKind", "amount");
-    await chooseReason(el, "Regular");
+    // Staff meal offers Free, so it may take the whole steak off (owner, 2026-10-28).
+    await chooseReason(el, "Staff meal");
     for (const value of ["00.00", "0000000005.50", "05.555", "-05.50", "05,5.0"]) {
       await type(el, "amount", value);
       await press(continueButton(el), el);
@@ -859,7 +883,7 @@ for (const locale of ["en", "es"]) {
     expect(asked).toEqual([
       {
         action: "discount_amount",
-        reasonId: "Regular",
+        reasonId: "Staff meal",
         note: null,
         quantity: "1",
         amount: "25.00",
@@ -946,6 +970,24 @@ describe("till-adjustment-dialog: comping the whole bill", () => {
     await chooseReason(fresh, "Regular");
     await choose(fresh, "discountKind", "free");
     expect(reasonChosen(fresh)).toBe(false);
+  });
+
+  it("refuses everything off the bill under a reason without Free, under the value (owner, 2026-10-28)", async () => {
+    const el = await mountBill();
+    const previews = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Regular");
+    await type(el, "percent", "100");
+    await press(continueButton(el), el);
+    expect(field(el, "percent").error).toBe(codeMessage("adjustment.free_not_allowed"));
+    expect(continueButton(el).disabled).toBe(true);
+
+    await choose(el, "discountKind", "amount");
+    await chooseReason(el, "Regular");
+    await type(el, "amount", "40.00");
+    await press(continueButton(el), el);
+    expect(field(el, "amount").error).toBe(codeMessage("adjustment.free_not_allowed"));
+    expect(continueButton(el).disabled).toBe(true);
+    expect(previews).toEqual([]);
   });
 
   it("puts a free bill's refusal above the action", async () => {

@@ -487,6 +487,23 @@ describe("approval through the route (plan D6)", () => {
     }
   });
 
+  it("answers everything off under a reason without Free as 409 free_not_allowed", async () => {
+    const { billId } = await billWith(venue, [{ name: "Salad" }]);
+    const off = {
+      action: "discount_percent",
+      percentBp: 10000,
+      reasonId: venue.reasonId.staffMeal,
+    };
+    for (const path of ["/preview", ""] as const) {
+      const refused = await post(billId, off, { cookie: venue.cookie.manager, path });
+      expect([refused.status, refused.json]).toEqual([
+        409,
+        { code: "adjustment.free_not_allowed", params: {} },
+      ]);
+    }
+    expect(await recordedOn(billId)).toEqual([]);
+  });
+
   it("answers a wrong PIN as pin.invalid, 401", async () => {
     const { billId } = await billWith(venue, [{ name: "Burger" }]);
     const refused = await post(

@@ -911,6 +911,7 @@ export async function planAdjustment(
           writes: writes ?? changes,
           carve,
           reduction,
+          before,
           actorRole,
           note: ask.note,
         });
@@ -982,6 +983,8 @@ async function judgeComp(
     writes: readonly Change[];
     carve: Carve | null;
     reduction: Decimal;
+    /** What the request's subject cost before it. */
+    before: Decimal;
     actorRole: PersonRoleValue;
     note: string | null;
   },
@@ -1002,6 +1005,7 @@ async function judgeComp(
     reduction: ask.reduction,
     actorRole: ask.actorRole,
     note: ask.note,
+    takesAll: compareDecimal(ask.reduction, ask.before) === 0,
     standingOnBill,
     dishes: dishPrices(ask.writes, rows, ask.carve),
     billComped,

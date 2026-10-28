@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { codeMessage } from "../i18n/codes.js";
 import type { AdjustmentChoice, AdjustTarget, TillAdjustmentDialog } from "./adjustment-dialog.js";
 import type { AdjustmentReason } from "../api/client.js";
 import "./adjustment-dialog.js";
@@ -333,8 +334,17 @@ it("uses the exact family total when all units' rounded shares do not add back t
   await click(el, 'input[name="reason"][value="Amount"]');
   await type(el, "amount", "10");
   await click(el, "[data-adjust-continue]");
+  // €10.00 is everything off, which a reason without Free refuses (owner, 2026-10-28).
+  expect((q(el, '[name="amount"]') as HTMLElement & { error: string }).error).toBe(
+    codeMessage("adjustment.free_not_allowed"),
+  );
+  await click(el, 'input[name="reason"][value="Mixed"]');
+  await click(el, 'input[name="discountKind"][value="amount"]');
+  await type(el, "amount", "10");
+  await type(el, "note", "cold");
+  await click(el, "[data-adjust-continue]");
   expect(seen).toEqual([
-    { action: "discount_amount", reasonId: "Amount", note: null, amount: "10" },
+    { action: "discount_amount", reasonId: "Mixed", note: "cold", amount: "10" },
   ]);
 });
 
@@ -362,4 +372,45 @@ it("Enter in the whole-dish quantity field previews the chosen partial quantity"
   await userEvent.keyboard("{Enter}");
   await el.updateComplete;
   expect(seen).toEqual([{ action: "comp", reasonId: "Free", note: null, quantity: "2" }]);
+});
+it("refuses everything off under a reason without Free under the value, keeping Continue disabled (owner, 2026-10-28)", async () => {
+  const el = await mount();
+  const seen = captures(el);
+  const error = (name: string) =>
+    (q(el, `[name="${name}"]`) as HTMLElement & { error: string }).error;
+  const continueDisabled = () =>
+    (q(el, "[data-adjust-continue]") as HTMLElement & { disabled: boolean }).disabled;
+  await click(el, 'input[name="reason"][value="Percent"]');
+  await type(el, "percent", "100");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([]);
+  expect(error("percent")).toBe(codeMessage("adjustment.free_not_allowed"));
+  expect(continueDisabled()).toBe(true);
+  await type(el, "percent", "90");
+  expect(error("percent")).toBe("");
+  expect(continueDisabled()).toBe(false);
+
+  await click(el, 'input[name="reason"][value="Amount"]');
+  await type(el, "adjustQuantity", "2");
+  await type(el, "amount", "24");
+  await click(el, "[data-adjust-continue]");
+  expect(error("amount")).toBe(codeMessage("adjustment.free_not_allowed"));
+  expect(continueDisabled()).toBe(true);
+  await type(el, "amount", "23.99");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([
+    { action: "discount_amount", reasonId: "Amount", note: null, quantity: "2", amount: "23.99" },
+  ]);
+});
+it("sends everything off under a reason that offers Free", async () => {
+  const el = await mount();
+  const seen = captures(el);
+  await click(el, 'input[name="reason"][value="Mixed"]');
+  await click(el, 'input[name="discountKind"][value="percent"]');
+  await type(el, "percent", "100");
+  await type(el, "note", "cold");
+  await click(el, "[data-adjust-continue]");
+  expect(seen).toEqual([
+    { action: "discount_percent", reasonId: "Mixed", note: "cold", percentBp: 10000 },
+  ]);
 });

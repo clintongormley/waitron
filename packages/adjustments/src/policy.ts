@@ -112,7 +112,8 @@ export type AdjustmentVerdict =
       code:
         | "adjustment.action_not_allowed"
         | "adjustment.note_required"
-        | "adjustment.no_common_approver";
+        | "adjustment.no_common_approver"
+        | "adjustment.free_not_allowed";
     };
 
 export interface CompRequest {
@@ -120,6 +121,8 @@ export interface CompRequest {
   reduction: Decimal;
   actorRole: PersonRoleValue;
   note: string | null;
+  /** Whether the request takes off everything its subject cost before it. */
+  takesAll: boolean;
   /** What this reason still has off the lines now on the bill, as {@link standingOff} counts it. */
   standingOnBill: Decimal;
   /** Each dish this request takes something off, as the per-dish floor reads it (plan D36). */
@@ -160,6 +163,7 @@ export function evaluateComp(reason: AdjustmentReason, req: CompRequest): Adjust
   if (reason.kind !== "comp" || !reason.actions.includes(req.action)) {
     return { kind: "refused", code: "adjustment.action_not_allowed" };
   }
+  if (takesEverything(reason, req)) return { kind: "refused", code: "adjustment.free_not_allowed" };
   if (lacksNote(reason, req.note)) return { kind: "refused", code: "adjustment.note_required" };
   const { maxAmount: billMax } = req.billLimit;
   return approvalFor(reason, req, {
@@ -170,6 +174,12 @@ export function evaluateComp(reason: AdjustmentReason, req: CompRequest): Adjust
     pastBillLimit:
       billMax !== null && compareDecimal(addDecimal(req.billComped, req.reduction), billMax) > 0,
   });
+}
+
+/** Everything off by a percentage or an amount is Free by another name, so a reason that does not
+ * offer Free refuses it too (owner, 2026-10-28). */
+function takesEverything(reason: AdjustmentReason, req: CompRequest): boolean {
+  return req.takesAll && !reason.actions.includes("comp");
 }
 
 /** Whoever lets a request through must be allowed both past the bill's comp limit and this

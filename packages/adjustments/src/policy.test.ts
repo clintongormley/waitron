@@ -50,6 +50,7 @@ function comp(overrides: Partial<CompRequest> = {}): CompRequest {
     reduction: decimal("25.00"),
     actorRole: "supervisor",
     note: null,
+    takesAll: false,
     standingOnBill: decimal("0.00"),
     dishes: [{ list: decimal("25.00"), after: decimal("0.00"), allowance: 1 }],
     billComped: decimal("0.00"),
@@ -276,6 +277,46 @@ describe("evaluateComp", () => {
         comp({ action: "discount_amount", reduction: decimal("5.00") }),
       ),
     ).toEqual({ kind: "allowed" });
+  });
+
+  describe("a reason without Free refuses everything off too (owner, 2026-10-28; plan D37 rule 4)", () => {
+    const CREW_MEAL: AdjustmentReason = {
+      ...COMPLAINT,
+      name: "Crew meal",
+      actions: ["discount_percent", "discount_amount"],
+      maxPercentBp: 5000,
+      maxAmount: null,
+      applyRoles: ["staff", "supervisor", "manager", "admin"],
+    };
+    const all = (action: "discount_percent" | "discount_amount") =>
+      comp({ action, actorRole: "manager", takesAll: true });
+
+    it.each(["discount_percent", "discount_amount"] as const)(
+      "%s taking everything off is refused free_not_allowed",
+      (action) => {
+        expect(evaluateComp(CREW_MEAL, all(action))).toEqual({
+          kind: "refused",
+          code: "adjustment.free_not_allowed",
+        });
+      },
+    );
+
+    it("is refused before a missing note is asked for", () => {
+      expect(evaluateComp({ ...CREW_MEAL, noteRequired: true }, all("discount_percent"))).toEqual({
+        kind: "refused",
+        code: "adjustment.free_not_allowed",
+      });
+    });
+
+    it("under a reason with Free, everything off by a percentage goes on to the checks", () => {
+      expect(evaluateComp(COMPLAINT, all("discount_percent"))).toEqual({ kind: "allowed" });
+    });
+
+    it("less than everything off goes on to the floor check", () => {
+      expect(
+        evaluateComp(CREW_MEAL, comp({ action: "discount_percent", takesAll: false })),
+      ).toEqual(BY_REASON);
+    });
   });
 
   it("a missing required note is refused before any approval is asked", () => {

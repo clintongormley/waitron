@@ -1628,7 +1628,7 @@ describe("cumulative limits (plan D6)", () => {
     ]);
   });
 
-  it("counts a €12.00 amount off the €12.00 Burger as 100% under a 20% item limit", async () => {
+  it("refuses a €12.00 amount off the €12.00 Burger under a reason without Free, as it refuses Free", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1646,10 +1646,72 @@ describe("cumulative limits (plan D6)", () => {
       amount: "12.00",
       reasonId,
     };
-    expect(await preview(billId, ask)).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    await expect(preview(billId, ask)).rejects.toMatchObject({
+      code: "adjustment.free_not_allowed",
     });
-    await refusedWith(billId, ask, "adjustment.approval_required", { approval: "reason" });
+    await refusedWith(billId, ask, "adjustment.free_not_allowed");
+  });
+
+  describe("a reason without Free refuses everything off too (owner, 2026-10-28; plan D37 rule 4)", () => {
+    it("Crew meal refuses 100% off a Burger, and €12.00 off it, even with a manager's PIN", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      const lineId = await lineIdOf(venue, billId, 1);
+      const off = { lineId, reasonId: venue.reasonId.staffMeal, approver: MANAGER_PIN() };
+      await refusedWith(
+        billId,
+        { ...off, action: "discount_percent", percentBp: 10000 },
+        "adjustment.free_not_allowed",
+      );
+      await refusedWith(
+        billId,
+        { ...off, action: "discount_amount", amount: "12.00" },
+        "adjustment.free_not_allowed",
+      );
+    });
+
+    it("100% off the whole bill is refused under Crew meal and goes through under House", async () => {
+      const { billId } = await bill([{ name: "Salad" }, { name: "Burger" }]);
+      const all = (reasonId: string): Ask => ({
+        action: "discount_percent",
+        percentBp: 10000,
+        reasonId,
+        operatorId: venue.managerId,
+      });
+      await refusedWith(billId, all(venue.reasonId.staffMeal), "adjustment.free_not_allowed");
+
+      await adjust(billId, all(venue.reasonId.house));
+
+      expect(total(await rowsOf(venue, billId))).toBe("0.00");
+    });
+
+    it("Crew meal refuses 99.99% off a €12.00 Burger, which leaves it at €0.00", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      await refusedWith(
+        billId,
+        {
+          lineId: await lineIdOf(venue, billId, 1),
+          action: "discount_percent",
+          percentBp: 9999,
+          reasonId: venue.reasonId.staffMeal,
+          approver: MANAGER_PIN(),
+        },
+        "adjustment.free_not_allowed",
+      );
+    });
+
+    it("90% under Crew meal goes on to the floor check, which asks", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      const ask: Ask = {
+        lineId: await lineIdOf(venue, billId, 1),
+        action: "discount_percent",
+        percentBp: 9000,
+        reasonId: venue.reasonId.staffMeal,
+        operatorId: venue.staffId,
+      };
+      expect(await preview(billId, ask)).toMatchObject({
+        needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      });
+    });
   });
 
   it("lets staff take Crew meal 50% off one of two Burgers on one line, then 50% off the other, both straight through", async () => {
