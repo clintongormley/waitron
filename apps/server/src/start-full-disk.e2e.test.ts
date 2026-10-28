@@ -104,7 +104,7 @@ import { systemClock } from "./till-backend.js";
 const FLOOR = 8 * 1024 * 1024;
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
-  "The box has deleted what it could make again, and that was not enough.",
+  "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full.",
 );
 
 let opened: ReturnType<typeof openSmallDisk> | undefined;
@@ -821,6 +821,11 @@ describe("a start on a real full disk", () => {
     const page = await (await app.request("/")).text();
     expect(page).toContain(TITLE);
     expect(page).toContain(escapeHtml(OPERATOR_TEXT["storage.disk_full"]!["en-GB"].action));
+    expect(page).toContain(
+      escapeHtml(
+        "This disk also still holds 4.2 MB left by a recovery from backup that Start again discarded.",
+      ),
+    );
 
     rmSync(filler);
     const room = entryDeps(stateDir, { spareBytes: 0 });
@@ -957,6 +962,7 @@ describe("a start on a real full disk", () => {
       expect(page.status).toBe(200);
       expect(page.body).toContain(TITLE);
       expect(page.body).toContain(DELETED);
+      expect(page.body).not.toContain("left by a recovery from backup");
       expect(page.body).toContain("Free space on the box&#39;s disk: 0 MB.");
       expect(readFileSync(join(stateDir, "recovery.json"))).toEqual(stateBytes);
       expect([inodeOf(recoveryLock), inodeOf(venueLock)]).toEqual(inodes);

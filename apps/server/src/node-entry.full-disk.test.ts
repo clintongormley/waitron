@@ -89,7 +89,7 @@ function servedApp(d: ReturnType<typeof deps>): Hono {
 
 const TITLE = escapeHtml("The box's disk is full, so Waitron cannot save anything.");
 const DELETED = escapeHtml(
-  "The box has deleted what it could make again, and that was not enough.",
+  "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full.",
 );
 
 describe("a start below the free-space floor", () => {

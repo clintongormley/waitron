@@ -30,6 +30,7 @@ import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning"
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
+import { discardedCopyBytes } from "./discarded-copy.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -402,6 +403,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
+        discardedCopyBytes: () =>
+          discardedCopyBytes({ stateDir: rooted.stateDir, venueDir: rooted.venueDir }),
         log: deps.log,
       }),
       transport,
