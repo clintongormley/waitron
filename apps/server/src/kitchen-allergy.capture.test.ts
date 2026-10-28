@@ -46,6 +46,7 @@ import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
+import { registerPortions } from "./order-portions.js";
 import { ALLERGEN_NAMES, ALLERGEN_KIND_NAMES } from "./i18n/kitchen-allergy.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -956,6 +957,49 @@ describe("A669 capture", () => {
       expect(copies(p.tabId)).toEqual([row]);
     }
     expect(await v.db.select().from(printJobs)).toHaveLength(2);
+  });
+
+  it("A803 portions: work added to a HOLD ticket prints the allergy it freezes, for a bound portion too", async () => {
+    const p = await party();
+    const ask = await command(p, "hold");
+    await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
+    const row = copies(p.tabId)[0]!;
+    expect(row.frozen).toBeNull();
+    await inTx(v, (tx) =>
+      registerPortions(tx, [
+        {
+          portionId: randomUUID(),
+          lineId: row.lineId,
+          ordinal: 1,
+          pricingCohortId: randomUUID(),
+          measured: false,
+        },
+      ]),
+    );
+    await printer();
+    const { enqueueHoldCorrections } = await import("./kitchen-print.js");
+    await inTx(v, (tx) =>
+      enqueueHoldCorrections(
+        tx,
+        v.cfg,
+        p.tabId,
+        [
+          {
+            workingOrderLineId: row.lineId,
+            stationId,
+            quantity: 1000,
+            wasStarted: false,
+            group: 1,
+          },
+        ],
+        { kind: "HOLD CHANGED", direction: "added" },
+      ),
+    );
+    expectCopies(p.tabId);
+    const [job] = await v.db.select().from(printJobs);
+    const slip = printedLines(job!.payload).join("\n");
+    expect(slip).toContain("HOLD CHANGED");
+    expect(slip).toContain(guest.note);
   });
 
   it("leaves absent tickets and another location's work untouched", async () => {
