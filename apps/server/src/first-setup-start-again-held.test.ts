@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, lstat, readFile, readdir } from "node:fs/promises";
+import { access, lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { getTableName } from "drizzle-orm";
+import { getTableName, sql } from "drizzle-orm";
 import { afterEach, expect, it, vi } from "vitest";
 import { openVenueDatabase } from "@waitron/db";
+import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { manifestSets } from "@waitron/migrations";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
@@ -23,6 +24,7 @@ import {
 } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import { writeLaterInstallation } from "@waitron/fiscal-verifactu/test/later-installation.js";
+import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
   createFirstSetupResolutionActions,
   type StartAgainFirstSetupRequest,
@@ -260,6 +262,84 @@ it("in the held state, Start again confirming the summary deletes the setup, kee
   const note = await readStartAgainNote(f.roots.stateDir);
   expect(note!.floorMs).toBeGreaterThanOrEqual(floorOf(f.installationName));
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+});
+
+/** Leaves the fiscal module's recovery-key record unreadable, as a damaged disk would. */
+const damageRecoveryRecord = (f: Held) =>
+  writeFile(
+    join(f.roots.stateDir, "first-fiscal-documents", "fiscal-verifactu.recovery.json"),
+    "{}",
+  );
+
+it("in the held state, a damaged recovery-key record: the summary shows it, and Start again sent as the page sends it, acknowledging it, deletes the setup and the note covers the attempt's name", async () => {
+  const f = await heldSetup();
+  await damageRecoveryRecord(f);
+  const startAgain = await askStartAgain(f);
+  expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true, held: expect.any(Object) });
+  await expect(
+    startAgain.run({
+      confirmRecoveryDiscard: { shown: startAgain.shown },
+      recoveryRecordDamagedShown: true,
+    }),
+  ).resolves.toBeUndefined();
+  const left = await snapshot(f);
+  expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
+  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]).toMatchObject({ database: "present", shown: startAgain.shown });
+  const note = await readStartAgainNote(f.roots.stateDir);
+  expect(note!.floorMs).toBeGreaterThanOrEqual(floorOf(f.installationName));
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+});
+
+it.each([
+  ["a damaged recovery-key record, sent without recoveryRecordDamagedShown", true, false],
+  ["a readable recovery-key record, sent with recoveryRecordDamagedShown", false, true],
+] as const)(
+  "in the held state, %s, is refused setup.attempt_conflict, and nothing changes",
+  async (_label, damaged, flag) => {
+    const f = await heldSetup();
+    if (damaged) await damageRecoveryRecord(f);
+    const startAgain = await askStartAgain(f);
+    expect(startAgain.shown.recoveryRecordDamaged).toBe(damaged ? true : undefined);
+    await expectStartAgainRefused(
+      f,
+      () =>
+        startAgain.run({
+          confirmRecoveryDiscard: { shown: startAgain.shown },
+          ...(flag && { recoveryRecordDamagedShown: true as const }),
+        }),
+      { code: "setup.attempt_conflict" },
+    );
+  },
+);
+
+it("a setup database that is not empty but holds no rows (a view only) is not the held state: the summary and Start again are refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup();
+  const before = await askStartAgain(f);
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  const db = await openVenueDatabase(f.roots.venueDir);
+  try {
+    for (const set of TEST_MIGRATIONS) await applyMigrationSet(db.venue, set);
+    db.venue.run(sql`create view held_probe as select 1 as one`);
+  } finally {
+    await db.close();
+  }
+  expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
+    database: "no-venue-rows",
+    emptyDatabase: false,
+  });
+  await expectRefused(f, { code: "setup.not_ready" });
+  // The summary the page would have shown had the counts been read: nothing.
+  const shown = { ...before.shown, held: { rows: 0, kept: 0, records: 0, accepted: 0 } };
+  const { owner, ids } = await f.signIn();
+  await expectStartAgainRefused(
+    f,
+    () => before.actions.startAgainFirstSetup({ ...ids, owner, confirmRecoveryDiscard: { shown } }),
+    { code: "setup.not_ready" },
+  );
 });
 
 it("in the held state, the note's floor follows a later installation the setup database holds, not the attempt's name", async () => {

@@ -458,6 +458,8 @@ export function createFirstSetupResolutionActions(
           if (held) {
             if (host.modules === undefined) unavailable();
             holdings = await readSetupDatabaseHoldings(roots, host.modules);
+            // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
+            if (holdings.rows === 0) unavailable();
           }
           const gathered = await gatherStartAgainFloor(
             roots,
@@ -550,14 +552,17 @@ export function createFirstSetupResolutionActions(
             ((request.register === undefined && emptyWorkspace) ||
               (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
           const unusedAssignment = Boolean(assignment);
+          // The held state has no assignment (it needs an empty database), so its damaged record is
+          // the one the summary showed, checked once the floor is gathered.
           const recoveryRecordDamaged =
-            !missing && typeof assignment === "object" && assignment.recoveryRecordDamaged;
+            !missing && !held && typeof assignment === "object" && assignment.recoveryRecordDamaged;
           let holdings: SetupDatabaseHoldings | undefined;
           if (held) {
             await assertRecoveredOwner(request.owner, state);
             if (request.register?.kind === "no-current-master") unavailable();
             if (host.modules === undefined) unavailable();
             holdings = await readSetupDatabaseHoldings(roots, host.modules);
+            if (holdings.rows === 0) unavailable();
             if (holdings.kept > 0 || holdings.records > 0) refused("kept-records");
           } else if (request.owner === undefined) {
             if (
@@ -605,7 +610,8 @@ export function createFirstSetupResolutionActions(
               picksDamaged ? { seriesPicksUnreadable: true } : {},
             );
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
-          if (recoveryRecordDamaged !== (request.recoveryRecordDamagedShown === true)) conflict();
+          const damagedShown = request.recoveryRecordDamagedShown === true;
+          if (!held && recoveryRecordDamaged !== damagedShown) conflict();
           const gathered = await gatherStartAgainFloor(
             roots,
             state,
@@ -616,6 +622,7 @@ export function createFirstSetupResolutionActions(
             missing,
             holdings?.history,
           );
+          if (held && gathered.recoveryRecordDamaged !== damagedShown) conflict();
           const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
