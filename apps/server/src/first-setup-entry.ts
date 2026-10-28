@@ -39,7 +39,7 @@ import {
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 import { FULL_DISK_BYTES, startFailureCode } from "./boot-failure.js";
 import type { Statfs } from "./free-bytes.js";
-import { releaseSpare } from "./spare-space.js";
+import { releaseSpare, releaseSpareBeforeStartAgain } from "./spare-space.js";
 import { lowestFreeBytes } from "./start-space.js";
 
 async function needsResolution(host: ReturnType<typeof createFirstSetupModuleHost>) {
@@ -75,7 +75,7 @@ export async function resolveFirstSetupEntry(
   if (backup.kind === "repair")
     return {
       kind: "resolution" as const,
-      ...(await resolutionApp(backup.roots, environment, requestRestart, log)),
+      ...(await resolutionApp(backup.roots, environment, requestRestart, log, spare)),
       roots: backup.roots,
     };
   if (backup.kind === "selected") {
@@ -84,6 +84,7 @@ export async function resolveFirstSetupEntry(
       environment,
       requestRestart,
       log,
+      spare,
     );
     if (admission.kind === "resolution") return admission;
     return {
@@ -92,7 +93,7 @@ export async function resolveFirstSetupEntry(
         backup.run(() => admission.run(() => body(true))),
     };
   }
-  return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log);
+  return resolveLegacyFirstSetupEntry(roots, environment, requestRestart, log, spare);
 }
 
 /** The box's configured state folder, where its spare file lives, and how its free space is read. */
@@ -257,6 +258,7 @@ async function resolveLegacyFirstSetupEntry(
   environment: Readonly<Record<string, string | undefined>>,
   requestRestart?: () => void,
   log: Logger = () => {},
+  spare?: SpareOption,
 ) {
   try {
     roots = {
@@ -270,32 +272,25 @@ async function resolveLegacyFirstSetupEntry(
       run: <T>(body: (venueHeld: boolean) => Promise<T>) => body(false),
     };
   }
+  const canonical = roots;
+  const resolution = async () => ({
+    kind: "resolution" as const,
+    ...(await resolutionApp(canonical, environment, requestRestart, log, spare)),
+    roots: canonical,
+  });
   try {
     await assertNoLegacyFirstSetupWorkspace(roots);
   } catch {
-    return {
-      kind: "resolution" as const,
-      ...(await resolutionApp(roots, environment, requestRestart, log)),
-      roots,
-    };
+    return resolution();
   }
   const host = createFirstSetupModuleHost({ ...roots, environment, modules: ALL_MODULES });
   let claimed = false;
   try {
     const admission = await needsResolution(host);
     claimed = admission.claimed;
-    if (admission.unresolved)
-      return {
-        kind: "resolution" as const,
-        ...(await resolutionApp(roots, environment, requestRestart, log)),
-        roots,
-      };
+    if (admission.unresolved) return resolution();
   } catch {
-    return {
-      kind: "resolution" as const,
-      ...(await resolutionApp(roots, environment, requestRestart, log)),
-      roots,
-    };
+    return resolution();
   }
   return {
     kind: "normal" as const,
@@ -321,6 +316,7 @@ async function resolutionApp(
   environment: Readonly<Record<string, string | undefined>>,
   requestRestart?: () => void,
   log: Logger = () => {},
+  spare?: SpareOption,
 ) {
   const moduleConfig = await readModuleConfig(roots.stateDir).catch(() => undefined);
   const host = createFirstSetupModuleHost({
@@ -331,6 +327,17 @@ async function resolutionApp(
   });
   const app = new Hono();
   const backup = firstSetupBackupRecoveryFor(roots, environment, host, log);
+  if (spare !== undefined)
+    app.use(
+      "*",
+      releaseSpareBeforeStartAgain({
+        stateDir: spare.stateDir,
+        roots,
+        statfs: spare.statfs,
+        recovery: backup,
+        log,
+      }),
+    );
   mountFirstSetupResolutionFence(app, backup, log);
   mountFirstSetupBackupApi(app, backup, log, requestRestart);
   app.get("/setup-api/status", async (c) => {

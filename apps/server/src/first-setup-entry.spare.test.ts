@@ -11,10 +11,12 @@ import {
   isEmptiedTombstone,
 } from "@waitron/provisioning";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import * as backupEntry from "./first-setup-backup-entry.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
 import type { Statfs } from "./free-bytes.js";
 
 vi.mock("@waitron/provisioning", { spy: true });
+vi.mock("./first-setup-backup-entry.js", { spy: true });
 
 const ID = "f063ea32-8c34-4b43-8ffc-5a319ec8c895";
 const MiB = 1024 * 1024;
@@ -39,7 +41,8 @@ const freeIs =
   () =>
     Promise.resolve({ bavail: bytes, frsize: 1 });
 
-async function discardedRecovery() {
+/** A backup recovery whose placement began and then stopped: Start again would discard it. */
+async function stoppedRecovery() {
   const base = join(stateDir, "first-setup-resolutions", "backup-recovery", ID);
   const target = {
     recoveryId: ID,
@@ -74,7 +77,11 @@ async function discardedRecovery() {
   await workspace.append({ ...input, input: { accepted: true }, phase: "placement-started" });
   (await lockVenueDatabase(target.target.venueDir)).release();
   writeFileSync(join(target.target.venueDir, "venue.db"), Buffer.alloc(4096, 68));
-  await workspace.abandon(ID);
+  return workspace;
+}
+
+async function discardedRecovery() {
+  await (await stoppedRecovery()).abandon(ID);
 }
 
 /** Records, at each emptying, whether the spare was still there. */
@@ -136,4 +143,78 @@ it("with no spare option given, nothing is released", async () => {
   await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn());
   expect(seen).toEqual([true]);
   expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
+});
+
+const INSPECTION = "/setup-api/first-setup/resolution";
+
+it("the repair app releases the spare on its inspection read when a stopped recovery fills the disk", async () => {
+  await stoppedRecovery();
+  plantSpare();
+  const log = vi.fn();
+  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, log, {
+    stateDir,
+    statfs: freeIs(MiB),
+  });
+  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
+  expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
+  await entry.app.request(INSPECTION);
+  expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
+  expect(log).toHaveBeenCalledWith("warn", "storage.spare_released", { bytes: 4096 });
+  await entry.dispose();
+});
+
+it("…and so does the repair app of a box that started with no recovery folder", async () => {
+  writeFileSync(join(stateDir, "first-setup.json"), "opaque retained attempt");
+  plantSpare();
+  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
+    stateDir,
+    statfs: freeIs(MiB),
+  });
+  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
+  await stoppedRecovery();
+  await entry.app.request(INSPECTION);
+  expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
+  await entry.dispose();
+});
+
+it("the repair app with room keeps the spare", async () => {
+  await stoppedRecovery();
+  plantSpare();
+  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
+    stateDir,
+    statfs: freeIs(16 * MiB),
+  });
+  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
+  await entry.app.request(INSPECTION);
+  expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
+  await entry.dispose();
+});
+
+it("the release runs before the fence", async () => {
+  await stoppedRecovery();
+  plantSpare();
+  const atFence: boolean[] = [];
+  const { firstSetupBackupRecoveryFor: real } = await vi.importActual<typeof backupEntry>(
+    "./first-setup-backup-entry.js",
+  );
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockImplementation((...args) => {
+    const service = real(...args);
+    const holds = service.holdsInMemory.bind(service);
+    // The fence's first step on every write; it seals a lapsed session only after it.
+    service.holdsInMemory = () => {
+      atFence.push(existsSync(join(stateDir, SPARE_SPACE_FILE)));
+      return holds();
+    };
+    return service;
+  });
+  const entry = await resolveFirstSetupEntry(anchor, {}, undefined, vi.fn(), {
+    stateDir,
+    statfs: freeIs(MiB),
+  });
+  if (entry.kind !== "resolution") throw new Error(`expected the repair app, got ${entry.kind}`);
+  atFence.length = 0;
+  await entry.app.request(`${INSPECTION}/start-again`, { method: "POST" });
+  expect(atFence.length).toBeGreaterThan(0);
+  expect(atFence).toEqual(atFence.map(() => false));
+  await entry.dispose();
 });
