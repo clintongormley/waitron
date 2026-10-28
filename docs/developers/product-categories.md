@@ -285,7 +285,8 @@ were.
   `menu_patch.not_published` (409, `menuId`), and a live version other than `baseVersionId`
   `menu_patch.base_changed` (409, `menuId`, `baseVersionId`, `liveVersionId`, `liveNumber`). A change the route cannot apply
   answers `menu_patch.invalid` (400, `change` as its index, `field` naming `target`, `field` or the
-  refused field, and `reason` with the code behind a refused translation). A patch that leaves the
+  refused field, and `reason` with the code behind a refused translation, or `image.not_found`
+  for a picture the image library does not hold). A patch that leaves the
   live version as it was answers `menu_patch.unchanged` (409, `menuId`).
 
 Tills sell from live versions of active menus. Reading a live version outside document format 3 refuses

@@ -156,7 +156,8 @@ no class of its own was frozen at its parent's class, and an extras line takes t
 its picked product. Raising the quantity of an unsent line in place keeps that row's class; a line
 an edit adds takes the class of the version live then. So a change to a product's VAT class reaches
 a till only when a menu including it is published again, and until then that menu shows
-Unpublished changes.
+Unpublished changes. Patching a live menu (`patchLiveMenu`, `packages/catalogue/src/menu-publication.ts`)
+changes a class in that menu's live version alone; the product keeps its own.
 
 Each class's percentage is a dated table in code (`VAT_RATE_TABLE` and `vatRateOn`,
 `packages/catalogue/src/vat-rates.ts`): a legal change ships as a new entry dated from the day it

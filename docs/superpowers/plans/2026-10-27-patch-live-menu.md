@@ -108,7 +108,9 @@ in `apps/dashboard`, Vitest (browser mode for the dashboard).
   show that code's own wording. Register it in `errors.ts` beside `menu_publication.*`. A body
   that is not an array refuses with `change: -1, field: "changes"`. (2026-10-27, finish-branch
   review: a body whose `changes` is not a list is now refused `management.request_invalid` with
-  `field: "changes"`, like the route's other body checks.)
+  `field: "changes"`, like the route's other body checks.) (2026-10-28, finish-branch review: a
+  picture the image library does not hold is refused with `reason: "image.not_found"`, the media
+  package's own code.)
 
 Value rules:
 - `name`, `internalName`: string, trimmed, non-blank.
@@ -421,7 +423,9 @@ Behaviour:
   Buttons: "Keep editing" and "Put live now" (primary).
 - `menu_patch.invalid` returns to the form, picks the item of the named change, and shows the
   `reason` code's own message (or "Check this value.") under the named field, plus the one bottom
-  message the Forms contract requires.
+  message the Forms contract requires. (2026-10-28, finish-branch review: a picture refused with
+  `image.not_found` says "This image is no longer in the image library. Choose another, or remove
+  it.")
 - `menu_patch.base_changed` shows its message with a "Reload" button that fetches `getLiveMenu`,
   calls `draft.rebase`, and when `dropped > 0` says "{dropped} changes no longer fit the live
   version and were dropped."
