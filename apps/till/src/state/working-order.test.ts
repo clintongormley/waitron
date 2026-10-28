@@ -1431,6 +1431,25 @@ describe("WorkingOrderStore.splitLine (Split quantity)", () => {
     expect(notified).toBe(0);
   });
 
+  it("A803: leaves a 200 ml line in a measure unit with no decimals alone", () => {
+    const wine = product("wine", {
+      unit: {
+        id: "unit-ml",
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
+        name: { en: "millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        hardwareUnit: null,
+        measure: true,
+      },
+    });
+    const s = new WorkingOrderStore();
+    s.addMerging(wine, "200");
+    s.splitLine(0);
+    expect(rows(s)).toEqual(["wine ×200"]);
+  });
+
   it("takes no split while the order is being sent", () => {
     const s = new WorkingOrderStore();
     s.addMerging(burger, "2");

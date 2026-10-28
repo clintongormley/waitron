@@ -141,6 +141,39 @@ it("does not offer unit splitting for measured, single or fractional quantities"
   expect(el.shadowRoot!.querySelectorAll("[data-split-draft-line]")).toHaveLength(0);
 });
 
+it("A803: offers no split for a 200 ml line in a measure unit with no decimals", async () => {
+  const { el } = await mount();
+  const wine = {
+    ...beer,
+    id: "wine",
+    menuItemId: "offer-wine",
+    name: "Wine",
+    unit: {
+      id: "unit-ml",
+      staffName: "Millilitre",
+      staffAbbreviation: "ml",
+      name: { en: "millilitre" },
+      abbreviation: { en: "ml" },
+      precision: 0,
+      hardwareUnit: null,
+      measure: true as const,
+    },
+  };
+  store(el).loadFrom(store(el).id, [
+    { product: wine, quantity: "200" },
+    { product: beer, quantity: "2" },
+  ]);
+  await el.updateComplete;
+  expect(
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-draft-line]")].map(
+      (control) => control.dataset.splitDraftLine,
+    ),
+  ).toEqual(["1"]);
+  expect(el.shadowRoot!.querySelector("[data-review-open]")!.textContent!.trim()).toBe(
+    "Review (3)",
+  );
+});
+
 it("a recalled line asks the server to split its source without copying priced references locally", async () => {
   const { el, draft } = await draftWithUnits();
   draft.lines[0]!.source = source;

@@ -63,11 +63,16 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
+import { lineProductName, productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
-import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
+import {
+  takesExtras,
+  toWireLineExtras,
+  toWireModifiers,
+  toWireProductIdentity,
+} from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
@@ -213,7 +218,7 @@ function flagged(line: OrderLine): boolean {
 
 /** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
 function countsWholeUnits(line: OrderLine): boolean {
-  return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
+  return takesExtras(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
@@ -3409,7 +3414,7 @@ export class TillTableOrderScreen extends LitElement {
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =
-      soldByTheUnit(line.product) &&
+      takesExtras(line.product) &&
       Number.isInteger(Number(line.quantity)) &&
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
@@ -3548,7 +3553,7 @@ export class TillTableOrderScreen extends LitElement {
       store.sending ||
       store.editsLocked ||
       this.groupCommandBusy ||
-      !soldByTheUnit(line.product) ||
+      !takesExtras(line.product) ||
       !Number.isInteger(Number(line.quantity)) ||
       Number(line.quantity) <= 1
     )
