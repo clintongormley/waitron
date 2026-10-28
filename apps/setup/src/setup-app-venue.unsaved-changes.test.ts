@@ -424,6 +424,25 @@ describe("demo name ownership across wizard drafts", () => {
       );
     },
   );
+  it("restores automatic ownership when a retained form discards a same-text edit", async () => {
+    const { el, venue } = await mount(demoDraft());
+    (await nativeName(venue)).dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await venue.updateComplete;
+    const pending = leaveCoordinatorFor(venue)!.request({
+      scopes: [venue],
+      reason: "navigation",
+      proceed: () => {},
+    });
+    await expect.poll(() => warning(el).open).toBe(true);
+    await choose(el, "discard");
+    expect(await pending).toBe("proceeded");
+    expect(el.shadowRoot!.querySelector("setup-venue-screen")).toBe(venue);
+    await edit(venue, "postalCode", "08001");
+    expect((await nativeName(venue)).value).toBe("Can Delgado");
+    next(venue);
+    await expect.poll(() => (el as unknown as State).screen).toBe("review");
+    expect((el as unknown as State).draft.demoLocationNameSource).toBe("automatic");
+  });
   it("retains a same-text custom choice after reconnect", async () => {
     const { el, venue, host } = await mount(demoDraft());
     (await nativeName(venue)).dispatchEvent(new Event("input", { bubbles: true, composed: true }));
