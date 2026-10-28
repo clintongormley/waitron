@@ -1726,7 +1726,10 @@ it("forgets and counts an error in a language the venue switches off", async () 
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
   expect(refusalsIn(el)).toBe("");
-  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
 });
 
 it("shows a refusal for a change the venue's content languages drop while it is being sent", async () => {
@@ -2826,6 +2829,48 @@ it("counts text typed in a language removed while its field fails its own check"
   ]);
 });
 
+it("keeps and stages the valid text of a field whose failing language is removed, counting only the removed text", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja" };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-en", "Hot soup");
+  await type(el, "wt-input", "description-es", "x".repeat(5000));
+  await press(el, "review");
+  expect(field(el, "wt-input", "description-es").error).not.toBe("");
+  expect(el.changes).toEqual([]);
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await el.updateComplete;
+  expect(field(el, "wt-input", "description-en").value).toBe("Hot soup");
+  expect(field(el, "wt-input", "description-en").error).toBe("");
+  expect(el.changes).toEqual([{ target: soup, field: "description", value: { en: "Hot soup" } }]);
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
+  expect(refusalsIn(el)).toBe("");
+  expect(footerButton(el, "review")!.disabled).toBe(false);
+});
+
+it("keeps marking a field whose failing language is removed while another of its languages still fails", async () => {
+  const document = lunch();
+  document.offers["mi-soup"]!.description = { en: "Old soup", es: "Sopa vieja", fr: "Soupe" };
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "es", "fr"] });
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Soup");
+  await type(el, "wt-input", "description-es", "x".repeat(5000));
+  await type(el, "wt-input", "description-fr", "y".repeat(5000));
+  await press(el, "review");
+  expect(field(el, "wt-input", "description-es").error).not.toBe("");
+  setContentLanguages({ defaultLanguage: "en", languages: ["en", "fr"] });
+  await el.updateComplete;
+  expect(field(el, "wt-input", "description-fr").value).toBe("y".repeat(5000));
+  expect(field(el, "wt-input", "description-fr").error).not.toBe("");
+  expect(el.changes).toEqual([]);
+  expect(droppedNote(el)).toBeNull();
+  expect(refusalsIn(el)).toBe("Correct the fields marked on Soup to continue.");
+});
+
 it("judges a field forgotten while failing its own check against the version shown when it is next edited", async () => {
   const drinksNamed = (es: string) => {
     const document = lunch();
@@ -2841,12 +2886,16 @@ it("judges a field forgotten while failing its own check against the version sho
   const getLiveMenu = vi
     .fn()
     .mockResolvedValueOnce(live(3, drinksNamed("Bebidas")))
-    .mockResolvedValue(live(4, drinksNamed("Copas")));
+    .mockResolvedValueOnce(live(4, drinksNamed("Copas")))
+    .mockResolvedValue(live(5, drinksNamed("Refrescos")));
   const el = await mount(stubApi({ liveData: data, getLiveMenu }));
   await pick(el, "Drinks");
   await type(el, "wt-input", "names-es", "x".repeat(5000));
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
+  expect(trimmedNote(el)).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
   await vi.waitFor(() => expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu"));
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
@@ -2859,7 +2908,17 @@ it("judges a field forgotten while failing its own check against the version sho
       value: { en: "Refreshments", es: "Copas" },
     },
   ]);
-  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
-  await el.updateComplete;
-  expect(trimmedNote(el)).toBeNull();
+  // The Spanish was left as version 4 has it, so it follows the version a Reload reads.
+  data.invalidate([{ type: "menu_versions", id: "v-5" }]);
+  await vi.waitFor(() => expect(bottomMessage(el)).toContain(newerNotice(5)));
+  await press(el, "reload");
+  expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
+  expect(field(el, "wt-input", "names-es").value).toBe("Refrescos");
+  expect(el.changes).toEqual([
+    {
+      target: { kind: "section", sectionId: "sec-drinks" },
+      field: "names",
+      value: { en: "Refreshments", es: "Refrescos" },
+    },
+  ]);
 });

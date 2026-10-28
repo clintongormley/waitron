@@ -526,8 +526,8 @@ export class MenuPatchDialog extends LitElement {
     this.dropped += dropped;
     if (trimmed.length > 0) this.trimmed = new Set([...this.trimmed, ...trimmed]);
     this.#typeSettled();
-    this.dropped += this.#forgetSettled(document);
     this.#followHeld();
+    this.dropped += this.#forgetSettled(document);
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
@@ -593,11 +593,11 @@ export class MenuPatchDialog extends LitElement {
   }
 
   /** After a rebase, a field neither staged nor failing its check shows the newer live value again.
-   * A failing field the form can no longer draw is forgotten too, or nothing could clear it;
-   * returns how many of those there were. A refusal the form can no longer draw goes, and its
-   * change stays staged. */
+   * A failing field whose failing language is removed is checked again in the languages left, whose
+   * text `#followHeld` has kept and counted. A failing field the form can no longer draw is
+   * forgotten too, or nothing could clear it; returns how many of those there were. A refusal the
+   * form can no longer draw goes, and its change stays staged. */
   #forgetSettled(document: MenuDocument): number {
-    const staged = new Set(this.#draft!.changes().map(changeKey));
     const items = itemNames(document);
     const languages = currentContentLanguages();
     let lost = 0;
@@ -605,20 +605,26 @@ export class MenuPatchDialog extends LitElement {
       this.#typed.delete(key);
       this.#draft!.clear(typed.target, field);
     };
-    for (const [key, typed] of this.#typed) {
+    for (const [key, held] of this.#typed) {
       const field = key.slice(key.lastIndexOf("/") + 1);
-      const drawn =
+      const shown =
         items.has(targetOf(key)) &&
-        patchFieldValue(document, typed.target, field, languages) !== undefined &&
-        (typed.language === null || languages.languages.includes(typed.language));
+        patchFieldValue(document, held.target, field, languages) !== undefined;
+      const inLanguage = (typed: Typed) =>
+        typed.language === null || languages.languages.includes(typed.language);
+      if (shown && !held.refused && held.error !== "" && !inLanguage(held))
+        this.#check(held.target, field, held.value);
+      const typed = this.#typed.get(key)!;
+      const drawn = shown && inLanguage(typed);
+      const staged = this.#draft!.changes().some((change) => changeKey(change) === key);
       if (typed.refused) {
         // A refused change is staged, so the rebase does any counting.
-        if (!staged.has(key)) forget(key, typed, field);
+        if (!staged) forget(key, typed, field);
         else if (!drawn) Object.assign(typed, { error: "", language: null, refused: false });
         continue;
       }
       if (typed.error !== "" && !drawn) lost += 1;
-      if (!staged.has(key) && (!drawn || typed.error === "")) forget(key, typed, field);
+      if (!staged && (!drawn || typed.error === "")) forget(key, typed, field);
     }
     return lost;
   }
@@ -802,6 +808,15 @@ export class MenuPatchDialog extends LitElement {
   }
 
   #change(target: MenuPatchTarget, field: string, raw: unknown): void {
+    this.#check(target, field, raw);
+    this.#retireRefusal();
+    this.#scope!.changed();
+    this.requestUpdate();
+  }
+
+  /** Stages `raw`, the field's text as the form holds it, or holds it with its own check's
+   * sentence. */
+  #check(target: MenuPatchTarget, field: string, raw: unknown): void {
     const draft = this.#draft!;
     const value = TRANSLATED.has(field)
       ? Object.fromEntries(
@@ -835,9 +850,6 @@ export class MenuPatchDialog extends LitElement {
         refused: false,
       });
     }
-    this.#retireRefusal();
-    this.#scope!.changed();
-    this.requestUpdate();
   }
 
   /** Where the form is stacked under the tree, it is scrolled to. Focus stays on a pressed tree

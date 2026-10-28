@@ -1172,10 +1172,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   the note counts a fixed name only when the whole change becomes a no-op. Found by a review
   experiment on the branch.
 
-- **A failing field in the menu patch window whose language is removed is counted as "no longer
-  fits … dropped" (left open by A1151).** The cause is the removed language, which has its own
-  note. Seen in the dialog test "forgets and counts an error…".
-
 - **Owner question: the menu patch window's locked section name says why on a line under the field
   (left open by A1151).** "The included folder sets this name." is a muted line under a disabled
   field (`apps/dashboard/src/widgets/form-fields.ts`, `optionalTextFields`). The house rule makes a
