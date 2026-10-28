@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   orderPortionEvents,
   orderPortions,
   saleLinePortions,
   saleLines,
   workingLinePortions,
+  workingOrderLines,
   type Transaction,
 } from "@waitron/db";
 import type { PortionBinding } from "./portion-sale-projection.js";
@@ -146,6 +147,33 @@ export async function readPortionBindings(
     .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
   return new Map(rows.map((row) => [row.lineId, row]));
+}
+
+/**
+ * Of `lineIds`, the dish lines bound to a portion that is not measured, and their extras: the lines
+ * kitchen paper prints once for several identical portions.
+ */
+export async function readWholePortionLines(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Set<string>> {
+  if (lineIds.length === 0) return new Set();
+  const rows = await tx
+    .select({ id: workingOrderLines.id })
+    .from(workingOrderLines)
+    .innerJoin(
+      workingLinePortions,
+      eq(
+        workingLinePortions.workingOrderLineId,
+        sql`coalesce(${workingOrderLines.parentLineId}, ${workingOrderLines.id})`,
+      ),
+    )
+    .innerJoin(
+      orderPortions,
+      and(eq(orderPortions.id, workingLinePortions.portionId), eq(orderPortions.measured, false)),
+    )
+    .where(inArray(workingOrderLines.id, [...lineIds]));
+  return new Set(rows.map((row) => row.id));
 }
 
 /** Unbind `lineIds` before their lines are deleted (the binding's key has no delete rule). */

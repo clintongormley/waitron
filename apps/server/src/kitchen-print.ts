@@ -24,6 +24,7 @@ import {
   compareStationNames,
   partyTablesName,
   perDishOptionQuantity,
+  stringToThousandths,
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { Decimal, TicketGrouping } from "@waitron/shared";
@@ -38,6 +39,7 @@ import {
   formatKitchenTicket,
   formatMovedSlip,
   joinKitchenTickets,
+  mergeKey,
   movedPlaceText,
 } from "./kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -50,12 +52,13 @@ import {
   type OrderPlaces,
   type PlacedOrder,
 } from "./order-places.js";
-import { readRestOfOrder } from "./rest-of-order.js";
+import { readWholePortionLines } from "./order-portions.js";
+import { readRestOfOrder, type RestOfOrderItem } from "./rest-of-order.js";
 import { holdersOf, partyFamilies, partyFamily } from "./parties.js";
 import { foodOnItsWay } from "./delivery-release.js";
 import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
-import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
+import type { KitchenTicketItem, MovedSlip, OtherStationItem } from "./kitchen-ticket.js";
 import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
@@ -649,11 +652,27 @@ async function planKitchenTickets(
   }
   const anyRest = [...restLeavesOut.values()].some((leavesOut) => leavesOut !== null);
   const rest = anyRest ? (await readRestOfOrder(tx, [orderId])).get(orderId)! : [];
+  const restLineIds = [...new Set(rest.map((item) => item.workingOrderLineId))];
   const eachByIdentity = !anyRest
     ? new Set<string>()
-    : await VENUE_SERVICE.readLinesSoldInEach(tx, [
-        ...new Set(rest.map((item) => item.workingOrderLineId)),
-      ]);
+    : await VENUE_SERVICE.readLinesSoldInEach(tx, restLineIds);
+  const restItems = foldWholePortions(
+    rest.map((item) => ({
+      stationId: item.stationId,
+      workingOrderLineId: item.workingOrderLineId,
+      other: {
+        qty: item.quantity,
+        unit:
+          item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
+            ? undefined
+            : ticketName(item.unitName, cfg.locale),
+        name: item.name,
+        stationName: item.stationName,
+        held: item.held,
+      },
+    })),
+    await readWholePortionLines(tx, restLineIds),
+  );
   const head = {
     locale: cfg.locale,
     kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
@@ -699,18 +718,9 @@ async function planKitchenTickets(
             ? {
                 alsoOnOrder: {
                   locale: cfg.locale,
-                  items: rest
+                  items: restItems
                     .filter((item) => !leavesOut.includes(item.stationId))
-                    .map((item) => ({
-                      qty: item.quantity,
-                      unit:
-                        item.unitName === null || eachByIdentity.has(item.workingOrderLineId)
-                          ? undefined
-                          : ticketName(item.unitName, cfg.locale),
-                      name: item.name,
-                      stationName: item.stationName,
-                      held: item.held,
-                    })),
+                    .map((item) => item.other),
                 },
               }
             : {}),
@@ -736,6 +746,42 @@ async function planKitchenTickets(
     }
   }
   return jobs;
+}
+
+/**
+ * The rest of the order with identical whole portions (`whole`, from {@link readWholePortionLines})
+ * printed once, wherever they sit in the list, in the first one's place with their quantities
+ * summed. An item that prints a unit stays on its own row, as on a station's own ticket.
+ */
+function foldWholePortions(
+  items: readonly (Pick<RestOfOrderItem, "stationId" | "workingOrderLineId"> & {
+    other: OtherStationItem;
+  })[],
+  whole: ReadonlySet<string>,
+): typeof items {
+  const out: { item: (typeof items)[number]; thousandths: number }[] = [];
+  const byKey = new Map<string, (typeof out)[number]>();
+  for (const item of items) {
+    const thousandths = stringToThousandths(String(item.other.qty));
+    const key =
+      whole.has(item.workingOrderLineId) &&
+      item.other.unit === undefined &&
+      thousandths % 1000 === 0
+        ? JSON.stringify([item.stationId, item.other.name, item.other.held])
+        : undefined;
+    const same = key === undefined ? undefined : byKey.get(key);
+    if (same !== undefined) {
+      same.thousandths += thousandths;
+      continue;
+    }
+    const entry = { item, thousandths };
+    out.push(entry);
+    if (key !== undefined) byKey.set(key, entry);
+  }
+  return out.map(({ item, thousandths }) => ({
+    ...item,
+    other: { ...item.other, qty: thousandthsToDecimal(thousandths) },
+  }));
 }
 
 /** Enqueue each job with its bill, station and line links. */
@@ -1224,13 +1270,46 @@ async function printCorrectionSlips(
     return;
   }
 
+  // Identical whole portions at a station with the same correction share one slip, whatever the
+  // station's grouping, as one line of their summed quantity would.
+  const whole = await readWholePortionLines(tx, lineIds);
+  const slips: {
+    stationId: string;
+    item: KitchenTicketItem;
+    block: KitchenAllergyBlock | null;
+    thousandths: number;
+  }[] = [];
+  const byKey = new Map<string, (typeof slips)[number]>();
   for (const target of items) {
-    const targets = printersByStation.get(target.stationId);
-    if (targets === undefined) continue;
+    if (!printersByStation.has(target.stationId)) continue;
     const entry = itemsByLine.get(target.workingOrderLineId)!;
-    const item = atFiredQuantity(entry.item, target);
+    const fired = atFiredQuantity(entry.item, target);
+    const item =
+      target.group === undefined
+        ? fired
+        : {
+            ...fired,
+            group: target.group,
+            groupLabel:
+              target.numberPartyLabel ??
+              (target.group === entry.group ? fired.groupLabel : undefined),
+          };
     const block =
       change.kind === "ALLERGY" ? (change.blocks.get(target.workingOrderLineId) ?? null) : null;
+    const merge = whole.has(target.workingOrderLineId) ? mergeKey(item) : undefined;
+    const key = merge === undefined ? undefined : JSON.stringify([target.stationId, merge, block]);
+    const same = key === undefined ? undefined : byKey.get(key);
+    if (same !== undefined) {
+      same.thousandths += target.quantity;
+      continue;
+    }
+    const slip = { stationId: target.stationId, item, block, thousandths: target.quantity };
+    slips.push(slip);
+    if (key !== undefined) byKey.set(key, slip);
+  }
+
+  for (const { stationId, item, block, thousandths } of slips) {
+    const targets = printersByStation.get(stationId)!;
     const correction =
       change.kind !== "ALLERGY"
         ? change
@@ -1243,20 +1322,11 @@ async function printCorrectionSlips(
           ...correction,
           locale: cfg.locale,
           kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
-          stationName: stationNames.get(target.stationId)!.name,
+          stationName: stationNames.get(stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
           at,
-          item:
-            target.group === undefined
-              ? item
-              : {
-                  ...item,
-                  group: target.group,
-                  groupLabel:
-                    target.numberPartyLabel ??
-                    (target.group === entry.group ? item.groupLabel : undefined),
-                },
+          item: { ...item, qty: thousandthsToDecimal(thousandths) },
         },
         group[0]!,
       );
