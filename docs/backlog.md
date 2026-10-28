@@ -1588,18 +1588,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1060. Ask whether A773's picture 10 replaces the station's three late-flag fields** with its
   one "Late after · 5 · 10 · 15 min" dropdown; A756 PR 5 kept A725's three (owner, 2026-10-15).
 
-- **A1134. Add station marks no field when the server refuses a minutes field.** The station editor
-  puts it under the field; A1136 is Add station's own-check half.
-  [Detail](backlog/kitchen.md#a1134-add-station-marks-no-field-when-the-server-refuses-a-minutes-field)
-
 - **A1135. No test catches `classifyBand` measuring from the wrong end.** Stryker's mutant turning
   `nowMs - queuedAtMs` into `+` (`packages/shared/src/timing.ts`) survives: every case that asserts
   a band starts the clock at 0. Fix: a case with a non-zero `queuedAtMs`. Found in A797 slice 6's
   review; predates it.
-
-- **A1136. Add station's own check of a minutes field highlights nothing and puts its bottom line
-  inside the form.** The station editor does it right; A1134 is the server-refusal half.
-  [Detail](backlog/kitchen.md#a1136-add-stations-own-check-of-a-minutes-field-highlights-nothing-and-puts-its-bottom-line-inside-the-form)
 
 - **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields**
   [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-minutes-grid-and-held-work-note-are-wider-than-its-fields)

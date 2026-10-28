@@ -136,7 +136,7 @@ const equal = (a: Draft, b: Draft) =>
 export const isWholeMinutes = (value: number) =>
   Number.isInteger(value) && value >= 1 && value <= 2_147_483_647;
 
-const timingMessage = (field: TimingField) =>
+export const timingMessage = (field: TimingField) =>
   field === "readyWarningAfterMinutes"
     ? t("prep.ready_warning_invalid")
     : t("prep.threshold_invalid");

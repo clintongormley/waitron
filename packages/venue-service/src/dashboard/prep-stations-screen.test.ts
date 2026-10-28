@@ -734,16 +734,69 @@ it.each(["0", "2147483648"])(
     await settle(el);
     q(el, '[data-test="save-station"]')!.click();
     await settle(el);
-    expect(q(el, '[data-field-error="readyWarningAfterMinutes"]')?.textContent).toBe(
+    expect(timingField(el, "readyWarningAfterMinutes").error).toBe(
       "Use whole minutes, at least 1.",
     );
     for (const field of ["warmAfterMinutes", "overdueAfterMinutes", "forgottenAfterMinutes"])
-      expect(q(el, `[data-field-error="${field}"]`)).toBeNull();
-    expect(
-      [...el.shadowRoot!.querySelectorAll("wt-modal .form > p.error")].map((p) => p.textContent),
-    ).toEqual([VENUE_SERVICE_STRINGS.en["prep.fix_fields"]]);
+      expect(timingField(el, field).error).toBe("");
+    expect(addActions(el).error).toBe(VENUE_SERVICE_STRINGS.en["prep.fix_fields"]);
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(true);
     expect(a.createStation).not.toHaveBeenCalled();
+  },
+);
+const addActions = (el: PrepStationsScreen) =>
+  el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-modal wt-form-actions")!;
+const addTimingFields = [
+  "warmAfterMinutes",
+  "overdueAfterMinutes",
+  "forgottenAfterMinutes",
+  "readyWarningAfterMinutes",
+];
+it.each([
+  ["warmAfterMinutes", "prep.threshold_invalid"],
+  ["readyWarningAfterMinutes", "prep.ready_warning_invalid"],
+] as const)(
+  "Add station's own check of 0 in %s highlights that field, focuses it and explains it above the buttons",
+  async (field, message) => {
+    setLocale("en");
+    const a = api();
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, '[data-test="name"]')!, "Terrace");
+    await editSaveField(el, timingField(el, field), "0");
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(a.createStation).not.toHaveBeenCalled();
+    expect(timingField(el, field).error).toBe(VENUE_SERVICE_STRINGS.en[message]);
+    for (const other of addTimingFields.filter((name) => name !== field))
+      expect(timingField(el, other).error).toBe("");
+    expect(addActions(el).error).toBe(VENUE_SERVICE_STRINGS.en["prep.fix_fields"]);
+    expect(el.shadowRoot!.querySelector("wt-modal .form p.error")).toBeNull();
+    await expect.poll(() => el.shadowRoot!.activeElement).toBe(timingField(el, field));
+  },
+);
+it.each([
+  ["station.thresholds_invalid", "overdueAfterMinutes", "prep.threshold_invalid"],
+  ["management.request_invalid", "forgottenAfterMinutes", "prep.threshold_invalid"],
+  ["management.request_invalid", "readyWarningAfterMinutes", "prep.ready_warning_invalid"],
+] as const)(
+  "Add station puts a %s refusal of %s under that field",
+  async (code, field, message) => {
+    setLocale("en");
+    const a = api({ createStation: vi.fn().mockRejectedValue({ code, params: { field } }) });
+    const el = await mount(a);
+    q(el, '[data-test="new-station"]')!.click();
+    await settle(el);
+    await editSaveField(el, q(el, '[data-test="name"]')!, "Terrace");
+    q(el, '[data-test="save-station"]')!.click();
+    await settle(el);
+    expect(a.createStation).toHaveBeenCalledOnce();
+    expect(timingField(el, field).error).toBe(VENUE_SERVICE_STRINGS.en[message]);
+    for (const other of addTimingFields.filter((name) => name !== field))
+      expect(timingField(el, other).error).toBe("");
+    expect(addActions(el).error).toBe(VENUE_SERVICE_STRINGS.en["prep.fix_fields"]);
+    expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
   },
 );
 const addPicker = (el: PrepStationsScreen) =>
@@ -848,9 +901,7 @@ it("puts a colour refusal from Add station under Colour", async () => {
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(addPicker(el).error).toBe("Choose one of these colours.");
-  expect(el.shadowRoot!.querySelector("wt-modal .form > p.error")!.textContent).toBe(
-    "Correct the highlighted fields to continue.",
-  );
+  expect(addActions(el).error).toBe("Correct the highlighted fields to continue.");
   colourTile(addPicker(el), "teal").click();
   await settle(el);
   expect(addPicker(el).error).toBe("");
@@ -1161,8 +1212,8 @@ it("places a taken-name refusal below Name", async () => {
   );
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
-  expect(q(el, '[data-field-error="name"]')?.textContent).toContain("already in use");
-  expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
+  expect((q(el, 'wt-input[name="name"]') as WtInput).error).toContain("already in use");
+  expect(addActions(el).error).toBe("Correct the highlighted fields to continue.");
   expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
 });
 it("does not create an unnamed station", async () => {
@@ -1174,7 +1225,7 @@ it("does not create an unnamed station", async () => {
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   expect(a.createStation).not.toHaveBeenCalled();
-  expect(q(el, '[data-field-error="name"]')).not.toBeNull();
+  expect((q(el, 'wt-input[name="name"]') as WtInput).error).not.toBe("");
 });
 it("reports rejected station actions without exposing a code", async () => {
   const a = api({ deleteStation: vi.fn().mockRejectedValue({ code: "station.not_found" }) });
@@ -1346,7 +1397,7 @@ it("refuses invalid warm and forgotten thresholds together when creating", async
   q(el, '[data-test="save-station"]')!.click();
   await settle(el);
   for (const field of ["warmAfterMinutes", "forgottenAfterMinutes"])
-    expect(q(el, `[data-field-error="${field}"]`)).not.toBeNull();
+    expect(timingField(el, field).error).not.toBe("");
   expect(a.createStation).not.toHaveBeenCalled();
   expect(a.updateStation).not.toHaveBeenCalled();
 });
@@ -1590,7 +1641,7 @@ it("routing recovery clears a read failure and retains an action refusal", async
   await settle(el);
   liveData.invalidate([{ type: "categories" }]);
   await settle(el);
-  expect(el.shadowRoot!.textContent).toContain("The change could not be saved.");
+  expect(addActions(el).error).toBe("The change could not be saved.");
 });
 it("a health snapshot ahead of routing metadata leaves the row note absent until the station's status arrives", async () => {
   const el = await mount(
@@ -4569,17 +4620,17 @@ describe("Save follows changes", () => {
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
     form.button().click();
     await settle(form.el);
-    expect(form.query('[data-field-error="name"]')).not.toBeNull();
-    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(timingField(form.el, "name").error).not.toBe("");
+    expect(timingField(form.el, "forgottenAfterMinutes").error).not.toBe("");
     await form.edit("New station");
-    expect(form.query('[data-field-error="name"]')).toBeNull();
-    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
-    expect(form.query("wt-modal")!.textContent).toContain(
-      "Correct the highlighted fields to continue.",
-    );
+    expect(timingField(form.el, "name").error).toBe("");
+    expect(timingField(form.el, "forgottenAfterMinutes").error).not.toBe("");
+    expect(addActions(form.el).error).toBe("Correct the highlighted fields to continue.");
     expect(form.button().disabled).toBe(true);
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
     expect(form.query('[role="alert"]')).toBeNull();
+    expect(timingField(form.el, "forgottenAfterMinutes").error).toBe("");
+    expect(addActions(form.el).error).toBe("");
     await state(form.button(), true);
     expect(form.a.createStation).not.toHaveBeenCalled();
   });
@@ -4590,16 +4641,14 @@ describe("Save follows changes", () => {
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
     form.button().click();
     await settle(form.el);
-    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
+    expect(timingField(form.el, "forgottenAfterMinutes").error).not.toBe("");
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "15");
     await state(form.button(), true);
     await editSaveField(form.el, form.query('wt-input[name="forgottenAfterMinutes"]')!, "10");
     expect(form.button().variant).toBe("primary");
     expect(form.button().disabled).toBe(true);
-    expect(form.query('[data-field-error="forgottenAfterMinutes"]')).not.toBeNull();
-    expect(form.query("wt-modal")!.textContent).toContain(
-      "Correct the highlighted fields to continue.",
-    );
+    expect(timingField(form.el, "forgottenAfterMinutes").error).not.toBe("");
+    expect(addActions(form.el).error).toBe("Correct the highlighted fields to continue.");
     expect(form.a.createStation).not.toHaveBeenCalled();
   });
   it.each(["rename"] as const)("%s compares trimmed names", async (mode) => {
@@ -4843,13 +4892,11 @@ describe("The station editor", () => {
     expect((q(el, "wt-combobox[name=printerIds]") as WtCombobox).error).toBe(
       "Choose active printers.",
     );
-    expect(q(el, '[data-field-error="name"]')).toBeNull();
-    expect(q(el, "wt-modal")!.textContent).toContain("Correct the highlighted fields to continue.");
+    expect((q(el, 'wt-input[name="name"]') as WtInput).error).toBe("");
+    expect(addActions(el).error).toBe("Correct the highlighted fields to continue.");
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
     await editSaveField(el, q(el, "wt-combobox[name=printerIds]")!, []);
-    expect(q(el, "wt-modal")!.textContent).not.toContain(
-      "Correct the highlighted fields to continue.",
-    );
+    expect(addActions(el).error).toBe("");
   });
 });
 
@@ -5040,9 +5087,7 @@ describe("a printer deleted elsewhere while a form holds it", () => {
     expect(combo.values).toEqual(["old"]);
     expect(combo.countLabel(2)).not.toContain("next");
     expect(combo.error).toBe("");
-    const modal = q(el, "wt-modal")!.textContent!;
-    expect(modal).toContain(DROPPED);
-    expect(modal).not.toContain("Correct the highlighted fields to continue.");
+    expect(addActions(el).error).toBe(DROPPED);
     expect(q(el, '[data-test="save-station"]')!.hasAttribute("disabled")).toBe(false);
     q(el, '[data-test="save-station"]')!.click();
     await vi.waitFor(() => expect(createStation).toHaveBeenCalledTimes(2));

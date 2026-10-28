@@ -5,6 +5,7 @@ import {
   baseStyles,
   leaveCoordinatorFor,
   draftScopeFor,
+  focusFirstInvalid,
   saveActionState,
   type DraftScope,
   type LeaveCoordinator,
@@ -64,6 +65,7 @@ import {
   listedPrinterIds,
   stationPrinterOptions,
   stationRefusalField,
+  timingMessage,
   type StationEditorSave,
   type StationRefusal,
 } from "./station-editor.js";
@@ -851,6 +853,10 @@ export class PrepStationsScreen extends LitElement {
     this.fieldError = errors;
     if (Object.keys(errors).length) {
       this.#showError(t("prep.fix_fields"));
+      void this.updateComplete.then(() => {
+        const form = this.renderRoot.querySelector("wt-modal .form");
+        if (form) void focusFirstInvalid(form);
+      });
       return;
     }
     if (this.busy) return;
@@ -886,6 +892,7 @@ export class PrepStationsScreen extends LitElement {
               : "prep.printers_refused",
           ),
         };
+      else if (field !== undefined) this.fieldError = { [field]: timingMessage(field) };
       this.#showError(t(field === undefined ? "prep.save_error" : "prep.fix_fields"));
       if (refusal.code === "printer.not_found") void this.#load();
     } finally {
@@ -1021,14 +1028,14 @@ export class PrepStationsScreen extends LitElement {
         type=${type}
         required
         .value=${String(this.draft[field])}
+        .error=${this.fieldError[field] ?? ""}
         @keydown=${(e: KeyboardEvent) => submitOnEnter(e, this.renderRoot.querySelector("[data-test=save-station]"))}
         @wt-change=${(e: CustomEvent<{ value: string }>) => {
           e.stopPropagation();
           if (this.isConnected && identity === this.#stationIdentity)
             this.#change(field, e.detail.value);
         }}
-      ></wt-input
-      >${this.fieldError[field] ? html`<p class="error" data-field-error=${field} role="alert">${this.fieldError[field]}</p>` : nothing}
+      ></wt-input>
     </div>`;
   }
   #newStationColour() {
@@ -1096,9 +1103,8 @@ export class PrepStationsScreen extends LitElement {
         }}
         ><div class="form">
           ${this.#field("name", t("prep.name"), "text")}${this.#newStationColour()}${this.#field("warmAfterMinutes", t("prep.warm"))}${this.#field("overdueAfterMinutes", t("prep.overdue"))}${this.#field("forgottenAfterMinutes", t("prep.forgotten"))}${this.#field("readyWarningAfterMinutes", t("prep.ready_warning"))}${this.#newStationPrinters()}
-          ${this.error ? html`<p class="error" role="alert">${this.error}</p>` : nothing}
         </div>
-        <wt-form-actions slot="footer">
+        <wt-form-actions slot="footer" .error=${this.error}>
           <wt-button
             slot="cancel"
             variant="secondary"
