@@ -65,7 +65,7 @@ describe("bookings schema (staff reservations — columns, CHECK, FKs)", () => {
       id: LOCATION,
       name: "Loc A",
       invoiceLocales: ["es"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
     });
     const [zone] = await suite.db
       .insert(floorZones)

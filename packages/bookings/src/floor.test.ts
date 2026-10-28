@@ -36,7 +36,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<Venue> {
   // inserts only. `invoice_locales` is a JSON array stored as text.
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (id, name, invoice_locales, operation_description, time_zone)
-    values (${newId()}, 'Barra', '["es-ES"]', 'Venta en establecimiento', ${timeZone})
+    values (${newId()}, 'Front counter', '["es-ES"]', 'Restaurant service', ${timeZone})
     returning id`);
   return {
     locationId: brandLocationId(loc.rows[0]!.id),

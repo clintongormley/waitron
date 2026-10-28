@@ -18,7 +18,7 @@ beforeAll(async () => {
 async function makeLocation(timeZone: string): Promise<string> {
   const loc = await db.execute<{ id: string }>(sql`
     insert into locations (id, name, invoice_locales, operation_description, time_zone)
-    values (${newId()}, 'Barra', '["es-ES"]', 'Venta en establecimiento', ${timeZone})
+    values (${newId()}, 'Front counter', '["es-ES"]', 'Restaurant service', ${timeZone})
     returning id`);
   return loc.rows[0]!.id;
 }

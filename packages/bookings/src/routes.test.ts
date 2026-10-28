@@ -51,9 +51,9 @@ async function setupVenue(): Promise<Venue> {
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Sala principal",
+      name: "Main room",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Venta en establecimiento",
+      operationDescription: "Restaurant service",
     })
     .returning({ id: locations.id });
   const locationId = loc!.id;
@@ -146,7 +146,7 @@ function bookingBody(overrides: Record<string, unknown> = {}): Record<string, un
     bookingDate: "2026-08-20",
     bookingTime: "20:00",
     partySize: 4,
-    contactName: "García",
+    contactName: "Taylor",
     ...overrides,
   };
 }
@@ -244,14 +244,14 @@ describe("Bookings API (routes, gates and request screens)", () => {
 
     const listed = await listOn(app, managerCookie, "2026-08-20");
     const created = listed.find((r) => r.id === id);
-    expect(created).toMatchObject({ status: "booked", tabId: null, contactName: "García" });
+    expect(created).toMatchObject({ status: "booked", tabId: null, contactName: "Taylor" });
 
     // PATCH every updatable field at once (exercises every `screenPatch` present-branch).
     const patchRes = await send(app, "PATCH", `/management-api/bookings/${id}`, managerCookie, {
       bookingDate: "2026-08-20",
       bookingTime: "21:30",
       partySize: 6,
-      contactName: "García party",
+      contactName: "Taylor party",
       contactPhone: "600333444",
       notes: "Now a bigger table",
       tableId,
@@ -259,7 +259,7 @@ describe("Bookings API (routes, gates and request screens)", () => {
     expect(patchRes.status).toBe(204);
     const afterPatch = (await listOn(app, managerCookie, "2026-08-20")).find((r) => r.id === id);
     // The seconds come from `storedTime` (`./bookings.ts`), on an update as on a create.
-    expect(afterPatch).toMatchObject({ bookingTime: "21:30:00", contactName: "García party" });
+    expect(afterPatch).toMatchObject({ bookingTime: "21:30:00", contactName: "Taylor party" });
 
     const seatRes = await send(
       app,
