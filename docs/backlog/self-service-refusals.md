@@ -869,6 +869,42 @@ The effective-key diagnosis and correction workflow remains open.
 
 **A fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
 
+**2026-10-28 reply-boundary recheck**, against `f0df802c0`:
+
+The inventory's retry description needs two distinctions: a wrong line count and a line that
+names the wrong record are different cases, and a retained incident does not establish the latest reply.
+The [proposed inspection scope](../superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md)
+awaits the owner's decision. This milestone changes no filing behavior or alert wording.
+
+| Boundary | Source finding and exercised limit |
+| --- | --- |
+| Wrong line count | `packages/fiscal-verifactu/src/drain.ts:1276` checks count before matching lines; `:1398` handles unmatched rows and `:1405` records the batch warning. Four existing cases cover fewer, extra, duplicated-extra and zero reply lines: no record is accepted, ordinary rows return to pending with a retry time, no acknowledgement is written, and the warning holds sent ids, CSV and returned line facts. |
+| Equal count | `packages/fiscal-verifactu/src/drain.ts:1284` checks position, reference, invoice identity and any stated operation. Existing cases accept a still-matched third line while leaving the swapped first two unknown; only those first two are sent by the fixture's explicit later drain call. This is not an all-or-nothing result for every malformed reply. |
+| Retry and holds | `packages/fiscal-verifactu/src/drain.ts:1551` schedules an ordinary row using `backoffMs`; a probe stays held. The later-record fixture sends nothing before the unresolved record's retry, then sends that record with its successor. These fixture calls do not establish that every retry runs at the displayed instant or that a persistent mismatch will clear. |
+| Retained evidence | The repeated-mismatch case at `packages/fiscal-verifactu/src/drain.cases.test.ts:1544` first retains an empty reply, then receives two lines at retry and still reads the original empty reply in the open warning. `packages/fiscal-verifactu/src/errors.ts:167` describes this first-open-warning limit. The retained lines must not be presented as the latest response or a complete history. |
+| Existing runtime caller | `packages/fiscal-verifactu/src/slot.ts:75` supplies the module drain; `apps/server/src/boot.ts:2840` wraps it with restart reset, then `:2867` passes it through submission policy in the primary's loop. This is a traced source chain, not a scheduler or live AEAT experiment. |
+| Existing alert action | `packages/fiscal-verifactu/src/alerts.ts:12` claims fiscal events for `fiscal.view` with no target screen; `apps/dashboard/src/widgets/alert-format.ts:38` needs a supplied target. The list maps incident parameters but the shown alert text is not a structured reply inspector. Mark handled calls `apps/server/src/alerts-api.ts:129`; `packages/core/src/incidents.ts:307` updates acknowledgement fields. It does not repair or resubmit the fiscal record. |
+
+Existing checks run unchanged in an isolated registered worktree:
+
+```sh
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/drain.cases.test.ts -t 'reply lines are paired'
+pnpm --filter @waitron/server exec vitest run src/alerts.test.ts src/alerts-api.test.ts
+pnpm --filter @waitron/fiscal-verifactu exec vitest run src/write-path.e2e.test.ts src/inmutabilidad.test.ts
+```
+
+The logs report **23**, **56** and **20** passing cases respectively; the first command skips
+45 unrelated cases. These are local fixtures, including fake AEAT and some responses through the
+real XML client, not live AEAT, an end-to-end inspection journey or a persistent-repair qualification.
+No original assertion, fiscal record, guard or production source changes in this milestone.
+
+**Still open:** decide whether to plan evidence inspection first, with persistent response repair
+explicitly open, or design the complete fiscal decision route before a build. Keep the support
+wording in scope until an actual action exists. Inspection must distinguish the first retained
+warning from freshly read submission state; it cannot reconstruct replies that were never kept.
+A malformed reply does not establish a Waitron bug or authorise a reset, altered chain, new invoice
+number, reordered batch or manual retry. W41s-8/W41s-9 retain their separate authority and gates.
+
 ### fiscal-environment
 
 **Fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
