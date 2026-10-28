@@ -55,7 +55,7 @@ export async function setupVenue(): Promise<Venue> {
   const locationId = loc!.id;
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const catalogueId = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: `Split extras menu ${locationId}` });
     await assignCatalogueToLocation(tx, locationId, cat.id);
     return cat.id;
   });

@@ -49,7 +49,7 @@ async function fixture() {
       .values({ ...cfg, name: "Dining" })
       .returning();
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
-    const menu = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createCatalogue(tx, { name: `Menu ${venue!.id}` });
     const lunch = (
       await saveMenuPeriod(tx, cfg, departmentId, {
         name: "Lunch",

@@ -143,7 +143,7 @@ export async function setupPartyVenue(db: Database): Promise<PartyVenue> {
     sessionId: await openTillSession(db, { deviceId: cfg.origin.deviceId, personId: OPERATOR }),
   };
   const { tables, counter, productIds } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: `Party menu ${cfg.locationId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     for (const product of MENU) {
       await createProduct(tx, {

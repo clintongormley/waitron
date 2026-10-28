@@ -631,7 +631,13 @@ async function venue(options: { timetable?: boolean; unpublished?: MenuName[] } 
     await configureZone(tx, cfg, { zoneId: mostrador, departmentId: deli });
     const menus = {} as Record<MenuName, string>;
     for (const name of MENU_NAMES) {
-      menus[name] = (await createCatalogue(tx, { name })).id;
+      menus[name] = (
+        await createCatalogue(tx, {
+          name: (await tx.select().from(catalogues)).some((menu) => menu.name === name)
+            ? `${name} ${locationId}`
+            : name,
+        })
+      ).id;
       if (!options.unpublished?.includes(name)) await publish(tx, menus[name]);
     }
     const v = { cfg, locationId, restaurant, deli, barra, sala, terraza, mostrador, menus };

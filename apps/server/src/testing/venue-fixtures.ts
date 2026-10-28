@@ -106,7 +106,7 @@ export async function setupVenue(db: Database): Promise<Venue> {
   const cfg = tillConfigFromVenue(venue);
 
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Delicatessen" });
+    const cat = await createCatalogue(tx, { name: `Delicatessen ${venue.locationId}` });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const cafe = await createProduct(tx, {
       catalogueId: cat.id,

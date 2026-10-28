@@ -176,7 +176,7 @@ export async function provisionBillVenue(db: Database): Promise<BillVenue> {
       .insert(departmentReceipts)
       .values({ departmentId: department.id, receipt: { operationDescription: "Restaurante" } });
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: `Bill menu ${cfg.locationId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
