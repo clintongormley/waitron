@@ -67,7 +67,7 @@ const ACCOUNT_KEY = Buffer.alloc(32, 8).toString("base64");
 
 /**
  * A first setup activated for real into `<venue>/venue.db` with every module, then a backup
- * recovery opened, prepared and stopped beside it. The order is the plan's Task 2 probe (order B).
+ * recovery opened, prepared and stopped beside it.
  * Call it once per test: it reuses `archiveHost()`'s single root. Importing this file brings in
  * `hour-recovery-host.ts`'s database suite, hooks and mocks.
  */

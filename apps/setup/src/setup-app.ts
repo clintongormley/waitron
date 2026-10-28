@@ -2544,7 +2544,6 @@ export class SetupApp extends LitElement {
         inspection.artifacts.some(
           (file) => file.name === "trading.env" && file.status !== "missing",
         ));
-    // A password does not make Start again available for a database that holds records.
     const unavailable =
       this.firstStartAgainRefused === "setup-finished"
         ? t.setupFinished
@@ -2710,7 +2709,7 @@ export class SetupApp extends LitElement {
             <label
               ><input
                 data-test="retire-confirmed"
-                name=${missing ? "missing-database-confirmed" : "retire-empty-setup"}
+                name=${missing ? "missing-database-confirmed" : "retire-setup"}
                 type="checkbox"
                 .checked=${this.firstRetireConfirmed}
                 ?disabled=${this.firstOwnerBusy}

@@ -817,3 +817,21 @@ Each finding's evidence was re-read before folding.
   labelled the reviewer's; Task 0 prints `node.db`'s tables for a `committed` attempt. M-7 the
   full-disk case is its own task (5b); the page is split (8a confirmation, 8b refusals) with their
   own a11y cases; the helper's test is under `apps/server/src/`.
+
+## Departures, as built (2026-10-28)
+
+The tables in Tasks 8a, 8b and 9 above are the plan; where the built code differs, it is here.
+
+- `tradingSaved` is two strings, `tradingSaved` and `tradingSavedPassword`, so the password
+  sentence is left off where the password cannot be checked. The words are the plan's.
+- The kept-records refusal opens with the `heldRows` line, and all three refusal views draw the
+  stopped recovery with `recoveryStoppedRefused` ("A recovery from backup started on {started} and
+  did not finish."), without "Start again deletes it.".
+- Amendment 4b0: a held Start again also deletes the setup's `modules.json` under the deletion
+  marker.
+- A held database whose holdings read 0 rows is refused `setup.not_ready`.
+- A `claimed` attempt with a `no-venue-rows` database holding rows beside a stopped recovery is
+  refused `setup.not_ready`.
+- With a damaged recovery-key record, the server compares the page's flag with the summary's own
+  reading.
+- The guide's wording (Task 9) is the one in `apps/server/src/guide/*/backup-recovery.md`.

@@ -733,7 +733,9 @@ journal records and its restored copy's lock files stay, and the rest is deleted
 `packages/provisioning/src/first-setup-backup-discard.ts`). With the venue database missing, it does
 so after the setup password and the missing-database confirmation; with it present, after the setup
 password and the discard confirmation, and only for an empty, never-activated attempt
-(`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042.
+(`startAgainFirstSetup`, `apps/server/src/first-setup-resolution.ts`). A1042. (2026-10-28, A1131:
+a database that holds records goes too, unless it holds a row Waitron never deletes, the setup saved
+its trading settings, or it finished.)
 
 **DECIDED (owner, 2026-10-17): setup, and the demo, start only for a country that has a country
 pack.** A country without one is not offered at all, so no venue is set up against settings no pack
