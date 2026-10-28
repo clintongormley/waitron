@@ -407,11 +407,36 @@ describe("readBillAdjustments", () => {
         splits: [],
         partOfLine: false,
         action: "discount_amount",
-        percentBp: null,
+        percentBp: 2500,
         reduction: "5.00",
         full: false,
       },
     ]);
+  });
+
+  it("gives an amount that left part of its subject the percentage it took of the price before it", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const amount = (seconds: number, beforeAmount: string, reduction: string) =>
+      recordAt(
+        `2026-09-30T12:00:0${seconds}.000Z`,
+        comp(order, reason, {
+          action: "discount_amount",
+          beforeAmount: decimal(beforeAmount),
+          afterAmount: subtractDecimal(decimal(beforeAmount), decimal(reduction)),
+          reduction: decimal(reduction),
+        }),
+      );
+    await amount(0, "9.99", "1.00");
+    await amount(1, "8.00", "0.01");
+    await amount(2, "8.00", "0.03");
+    await amount(3, "3000.00", "0.01");
+    await amount(4, "3000.00", "2999.99");
+
+    const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
+    // 10.01001…%, 0.125% and 0.375% round half up to a basis point; the last two would round to
+    // 0% and 100%, which neither is.
+    expect(read.map((row) => row.percentBp)).toEqual([1001, 13, 38, 1, 9999]);
   });
 
   it("marks a Free comp and an amount that left its subject at zero as full", async () => {

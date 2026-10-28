@@ -488,7 +488,9 @@ describe("receiptLines", () => {
       [{ kind: "comp", amount: "12.00" }],
       undefined,
     ]);
-    expect(receipt.billAdjustments).toEqual([{ kind: "discount", amount: "5.00" }]);
+    expect(receipt.billAdjustments).toEqual([
+      { kind: "discount", percentBp: 1667, amount: "5.00" },
+    ]);
   });
 
   it("falls back to what each dish lost when the records no longer add up to the bill", async () => {
@@ -673,6 +675,21 @@ describe("receiptLines", () => {
       ]);
     });
 
+    it("prints two €6.00 amounts off the €12.00 Burger as 50% and then 100%", async () => {
+      const billId = await bill([{ name: "Burger" }]);
+      const burger = await lineIdOf(venue, billId, 1);
+      await adjust(billId, { lineId: burger, action: "discount_amount", amount: "6.00" });
+      await adjust(billId, { lineId: burger, action: "discount_amount", amount: "6.00" });
+
+      const { goods } = await payAndPrint(billId, "0.00");
+
+      expect(goods).toEqual([
+        at80("1  Hamburguesa", "12,00"),
+        at80("  Descuento 50%", "-6,00"),
+        at80("  Descuento 100%", "-6,00"),
+      ]);
+    });
+
     it("prints an amount on the whole bill as Descuento 100% only when it left the bill at zero", async () => {
       const whole = await bill([{ name: "Burger" }]);
       await adjust(whole, { action: "discount_amount", amount: "12.00" });
@@ -687,10 +704,12 @@ describe("receiptLines", () => {
         at80("1  Hamburguesa", "12,00"),
         at80("Descuento 100%", "-12,00"),
       ]);
-      expect(partPrinted.result.billAdjustments).toEqual([{ kind: "discount", amount: "5.00" }]);
+      expect(partPrinted.result.billAdjustments).toEqual([
+        { kind: "discount", percentBp: 4167, amount: "5.00" },
+      ]);
       expect(partPrinted.goods).toEqual([
         at80("1  Hamburguesa", "12,00"),
-        at80("Descuento", "-5,00"),
+        at80("Descuento 41,67%", "-5,00"),
       ]);
     });
 
@@ -748,7 +767,7 @@ describe("receiptLines", () => {
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
     // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows, and the
-    // second is numbered after the Bread.
+    // second is numbered after the Bread. The amount prints the share it took: 1.00 of 9.99.
     const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Bread" }]);
     await adjust(billId, {
       lineId: await lineIdOf(venue, billId, 1),
@@ -779,7 +798,7 @@ describe("receiptLines", () => {
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
       at80("2  Croquetas de jamón", "6,66"),
-      at80("  Descuento", "-1,00"),
+      at80("  Descuento 10,01%", "-1,00"),
       at80("1  Pan de pueblo", "2,50"),
       at80("1  Croquetas de jamón", "3,33"),
     ]);

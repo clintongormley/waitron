@@ -1085,6 +1085,7 @@ dashboard/client.ts, dashboard/strings.ts}` and their tests.
   `beforeAmount` = `nominalValue`, Open point 3), "Comp 20%" for a percentage, "Comp €3.00" for any
   other amount («Descuento 100 %», «Descuento 20 %», «Descuento 3,00 €»). Changed checks:
   `adjustment-report-screen.test.ts:235`, `:260`, `:278` ("Give-aways"), `:536` ("Give away") — D10.
+  _2026-10-28, A803 slice 1 (owner, rule 4): an amount is full when it leaves its subject at zero, whatever an earlier step took, so the report calls it "Comp 100%"; any other amount still reads in euros here; see [the decision](../../backlog/till.md#decisions-and-deliberate-limits)._
 - **Task 2 — By reason's Asked by and Approved by** (§3.7): `ReasonTally` gains `askedBy` and
   `approvedBy` lists of `PersonRef & { count }` (`reports.ts:45-49`); the screen draws them as the
   people table's Approved by does (`adjustment-report-screen.ts:563-572`).
@@ -1170,6 +1171,7 @@ A773-1 lands if that is near, else rebase.
 3. **"Full" for an amount comp** means it took the item's whole list price (`afterAmount` 0 and
    `beforeAmount` = `nominalValue`). An amount that takes what another comp left prints "Descuento"
    with its amount, not "Descuento 100%". Default: as stated; the owner may say otherwise.
+   _2026-10-28, A803 slice 1 (owner, rule 4): an amount is full when it leaves its subject at zero, whatever an earlier step took, and every other amount prints the percentage it took; see [the decision](../../backlog/till.md#decisions-and-deliberate-limits)._
 4. **Words not drawn by the owner's pictures:** the Void form's one line, "Who may cancel is set by
    the refund permission, not by the reason." (picture 02 draws a longer box; design §6 asks for "a
    short line"); every Spanish word of the form, the bill-limit section, the till's three approval

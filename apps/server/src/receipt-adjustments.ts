@@ -94,7 +94,7 @@ export async function receiptLines(
     takenOff = addDecimal(takenOff, record.reduction);
     const entry: ReceiptAdjustment = {
       kind: record.full ? "comp" : "discount",
-      ...(record.action === "discount_percent" ? { percentBp: record.percentBp! } : {}),
+      ...(record.percentBp === null ? {} : { percentBp: record.percentBp }),
       amount: record.reduction,
     };
     if (record.lineId === null) {

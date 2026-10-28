@@ -1660,6 +1660,11 @@ example and the 2026-09-30 paragraph below say «Invitación -12,00 €»; the f
 record are unchanged. S10 already
 treats a free item as a discount (V0555-17)._
 
+_2026-10-28, A803 slice 1 (owner): an amount that leaves the dish at zero after an earlier discount
+also prints «Descuento 100%», and on the ticket any other amount prints the percentage it took, as
+«Descuento 10,01% -1,00 €»; a full invoice's row joining several steps still prints one row without
+a step's percentage. The figures and the filed record are unchanged._
+
 **What the software does, 2026-09-30.** This is now built (service plan Task 11, #916). Staff can
 comp or discount only a bill whose invoice has not been issued yet (an open bill of a table). The
 filed record carries only the reduced price. The printed ticket, and the ticket the till shows

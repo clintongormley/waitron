@@ -2154,11 +2154,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
   than design D12. Decide whether Discard should ask the question too.
 
-- **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).**
-  Free always counts, even after an earlier comp took part of the price, so it prints «Descuento 100%»
-  beside what was left, as a 100% percentage already does. Owner to confirm both halves.
-  [Detail](backlog/till.md#a911-what-counts-as-a-full-comp-left-open-by-a758-1-a758-3-and-a758-4)
-
 - **A919. Three reason-form limits show "No limit" as a placeholder and also carry a hint (left
   open by A758-1).** The voids-and-comps form's limit fields use `adjustments.no_limit` as the
   placeholder beside a hint (`packages/adjustments/src/dashboard/reasons-screen.ts`). By

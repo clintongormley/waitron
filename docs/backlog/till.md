@@ -1523,6 +1523,22 @@ whether those reads should follow today's map once a group is left.
   `readRows` in `apps/server/src/adjustments-apply.ts`). Plan:
   [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), D36 and D37.
 
+- **Every comp or discount line prints what that step took (owner, 2026-10-28; A803 slice 1,
+  closes A911).** The owner's rule 4: "each receipt line prints the percentage that step actually
+  took off the price before it: €12 burger, 50% then Free / 100% / €6 off → second line
+  "Descuento 100% −6,00" in all three cases". Free, and an amount that leaves its item (or, on the
+  whole bill, the bill) at zero, print as 100% (`isFullComp`,
+  `packages/adjustments/src/full-comp.ts`), on the ticket, the till's ticket and the dashboard
+  report alike. On the ticket and the till's ticket any other amount prints its share of the price
+  before it, half up to a basis point and never as 0% or 100% (`readBillAdjustments`,
+  `packages/adjustments/src/record.ts`); the report still shows such an amount in euros. Two
+  places print no share: a full invoice's row that joins several steps (a dish with two of its own,
+  or two whole-bill steps), which prints one row, «Descuento», or «Descuento 100%» when every line
+  at its rate was filed at zero (A961), and the per-dish fallback used when the records no longer
+  add up to the bill. The filed sale is unchanged. A reason without Free refuses 100% too (the rule's first
+  half, `adjustment.free_not_allowed`). Plan:
+  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
@@ -2751,19 +2767,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).
-
-Free always
-counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
-what was left, as a 100% percentage already does. An amount counts only when it took the item's
-whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
-the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
-ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
-unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
-otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
-(`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
-Owner to confirm both halves.
 
 ## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
 

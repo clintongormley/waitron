@@ -505,8 +505,8 @@ describe("A803 portions: filing a bill of portions", () => {
         "Burger (customer)",
         "2",
         [
-          { kind: "discount", amount: "0.10" },
-          { kind: "discount", amount: "0.10" },
+          { kind: "discount", percentBp: 272, amount: "0.10" },
+          { kind: "discount", percentBp: 272, amount: "0.10" },
         ],
       ],
       ["Cheese (customer)", "2", []],

@@ -130,11 +130,16 @@ export interface BillAdjustment {
   /** It covered less than the whole quantity of its line. */
   partOfLine: boolean;
   action: Exclude<AdjustmentAction, "cancel">;
+  /**
+   * What this step took off the price before it: a percentage's own, or for an amount that is not
+   * `full` its share of that price, half up to a basis point and kept within 1..9999 so it never
+   * reads 0% or 100%. Null for Free and a full amount.
+   */
   percentBp: number | null;
   reduction: Decimal;
   /**
    * Free, or an amount that left its item, or the bill for a bill-wide amount, at zero: it prints
-   * as 100%. A percentage carries its own `percentBp`.
+   * as 100%.
    */
   full: boolean;
 }
@@ -160,18 +165,24 @@ export async function readBillAdjustments(
     .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
   return rows.map(
-    ({ quantity, lineQuantity, reduction, action, beforeAmount, afterAmount, ...row }) => ({
-      ...row,
-      // The query leaves cancellations out.
-      action: action as BillAdjustment["action"],
-      // A line row holds both counts (`adjustments_line_level_ck`).
-      partOfLine: row.lineId !== null && quantity! < lineQuantity!,
-      reduction: centsToDecimal(reduction),
-      full: isFullComp({
-        action,
-        beforeAmount: centsToDecimal(beforeAmount),
-        afterAmount: centsToDecimal(afterAmount),
-      }),
-    }),
+    ({ quantity, lineQuantity, reduction, action, beforeAmount, afterAmount, ...row }) => {
+      const full = isFullComp({ action, afterAmount: centsToDecimal(afterAmount) });
+      return {
+        ...row,
+        // The query leaves cancellations out.
+        action: action as BillAdjustment["action"],
+        percentBp:
+          action === "discount_amount" && !full ? shareBp(reduction, beforeAmount) : row.percentBp,
+        // A line row holds both counts (`adjustments_line_level_ck`).
+        partOfLine: row.lineId !== null && quantity! < lineQuantity!,
+        reduction: centsToDecimal(reduction),
+        full,
+      };
+    },
   );
+}
+
+/** `part` of `whole`, both whole cents, in basis points half up, within 1..9999. */
+function shareBp(part: number, whole: number): number {
+  return Math.min(9999, Math.max(1, Math.floor((part * 20000 + whole) / (2 * whole))));
 }
