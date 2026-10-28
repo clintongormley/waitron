@@ -170,7 +170,8 @@ import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { isUnset } from "./env-value.js";
-import { spareReleased } from "./spare-space.js";
+import { SPARE_SPACE_BYTES, spareReleased, topUpSpare } from "./spare-space.js";
+import { lowestFreeBytes } from "./start-space.js";
 import {
   createFreeSpaceState,
   FREE_SPACE_CHECK_MS,
@@ -305,7 +306,8 @@ import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
-import { freeBytes } from "./free-bytes.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -822,6 +824,10 @@ function makeStartedServer(
 export interface StartServerSeams {
   stream?: Pick<StreamHostDeps, "walLimitBytes" | "spawn" | "store">;
   appendOnlyWatch?: { intervalMs?: number };
+  /** The spare file's size; defaults to SPARE_SPACE_BYTES. */
+  spareBytes?: number;
+  /** For the free-space watch and the spare's room check only. */
+  freeSpaceWatch?: { intervalMs?: number; statfs?: Statfs };
   testClock?: ModuleOperationHost["testClock"];
   requestFromBox?: (c: Context) => boolean;
 }
@@ -999,6 +1005,22 @@ async function bootServer(
     ? config.stateDir
     : env.WAITRON_SPARE_SPACE_DIR;
   const released = () => spareReleased(spareDir, log);
+  const spareBytes = seams.spareBytes ?? SPARE_SPACE_BYTES;
+  const spareStatfs = seams.freeSpaceWatch?.statfs;
+  // Only while the marker exists: otherwise every booted server with room would write 8 MiB.
+  const restoreSpare = async (): Promise<boolean> => {
+    if (!(await released())) return false;
+    await topUpSpare({
+      stateDir: spareDir,
+      bytes: spareBytes,
+      log,
+      hasRoom: async () => {
+        const lowest = await lowestFreeBytes([spareDir, config.venueDir], spareStatfs);
+        return lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES;
+      },
+    });
+    return true;
+  };
   const diskFull = createDiskFullState({
     dir: config.venueDir,
     now,
@@ -2306,9 +2328,11 @@ async function bootServer(
     dir: config.venueDir,
     state: freeSpace,
     disk: diskFull,
-    intervalMs: FREE_SPACE_CHECK_MS,
+    intervalMs: seams.freeSpaceWatch?.intervalMs ?? FREE_SPACE_CHECK_MS,
     now,
     log,
+    restoreSpare,
+    ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
   });
   undoOnFailure.push(async () => freeSpaceWatch.stop());
   const emailNoticeLog = createStaffNoticeLog(log);

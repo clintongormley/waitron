@@ -1,4 +1,5 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { sql } from "drizzle-orm";
@@ -6,7 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueDatabase } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
+import type { Statfs } from "./free-bytes.js";
 import type { StartedServer } from "./boot.js";
 import type { DeviceApiDeps } from "./device-api.js";
 import type { DiskFullState } from "./disk-full-state.js";
@@ -254,7 +257,7 @@ describe("boot's full-disk stop wiring", () => {
     try {
       const { env } = await startEnv(scratch);
       await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
-      server = await startServer(env, env);
+      server = await startServer(env, env, { spareBytes: 4096 });
       expect(seen.noted).toHaveLength(1);
       expect(seen.noted[0]!.notedAfter).toBe(true);
     } finally {
@@ -272,7 +275,7 @@ describe("boot's full-disk stop wiring", () => {
       const { env } = await startEnv(scratch);
       await writeFile(join(spareDir, SPARE_SPACE_RELEASED_FILE), "");
       const withSpare = { ...env, WAITRON_SPARE_SPACE_DIR: spareDir };
-      server = await startServer(withSpare, withSpare);
+      server = await startServer(withSpare, withSpare, { spareBytes: 4096 });
       expect(seen.noted).toHaveLength(1);
       expect(seen.noted[0]!.notedAfter).toBe(true);
     } finally {
@@ -280,6 +283,82 @@ describe("boot's full-disk stop wiring", () => {
       await rm(scratch, { recursive: true, force: true });
       await rm(spareDir, { recursive: true, force: true });
     }
+  });
+
+  describe("the running box writes a released spare back", () => {
+    const SPARE = 4096;
+    /** A free-space stub for the watch and its room check, recording each folder it is asked about. */
+    function stubbed(bytes: number) {
+      const asked: string[] = [];
+      const statfs: Statfs = async (dir) => {
+        asked.push(dir);
+        return { bavail: bytes, frsize: 1 };
+      };
+      const count = (dir: string) => asked.filter((seenDir) => seenDir === dir).length;
+      return { statfs, count };
+    }
+
+    async function booted(free: number, withMarker: boolean) {
+      beforeServerStarts();
+      const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
+      const { env, venueDir } = await startEnv(scratch);
+      if (withMarker) await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
+      const stub = stubbed(free);
+      const server = await startServer(env, env, {
+        spareBytes: SPARE,
+        freeSpaceWatch: { intervalMs: 50, statfs: stub.statfs },
+      });
+      return { scratch, venueDir, server, stub };
+    }
+
+    it("the watch writes a released spare back once exactly the spare plus 16 MiB is free, deletes the marker, and the stop lifts", async () => {
+      const { scratch, server } = await booted(SPARE + FULL_DISK_BYTES, true);
+      try {
+        const state = seen.created[0]!.state as DiskFullState;
+        await vi.waitFor(
+          async () => {
+            expect((await stat(join(scratch, SPARE_SPACE_FILE))).size).toBe(SPARE);
+            expect(existsSync(join(scratch, SPARE_SPACE_RELEASED_FILE))).toBe(false);
+            expect(state.noted()).toBe(false);
+          },
+          { timeout: 10_000 },
+        );
+        expect(await readFile(join(scratch, "logs", "waitron.log"), "utf8")).toContain(
+          "storage.spare_restored",
+        );
+      } finally {
+        await server.close();
+        await rm(scratch, { recursive: true, force: true });
+      }
+    });
+
+    it("the watch writes nothing back at one byte under the spare plus 16 MiB", async () => {
+      const { scratch, server, stub } = await booted(SPARE + FULL_DISK_BYTES - 1, true);
+      try {
+        await vi.waitFor(() => expect(stub.count(scratch)).toBeGreaterThanOrEqual(3), {
+          timeout: 10_000,
+        });
+        expect(existsSync(join(scratch, SPARE_SPACE_FILE))).toBe(false);
+        expect(existsSync(join(scratch, SPARE_SPACE_RELEASED_FILE))).toBe(true);
+      } finally {
+        await server.close();
+        await rm(scratch, { recursive: true, force: true });
+      }
+    });
+
+    it("the watch writes nothing back while no marker exists", async () => {
+      const { scratch, venueDir, server, stub } = await booted(1024 ** 3, false);
+      try {
+        await vi.waitFor(() => expect(stub.count(venueDir)).toBeGreaterThanOrEqual(3), {
+          timeout: 10_000,
+        });
+        expect(existsSync(join(scratch, SPARE_SPACE_FILE))).toBe(false);
+        expect(stub.count(scratch)).toBe(0);
+      } finally {
+        await server.close();
+        await rm(scratch, { recursive: true, force: true });
+      }
+    });
   });
 
   it("a refused start stops listening", async () => {

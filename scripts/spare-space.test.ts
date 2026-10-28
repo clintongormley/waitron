@@ -1,7 +1,8 @@
 /**
  * Only the allowed files name the box's spare file or the functions that delete and write it: the
  * start on a nearly full disk (`node-entry.ts`), the start's emptying and the repair host
- * (`first-setup-entry.ts`) release it, and only a start with room writes it back (`node-entry.ts`).
+ * (`first-setup-entry.ts`) release it, and a start with room (`node-entry.ts`) and the running box
+ * (`boot.ts`) write it back.
  *
  * Weaker than its name: it reads TEXT — a non-test `.ts` file under `apps/<app>/src` or
  * `packages/<package>/src` naming `SPARE_SPACE_FILE`, the literal `"spare-space"`, `releaseSpare`,
@@ -34,7 +35,11 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
   },
   {
     pattern: /\btopUpSpare\b/,
-    allowed: ["apps/server/src/node-entry.ts", "apps/server/src/spare-space.ts"],
+    allowed: [
+      "apps/server/src/boot.ts",
+      "apps/server/src/node-entry.ts",
+      "apps/server/src/spare-space.ts",
+    ],
   },
 ];
 

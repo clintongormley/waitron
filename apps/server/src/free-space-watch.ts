@@ -1,5 +1,6 @@
 import { codeOf } from "@waitron/server-kit";
 import type { DiskFullState } from "./disk-full-state.js";
+import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
@@ -50,8 +51,9 @@ export function createFreeSpaceState(deps: { log: Logger }): FreeSpaceState {
 
 /**
  * Reads `dir`'s free space at once and then every `intervalMs`, each timer armed after the reading
- * before it finished. While `disk` holds a noted stop, each reading also asks it to re-check, so a
- * stop lifts when space is freed even if nothing writes.
+ * before it finished. Each reading first lets `restoreSpare` write the box's spare file back, and
+ * reads again when it answers true. While `disk` holds a noted stop, each reading also asks it to
+ * re-check, so a stop lifts when space is freed even if nothing writes.
  */
 export function startFreeSpaceWatch(deps: {
   dir: string;
@@ -61,6 +63,7 @@ export function startFreeSpaceWatch(deps: {
   now: () => Date;
   log: Logger;
   statfs?: Statfs;
+  restoreSpare?: () => Promise<boolean>;
   timer?: (ms: number, fn: () => void) => Timer;
 }): { stop: () => void } {
   const timer = deps.timer ?? unrefTimer;
@@ -68,7 +71,9 @@ export function startFreeSpaceWatch(deps: {
 
   async function read(): Promise<void> {
     try {
-      const free = await freeBytes(deps.dir, deps.statfs);
+      let free = await freeBytes(deps.dir, deps.statfs);
+      if (stopped) return;
+      if (await restore()) free = await freeBytes(deps.dir, deps.statfs);
       if (stopped) return;
       deps.state.record(free, deps.now());
       if (deps.disk.noted()) await deps.disk.full();
@@ -76,6 +81,15 @@ export function startFreeSpaceWatch(deps: {
       deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
     } finally {
       if (!stopped) armed = timer(deps.intervalMs, () => void read());
+    }
+  }
+
+  async function restore(): Promise<boolean> {
+    try {
+      return (await deps.restoreSpare?.()) ?? false;
+    } catch (error) {
+      deps.log("warn", "storage.spare_restore_failed", { errno: errnoOf(error) ?? null });
+      return false;
     }
   }
 
