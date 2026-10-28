@@ -32,6 +32,7 @@ import {
 } from "./testing/adjustment-venue.js";
 import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
 import { readStoredOrder } from "./working-order.js";
+import type { ReceiptAdjustment } from "./till-sale.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 
@@ -639,26 +640,40 @@ describe("receiptLines", () => {
       expect(goods).toEqual([at80("1  Hamburguesa", "12,00"), at80("  Descuento 100%", "-12,00")]);
     });
 
-    it("prints an amount that took what a 50% left with its amount", async () => {
+    // Each line prints what its own step took: everything a 50% left is 100% of it, however it was
+    // asked for (owner, 2026-10-28).
+    it.each<[string, Ask, ReceiptAdjustment]>([
+      ["Free", { action: "comp" }, { kind: "comp", amount: "6.00" }],
+      [
+        "100%",
+        { action: "discount_percent", percentBp: 10000 },
+        { kind: "discount", percentBp: 10000, amount: "6.00" },
+      ],
+      [
+        "€6.00 off",
+        { action: "discount_amount", amount: "6.00" },
+        { kind: "comp", amount: "6.00" },
+      ],
+    ])("prints %s after a 50% as Descuento 100% of what was left", async (_, second, entry) => {
       const billId = await bill([{ name: "Burger" }]);
       const burger = await lineIdOf(venue, billId, 1);
       await adjust(billId, { lineId: burger, action: "discount_percent", percentBp: 5000 });
-      await adjust(billId, { lineId: burger, action: "discount_amount", amount: "6.00" });
+      await adjust(billId, { lineId: burger, ...second });
 
       const { result, goods } = await payAndPrint(billId, "0.00");
 
       expect(result.lines[0]!.adjustments).toEqual([
         { kind: "discount", percentBp: 5000, amount: "6.00" },
-        { kind: "discount", amount: "6.00" },
+        entry,
       ]);
       expect(goods).toEqual([
         at80("1  Hamburguesa", "12,00"),
         at80("  Descuento 50%", "-6,00"),
-        at80("  Descuento", "-6,00"),
+        at80("  Descuento 100%", "-6,00"),
       ]);
     });
 
-    it("prints an amount on the whole bill as Descuento 100% only when it took the bill's whole price", async () => {
+    it("prints an amount on the whole bill as Descuento 100% only when it left the bill at zero", async () => {
       const whole = await bill([{ name: "Burger" }]);
       await adjust(whole, { action: "discount_amount", amount: "12.00" });
       const part = await bill([{ name: "Burger" }]);

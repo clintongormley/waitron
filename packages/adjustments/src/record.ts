@@ -133,9 +133,8 @@ export interface BillAdjustment {
   percentBp: number | null;
   reduction: Decimal;
   /**
-   * Free, or an amount that took the whole list value of its item, or of the bill for a bill-wide
-   * amount: it prints as 100%. A percentage
-   * carries its own `percentBp`.
+   * Free, or an amount that left its item, or the bill for a bill-wide amount, at zero: it prints
+   * as 100%. A percentage carries its own `percentBp`.
    */
   full: boolean;
 }
@@ -156,22 +155,12 @@ export async function readBillAdjustments(
       reduction: adjustments.reduction,
       beforeAmount: adjustments.beforeAmount,
       afterAmount: adjustments.afterAmount,
-      nominalValue: adjustments.nominalValue,
     })
     .from(adjustments)
     .where(and(eq(adjustments.workingOrderId, workingOrderId), ne(adjustments.action, "cancel")))
     .orderBy(asc(adjustments.createdAt), asc(adjustments.id));
   return rows.map(
-    ({
-      quantity,
-      lineQuantity,
-      reduction,
-      action,
-      beforeAmount,
-      afterAmount,
-      nominalValue,
-      ...row
-    }) => ({
+    ({ quantity, lineQuantity, reduction, action, beforeAmount, afterAmount, ...row }) => ({
       ...row,
       // The query leaves cancellations out.
       action: action as BillAdjustment["action"],
@@ -182,7 +171,6 @@ export async function readBillAdjustments(
         action,
         beforeAmount: centsToDecimal(beforeAmount),
         afterAmount: centsToDecimal(afterAmount),
-        nominalValue: centsToDecimal(nominalValue),
       }),
     }),
   );

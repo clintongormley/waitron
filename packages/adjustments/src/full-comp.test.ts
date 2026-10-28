@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { isFullComp } from "./full-comp.js";
 
-function row(action: string, beforeAmount: string, afterAmount: string, nominalValue = "12.00") {
-  return { action, beforeAmount, afterAmount, nominalValue };
+function row(action: string, beforeAmount: string, afterAmount: string) {
+  return { action, beforeAmount, afterAmount };
 }
 
 describe("isFullComp", () => {
@@ -14,8 +14,8 @@ describe("isFullComp", () => {
     expect(isFullComp(row("discount_amount", "12.00", "0.00"))).toBe(true);
   });
 
-  it("is false for an amount that took what an earlier comp left", () => {
-    expect(isFullComp(row("discount_amount", "6.00", "0.00"))).toBe(false);
+  it("is true for an amount that took what an earlier step left", () => {
+    expect(isFullComp(row("discount_amount", "6.00", "0.00"))).toBe(true);
   });
 
   it("is false for an amount that left part of the price", () => {
@@ -27,11 +27,6 @@ describe("isFullComp", () => {
   });
 
   it("compares amounts as values, not text", () => {
-    expect(isFullComp(row("discount_amount", "12.0", "0", "12.00"))).toBe(true);
-  });
-
-  it("compares amounts exactly, not as floating-point numbers", () => {
-    expect(Number("12.0000000000000001")).toBe(Number("12.00"));
-    expect(isFullComp(row("discount_amount", "12.0000000000000001", "0.00", "12.00"))).toBe(false);
+    expect(isFullComp(row("discount_amount", "12.0", "0.000"))).toBe(true);
   });
 });

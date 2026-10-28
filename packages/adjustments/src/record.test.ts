@@ -414,15 +414,15 @@ describe("readBillAdjustments", () => {
     ]);
   });
 
-  it("marks a Free comp and an amount that took the whole list value as full", async () => {
+  it("marks a Free comp and an amount that left its subject at zero as full", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    const amount = (beforeAmount: string, nominalValue: string) =>
+    const amount = (beforeAmount: string, nominalValue: string, afterAmount = "0.00") =>
       comp(order, reason, {
         action: "discount_amount",
         beforeAmount: decimal(beforeAmount),
-        afterAmount: decimal("0.00"),
-        reduction: decimal(beforeAmount),
+        afterAmount: decimal(afterAmount),
+        reduction: subtractDecimal(decimal(beforeAmount), decimal(afterAmount)),
         nominalValue: decimal(nominalValue),
       });
     await recordAt("2026-09-30T12:00:00.000Z", comp(order, reason));
@@ -433,9 +433,10 @@ describe("readBillAdjustments", () => {
       line: null,
       quantity: null,
     });
+    await recordAt("2026-09-30T12:00:04.000Z", amount("12.00", "12.00", "3.00"));
 
     const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
-    expect(read.map((row) => row.full)).toEqual([true, true, false, true]);
+    expect(read.map((row) => row.full)).toEqual([true, true, true, true, false]);
   });
 
   it("reads the bill's adjustments through the index that leads with the working order", async () => {
