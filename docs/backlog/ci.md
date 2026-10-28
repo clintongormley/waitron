@@ -509,8 +509,11 @@ other jobs finished cancelling. After force-cancellation, the run and job comple
 `gh run view 40644939856 --job 122671628160 --log` then answered `log not found: 122671628160`;
 the job-log REST endpoint returned HTTP 404. Recover runner-side evidence and distinguish a running
 command from stale runner reporting before changing the installer, retry limits or job deadline.
-The cause is unverified. Lane F retains the snapshots in `receipts/a976-media-localized-20261028/`;
-no unchanged rerun was requested.
+The cause is unverified. Lane F retains the snapshots in `receipts/a976-media-localized-20261028/`.
+At the watcher's request, `gh run rerun 40644939856 --job 122671628160` started one second sample
+on the same commit. Compare its setup duration and logs; a successful retry does not diagnose
+the first attempt or demonstrate a repair. If a step again outlives its own five-minute limit,
+retain the recurrence before changing any command deadline.
 
 ## The step-watch guard received an undefined held-thread result
 
