@@ -859,6 +859,31 @@ it("a save that succeeds after the card turned read-only and back leaves the new
   reread.resolve({ ...MADRID, defaultProductVatClass: "zero" });
 });
 
+it("a refusal that arrives after the card turned read-only and back leaves the new draft alone", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  saveButton(el).click();
+  await el.updateComplete;
+  el.readOnly = true;
+  await flush(el);
+  el.readOnly = false;
+  await flush(el);
+  await edit(el);
+  pending.reject({ code: "receipt.language_orders_open" });
+  await pending.promise.catch(() => {});
+  await frame();
+  await flush(el);
+  expect(combo(el, "receiptLanguage")!.value).toBe("es-ES");
+  expect(combo(el, "receiptLanguage")!.error).toBe("");
+  expect(bottom(el)).toBe("");
+  expect(saveButton(el).loading).toBe(false);
+});
+
 it("in Edit the content warning follows the staged language and goes once its content is enabled", async () => {
   setLocale("en-GB");
   const r = rig(MADRID, { defaultLanguage: "es", languages: ["es"] });
