@@ -2,14 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
+import { BOOKINGS_STRINGS } from "./strings.js";
 import { BookingForm } from "./booking-form.js";
 import type { Booking, BookingInput, DashboardTable } from "./client.js";
 
 afterEach(cleanupWidgets);
 
 const TABLES: DashboardTable[] = [
-  { id: "t-1", label: "Mesa 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
-  { id: "t-2", label: "Mesa 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-1", label: "Table 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-2", label: "Table 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
 ];
 
 /** Base props: an open create form seeded to a known day, with the tables loaded for the picker. */
@@ -56,7 +57,7 @@ async function fillValid(el: BookingForm): Promise<void> {
   await setInput(el, "booking-date", "2026-08-20");
   await setInput(el, "booking-time", "20:00");
   await setInput(el, "party-size", "4");
-  await setInput(el, "contact-name", "García");
+  await setInput(el, "contact-name", "Morgan");
 }
 
 const EDIT_BOOKING: Booking = {
@@ -64,9 +65,9 @@ const EDIT_BOOKING: Booking = {
   bookingDate: "2026-07-01",
   bookingTime: "13:30:00",
   partySize: 2,
-  contactName: "Pérez",
+  contactName: "Taylor",
   contactPhone: "600100200",
-  notes: "Ventana",
+  notes: "Window",
   tableId: "t-2",
   tableLabel: null,
   tabId: null,
@@ -76,12 +77,12 @@ const EDIT_BOOKING: Booking = {
 };
 
 describe("booking-form", () => {
-  it("heads a create Añadir reserva and confirms it with Guardar", async () => {
+  it("heads a create with Add booking and confirms it with Save", async () => {
     const { el } = await mountWidget<BookingForm>("dashboard-booking-form", baseProps());
     expect([
       el.shadowRoot!.querySelector("wt-dialog")!.getAttribute("heading"),
       el.shadowRoot!.querySelector("[data-test=confirm]")!.textContent!.trim(),
-    ]).toEqual(["Añadir reserva", "Guardar"]);
+    ]).toEqual([BOOKINGS_STRINGS.es["booking.new"], BOOKINGS_STRINGS.es["action.save"]]);
   });
 
   it("seeds a create's date to defaultDate and starts otherwise blank", async () => {
@@ -105,7 +106,7 @@ describe("booking-form", () => {
   it("lists the tables in number order after 'no table', whatever order they arrive in", async () => {
     const tables: DashboardTable[] = ["t-10", "t-2", "t-1"].map((id) => ({
       id,
-      label: `Mesa ${id.slice(2)}`,
+      label: `Table ${id.slice(2)}`,
       zoneId: "z1",
       planTableId: null,
       createdAt: "2026-01-01",
@@ -117,8 +118,20 @@ describe("booking-form", () => {
   });
 
   it.each([
-    ["en", "Table", "No table", "Search", "No results"],
-    ["es", "Mesa", "Sin mesa", "Buscar", "Sin resultados"],
+    [
+      "en",
+      BOOKINGS_STRINGS.en["booking.table"],
+      BOOKINGS_STRINGS.en["booking.table_none"],
+      BOOKINGS_STRINGS.en["booking.combobox_search"],
+      BOOKINGS_STRINGS.en["booking.combobox_no_results"],
+    ],
+    [
+      "es",
+      BOOKINGS_STRINGS.es["booking.table"],
+      BOOKINGS_STRINGS.es["booking.table_none"],
+      BOOKINGS_STRINGS.es["booking.combobox_search"],
+      BOOKINGS_STRINGS.es["booking.combobox_no_results"],
+    ],
   ] as const)(
     "draws the table as the shared dropdown, 'no table' its placeholder and first row (%s)",
     async (locale, label, none, search, noResults) => {
@@ -130,7 +143,7 @@ describe("booking-form", () => {
         expect(table).not.toBeNull();
         expect(table.label).toBe(label);
         expect(table.placeholder).toBe(none);
-        expect(table.options.map((o) => o.label)).toEqual([none, "Mesa 1", "Mesa 2"]);
+        expect(table.options.map((o) => o.label)).toEqual([none, "Table 1", "Table 2"]);
         expect(table.value).toBe("");
         expect(table.required).toBe(false);
         expect(table.search).toBe("auto");
@@ -174,7 +187,7 @@ describe("booking-form", () => {
       bookingDate: "2026-08-20",
       bookingTime: "20:00",
       partySize: 4,
-      contactName: "García",
+      contactName: "Morgan",
     });
     // No instant leaked in: no `T…` separator and no trailing `Z`.
     expect(JSON.stringify(detail)).not.toContain("T20:00");
@@ -186,13 +199,13 @@ describe("booking-form", () => {
     const done = nextEvent<BookingInput>(el, "create-booking");
     await fillValid(el);
     await setInput(el, "contact-phone", "600100200");
-    await setInput(el, "notes", "Cumpleaños");
+    await setInput(el, "notes", "Birthday");
     await setSelect(el, "booking-table", "t-1");
     await click(el, "confirm");
     const { detail } = await done;
     expect(detail).toMatchObject({
       contactPhone: "600100200",
-      notes: "Cumpleaños",
+      notes: "Birthday",
       tableId: "t-1",
     });
   });
@@ -218,7 +231,7 @@ describe("booking-form", () => {
     expect(value("booking-date")).toBe("2026-07-01");
     expect(value("booking-time")).toBe("13:30"); // sliced from 13:30:00
     expect(value("party-size")).toBe("2");
-    expect(value("contact-name")).toBe("Pérez");
+    expect(value("contact-name")).toBe("Taylor");
     expect(
       el.shadowRoot!.querySelector<HTMLSelectElement>("[data-test=booking-table]")!.value,
     ).toBe("t-2");
@@ -248,11 +261,11 @@ describe("booking-form", () => {
     await click(el, "confirm");
     expect(fired).toBe(false);
     const alert = el.shadowRoot!.querySelector("[role=alert]")!;
-    expect(alert.textContent!.trim()).toBe("Corrige los campos marcados para continuar.");
+    expect(alert.textContent!.trim()).toBe(BOOKINGS_STRINGS.es["booking.fix_fields"]);
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=contact-name]")!
         .error,
-    ).toBe("Introduce un nombre");
+    ).toBe(BOOKINGS_STRINGS.es["booking.name_required"]);
   });
 
   it("blocks and shows an alert when the party size is not a positive whole number", async () => {
@@ -264,7 +277,7 @@ describe("booking-form", () => {
     await click(el, "confirm");
     expect(fired).toBe(false);
     expect(el.shadowRoot!.querySelector("[role=alert]")!.textContent!.trim()).toBe(
-      "Corrige los campos marcados para continuar.",
+      BOOKINGS_STRINGS.es["booking.fix_fields"],
     );
     expect(
       el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[data-test=party-size]")!
@@ -291,7 +304,7 @@ describe("booking-form", () => {
     await setInput(el, "party-size", "4");
     await click(el, "confirm"); // contact-name blank → the alert shows
     expect(el.shadowRoot!.querySelector("[role=alert]")).not.toBeNull();
-    await setInput(el, "contact-name", "García");
+    await setInput(el, "contact-name", "Morgan");
     expect(el.shadowRoot!.querySelector("[role=alert]")).toBeNull();
   });
 
@@ -309,8 +322,8 @@ describe("booking-form", () => {
   });
 
   it.each([
-    ["en", "Correct the highlighted fields to continue."],
-    ["es", "Corrige los campos marcados para continuar."],
+    ["en", BOOKINGS_STRINGS.en["booking.fix_fields"]],
+    ["es", BOOKINGS_STRINGS.es["booking.fix_fields"]],
   ] as const)(
     "says at the bottom to correct the marked fields while Table shows a refusal (%s)",
     async (locale, sentence) => {
@@ -353,7 +366,7 @@ describe("booking-form", () => {
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Morgan",
         contactPhone: null,
         notes: null,
         tableId: null,

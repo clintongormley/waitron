@@ -3,15 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { chooseOption } from "@waitron/ui/src/test-helpers.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { codeMessage, currentLocale, setLocale } from "@waitron/dashboard-kit";
-import { bookingStatusName } from "./strings.js";
+import { BOOKINGS_STRINGS, bookingStatusName } from "./strings.js";
 import { today } from "./date-utils.js";
 import type { Booking, BookingApi, DashboardTable } from "./client.js";
 import type { BookingForm } from "./booking-form.js";
 import { BookingsScreen } from "./bookings-screen.js";
 
 const TABLES: DashboardTable[] = [
-  { id: "t-1", label: "Mesa 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
-  { id: "t-2", label: "Mesa 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-1", label: "Table 1", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
+  { id: "t-2", label: "Table 2", zoneId: "z1", planTableId: null, createdAt: "2026-01-01" },
 ];
 
 function booking(overrides: Partial<Booking> = {}): Booking {
@@ -20,7 +20,7 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     bookingDate: "2026-08-20",
     bookingTime: "20:00:00",
     partySize: 4,
-    contactName: "García",
+    contactName: "Morgan",
     contactPhone: null,
     notes: null,
     tableId: null,
@@ -36,8 +36,8 @@ function booking(overrides: Partial<Booking> = {}): Booking {
 // Two bookings supplied OUT of time order, so a passing "ordered by time" assertion proves the screen
 // orders them rather than trusting insert order.
 const BOOKINGS: Booking[] = [
-  booking({ id: "bk-late", bookingTime: "20:00:00", contactName: "García" }),
-  booking({ id: "bk-early", bookingTime: "13:30:00", contactName: "Pérez", tableId: "t-2" }),
+  booking({ id: "bk-late", bookingTime: "20:00:00", contactName: "Morgan" }),
+  booking({ id: "bk-early", bookingTime: "13:30:00", contactName: "Taylor", tableId: "t-2" }),
 ];
 
 function stubApi(overrides: Partial<BookingApi> = {}): BookingApi {
@@ -93,7 +93,7 @@ describe("bookings-screen", () => {
     expect(rows[0]!.querySelector("[data-test=row-time]")!.textContent!.trim()).toBe("13:30");
     expect(rows[1]!.querySelector("[data-test=row-time]")!.textContent!.trim()).toBe("20:00");
     // Time is HH:MM (sliced from the server's HH:MM:SS), party + name shown.
-    expect(rows[0]!.querySelector("[data-test=row-name]")!.textContent).toContain("Pérez");
+    expect(rows[0]!.querySelector("[data-test=row-name]")!.textContent).toContain("Taylor");
     expect(rows[0]!.querySelector("[data-test=row-party]")!.textContent).toContain("4");
   });
 
@@ -159,7 +159,7 @@ describe("bookings-screen", () => {
       bookingDate: "2026-08-20",
       bookingTime: "20:00",
       partySize: 4,
-      contactName: "García",
+      contactName: "Morgan",
       contactPhone: null,
       notes: null,
       tableId: null,
@@ -187,7 +187,7 @@ describe("bookings-screen", () => {
     await set("booking-date", "2026-08-20");
     await set("booking-time", "20:00");
     await set("party-size", "4");
-    await set("contact-name", "García");
+    await set("contact-name", "Morgan");
     f.shadowRoot!.querySelector<HTMLElement>("[data-test=confirm]")!.click();
     await flush(el);
     expect(api.createBooking).toHaveBeenCalledWith(
@@ -242,7 +242,7 @@ describe("bookings-screen", () => {
   it("offers the seat tables in number order and starts on the first of them", async () => {
     const tables: DashboardTable[] = ["t-10", "t-2", "t-1"].map((id) => ({
       id,
-      label: `Mesa ${id.slice(2)}`,
+      label: `Table ${id.slice(2)}`,
       zoneId: "z1",
       planTableId: null,
       createdAt: "2026-01-01",
@@ -254,13 +254,23 @@ describe("bookings-screen", () => {
     const table = el.shadowRoot!.querySelector<
       HTMLElement & { value: string; options: { value: string; label: string }[] }
     >("wt-combobox[data-test=seat-table-bk-late]")!;
-    expect(table.options.map((o) => o.label)).toEqual(["Mesa 1", "Mesa 2", "Mesa 10"]);
+    expect(table.options.map((o) => o.label)).toEqual(["Table 1", "Table 2", "Table 10"]);
     expect(table.value).toBe("t-1");
   });
 
   it.each([
-    ["en", "Table", "Search", "No results"],
-    ["es", "Mesa", "Buscar", "Sin resultados"],
+    [
+      "en",
+      BOOKINGS_STRINGS.en["booking.table"],
+      BOOKINGS_STRINGS.en["booking.combobox_search"],
+      BOOKINGS_STRINGS.en["booking.combobox_no_results"],
+    ],
+    [
+      "es",
+      BOOKINGS_STRINGS.es["booking.table"],
+      BOOKINGS_STRINGS.es["booking.combobox_search"],
+      BOOKINGS_STRINGS.es["booking.combobox_no_results"],
+    ],
   ] as const)(
     "asks for the table to seat at in the shared dropdown, starting on the first table (%s)",
     async (locale, label, search, noResults) => {
@@ -286,8 +296,8 @@ describe("bookings-screen", () => {
         expect(table.name).toBe("seat-table");
         expect(table.label).toBe(label);
         expect(table.options).toEqual([
-          { value: "t-1", label: "Mesa 1" },
-          { value: "t-2", label: "Mesa 2" },
+          { value: "t-1", label: "Table 1" },
+          { value: "t-2", label: "Table 2" },
         ]);
         expect(table.value).toBe("t-1");
         expect(table.search).toBe("auto");
@@ -421,7 +431,7 @@ describe("bookings-screen", () => {
       bookingDate: "2026-08-20",
       bookingTime: "20:00",
       partySize: 4,
-      contactName: "García",
+      contactName: "Morgan",
       contactPhone: null,
       notes: null,
       tableId: null,
@@ -515,7 +525,7 @@ describe("bookings-screen", () => {
       bookingDate: "2026-08-20",
       bookingTime: "20:00",
       partySize: 4,
-      contactName: "García",
+      contactName: "Morgan",
       contactPhone: null,
       notes: null,
       tableId: null,
@@ -734,7 +744,7 @@ it.each([
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Morgan",
         contactPhone: null,
         notes: null,
         tableId: null,

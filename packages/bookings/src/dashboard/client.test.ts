@@ -19,7 +19,7 @@ describe("BookingApi — bookings", () => {
     bookingDate: "2026-08-20",
     bookingTime: "20:00:00",
     partySize: 4,
-    contactName: "García",
+    contactName: "Morgan",
     contactPhone: null,
     notes: null,
     tableId: null,
@@ -46,7 +46,7 @@ describe("BookingApi — bookings", () => {
       bookingDate: "2026-08-20",
       bookingTime: "20:00",
       partySize: 4,
-      contactName: "García",
+      contactName: "Morgan",
       contactPhone: null,
       notes: null,
       tableId: null,
@@ -67,7 +67,7 @@ describe("BookingApi — bookings", () => {
   });
 
   it("updateBooking PATCHes the patch and resolves undefined on a 204", async () => {
-    const patch = { partySize: 6, contactName: "García Pérez" };
+    const patch = { partySize: 6, contactName: "Morgan Taylor" };
     const fetchImpl = vi.fn().mockResolvedValue(emptyResponse());
     await expect(
       api(fetchImpl as unknown as typeof fetch).updateBooking("bk-1", patch),

@@ -87,7 +87,7 @@ describe.each([
         codeMessage("table.in_joined_table"),
       );
       await expectDisabled(el, true);
-      await change(el, "contact-name", "García");
+      await change(el, "contact-name", "Morgan");
       expect(field(el, "contact-name").error).toBe("");
       expect(bottom(el)).toBe(sentence);
       await expectDisabled(el, false);
@@ -126,7 +126,7 @@ describe.each([
       expect(field(el, "booking-time").error).toBe(timeError);
       await validExceptName(el);
       await expectDisabled(el, true);
-      await change(el, "contact-name", "García");
+      await change(el, "contact-name", "Morgan");
       expect(bottom(el)).toBe("");
       await expectDisabled(el, false);
       await change(el, "party-size", "0");
