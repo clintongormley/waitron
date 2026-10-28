@@ -804,7 +804,7 @@ export class SetupApp extends LitElement {
         } catch (error) {
           if (this.isConnected && generation === this.#connectionGeneration) {
             this.screen = "first-owner";
-            this.firstOwnerError = this.#describeFirstError(error);
+            this.firstOwnerError = this.#describeRepairError(error);
           }
           throw error;
         }
@@ -845,7 +845,7 @@ export class SetupApp extends LitElement {
         } catch (error) {
           if (this.isConnected && generation === this.#connectionGeneration) {
             this.screen = "first-owner";
-            this.firstOwnerError = this.#describeFirstError(error);
+            this.firstOwnerError = this.#describeRepairError(error);
           }
           throw error;
         }
@@ -1275,7 +1275,7 @@ export class SetupApp extends LitElement {
       this.#acceptFirstIdentity();
       this.#afterFirstOwner();
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) this.firstOwnerError = this.#describeRepairError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1284,6 +1284,12 @@ export class SetupApp extends LitElement {
     const code = (error as { code?: string } | null)?.code;
     const key = code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
+  }
+  /** The repair page's own reads and Start-again steps; activation keeps `#describeFirstError`. */
+  #describeRepairError(error: unknown): Message {
+    return (error as { code?: string } | null)?.code === "storage.disk_full"
+      ? say("shell.first_setup.disk_full")
+      : this.#describeFirstError(error);
   }
   async #resumeFirstSetup(): Promise<void> {
     this.firstPasswordAttempted = true;
@@ -1340,7 +1346,7 @@ export class SetupApp extends LitElement {
       this.#afterFirstOwner();
     } catch (error) {
       if (current()) {
-        this.firstOwnerError = this.#describeFirstError(error);
+        this.firstOwnerError = this.#describeRepairError(error);
         if (damagedSignedOut && this.#firstSession?.recoveryRequired)
           await this.#signOutFirstSession();
       }
@@ -1377,7 +1383,7 @@ export class SetupApp extends LitElement {
     try {
       await this.#readMissingAsk(session, current);
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) this.firstOwnerError = this.#describeRepairError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1468,14 +1474,14 @@ export class SetupApp extends LitElement {
           this.firstDamagedRecord = "password";
           this.firstStoppedSummary = undefined;
           this.firstDamagedSummary = undefined;
-          this.firstOwnerError = this.#describeFirstError(error);
+          this.firstOwnerError = this.#describeRepairError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (!current() || !inspection) return;
           this.firstInspection = inspection;
           if (!presentStartAgainAllowed(inspection)) await this.#signOutFirstSession();
           return;
         }
-        this.firstOwnerError = this.#describeFirstError(error);
+        this.firstOwnerError = this.#describeRepairError(error);
       }
     } finally {
       if (current()) this.firstOwnerBusy = false;
@@ -1500,7 +1506,7 @@ export class SetupApp extends LitElement {
       if (!current()) return;
       await this.#openPresentConfirmation(session, current);
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) this.firstOwnerError = this.#describeRepairError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
@@ -1560,8 +1566,9 @@ export class SetupApp extends LitElement {
     this.firstRetireConfirmed = false;
     const code = (error as { code?: string } | null)?.code;
     this.firstOwnerError =
-      code !== undefined && FIRST_SETUP_ERROR_MESSAGES[code] !== undefined
-        ? this.#describeFirstError(error)
+      code === "storage.disk_full" ||
+      (code !== undefined && FIRST_SETUP_ERROR_MESSAGES[code] !== undefined)
+        ? this.#describeRepairError(error)
         : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
   }
   async #checkPresentAgain(): Promise<void> {
@@ -1591,7 +1598,7 @@ export class SetupApp extends LitElement {
       this.firstActivity = activity;
       this.#watchActivity();
     } catch (error) {
-      if (current()) this.firstOwnerError = this.#describeFirstError(error);
+      if (current()) this.firstOwnerError = this.#describeRepairError(error);
     }
   }
   async #cancelDamagedRecord(): Promise<void> {
@@ -1684,7 +1691,7 @@ export class SetupApp extends LitElement {
       }
     } catch (error) {
       if (this.isConnected && generation === this.#firstGeneration)
-        this.firstOwnerError = this.#describeFirstError(error);
+        this.firstOwnerError = this.#describeRepairError(error);
     } finally {
       if (this.isConnected && generation === this.#firstGeneration) this.firstOwnerBusy = false;
     }

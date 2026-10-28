@@ -3,6 +3,7 @@ import { userEvent } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import type { FirstSetupState } from "./api/first-setup-types.js";
 import { SetupApp } from "./setup-app.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { FirstSetupSession, FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -238,4 +239,21 @@ it("does not replace a navigated-away repair page with a late Finish answer", as
   await app.updateComplete;
   expect(q(app, "screen-first-owner")).not.toBeNull();
   expect(q(app, "screen-done")).toBeNull();
+});
+
+it("an activation step refused storage.disk_full still says to reconnect and not repeat activation", async () => {
+  const { app } = await mount("committed", (path) => {
+    if (path.endsWith("/resolution/finish"))
+      return Response.json({ error: { code: "storage.disk_full", params: {} } }, { status: 507 });
+  });
+  await recover(app);
+  const review = await publication(app);
+  await userEvent.click(button(review.shadowRoot!, "provision"));
+  await expect
+    .poll(() =>
+      [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+        (f) => f.error,
+      ),
+    )
+    .toContain(initialOwnerStrings.en.error);
 });
