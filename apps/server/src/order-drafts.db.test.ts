@@ -5657,7 +5657,7 @@ describe("A803: weighed and measured adds never merge", () => {
     });
   }
 
-  it("A803: two 200 ml adds saved in one draft stay two lines, whatever the client says", async () => {
+  it("A803: two 200 ml adds saved in one draft stay two lines, and a measured fact a request carries changes nothing", async () => {
     const v = await setupVenue();
     await fishInMillilitres(v);
     const { partyId } = await seated(v);
@@ -5702,6 +5702,19 @@ describe("A803: weighed and measured adds never merge", () => {
     ]);
 
     expect(saved.lines.map((line) => line.quantity)).toEqual(["200.000", "200.000"]);
+  });
+
+  it("A803: two lines of a menu item the zone does not offer merge as before", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const gone = randomUUID();
+
+    const saved = await save(v, partyId, ALEX, null, 0, [
+      item(v, "beer", { menuItemId: gone }),
+      item(v, "beer", { menuItemId: gone }),
+    ]);
+
+    expect(saved.lines.map((line) => [line.quantity, line.unavailable])).toEqual([["2.000", true]]);
   });
 
   it("A803: two 200 ml lines of a draft are sent as two lines", async () => {
