@@ -577,7 +577,7 @@ export async function billWith(
   });
 }
 
-/** One group placed as `placeGroups` placed it before portions, each line stored once. */
+/** One group placed as `placeGroups` placed it before portions, each line stored once; answers its id. */
 export async function placeGrouped(
   tx: Transaction,
   cfg: DeviceRequestConfig,
@@ -585,7 +585,7 @@ export async function placeGrouped(
   lines: TabRoundLine[],
   release: "fire" | "hold",
   operatorId: string,
-): Promise<void> {
+): Promise<string> {
   const fire = release === "fire";
   const round = await priceTabRound(
     tx,
@@ -616,6 +616,7 @@ export async function placeGrouped(
     actorId: operatorId,
     detail: { workingOrderId: seated.tabId, release },
   });
+  return groupId;
 }
 
 /** A bill's rows in line order, as the cases read them: prices and totals as decimal strings. */
