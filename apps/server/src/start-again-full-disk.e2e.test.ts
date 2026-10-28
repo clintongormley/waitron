@@ -225,7 +225,7 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
   expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
 });
 
-it("without a spare file, the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
+it("without a spare file, the password step of the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
   const small = needDisk(ctx);
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);

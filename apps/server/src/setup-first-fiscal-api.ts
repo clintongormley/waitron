@@ -10,7 +10,7 @@ import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono, MiddlewareHandler, Next } from "hono";
 import { TLSSocket } from "node:tls";
-import { AppError, isAppError } from "@waitron/shared";
+import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
@@ -24,6 +24,7 @@ import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { requestFromBox } from "./request-from-box.js";
 import { FULL_DISK_BYTES, fullDiskFailure } from "./boot-failure.js";
+import { errnoOf } from "./errno.js";
 import { publicFirstSetupState, type FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -790,7 +791,15 @@ export function mountFirstSetupResolutionApi(
         const full = isAppError(error)
           ? error.code === "setup.attempt_invalid" && free !== null && free < FULL_DISK_BYTES
           : fullDiskFailure(error, free);
-        if (full) throw new AppError("storage.disk_full", {});
+        if (full) {
+          // The boundary logs only the code it answers; this keeps what the refusal really was.
+          log("warn", "storage.disk_full_reported", {
+            errorCode: isAppError(error) ? error.code : null,
+            errno: errnoOf(error) ?? null,
+            errcode: sqliteFailureOf(error)?.errcode ?? null,
+          });
+          throw new AppError("storage.disk_full", {});
+        }
       }
       throw error;
     }

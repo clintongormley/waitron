@@ -1,7 +1,7 @@
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
@@ -40,10 +40,11 @@ function cannotOpen(): Error {
 }
 
 function appWith(options: {
-  free: number | null;
+  free: number | null | Error;
   refusal?: unknown;
   database?: string;
   authorize?: () => Promise<never>;
+  log?: Parameters<typeof mountFirstSetupResolutionApi>[2];
 }) {
   const refuse = async (): Promise<never> => {
     throw options.refusal;
@@ -58,11 +59,14 @@ function appWith(options: {
     owner: { recoverFirstSetupOwner: refuse, authorize: options.authorize ?? refuse },
   } as unknown as Host;
   const app = new Hono();
-  mountFirstSetupResolutionApi(app, host, () => {}, {
+  mountFirstSetupResolutionApi(app, host, options.log ?? (() => {}), {
     startAgain: refuse,
     summary: refuse,
     withPublication: refuse,
-    freeSpace: async () => options.free,
+    freeSpace: async () => {
+      if (options.free instanceof Error) throw options.free;
+      return options.free;
+    },
   });
   return app;
 }
@@ -207,4 +211,37 @@ it("the activation routes keep their answer on a nearly full disk", async () => 
     tls(),
   );
   expect(await answer(response)).toEqual({ status: 409, code: "setup.attempt_invalid" });
+});
+
+it("GET /resolution answers database unknown as today when free space cannot be read", async () => {
+  const response = await appWith({ free: null, database: "unknown" }).request(ROUTE, {}, tls());
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({ database: "unknown" });
+});
+
+it("a free-space reader that throws leaves a wrong password as setup.owner_required", async () => {
+  const refusal = new AppError("setup.owner_required", {});
+  const app = appWith({ free: new Error("statfs failed"), refusal });
+  expect(await answer(await STEPS.password(app))).toEqual({
+    status: 403,
+    code: "setup.owner_required",
+  });
+});
+
+it("a refusal reported as a full disk logs what it was", async () => {
+  const log = vi.fn();
+  const refusal = new AppError("setup.attempt_invalid", {});
+  await STEPS["Start again"](appWith({ free: NEARLY_FULL, refusal, log }));
+  expect(log).toHaveBeenCalledWith("warn", "storage.disk_full_reported", {
+    errorCode: "setup.attempt_invalid",
+    errno: null,
+    errcode: null,
+  });
+  log.mockClear();
+  await STEPS.password(appWith({ free: NEARLY_FULL, refusal: cannotOpen(), log }));
+  expect(log).toHaveBeenCalledWith("warn", "storage.disk_full_reported", {
+    errorCode: null,
+    errno: "ERR_SQLITE_ERROR",
+    errcode: 14,
+  });
 });
