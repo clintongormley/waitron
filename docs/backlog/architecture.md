@@ -498,7 +498,7 @@ until A977).
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
   Keep accent tests, AEAT names and official text. Media's sibling suites still have translated UI
-  expectations to read from its strings file. The main library suite's card actions, usage labels,
+  expectations to read from its strings file. The main library suite's Spanish card actions, usage labels,
   preview, default-language marker and form message now use the catalogue; its direct error-wording
   and browser language-name checks remain. Keep deliberate Spanish/French metadata, the filename
   suite's accent-sensitive sample and the framing suite's deliberate multilingual metadata.

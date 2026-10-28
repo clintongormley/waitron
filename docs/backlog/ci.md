@@ -505,10 +505,12 @@ On 2026-10-28, main run [40644939856](https://github.com/clintongormley/waitron/
 reported workforce job `122671628160` in `Set up pnpm` from `06:37:54Z` through repeated
 API snapshots. At the cancellation request that step had lasted 438 seconds; the same step in
 successful run `40626865577` lasted two seconds. Normal cancellation left that job active while
-other jobs finished cancelling. Running-job log retrieval refused until completion. Retain its
-completed log and distinguish a running command from stale runner reporting before changing the
-installer, retry limits or job deadline. The cause is unverified. Lane F retains the snapshots in
-`receipts/a976-media-localized-20261028/`; no unchanged rerun was requested.
+other jobs finished cancelling. After force-cancellation, the run and job completed as cancelled.
+`gh run view 40644939856 --job 122671628160 --log` then answered `log not found: 122671628160`;
+the job-log REST endpoint returned HTTP 404. Recover runner-side evidence and distinguish a running
+command from stale runner reporting before changing the installer, retry limits or job deadline.
+The cause is unverified. Lane F retains the snapshots in `receipts/a976-media-localized-20261028/`;
+no unchanged rerun was requested.
 
 ## The step-watch guard received an undefined held-thread result
 

@@ -5929,8 +5929,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A976. Finish the server's English test-venue defaults.**
   Other helpers and screen expectations remain. Media's sibling suites still have translated
-  UI expectations to read from its strings file; the main library suite's card actions, usage
-  labels, preview and form messages use the catalogue. Later cleanup goes package by package
+  UI expectations to read from its strings file; the main library suite's Spanish card actions,
+  usage labels, preview and form message use the catalogue. Later cleanup goes package by package
   from A977's list. Keep accent-sensitive filename samples and deliberate multilingual metadata.
   Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
