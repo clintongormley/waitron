@@ -561,6 +561,12 @@ only the app keeps from deletion; no trigger protects it either.
   map the renamed column in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which compares every
   table's columns with the frozen Madrid export; the recipe and measurements are Task 5 of
   `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`.
+- Some code names holding the guest count still say `guests` after A988 (#2163), which renamed
+  only the wire fields and the drizzle property: `readBillGuests` and `guestsOfParty`
+  (`apps/server/src/receipt-guests.ts`, `apps/till/src/state/receipt-guests.ts`),
+  `setPartyGuests` (server `parties.ts`, `till-api.ts`; till `api/client.ts`, `till-app.ts`), and
+  `splitGuests` / `#savedGuests` (`apps/till/src/screens/till-table-order-screen.ts`). Renaming
+  them to `…GuestCount` is free before go-live; no behaviour changes.
 - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
   (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
   `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guestCount` shows only at
