@@ -10,9 +10,9 @@ const booking: Booking = {
   bookingDate: "2026-10-09",
   bookingTime: "20:30:00",
   partySize: 4,
-  contactName: "García",
+  contactName: "Morgan",
   contactPhone: "600100200",
-  notes: "Ventana",
+  notes: "Window",
   tableId: null,
   tableLabel: null,
   tabId: null,
@@ -46,7 +46,7 @@ describe("booking Save follows its draft", () => {
         defaultDate: "2026-10-09",
       });
       await buttonState(el, true, "secondary");
-      await change(el, "García editada");
+      await change(el, "Morgan edited");
       await buttonState(el, false, "primary");
       await change(el, value?.contactName ?? "");
       await buttonState(el, true, "secondary");
@@ -71,7 +71,7 @@ describe("booking Save follows its draft", () => {
       open: true,
       booking,
     });
-    await change(el, "García editada");
+    await change(el, "Morgan edited");
     el.busy = true;
     await el.updateComplete;
     await buttonState(el, true, "primary");

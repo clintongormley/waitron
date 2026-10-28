@@ -12,7 +12,7 @@ const booked: Booking = {
   bookingDate: "2026-08-20",
   bookingTime: "20:00:00",
   partySize: 4,
-  contactName: "García",
+  contactName: "Morgan",
   contactPhone: null,
   notes: null,
   tableId: null,
@@ -167,7 +167,7 @@ it.each([
   ["booking-time", "20:30"],
   ["party-size", "5"],
   ["party-size", ""],
-  ["contact-name", " García "],
+  ["contact-name", " Morgan "],
   ["contact-phone", "600123456"],
   ["notes", "Window"],
 ])("protects the submitted %s value %s", async (name, value) => {
@@ -201,7 +201,7 @@ it("closes clean or normalized reverted edits without asking", async () => {
   const { screen } = await mount();
   const form = await open(screen);
   await field(form, "contact-name", "Other");
-  await field(form, "contact-name", "García");
+  await field(form, "contact-name", "Morgan");
   await field(form, "party-size", "04");
   await field(form, "contact-phone", "  ");
   await field(form, "notes", "  ");
@@ -288,7 +288,7 @@ it("commits only the submitted snapshot when newer input arrives during a write"
     bookingDate: "2026-08-20",
     bookingTime: "20:00",
     partySize: 4,
-    contactName: "García",
+    contactName: "Morgan",
     contactPhone: null,
     notes: "Submitted note",
     tableId: null,
@@ -368,7 +368,7 @@ it("an earlier successful write cannot close a replacement booking editor", asyn
         bookingDate: "2026-08-20",
         bookingTime: "20:00",
         partySize: 4,
-        contactName: "García",
+        contactName: "Morgan",
         contactPhone: null,
         notes: "First booking submitted",
         tableId: null,

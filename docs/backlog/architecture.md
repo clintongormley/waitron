@@ -505,6 +505,8 @@ until A977).
   suite's accent-sensitive sample and the framing suite's deliberate multilingual metadata.
   The combobox accessibility suite's sample wording is English; its themes, keyboard,
   selection, disabled contrast and accessibility checks remain.
+  The bookings dashboard's form, day-list, client, validation, draft and accessibility suites
+  use English sample names; form and picker labels read the catalogue.
   Remaining helper and screen fixtures stay with this item; continue package by package from
   A977's list. Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

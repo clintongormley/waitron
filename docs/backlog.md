@@ -5483,6 +5483,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **Setup held-summary refusal loses its password field in CI.** At merge
+  `8977d4ad1`, run `40708505640` / setup job `122887931308` failed
+  `setup-app-held-refusals.test.ts:197` in the Spanish trading-settings refusal case:
+  `resume-password` was absent after the refusal text appeared. Retain that check and
+  reproduce the state transition before changing it; cause unknown.
+
 - **The receipt-guests upgrade test reinstalls the append-only triggers itself** (left open by
   A1164, #2176). `packages/db/src/schema/sale-receipt-guests-upgrade.test.ts` calls
   `installAppendOnlyTriggers` by hand after migrating, so it does not prove `applyMigrations` puts
@@ -5946,7 +5952,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** Other helpers and screen
-  expectations remain; the combobox accessibility suite's sample wording is English. Continue
+  expectations remain; the bookings form and day-list samples are English, and their translated
+  labels read the catalogue. Continue
   package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, and deliberate multilingual metadata. Low priority.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
