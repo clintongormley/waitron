@@ -4067,13 +4067,14 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   (found in A757 slice 7's review, 2026-10-19).**
   [Detail](backlog/dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
 
-- **A1168. The Appearance screen throws away a theme list read begun before a change it applied
-  (left open by A1133, which fixed the same counter in the Defaults card).**
+- **A1168. The Appearance screen throws away a theme list read that answers after a change it
+  applied (left open by A1133, found by reading, not run, 2026-10-28).**
   `apps/dashboard/src/screens/appearance-screen.ts`'s `#writes` counter drops every `listThemes`
-  read begun before a theme change it applied locally, so a newer list another manager saved in
-  between is dropped and shows only when a later read answers (found by reading, not run). The Privacy and Defaults cards' fix (an order
-  number per read and per applied answer, then a background re-read) is the pattern. Left out of
-  A1133 because lane A's A841 theme-editor slices own this screen.
+  answer whose read began before a theme change the screen applied locally and answered after
+  it, so a newer list another manager saved meanwhile shows only when a later read answers. The
+  Privacy and Defaults cards' fix (an order number per read and per applied answer, then a
+  background re-read) is the pattern. Left out of A1133 because lane A's A841 theme-editor
+  slices own this screen.
 
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).**
