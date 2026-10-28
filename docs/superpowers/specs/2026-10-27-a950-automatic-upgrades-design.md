@@ -13,8 +13,10 @@ go-live, by the owner's 21 October decision.
 
 **Dated supersession, 28 October:** the owner's answer replaces the earlier first-order and
 first-real-action boundaries, including any healthy READY wait or acceptance step. It settles
-only the closing rule. Automatic-on, 03:00–05:00, spare-first and all choices labelled **my call**
-remain proposed and unapproved. The complete revised design still needs owner approval.
+the closing rule. The later 28 October window instruction replaces the fixed overnight window:
+you choose a local closed period, after close, reports and backup, ending before reopening.
+Automatic-on, spare-first and all choices labelled **my call** remain proposed and unapproved.
+The complete revised design still needs owner approval.
 
 ## 1. Contracts and evidence status
 
@@ -88,28 +90,167 @@ normal requests and duties. No first order, first real change, scheduled action 
 acceptance click closes it. There is no healthy reversible version waiting for morning.
 
 For example, Harbour Kitchen has finished service and meets the proposed quiet-window checks
-at 03:10. The host stops all writers, saves the complete state and starts the new version in
-validation mode. At 03:12 the packaged migrations, database preservation checks and fresh local
+at 06:50, inside its administrator-chosen window after the day’s close, reports and backup
+have completed (§3). The host stops all writers, saves the complete state and starts the new
+version in validation mode. At 06:52 the packaged migrations, database preservation checks and fresh local
 TLS/menu/config/history responses all pass. These times illustrate the sequence, not measured
 durations. The host records rollback closed and releases normal work immediately. Queued
-filing and qualified backup publication can resume at 03:12 without waiting for Ana to arrive.
+filing and qualified backup publication can resume at 06:52 without waiting for Ana to arrive.
 At 08:00 Ana signs in, clocks in and changes her PIN normally; the first order has no update role.
 
 If migration or local running checks fail **before** closure, the host restores the matching
 old state and images and checks the old service before reopening it. If the new version fails
-at 04:00 **after** closure, it keeps the current state and needs repair of that state. It cannot
-restore the 03:10 snapshot, even if no order has yet been taken. Otherwise it could erase work
+at 07:10 **after** closure, it keeps the current state and needs repair of that state. It cannot
+restore the 06:50 snapshot, even if no order has yet been taken. Otherwise it could erase work
 or external effects already acknowledged after closure. A bucket, Cloud, internet or provider
 outage cannot postpone closure when the local checks pass, and cannot block ordinary sales.
 Their own retry, publication and membership rules still apply.
 
 ## 3. Scheduling without putting a release server on the sale path
 
-**My call:** automatic app updates are on by default for qualified stick-installed boxes,
-shown in Box settings, with a daily 03:00–05:00 window in the venue's configured time zone.
-An administrator can change the window, pause automatic updates or choose Update now; manual
-start still meets every admission check. No version-age policy disables ordinary sales.
-Off-box backup defaults and commercial support ages remain A1016 decisions, not settled here.
+**My call, still PROPOSED:** automatic app updates are on by default for qualified
+stick-installed boxes. Application waits until an administrator saves an explicit local start
+and end in Box settings. There is no preset window and no inference from opening hours or
+inactivity. With no chosen window, show “Choose an update window”; verified background downloads
+may continue, but neither automatic nor manual application can freeze service. Ordinary sales
+continue. You can pause automation or choose Update now; manual application meets the same
+window, close/report/backup, time-budget and quiet checks. No version-age policy disables sales.
+Off-box backup defaults and commercial support ages remain A1016 decisions.
+
+The saved end is your **latest reopening boundary**: admission must reserve enough time to restore normal work before it.
+Choose a period you intend the venue to be closed, with room for late reports, backups and the
+full trial plus rollback. The setting does not close the venue or prevent earlier real work.
+If you reopen early, new work invalidates readiness and defers an attempt not yet frozen.
+An unsaved preview grants no authority. Required start/end use local HH:MM and the venue's named
+time zone; show the next dated occurrence and its UTC instants before Save. Equal times are
+invalid, not an all-day window. An end earlier than the start means the following civil date.
+
+### What the timeline can say from today's source
+
+**Additional source-only inspection at HEAD `288213aef2b66189480c341954dc7dfaea256fdd`,
+28 October 2026.** These anchors supplement, and do not replace or refresh, §1's historical
+inventory. No scheduler, reporting, archival or A950 runtime operation was executed.
+
+| Inspected anchor at this HEAD | Source rule and limit |
+| --- | --- |
+| `packages/reporting/src/business-day.ts:112`, `:157`, `:209`, `:221`; `apps/server/src/business-day-start.ts:76`; `apps/server/src/business-day-changeover.ts:30` | Reports resolve the node's location time zone and dated cutovers. Business-day labels/bounds differ from civil midnight; the settings model exposes current day, revision and pending change. These functions do not produce a report at rollover. |
+| `packages/reporting/src/daily-close.ts:15`; `apps/server/src/report-api.ts:295`, `:382`; `packages/reporting/src/record-daily-close.ts:32`, `:68`, `:81`; `apps/server/scripts/daily-close-z-demo.ts:186` | The GET computes a day's figures on demand; category printing queues a job and returns 202. The separate frozen-close function appends a snapshot and chain head in its caller's transaction. `rg -n 'recordDailyClose\(|computeDailyClose\(' packages apps --glob '*.ts' --glob '!*.test.ts'` found its call in the demo, not a production app close workflow. Do not claim a scheduled frozen close or reports produced at rollover. |
+| `packages/venue-service/src/service.ts:131`; `apps/server/src/boot.ts:1702`, `:2836`, `:2846` | The service contribution exposes operational seats; the inspected scheduled `runDue` call runs the reconciliation duty. Neither supplies a daily report-completion receipt. Any actual service/reporting job used for admission must be inventoried by its real producer and outcome, not inferred from this generic scheduler. |
+| `apps/server/src/backup-config.ts:51`, `:86`, `:274`, `:303`; `apps/server/src/backup-schedule.ts:54`, `:60` | Environment scheduling supports interval or wall-clock daily/selected weekdays; wall-clock `auto` is the dated business-day boundary +30 minutes + stable seed jitter of 0–10 minutes. Fixed local HH:MM and interval alternatives differ. Environment without a destination, or dashboard without a sealed record, supplies no archive duty; a switched-off record stays off. |
+| `apps/server/src/backup-sweep.ts:122`, `:181`, `:208`, `:268`; `apps/server/src/backup-supervisor.ts:210`, `:265`, `:286`, `:355` | A sweep copies immediately on startup, then schedules. A cycle's next due instant stays fixed while it waits, even after a clock edit. `runOnce` settles destination calls separately: a resolved promise can include failed uploads; `onUploaded` precedes pruning, and callbacks can outlive a stopped sweep. The supervisor filters aborted callbacks, gates archives on the singleton `primary` role and keeps per-sweep outcomes, not day-bound durable update authority. |
+| `apps/server/src/boot.ts:2209`, `:2223`, `:2230`, `:2971`; `apps/server/src/cloud-snapshot-worker.ts:134`, `:166`, `:196` | Archives use the node seed/clock and expose the actual scheduled deadline. Cloud retained snapshots have a separate primary/service/test-environment gate and publication path; they are not automatically a production archive substitute. |
+
+Read alongside the [archive settings reference](../../../apps/server/README.md#backup-archive-settings),
+[backup operations guide](../../operations/backups-and-support.md),
+[backup recovery guide](../../../apps/server/src/guide/en/backup-recovery.md#proof) and
+[business-day writing rules](../../developers/conventions-data.md). These guides describe settings
+and recovery, not a daily close scheduler. The current backup selector's wording “after close
+and the day's reports” (`apps/dashboard/src/i18n/strings.ts:1780`) is not evidence of a dependency:
+`nextFireMs` uses the clock, not close/report results. A950 must show the actual rule above.
+
+### Completion means this closed day, on the actual primary
+
+**My call, PROPOSED:** obtain durable completion receipts from qualified close/report and backup
+producers. These are new contracts, not existing status booleans. Producer receipts carry venue/location,
+actual primary node and membership term, closed business-day label D and resolved UTC bounds,
+close episode ID, relevant input/data generation, producer settings revisions (report/job
+inventory, backup destinations/key and clock with pending cutovers), run/output IDs and actual
+start/completion instants. The host binds accepted receipts to the current window revision and
+occurrence. Environment-owned settings need an effective-settings digest, not an invented
+dashboard revision. Persist accepted evidence and its binding in `@host-state`;
+a restart, delayed callback or status cache cannot create a success receipt.
+
+A close receipt requires an explicit authorised confirmation that the venue has actually closed
+for D, plus completion of its required report outputs for that same data generation. The
+qualified close/report workflow declares that required output set; A950 cannot guess it from
+installed modules or accept an absent/unknown declaration as an empty set. Ten idle
+minutes, a closed station, midnight and rollover prove none of these. **For reports with no
+scheduled job, my call:** finish them on demand, then record close/report completion through an
+authenticated workflow bound to those outputs. Show “On close; no fixed scheduled time” until
+there is an actual completion time. Merely opening a live Sales report is not a frozen close.
+Where a frozen close is required, use its real committed record; its absent production workflow
+is an integration/qualification gate, not permission for A950 to invent one or synthesize a row.
+Disabled/unavailable required reporting defers application. An empty scheduled-job inventory can
+say “No scheduled report jobs”; it cannot say “Reports complete” or waive actual close/reporting.
+No new daily report scheduler is proposed. Until the qualified receipt producer exists, defer.
+
+For configured service/reporting workflows, enumerate all closing jobs required for D, including
+print/delivery work when part of that workflow. Require their terminal successful results; queued,
+started, failed, overdue, missing and unknown outcomes are not complete. A cancelled/disabled job
+cannot disappear from the accepted inventory mid-attempt. Work that is unrelated to closing still
+meets the quiet checks below. No updater cancellation makes a late job fit.
+
+**For backups, my call:** require a completed archive captured after the accepted close/report
+outputs, covering their committed data, stored successfully at every enabled configured archive
+destination, with the whole run and its cleanup settled. Record artifact identity/digest,
+capture point and per-destination storage/pruning outcomes under the same effective settings.
+A pruning failure is visible and defers this attempt; an early upload callback, recent object
+mtime, generic freshness, timer firing or `runOnce` resolving is insufficient. A scheduled copy
+captured before reports finished cannot authorize this close episode. Wait for a later qualified
+run; do not silently reschedule backups or start an extra one. Show fixed weekdays or interval
+next due as configured, even if it is outside this update window.
+
+Disabled, unconfigured, unreadable or unavailable backups defer **both manual and automatic**
+application, with a link to Backups and a reason. There is no “disabled means complete” waiver,
+and the local rollback snapshot or continuous bucket stream does not substitute for this archive.
+The administrator can configure backups and wait for a real qualifying result, change the window,
+or leave the current version running. This does not settle A1016's off-box default. A remote
+backup outage defers updates only; it never gates ordinary sales or cancels backup/report work.
+
+D is the trading day being closed, selected from the actual close episode, not “the most recent
+close row”. After rollover D may be yesterday's label; it remains eligible only for that same
+unbroken closed episode and window occurrence, with no later business work. An older day's
+receipt cannot authorize today's closure, and rollover never creates a close for D+1. Reopening,
+a new business mutation affecting the close/archive inputs, a new closing job, settings change
+or membership change invalidates readiness. Revalidate the producer evidence and make a fresh
+admission binding; reuse an existing output only if its own day, inputs and producer settings
+still match. Never relabel an old output or claim it ran under newer producer settings. Readiness is not a permission that survives a later day's service.
+
+### Waiting, final admission and clock changes
+
+At window start, wait with the current version serving normally until the actual close/report
+AND backup receipts are complete. The window may overlap them; that is a wait, not a failure or
+an instruction to stop them. When results arrive, require the quiet checks below and the full
+remaining budgets before freeze. Late, failed, missing or unknown results skip this occurrence
+when time runs out. Record the specific reason and next eligible window, not “update failed”.
+No queued automatic freeze is carried into reopening or the next occurrence.
+
+In the final admission turn, serialize with new work, report/backup starts, settings edits and
+membership changes. Re-read all receipt bindings, current data generation, actual outstanding
+jobs, actual scheduled deadlines, quiet state, resolved window and remaining time under the same
+fence before any shutdown. A due job racing that turn wins or makes admission defer; a success
+from a replaced run cannot win it. Keep the fence through stopped capture. A change before
+candidate launch cancels admission and rechecks the intact old service; after candidate launch,
+follow §§5–6's bounded trial/rollback and durable closure rules, never a live settings rewrite.
+
+Any accepted time-zone, business-day-start (including pending-change activation), report/backup
+settings or window edit invalidates a pending occurrence/receipt binding. Respect the venue
+editor's existing restrictions; A950 grants no new right to change history or time zones.
+Recompute and show dated labels and actual worker deadlines, which may still reflect the old
+clock until the next backup cycle; do not promise an immediate backup move. Require a fresh
+review/save of the update window after a clock change before application resumes, without
+restarting report or backup jobs merely to obtain a new receipt.
+
+**My call:** a cross-midnight window is one occurrence identified by its local start date,
+zone and saved settings generation. Resolve both endpoints to UTC. If either local endpoint is
+missing or repeated at a daylight-saving change, skip that occurrence with an explanation; do
+not pick one offset silently. An internal offset change with unique endpoints uses the real
+elapsed time. Persist one attempt per box within the coordinated occurrence and one active box
+attempt at a time, across restarts, clock jumps and settings revisions. An edit cannot mint a
+second attempt for the same close episode or overlapping period, or reset the daily allowance. A backward jump cannot
+reopen a consumed occurrence; an uncertain clock or a forward jump leaving too little time
+defers. Expired windows cannot acquire freeze authority.
+
+For example only, in **Europe/Madrid (UTC+01:00)** D **2026-10-28** runs from 28 October
+06:00 until 29 October 06:00; D+1 starts then. On 29 October the venue closes at 01:15,
+reports finish on demand at 01:45, and the administrator's saved closed window is **01:30–08:00**,
+with **08:00 the explicit next reopening boundary**. The selected archive schedule is daily
+`auto`: due **06:37** in this example (+30 minutes, example stable jitter +7), initially Pending;
+at **06:45** all configured stores, pruning and cleanup are confirmed complete for D's close.
+Admission may then proceed only with every remaining check and budget. If it is still running
+or uncertain at the latest safe start, skip the update and let it finish. These are example
+settings/statuses, neither defaults nor measured durations. The timeline shows scheduled, actual
+and unknown times separately; §8's EN/ES settings brief gives the exact illustration copy.
 
 The proposed host service checks B3's signed release manifest daily with jitter, verifies
 signatures against its embedded current/spare public keys, platform, minimum host protocol,
@@ -129,22 +270,26 @@ Require ten minutes without new work and, under a shared admission fence, no act
 unsettled bills, in-flight requests, reader authorisation/capture, Stripe reconciliation,
 pending/unknown refunds, printing/drawer delivery, restore/reset/setup, membership change,
 host/network change or conflicting update. Drain already-started effects to a known outcome
-within their own deadlines; an unknown answer defers. Do not cancel money work to make a quiet
-window. Pending unsent fiscal/email work may be frozen, not sent during trial. A failed ability
+within their own deadlines; an unknown answer defers. Do not cancel money, report or backup
+work to make a quiet window. Pending unsent fiscal/email work may be frozen, not sent during trial. A failed ability
 to determine quiet status defers the upgrade, not current service. The fence stops a fresh order
 slipping between the final check and shutdown; a request already admitted makes that attempt defer.
 
 **My-call budgets:** release/download checks get three bounded attempts per daily check,
 30-second metadata/hold attempts and 10-minute image attempts; no freeze before completion.
 Freeze/drain gets two minutes, migration/readiness five minutes and restoration/old-readiness
-five minutes each. Start no freeze unless the window has room for these budgets. Successful
-checks trigger closure immediately, even with nobody present. Crossing the window never
+five minutes each. Require strictly more than the full 17-minute total before freeze against
+the saved end/reopening boundary, using elapsed time; include shutdown/capture and journal/closure/release within the
+qualified phase bounds, not unbounded extras. If this cannot be bounded, defer. This reserve is
+an admission requirement, not a promise of recovery by opening after a fault or power cut.
+Successful checks trigger closure immediately, even with nobody present. Crossing the window never
 reopens closed rollback or starts a second attempt while one is unfinished.
 Measure and review these limits before enabling them. An expired phase never implies success
 or permits killing an effect with an unknown result. One failed candidate digest is quarantined
 after one trial; no nightly failure loop. A newer fixed digest is eligible next window. An admin
-may explicitly retry the same digest after seeing its recorded cause, without a promise that
-retry fixes it. Cleanup failure retains evidence and prevents another attempt.
+may explicitly retry the same digest in a later eligible occurrence after seeing its recorded
+cause and meeting the same checks, without a promise that retry fixes it. Cleanup failure
+retains evidence and prevents another attempt.
 
 ## 4. Capture the complete state and retain the previous release
 
@@ -282,7 +427,8 @@ sales are qualified on disposable release-test copies, never by a test sale in t
 
 The host persists a versioned root-only journal on checked `@host-state`, with attempt ID,
 disk UUID/layout, old/new digests, capture/subvolume identities, phase sequence, admission
-generation, check bindings, floor evidence, stream/spare heads and bounded redacted outcomes.
+generation, check bindings, window/close/report/backup receipt bindings from §3, floor evidence,
+stream/spare heads and bounded redacted outcomes.
 Unknown versions, mismatches, corruption or missing state after an attempt never mean idle.
 Use serialized atomic publication with file and directory flushes and validated read-back;
 the exact crash guarantees must be measured. Host requests authenticate the local caller and
@@ -394,8 +540,15 @@ takeover validation and print-agent protocol. A version label alone supplies no 
 evidence. No general backward-compatibility layer is authorised while the pre-live reset rule
 stands; defer unsupported pairs rather than adding one implicitly.
 
-While the spare trials, the primary continues selling, with replication deliberately paused
-and last-copy age visible; it must not wait on the update coordinator to make a sale. Snapshot
+Both boxes use §3’s chosen closed window and completion evidence from the **actual primary**.
+The spare’s disabled archive duty is neither a completed backup nor a reason to run a competing
+archive. Bind the primary’s authenticated receipts/head/term to the spare attempt; any subsequent
+primary work invalidates readiness for the primary attempt. Reserve each full trial/rollback
+budget and bounded catch-up time before beginning the paired sequence; if remaining time cannot
+cover the next box, defer it. A completed spare remains waiting on its qualified version.
+
+While the spare trials, the primary remains available for ordinary sales, with replication
+deliberately paused and last-copy age visible; it must not wait on the update coordinator to make a sale. Snapshot
 the spare's entire stopped store/follower state, leave its old data intact and suppress takeover
 on the trial instance. Before resuming follow or receiving newer primary data, close the spare's
 own rollback boundary automatically after its own successful restart, clean-database and fresh
@@ -427,8 +580,20 @@ an update cannot silently weaken it. Rejoining a repaired spare remains A947's j
 
 [Static screen brief and EN/ES copy](../../backlog/mockups/a950-automatic-upgrades/README.md)
 show `01-upgrade-check.png`, `02-rollback-complete.png` and `03-upgrade-complete.png`, with
-English/Spanish, both themes, phone and desktop variants. These illustrations reflect the
-revised boundary below. PNGs are documentation illustrations, not product or runtime proof.
+English/Spanish, both themes, phone and desktop variants. The existing state views are unchanged.
+The eight `04-window-settings-<en|es>-<light|dark>-<390|1280>.png` settings views show the timeline
+next to the fields on desktop and directly below them on phone. All eight new views have been
+rendered and visually inspected. PNGs are documentation illustrations, not product or runtime proof.
+
+The settings view shows automatic-on as proposed, start/end with the end labelled as latest
+reopening, the saved time zone and dated business-day boundaries, actual close/report status,
+each selected backup schedule/actual next due/completion status and why application waits.
+No chosen window says no automatic application yet, with downloads and sales available.
+Offer Save, Cancel, Pause automatic updates, Backups and the close/report completion workflow
+when qualified, with on-screen admin authentication where needed. Update now shares §3’s gates.
+Use the shared field/draft/Save/inline-error contract; an empty optional window can be saved as
+unset, while a partial/invalid window cannot be saved as configured. No inferred hours or hidden
+acceptance of disabled backups is shown.
 
 | State | English | Español |
 | --- | --- | --- |
@@ -488,6 +653,7 @@ later separately approved build, not a task plan or evidence that this design is
 
 | Gate | Required discriminating evidence |
 | --- | --- |
+| Scheduling and completion | Prove an unset window admits no freeze while downloads/sales continue; manual has identical gates. Cover close/report on demand with no scheduler, actual scheduled jobs, disabled/missing producers, late/failed/unknown results, archive captured before close, every-destination storage versus early upload/pruning/cleanup, callbacks from replaced sweeps and startup/reload copies. Race new work/jobs/settings/term changes against final admission; reject wrong day/node/term/revision/data generation and a prior day’s receipt, while accepting the same unbroken D episode after rollover. Cover fixed/weekday/interval/auto next due, retained old-clock deadlines, pending cutover activation, cross-midnight and DST gap/fold/internal transition, clock jumps, reboot and revision-based duplicate attempts. Positive controls must admit the fully complete quiet case with full budgets, reject exactly-at-cutoff admission and preserve real jobs on deferral. Check both-box evidence comes from the primary and reserve sequential budgets/catch-up. Inspect all eight EN/ES timeline views and no-window/wait/skip/disabled statuses in the eventual product. |
 | Closure and host admission | Apply §2's resolved boundary. Race successful-check closure against explicit/failed-check rollback both ways; cut power before/after durable closure and release; lose check/completion answers; reject stale boot permits and unknown journals. Prove no effect before closure and no restore after closure or RESTORED, with negative controls. An idle overnight success must close without staff, first work or an acceptance click; normal operations need no ongoing updater roundtrip. |
 | Complete-state durability | Encrypted Linux btrfs rig, pinned Docker store, all writers stopped, exact mount/nested-subvolume inventory, side files and whole-state restoration. Cut every journal/restore phase; prove logs, host marker, key/UUID and newer/unknown/damaged floor survive. Refuse missing host/log mounts and unsupported old parsers. |
 | Capacity and images | Full-data and metadata exhaustion on an owned small throwaway filesystem during image/snapshot/migration/closure/restore. Exact old digests launch offline; supported cleanup cannot prune protected references. No test fills or cleans the real shared disk. |
@@ -497,7 +663,9 @@ later separately approved build, not a task plan or evidence that this design is
 | Host/TPM and clients | B3's separately authorised real Linux/VM/TPM/firmware/disk/Android gates; startup reseal interruption and key-present exceptions. No source read, mock or app upgrade result substitutes for them. |
 
 **Status: needs-owner-review for the whole revised design.** Section 2's owner boundary is
-resolved; do not ask it again. Automatic-on, 03:00–05:00, spare-first and the other labelled
-proposals remain for that full approval. The revised design and illustrations are ready for
-owner review. Publication grants no plan, build, migration, runtime qualification, Cloud change
-or release authority.
+resolved; do not ask it again. The later owner instruction sets an administrator-chosen closed
+window after close/reports/backup and before reopening. Automatic-on, spare-first, the completion
+contracts and other labelled proposals remain for full approval. One fresh builder review precedes
+presentation of the full revision; the new static settings views have been rendered and inspected.
+Publication grants no plan, build, migration, runtime qualification, Cloud change or release
+authority.

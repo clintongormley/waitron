@@ -8,7 +8,9 @@
 **Revised 28 October 2026; needs-owner-review for the whole design.** The owner's closing rule
 is resolved: successful restart, clean database upgrade and a running, answering system end
 rollback automatically, before normal requests and duties resume. No first order, first action
-or acceptance button ends it. Automatic-on, 03:00–05:00 and spare-first remain proposals.
+or acceptance button ends it. The later owner instruction requires an administrator-chosen local
+closed window after close/reports/backup and before reopening. Automatic-on and spare-first
+remain proposals.
 No whole-design or build approval is recorded.
 
 These revised static illustrations use example data and theme tokens. They prove no updater,
@@ -30,7 +32,9 @@ rendering/accessibility and runtime qualification remain build gates.
 
 The three short filenames are English, light theme, 390 px. Each also has
 `-<en|es>-<light|dark>-<390|1280>.png` variants for both themes and phone/desktop widths.
-The variants were regenerated together. There is no separate healthy READY illustration.
+Those existing 24 state views stay unchanged for this window revision. There is no separate
+healthy READY illustration. The eight new settings views below still need driver rendering and
+visual inspection; this brief does not claim that either has happened.
 
 | State | English copy | Texto en español |
 | --- | --- | --- |
@@ -43,3 +47,75 @@ The failure-restoration example cannot describe an explicit return as a failed c
 explicit return substitute “You chose to return before checks finished” / «Has elegido volver
 antes de que terminaran las comprobaciones». Show the design's inspection state whenever the
 journal or restore is uncertain. A spare completion says it is ready to follow, not ready to sell.
+
+## Window settings illustration: 04
+
+[English desktop](04-window-settings-en-light-1280.png) ·
+[Spanish phone](04-window-settings-es-dark-390.png)
+
+The eight new views are `04-window-settings-<en|es>-<light|dark>-<390|1280>.png`.
+The existing 01–03 files are unchanged. This is a proposed Box settings form, with timeline
+alongside at 1280 px and directly below at 390 px; keep labels and full status text readable.
+Use the established theme tokens, field primitives, draft handling and Save/Cancel conventions.
+Save is quiet and disabled for this unchanged saved example. A complete empty window is allowed
+as unset; a partial/invalid window gets field errors and the localized bottom correction sentence.
+The updater does not use the venue's authored opening hours to fill these fields.
+
+Use the same **example**, viewed at **2026-10-29 06:46, Europe/Madrid, UTC+01:00**, in all eight.
+All times below are illustrative settings/results, not defaults, actual runs or duration proof.
+The completed report/backup times illustrate the proposed qualified receipts in design §3;
+today's source does not supply those update-admission receipts. Show a small visible
+“Design example” / «Ejemplo de diseño» label and automatic-on as a proposed setting. Do not
+expose receipt hashes or internal revision jargon in the product illustration.
+
+| Element | Exact English copy | Texto exacto en español |
+| --- | --- | --- |
+| Title and introduction | **Update window**. “Choose a period when your venue is closed, after close, reports and backup, and before you reopen. Waitron waits for them to finish.” | **Horario de actualización**. «Elige un periodo en el que el local esté cerrado, después del cierre, los informes y la copia de seguridad, y antes de volver a abrir. Waitron espera a que terminen.» |
+| Automation | **Automatic updates**: **On (proposed)** | **Actualizaciones automáticas**: **Activadas (propuesta)** |
+| Start field | **Window starts at** (required): **01:30** | **El periodo empieza a las** (obligatorio): **01:30** |
+| End field and hint | **Window ends at / reopen by** (required): **08:00**. “This is your latest reopening boundary. Leave time for all checks and a possible return to the previous version.” | **El periodo termina a las / reapertura límite** (obligatorio): **08:00**. «Esta es la hora límite para volver a abrir. Deja tiempo para todas las comprobaciones y una posible vuelta a la versión anterior.» |
+| Zone | **Time zone**: **Europe/Madrid · UTC+01:00** | **Zona horaria**: **Europe/Madrid · UTC+01:00** |
+| Occurrence | **Chosen closed period**: **29 Oct 2026, 01:30–08:00**. “You set these times. Quiet tills do not mean the venue is closed.” | **Periodo de cierre elegido**: **29 oct 2026, 01:30–08:00**. «Tú eliges estas horas. Que las cajas estén inactivas no significa que el local esté cerrado.» |
+| Timeline heading and day | **This closure: business day 28 Oct 2026** | **Este cierre: jornada del 28 oct 2026** |
+| Day starts | **Business day starts at**: **28 Oct, 06:00**. **Next business day starts**: **29 Oct, 06:00**. “Rollover labels the next day's records; it does not run the close or reports.” | **La jornada empieza a las**: **28 oct, 06:00**. **La siguiente jornada empieza**: **29 oct, 06:00**. «El cambio de jornada asigna la fecha a los siguientes registros; no ejecuta el cierre ni los informes.» |
+| Actual close | **Venue closed**: **29 Oct, 01:15 · Confirmed for business day 28 Oct** | **Local cerrado**: **29 oct, 01:15 · Confirmado para la jornada del 28 oct** |
+| Report timing and result | **Close and reports**: **On close; no fixed scheduled time**. **Completed: 29 Oct, 01:45 · Business day 28 Oct**. **No scheduled report jobs**. | **Cierre e informes**: **Al cerrar; sin hora fija programada**. **Completados: 29 oct, 01:45 · Jornada del 28 oct**. **No hay tareas de informes programadas**. |
+| Selected backup schedule | **Archive backups**: **Daily · Automatic**. “Business-day start +30 minutes +0–10 minutes fixed per box. This example: +7 minutes.” | **Copias de seguridad de archivo**: **Diarias · Automáticas**. «Inicio de jornada +30 minutos +0–10 minutos fijos para cada equipo. En este ejemplo: +7 minutos.» |
+| Due and completed, clearly distinct | **Scheduled for: 29 Oct, 06:37**. **Completed: 29 Oct, 06:45 · Business day 28 Oct close included**. **All configured destinations stored; cleanup finished**. **Next due: 30 Oct, 06:37**. | **Programada para: 29 oct, 06:37**. **Completada: 29 oct, 06:45 · Incluye el cierre de la jornada del 28 oct**. **Guardada en todos los destinos configurados; limpieza terminada**. **Próxima: 30 oct, 06:37**. |
+| Boundary and UTC detail | **Reopen by: 29 Oct, 08:00**. **Window in UTC: 29 Oct, 00:30–07:00** | **Reapertura límite: 29 oct, 08:00**. **Periodo en UTC: 29 oct, 00:30–07:00** |
+| Current eligibility | “Close, reports and backup are complete. Waitron still checks that no work is active and that the full check-and-return time fits before 08:00.” | «El cierre, los informes y la copia de seguridad han terminado. Waitron comprueba también que no haya trabajo en curso y que quede tiempo para todas las comprobaciones y una posible vuelta antes de las 08:00.» |
+| Actions | **Cancel**, **Save**, **Backups**, **Pause automatic updates**. **Update now** stays quiet while eligibility checks are pending. | **Cancelar**, **Guardar**, **Copias de seguridad**, **Pausar actualizaciones automáticas**. **Actualizar ahora** permanece atenuado mientras se comprueba si se puede actualizar. |
+| Caption | “Example times, not defaults or measured durations. Your reports have no scheduled rollover time.” | «Horas de ejemplo, no valores predeterminados ni duraciones medidas. Tus informes no tienen una hora programada al cambiar de jornada.» |
+
+Do not draw a report at 06:00, call 06:37 “backup completed”, or infer close from inactivity.
+The active business day at the example's viewing instant is 29 October; the explicitly closed
+episode/report/backup still names 28 October, as the timeline explains. Do not turn that into
+permission to accept any previous day's receipt. Runtime eligibility follows §3's complete binding.
+For fixed local/weekday or interval backup settings, show that selected rule and the worker's
+concrete next deadline, not the automatic example's time. Show each configured closing workflow's
+actual job status when one exists, with no invented report production time.
+
+These alternate state strings belong to the same settings contract; eight new static views are
+enough for this revision. Driver/product qualification must check the alternatives as well:
+
+| State | Exact English copy | Texto exacto en español |
+| --- | --- | --- |
+| No chosen window | “Choose an update window. No update will be applied yet. Verified downloads can continue in the background, and you can keep taking orders.” | «Elige un horario de actualización. Todavía no se aplicará ninguna actualización. Las descargas verificadas pueden continuar en segundo plano y puedes seguir tomando pedidos.» |
+| Reports on demand, not done | “Finish the close and reports for business day {day}, then record their completion. No daily report job is scheduled.” **Record close and report completion** is offered only with the qualified workflow. | «Termina el cierre y los informes de la jornada del {day} y registra que han terminado. No hay ninguna tarea diaria de informes programada.» **Registrar cierre e informes completados** solo se ofrece con el proceso validado. |
+| Required reporting unavailable | “Required close/report completion cannot be confirmed. This update will wait. View details, or leave the current version running.” | «No se puede confirmar que el cierre y los informes necesarios hayan terminado. La actualización esperará. Consulta los detalles o deja la versión actual en funcionamiento.» |
+| Backup overlaps window | “Waiting for the backup scheduled for {due}. Its completion is not yet confirmed. Waitron will skip this window if there is not enough time left. Orders remain available.” | «Esperando la copia de seguridad programada para {due}. Aún no se ha confirmado que haya terminado. Waitron omitirá este periodo si no queda tiempo suficiente. Puedes seguir tomando pedidos.» |
+| Backups off or absent | “Backups are off or not set up. Updates will wait for a completed backup after close and reports. Open Backups to configure them, or leave the current version running.” | «Las copias de seguridad están desactivadas o sin configurar. Las actualizaciones esperarán a que termine una copia posterior al cierre y los informes. Abre Copias de seguridad para configurarlas o deja la versión actual en funcionamiento.» |
+| Failed/unknown backup | “Backup completion could not be confirmed: {reason}. The update will wait; backup work and ordinary sales continue under their own checks.” | «No se ha podido confirmar que la copia de seguridad haya terminado: {reason}. La actualización esperará; la copia y las ventas habituales siguen con sus propias comprobaciones.» |
+| Too late | “Update skipped: there is not enough time for all checks and a possible return before {end}. Current work continues. Next window: {nextWindow}.” | «Actualización omitida: no queda tiempo para todas las comprobaciones y una posible vuelta antes de {end}. El trabajo actual continúa. Próximo periodo: {nextWindow}.» |
+| Clock/settings changed | “The timeline changed. Review the dated window before saving it again. Reports and backups have not been cancelled.” | «La cronología ha cambiado. Revisa las fechas y horas del periodo antes de volver a guardarlo. Los informes y las copias de seguridad no se han cancelado.» |
+| DST endpoint ambiguous/missing | “Update skipped: a window boundary is repeated or missing when the clocks change. Next unambiguous window: {nextWindow}.” | «Actualización omitida: una hora límite del periodo se repite o no existe con el cambio de hora. Próximo periodo sin ambigüedad: {nextWindow}.» |
+| Spare context | “Close and backup evidence comes from the main box. The spare remains waiting; it does not take orders during this update.” | «La confirmación del cierre y de la copia procede del equipo principal. El equipo de reserva sigue en espera; no toma pedidos durante esta actualización.» |
+| Field correction | “Correct the highlighted fields to continue.” | «Corrige los campos resaltados para continuar.» |
+
+Window preview errors belong beside the affected field, with the bottom correction sentence;
+request refusals preserve the draft. Authentication is offered on the same screen for authorised
+changes, with safe Cancel/Leave. A no-window state is a status, not an invalid untouched form.
+All eight new variants have been rendered and visually inspected. The fresh builder check
+precedes presentation of the full revision. Whole-design approval remains pending; no plan/build
+is allowed by this document. Runtime scheduling, receipts, rollback and paired-box behavior remain
+**UNVERIFIED**.

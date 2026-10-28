@@ -103,8 +103,28 @@ identity/fiscal/workforce/history/allocation preservation. Running checks requir
 TLS/listener and representative passive menu/config/history responses bound to the same candidate,
 boot and attempt. Health/setup/recovery 200 or a started process alone is insufficient. No venue
 test sale or forced staff login is required. These are **UNVERIFIED acceptance requirements**.
-Automatic-on, the 03:00–05:00 quiet window, bounded attempts/quarantine and spare-first remain
-proposals awaiting full-design approval, not new owner decisions.
+The later 28 October owner instruction replaces the fixed overnight window with an explicit
+administrator-chosen local closed period, ending at the administrator’s latest reopening boundary.
+No chosen window means no automatic or manual application yet; verified downloads and ordinary
+sales can continue. Wait for actual close/report and archive completion for that day’s close
+episode on the actual primary, then all quiet checks and the full trial plus rollback budgets.
+Late/failed/missing/unknown work defers application without cancelling it or gating sales.
+
+The proposed timeline distinguishes the configured business-day start and dated labels, reports
+on close with no fixed scheduled time, selected backup schedule, actual next due and completed
+status, update window and reopening boundary. Source-only inspection at
+`288213aef2b66189480c341954dc7dfaea256fdd` supplements the unchanged historical inventory in
+the design: backup `auto` uses the business-day boundary +30 minutes + stable 0–10 minute jitter;
+it does not prove close/report completion. The inspected daily-report read is on demand and the
+frozen-close function has no production app caller in that inspection. No rollover report
+scheduler is assumed or proposed. The design cites source lines and the caller search.
+
+My-call proposals require qualified day/node/term/settings/data-bound completion receipts and a
+final admission fence, on-demand close/report completion where no job is scheduled, and deferral
+when required reporting or backups are disabled/unavailable. A local snapshot or standby’s
+disabled archive duty cannot stand in for the primary’s completed archive. Cross-midnight/DST,
+clock/cutover edits and stale-day evidence have explicit deferral rules. Automatic-on, bounded
+attempts/quarantine, spare-first and these receipt/policy choices still need full-design approval.
 
 The design retains B3's five encrypted subvolumes, complete stopped-state inventory, old images
 by immutable digest plus container references, logs/host evidence outside rollback and the
@@ -131,9 +151,9 @@ The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
 A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
 A799 historical qualification, B3 hardware/trust holds and separate build authority remain gates.
-The [revised mockups and EN/ES copy](mockups/a950-automatic-upgrades/README.md) show validation,
-restoration and completion in both themes and at phone/desktop widths. The closing policy
-question is resolved; full design approval is still requested.
+The [mockup brief and EN/ES copy](mockups/a950-automatic-upgrades/README.md) retain the existing
+validation/restoration/completion views and add eight rendered and visually inspected window-settings
+views. The closing policy is resolved; whole-design approval remains, with no plan or build authority.
 
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 
