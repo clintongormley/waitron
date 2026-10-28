@@ -186,3 +186,9 @@ it("refuses an empty retired command file by its path", () => {
   const file = `apps/server/scripts/${command}.ts`;
   expect(inspectSource(file, "")).toEqual([`${file}: retired ${command}`]);
 });
+
+it("rejects private fiscal identifiers", () => {
+  expect(inspectSource("packages/fiscal/src/private.ts", "class Fiscal { #till = 1; }")).toEqual([
+    "packages/fiscal/src/private.ts: fiscal identifier #till",
+  ]);
+});

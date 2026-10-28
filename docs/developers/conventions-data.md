@@ -4795,3 +4795,9 @@ The scan cannot recognize the same concept under a different word or in an expla
 none of its exact spellings. It ignores dependencies, build output and symlinks, and only reads its
 listed text extensions. The schema check covers the fiscal modules' classified tables and the
 core node, sale and series tables, not every possible future ownership relationship.
+
+The text rules recognize their literal spellings, not every variant: the action is lowercase and
+hyphenated, its inflections and unhyphenated spelling are not checked, and an underscore is not
+the retired command's separator. Text extensions are case-sensitive. The fiscal parser checks
+ordinary and private identifiers; quoted property keys remain string literals and are not
+identifier checks. These limits also apply to source comments and prose that use different words.

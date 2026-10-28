@@ -16,11 +16,6 @@ import { registroSif } from "./schema/sif.js";
  */
 export const ID_SISTEMA_MAX_LENGTH = 2;
 
-/**
- * The database does not enforce this: `registro_sif` carries no CHECK on the column, and every
- * registro copies the value onto a record that can only be superseded by restoring onto a
- * fresh chain. So it is checked HERE, before the registration writes anything.
- */
 function assertUsableIdSistema(value: string): void {
   if (value.length === 0 || value.length > ID_SISTEMA_MAX_LENGTH) {
     throw new AppError("sif.id_sistema_invalid", { value, maxLength: ID_SISTEMA_MAX_LENGTH });

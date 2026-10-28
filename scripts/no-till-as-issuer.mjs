@@ -69,7 +69,7 @@ export function inspectSource(path, source) {
   if (/^packages\/fiscal(?:-[^/]+)?\/.*\.[cm]?[jt]sx?$/.test(path)) {
     const tree = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true);
     const visit = (node) => {
-      if (ts.isIdentifier(node) && /till/i.test(node.text))
+      if ((ts.isIdentifier(node) || ts.isPrivateIdentifier(node)) && /till/i.test(node.text))
         failures.push(`${path}: fiscal identifier ${node.text}`);
       ts.forEachChild(node, visit);
     };

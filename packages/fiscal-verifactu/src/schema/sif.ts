@@ -3,8 +3,8 @@ import { check, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { id, label, newId, nodes, now, table, ts } from "@waitron/db";
 
 /**
- * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación. Append-mostly — a node that
- * restores gets a NEW row, and the old one is marked revoked rather than updated, because the
+ * A SIF identity: NIF + IdSistemaInformatico + NúmeroInstalación. A replacement identity gets
+ * a NEW row, and the old one is marked revoked rather than updated, because the
  * old identity's registros are immutable and must keep pointing at the identity that actually
  * generated them.
  */

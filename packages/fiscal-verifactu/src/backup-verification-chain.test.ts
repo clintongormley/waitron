@@ -82,7 +82,7 @@ async function append(
   return suite.db.transaction((tx) => appendToChain(tx, node.nodeId, pending));
 }
 
-async function reregister(node: SeededNode, installation: string) {
+async function replaceNodeIdentity(node: SeededNode, installation: string) {
   const [sif] = suite.db.all<{ nif: string }>(
     sql`select nif from registro_sif where node_id = ${node.nodeId} and revocado_en is null`,
   );
@@ -106,11 +106,11 @@ async function capture(populate = true, resetOther = false) {
       await append(node, 3, "correction");
       await append(node, 4, "substitution");
     }
-    await reregister(other, "second");
+    await replaceNodeIdentity(other, "second");
     await append(other, 5);
     await append(other, 6);
-    await reregister(first, "empty-current");
-    if (resetOther) await reregister(other, "empty-next");
+    await replaceNodeIdentity(first, "empty-current");
+    if (resetOther) await replaceNodeIdentity(other, "empty-next");
     await seedNode(suite.db, "Never traded");
   }
   directory = await mkdtemp(join(tmpdir(), "waitron-fiscal-backup-"));

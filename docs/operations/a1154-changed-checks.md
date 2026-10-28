@@ -70,9 +70,13 @@ Historical review inventory, 2026-10-28. The owner authorizes removal of the obs
 
 New coverage: `scripts/no-till-as-issuer.test.ts` exercises retired entry paths, action/setting spellings, fiscal identifiers, real file discovery, legitimate historical/device uses and migrated fiscal ownership. `packages/provisioning/src/venue-operation.test.ts` adds a no-input setup retry with stable node, exactly one seed and no second seed report.
 
-The source mismatch in `hour-recovery-state.test.ts` previously checked the retired operation's `event_mismatch`. Its restore fixture now requires `prior_activation_requires_replay`, the existing refusal from `restore-committed.ts`. The request remains refused under the exact domain code, and counters, SIF rows and allocation evidence remain unchanged. No production error handling changes.
+The source mismatch in `hour-recovery-state.test.ts` previously checked the retired operation's `event_mismatch`. Its restore fixture now requires `prior_activation_requires_replay`, the existing refusal from `restore-committed.ts`. The request remains refused under the exact domain code, and counters, SIF rows and allocation evidence remain unchanged. This uses the existing restore refusal. The retired action is separately refused by the narrowed operation gates.
 
 The runnable-selection fixture in `scripts/changed-packages.test.mjs` now pairs the remaining exempt package name with `bench/sqlite-failover`, its real manifest. The success/status and warning assertions are unchanged. Its old fixture looked up the retired benchmark directory and failed with status 1 after deletion.
+
+The two protected references remain at `packages/fiscal-verifactu/src/inmutabilidad.test.ts:6` and `:29`. The exact source-refusal change is at `packages/fiscal-verifactu/src/hour-recovery-state.test.ts:262`; the bundle-absence check is at `scripts/generate-hour-release.test.mjs:437`. The added shared-device assertions are at `packages/fiscal-verifactu/src/chain.node-rekey.concurrency.test.ts:88`; the exempt-package fixture correction is at `scripts/changed-packages.test.mjs:876`.
+
+The final review also adds private fiscal identifier coverage and renames the local `reregister` test helper to `replaceNodeIdentity`, retaining every assertion and argument.
 
 ## Removed command-only case inventory
 

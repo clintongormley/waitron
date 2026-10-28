@@ -94,7 +94,7 @@ export async function seedTenantNodeSif(db: Database): Promise<void> {
  * installation-number counter is per (NIF, IdSIF), not per node) and `TENANT_B.nodeId` (a node
  * registering under a DIFFERENT NIF, proving the counter is not shared across identities either).
  *
- * Deliberately narrower than `seedTenantTillSif` above: no invoice series, no sale, no
+ * Deliberately narrower than `seedTenantNodeSif` above: no invoice series, no sale, no
  * pre-existing `registro_sif` row. `registerSif` is exactly what mints that row under test, so
  * seeding one here would make every "first registration" assertion false before the test body
  * even runs. The SIF is the node, so `registerSif` keys on these nodes.
@@ -245,7 +245,7 @@ async function insertLocationNodeSeries(
 /**
  * Seeds location -> node -> invoice series and a till device, makes sure the one taxpayer row exists, and registers a
  * LIVE Veri*Factu SIF identity (via `registerSif`) — everything `write-path.e2e.test.ts` needs for
- * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantTillSif` above is
+ * `VerifactuBackend.recordSale`'s own `currentSif` lookup to succeed. `seedTenantNodeSif` above is
  * deliberately not reused for this: it seeds a ready-made SALE too (for `inmutabilidad.test.ts`'s
  * own fixed ids), which would collide with `write-path.e2e.test.ts`'s own first allocated invoice
  * number.
