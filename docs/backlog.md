@@ -603,11 +603,15 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   starts, after recording every installation and invoice-series name it held in the start-again
   note so none is reused. Start again then says only what it deletes ("what was entered in the
   setup that stopped part way. Nothing was sent to AEAT."). The refusals for an invoice or a
-  never-deleted record, saved trading settings and a finished setup stay. Design first; lane A.
+  never-deleted record, saved trading settings and a finished setup stay. Designed with A1131 below
+  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`); waits for the
+  owner's eight questions in it.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
-  missing.** Only Reconnect is enabled today. Waits for the owner's 2026-10-28 design: a recovered
-  database moves to the standard database path before anything writes to it.
+  missing.** Only Reconnect is enabled today. Designed 2026-10-28 with A1131c: a recovered database
+  moves to the standard database path once the recovery is chosen
+  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`); waits for the
+  owner's questions in it.
   [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
 
 - **On a full disk, the repair page's password step needs room for a whole copy of the setup

@@ -636,8 +636,9 @@ could be lost, and then leave the choice to the user." Waits for the owner: an u
 belong to a recovery the box has been trading from (A1131 question, 2026-10-28). The owner's answer
 (2026-10-28 ~08:10) replaced the options: once a recovery is selected, and before anything writes to
 the restored database, it moves to the standard database path, so a damaged recovery record can no
-longer hide the venue the box trades from. That design comes first; it is likely to remove most of
-this case.
+longer hide the venue the box trades from. Designed 2026-10-28 together with A1131c (a restore
+replaces the failed setup): `docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`,
+whose §8 says what is left of this case; nothing is built until the owner answers its questions.
 
 ## On a full disk, the repair page's password step needs room for a whole copy of the setup database
 
