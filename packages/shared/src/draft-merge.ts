@@ -20,6 +20,8 @@ export interface MergeableDraftLine {
   /** A decimal string. */
   quantity: string;
   noMerge: boolean;
+  /** Sold in a weight or measure (g, ml…), read from the product or offer; never from a request. */
+  measured?: boolean;
 }
 
 interface SourceDraftLine {
@@ -30,14 +32,15 @@ interface SourceDraftLine {
 
 /**
  * Two lines merge exactly when their keys are equal and not null; null for a line that never merges.
- * A fractional quantity never merges: 0.5 kg and 0.3 kg of fish are two portions the kitchen cooks
- * separately, and one 0.8 kg row would lose that. Options compare as a set and extras picks as a
+ * A fractional or measured quantity never merges: 0.5 kg and 0.3 kg of fish, or two 200 ml glasses,
+ * are two portions the kitchen serves separately, and one row would lose that. Options compare as a set and extras picks as a
  * multiset, never by order.
  */
 
 export function draftLineMergeKey(line: MergeableDraftLine | SourceDraftLine): string | null {
   if (line.sourceLineId != null) return null;
   if (line.noMerge || stringToThousandths(line.quantity) % 1000 !== 0) return null;
+  if (line.measured === true) return null;
   const options = [
     ...new Set(line.options.map(({ listId, labelId }) => JSON.stringify([listId, labelId]))),
   ].sort();

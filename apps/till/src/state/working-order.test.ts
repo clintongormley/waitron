@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { WorkingOrderStore } from "./working-order.js";
 import { lineGross, productAsVariant } from "./order-line.js";
+import { toDraftLineInput } from "./draft-lines.js";
 import type { OrderLine, SelectedExtra } from "./working-order.js";
 import { menuOfferToTillProduct, type TillMenuOffer, type TillProduct } from "../api/client.js";
 
@@ -1140,11 +1141,31 @@ describe("WorkingOrderStore.addMerging (D10)", () => {
     expect(rows(s)).toEqual(["fish ×0.5", "fish ×0.5", "fish ×1"]);
   });
 
-  it("merges a whole-number weighed quantity", () => {
+  it("A803: never merges a weighed quantity, even a whole number", () => {
     const s = new WorkingOrderStore();
     s.addMerging(fish, "1");
     s.addMerging(fish, "2.000");
-    expect(rows(s)).toEqual(["fish ×3.000"]);
+    expect(rows(s)).toEqual(["fish ×1", "fish ×2.000"]);
+  });
+
+  it("A803: adding 200 ml twice keeps two lines", () => {
+    const wine = product("wine", {
+      unit: {
+        id: "unit-ml",
+        staffName: "Millilitre",
+        staffAbbreviation: "ml",
+        name: { en: "millilitre" },
+        abbreviation: { en: "ml" },
+        precision: 0,
+        hardwareUnit: null,
+        measure: true,
+      },
+    });
+    const s = new WorkingOrderStore();
+    s.addMerging(wine, "200");
+    s.addMerging(wine, "200");
+    expect(rows(s)).toEqual(["wine ×200", "wine ×200"]);
+    expect(toDraftLineInput(s.lines[0]!)).not.toHaveProperty("measured");
   });
 
   it("appends a product that names no menu item, as addProduct does", () => {

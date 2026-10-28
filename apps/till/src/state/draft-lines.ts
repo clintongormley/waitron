@@ -74,7 +74,9 @@ export function toDraftLineInput(line: OrderLine): DraftLineInput {
 export function orderLineMergeKey(line: OrderLine): string | null {
   if (line.source !== undefined || line.product.menuItemId === undefined) return null;
   const input = toDraftLineInput(line);
-  return input.sourceLineId != null ? null : draftLineMergeKey(input);
+  return input.sourceLineId != null
+    ? null
+    : draftLineMergeKey({ ...input, measured: !takesExtras(line.product) });
 }
 
 /**

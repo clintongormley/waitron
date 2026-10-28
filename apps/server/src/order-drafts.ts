@@ -49,6 +49,7 @@ import {
   readOrderRevision,
   refusePaymentInFlight,
   screenNote,
+  takesExtras,
 } from "./working-order.js";
 import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -637,7 +638,7 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line): DraftLine =>
+      lines.map((line): DraftLine & { measured?: boolean } =>
         line.sourceLineId === null
           ? {
               ...line,
@@ -645,6 +646,7 @@ export async function saveDraft(
               id: line.id ?? newId(),
               noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
               unavailable: false,
+              measured: soldMeasured(offers.get(line.menuItemId)),
             }
           : {
               ...(owned.get(line.id)! as RecalledDraftLine),
@@ -1135,6 +1137,12 @@ export async function submitDraft(
       const assigned = new Set(
         allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
       );
+      const offers = await offersFor(
+        tx,
+        cfg,
+        partyId,
+        lines.filter(isFresh).map((line) => line.menuItemId),
+      );
       const freshGroups = groups.map(({ lineIds }) => {
         const selected = new Set(lineIds);
         return normaliseDraftLines(
@@ -1144,6 +1152,7 @@ export async function submitDraft(
             .map((line) => ({
               ...line,
               noMerge: assigned.has(line.id),
+              measured: soldMeasured(offers.get(line.menuItemId)),
               slot: 0,
               joinGroupId: null,
               afterGroupId: null,
@@ -1886,6 +1895,11 @@ async function takenOverFrom(
   return new Map(
     rows.map((row) => [row.draftId, { personId: row.personId!, name: row.name ?? "" }] as const),
   );
+}
+
+/** Whether `offer` sells its dish in a weight or measure; false when the dish has no offer. */
+function soldMeasured(offer: ZoneMenuOffer | undefined): boolean {
+  return offer !== undefined && !takesExtras(offer.unit);
 }
 
 /** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */

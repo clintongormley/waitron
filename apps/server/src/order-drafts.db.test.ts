@@ -34,11 +34,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedKitchenStation, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import {
   assignCatalogueToLocation,
+  assignProductUnit,
   createCatalogue,
   createCategory,
   createExtraList,
   createOptionList,
   createProduct,
+  createUnit,
   setMenuVariants,
   setProductVariants,
   updateMenuItem,
@@ -5632,4 +5634,87 @@ describe("send-time fresh combining", () => {
       ]);
     },
   );
+});
+
+describe("A803: weighed and measured adds never merge", () => {
+  /** Fish sold in millilitres, and the menu published again. */
+  async function fishInMillilitres(v: Venue): Promise<void> {
+    await inTx(async (tx) => {
+      const ml = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        LOCALE,
+      );
+      await assignProductUnit(tx, v.productId.fish, ml.id);
+      await publishWorkingMenu(tx, v.menuId);
+    });
+  }
+
+  it("A803: two 200 ml adds saved in one draft stay two lines, whatever the client says", async () => {
+    const v = await setupVenue();
+    await fishInMillilitres(v);
+    const { partyId } = await seated(v);
+
+    const saved = await save(v, partyId, ALEX, null, 0, [
+      item(v, "fish", { quantity: "200" }),
+      { ...item(v, "fish", { quantity: "200" }), measured: false },
+      item(v, "beer"),
+      { ...item(v, "beer"), measured: true },
+    ]);
+
+    expect(saved.lines.map((line) => [line.menuItemId, line.quantity])).toEqual([
+      [v.offer("fish"), "200.000"],
+      [v.offer("fish"), "200.000"],
+      [v.offer("beer"), "2.000"],
+    ]);
+  });
+
+  it("A803: two 200 ml glasses of a wine sold in millilitres stay two lines", async () => {
+    const v = await setupVenue();
+    await inTx(async (tx) => {
+      const ml = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        LOCALE,
+      );
+      await assignProductUnit(tx, v.productId.wine, ml.id);
+      await publishWorkingMenu(tx, v.menuId);
+    });
+    const { partyId } = await seated(v);
+
+    const saved = await save(v, partyId, ALEX, null, 0, [
+      item(v, "wine", { variantId: v.glass, quantity: "200" }),
+      item(v, "wine", { variantId: v.glass, quantity: "200" }),
+    ]);
+
+    expect(saved.lines.map((line) => line.quantity)).toEqual(["200.000", "200.000"]);
+  });
+
+  it("A803: two 200 ml lines of a draft are sent as two lines", async () => {
+    const v = await setupVenue();
+    await fishInMillilitres(v);
+    const { partyId } = await seated(v);
+    const saved = await save(v, partyId, ALEX, null, 0, [
+      item(v, "fish", { quantity: "200" }),
+      item(v, "fish", { quantity: "200" }),
+    ]);
+
+    await submit(v, partyId, saved, ALEX, [{ lineIds: lineIds(saved), release: "fire" }]);
+
+    expect((await tabLines(partyId)).map((line) => line.quantity)).toEqual([200000, 200000]);
+  });
 });

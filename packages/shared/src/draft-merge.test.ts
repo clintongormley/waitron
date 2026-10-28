@@ -165,10 +165,14 @@ describe("merging by draftLineMergeKey (D10)", () => {
     expect(merges(line({ menuItemId: FISH }), fish)).toBe(false);
   });
 
-  it("merges a whole-number weighed quantity, whatever places it is written with", () => {
+  it("never merges a weighed or measured quantity, even a whole number with its identical twin", () => {
+    const wine = line({ menuItemId: FISH, quantity: "200", measured: true });
+    expect(merges(wine, { ...wine })).toBe(false);
+    expect(merges(wine, line({ menuItemId: FISH, quantity: "200" }))).toBe(false);
+    expect(merges(line({ menuItemId: FISH, quantity: "200" }), wine)).toBe(false);
     expect(
       merges(
-        line({ menuItemId: FISH, quantity: "2.000" }),
+        line({ menuItemId: FISH, quantity: "2.000", measured: false }),
         line({ menuItemId: FISH, quantity: "1" }),
       ),
     ).toBe(true);
