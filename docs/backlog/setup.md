@@ -443,8 +443,10 @@ room and starts NORMALLY; once up, it prompts the person to delete old backups k
 oldest first, naming what each choice does, with the administrator sign-in in place and a safe Stop;
 only if the person does not follow those prompts, or nothing can be freed, does today's explain-only
 full-disk page apply (A1127's words, `storage.disk_full` in `apps/server/src/recovery-surface.ts`).
-Next: a design, parked `needs-owner-review` before any build, saying where the prompt appears
-(repair page, dashboard or both) and when the spare is written back.
+Designed 2026-10-28, waiting for the owner's answers to its five questions before any build:
+[the design](../superpowers/specs/2026-10-28-a1127-full-boot-and-old-backups-design.md), pictures in
+[mockups/a1127-full-boot](mockups/a1127-full-boot/README.md). It also settles the repair page's two
+wording gaps below.
 
 ## A resume can use the room the spare file gave
 

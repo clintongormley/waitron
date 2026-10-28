@@ -609,7 +609,7 @@ What the box does instead:
    this watch, not the first failed write, is what warns in time. The build picks how far above
    2 GiB free space must climb before the warning clears, so a disk hovering at the line does not
    email again and again.
-5. **No reserve** (the owner's answer to question 1). The box keeps no spare space on its disk, so
+5. **No reserve** (the owner's answer to question 1; _2026-10-28: reversed by the owner's later choice — the box now keeps an 8 MiB spare file, A1127; see [its full-boot design](2026-10-28-a1127-full-boot-and-old-backups-design.md)_). The box keeps no spare space on its disk, so
    nothing softens a disk that does fill: the first save that fails turns every device red, every
    sale, order, kitchen send and clock-in is refused with the honest message of item 2, and a start
    on that disk goes as §4.7. Trading comes back only when someone frees space.

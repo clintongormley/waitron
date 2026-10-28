@@ -503,8 +503,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
 - **On a full disk, boot fully from the spare file, then prompt to delete old backups.** The
-  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Next: a
-  design, parked for the owner. Left open by A1127.
+  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Designed,
+  waiting for the owner's five answers. Left open by A1127.
   [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
 
 - **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
