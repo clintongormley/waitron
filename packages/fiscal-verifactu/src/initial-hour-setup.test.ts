@@ -1322,6 +1322,24 @@ it("a setup database's history names its latest minute", () => {
   ).toEqual({ floorMs: minuteMs("2026-10-16T11:41:00.000Z"), lastName: "0CNNW" });
   expect(floor([databaseSource([])])).toBeNull();
   expect(floor([])).toBeNull();
+  for (const [kind, reference] of [
+    ["activation", "registro_sif/sif"],
+    ["intent", "fiscal_allocations/event"],
+    ["reservation", "fiscal_reservations/event"],
+  ])
+    expect(
+      floor([
+        databaseSource([
+          databaseRecord("0CNPG"),
+          {
+            ...databaseRecord("0CNQT"),
+            kind,
+            reference,
+            recordedAtMs: minuteMs("2026-10-16T12:42:00.000Z"),
+          },
+        ]),
+      ]),
+    ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
 });
 it("a setup database's later name under another taxpayer or environment still raises the floor", () => {
   const seat = configured().seat;
@@ -1338,6 +1356,17 @@ it("a setup database's later name under another taxpayer or environment still ra
   });
   expect(
     floor([databaseRecord("0CNPG"), { ...databaseRecord("0CNQT"), environment: "production" }]),
+  ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
+  expect(
+    floor([
+      databaseRecord("0CNPG"),
+      {
+        ...databaseRecord("0CNQT", "B12345674"),
+        kind: "reservation",
+        reference: "fiscal_reservations/event",
+        recordedAtMs: minuteMs("2026-10-16T12:42:00.000Z"),
+      },
+    ]),
   ).toEqual({ floorMs: minuteMs("2026-10-16T12:43:00.000Z"), lastName: "0CNQT" });
 });
 it("a setup database's history that is incomplete refuses", () => {
@@ -1373,6 +1402,8 @@ it("a malformed setup database history refuses", () => {
     { reference: "venue", complete: "yes", records: [] },
     databaseSource([null]),
     databaseSource(["0CNPG"]),
+    // eslint-disable-next-line no-sparse-arrays
+    databaseSource([databaseRecord("0CNPG"), , databaseRecord("0CNQT")]),
   ])
     expect(() =>
       seat.startAgainFloor!({
@@ -1382,4 +1413,13 @@ it("a malformed setup database history refuses", () => {
         databaseHistory: [source],
       }),
     ).toThrowError(historyInvalid);
+  expect(() =>
+    seat.startAgainFloor!({
+      attempts: [],
+      preparations: [],
+      publicEvidence: [],
+      // eslint-disable-next-line no-sparse-arrays
+      databaseHistory: [databaseSource([databaseRecord("0CNPG")]), , databaseSource([])],
+    }),
+  ).toThrowError(historyInvalid);
 });

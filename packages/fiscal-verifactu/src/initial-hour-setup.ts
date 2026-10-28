@@ -177,10 +177,11 @@ export function hourStartAgainFloor(
         }),
         // Every name the database ever held, whatever its taxpayer or environment: a name is
         // never reused, so no record is filtered out.
-        ...databaseHistory.flatMap((source) => {
+        // `Array.from` turns a hole into `undefined`, which is refused; `flatMap`/`map` skip it.
+        ...Array.from(databaseHistory).flatMap((source) => {
           if (!record(source) || source.complete !== true || !Array.isArray(source.records))
             refuse();
-          return source.records.map((row: unknown) => {
+          return Array.from(source.records).map((row: unknown) => {
             if (!record(row) || !isMinuteIdentity(row.identity)) refuse();
             return decodeMinuteIdentity(row.identity);
           });
