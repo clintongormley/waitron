@@ -3,6 +3,8 @@ import { page, userEvent } from "vitest/browser";
 import {
   applyTokens,
   applyVenueTheme,
+  currentVenueLogo,
+  reportVenueLogoFailure,
   startVenueTheme,
   VENUE_THEME_STORAGE_KEY,
   type WtVenueLogo,
@@ -57,7 +59,8 @@ function startFrom(answer: unknown): void {
   startVenueTheme(document.documentElement, { fetchImpl: never });
 }
 
-const mount = (props: Partial<TillShell>) => mountWidget<TillShell>("till-shell", props);
+const mount = (props: Partial<TillShell>, theme?: "light" | "dark") =>
+  mountWidget<TillShell>("till-shell", props, theme);
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
@@ -586,6 +589,111 @@ describe("the logo is held while the zone menu is open", () => {
       await userEvent.click(zones(el).shadowRoot!.querySelector<HTMLElement>("[part=trigger]")!);
       await expect.poll(() => isOpen(el)).toBe(false);
       await expect.poll(() => shown(el)).toBe(false);
+    });
+  });
+});
+
+describe("a cash register's logo that fails, and under Dark", () => {
+  const image = (el: TillShell) => logoOf(el)!.shadowRoot!.querySelector("img")!;
+
+  it("a logo that cannot load takes no room, draws no word and no gap", async () => {
+    await atViewport(1280, 800, async () => {
+      const base = await baseline(QUIET);
+      startFrom(withLogo("/no-such.png"));
+      const { el } = await mount(QUIET);
+      await expect.poll(() => logoOf(el)?.hasAttribute("failed")).toBe(true);
+      await settle(el);
+      expect(shown(el)).toBe(false);
+      expect(head(el).querySelector(".brand")).toBeNull();
+      expect(Math.abs(strip(el).getBoundingClientRect().left - base.stripLeft)).toBeLessThanOrEqual(
+        0.5,
+      );
+    });
+  });
+
+  it("a failed logo is tried again after 60 s and drawn once it loads", async () => {
+    await atViewport(1280, 800, async () => {
+      const el = await mountWithLogo(QUIET);
+      expect(shown(el)).toBe(true);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        image(el).dispatchEvent(new Event("error"));
+        await settle(el);
+        expect(shown(el)).toBe(false);
+        expect(currentVenueLogo()).toMatchObject({ failed: true });
+        await vi.advanceTimersByTimeAsync(60_001);
+      } finally {
+        vi.useRealTimers();
+      }
+      await expect.poll(() => currentVenueLogo()).toMatchObject({ failed: false });
+      await expect.poll(() => shown(el)).toBe(true);
+    });
+  });
+
+  it("a failed logo hidden for want of room is still tried again", async () => {
+    await atViewport(1280, 800, async () => {
+      const { wStar } = await edge(QUIET);
+      const el = await mountWithLogo(QUIET);
+      await widthTo(el, wStar + 4);
+      expect(shown(el)).toBe(true);
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        image(el).dispatchEvent(new Event("error"));
+        await settle(el);
+        await widthTo(el, wStar - 4);
+        expect(shown(el)).toBe(false);
+        await vi.advanceTimersByTimeAsync(60_001);
+      } finally {
+        vi.useRealTimers();
+      }
+      await expect.poll(() => currentVenueLogo()).toMatchObject({ failed: false });
+      await settle(el);
+      expect(image(el).naturalWidth).toBeGreaterThan(0);
+      expect(logoOf(el)!.hasAttribute("failed")).toBe(false);
+      expect(shown(el)).toBe(false);
+    });
+  });
+
+  it("the shell keeps no timer of its own for a counter's logo", async () => {
+    const answer = withLogo(LOGO);
+    startFrom(answer);
+    reportVenueLogoFailure(answer.logo);
+    await atViewport(1280, 800, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { el } = await mount(QUIET);
+        expect(logoOf(el)).not.toBeNull();
+        await expect.poll(() => currentVenueLogo()).toMatchObject({ failed: false });
+        await settle(el);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  it("under Dark with one image the counter's logo sits on the plate", async () => {
+    startFrom(withLogo(LOGO));
+    await atViewport(1280, 800, async () => {
+      const loads = nextLogoLoad();
+      const { el } = await mount(QUIET, "dark");
+      const { logo } = await loads;
+      expect(logo).toBe(logoOf(el));
+      expect(logo.shadowRoot!.querySelector(".box")!.hasAttribute("data-plate")).toBe(true);
+    });
+  });
+
+  it("with a dark image under Dark, the counter's logo draws the dark image and no plate", async () => {
+    const dark = png(90, 30);
+    startFrom(withLogo(LOGO, dark));
+    await atViewport(1280, 800, async () => {
+      const loads = nextLogoLoad();
+      const { el } = await mount(QUIET, "dark");
+      expect(logoOf(el)!.getAttribute("dark")).toBe(dark);
+      const { logo, img } = await loads;
+      expect(logo).toBe(logoOf(el));
+      expect(img.getAttribute("src")).toBe(dark);
+      expect(logo.shadowRoot!.querySelector(".box")!.hasAttribute("data-plate")).toBe(false);
     });
   });
 });

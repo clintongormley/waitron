@@ -845,6 +845,38 @@ describe("A841 the till follows the theme in use", () => {
     }
   });
 
+  it("a moved theme hash brings a new logo into a cash register's bar without a reload", async () => {
+    const counter = till("till");
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(1280, 800);
+    try {
+      const { el } = await mountApp({
+        getTill: vi
+          .fn()
+          .mockResolvedValueOnce({ ...counter, themeHash: "h1", setupRevision: "s1" })
+          .mockResolvedValue({ ...counter, themeHash: "h2", setupRevision: "s2" }),
+      });
+      await flush(el);
+      await signIn(el);
+      const bar = () => shell(el).shadowRoot!.querySelector(".head")!;
+      await vi.waitFor(() => expect(bar().querySelector(".till-strip")).not.toBeNull());
+      expect(bar().querySelector("wt-venue-logo")).toBeNull();
+      expect(bar().querySelector(".brand")).toBeNull();
+      const light = png(120, 40);
+      themeAnswer = { ...FIXTURE_ANSWER, hash: "h2", logo: { light, dark: null } };
+      api.menuState.mockImplementation(async () => state("v1", "lf-1", "s2"));
+      await poll(el);
+      await vi.waitFor(() =>
+        expect(bar().querySelector("wt-venue-logo")?.getAttribute("light")).toBe(light),
+      );
+      expect(bar().querySelector("wt-venue-logo")!.getAttribute("alt")).toBe("Bar Pepe");
+      expect(bar().querySelector(".brand")).toBeNull();
+      expect(themeFetch).toHaveBeenCalledTimes(2);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
+
   it("a setup change that keeps the theme fetches nothing", async () => {
     const el = await openTill({ ...moved, themeHash: "h1" });
     const reads = api.getTill.mock.calls.length;
