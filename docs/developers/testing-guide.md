@@ -40,11 +40,11 @@ processes.
 
 ## Observe reader collection before cancelling its pending payment
 
-When a test needs a pending reader payment, observe the real collector entering its pending
-state before sending Cancel. Keep the real collector and its database writes running. Race that
-notification against the HTTP response, so a refused pay request fails with its status instead
-of waiting for a reader operation that never starts. Read the response body only in the path
-that checks its outcome.
+When a test needs a pending reader payment, signal after calling the real collector, then check
+its pending list before sending Cancel. Keep the real collector and its database writes running.
+Race that notification against the HTTP response, so a refused pay request fails with its status
+instead of waiting for a reader operation that never starts. Read the response body only in the
+path that checks its outcome.
 
 On 2026-10-28, A1179 traced main CI `40750935978`, server job `123038600497`, to the
 one-second `vi.waitFor` in “lets the paying till cancel a pending pretend reader payment”.
