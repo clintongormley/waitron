@@ -562,14 +562,16 @@ and box both answered `waitron.local`, sending some lookups to the laptop. Guard
 
 For a fresh practice venue in Catalonia, run
 `WAITRON_DEMO_REGION=catalonia wa-wt demo <worktree-name>`. Use `balearic` for
-Palma, `valencia` for València, or `madrid` for the Madrid demo. An unset, empty or whitespace-only selector
+Palma, `valencia` for València, `galicia` for A Coruña, or `madrid` for the Madrid demo. An unset, empty or whitespace-only selector
 uses Madrid; an unknown selector refuses before database or settings work.
 
 Catalonia and the Balearic Islands share Can Delgado's Catalan staff and kitchen
 names, regional dishes and cava. A new Catalonia venue uses Catalan receipts;
 a Balearic venue uses Spanish receipts. Madrid retains the receipt choice from
 `WAITRON_SEED_LOCALE`. The Valencian preset uses Casa Delgado de l'Horta,
-Valencian staff and kitchen names, and Spanish receipts. Screens remain English or Spanish.
+Valencian staff and kitchen names, and Spanish receipts. The Galician preset uses
+A Casa Delgado, Galician staff and kitchen names, regional dishes and Albariño,
+with Spanish receipts. Screens remain English or Spanish.
 
 Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
 To replace a throwaway venue you own, run

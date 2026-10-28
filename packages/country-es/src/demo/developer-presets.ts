@@ -9,6 +9,15 @@ const REGIONAL_ADDRESS = {
   dayCutover: "05:00",
 } as const;
 export const DEMO_DEVELOPER_PRESETS = {
+  galicia: {
+    ...REGIONAL_ADDRESS,
+    dataSet: "casa-delgado-gl",
+    locationName: "A Casa Delgado",
+    postalCode: "15001",
+    city: "A Coruña",
+    province: "Coruña, A",
+    receiptLocale: "es-ES",
+  },
   valencia: {
     ...REGIONAL_ADDRESS,
     dataSet: "casa-delgado-valencia",

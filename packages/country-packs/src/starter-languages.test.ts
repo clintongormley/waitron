@@ -109,3 +109,18 @@ it.each(["03", "12", "46"])(
       });
   },
 );
+
+it.each(["15", "27", "32", "36"])(
+  "keeps Galician content distinct from receipt and screen languages (%s)",
+  (area) => {
+    expect(resolveInstalledStartingContentLanguages({ country: "ES", area })).toMatchObject({
+      defaultLanguage: "gl",
+      languages: ["gl", "es", "en"],
+    });
+    for (const receiptLocale of ["es-ES", "en-GB"])
+      expect(resolveInstalledStarterLanguages({ country: "ES", area, receiptLocale })).toEqual({
+        staffLanguage: receiptLocale === "es-ES" ? "es" : "en",
+        languages: ["gl", "es", "en"],
+      });
+  },
+);

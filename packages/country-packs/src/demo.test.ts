@@ -9,6 +9,7 @@ it("resolves every installed pack's demo and the default through the secondary r
     registry.DEFAULT_DEMO_DATA_SET_ID,
     "casa-delgado-ca",
     "casa-delgado-valencia",
+    "casa-delgado-gl",
   ]);
   for (const pack of COUNTRY_PACKS) {
     if (pack.demo?.dataSet !== undefined)
