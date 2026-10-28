@@ -497,9 +497,9 @@ until A977).
   split-extras, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
-  Keep accent tests, AEAT names and official text. Media's main library suite still has a literal
-  translated Save-label expectation. Its Spanish card actions, usage labels,
-  preview, default-language marker and form message now use the catalogue; its direct error-wording
+  Keep accent tests, AEAT names and official text. Media's main library suite takes its Spanish
+  Save label, card actions, usage labels, preview, default-language marker and form message from
+  the catalogue; its direct error-wording
   and browser language-name checks remain. Keep deliberate Spanish/French metadata, the filename
   suite's accent-sensitive sample and the framing suite's deliberate multilingual metadata.
   Later cleanup goes package by package from A977's list. Low priority.
