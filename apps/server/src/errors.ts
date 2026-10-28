@@ -1335,7 +1335,12 @@ declare module "@waitron/shared" {
     /** The most recent backup run stopped before reaching any destination; `errorCode` is the code
      * it threw, `unknown` for an error that is not an AppError. Built as data by the backups alert
      * source, never thrown. */
-    "backup.run_stopped": { errorCode: string };
+    "backup.run_stopped": {
+      errorCode: string;
+      spaceLow?: true;
+      neededBytes?: number;
+      availableBytes?: number;
+    };
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };

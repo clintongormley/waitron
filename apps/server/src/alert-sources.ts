@@ -192,7 +192,10 @@ export function backupAlertSource(deps: {
         alerts.push({
           key: "backup.run_stopped",
           code: "backup.run_stopped",
-          params: { errorCode: stopped.code },
+          params:
+            stopped.code === "backup.staging_space_low"
+              ? { errorCode: stopped.code, spaceLow: true, ...stopped.sizes }
+              : { errorCode: stopped.code },
           severity: "error",
           since: stopped.at,
           screen: BACKUP_SCREEN,
