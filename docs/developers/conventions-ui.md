@@ -1110,7 +1110,8 @@ unless another process holds the venue folder's lock — in the folders a backup
 setup repair page selected instead, when there is one (the heartbeat fallback is in
 conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
-week (`apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
+week (a start at a backup recovery's repair stage only when the logs folder, followed through links,
+is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
 start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the
@@ -1120,7 +1121,8 @@ make again, and the disk is still full." («El equipo ha quitado las copias temp
 y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno.»). Since A1127 the
 action names nobody to ask: it says what fills the rest of the disk, that Waitron cannot free more by
 itself, and what reinstalling costs; while a discarded recovery's copy is still there, one more line
-names its size (`discardedCopyBytes`, `apps/server/src/discarded-copy.ts`). That start writes no
+names its size (`discardedCopyBytes`, `apps/server/src/discarded-copy.ts`); the ordinary recovery
+page shows the same line when the failure it recorded is `storage.disk_full`. That start writes no
 `server.boot_started`, so "Why the last start failed" shows the last counted start's failure, if it
 failed. The Spanish says «quitado»,
 not the design's «borrado», because the page's never-wipe check (`NEVER_WIPE_ES`,

@@ -453,8 +453,9 @@ called weaker than its name, the topic file lists what it does not see.
 - **A full disk is not one error code; code 14 also names a missing folder.**
   `fullDiskFailure` in `apps/server/src/boot-failure.ts` classifies 13 always, 14/4874/`ENOSPC` only
   under 16 MiB free. Guard: its test suite, weaker than the rule: stubbed errors, no real `ENOSPC` case.
-- **On a nearly full disk, only the start's emptying of a discarded recovery and the repair page's
-  Start-again flow delete `<state>/spare-space`, and only a start with room writes it back; it is
+- **Within the server, only the start's emptying of a discarded recovery and the repair page's
+  Start-again flow delete `<state>/spare-space`, on a nearly full disk (`waitron.sh reset` deletes it
+  too), and only a start with room writes it back; it is
   never venue data, and a recovery's originals walk leaves it out.** Cost if not: on a full disk the
   venue locks cannot be taken, so a recovery's copy could never be freed (A1127). Guard:
   `scripts/spare-space.test.ts`, weaker than its name: reads text.
@@ -595,7 +596,7 @@ browser test** — most of these rules exist because a test passed while proving
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 - **Full-disk start tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
   needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` for the second file: two
-  files filling one filesystem fail each other), otherwise skips locally and fails CI. Interrupted
+  files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the

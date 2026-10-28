@@ -2931,7 +2931,8 @@ under `FULL_DISK_BYTES`, 16 MiB, and the cause chain carries an engine result co
 code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses it to turn
 `provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
 its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
-recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). Why 16 MiB: every
+recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). The repair page's recover,
+summary and start-again routes use it too (`diskFullOr`, `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
 full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
 and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
 to spare, so the clean-up floor of 256 MiB cannot be the test.
@@ -2942,8 +2943,10 @@ as a full disk. Freeing space does not fix it, and the next start after space is
 its own code.
 
 `ENOSPC` is deliberately not in `diskFullIn` (`@waitron/shared`): that would change what every
-route answers, so a route behind `createErrorBoundary` whose failure is the system's `ENOSPC`
-still answers `server.internal` (backlog).
+route answers. `fullDiskFailure` names it a full disk at start, and on the repair page's recover,
+summary and start-again routes (A1127, `diskFullOr` in `apps/server/src/setup-first-fiscal-api.ts`);
+every other route behind `createErrorBoundary` whose failure is the system's `ENOSPC` still answers
+`server.internal` (backlog).
 
 Guards: the `fullDiskFailure`, `classifyStartFailure` and `startFailureCode` cases in
 `apps/server/src/boot-failure.test.ts`, on stubbed errors and free space; and the refused-open rows
@@ -3293,15 +3296,20 @@ name — it covers only the duties it names, so a new one that forgets is seen b
 
 **The rule.** The box keeps `<state>/spare-space` (`SPARE_SPACE_FILE`, `@waitron/provisioning`;
 `SPARE_SPACE_BYTES`, 8 MiB of random bytes, `apps/server/src/spare-space.ts`) so that, on a nearly full
-disk, it still has the room to take the venue locks that freeing a backup recovery's copy needs. Only
-two paths delete it, and only when the lower free space of the state and venue folders is under
+disk, it still has the room to take the venue locks that freeing a backup recovery's copy needs. Within
+the server, only two paths delete it, and only when the lower free space of the state and venue folders is under
 `FULL_DISK_BYTES` (16 MiB): the start's emptying of a discarded recovery (`emptyDiscardedRecovery`,
 `apps/server/src/first-setup-entry.ts`), and the repair host before the four requests of the
-Start-again flow (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`). Only a start
+Start-again flow (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`); `waitron.sh
+reset` deletes it too. Only a start
 (`runEntry`, `apps/server/src/node-entry.ts`) writes it back, when at least 24 MiB is free. It is never
 venue data: never backed up, exported or streamed, and the backup recovery's originals walk
 (`packages/provisioning/src/first-setup-backup-workspace.ts`) leaves it out, so writing or deleting it
 cannot refuse a resume. Guard: `scripts/spare-space.test.ts`, weaker than its name: it reads text.
+It reads only non-test `.ts` files under `apps/<app>/src` and `packages/<package>/src`, so test files and nothing under `scripts/` or `deploy/` (`waitron.sh
+reset` among them) are seen. It looks for `SPARE_SPACE_FILE`, the literal `"spare-space"` and
+the release and top-up function names, so a path built another way or a function reached under
+another name escapes it, and it never checks that the originals walk leaves the file out.
 
 **Why 8 MiB.** Measured on a 32 MiB HFS+ image (scripts and output kept outside the repo, under
 `~/waitron-campaign/a1127-measure/`): one lock needed 8 KiB, the emptying 16 KiB, the whole

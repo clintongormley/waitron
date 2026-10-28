@@ -404,7 +404,7 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:448` and `apps/dashboard/src
 
 State: Free space in the staging filesystem is below the estimated need. A full filesystem does not require a Waitron bug. Receipt: `apps/server/src/backup-sweep.ts:108`.
 
-Route: Existing: Box status shows disk use; the boot recovery wording names an installer freeing space or fitting a bigger disk. Missing: a supported self-service cleanup path for a person without a terminal. Never delete fiscal data or unrelated shared state.
+Route: Existing: Box status shows disk use; the boot recovery wording names an installer freeing space or fitting a bigger disk. (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. The `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` still names the installer.) Missing: a supported self-service cleanup path for a person without a terminal. Never delete fiscal data or unrelated shared state.
 
 ### `recovery.state_incomplete`
 
@@ -666,7 +666,7 @@ not verify that every provider, device or process eventually recovers.
 ## Server pages and guides
 
 `apps/server/src/recovery-surface.ts` has no literal “contact support”. Its database-ahead/schema
-rows name backup/reinstall, its disk-full row names freeing space or a bigger disk, and its unknown
+rows name backup/reinstall, its disk-full row names freeing space or a bigger disk (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. The `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` still names the installer), and its unknown
 boot row names a retry followed by the installer. Those are already distinct instructions rather
 than an endless wait. The page's rendered action is a boot retry (`:563`); a restore or reinstall
 is an operator procedure, not a second button. The actual accessibility of each installer procedure

@@ -4768,9 +4768,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
-  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
-  a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
-  it to `diskFullIn` changes every route's answer.
+  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
+  (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
+  recover, summary and start-again routes (A1127); every other route still answers
+  `server.internal`, because adding it to `diskFullIn` changes every route's answer.
 
 - **The recovery page served at once on a full disk does not notice freed space by itself.** It
   shows the free space as it is on every load, but only Retry, which restarts the app, tries the
