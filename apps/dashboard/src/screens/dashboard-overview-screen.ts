@@ -7,6 +7,7 @@ import { formatMoney } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-card.js";
 import { currentLocale, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { countOf } from "../widgets/count-text.js";
 import { metricStyles, renderMetric } from "../widgets/metric-row.js";
 import {
   renderTopSellers,
@@ -271,7 +272,7 @@ export class OverviewScreen extends LitElement {
       return html`<p class="muted" data-test="overdue-empty">${t("overview.overdue_none")}</p>`;
     }
     return html`
-      <p data-test="overdue-count">${orders.length} ${t("overview.overdue_count")}</p>
+      <p data-test="overdue-count">${countOf("overview.overdue_count", orders.length)}</p>
       <table data-test="overdue-table">
         <thead>
           <tr>
