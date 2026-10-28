@@ -19,11 +19,12 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
-import { decimal } from "@waitron/shared";
+import { cancelRefundShare, decimal } from "@waitron/shared";
 import { withTransaction } from "@waitron/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import { createCourse } from "./kitchen.js";
 import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -591,6 +592,251 @@ describe("A803 portions: filing a bill of portions", () => {
       ),
     ).toEqual([]);
     expect(await inTx(venue, (tx) => tx.select().from(saleLinePortions))).toEqual(linksBefore);
+  });
+});
+
+describe("A803 portions: a cancel's refund value on a paid bill", () => {
+  async function refundValueOf(billId: string, lineId: string) {
+    return inTx(venue, async (tx) => {
+      const [sale] = await tx
+        .select({ id: sales.id })
+        .from(sales)
+        .where(eq(sales.workingOrderId, billId));
+      return cancellationRefundValue(tx, billId, sale!.id, lineId);
+    });
+  }
+
+  it("A803 portions: each portion of a filed row of 2 is worth its own share of the row and of its extras", async () => {
+    const { billId, portions } = await seed([...burgersWithCheese("2"), ...sweets("2")]);
+    await payInCash(billId);
+
+    expect(
+      await Promise.all(portions.map((portion) => refundValueOf(billId, portion.lineId))),
+    ).toEqual([
+      { quantity: "1.000", gross: "3.68" },
+      { quantity: "1.000", gross: "3.68" },
+      { quantity: "1.000", gross: "0.05" },
+      { quantity: "1.000", gross: "0.05" },
+    ]);
+  });
+
+  it("A803 portions: an unbound line on a bill whose other rows stand for portions keeps its own row's value", async () => {
+    const { billId, portions } = await seed(burgersWithCheese("2"));
+    const unbound = await inTx(venue, async (tx) => {
+      const priced = await priceTabRound(tx, venue.cfg, billId, sweets("1"), "checked");
+      await insertTabRound(tx, venue.cfg, priced, priced.rows);
+      return priced.rows[0]!.id!;
+    });
+    await payInCash(billId);
+
+    expect(
+      await Promise.all(
+        [...portions.map((portion) => portion.lineId), unbound].map((lineId) =>
+          refundValueOf(billId, lineId),
+        ),
+      ),
+    ).toEqual([
+      { quantity: "1.000", gross: "3.68" },
+      { quantity: "1.000", gross: "3.68" },
+      { quantity: "1.000", gross: "0.05" },
+    ]);
+  });
+
+  it("A803 portions: a bound line whose portion no filed row stands for has no refund value", async () => {
+    const { billId } = await seed(croquetas("1"));
+    const unbound = await inTx(venue, async (tx) => {
+      const priced = await priceTabRound(tx, venue.cfg, billId, sweets("1"), "checked");
+      await insertTabRound(tx, venue.cfg, priced, priced.rows);
+      return priced.rows[0]!.id!;
+    });
+    await payInCash(billId);
+    await inTx(venue, async (tx) => {
+      const portionId = randomUUID();
+      await tx
+        .insert(orderPortions)
+        .values({ id: portionId, cohortId: randomUUID(), ordinal: 1, measured: false });
+      await tx.insert(workingLinePortions).values({ workingOrderLineId: unbound, portionId });
+    });
+
+    expect(await refundValueOf(billId, unbound)).toBeUndefined();
+  });
+
+  it("A803 portions: a measured portion of 3 is worth its whole row, so a part cancel refunds its part", async () => {
+    const billId = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      const priced = await priceTabRound(tx, venue.cfg, tabId, croquetas("3"), "checked");
+      await insertTabRound(tx, venue.cfg, priced, priced.rows);
+      const [measured] = await tx
+        .insert(orderPortions)
+        .values({ cohortId: randomUUID(), ordinal: 1, measured: true })
+        .returning({ id: orderPortions.id });
+      await tx
+        .insert(workingLinePortions)
+        .values({ workingOrderLineId: priced.rows[0]!.id!, portionId: measured!.id });
+      return tabId;
+    });
+    const [line] = await inTx(venue, (tx) =>
+      tx.select().from(workingOrderLines).where(eq(workingOrderLines.workingOrderId, billId)),
+    );
+    await payInCash(billId);
+
+    const value = await refundValueOf(billId, line!.id);
+    expect(value).toEqual({ quantity: "3.000", gross: "9.99" });
+    expect(cancelRefundShare(value!, "0", "1")).toBe("3.33");
+  });
+
+  it("A803 portions: after a whole-bill discount each portion is worth the price its own filed row gives it", async () => {
+    const { billId, portions } = await seed(croquetas("3"));
+    await inTx(venue, async (tx) => {
+      const [order] = await tx
+        .select({ revision: workingOrders.revision })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, billId));
+      await applyAdjustment(
+        tx,
+        venue.cfg,
+        {
+          orderId: billId,
+          expectedEdit: await readBillEditState(tx, billId),
+          submissionId: randomUUID(),
+          expectedRevision: order!.revision,
+          lineId: null,
+          reasonId: ids.reasonId,
+          action: "discount_amount",
+          amount: decimal("1.00"),
+          note: null,
+          operatorId: venue.operatorId,
+        },
+        venue.cfg.locale,
+      );
+    });
+    await payInCash(billId);
+
+    expect(
+      await Promise.all(portions.map((portion) => refundValueOf(billId, portion.lineId))),
+    ).toEqual([
+      { quantity: "1.000", gross: "3.00" },
+      { quantity: "1.000", gross: "3.00" },
+      { quantity: "1.000", gross: "2.99" },
+    ]);
+  });
+
+  it("A803 portions: a portion whose stored copy drifted from its filed rows has no refund value", async () => {
+    const { billId, portions } = await seed([...burgersWithCheese("2"), ...burgersWithCheese("2")]);
+    await payInCash(billId);
+    const drift = (change: (tx: Parameters<Parameters<typeof inTx>[1]>[0]) => Promise<unknown>) =>
+      inTx(venue, async (tx) => {
+        // The stored copy drifting from the filed sale stands in for any line the sale cannot value.
+        const names = [
+          "working_order_lines_require_open_parent_update",
+          "working_order_lines_require_open_parent_insert",
+        ];
+        const triggers = names.map(
+          (name) =>
+            tx.all<{ sql: string }>(
+              sql`select sql from sqlite_master where type = 'trigger' and name = ${name}`,
+            )[0]!.sql,
+        );
+        for (const name of names) tx.run(sql.raw(`drop trigger ${name}`));
+        await change(tx);
+        for (const trigger of triggers) tx.run(sql.raw(trigger));
+      });
+    const [cheese] = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.parentLineId, portions[0]!.lineId)),
+    );
+    await drift((tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 2000 })
+        .where(eq(workingOrderLines.id, cheese!.id)),
+    );
+    await drift((tx) =>
+      tx
+        .insert(workingOrderLines)
+        .values({ ...cheese!, id: randomUUID(), lineNo: 99, parentLineId: portions[1]!.lineId }),
+    );
+    await drift((tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ quantity: 2000 })
+        .where(eq(workingOrderLines.id, portions[2]!.lineId)),
+    );
+
+    expect(
+      await Promise.all(portions.map((portion) => refundValueOf(billId, portion.lineId))),
+    ).toEqual([undefined, undefined, undefined, { quantity: "1.000", gross: "3.68" }]);
+  });
+
+  it("A803 portions: a portion whose filed row does not split into whole cents between its links has no refund value", async () => {
+    const { billId, portions } = await seed(sweets("2"));
+    await payInCash(billId);
+    const stray = await seed(sweets("2"));
+    await inTx(venue, async (tx) => {
+      const [row] = await tx
+        .select({ id: saleLinePortions.saleLineId })
+        .from(saleLinePortions)
+        .where(eq(saleLinePortions.portionId, portions[0]!.portionId));
+      // 2.000 between four portions is 0.500 each; 0.10 is not a whole number of cents.
+      await tx
+        .insert(saleLinePortions)
+        .values(
+          stray.portions.map((portion) => ({ saleLineId: row!.id, portionId: portion.portionId })),
+        );
+    });
+
+    expect(await refundValueOf(billId, portions[0]!.lineId)).toBeUndefined();
+  });
+
+  it("A803 portions: a comped row of 2 linked to a third portion has no refund value, though its €0.00 splits evenly", async () => {
+    const { billId, portions } = await seed(sweets("2"));
+    await inTx(venue, (tx) => addPortionRound(tx, venue.cfg, billId, croquetas("1")));
+    for (const portion of portions)
+      await inTx(venue, async (tx) => {
+        const [order] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, billId));
+        await applyAdjustment(
+          tx,
+          venue.cfg,
+          {
+            orderId: billId,
+            expectedEdit: await readBillEditState(tx, billId),
+            submissionId: randomUUID(),
+            expectedRevision: order!.revision,
+            lineId: portion.lineId,
+            reasonId: ids.reasonId,
+            action: "comp",
+            note: null,
+            operatorId: venue.operatorId,
+          },
+          venue.cfg.locale,
+        );
+      });
+    await payInCash(billId);
+    expect(await refundValueOf(billId, portions[0]!.lineId)).toEqual({
+      quantity: "1.000",
+      gross: "0.00",
+    });
+    const stray = await seed(sweets("1"));
+    await inTx(venue, async (tx) => {
+      const [row] = await tx
+        .select({ id: saleLinePortions.saleLineId })
+        .from(saleLinePortions)
+        .where(eq(saleLinePortions.portionId, portions[0]!.portionId));
+      await tx
+        .insert(saleLinePortions)
+        .values({ saleLineId: row!.id, portionId: stray.portions[0]!.portionId });
+    });
+
+    expect(await refundValueOf(billId, portions[0]!.lineId)).toBeUndefined();
   });
 });
 
