@@ -6230,6 +6230,126 @@ describe("till-table-order-screen", () => {
       expect(el.shadowRoot!.querySelector('[data-transfer-line="2"]')).toBeNull();
     });
 
+    /** Three identical one-unit cafés, given out of line order, and one tea. */
+    const portions = (): TabLine[] => [
+      ...[3, 1, 2].map((lineNo) => ({
+        ...pendingLine,
+        id: `cafe-${lineNo}`,
+        lineNo,
+        quantity: "1.000",
+      })),
+      { ...pendingLine, id: "tea-4", lineNo: 4, productId: "te", quantity: "1.000" },
+    ];
+
+    it("A803 portion grouping: ticking a grouped row in Transfer items sends every member's line number", async () => {
+      const { el } = await mount({ ...partyBills(), lines: portions(), orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-transfer-line]")];
+      expect(
+        rows.map((row) => [
+          row.dataset.transferLine,
+          row.querySelector(".qty")!.textContent!.trim(),
+        ]),
+      ).toEqual([
+        ["1", "3"],
+        ["4", "1"],
+      ]);
+      let captured: CustomEvent | undefined;
+      el.addEventListener("transfer-lines", (e) => (captured = e as CustomEvent));
+      click(el, '[data-transfer-line="1"]');
+      await el.updateComplete;
+      expect(
+        el.shadowRoot!.querySelector('[data-transfer-line="1"]')!.getAttribute("aria-pressed"),
+      ).toBe("true");
+      click(el, "[data-transfer-confirm]");
+      await el.updateComplete;
+      const { toBillId, transfers } = captured!.detail as {
+        toBillId: string;
+        transfers: { lineNo: number }[];
+      };
+      expect(toBillId).toBe("wo-check");
+      expect([...transfers].sort((a, b) => a.lineNo - b.lineNo)).toEqual([
+        { lineNo: 1 },
+        { lineNo: 2 },
+        { lineNo: 3 },
+      ]);
+    });
+
+    it("A803 portion grouping: unticking a grouped row in Transfer items leaves none of its members", async () => {
+      const { el } = await mount({ ...partyBills(), lines: portions(), orderId: "wo-4" });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+      let captured: CustomEvent | undefined;
+      el.addEventListener("transfer-lines", (e) => (captured = e as CustomEvent));
+      click(el, '[data-transfer-line="1"]');
+      await el.updateComplete;
+      click(el, '[data-transfer-line="1"]');
+      await el.updateComplete;
+      click(el, '[data-transfer-line="4"]');
+      await el.updateComplete;
+      click(el, "[data-transfer-confirm]");
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({ toBillId: "wo-check", transfers: [{ lineNo: 4 }] });
+    });
+
+    it("A803 portion grouping: splitting 2 of a grouped 3 sends two member line numbers, whole", async () => {
+      const { el } = await mount({ ...partyBills(), lines: portions(), orderId: "wo-4" });
+      await toMenu(el);
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (e) => (captured = e as CustomEvent));
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      const rows = [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-split-line]")];
+      expect(
+        rows.map((row) => [row.dataset.splitLine, row.querySelector(".qty")!.textContent!.trim()]),
+      ).toEqual([
+        ["1", "3"],
+        ["4", "1"],
+      ]);
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent!.trim()).toBe("3");
+      expect(el.shadowRoot!.querySelector('[data-split-inc="1"]')!.hasAttribute("disabled")).toBe(
+        true,
+      );
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent!.trim()).toBe("2");
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    });
+
+    it("A803 portion grouping: stepping a grouped split row back up adds the next member", async () => {
+      const { el } = await mount({ ...partyBills(), lines: portions(), orderId: "wo-4" });
+      await toMenu(el);
+      let captured: CustomEvent | undefined;
+      el.addEventListener("split-lines", (e) => (captured = e as CustomEvent));
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+      click(el, '[data-split-line="1"]');
+      await el.updateComplete;
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      click(el, '[data-split-dec="1"]');
+      await el.updateComplete;
+      expect(el.shadowRoot!.querySelector('[data-split-dec="1"]')!.hasAttribute("disabled")).toBe(
+        true,
+      );
+      click(el, '[data-split-inc="1"]');
+      await el.updateComplete;
+      click(el, "[data-split-confirm]");
+      await el.updateComplete;
+      expect(captured!.detail).toEqual({ transfers: [{ lineNo: 1 }, { lineNo: 2 }] });
+    });
+
     it("shows an empty-state when there are no other tables to move to", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-7", tables: [] });
       await toMenu(el);
