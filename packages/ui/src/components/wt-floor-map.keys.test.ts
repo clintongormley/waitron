@@ -525,5 +525,7 @@ describe("a merge reached by Tab", () => {
     expect(merge.matches(":focus-visible")).toBe(true);
     expect(outline(merge)).toBe(FOCUS);
     expect(outline(merge, "::after")).toBe(SELECTED);
+    expect(getComputedStyle(merge).outlineOffset).toBe("4px");
+    expect(getComputedStyle(merge, "::after").outlineOffset).toBe("2px");
   });
 });

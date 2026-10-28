@@ -291,7 +291,9 @@ describe("a value the range snaps or clamps shows the number the thumb sits at",
   });
 
   test("a value set later off the step shows the snapped number, and the value stays as given", async () => {
-    const el = await mountSlider('step="3" value="2"');
+    const el = (await mount(
+      '<wt-slider label="Columns" min="2" max="10" step="3" value="2"></wt-slider>',
+    )) as WtSlider;
     const heard = hostHears(el);
     el.value = 7;
     await el.updateComplete;
