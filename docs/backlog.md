@@ -5822,8 +5822,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A963. Full invoices accept recipient addresses in any country (owner, 2026-10-28).**
   Postal country is independent of the required Spanish NIF or explicitly typed document.
-  The rework branch includes identity storage and transition guards. Filing, request/read propagation,
-  customer exports and form integration remain; the PR stays a draft for the owner's eventual landing.
+  The rework branch includes identity storage, transition guards and locally validated recipient filing.
+  Request/read propagation, customer exports and forms remain; the PR stays a draft for the owner.
   [Rework plan](superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from

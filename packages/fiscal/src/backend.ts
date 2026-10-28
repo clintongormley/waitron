@@ -1,6 +1,7 @@
 import "./errors.js";
 import type { Decimal, NodeId, SaleId, SaleOrigin, SeriesId } from "@waitron/shared";
 import type { Transaction } from "@waitron/db";
+import type { RecipientIdentifierType } from "@waitron/country";
 import type { VatBreakdownLine } from "./vat-breakdown.js";
 import type { TrustedReading } from "./clock.js";
 import type { ClockWitness } from "./clock-witnesses.js";
@@ -36,6 +37,8 @@ export interface Counterparty {
   taxId: string;
   legalName: string;
   countryCode: string;
+  identifierType?: RecipientIdentifierType;
+  identifierCountryCode?: string;
 }
 
 /**

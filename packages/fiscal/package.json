@@ -13,6 +13,7 @@
     "mutation": "stryker run"
   },
   "dependencies": {
+    "@waitron/country": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/db": "workspace:*",
     "@waitron/shared": "workspace:*",
