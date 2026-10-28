@@ -863,7 +863,7 @@ it("updates interface language without discarding an image draft", async () => {
   await el.updateComplete;
   setLocale("es-ES");
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector("[data-test=save]")!.textContent).toContain("Guardar");
+  expect(el.shadowRoot!.querySelector("[data-test=save]")!.textContent).toContain(ES["image.save"]);
   expect(
     (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
       .value,
