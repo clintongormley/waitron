@@ -26,7 +26,8 @@ export type AdjustKind = "cancel" | "comp" | "discount";
 export interface AdjustTarget {
   /** The dish or the extra; null for the whole bill. */
   lineId: string | null;
-  /** Every portion line of a row the till shows as one, `lineId` first; absent on a single line. */
+  /** Every portion line of a row the till shows as one, or that row's lines of one extra product;
+   * `lineId` first. Absent on a single line. */
   lineIds?: string[];
   name: string;
   /** Its quantity as shown; null for the bill. */

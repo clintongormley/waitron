@@ -948,7 +948,8 @@ export interface AdjustmentAsk {
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
-  /** Every portion line of a row the till shows as one, `lineId` among them (plan D31). */
+  /** Every portion line of a row the till shows as one, or that row's lines of one extra product
+   * (plan D31, D34); `lineId` among them. */
   lineIds?: string[];
   reasonId: string;
   action: AdjustmentAction;
