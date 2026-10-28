@@ -409,6 +409,26 @@ are the audit's, taken on `a3be14ba4`; re-find them on current `main`. Every ite
 for its own diff (grep it for non-English text before pushing — the guard will not see most of it
 until A977).
 
+- **Full-invoice locality/province commas.** On A963's `e5693d460`,
+  `recipientAddressErrors` accepts a nonblank Spanish locality/province containing a comma, but
+  `checkedInvoiceRecipient` refuses the composed address with `invoice.recipient_invalid`,
+  `field: address`. A street ending in a comma also takes that path; an internal street comma
+  is accepted. Align structured and server checks and field recovery without dropping completeness
+  checks. Driver probe: `pnpm --filter @waitron/server exec vitest run src/a963-driver-review-probe.test.ts`
+  in the owned installed candidate, two passing cases including the accepted street control.
+  Receipt: `~/waitron-campaign-e/receipts/a963-task8-20261028/review-findings-probe.log`.
+  The base version was not run, so this receipt makes no regression classification.
+- **Name special invoice-document issuing codes.** The same probe finds exactly
+  `QU`, `XB`, `XG`, `XN`, `XU` returned unchanged by `countryNameFor` in English and Spanish.
+  Both dialogs use that helper for the issuing list. Add sourced names for that list without
+  admitting those values to the postal-country list. This is a wording follow-up; the identifiers
+  retain their explicit issuing code.
+- **Retire obsolete foreign-recipient restriction prose after scope approval.**
+  `packages/fiscal-verifactu/src/backend.ts:277–279` and `src/errors.ts:270–278` still describe the
+  old foreign-recipient restriction. The approved A963 builder now accepts explicit document
+  identity independently of postal country. Its narrow scope leaves those comments untouched;
+  the owner can approve their deletion or correction. The new path is checked locally, not by a
+  live AEAT submission. See the rework plan's protected-prose exception.
 - **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than

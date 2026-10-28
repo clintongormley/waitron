@@ -148,7 +148,7 @@ Keep `taxId` as the identifier value and existing `countryCode` as postal countr
 
 - [x] Run the task commands and unchanged protected fiscal suites above; record nonzero counts/statuses, run `pnpm exec vitest run scripts/workspace-cycles.test.ts scripts/module-seams.test.ts --reporter=dot` after dependency edits, and inspect the whole base-to-tip prose/consumer inventory. Record protected stale prose rather than silently widening the builder waiver.
 - [x] Inspect both dialogs and actual thermal/PDF/ticket output in EN/ES, light/dark and 390/1280 widths. Update `apps/server/src/guide/en/table-service.md`, `guide/es/table-service.md` under shared `{#full-invoice}`, and `guide/en/staff.md`, `guide/es/staff.md` under `{#invoice-customer-data}` once those paths work; update `docs/backlog.md` and its A963 detail without rewriting historical plans.
-- [ ] Retain the prior 268-second approval for original code. After integration/initial rebase, obtain one scoped substantial-work Claude run-it review through `claude-seat.sh review-run` in a complete disposable checkout with dependencies; read completed findings, fix verified issues and run focused checks. A later rebase alone does not repeat it. This plan author invokes no reviewer.
+- [x] Retain the prior 268-second approval for original code. After integration/initial rebase, obtain one scoped substantial-work Claude run-it review through `claude-seat.sh review-run` in a complete disposable checkout with dependencies; read completed findings, fix verified issues and run focused checks. A later rebase alone does not repeat it. This plan author invokes no reviewer.
 - [ ] Once the shared caller changes and full path qualify, announce readiness for `finish-branch`; later use signed-off commits, the normal push hook and current-head required CI/package coverage. No whole-workspace local run solely to finish. #2145 remains owner-held for landing; this amendment performs no implementation, tests, commit, rebase, push or merge.
 
 ## Task 8 existing-check inventory (2026-10-28)
@@ -173,9 +173,26 @@ Task8 ruling: put the till's action row in the dialog's footer slot so its longe
 without taking Save/Cancel out of view. The new footer assertion failed before the move; the
 native button rectangles were then checked in the EN/ES, light/dark, 390/1280 visual matrix.
 
-Task8 protected-prose exception: `packages/fiscal-verifactu/src/backend.ts:277–279` still describes
+Task8 protected-prose exception: `packages/fiscal-verifactu/src/backend.ts:277–279` and
+`packages/fiscal-verifactu/src/errors.ts:270–278` still describe
 foreign recipients as unsupported. That comment is outside the owner-approved builder scope and
 is retained for the owner's review; no runtime or other fiscal writer was changed to match it.
 The new builder/flow tests validate the accepted identifier path locally, without an AEAT service
 submission. Public counter F1 issuance remains A555; Task7's ruling and available party-payment
 issuance/replay checks stand.
+
+## Integration review, 2026-10-28
+
+One Claude run-it review completed in 521 seconds at `e5693d460`, after the initial rebase.
+Its thirteen independent mutations were caught. Two minor usability findings remain as their
+own backlog entries: locality/province commas can produce a street-address refusal, and five
+special issuing codes lack names. The driver reproduced both with a two-case probe and an
+accepted street-comma control; no claim that they predate the branch rests on that probe.
+No runtime fix was requested by the review. The protected stale-prose follow-up names both
+backend and error-registry sites; no protected scope was expanded.
+
+The review made no live AEAT acceptance claim. Driver receipts cover its unverified builder
+mapping, counter refusal, footer/required flags, guide twins and schema guards. The six remaining reader sites were traced through their null/non-null eligibility branches.
+Five matching existing suites ran312cases; the actions branch was source-traced only.
+Those cases are sibling qualification, not new independent mutations of all six sites. The
+actual foreign issue/replay and export controls remain the Task6/7 receipts.

@@ -5820,6 +5820,20 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   items below. A964 comes first: it changes what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 
+- **Full-invoice locality/province commas.** Align the till's structured address checks and
+  the server's Spanish completeness rule, and put a refusal under the field that needs changing.
+  A locality or province containing a comma currently passes the till check and is refused as a
+  street-address error. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **Name special invoice-document issuing codes.** Both recipient dialogs currently show
+  `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
+  treating them as postal countries. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **Retire obsolete foreign-recipient restriction prose after scope approval.** The comments
+  in the fiscal backend and error registry still describe the earlier restriction. A963's narrow
+  builder approval leaves those sites for the owner to approve.
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
   `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),
   using the saved default content language. Recheck A773-2's printing reservations before
