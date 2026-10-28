@@ -491,7 +491,8 @@ until A977).
   glyph cases and preserve text lengths when translating its remaining samples.
   Bookings’ native booking, route, clock, floor, table-removal and schema suites use English
   sample location, operation, contact and note text. Remaining helper and screen fixtures stay
-  with this item; continue package by package from A977's list. Keep existing behavioral assertions. Low priority.
+  with this item; continue package by package from A977's list. UI switch behavior and accessibility
+  suites use English sample labels and descriptions. Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the

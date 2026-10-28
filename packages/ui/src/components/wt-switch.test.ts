@@ -18,13 +18,13 @@ test("forwards a semantic name and keeps unnamed switches unnamed", async () => 
 });
 
 test("renders its label", async () => {
-  const el = await mount('<wt-switch label="Modo formación"></wt-switch>');
-  expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Modo formación");
+  const el = await mount('<wt-switch label="Training mode"></wt-switch>');
+  expect(el.shadowRoot!.querySelector("label")?.textContent?.trim()).toBe("Training mode");
 });
 
 test("gives each instance a unique id so labels never collide", async () => {
-  const a = await mount('<wt-switch label="Modo formación"></wt-switch>');
-  const b = await mount('<wt-switch label="Modo entrenamiento"></wt-switch>');
+  const a = await mount('<wt-switch label="Training mode"></wt-switch>');
+  const b = await mount('<wt-switch label="Practice mode"></wt-switch>');
   const inputA = a.shadowRoot!.querySelector("input")!;
   const inputB = b.shadowRoot!.querySelector("input")!;
   const label = a.shadowRoot!.querySelector("label")!;
@@ -85,7 +85,7 @@ test("does not leak the native change event outside the component", async () => 
 });
 
 test("clicking the visible label toggles the switch", async () => {
-  const el = (await mount('<wt-switch label="Modo formación"></wt-switch>')) as HTMLElement & {
+  const el = (await mount('<wt-switch label="Training mode"></wt-switch>')) as HTMLElement & {
     checked: boolean;
   };
   const label = el.shadowRoot!.querySelector("label")!;
@@ -141,17 +141,17 @@ test("a switch with no label renders no label text and no aria-label attribute",
 });
 
 test("names the switch for assistive technology with its own label text", async () => {
-  const el = await mount('<wt-switch label="Modo formación"></wt-switch>');
+  const el = await mount('<wt-switch label="Training mode"></wt-switch>');
   const input = el.shadowRoot!.querySelector("input")!;
-  expect(input.getAttribute("aria-label")).toBe("Modo formación");
+  expect(input.getAttribute("aria-label")).toBe("Training mode");
 });
 
 test("can name its control for one row while keeping the shared column label", async () => {
   const el = await mount(
-    '<wt-switch label="Disponible" accessible-name="Media" hide-label></wt-switch>',
+    '<wt-switch label="Available" accessible-name="Media" hide-label></wt-switch>',
   );
   const input = el.shadowRoot!.querySelector("input")!;
-  expect(el.getAttribute("label")).toBe("Disponible");
+  expect(el.getAttribute("label")).toBe("Available");
   expect(input.getAttribute("aria-label")).toBe("Media");
   expect(el.shadowRoot!.querySelector("label")).toBeNull();
 });
@@ -162,11 +162,11 @@ test("a switch given no name leaves its native input unnamed", async () => {
 });
 
 test("a hidden label still names the switch but draws no text beside it", async () => {
-  const el = await mount('<wt-switch label="Disponible" hide-label></wt-switch>');
+  const el = await mount('<wt-switch label="Available" hide-label></wt-switch>');
   const input = el.shadowRoot!.querySelector("input")!;
-  expect(input.getAttribute("aria-label")).toBe("Disponible");
+  expect(input.getAttribute("aria-label")).toBe("Available");
   expect(el.shadowRoot!.querySelector("label")).toBeNull();
-  expect(el.shadowRoot!.textContent).not.toContain("Disponible");
+  expect(el.shadowRoot!.textContent).not.toContain("Available");
   // Only the control is left, so the switch takes no more room than its own tap target.
   const tap = parseFloat(getComputedStyle(el).minWidth);
   expect(el.getBoundingClientRect().width).toBeLessThanOrEqual(tap);
