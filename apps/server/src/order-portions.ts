@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/sqlite-core";
 import {
   orderPortionEvents,
   orderPortions,
@@ -147,6 +148,44 @@ export async function readPortionBindings(
     .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]));
   return new Map(rows.map((row) => [row.lineId, row]));
+}
+
+/** A raised dish's portion: its cohort, whether it is measured, and the next ordinal the cohort takes. */
+export interface GrowingPortion {
+  cohortId: string;
+  measured: boolean;
+  nextOrdinal: number;
+}
+
+/** The portion each of `lineIds` holds, as a rise needs it; a line holding none is absent. */
+export async function readGrowingPortions(
+  tx: Transaction,
+  lineIds: readonly string[],
+): Promise<Map<string, GrowingPortion>> {
+  if (lineIds.length === 0) return new Map();
+  const cohort = alias(orderPortions, "cohort");
+  const rows = await tx
+    .select({
+      lineId: workingLinePortions.workingOrderLineId,
+      cohortId: orderPortions.cohortId,
+      measured: orderPortions.measured,
+      lastOrdinal: sql<number>`max(${cohort.ordinal})`,
+    })
+    .from(workingLinePortions)
+    .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+    .innerJoin(cohort, eq(cohort.cohortId, orderPortions.cohortId))
+    .where(inArray(workingLinePortions.workingOrderLineId, [...lineIds]))
+    .groupBy(
+      workingLinePortions.workingOrderLineId,
+      orderPortions.cohortId,
+      orderPortions.measured,
+    );
+  return new Map(
+    rows.map((row) => [
+      row.lineId,
+      { cohortId: row.cohortId, measured: row.measured, nextOrdinal: row.lastOrdinal + 1 },
+    ]),
+  );
 }
 
 /**

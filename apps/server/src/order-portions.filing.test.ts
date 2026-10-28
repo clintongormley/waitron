@@ -1,6 +1,6 @@
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
@@ -23,8 +23,10 @@ import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
 import { createCourse } from "./kitchen.js";
+import { moveBill } from "./move-bill.js";
 import { readOrderDetail } from "./orders-list.js";
 import type { PortionRef } from "./order-portions.js";
+import { partyRevision } from "./parties.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
@@ -35,15 +37,19 @@ import {
   type IntegratedPayDeps,
 } from "./till-sale.js";
 import { createTable } from "./testing/live-table.js";
-import { openPartyTab } from "./testing/serve-line.js";
+import { fireAll, openPartyTab } from "./testing/serve-line.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   insertTabRound,
   priceStoredOrder,
   priceStoredOrderForIssuance,
   priceTabRound,
+  fireableLineColumns,
+  fireLines,
+  readOrderRevision,
   readStoredOrder,
   storedOrderTotal,
+  updateOrderLine,
   type TabRoundLine,
 } from "./working-order.js";
 
@@ -848,6 +854,325 @@ describe("A803 portion grouping: the dashboard's order detail", () => {
     expect(await detailLines(billId)).toEqual([
       { name: "Croqueta", quantity: "1.000", total: "3.33" },
       { name: "Croqueta", quantity: "1.000", total: "3.33" },
+    ]);
+  });
+});
+
+describe("A803 portions: raising a dish", () => {
+  /** A fresh party's bill holding `lines`: as portions, or (`bound: false`) as today's grouped
+   * lines; `fire` sends them all. */
+  async function billOf(lines: TabRoundLine[], opts: { bound: boolean; fire?: boolean }) {
+    return inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `R-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      const { tabId, partyId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      let portions: PortionRef[] = [];
+      if (opts.bound) {
+        portions = await addPortionRound(tx, venue.cfg, tabId, lines, { fire: opts.fire });
+      } else {
+        const priced = await priceTabRound(tx, venue.cfg, tabId, lines, "checked");
+        await insertTabRound(tx, venue.cfg, priced, priced.rows);
+        if (opts.fire === true) await fireAll(tx, venue.cfg, tabId);
+      }
+      return { billId: tabId, partyId, portions };
+    });
+  }
+
+  async function raise(billId: string, lineNo: number, quantity: string) {
+    await inTx(venue, async (tx) =>
+      updateOrderLine(
+        tx,
+        venue.cfg,
+        billId,
+        lineNo,
+        { quantity },
+        await readOrderRevision(tx, billId),
+        { operatorId: venue.adminId, expectedEdit: await readBillEditState(tx, billId) },
+      ),
+    );
+  }
+
+  async function toCounter(billId: string, partyId: string) {
+    await inTx(venue, async (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        billId,
+        { counter: { zoneId: null } },
+        {
+          expectedEdits: [await readBillEditState(tx, billId)],
+          bills: "separate",
+          expectedPartyRevision: await partyRevision(tx, partyId),
+          partyId,
+          operatorId: venue.adminId,
+        },
+      ),
+    );
+  }
+
+  /** Every line of the bill in line order, with the cohort and ordinal of the portion it holds. */
+  function linesOf(billId: string) {
+    return venue.db.all<{
+      lineNo: number;
+      name: string;
+      quantity: number;
+      lineTotal: number;
+      dishNo: number | null;
+      cohortId: string | null;
+      ordinal: number | null;
+      measured: number | null;
+      creditedTo: string | null;
+    }>(
+      sql`select l.line_no as lineNo, l.name, l.quantity, l.line_total as lineTotal,
+            d.line_no as dishNo, p.cohort_id as cohortId, p.ordinal, p.measured,
+            l.credited_to as creditedTo
+          from working_order_lines l
+          left join working_order_lines d on d.id = l.parent_line_id
+          left join working_line_portions b on b.working_order_line_id = l.id
+          left join order_portions p on p.id = b.portion_id
+          where l.working_order_id = ${billId}
+          order by l.line_no`,
+    );
+  }
+
+  /** The filed rows without their portion links, to compare a portion bill with today's. */
+  async function filedFacts(billId: string) {
+    return (await filedRows(billId)).map((row) => ({ ...row, portions: undefined }));
+  }
+
+  it("A803 portions: raising an unsent bound burger from 1 to 3 adds two portions of its cohort, and the bill files one row of 3", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    const today = await billOf(burgersWithCheese("1"), { bound: false });
+    const [first] = bound.portions;
+
+    await raise(bound.billId, 1, "3");
+    await raise(today.billId, 1, "3");
+
+    const cohort = first!.pricingCohortId;
+    expect(linesOf(bound.billId)).toEqual(
+      [1, 2, 3].flatMap((ordinal) => [
+        expect.objectContaining({
+          lineNo: ordinal * 2 - 1,
+          name: "Burger",
+          quantity: 1000,
+          lineTotal: 333,
+          dishNo: null,
+          cohortId: cohort,
+          ordinal,
+          measured: 0,
+        }),
+        expect.objectContaining({
+          lineNo: ordinal * 2,
+          name: "Cheese",
+          quantity: 1000,
+          lineTotal: 35,
+          dishNo: ordinal * 2 - 1,
+          cohortId: null,
+        }),
+      ]),
+    );
+    const credited = new Set(linesOf(bound.billId).map((line) => line.creditedTo));
+    expect([...credited]).toEqual([linesOf(today.billId)[0]!.creditedTo]);
+
+    await payInCash(bound.billId);
+    await payInCash(today.billId);
+    const filed = await filedRows(bound.billId);
+    expect(filed.map(({ name, quantity }) => [name, quantity])).toEqual([
+      ["Burger", 3000],
+      ["Cheese", 3000],
+    ]);
+    expect(filed[0]!.portions).toHaveLength(3);
+    expect(await filedFacts(bound.billId)).toEqual(await filedFacts(today.billId));
+  });
+
+  it("A803 portions: each added portion and its extra keep the sale context their originals were added with", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    await raise(bound.billId, 1, "2");
+
+    const contexts = venue.db.all<Record<string, unknown>>(
+      sql`select c.* from working_line_contexts c
+          join working_order_lines l on l.id = c.working_order_line_id
+          where l.working_order_id = ${bound.billId} order by l.line_no`,
+    );
+    const facts = contexts.map((row) => ({ ...row, working_order_line_id: undefined }));
+    expect(facts).toHaveLength(4);
+    expect(facts[2]).toEqual(facts[0]);
+    expect(facts[3]).toEqual(facts[1]);
+  });
+
+  it("A803 portions: raising a bound burger and adding bacon in one edit gives every portion its cheese and bacon", async () => {
+    const lines = () => linesOf(bound.billId);
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    const today = await billOf(burgersWithCheese("1"), { bound: false });
+    const withBacon = [
+      {
+        listId: ids.toppings,
+        picks: [
+          { productId: ids.cheese, quantity: 1 },
+          { productId: ids.bacon, quantity: 1 },
+        ],
+      },
+    ];
+    for (const billId of [bound.billId, today.billId])
+      await inTx(venue, async (tx) =>
+        updateOrderLine(
+          tx,
+          venue.cfg,
+          billId,
+          1,
+          { quantity: "2", extras: withBacon },
+          await readOrderRevision(tx, billId),
+          { operatorId: venue.adminId, expectedEdit: await readBillEditState(tx, billId) },
+        ),
+      );
+
+    const dishes = lines().filter((line) => line.dishNo === null);
+    expect(dishes.map((line) => [line.quantity, line.cohortId, line.ordinal])).toEqual([
+      [1000, bound.portions[0]!.pricingCohortId, 1],
+      [1000, bound.portions[0]!.pricingCohortId, 2],
+    ]);
+    for (const dish of dishes)
+      expect(
+        lines()
+          .filter((line) => line.dishNo === dish.lineNo)
+          .map((line) => [line.name, line.quantity])
+          .sort(),
+      ).toEqual([
+        ["Bacon", 1000],
+        ["Cheese", 1000],
+      ]);
+
+    await payInCash(bound.billId);
+    await payInCash(today.billId);
+    expect(await filedFacts(bound.billId)).toEqual(await filedFacts(today.billId));
+  });
+
+  it("A803 portions: raising a held bound burger gives each added portion its own held kitchen item", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    await inTx(venue, async (tx) => {
+      const dishes = await tx
+        .select(fireableLineColumns)
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, bound.billId));
+      await fireLines(
+        tx,
+        venue.cfg,
+        bound.billId,
+        dishes.map((line) => ({ ...line, hold: true })),
+      );
+    });
+
+    await raise(bound.billId, 1, "3");
+
+    const items = venue.db.all<{ lineNo: number; quantity: number; fired: number }>(
+      sql`select l.line_no as lineNo, t.quantity, t.fired_at is not null as fired
+          from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+          where t.working_order_id = ${bound.billId} and l.parent_line_id is null
+          order by l.line_no`,
+    );
+    expect(items).toEqual([
+      { lineNo: 1, quantity: 1000, fired: 0 },
+      { lineNo: 3, quantity: 1000, fired: 0 },
+      { lineNo: 5, quantity: 1000, fired: 0 },
+    ]);
+  });
+
+  it("A803 portions: a measured bound line rises in place and stays one portion", async () => {
+    const bound = await billOf(croquetas("1"), { bound: true });
+    await inTx(venue, async (tx) => {
+      const [measured] = await tx
+        .insert(orderPortions)
+        .values({ cohortId: randomUUID(), ordinal: 1, measured: true })
+        .returning({ id: orderPortions.id, cohortId: orderPortions.cohortId });
+      await tx
+        .update(workingLinePortions)
+        .set({ portionId: measured!.id })
+        .where(eq(workingLinePortions.workingOrderLineId, bound.portions[0]!.lineId));
+    });
+
+    await raise(bound.billId, 1, "3");
+
+    expect(
+      linesOf(bound.billId).map((line) => [line.quantity, line.ordinal, line.measured]),
+    ).toEqual([[3000, 1, 1]]);
+  });
+
+  it("A803 portions: raising a fired bound burger adds a separately priced cohort, filed as today's second row", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const today = await billOf(burgersWithCheese("1"), { bound: false, fire: true });
+    const [first] = bound.portions;
+
+    await raise(bound.billId, 1, "3");
+    await raise(today.billId, 1, "3");
+
+    const lines = linesOf(bound.billId);
+    const dishes = lines.filter((line) => line.dishNo === null);
+    expect(dishes.map((line) => [line.quantity, line.lineTotal])).toEqual([
+      [1000, 333],
+      [1000, 333],
+      [1000, 333],
+    ]);
+    expect(dishes[0]!.cohortId).toBe(first!.pricingCohortId);
+    expect(dishes[1]!.cohortId).not.toBe(first!.pricingCohortId);
+    expect(dishes[2]!.cohortId).toBe(dishes[1]!.cohortId);
+    expect(dishes.map((line) => line.ordinal)).toEqual([1, 1, 2]);
+    expect(lines.filter((line) => line.dishNo !== null).map((line) => line.quantity)).toEqual([
+      1000, 1000, 1000,
+    ]);
+    const items = venue.db.all<{ lineNo: number; quantity: number; fired: number }>(
+      sql`select l.line_no as lineNo, t.quantity, t.fired_at is not null as fired
+          from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+          where t.working_order_id = ${bound.billId} and l.parent_line_id is null
+          order by l.line_no`,
+    );
+    expect(items.map(({ quantity, fired }) => [quantity, fired])).toEqual([
+      [1000, 1],
+      [1000, 1],
+      [1000, 1],
+    ]);
+
+    await payInCash(bound.billId);
+    await payInCash(today.billId);
+    expect((await filedRows(bound.billId)).map(({ name, quantity }) => [name, quantity])).toEqual([
+      ["Burger", 1000],
+      ["Cheese", 1000],
+      ["Burger", 2000],
+      ["Cheese", 2000],
+    ]);
+    expect(await filedFacts(bound.billId)).toEqual(await filedFacts(today.billId));
+  });
+
+  it("A803 portions: a bound line on a bill moved to the counter rises by new portions", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    await toCounter(bound.billId, bound.partyId);
+
+    await raise(bound.billId, 1, "2");
+
+    const dishes = linesOf(bound.billId).filter((line) => line.dishNo === null);
+    expect(dishes.map((line) => [line.quantity, line.cohortId, line.ordinal])).toEqual([
+      [1000, bound.portions[0]!.pricingCohortId, 1],
+      [1000, bound.portions[0]!.pricingCohortId, 2],
+    ]);
+  });
+
+  it("A803 portions: an unbound counter line still rises in place", async () => {
+    const today = await billOf(burgersWithCheese("1"), { bound: false });
+    await toCounter(today.billId, today.partyId);
+
+    await raise(today.billId, 1, "2");
+
+    expect(
+      linesOf(today.billId).map((line) => [
+        line.name,
+        line.quantity,
+        line.lineTotal,
+        line.cohortId,
+      ]),
+    ).toEqual([
+      ["Burger", 2000, 666, null],
+      ["Cheese", 2000, 70, null],
     ]);
   });
 });

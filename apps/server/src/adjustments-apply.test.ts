@@ -43,6 +43,7 @@ import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { fireGroup } from "./order-groups.js";
+import { registerPortions } from "./order-portions.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1335,6 +1336,121 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     // It waits with the recalled Burger, in the group that Burger was fired in.
     expect(await kitchenOf(billId, 2)).toEqual({ group: "fired", firedAt: null });
     expect((await placeOf(billId, 2)).groupId).toBe((await placeOf(billId, 1)).groupId);
+  });
+
+  /** Bind line `lineNo` to a portion of a cohort of its own, as the portion writers will. */
+  async function bindAsPortion(billId: string, lineNo: number): Promise<string> {
+    const lineId = await lineIdOf(venue, billId, lineNo);
+    const cohortId = randomUUID();
+    await inTx(venue, (tx) =>
+      registerPortions(tx, [
+        { portionId: randomUUID(), lineId, ordinal: 1, pricingCohortId: cohortId, measured: false },
+      ]),
+    );
+    return cohortId;
+  }
+
+  /** Each dish line's number, the cohort and ordinal of its portion, its price and served count. */
+  function dishPortions(billId: string) {
+    return venue.db.all<{
+      lineNo: number;
+      cohortId: string | null;
+      ordinal: number | null;
+      unitPrice: number;
+      served: number;
+    }>(
+      sql`select l.line_no as lineNo, p.cohort_id as cohortId, p.ordinal,
+            l.unit_price_gross as unitPrice, l.served_quantity as served
+          from working_order_lines l
+          left join working_line_portions b on b.working_order_line_id = l.id
+          left join order_portions p on p.id = b.portion_id
+          where l.working_order_id = ${billId} and l.parent_line_id is null
+          order by l.line_no`,
+    );
+  }
+
+  it("A803 portions: raising a bound held Burger to 3 adds two held portions and prints a plain raise's HOLD CHANGED slip", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    try {
+      const bound = await bill([{ name: "Burger" }], { release: "hold" });
+      const plain = await bill([{ name: "Burger" }], { release: "hold" });
+      const cohortId = await bindAsPortion(bound.billId, 1);
+
+      const beforePlain = await kitchenJobCount();
+      await raise(plain.billId, 1, "3");
+      const plainJobs = await kitchenJobsSince(beforePlain);
+      const beforeBound = await kitchenJobCount();
+      await raise(bound.billId, 1, "3");
+      const boundJobs = await kitchenJobsSince(beforeBound);
+
+      expect(
+        dishPortions(bound.billId).map((line) => [line.lineNo, line.cohortId, line.ordinal]),
+      ).toEqual([
+        [1, cohortId, 1],
+        [2, cohortId, 2],
+        [3, cohortId, 3],
+      ]);
+      const held = await placeOf(bound.billId, 1);
+      for (const lineNo of [2, 3])
+        expect(await kitchenOf(bound.billId, lineNo)).toEqual({ group: "held", firedAt: null });
+      expect((await placeOf(bound.billId, 3)).groupId).toBe(held.groupId);
+      const shape = (jobs: string[][]) =>
+        jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
+      expect(shape(plainJobs)).toEqual([["*** HOLD CHANGED ***", "+2.000 x BURG"]]);
+      expect(shape(boundJobs)).toEqual(shape(plainJobs));
+    } finally {
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("A803 portions: raising a comped bound held Burger to 3 sells the two added at today's price as two portions of a new cohort, with a plain raise's slip", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    try {
+      const comped = await bill([{ name: "Burger" }], { release: "hold" });
+      const plain = await bill([{ name: "Burger" }], { release: "hold" });
+      const cohortId = await bindAsPortion(comped.billId, 1);
+      await adjust(comped.billId, {
+        lineId: await lineIdOf(venue, comped.billId, 1),
+        action: "comp",
+      });
+
+      const beforePlain = await kitchenJobCount();
+      await raise(plain.billId, 1, "3");
+      const plainJobs = await kitchenJobsSince(beforePlain);
+      const beforeComped = await kitchenJobCount();
+      await raise(comped.billId, 1, "3");
+      const compedJobs = await kitchenJobsSince(beforeComped);
+
+      const dishes = dishPortions(comped.billId);
+      expect(dishes.map((line) => [line.lineNo, line.ordinal, line.unitPrice])).toEqual([
+        [1, 1, 0],
+        [2, 1, 1200],
+        [3, 2, 1200],
+      ]);
+      expect(dishes[0]!.cohortId).toBe(cohortId);
+      expect(dishes[1]!.cohortId).not.toBe(cohortId);
+      expect(dishes[2]!.cohortId).toBe(dishes[1]!.cohortId);
+      const shape = (jobs: string[][]) =>
+        jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
+      expect(shape(compedJobs)).toEqual(shape(plainJobs));
+    } finally {
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("A803 portions: raising a served bound coffee poured at the bar adds a sent, unserved portion with no kitchen item", async () => {
+    const { billId } = await bill([{ name: "Coffee" }]);
+    const coffee = await placeOf(billId, 1);
+    const cohortId = await bindAsPortion(billId, 1);
+    await inTx(venue, (tx) => serveLine(tx, venue.cfg, billId, 1));
+
+    await raise(billId, 1, "2");
+
+    expect(dishPortions(billId)).toEqual([
+      { lineNo: 1, cohortId, ordinal: 1, unitPrice: 150, served: 1000 },
+      { lineNo: 2, cohortId, ordinal: 2, unitPrice: 150, served: 0 },
+    ]);
+    expect(await placeOf(billId, 2)).toEqual({ groupId: coffee.groupId, sent: true, items: [] });
   });
 
   it("still widens a line nobody adjusted", async () => {
