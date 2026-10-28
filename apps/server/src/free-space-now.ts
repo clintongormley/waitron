@@ -114,12 +114,19 @@ export function createSpaceFreer(
     statfs?: Statfs;
     /** Called once after each deletion settles, so boot can start a fresh disk usage walk. */
     onFreed?: () => void;
+    /** Writes the box's spare file back while it is given up; see `startFreeSpaceWatch`. */
+    restoreSpare?: () => Promise<boolean>;
   },
 ): (personId: string) => Promise<FreedSpace> {
   let running: Promise<FreedSpace> | null = null;
 
   async function run(personId: string): Promise<FreedSpace> {
     const removal = await deleteLeftovers(deps);
+    try {
+      await deps.restoreSpare?.();
+    } catch (error) {
+      deps.log("warn", "storage.spare_restore_failed", { errno: errnoOf(error) ?? null });
+    }
     const free = await freeBytes(deps.venueDir, deps.statfs);
     deps.space.record(free, deps.now());
     if (deps.disk.noted()) await deps.disk.full();

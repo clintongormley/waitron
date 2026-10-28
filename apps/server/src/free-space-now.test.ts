@@ -672,6 +672,7 @@ describe("createSpaceFreer", () => {
       statfs?: () => Promise<{ bavail: number; frsize: number }>;
       remove?: LeftoverDeps["remove"];
       full?: () => Promise<boolean>;
+      restoreSpare?: () => Promise<boolean>;
     } = {},
   ) {
     const order: string[] = [];
@@ -701,6 +702,14 @@ describe("createSpaceFreer", () => {
         },
       },
       statfs: options.statfs ?? statfs,
+      ...(options.restoreSpare
+        ? {
+            restoreSpare: async () => {
+              order.push("restore");
+              return options.restoreSpare!();
+            },
+          }
+        : {}),
       onFreed() {
         order.push("freed");
         freedCalls += 1;
@@ -740,6 +749,50 @@ describe("createSpaceFreer", () => {
     const quiet = freer({ noted: false });
     await quiet.free("person-1");
     expect(quiet.fullCalls()).toBe(0);
+  });
+
+  it("a Free writes the spare back after the deletion and before it reads free space and asks the stop to re-check", async () => {
+    await stagingFiles();
+    const f = freer({ noted: true, restoreSpare: async () => false });
+    await f.free("person-1");
+    expect(f.order.filter((step) => step !== "remove")).toEqual([
+      "restore",
+      "record",
+      "full",
+      "freed",
+    ]);
+    expect(f.order.lastIndexOf("remove")).toBeLessThan(f.order.indexOf("restore"));
+  });
+
+  it("a Free that writes the spare back reports and records the free space after the write", async () => {
+    await stagingFiles();
+    let bavail = 1000;
+    const f = freer({
+      statfs: async () => ({ bavail, frsize: 4096 }),
+      restoreSpare: async () => {
+        bavail = 900;
+        return true;
+      },
+    });
+    expect((await f.free("person-1")).freeBytes).toBe(4096 * 900);
+    expect(f.records).toEqual([{ free: 4096 * 900, at: NOW }]);
+  });
+
+  it("a restore that throws is logged as storage.spare_restore_failed, and the Free still answers", async () => {
+    await stagingFiles();
+    const f = freer({
+      noted: true,
+      restoreSpare: async () => {
+        throw Object.assign(new Error("no space"), { code: "ENOSPC" });
+      },
+    });
+    expect((await f.free("person-1")).freeBytes).toBe(FREE);
+    expect(lines).toContainEqual({
+      level: "warn",
+      event: "storage.spare_restore_failed",
+      fields: { errno: "ENOSPC" },
+    });
+    expect(f.fullCalls()).toBe(1);
   });
 
   it("two calls during one deletion share it; a later call runs a new one", async () => {

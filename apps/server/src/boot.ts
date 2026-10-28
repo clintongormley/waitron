@@ -2525,6 +2525,7 @@ async function bootServer(
         venueDir: config.venueDir,
         space: freeSpace,
         disk: diskFull,
+        restoreSpare,
         // A deletion changes what the disk holds, so the next read walks it afresh.
         onFreed: () => diskUsageCache.clear(),
       }),
