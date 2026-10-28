@@ -239,16 +239,17 @@ Start again, and the claim of a replacement setup from the repair page (`#claimF
 error handler also covers the inspection read it opens with). Every other caller keeps its words; a test pins that an activation step refused
 `storage.disk_full` still draws "Do not repeat activation".
 
-- EN: "The box's disk is full, so this step could not be saved. Restart the box: as it starts, it
+- EN: "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it
   removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron
   cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on
   it is lost."
-- ES: "El disco del equipo está lleno, así que este paso no se ha podido guardar. Reinicia el equipo: al
+- ES: "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al
   arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo.
   Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el
   equipo empieza de cero, pero se pierde todo lo que contiene."
 
-The last sentence follows OPEN QUESTION Q1's default and changes with it. "Restart the box" is already
+The first sentence is the full-disk page's title, because the look check (Task 9) found the earlier
+"this step could not be saved" false where only the page's first read was refused. The last sentence follows OPEN QUESTION Q1's default and changes with it. "Restart the box" is already
 used on these pages (`apps/server/src/guide/en/backup-recovery.md:85`; `apps/setup/src/i18n/backup-repair.ts:27`).
 
 **The repair start runs the log clean-up too.** Today a start that finds a recovery at its repair stage
