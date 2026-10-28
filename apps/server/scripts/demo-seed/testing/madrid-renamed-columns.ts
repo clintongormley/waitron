@@ -5,7 +5,8 @@ export type MadridColumnRenames = Record<string, Record<string, string>>;
 
 /** Apply reviewed column renames to the frozen capture, so an entry that no longer matches the
  * capture fails rather than quietly widening the comparison. Every entry is checked against the
- * capture's own columns, and a table's renames apply together, never one onto another. */
+ * capture's own columns: its old name must be one of them, its new name must not be, and no two
+ * entries share a new name. */
 export function madridWithRenamedColumns(
   original: CanonicalMadridSemantics,
   renames: MadridColumnRenames,
