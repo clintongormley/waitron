@@ -15,14 +15,16 @@ const renamed = (legalName: string): VenueDetailsModel => {
 };
 
 function stubApi() {
+  let current = venueDetailsFixture();
   return {
     liveData: new LiveData(),
-    getVenueDetails: vi.fn(async () => venueDetailsFixture()),
+    getVenueDetails: vi.fn(async () => structuredClone(current)),
     getVenueClockPreview: vi.fn(),
     patchVenueDetails: vi.fn(),
-    renameTaxpayer: vi.fn(async ({ legalName }: { legalName: string; expected: string }) => ({
-      model: renamed(legalName),
-    })),
+    renameTaxpayer: vi.fn(async ({ legalName }: { legalName: string; expected: string }) => {
+      current = renamed(legalName);
+      return { model: renamed(legalName) };
+    }),
   };
 }
 type Api = ReturnType<typeof stubApi>;

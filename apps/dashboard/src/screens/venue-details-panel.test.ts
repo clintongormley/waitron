@@ -930,3 +930,22 @@ it("a save's answer is shown when the read begun after it was sent failed", asyn
   await flush(el);
   expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Confirmed street");
 });
+
+it("after the legal-name dialog's answer the card reads again, so a change in a read it overtook still shows", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  const held = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => held.promise);
+  await r.notify(el);
+  const fixture = venueDetailsFixture();
+  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "Nuevo SL" } };
+  const later = { ...venueDetailsFixture({ name: "Other manager" }), issuer: renamed.issuer };
+  r.set(later);
+  q(el, "dashboard-legal-name-dialog")!.dispatchEvent(
+    new CustomEvent("venue-identity-changed", { detail: { model: renamed } }),
+  );
+  await flush(el);
+  held.resolve(structuredClone(later));
+  await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
+  expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
+});

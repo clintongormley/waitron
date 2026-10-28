@@ -145,6 +145,8 @@ export class VenueDetailsPanel extends LitElement {
   #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
+  /** Each read and each save takes the next place when it is sent, a dialog's answer when it
+   * arrives; the card shows a value only if its place is later than the one it shows. */
   #places = 0;
   #shownPlace = 0;
   #scope?: DraftScope<VenueDetailValues>;
@@ -608,7 +610,10 @@ export class VenueDetailsPanel extends LitElement {
             <dashboard-legal-name-dialog
               .api=${this.api}
               @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
-                if (generation === this.#generation) this.#show(++this.#places, event.detail.model);
+                if (generation === this.#generation) {
+                  this.#show(++this.#places, event.detail.model);
+                  void this.#load();
+                }
               }}
             ></dashboard-legal-name-dialog>
             ${settingsCard({
