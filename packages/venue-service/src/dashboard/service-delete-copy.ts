@@ -3,29 +3,35 @@ import { codeOf } from "@waitron/dashboard-kit";
 import { format } from "./hours-view.js";
 import { t } from "./strings.js";
 const itemKeys = {
-  tables: "venue.delete_item_tables",
-  saved_tables: "venue.delete_item_saved_tables",
-  zones: "venue.delete_item_zones",
-  today_joins: "venue.delete_item_today_joins",
-  reset_targets: "venue.delete_item_reset_targets",
-  routing_rules: "venue.delete_item_routing_rules",
-  routing_periods: "venue.delete_item_routing_periods",
-  profile_zones: "venue.delete_item_profile_zones",
-  profile_starting_zones: "venue.delete_item_profile_starting_zones",
-  screen_zones: "venue.delete_item_screen_zones",
-  screen_notices: "venue.delete_item_screen_notices",
-  zone_policies: "venue.delete_item_zone_policies",
-  zone_extensions: "venue.delete_item_zone_extensions",
-  department_periods: "venue.delete_item_department_periods",
-  floor_plan_sets: "venue.delete_item_floor_plan_sets",
-  staff_menus: "venue.delete_item_staff_menus",
-  seasons: "venue.delete_item_seasons",
-  department_policy: "venue.delete_item_department_policy",
-  service_steps: "venue.delete_item_service_steps",
-  transfer_desks: "venue.delete_item_transfer_desks",
-  transfer_routes: "venue.delete_item_transfer_routes",
-  default_department: "venue.delete_item_default_department",
-  counter_default: "venue.delete_item_counter_default",
+  tables: ["venue.delete_item_tables", "venue.delete_item_tables_one"],
+  saved_tables: ["venue.delete_item_saved_tables", "venue.delete_item_saved_tables_one"],
+  zones: ["venue.delete_item_zones", "venue.delete_item_zones_one"],
+  today_joins: ["venue.delete_item_today_joins", "venue.delete_item_today_joins_one"],
+  reset_targets: ["venue.delete_item_reset_targets", "venue.delete_item_reset_targets_one"],
+  routing_rules: ["venue.delete_item_routing_rules", "venue.delete_item_routing_rules_one"],
+  routing_periods: ["venue.delete_item_routing_periods", "venue.delete_item_routing_periods_one"],
+  profile_zones: ["venue.delete_item_profile_zones", "venue.delete_item_profile_zones_one"],
+  profile_starting_zones: ["venue.delete_item_profile_starting_zones"],
+  screen_zones: ["venue.delete_item_screen_zones", "venue.delete_item_screen_zones_one"],
+  screen_notices: ["venue.delete_item_screen_notices", "venue.delete_item_screen_notices_one"],
+  zone_policies: ["venue.delete_item_zone_policies", "venue.delete_item_zone_policies_one"],
+  zone_extensions: ["venue.delete_item_zone_extensions", "venue.delete_item_zone_extensions_one"],
+  department_periods: [
+    "venue.delete_item_department_periods",
+    "venue.delete_item_department_periods_one",
+  ],
+  floor_plan_sets: ["venue.delete_item_floor_plan_sets", "venue.delete_item_floor_plan_sets_one"],
+  staff_menus: ["venue.delete_item_staff_menus", "venue.delete_item_staff_menus_one"],
+  seasons: ["venue.delete_item_seasons", "venue.delete_item_seasons_one"],
+  department_policy: [
+    "venue.delete_item_department_policy",
+    "venue.delete_item_department_policy_one",
+  ],
+  service_steps: ["venue.delete_item_service_steps", "venue.delete_item_service_steps_one"],
+  transfer_desks: ["venue.delete_item_transfer_desks"],
+  transfer_routes: ["venue.delete_item_transfer_routes", "venue.delete_item_transfer_routes_one"],
+  default_department: ["venue.delete_item_default_department"],
+  counter_default: ["venue.delete_item_counter_default"],
 } as const;
 const refusalKeys = {
   "department.last_active": "venue.delete_refusal_department_last_active",
@@ -54,9 +60,10 @@ export function serviceDeleteCopy(kind: "zone" | "department"): DeleteDialogCopy
       const names = item.targets.map((target) => target.name).join(", ");
       if (item.key === "counter_default" && !names) return t("venue.delete_counter_empty");
       if (item.key === "default_department" && !names) return t("venue.delete_default_empty");
-      const key = itemKeys[item.key as keyof typeof itemKeys];
-      if (!key) return t("venue.delete_action_error");
-      const line = format(key, { count: String(item.count), names });
+      const keys = itemKeys[item.key as keyof typeof itemKeys];
+      if (!keys) return t("venue.delete_action_error");
+      const [many, one = many] = keys;
+      const line = format(item.count === 1 ? one : many, { count: String(item.count), names });
       return ["tables", "saved_tables", "zones", "today_joins", "reset_targets"].includes(
         item.key,
       ) && names

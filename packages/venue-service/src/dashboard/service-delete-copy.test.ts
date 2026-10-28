@@ -201,7 +201,7 @@ it("counts physical tables independently of today placement and discloses retain
     }),
   ).toBe("Deletes 3 tables. Never placed today");
   expect(c.item({ key: "saved_tables", count: 1, targets: [] })).toBe(
-    "Removes 1 tables from the floor plans.",
+    "Removes 1 table from the floor plans.",
   );
 });
 it.each(["zone", "department"] as const)(
@@ -259,4 +259,152 @@ it.each([
   setLocale(locale);
   const c = await copy("department");
   expect(c.item({ key: "floor_plan_sets", count: 2, targets: [] })).toBe(line);
+});
+it.each([
+  [
+    "tables",
+    ["Deletes {count} table. {names}", "Deletes {count} tables. {names}"],
+    ["Elimina {count} mesa. {names}", "Elimina {count} mesas. {names}"],
+  ],
+  [
+    "saved_tables",
+    [
+      "Removes {count} table from the floor plans. {names}",
+      "Removes {count} tables from the floor plans. {names}",
+    ],
+    ["Quita {count} mesa de los planos. {names}", "Quita {count} mesas de los planos. {names}"],
+  ],
+  [
+    "zones",
+    ["Deletes {count} zone. {names}", "Deletes {count} zones. {names}"],
+    ["Elimina {count} zona. {names}", "Elimina {count} zonas. {names}"],
+  ],
+  [
+    "today_joins",
+    [
+      "Removes {count} join from today’s plan. {names}",
+      "Removes {count} joins from today’s plan. {names}",
+    ],
+    [
+      "Quita {count} unión del plano de hoy. {names}",
+      "Quita {count} uniones del plano de hoy. {names}",
+    ],
+  ],
+  [
+    "reset_targets",
+    ["Removes {count} saved reset target. {names}", "Removes {count} saved reset targets. {names}"],
+    [
+      "Quita {count} destino de restablecimiento guardado. {names}",
+      "Quita {count} destinos de restablecimiento guardados. {names}",
+    ],
+  ],
+  [
+    "routing_rules",
+    ["Removes {count} routing rule.", "Removes {count} routing rules."],
+    ["Quita {count} regla de enrutamiento.", "Quita {count} reglas de enrutamiento."],
+  ],
+  [
+    "routing_periods",
+    ["Removes {count} period routing rule.", "Removes {count} period routing rules."],
+    [
+      "Quita {count} regla de enrutamiento por periodo.",
+      "Quita {count} reglas de enrutamiento por periodo.",
+    ],
+  ],
+  [
+    "profile_zones",
+    [
+      "Removes {count} profile zone choice: {names}.",
+      "Removes {count} profile zone choices: {names}.",
+    ],
+    [
+      "Quita {count} selección de zona de perfil: {names}.",
+      "Quita {count} selecciones de zonas de perfiles: {names}.",
+    ],
+  ],
+  [
+    "screen_zones",
+    [
+      "Removes {count} screen zone choice: {names}.",
+      "Removes {count} screen zone choices: {names}.",
+    ],
+    [
+      "Quita {count} selección de zona de pantalla: {names}.",
+      "Quita {count} selecciones de zonas de pantallas: {names}.",
+    ],
+  ],
+  [
+    "screen_notices",
+    ["Removes {count} screen notice: {names}.", "Removes {count} screen notices: {names}."],
+    ["Quita {count} aviso de pantalla: {names}.", "Quita {count} avisos de pantallas: {names}."],
+  ],
+  [
+    "zone_policies",
+    ["Removes {count} zone service setting.", "Removes {count} zone service settings."],
+    ["Quita {count} ajuste de servicio de zona.", "Quita {count} ajustes de servicio de zonas."],
+  ],
+  [
+    "zone_extensions",
+    ["Removes {count} zone extension.", "Removes {count} zone extensions."],
+    ["Quita {count} extensión de zona.", "Quita {count} extensiones de zonas."],
+  ],
+  [
+    "department_periods",
+    ["Removes {count} department period.", "Removes {count} department periods."],
+    ["Quita {count} periodo del departamento.", "Quita {count} periodos del departamento."],
+  ],
+  [
+    "floor_plan_sets",
+    ["Removes {count} floor plan set.", "Removes {count} floor plan sets."],
+    ["Quita {count} conjunto de planos de sala.", "Quita {count} conjuntos de planos de sala."],
+  ],
+  [
+    "staff_menus",
+    ["Removes {count} staff menu setting.", "Removes {count} staff menu settings."],
+    ["Quita {count} ajuste de menú del personal.", "Quita {count} ajustes de menús del personal."],
+  ],
+  [
+    "seasons",
+    ["Removes hours in {count} season.", "Removes hours in {count} seasons."],
+    ["Quita los horarios de {count} temporada.", "Quita los horarios de {count} temporadas."],
+  ],
+  [
+    "department_policy",
+    ["Removes {count} department service setting.", "Removes {count} department service settings."],
+    [
+      "Quita {count} ajuste de servicio del departamento.",
+      "Quita {count} ajustes de servicio del departamento.",
+    ],
+  ],
+  [
+    "service_steps",
+    ["Removes {count} service step.", "Removes {count} service steps."],
+    ["Quita {count} paso de servicio.", "Quita {count} pasos de servicio."],
+  ],
+  [
+    "transfer_routes",
+    [
+      "Removes {count} transfer route to or from: {names}.",
+      "Removes {count} transfer routes to or from: {names}.",
+    ],
+    [
+      "Quita {count} ruta de traslado hacia o desde: {names}.",
+      "Quita {count} rutas de traslado hacia o desde: {names}.",
+    ],
+  ],
+] as const)("words %s in the singular for one and the plural otherwise", (key, en, es) => {
+  for (const [locale, [one, many]] of [
+    ["en", en],
+    ["es", es],
+  ] as const) {
+    setLocale(locale);
+    const c = serviceDeleteCopy("department");
+    const line = (count: number) =>
+      c.item({ key, count, targets: [{ id: "private", name: "Patio" }] });
+    const fill = (text: string, count: number) =>
+      text.replace("{count}", String(count)).replace("{names}", "Patio");
+    expect(line(1)).toBe(fill(one, 1));
+    expect(line(2)).toBe(fill(many, 2));
+    expect(line(0)).toBe(fill(many, 0));
+  }
 });

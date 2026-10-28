@@ -1271,8 +1271,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   file could store 0, a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
 
-- **A1083. The department delete preview says "Removes 1 floor plan sets."**
-  [Detail](backlog/service-periods.md#a1083-the-department-delete-preview-says-removes-1-floor-plan-sets)
+- **A1174. Delete previews say "Remove 1 normal routing rules."** Several station, zone and
+  department delete lines have only a plural wording, so one item reads wrongly. Left open by A1083
+  (#2196). [Detail](backlog/service-periods.md#a1174-delete-previews-say-remove-1-normal-routing-rules)
 
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
   A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
