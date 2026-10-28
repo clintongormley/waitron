@@ -1680,20 +1680,20 @@ describe("a dish sent after its period", () => {
   });
 
   it("keeps a marked and an unmarked identical dish apart when combined", () => {
-    const tortilla: KitchenTicketItem = { qty: "1.000", name: "Tortilla" };
+    const omelette: KitchenTicketItem = { qty: "1.000", name: "Tortilla" };
     expect(
       arrangeTicketItems(
         [
-          tortilla,
-          { ...tortilla, afterPeriod: "Lunch" },
-          { ...tortilla },
-          { ...tortilla, afterPeriod: "Lunch" },
+          omelette,
+          { ...omelette, afterPeriod: "Lunch" },
+          { ...omelette },
+          { ...omelette, afterPeriod: "Lunch" },
         ],
         "combined",
       ),
     ).toEqual([
-      { ...tortilla, qty: "2.000" },
-      { ...tortilla, afterPeriod: "Lunch", qty: "2.000" },
+      { ...omelette, qty: "2.000" },
+      { ...omelette, afterPeriod: "Lunch", qty: "2.000" },
     ]);
   });
 

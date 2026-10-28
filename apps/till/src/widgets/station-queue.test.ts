@@ -657,7 +657,7 @@ describe("till-station-queue", () => {
   });
 
   describe("an advanceable line's accessible name", () => {
-    const paella: StationQueueGroup = {
+    const dishWithAllergens: StationQueueGroup = {
       ...groupA,
       items: [{ ...groupA.items[0]!, asServed: { allergens: { gluten: {} }, pending: false } }],
     };
@@ -665,7 +665,7 @@ describe("till-station-queue", () => {
     {
       it("starts with the dish, carries its allergens and ends with the bump label", async () => {
         const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
-          groups: [paella],
+          groups: [dishWithAllergens],
           stationId: "st-1",
         });
         const line = el.shadowRoot!.querySelector<HTMLButtonElement>('button[data-item="ti-1"]')!;

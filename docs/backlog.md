@@ -5863,7 +5863,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   suites, server till-API and configuration-transfer fixtures, and file names.
   Keep fixture text with A976, including catalogue display names, recipe ingredient names and
   seasonal venue and zone names, printer-screen display labels, counter-screen display text and
-  station-screen display names.
+  station-screen display names, plus kitchen-ticket grouping and payment/queue widget display text.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
