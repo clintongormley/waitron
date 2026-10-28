@@ -1182,6 +1182,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1151).** Seen with a forced 4-second delay on that read; in normal use it would flash for about
   a tenth of a second at most.
 
+- **A server refusal under a name language that a newer version's folder then sets stays under the
+  disabled field until the next send (left open by A1151).** The window's own check is let go in
+  that case (524413e12); a refusal the server sent is not. It never disables Review.
+
+- **A dish's variant link, when its name wraps, puts its price and VAT class 8 px left of the
+  name's text (left open by A1151).** The link button has its own inside padding; seen only with a
+  name lengthened in the open page, since the demo's variant names are short.
+
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
