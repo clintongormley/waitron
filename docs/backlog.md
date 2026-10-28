@@ -4076,6 +4076,15 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   background re-read) is the pattern. Left out of A1133 because lane A's A841 theme-editor
   slices own this screen.
 
+- **A1169. The Privacy, Defaults and Venue cards can show a save's answer over a newer read when
+  the read that follows the save fails (left open by A1133's review, PR #2180, 2026-10-28).**
+  Defaults (reproduced by the Codex review with a temporary test): a live read shows a newer value
+  while a save runs, the save's later answer replaces it, and the re-read after the save fails, so
+  the card shows the saved value under a read-error message; Privacy uses the same order numbers.
+  Venue (from reading only): a reconnect's read answered before the save was stored is shown, the
+  save's answer is dropped, and the re-read fails, so the card shows the old values under the error.
+  Retry recovers in each. Neither value is known to be newer, so a fix needs a rule for that first.
+
 - **An off `wt-switch` is hard to see, worst in a dark dialog (seen in A757 slice 1's look,
   2026-10-19).**
   [Detail](backlog/dashboard.md#an-off-wt-switch-is-hard-to-see-worst-in-a-dark-dialog-seen-in-a757-slice-1s-look-2026-10-19)
