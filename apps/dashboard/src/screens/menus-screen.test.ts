@@ -2190,6 +2190,7 @@ describe("copying a menu from the list", () => {
     );
     expect(form(el).open).toBe(false);
     expect(location.pathname).toBe("/manage/menus");
+    expect(q(el, '[data-test="member-error"]')).toBeNull();
     expect(writeCalls(client)).toEqual(["duplicateCatalogue"]);
   });
   it("refuses taken and blank names inline, then enables Copy when corrected", async () => {
@@ -2249,6 +2250,14 @@ describe("copying a menu from the list", () => {
     ).toBe(false);
     finish(copy);
     await expect.poll(() => form(el).open).toBe(false);
+    await expect
+      .poll(
+        () =>
+          table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+            '[data-test="duplicate-menu-lunch"]',
+          )!.disabled,
+      )
+      .toBe(false);
   });
   it("closes the row menu on a real Copy click without sending a write", async () => {
     const client = api();
