@@ -1,5 +1,7 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import {
+  adjustmentLines,
+  adjustments,
   approves,
   evaluateCancel,
   evaluateComp,
@@ -217,6 +219,9 @@ interface Plan {
   stamped: string[];
   /** On a row, the split today's second price would have recorded (plan D33). */
   rowSplits: AdjustmentSplit[];
+  /** The lines a comp or discount of bound whole portions or their extras covered, which a later
+   * approval limit reads (plan D33); none on any other line or the whole bill. */
+  coveredLines: string[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
   compedExtras: string[];
   reduction: Decimal;
@@ -727,6 +732,7 @@ export async function planAdjustment(
   let writes: Change[] | null = null;
   let stamped: string[] = [];
   const rowSplits: AdjustmentSplit[] = [];
+  let coveredLines: string[] = [];
   let row: StandIn | null = null;
   let view: readonly Row[] = rows;
   let compedExtras: string[] = [];
@@ -857,6 +863,7 @@ export async function planAdjustment(
             rowSplits.push({ from: standingFor(standIn)[0]!.id, to: takenOf(standIn)[0]!.id });
           }
         }
+        coveredLines = takenOf(target).map(({ id }) => id);
         stamped = changes.flatMap((change) => standingFor(change.row).map((one) => one.id));
         writes = changes.flatMap((change) => {
           const portions = handOut(
@@ -880,6 +887,7 @@ export async function planAdjustment(
           return portions;
         });
       }
+      if (row === null) coveredLines = [...(await readWholePortionLines(tx, [target.id]))];
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
@@ -908,6 +916,7 @@ export async function planAdjustment(
           action: ask.action,
           line,
           rows: view,
+          membersOf: row?.membersOf,
           changes,
           reduction,
           nominal,
@@ -954,6 +963,7 @@ export async function planAdjustment(
     writes: writes ?? changes,
     stamped,
     rowSplits,
+    coveredLines,
     compedExtras,
     reduction,
     nominal,
@@ -961,6 +971,30 @@ export async function planAdjustment(
     stage,
     approval: verdict.kind === "needs_approval" ? verdict.approval : null,
   };
+}
+
+/** Every comp and discount on this bill that covered any of `lineIds` (plan D33), once per line
+ * it covered. */
+async function readCoveringRecords(tx: Transaction, orderId: string, lineIds: readonly string[]) {
+  if (lineIds.length === 0) return [];
+  return tx
+    .select({
+      lineId: adjustmentLines.lineId,
+      reasonId: adjustments.reasonId,
+      reduction: adjustments.reduction,
+      nominal: adjustments.nominalValue,
+      whole: sql<number>`${adjustments.quantity} = ${adjustments.lineQuantity}
+        and json_array_length(${adjustments.splits}) = 0`,
+    })
+    .from(adjustmentLines)
+    .innerJoin(adjustments, eq(adjustments.id, adjustmentLines.adjustmentId))
+    .where(
+      and(
+        eq(adjustments.workingOrderId, orderId),
+        ne(adjustments.action, "cancel"),
+        inArray(adjustmentLines.lineId, [...lineIds]),
+      ),
+    );
 }
 
 /** The line's dish: the line itself, or the dish an extra belongs to, whose stage it shares. */
@@ -978,7 +1012,8 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
  * and the whole-cent spread can give one row more than its average, so each of the item's rows
  * counts their whole reduction, capped at what that row is now below its list value less what any
  * reason's comps and discounts of that row alone took ({@link readWholeLineReductions}, at the
- * row's present quantity and list value), and the item the largest of those.
+ * row's present quantity and list value; on a bound portion, each whole unsplit record that covered
+ * it, by its share of the record's list value, plan D33), and the item the largest of those.
  */
 async function judgeComp(
   tx: Transaction,
@@ -988,6 +1023,8 @@ async function judgeComp(
     action: CompAction;
     line: Row | null;
     rows: readonly Row[];
+    /** On a row, the lines each stand-in line stands for. */
+    membersOf?: ReadonlyMap<string, readonly Row[]>;
     changes: readonly Change[];
     reduction: Decimal;
     nominal: Decimal;
@@ -1015,20 +1052,60 @@ async function judgeComp(
   const lineIds = [
     ...new Set(subjects.flatMap(({ row }) => [row, ...relatedOf(row)].map(({ id }) => id))),
   ];
-  const { lines: shares, billReduction } = await readReasonItemShares(tx, {
+  // Which reader a line takes is decided by its kind (plan D33): a bound whole portion or its extra
+  // reads the lines this reason's records covered; any other line, the record's own lineage.
+  const standing = (id: string) => ask.membersOf?.get(id)?.map((one) => one.id) ?? [id];
+  const real = lineIds.flatMap(standing);
+  const bound = await readWholePortionLines(tx, real);
+  const { lines: lineageShares, billReduction } = await readReasonItemShares(tx, {
     workingOrderId: orderId,
     reasonId: reason.id,
-    lineIds,
+    lineIds: real.filter((id) => !bound.has(id)),
   });
+  const covering = await readCoveringRecords(tx, orderId, [...bound]);
+  const coveredShare = (id: string) =>
+    covering
+      .filter((record) => record.lineId === id && record.reasonId === reason.id)
+      .reduce((sum, record) => sum + shareBp(record.reduction, record.nominal), 0);
+  const shares = new Map(
+    lineIds.map((id) => [
+      id,
+      Math.max(
+        ...standing(id).map((one) =>
+          bound.has(one) ? coveredShare(one) : lineageShares.get(one)!,
+        ),
+      ),
+    ]),
+  );
+  // What any reason's comps and discounts of whole rows took off a bound line: each its part, by
+  // list value, of what it took off every line it covered — today's whole line's own reduction when
+  // the row still holds every one.
+  const coveredAlone = (row: Row) => {
+    const members = ask.membersOf?.get(row.id) ?? [row];
+    let taken = 0;
+    for (const member of members) {
+      const list = decimalToCents(listValue(member, member.quantity));
+      for (const record of covering) {
+        if (record.lineId === member.id && record.whole && record.nominal !== 0) {
+          taken += (record.reduction * list) / record.nominal;
+        }
+      }
+    }
+    return Math.round(taken);
+  };
   const lineReductions = await readWholeLineReductions(tx, { workingOrderId: orderId, lineIds });
   const billShareOf = (row: Row) => {
     const list = decimalToCents(listValue(row, row.quantity));
-    const alone = lineReductions
-      .filter(
-        (taken) =>
-          taken.lineId === row.id && taken.lineQuantity === row.quantity && taken.nominal === list,
-      )
-      .reduce((sum, taken) => sum + taken.reduction, 0);
+    const alone = bound.has(row.id)
+      ? coveredAlone(row)
+      : lineReductions
+          .filter(
+            (taken) =>
+              taken.lineId === row.id &&
+              taken.lineQuantity === row.quantity &&
+              taken.nominal === list,
+          )
+          .reduce((sum, taken) => sum + taken.reduction, 0);
     const off = list - decimalToCents(gross(row, row.quantity)) - alone;
     return shareBp(Math.min(billReduction, Math.max(0, off)), list);
   };
@@ -1308,6 +1385,11 @@ export async function applyAdjustment(
         note: args.note,
         preparationStarted: args.recordedPreparationStarted ?? null,
       });
+      if (plan.coveredLines.length > 0) {
+        await tx
+          .insert(adjustmentLines)
+          .values(plan.coveredLines.map((lineId) => ({ adjustmentId: id, lineId })));
+      }
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {
         const [order] = await tx
