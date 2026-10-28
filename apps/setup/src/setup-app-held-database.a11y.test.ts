@@ -7,6 +7,14 @@ import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { q, click, stoppedActivity, stoppedSummary } from "../test/missing-database-browser.js";
 import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./widgets/test-helpers.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
+import {
+  heldFixture,
+  heldPasswordAccepted,
+  heldSummary,
+  refusedCause,
+  tradingEnv,
+} from "../test/held-database-browser.js";
 
 afterEach(async () => {
   cleanupWidgets();
@@ -93,3 +101,36 @@ for (const locale of ["en-GB", "es-ES"] as const)
             await page.viewport(previous[0]!, previous[1]!);
           }
         });
+
+for (const locale of ["en-GB", "es-ES"] as const)
+  for (const theme of ["light", "dark"] as const)
+    for (const view of ["kept", "trading-saved", "setup-finished"] as const)
+      it(`${locale} ${theme} ${view}: accessible refusal beside a stopped recovery and a setup database holding records`, async () => {
+        const { app, host } = await heldFixture({
+          locale,
+          theme,
+          inspection: () => (view === "trading-saved" ? { artifacts: [tradingEnv] } : {}),
+          summary:
+            view === "setup-finished"
+              ? () => refusedCause("setup-finished")
+              : () => Response.json(heldSummary({ rows: 105, kept: 2, records: 1, accepted: 0 })),
+        });
+        const t = initialOwnerStrings[locale === "es-ES" ? "es" : "en"];
+        if (view !== "trading-saved") await heldPasswordAccepted(app);
+        await expect
+          .poll(() =>
+            view === "kept"
+              ? q(app, "held-refused")
+              : app.shadowRoot!.textContent!.includes(
+                  view === "setup-finished" ? t.setupFinished : t.tradingSaved,
+                ) || null,
+          )
+          .not.toBeNull();
+        await app.updateComplete;
+        await expectNoA11yViolations(host);
+        const focusable = q<WtButton>(
+          app,
+          view === "kept" ? "cancel-start-again" : "reconnect-first",
+        )!;
+        expect(focusable.disabled).toBe(false);
+      });

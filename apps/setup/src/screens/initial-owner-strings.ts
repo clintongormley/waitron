@@ -58,6 +58,17 @@ export const initialOwnerStrings = {
     heldNoInvoicesOne: "It is not an invoice, so no invoice was sent to AEAT.",
     heldLost:
       "Start again deletes them with this attempt. You will enter this setup's details again.",
+    heldKept: "It holds {kept} items that Waitron never deletes.",
+    heldKeptOne: "It holds 1 item that Waitron never deletes.",
+    heldInvoices: "{records} of them are invoices; AEAT accepted {accepted}.",
+    heldInvoiceOne: "1 of them is an invoice; AEAT accepted {accepted}.",
+    heldFault:
+      "An unfinished setup should hold none of these, so this is a fault in Waitron. Start again would delete them, so it is not offered. Reconnect keeps everything as it is.",
+    tradingSaved:
+      "This setup already saved the settings the box trades with. Start again would delete a setup that is ready to trade, so it is not offered here.",
+    tradingSavedPassword: "Enter your setup password to see what is left to do.",
+    setupFinished:
+      "This setup already finished. Start again would delete a finished setup, so it is not offered. Reconnect to check the saved result.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -136,6 +147,17 @@ export const initialOwnerStrings = {
     heldNoInvoicesOne: "No es una factura, así que no se envió ninguna factura a la AEAT.",
     heldLost:
       "Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración.",
+    heldKept: "Tiene {kept} elementos que Waitron nunca borra.",
+    heldKeptOne: "Tiene 1 elemento que Waitron nunca borra.",
+    heldInvoices: "{records} son facturas; la AEAT aceptó {accepted}.",
+    heldInvoiceOne: "1 es una factura; la AEAT aceptó {accepted}.",
+    heldFault:
+      "Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. Empezar de nuevo los borraría, así que no se ofrece. Reconectar lo deja todo como está.",
+    tradingSaved:
+      "Esta configuración ya guardó los ajustes con los que vende el equipo. Empezar de nuevo borraría una configuración lista para vender, así que no se ofrece aquí.",
+    tradingSavedPassword: "Introduce tu contraseña de configuración para ver qué falta.",
+    setupFinished:
+      "Esta configuración ya terminó. Empezar de nuevo borraría una configuración terminada, así que no se ofrece. Reconecta para comprobar el resultado guardado.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",
