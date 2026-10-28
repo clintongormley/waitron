@@ -15,7 +15,11 @@ export const shellEn = {
   "shell.first_setup.recovery_discarded":
     "This recovery was discarded on another device. Start again to recover.",
   "shell.first_setup.disk_full":
-    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+  "shell.first_setup.disk_full_restart_frees_nothing":
+    "The box's disk is full, so Waitron cannot save anything, and restarting the box frees no space. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+  "shell.first_setup.disk_full_restart_unknown":
+    "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
 
   "shell.document_title": "Waitron — set up your server",
   "shell.reload": "Reload",
@@ -173,7 +177,11 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.first_setup.recovery_discarded":
     "Esta recuperación se descartó en otro dispositivo. Empieza de nuevo para recuperar.",
   "shell.first_setup.disk_full":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene.",
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+  "shell.first_setup.disk_full_restart_frees_nothing":
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada, y reiniciar el equipo no libera espacio. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+  "shell.first_setup.disk_full_restart_unknown":
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
 
   "shell.document_title": "Waitron — configura tu servidor",
   "shell.reload": "Recargar",

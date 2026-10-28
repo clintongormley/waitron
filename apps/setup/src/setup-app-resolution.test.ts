@@ -617,6 +617,8 @@ async function damagedRecord(
     summaryRefused?: boolean;
     /** The code of that refusal; `server.internal` when not given. */
     summaryRefusedCode?: string;
+    /** That refusal's params; a full disk's say a restart deletes logs when not given. */
+    summaryRefusedParams?: Record<string, unknown>;
     /** Answered by the summary route in place of `damagedSummary` once a send was refused. */
     damagedSummaryAfterRefusal?: StartAgainSummary;
   } = {},
@@ -639,7 +641,16 @@ async function damagedRecord(
       if (path.endsWith("/start-again/summary") && options.damagedSummary)
         return options.summaryRefused
           ? Response.json(
-              { error: { code: options.summaryRefusedCode ?? "server.internal", params: {} } },
+              {
+                error: {
+                  code: options.summaryRefusedCode ?? "server.internal",
+                  params:
+                    options.summaryRefusedParams ??
+                    (options.summaryRefusedCode === "storage.disk_full"
+                      ? { restartDeletesLogs: true }
+                      : {}),
+                },
+              },
               { status: options.summaryRefusedCode === "storage.disk_full" ? 507 : 500 },
             )
           : Response.json(
@@ -650,7 +661,12 @@ async function damagedRecord(
         refused = true;
         const code = options.refuseCode ?? "setup.attempt_conflict";
         return Response.json(
-          { error: { code, params: {} } },
+          {
+            error: {
+              code,
+              params: code === "storage.disk_full" ? { restartDeletesLogs: true } : {},
+            },
+          },
           { status: code === "storage.disk_full" ? 507 : 409 },
         );
       }
@@ -2333,12 +2349,65 @@ it("with the database present, a tab closed while a refused Start again reads th
 
 const DISK_FULL = {
   "en-GB":
-    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
   "es-ES":
-    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene.",
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
 } as const;
-const diskFull = () =>
-  Response.json({ error: { code: "storage.disk_full", params: {} } }, { status: 507 });
+const DISK_FULL_RESTART_FREES_NOTHING = {
+  "en-GB":
+    "The box's disk is full, so Waitron cannot save anything, and restarting the box frees no space. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+  "es-ES":
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada, y reiniciar el equipo no libera espacio. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+} as const;
+const DISK_FULL_RESTART_UNKNOWN = {
+  "en-GB":
+    "The box's disk is full, so Waitron cannot save anything. If you reinstall Waitron, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
+  "es-ES":
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
+} as const;
+const diskFull = (params: Record<string, unknown> = { restartDeletesLogs: true }) =>
+  Response.json({ error: { code: "storage.disk_full", params } }, { status: 507 });
+
+/** Opens the Start-again confirmation and confirms it. */
+async function confirmStartAgain(app: SetupApp) {
+  await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await userEvent.click(
+    q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+  );
+}
+
+it.each(["en-GB", "es-ES"] as const)(
+  "a Start again refused storage.disk_full where a restart deletes no logs says restarting frees no space, in %s",
+  async (locale) => {
+    const { app } = await mount({
+      intercept(path) {
+        if (path.endsWith("/start-again")) return diskFull({ restartDeletesLogs: false });
+      },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await confirmStartAgain(app);
+    await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING[locale]);
+  },
+);
+
+it.each(["en-GB", "es-ES"] as const)(
+  "a full-disk answer without the field says nothing about restarting, in %s",
+  async (locale) => {
+    const { app } = await mount({
+      intercept(path) {
+        if (path.endsWith("/start-again")) return diskFull({});
+      },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await confirmStartAgain(app);
+    await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_UNKNOWN[locale]);
+    expect(formErrors(app).join(" ")).not.toMatch(/restart/i);
+    expect(formErrors(app).join(" ")).not.toMatch(/reinici/i);
+  },
+);
 
 it.each(["en-GB", "es-ES"] as const)(
   "a Start again refused storage.disk_full says the disk is full, in %s",
@@ -2369,6 +2438,18 @@ it("with the database present, a summary read refused storage.disk_full says the
   await click(app, "damaged-record-continue");
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+});
+
+it("with the database present, a summary read refused storage.disk_full without the field says nothing about restarting", async () => {
+  const { app } = await damagedRecord({
+    damagedSummary: picksSummary(false),
+    summaryRefused: true,
+    summaryRefusedCode: "storage.disk_full",
+    summaryRefusedParams: {},
+  });
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_UNKNOWN["en-GB"]);
 });
 
 it("a damaged record's Start again refused storage.disk_full says the disk is full and goes back to the password", async () => {

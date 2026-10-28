@@ -261,11 +261,20 @@ const ADOPT_ERROR_MESSAGES: Record<string, StringKey> = {
   "setup.not_ready": "shell.not_ready",
 };
 
-/** The repair page's steps before activation, the claim included; activation keeps the first-setup map. */
-const REPAIR_ERROR_MESSAGES: Record<string, StringKey> = {
-  ...FIRST_SETUP_ERROR_MESSAGES,
-  "storage.disk_full": "shell.first_setup.disk_full",
-};
+/**
+ * The repair page's steps before activation, the claim included; activation keeps the first-setup
+ * map. A full disk's words say a restart frees space only where the server says it does.
+ */
+function repairErrorKey(error: unknown): StringKey | undefined {
+  const { code, params } = (error ?? {}) as { code?: string; params?: Record<string, unknown> };
+  if (code === "storage.disk_full")
+    return params?.restartDeletesLogs === true
+      ? "shell.first_setup.disk_full"
+      : params?.restartDeletesLogs === false
+        ? "shell.first_setup.disk_full_restart_frees_nothing"
+        : "shell.first_setup.disk_full_restart_unknown";
+  return code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
+}
 
 const RESET_ERROR_MESSAGES: Record<string, StringKey> = {
   ...FIRST_SETUP_ERROR_MESSAGES,
@@ -1298,8 +1307,7 @@ export class SetupApp extends LitElement {
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
   #describeRepairError(error: unknown): Message {
-    const code = (error as { code?: string } | null)?.code;
-    const key = code === undefined ? undefined : REPAIR_ERROR_MESSAGES[code];
+    const key = repairErrorKey(error);
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
   async #resumeFirstSetup(): Promise<void> {
@@ -1596,8 +1604,7 @@ export class SetupApp extends LitElement {
     this.firstDamagedRecord = "unread";
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
-    const code = (error as { code?: string } | null)?.code;
-    const key = code === undefined ? undefined : REPAIR_ERROR_MESSAGES[code];
+    const key = repairErrorKey(error);
     this.firstOwnerError = key
       ? say(key)
       : () => initialOwnerStrings[setupLocale()].recoveryDetailsUnread;
