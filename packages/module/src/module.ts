@@ -1620,6 +1620,11 @@ export interface WaitronModule {
    * `TableClass`, `@waitron/sync-enrolment`). No foreign key may join a `local` table to a
    * `ledger`/`state` one: `scripts/two-file-foreign-keys.test.ts`. */
   readonly classification?: readonly ClassifiedTable[];
+  /** Whole append-only tables (every row in them may go) that this module's own first-setup
+   * activation writes, which Start again may delete with an unfinished setup. Their names still
+   * reach the floor through `startAgainHistory`; listing a table here never hides it from the
+   * floor. Each must be declared append-only in this module's own `classification`. */
+  readonly startAgainDeletable?: readonly string[];
   readonly changes?: readonly ChangeSource[];
   readonly cards?: unknown;
   /** The domain terms this module OWNS — allowed in its own package (`packageDirOf`), forbidden in
@@ -1676,8 +1681,8 @@ function* requiredEdges(m: WaitronModule): Iterable<readonly [string, string]> {
  * from the `ledger` CLASS: some `ledger` tables are updated by product code, and an append-only table
  * may be `state`.
  *
- * Throws `module.requires_invalid`, `module.dependency_missing`, `module.incompatible_version` or
- * `module.dependency_cycle`.
+ * Throws `module.requires_invalid`, `module.dependency_missing`, `module.incompatible_version`,
+ * `module.dependency_cycle` or `module.start_again_deletable_invalid`.
  */
 export function orderedMigrationSets(modules: readonly WaitronModule[]): MigrationSet[] {
   const byName = new Map(modules.map((m) => [m.name, m]));
@@ -1700,6 +1705,15 @@ export function orderedMigrationSets(modules: readonly WaitronModule[]): Migrati
           required: range,
           actual: target.version,
         });
+      }
+    }
+  }
+
+  for (const m of modules) {
+    const own = new Set(appendOnlyTablesIn(m.classification ?? []));
+    for (const table of m.startAgainDeletable ?? []) {
+      if (!own.has(table)) {
+        throw new AppError("module.start_again_deletable_invalid", { module: m.name, table });
       }
     }
   }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
+import { appendOnly, classify } from "@waitron/sync-enrolment";
 import {
   orderedMigrationSets,
   packageDirOf,
@@ -118,6 +119,46 @@ describe("orderedMigrationSets", () => {
   it("throws module.requires_invalid on a malformed range string", () => {
     const mods = [mod("core"), mod("workforce", { core: "not-a-range" })];
     expect(thrownCode(() => orderedMigrationSets(mods))).toBe("module.requires_invalid");
+  });
+
+  describe("startAgainDeletable", () => {
+    const owner: WaitronModule = {
+      ...mod("ledger"),
+      classification: [
+        appendOnly("ledger_entries", "ledger", "what happened"),
+        classify("ledger_settings", "state", "settings"),
+      ],
+    };
+
+    it("composes a module listing only append-only tables its own migration set declares", () => {
+      const listing: WaitronModule = { ...owner, startAgainDeletable: ["ledger_entries"] };
+      expect(orderedMigrationSets([mod("core"), listing]).map((s) => s.name)).toEqual([
+        "core",
+        "ledger",
+      ]);
+    });
+
+    it("refuses a table another module's migration set declares append-only", () => {
+      const other: WaitronModule = { ...mod("other"), startAgainDeletable: ["ledger_entries"] };
+      let thrown: unknown;
+      try {
+        orderedMigrationSets([owner, other]);
+      } catch (error) {
+        thrown = error;
+      }
+      expect(isAppError(thrown) && thrown.code).toBe("module.start_again_deletable_invalid");
+      expect(isAppError(thrown) && thrown.params).toEqual({
+        module: "other",
+        table: "ledger_entries",
+      });
+    });
+
+    it("refuses a table its own migration set declares but not append-only", () => {
+      const listing: WaitronModule = { ...owner, startAgainDeletable: ["ledger_settings"] };
+      expect(thrownCode(() => orderedMigrationSets([listing]))).toBe(
+        "module.start_again_deletable_invalid",
+      );
+    });
   });
 });
 
