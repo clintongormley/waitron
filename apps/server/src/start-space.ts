@@ -41,6 +41,8 @@ export interface StartSpaceDeps {
   force?: boolean;
   /** This process holds the venue folder's lock for the whole call, so no other process can. */
   venueHeld?: boolean;
+  /** Delete backup and restore staging's leftovers too; defaults to true. */
+  stagingLeftovers?: boolean;
   now: () => Date;
   statfs?: Statfs;
   /** Refused with `provisioning.database_in_use` while another process holds the venue folder. */
@@ -90,6 +92,7 @@ export async function freeSpaceAtStart(
   // On a box, only the server runs a backup or stages a recovery copy, and it holds the venue
   // folder's lock while it does.
   const removeStagingLeftovers = async () => {
+    if (deps.stagingLeftovers === false) return;
     // Taking the lock would create a missing venue folder; with none, no process can hold it.
     if (deps.venueHeld === true || (await missing(deps.venueDir))) return deleteStagingLeftovers();
     let hold: VenueLock;

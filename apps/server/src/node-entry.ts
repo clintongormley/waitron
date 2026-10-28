@@ -9,7 +9,8 @@ export { serveRecovery, recoveryTlsFiles } from "./recovery-listener.js";
 export type { RecoveryServeOptions } from "./recovery-listener.js";
 export { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { realpath } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
@@ -315,6 +316,20 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   };
   const backupEntry = await resolveFirstSetupBackupEntry(deps);
   const cleanupRoots = backupEntry.kind === "selected" ? backupEntry.roots : deps;
+  if (backupEntry.kind === "repair") {
+    const logDir = deps.logDir ?? join(deps.stateDir, "logs");
+    // The recovery's originals digest covers both roots, so a deletion inside them would change it.
+    if (!(await insideAny(logDir, [deps.stateDir, deps.venueDir]))) {
+      await freeSpaceAtStart({
+        ...cleanUp,
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir,
+        stagingLeftovers: false,
+      });
+    }
+  }
+  // The repair stage keeps its page: its clean-up above is for the deletions only.
   const space =
     backupEntry.kind === "repair"
       ? { freeBytes: null, belowFloor: false }
@@ -370,7 +385,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const dirs = [rooted.stateDir, rooted.venueDir];
   const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
   let belowFloor = space.belowFloor;
-  if (moved) {
+  if (moved && backupEntry.kind !== "repair") {
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }
@@ -463,6 +478,17 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
 
   const selected = !moved ? deps : rooted;
   return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
+}
+
+/** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
+async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
+  const real = async (p: string) => realpath(p).catch(() => resolve(p));
+  const target = await real(path);
+  for (const root of roots) {
+    const base = await real(root);
+    if (target === base || target.startsWith(base + sep)) return true;
+  }
+  return false;
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
