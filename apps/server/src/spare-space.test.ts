@@ -137,6 +137,20 @@ describe("releaseSpare", () => {
       ["warn", "storage.spare_marker_write_failed", { errno: "ENOSPC" }],
     ]);
   });
+  it("never writes the marker through a link", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    const outside = join(root, "outside");
+    await writeFile(outside, "kept");
+    await symlink(outside, marker());
+    const log = vi.fn();
+    expect(await releaseSpare(stateDir, log)).toBe(4096);
+    expect(await readFile(outside, "utf8")).toBe("kept");
+    expect((await lstat(marker())).isSymbolicLink()).toBe(true);
+    expect(log.mock.calls).toEqual([
+      ["warn", "storage.spare_released", { bytes: 4096 }],
+      ["warn", "storage.spare_marker_write_failed", { errno: "ELOOP" }],
+    ]);
+  });
 });
 
 describe("topUpSpare", () => {
@@ -355,6 +369,18 @@ describe("spareReleased", () => {
     expect(await spareReleased(stateDir, log)).toBe(false);
     await writeFile(marker(), "");
     expect(await spareReleased(stateDir, log)).toBe(true);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("a folder or a link at the marker's path answers false, and nothing is logged", async () => {
+    const log = vi.fn();
+    await mkdir(marker());
+    expect(await spareReleased(stateDir, log)).toBe(false);
+    await rm(marker(), { recursive: true });
+    const outside = join(root, "outside");
+    await writeFile(outside, "");
+    await symlink(outside, marker());
+    expect(await spareReleased(stateDir, log)).toBe(false);
     expect(log).not.toHaveBeenCalled();
   });
 

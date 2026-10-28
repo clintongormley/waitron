@@ -105,10 +105,7 @@ async function deleteMarker(
   }
 }
 
-/**
- * Whether the release marker stands in `stateDir`: the spare was given up and is not yet whole
- * again. A marker that cannot be read answers true, so the stop holds when the box cannot tell.
- */
+/** Whether the release marker is a regular file in `stateDir`; an unreadable one answers true. */
 export async function spareReleased(stateDir: string, log: Logger): Promise<boolean> {
   try {
     return (await lstat(join(stateDir, SPARE_SPACE_RELEASED_FILE))).isFile();
@@ -147,8 +144,9 @@ function kindOf(info: { isSymbolicLink(): boolean; isDirectory(): boolean }): st
 
 /**
  * Deletes the box's spare file so a nearly full disk has room to start or to take a venue folder's
- * lock; answers the bytes it held. A spare that held bytes leaves the release marker behind it. A
- * link or folder at its path is left alone. Nothing is thrown.
+ * lock; answers the bytes it held. A spare that held bytes leaves the release marker behind it (a
+ * marker that cannot be written is logged). A link or folder at its path is left alone. Nothing is
+ * thrown.
  */
 export async function releaseSpare(
   stateDir: string,
