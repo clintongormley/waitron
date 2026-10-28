@@ -29,9 +29,9 @@ describe("drawTextBand", () => {
   it("centres and right-aligns in whole cells", () => {
     const grid = textGrid("58mm", "180dpi");
     // 30 columns, 4 characters: centred from cell 13, right-aligned from cell 26.
-    expect([...drawTextBand("Hola", grid, "center")]).toEqual(band(360, at("Hola", 13 * 12)));
-    expect([...drawTextBand("Hola", grid, "right")]).toEqual(band(360, at("Hola", 26 * 12)));
-    expect([...drawTextBand("Hol", grid, "center")]).toEqual(band(360, at("Hol", 13 * 12)));
+    expect([...drawTextBand("Wave", grid, "center")]).toEqual(band(360, at("Wave", 13 * 12)));
+    expect([...drawTextBand("Wave", grid, "right")]).toEqual(band(360, at("Wave", 26 * 12)));
+    expect([...drawTextBand("Odd", grid, "center")]).toEqual(band(360, at("Odd", 13 * 12)));
   });
 
   it("cuts a line longer than the grid at the grid's last cell", () => {
@@ -95,8 +95,8 @@ describe("readRasterText", () => {
 
   it("keeps leading spaces and drops trailing ones", () => {
     expect(read("  Total  ", 384)).toBe("  Total");
-    expect(read("Hola", 384, "center")).toBe(" ".repeat(13) + "Hola");
-    expect(read("Hola", 512, "right")).toBe(" ".repeat(38) + "Hola");
+    expect(read("Wave", 384, "center")).toBe(" ".repeat(13) + "Wave");
+    expect(read("Wave", 512, "right")).toBe(" ".repeat(38) + "Wave");
   });
 
   it("reads a blank band as an empty line", () => {

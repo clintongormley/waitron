@@ -375,7 +375,7 @@ describe("text drawn as images", () => {
   it("counts every picture drawn so far, a line, a bitmap and a QR picture alike, and nothing else", () => {
     const b = esc(TM_T88_58);
     expect(b.pictures).toBe(0);
-    b.init().align("center").feed(2).line("Hola").line();
+    b.init().align("center").feed(2).line("Wave").line();
     expect(b.pictures).toBe(2);
     b.bitmap({ widthDots: 8, heightDots: 1, bits: Uint8Array.of(0xff) }).qrRaster([[true]]);
     expect(b.pictures).toBe(4);
@@ -392,18 +392,18 @@ describe("text drawn as images", () => {
 
   it("still sends ESC a, and places the text in whole cells by the alignment", () => {
     expect([
-      ...esc(TM_T88_58).align("center").line("Hola").align("right").line("Hola").bytes(),
+      ...esc(TM_T88_58).align("center").line("Wave").align("right").line("Wave").bytes(),
     ]).toEqual([
       0x1b,
       0x61,
       1,
       ...header(45, 28),
-      ...expectedBand(360, cellsFrom("Hola", 13 * 12)),
+      ...expectedBand(360, cellsFrom("Wave", 13 * 12)),
       0x1b,
       0x61,
       2,
       ...header(45, 28),
-      ...expectedBand(360, cellsFrom("Hola", 26 * 12)),
+      ...expectedBand(360, cellsFrom("Wave", 26 * 12)),
     ]);
   });
 
@@ -427,14 +427,14 @@ describe("text drawn as images", () => {
   });
 
   it("draws text left-aligned again after ESC @, which resets the printer's alignment too", () => {
-    expect([...esc(TM_T88_58).align("center").init().line("Hola").bytes()]).toEqual([
+    expect([...esc(TM_T88_58).align("center").init().line("Wave").bytes()]).toEqual([
       0x1b,
       0x61,
       1,
       0x1b,
       0x40,
       ...header(45, 28),
-      ...expectedBand(360, cellsFrom("Hola", 0)),
+      ...expectedBand(360, cellsFrom("Wave", 0)),
     ]);
   });
 
