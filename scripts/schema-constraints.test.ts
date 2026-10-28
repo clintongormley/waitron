@@ -42,6 +42,7 @@ const EXPECTED_FOREIGN_KEYS = [
   ["absences", ["decided_by_person_id"], "persons"],
   ["absences", ["person_id"], "persons"],
   ["acks", ["registro_id"], "registros_facturacion"],
+  ["adjustment_lines", ["adjustment_id"], "adjustments"],
   ["adjustments", ["working_order_id"], "working_orders"],
   ["availability", ["person_id"], "persons"],
   ["bill_payment_lines", ["bill_payment_id"], "bill_payments"],
@@ -379,6 +380,7 @@ const EXPECTED_FOREIGN_KEYS = [
 
 /** Every unique index that is not a primary key, by the name its declaration gives it. */
 const EXPECTED_UNIQUE_INDEXES = [
+  "adjustment_lines_adjustment_line_key",
   "adjustment_reasons_name_key",
   "bill_payment_refunds_submission_key",
   "bill_payments_submission_key",

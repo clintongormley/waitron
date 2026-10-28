@@ -132,7 +132,7 @@ describe("adjustment backup evidence", () => {
     expect(owner.data).toEqual({
       kind: "custom",
       tables: ADJUSTMENTS_CLASSIFICATION.map((c) => c.table),
-      immutableTables: ["adjustments", "adjustment_refunds"],
+      immutableTables: ["adjustments", "adjustment_refunds", "adjustment_lines"],
       checks: ["data"],
     });
     expect([
@@ -245,6 +245,18 @@ describe("adjustment backup evidence", () => {
     await corrupt(restored.db, change);
     expect((await run()).status).toBe("invalid");
   });
+  it.each(["update adjustment_lines set line_id='other-line'", "delete from adjustment_lines"])(
+    "A803 portions: refuses a changed record of a covered line: %s",
+    async (change) => {
+      for (const db of [original.db, restored.db])
+        db.run(
+          sql`insert into adjustment_lines (id,adjustment_id,line_id) values ('covered','adjustment','deleted-line')`,
+        );
+      expect(await run()).toEqual(passed);
+      await corrupt(restored.db, change);
+      expect((await run()).status).toBe("invalid");
+    },
+  );
   it("keeps query failures distinct from corruption", async () => {
     const failure = new Error("private unavailable read");
     await expect(

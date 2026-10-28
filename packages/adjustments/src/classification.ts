@@ -22,6 +22,11 @@ export const ADJUSTMENTS_CLASSIFICATION: readonly ClassifiedTable[] = [
     "ledger",
     "which cancelled dishes a refund paid back, and how much of it; nothing may change or remove it",
   ),
+  appendOnly(
+    "adjustment_lines",
+    "ledger",
+    "which bill lines a comp or discount covered; nothing may change or remove it",
+  ),
 ];
 
 export const ADJUSTMENTS_CHANGE_SOURCES: readonly ChangeSource[] = ADJUSTMENTS_CLASSIFICATION.map(

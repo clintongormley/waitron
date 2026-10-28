@@ -522,6 +522,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       ticket_item_allergies: [],
       custom_themes: [],
       adjustment_refunds: [],
+      adjustment_lines: [],
       order_group_hold_stations: [],
       order_portions: [],
       working_line_portions: [],

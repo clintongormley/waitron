@@ -112,7 +112,7 @@
     "name": "adjustments",
     "table": "__drizzle_migrations_adjustments",
     "from": "../adjustments/drizzle",
-    "appendOnlyTables": ["adjustments", "adjustment_refunds"]
+    "appendOnlyTables": ["adjustments", "adjustment_refunds", "adjustment_lines"]
   },
   {
     "name": "staffing",
