@@ -393,10 +393,13 @@ it("a detached save cannot replace a reopened panel's new saved values", async (
   r.set(venueDetailsFixture({ name: "Reopened" }));
   host.append(el);
   await flush(el);
+  const reread = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => reread.promise);
   complete({ changed: true, model: venueDetailsFixture({ name: "Old reply" }) });
   await flush(el);
   await flush(el);
   expect(q(el, "[data-test=saved-name]")?.textContent?.trim()).toBe("Reopened");
+  reread.resolve(venueDetailsFixture({ name: "Reopened" }));
 });
 it("shows a refusal without a visible field at the bottom without disabling retry", async () => {
   setLocale("en-GB");
@@ -896,12 +899,34 @@ it.each([
   },
 );
 
-it("an answer from before a reconnect does not replace the newer read while its own re-read is pending", async () => {
+it("a read begun after the save was sent and already shown wins over the save's answer", async () => {
   const r = rig();
   r.set(venueDetailsFixture({ name: "Reopened" }));
   const { el, pending } = await savingThroughReconnect(r);
-  vi.mocked(r.api.getVenueDetails).mockImplementation(() => new Promise(() => {}));
+  const reread = deferred<VenueDetailsModel>();
+  vi.mocked(r.api.getVenueDetails).mockImplementationOnce(() => reread.promise);
   pending.resolve({ changed: true, model: venueDetailsFixture({ name: "Old reply" }) });
   await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
   expect(text(q(el, "[data-test=saved-name]"))).toBe("Reopened");
+  reread.resolve(venueDetailsFixture({ name: "Reopened" }));
+});
+
+it("a save's answer is shown when the read begun after it was sent failed", async () => {
+  const r = rig();
+  const pending = deferred<{ changed: boolean; model: VenueDetailsModel }>();
+  vi.mocked(r.api.patchVenueDetails).mockImplementationOnce(() => pending.promise);
+  const el = await editing(r.api);
+  change(el, "addressLine1", "Confirmed street");
+  await flush(el);
+  await click(el, "[data-test=save]");
+  vi.mocked(r.api.getVenueDetails).mockRejectedValue({ code: "connection.failed" });
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  pending.resolve({
+    changed: true,
+    model: venueDetailsFixture({ addressLine1: "Confirmed street" }),
+  });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await flush(el);
+  expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Confirmed street");
 });
