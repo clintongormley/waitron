@@ -366,7 +366,10 @@ describe("patchLiveMenu", () => {
             { target, field: "price", value: "5.5" },
             { target, field: "image", value: "lemon.jpg" },
           ]),
-        { code: "menu_patch.invalid", params: { change: 1, field: "image" } },
+        {
+          code: "menu_patch.invalid",
+          params: { change: 1, field: "image", reason: "image.not_found" },
+        },
       );
     });
   });

@@ -722,7 +722,11 @@ export async function patchLiveMenu(
   const parsed = parseMenuPatch(changes);
   for (const [index, { field, value }] of parsed.entries())
     if (field === "image" && value !== null && !(await mediaImageExists(tx, value as string)))
-      throw new AppError("menu_patch.invalid", { change: index, field: "image" });
+      throw new AppError("menu_patch.invalid", {
+        change: index,
+        field: "image",
+        reason: "image.not_found",
+      });
   const document = applyMenuPatch(
     live.document!,
     parsed,

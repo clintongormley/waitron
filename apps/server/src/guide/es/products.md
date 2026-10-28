@@ -302,6 +302,8 @@ Cada elemento que cambias se marca con un punto. Un valor que la corrección no 
 elegir **Revisar**: su campo dice qué corregir, su elemento se marca con **!** y **Revisar** no
 está disponible hasta que lo corrijas. Si se rechaza **Publicar la corrección** por un valor, la
 ventana vuelve al campo de ese valor y explica allí el motivo; tu cambio se conserva en la ventana.
+Una imagen que se ha borrado de la biblioteca de imágenes después de elegirla se rechaza así: elige
+otra o quítala.
 **Revisar 1 corrección**, o **Revisar** seguido del número de correcciones, muestra cada una
 como el valor anterior → el nuevo. Elige **Seguir editando** para volver, o **Publicar la corrección**. Esto es lo que hace publicar una corrección:
 

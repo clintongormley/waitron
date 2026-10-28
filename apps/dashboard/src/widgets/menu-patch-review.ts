@@ -57,6 +57,8 @@ export function placeRefusal(
   const params = (error as { params?: Record<string, unknown> }).params ?? {};
   const change = code === "menu_patch.invalid" ? sent[params.change as number] : undefined;
   if (change === undefined || change.field !== params.field) return { refusal: { code, params } };
+  if (params.reason === "image.not_found")
+    return { change, message: t("menu_patch.image_not_found") };
   return {
     change,
     message: codeMessage((params.reason as string | undefined) ?? "menu_patch.invalid"),

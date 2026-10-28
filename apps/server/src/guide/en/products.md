@@ -287,6 +287,8 @@ Each item you change is marked with a dot. A value the patch cannot take is poin
 choose **Review**: its field says what to correct, its item is marked with **!**, and **Review** stays
 unavailable until you correct it. If **Put live now** is refused because of one value, the
 window goes back to that value's field and says why there; your change stays in the window.
+An image deleted from the image library after you chose it is refused this way: choose another, or
+remove it.
 **Review 1 change**, or **Review** followed by the number of changes, lists each one as the old
 value → the new one. Choose **Keep editing** to go back, or **Put live now**. What putting a patch live does:
 

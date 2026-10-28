@@ -2362,11 +2362,15 @@ it("keeps focus inside the dialog when a Reload read during the send removes the
   expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "review"));
 });
 
-it("says under the picture why a refused picture was refused, as its chooser's description", async () => {
+it("says under the picture that a refused picture left the image library, as its chooser's description", async () => {
   const el = await mount(
     stubApi({
       patchLiveMenu: vi.fn(async () => {
-        throw refusal("menu_patch.invalid", { change: 0, field: "image" });
+        throw refusal("menu_patch.invalid", {
+          change: 0,
+          field: "image",
+          reason: "image.not_found",
+        });
       }),
     }),
   );
@@ -2383,13 +2387,14 @@ it("says under the picture why a refused picture was refused, as its chooser's d
   await press(el, "put-live");
   const upload = form(el).querySelector("dashboard-image-upload")!;
   await upload.updateComplete;
+  const gone = "This image is no longer in the image library. Choose another, or remove it.";
   expect(upload.shadowRoot!.querySelector('[data-test="image-error"]')!.textContent!.trim()).toBe(
-    "Check this value.",
+    gone,
   );
   const choose = upload.shadowRoot!.querySelector('wt-button[data-test="choose-image"]')!;
   await expect
     .element(page.elementLocator(choose.shadowRoot!.querySelector("button")!))
-    .toHaveAccessibleDescription("Check this value.");
+    .toHaveAccessibleDescription(gone);
   pickPicture("media:soup");
   await el.updateComplete;
   await upload.updateComplete;

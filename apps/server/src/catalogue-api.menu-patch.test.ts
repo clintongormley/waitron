@@ -234,6 +234,35 @@ describe("reading and patching a menu's live version", () => {
     ).toEqual([{ filename: PHOTO }]);
   });
 
+  it("refuses a picture deleted from the media library, saying the library no longer holds it", async () => {
+    const app = mountApp();
+    const { menuId, itemId } = await lunchWithSoup(app);
+    await publish(app, menuId);
+    const base = await json<LiveMenu>(await live(app, menuId), 200);
+    const deleted = `${"d".repeat(64)}.jpg`;
+    await suite.db.insert(mediaImages).values({ filename: deleted, names: { es: "Borrada" } });
+    await suite.db.execute(sql`delete from media_images where filename = ${deleted}`);
+    const before = await publicationTables();
+    expect(
+      await json(
+        await patch(app, menuId, {
+          baseVersionId: base.versionId,
+          changes: [
+            price(itemId, "4.50"),
+            { target: { kind: "offer", menuItemId: itemId }, field: "image", value: deleted },
+          ],
+        }),
+        400,
+      ),
+    ).toEqual({
+      error: {
+        code: "menu_patch.invalid",
+        params: { change: 1, field: "image", reason: "image.not_found" },
+      },
+    });
+    expect(await publicationTables()).toEqual(before);
+  });
+
   it("refuses a session without the catalogue permission, writing nothing", async () => {
     const app = mountApp();
     const { menuId, itemId } = await lunchWithSoup(app);

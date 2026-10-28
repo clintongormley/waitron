@@ -2955,6 +2955,8 @@ export const en = {
   "menu_patch.no_image": "no image",
   "menu_patch.current_image": "current image",
   "menu_patch.new_image": "new image",
+  "menu_patch.image_not_found":
+    "This image is no longer in the image library. Choose another, or remove it.",
   "menu_patch.open_orders_note": "Lines already on open orders keep their old price and VAT class.",
   "menu_patch.queued_note": "The version going live on {date} does not include these changes.",
   "menu_patch.queued_note_many": "The versions going live on {dates} do not include these changes.",
@@ -6485,6 +6487,8 @@ export const es: Record<StringKey, string> = {
   "menu_patch.no_image": "sin imagen",
   "menu_patch.current_image": "imagen actual",
   "menu_patch.new_image": "imagen nueva",
+  "menu_patch.image_not_found":
+    "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
   "menu_patch.open_orders_note":
     "Las líneas que ya están en pedidos abiertos mantienen su precio y su clase de IVA anteriores.",
   "menu_patch.queued_note": "La versión que se publica el {date} no incluye estas correcciones.",

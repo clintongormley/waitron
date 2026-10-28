@@ -255,6 +255,24 @@ it("places a refused value under the field of the change it names", () => {
   ).toEqual({ change: price, message: codeMessage("content.translation_invalid") });
 });
 
+it("says a refused picture is no longer in the image library and what to do, in English and Spanish", () => {
+  const picture = { target: soup, field: "image", value: "gone.jpg" };
+  const gone = refused("menu_patch.invalid", {
+    change: 0,
+    field: "image",
+    reason: "image.not_found",
+  });
+  expect(placeRefusal(gone, [picture])).toEqual({
+    change: picture,
+    message: "This image is no longer in the image library. Choose another, or remove it.",
+  });
+  setLocale("es");
+  expect(placeRefusal(gone, [picture])).toEqual({
+    change: picture,
+    message: "Esta imagen ya no está en la biblioteca de imágenes. Elige otra o quítala.",
+  });
+});
+
 it("leaves at the bottom a refusal that names no change the form shows", () => {
   for (const params of [
     { change: 0, field: "target" },
