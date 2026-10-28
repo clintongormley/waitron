@@ -780,7 +780,7 @@ const EXPECTED_CHECK_CONSTRAINTS = [
   "sale_lines_quantity_ck",
   "sale_lines_unit_precision_ck",
   "sale_lines_vat_rate_ck",
-  "sale_receipt_guests_guests_ck",
+  "sale_receipt_guests_guest_count_ck",
   "sales_invoice_locales_ck",
   "sales_invoice_number_ck",
   "sales_issued_offset_ck",
