@@ -720,6 +720,13 @@ PROBE inspect occupied false undefined
   `@waitron/composition`, failed inside `archiveHost()` with `sif.allocation_invalid`
   (`hour-selection.ts:383`); the only change before the run above was moving that import to the
   top, as `first-setup-backup-recovery-fixture.ts` has it. The helper imports it first.
+- **Known limit of the helper (`apps/server/test/held-setup-database.ts`): its environments are
+  mixed.** The attempt and the setup database are `production` (`provision.ts:141`; a throwaway
+  probe printed attempt `production`, `deployment` `production`), while the setup host
+  (`hourFirstFiscalFixture`, `environment: {}`, so preproduction) and the backup recovery and its
+  archive are `preproduction`. No real box holds that mix; later tasks must not build or test an
+  environment check on the helper's held state. The `invoices` option's records follow the
+  attempt's environment (the same probe printed `entorno` `production` after the review fix).
 
 ## Review round 1 (2026-10-28) — what changed
 

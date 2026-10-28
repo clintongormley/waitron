@@ -41,6 +41,21 @@ export interface HeldSetupOptions {
   tradingSettings?: boolean;
   /** One committed row left in `venue.db-wal` and not in `venue.db`. */
   pendingWal?: boolean;
+  /** `false`: no backup recovery is started beside the held database. */
+  recovery?: boolean;
+}
+
+type BackupRecovery = ReturnType<typeof createFirstSetupBackupRecovery>;
+interface HeldSetup {
+  roots: { stateDir: string; venueDir: string };
+  host: Awaited<ReturnType<typeof hourFirstFiscalFixture>>["host"];
+  workspace: ReturnType<typeof createFirstSetupBackupWorkspace>;
+  service: BackupRecovery | undefined;
+  signIn(): Promise<{
+    owner: { attemptId: string; revision: number; ownerGeneration: number; capability: string };
+    ids: { inspectionId: string; revision: number; ownerGeneration: number };
+  }>;
+  installationName: string;
 }
 
 const services: { dispose(): Promise<void> }[] = [];
@@ -53,8 +68,16 @@ const ACCOUNT_KEY = Buffer.alloc(32, 8).toString("base64");
 /**
  * A first setup activated for real into `<venue>/venue.db` with every module, then a backup
  * recovery opened, prepared and stopped beside it. The order is the plan's Task 2 probe (order B).
+ * Call it once per test: it reuses `archiveHost()`'s single root. Importing this file brings in
+ * `hour-recovery-host.ts`'s database suite, hooks and mocks.
  */
-export async function heldSetup(options: HeldSetupOptions = {}) {
+export function heldSetup(
+  options: HeldSetupOptions & { recovery: false },
+): Promise<HeldSetup & { service: undefined }>;
+export function heldSetup(
+  options?: HeldSetupOptions & { recovery?: true },
+): Promise<HeldSetup & { service: BackupRecovery }>;
+export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSetup> {
   const status = options.status ?? "committed";
   const f = await archiveHost();
   const held = await openVenueDatabase(f.roots.venueDir);
@@ -164,8 +187,8 @@ export async function heldSetup(options: HeldSetupOptions = {}) {
       const backend = new VerifactuBackend({
         db: held.venue,
         clock: saleClock,
-        deploymentEnvironment: "preproduction",
-        environment: "preproduction",
+        deploymentEnvironment: attempt.frozen.environment,
+        environment: attempt.frozen.environment,
         resolveClient: async () => aeat.client(),
       });
       const [standard] = await held.venue
@@ -214,50 +237,53 @@ export async function heldSetup(options: HeldSetupOptions = {}) {
       await held.close();
     }
 
-    const entries = unpackArchive(decryptArtifact(f.restore.artifact, f.restore.recoveryKey));
-    entries.push({
-      name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
-      bytes: Buffer.from(
-        JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
-      ),
-    });
-    const artifact = encryptArtifact(packArchive(entries), f.restore.recoveryKey);
     const workspace = createFirstSetupBackupWorkspace(f.roots);
-    const service = createFirstSetupBackupRecovery({
-      ...f.roots,
-      environment: "preproduction",
-      modules: ALL_MODULES,
-      host,
-      workspace,
-      sources: {
-        ...f.restore,
-        bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
-      },
-      log: () => {},
-    });
-    services.push(service);
-    await host.resolution.withVenueExclusion(async () => {});
-    const inspected = await host.resolution.inspectFirstSetupResolution();
-    const session = await service.open(
-      {
-        observation: {
-          inspectionId: inspected.inspectionId,
-          revision: inspected.revision,
-          ownerGeneration: inspected.ownerGeneration,
+    let service: BackupRecovery | undefined;
+    if (options.recovery !== false) {
+      const entries = unpackArchive(decryptArtifact(f.restore.artifact, f.restore.recoveryKey));
+      entries.push({
+        name: "secrets/module-evidence/fiscal-verifactu/hour-history.json",
+        bytes: Buffer.from(
+          JSON.stringify({ reference: "prepared-hours", complete: true, records: [] }),
+        ),
+      });
+      const artifact = encryptArtifact(packArchive(entries), f.restore.recoveryKey);
+      service = createFirstSetupBackupRecovery({
+        ...f.roots,
+        environment: "preproduction",
+        modules: ALL_MODULES,
+        host,
+        workspace,
+        sources: {
+          ...f.restore,
+          bucket: { litestreamBin: "/unused", now: () => new Date(), log: () => {} },
         },
-        source: {
-          kind: "archive",
-          artifact: Uint8Array.from(artifact),
-          recoveryKey: f.restore.recoveryKey,
-          environment: "preproduction",
+        log: () => {},
+      });
+      services.push(service);
+      await host.resolution.withVenueExclusion(async () => {});
+      const inspected = await host.resolution.inspectFirstSetupResolution();
+      const session = await service.open(
+        {
+          observation: {
+            inspectionId: inspected.inspectionId,
+            revision: inspected.revision,
+            ownerGeneration: inspected.ownerGeneration,
+          },
+          source: {
+            kind: "archive",
+            artifact: Uint8Array.from(artifact),
+            recoveryKey: f.restore.recoveryKey,
+            environment: "preproduction",
+          },
+          nodeRecoverySecret: key.secret,
+          context: { oldBoxGone: true, soleRecovery: true },
         },
-        nodeRecoverySecret: key.secret,
-        context: { oldBoxGone: true, soleRecovery: true },
-      },
-      { onBox: false },
-    );
-    await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
-    await service.close(session.sessionId);
+        { onBox: false },
+      );
+      await service.prepare(session.sessionId, { action: "clock-challenge" }, { onBox: false });
+      await service.close(session.sessionId);
+    }
 
     /** The setup owner signed in again with the setup password, and the ids of a fresh inspection. */
     const signIn = async () => {

@@ -70,6 +70,26 @@ it("status complete and saved trading settings are reached through real steps", 
   expect((await f.service.liveness())?.state).toBe("stopped");
 });
 
+it("status committed with saved trading settings: publication wrote them, then failed", async () => {
+  const f = await heldSetup({ tradingSettings: true });
+  expect((await f.host.store.read())?.status).toBe("committed");
+  expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(
+    "WAITRON_TILL_NODE_ID=",
+  );
+  expect((await f.service.liveness())?.state).toBe("stopped");
+});
+
+it("recovery: false leaves the held database with no recovery beside it", async () => {
+  const f = await heldSetup({ recovery: false });
+  expect(f.service).toBeUndefined();
+  expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
+    database: "occupied",
+    emptyDatabase: false,
+  });
+  expect((await f.host.store.read())?.status).toBe("committed");
+  expect(await f.workspace.read()).toEqual([]);
+});
+
 it("pendingWal leaves a committed row in venue.db-wal", async () => {
   const f = await heldSetup({ pendingWal: true });
   // A write-ahead file is a 32-byte header followed by frames; a frame means a pending page.
