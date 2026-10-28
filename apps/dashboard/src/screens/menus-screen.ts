@@ -2251,7 +2251,7 @@ export class MenusScreen extends LitElement {
               align="start"
               variant="ghost"
               data-test=${`duplicate-${menu.id}`}
-              ?disabled=${this.copyingMenu !== null}
+              ?disabled=${this.copyingMenu?.id === menu.id}
               @click=${() => {
                 if (!this.copyingMenu) this.copyingMenu = menu;
               }}

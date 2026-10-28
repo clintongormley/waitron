@@ -2158,6 +2158,17 @@ describe("copying a menu from the list", () => {
     expect(field(el).required).toBe(true);
     expect(action(el).disabled).toBe(true);
     expect(table(el).shadowRoot.textContent).toContain(t("menus.copy"));
+    const menu = table(el).shadowRoot.querySelector(
+      'tr[data-row-key="menu-lunch"] wt-row-actions',
+    )!;
+    const items = [...menu.querySelectorAll("wt-button")];
+    expect(items.map((item) => item.dataset.test)).toEqual([
+      "edit-menu-lunch",
+      "rename-menu-lunch",
+      "duplicate-menu-lunch",
+    ]);
+    expect(text(items[2]!)).toBe(t("menus.copy"));
+    expect(items[2]!.variant).toBe("ghost");
   });
   it("copies under the trimmed chosen name, stays on the list and lists the copy", async () => {
     const client = api({
@@ -2226,6 +2237,16 @@ describe("copying a menu from the list", () => {
     expect(action(el).loading).toBe(true);
     expect(field(el).disabled).toBe(true);
     expect(client.duplicateCatalogue).toHaveBeenCalledOnce();
+    expect(
+      table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="duplicate-menu-lunch"]',
+      )!.disabled,
+    ).toBe(true);
+    expect(
+      table(el).shadowRoot.querySelector<HTMLElementTagNameMap["wt-button"]>(
+        '[data-test="duplicate-menu-dinner"]',
+      )!.disabled,
+    ).toBe(false);
     finish(copy);
     await expect.poll(() => form(el).open).toBe(false);
   });
@@ -2275,9 +2296,30 @@ describe("copying a menu from the list", () => {
       .toBe(codeMessage("catalogue.not_found"));
     expect(field(el).error).toBe("");
     expect(action(el).disabled).toBe(false);
+    expect(
+      [...table(el).shadowRoot.querySelectorAll("tr[data-row-key]")].map((row) =>
+        row.getAttribute("data-row-key"),
+      ),
+    ).toEqual(["menu-dinner", "menu-lunch"]);
+    expect(client.listCatalogues).toHaveBeenCalledOnce();
     action(el).click();
     await expect.poll(() => form(el).open).toBe(false);
     expect(client.duplicateCatalogue).toHaveBeenCalledTimes(2);
+  });
+  it("Spanish Copy uses the chosen name without adding a suffix", async () => {
+    const client = api();
+    const el = await mount(client);
+    await at([390, 844], "es", async () => {
+      await open(el);
+      await name(el, "Weekend lunch");
+      expect(action(el).textContent!.trim()).toBe(t("menus.copy_action"));
+      action(el).click();
+      await expect.poll(() => form(el).open).toBe(false);
+      expect(client.duplicateCatalogue).toHaveBeenCalledExactlyOnceWith(
+        "menu-lunch",
+        "Weekend lunch",
+      );
+    });
   });
   it("reports a failed reload after a copy as a load failure and closes the dialog", async () => {
     const client = api({
