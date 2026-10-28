@@ -460,6 +460,7 @@ export class TillShell extends LitElement {
       this.#observe();
       this.#retryHiddenLogo();
     }
+    if (this.hasUpdated && this.formFactor === "till") this.#observeCounter();
   }
 
   override disconnectedCallback(): void {
@@ -471,7 +472,10 @@ export class TillShell extends LitElement {
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
     this.#watchedStrip = undefined;
+    this.#counterObserver?.disconnect();
+    this.#counterTargets.clear();
     this.#run += 1;
+    this.#counterRun += 1;
     this.#stopLogoRetry();
   }
 
@@ -492,6 +496,8 @@ export class TillShell extends LitElement {
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #stripObserver?: ResizeObserver;
+  #counterObserver?: ResizeObserver;
+  #counterTargets = new Set<Element>();
   #watchedStrip?: Element;
   #watchedPopup?: Element;
   #shownName = false;
@@ -523,15 +529,21 @@ export class TillShell extends LitElement {
 
   override willUpdate(changed: PropertyValues): void {
     super.willUpdate(changed);
-    if (this.formFactor !== "till") this.#release();
+    if (this.formFactor !== "till") {
+      this.counterLogoRoom = false;
+      this.#release();
+    }
   }
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
     if (this.formFactor === "till") {
+      this.#observeCounter();
       void this.#measureCounterLogo();
       return;
     }
+    this.#counterObserver?.disconnect();
+    this.#counterTargets.clear();
     this.#observe();
     const logo = logoKey(this.#venueLogo.state);
     const logoChanged = logo !== this.#drawnLogo;
@@ -634,6 +646,24 @@ export class TillShell extends LitElement {
     if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
     if (strip) this.#stripObserver.observe(strip);
     this.#watchedStrip = strip;
+  }
+
+  /** The strip itself is not observed: its width is what the logo changes. Only targets new since
+   * the last render are observed, since each new observation reports once, and one made while
+   * notifications are being delivered is a ResizeObserver loop. */
+  #observeCounter(): void {
+    this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
+    const targets = new Set<Element>([
+      this,
+      ...this.renderRoot.querySelectorAll(
+        ".head > .counter-logo, .head > .session, .till-strip > *",
+      ),
+    ]);
+    for (const target of this.#counterTargets)
+      if (!targets.has(target)) this.#counterObserver.unobserve(target);
+    for (const target of targets)
+      if (!this.#counterTargets.has(target)) this.#counterObserver.observe(target);
+    this.#counterTargets = targets;
   }
 
   #popup(): Element | undefined {
