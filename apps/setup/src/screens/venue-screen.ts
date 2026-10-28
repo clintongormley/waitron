@@ -11,6 +11,7 @@ import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
   receiptLanguageRules,
+  resolveCountryDemoIdentity,
   resolveFiscalJurisdiction,
   type AdministrativeArea,
   type CountryPack,
@@ -83,6 +84,7 @@ const FIELD_AUTOCOMPLETE: Record<TextField, string> = {
 type FieldKey = TextField | "invoiceLocales";
 
 interface VenueForm {
+  demoLocationNameSource: "automatic" | "custom";
   values: Record<TextField, string>;
   invoiceLocales: string[];
   invoiceLocalesFollowAreaDefault: boolean;
@@ -299,6 +301,7 @@ export class SetupVenueScreen extends LitElement {
   // `refusal` is kept whole, not copied: its `message` is translated on each read.
   @state() private serverInvalid?: { readonly key: TextField; readonly refusal: ServerField };
 
+  #demoLocationNameSource: "automatic" | "custom" = "automatic";
   #seeded = false;
   #invoiceLocalesFollowAreaDefault = true;
   #errors = new Map<FieldKey, string>();
@@ -318,6 +321,7 @@ export class SetupVenueScreen extends LitElement {
 
   #current(): VenueForm {
     return {
+      demoLocationNameSource: this.#demoLocationNameSource,
       values: this.values,
       invoiceLocales: this.invoiceLocales,
       invoiceLocalesFollowAreaDefault: this.#invoiceLocalesFollowAreaDefault,
@@ -328,14 +332,17 @@ export class SetupVenueScreen extends LitElement {
     return { ...form, values: { ...form.values }, invoiceLocales: [...form.invoiceLocales] };
   }
 
-  #comparable(form: VenueForm): Record<TextField | "invoiceLocales", string | null> {
+  #comparable(
+    form: VenueForm,
+  ): Record<TextField | "invoiceLocales" | "demoLocationNameSource", string | null> {
     const pack = getVenueSetupCountryPack(form.values.country);
     const area = pack && findAdministrativeArea(pack, form.values.province);
     const tax = pack?.taxIdentifier?.validate(form.values.taxId);
     const postal = pack?.postalCode?.validate(form.values.postalCode);
     const rules = pack && receiptLanguageRules(pack, area?.code);
-    const values: Record<TextField | "invoiceLocales", string | null> = {
+    const values: Record<TextField | "invoiceLocales" | "demoLocationNameSource", string | null> = {
       ...form.values,
+      demoLocationNameSource: this.#demo ? form.demoLocationNameSource : null,
       operationDescription: "",
       taxId: tax?.valid ? tax.normalized : form.values.taxId,
       postalCode: postal?.valid ? postal.normalized : form.values.postalCode,
@@ -360,11 +367,12 @@ export class SetupVenueScreen extends LitElement {
       equal: (a, b) => {
         const left = this.#comparable(a);
         const right = this.#comparable(b);
-        return (Object.keys(left) as (TextField | "invoiceLocales")[]).every(
-          (key) => left[key] === right[key],
-        );
+        return (
+          Object.keys(left) as (TextField | "invoiceLocales" | "demoLocationNameSource")[]
+        ).every((key) => left[key] === right[key]);
       },
       restore: (form) => {
+        this.#demoLocationNameSource = form.demoLocationNameSource;
         this.values = form.values;
         this.invoiceLocales = form.invoiceLocales;
         this.#invoiceLocalesFollowAreaDefault = form.invoiceLocalesFollowAreaDefault;
@@ -378,10 +386,7 @@ export class SetupVenueScreen extends LitElement {
     if (!this.#seeded) {
       this.#seeded = true;
       this.#seedFromDraft();
-      const demoLocation = this.#demo ? this.#pack()?.demo?.locationName : undefined;
-      if (demoLocation !== undefined && this.values.name === "") {
-        this.values = { ...this.values, name: demoLocation };
-      }
+      this.#followDemoName(this.#pack(), this.#area(this.#pack()));
     }
     this.values = { ...this.values, operationDescription: this.#descriptionDefault() };
     this.#baseline ??= this.#snapshot(this.#current());
@@ -435,6 +440,8 @@ export class SetupVenueScreen extends LitElement {
       fullSeriesCode: venue.fullSeriesCode ?? this.values.fullSeriesCode,
       rectificativeSeriesCode: venue.rectificativeSeriesCode ?? this.values.rectificativeSeriesCode,
     };
+    this.#demoLocationNameSource =
+      this.draft.demoLocationNameSource ?? (this.values.name === "" ? "automatic" : "custom");
     const pack = this.#pack();
     const area = this.#area(pack);
     const defaults = defaultInvoiceLocales(pack, area);
@@ -445,11 +452,18 @@ export class SetupVenueScreen extends LitElement {
     }
   }
 
+  #followDemoName(pack: CountryPack | undefined, area: AdministrativeArea | undefined): void {
+    if (!this.#demo || this.#demoLocationNameSource !== "automatic" || pack === undefined) return;
+    const identity = resolveCountryDemoIdentity(pack, area?.code);
+    if (identity !== undefined) this.values = { ...this.values, name: identity.locationName };
+  }
+
   #onField(key: TextField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
     // Editing the field the server refused retires that mark: the new value has not been refused.
     if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
+    if (key === "name") this.#demoLocationNameSource = "custom";
     if (key === "postalCode") {
       const pack = this.#pack();
       const validation = pack?.postalCode?.validate(value);
@@ -462,6 +476,7 @@ export class SetupVenueScreen extends LitElement {
         postalCode: value,
         ...(area === undefined ? {} : { province: area.name }),
       };
+      if (area !== undefined) this.#followDemoName(pack, area);
       if (pack !== undefined && area !== undefined && this.#invoiceLocalesFollowAreaDefault) {
         this.invoiceLocales = defaultInvoiceLocales(pack, area);
       }
@@ -477,6 +492,7 @@ export class SetupVenueScreen extends LitElement {
     const country = event.detail.value;
     const pack = getVenueSetupCountryPack(country);
     this.values = { ...this.values, country, postalCode: "", province: "" };
+    this.#followDemoName(pack, undefined);
     if (pack !== undefined) {
       this.invoiceLocales = defaultInvoiceLocales(pack, undefined);
       this.#invoiceLocalesFollowAreaDefault = true;
@@ -490,6 +506,7 @@ export class SetupVenueScreen extends LitElement {
     if (pack === undefined) return;
     const area = findAdministrativeArea(pack, event.detail.value);
     this.values = { ...this.values, province: area?.name ?? "" };
+    if (area !== undefined) this.#followDemoName(pack, area);
     this.#scope?.changed();
     if (area === undefined) return;
     if (this.#invoiceLocalesFollowAreaDefault) {
@@ -596,9 +613,11 @@ export class SetupVenueScreen extends LitElement {
   }
 
   #next(): void {
-    // From the pack chosen NOW, so a country changed after the form was seeded cannot send another
-    // country's demo identity.
-    const identity = this.#demo ? this.#pack()?.demo : undefined;
+    const demoPack = this.#pack();
+    const identity =
+      this.#demo && demoPack !== undefined
+        ? resolveCountryDemoIdentity(demoPack, this.#area(demoPack)?.code)
+        : undefined;
     if (identity !== undefined) {
       this.values = { ...this.values, taxId: identity.taxId, legalName: identity.legalName };
     }
@@ -628,6 +647,7 @@ export class SetupVenueScreen extends LitElement {
       postalValidation?.valid === true ? postalValidation.normalized : this.values.postalCode;
     const addressLine2 = this.values.addressLine2.trim() === "" ? null : this.values.addressLine2;
     const patch: DeepPartial<ProvisionBody> = {
+      ...(this.#demo ? { demoLocationNameSource: this.#demoLocationNameSource } : {}),
       venue: {
         country: selectedPack.countryCode,
         taxId: normalizedTaxId,

@@ -587,3 +587,108 @@ describe("inspectVenues reads a migrated venue directory", () => {
     }
   });
 });
+
+describe("developer demo regions", () => {
+  afterEach(() => vi.unstubAllEnvs());
+  it.each([undefined, "", " ", "madrid", " catalonia ", "balearic"])(
+    "resolves the selector %j before work",
+    async (value) => {
+      const module = await import("./dev-setup.js");
+      expect(module).toHaveProperty("resolveDeveloperDemo", expect.any(Function));
+      const preset = module.resolveDeveloperDemo(value);
+      expect(preset).toMatchObject(
+        value?.trim() === "catalonia"
+          ? { dataSet: "casa-delgado-ca", postalCode: "08001", locationName: "Can Delgado" }
+          : value === "balearic"
+            ? { dataSet: "casa-delgado-ca", postalCode: "07001", locationName: "Can Delgado" }
+            : { dataSet: "casa-delgado-es", postalCode: "28013", locationName: "Casa Delgado" },
+      );
+    },
+  );
+  it.each(["unknown", "constructor", "__proto__"])(
+    "refuses %s without creating a database or settings",
+    async (selector) => {
+      const root = await mkdtemp(join(tmpdir(), "a972-dev-invalid-"));
+      try {
+        vi.stubEnv("WAITRON_ENV", "dev");
+        vi.stubEnv("WAITRON_DEMO_REGION", selector);
+        vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
+        await expect(
+          devSetup({
+            venueDir: join(root, "venue"),
+            envPath: join(root, ".env"),
+            stateDir: join(root, "state"),
+          }),
+        ).rejects.toThrow(/demo region/i);
+        for (const file of ["venue", ".env", "state"])
+          expect(existsSync(join(root, file))).toBe(false);
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
+  for (const region of ["madrid", "catalonia", "balearic"])
+    for (const staff of ["en", "es"] as const)
+      it(`seeds ${region} in ${staff} and retains its stored geography when reused`, async () => {
+        const root = await mkdtemp(join(tmpdir(), "a972-dev-region-"));
+        try {
+          vi.stubEnv("WAITRON_ENV", "dev");
+          vi.stubEnv("WAITRON_DEMO_REGION", region);
+          vi.stubEnv("WAITRON_SEED_LOCALE", staff === "es" ? "es-ES" : "en-GB");
+          vi.stubEnv("WAITRON_SEED_SALES_DAYS", "0");
+          const opts = {
+            venueDir: join(root, "venue"),
+            envPath: join(root, ".env"),
+            stateDir: root,
+          };
+          const first = await devSetup(opts);
+          const expected =
+            region === "catalonia"
+              ? {
+                  name: "Can Delgado",
+                  postal_code: "08001",
+                  province: "Barcelona",
+                  receipt: "ca-ES",
+                }
+              : region === "balearic"
+                ? {
+                    name: "Can Delgado",
+                    postal_code: "07001",
+                    province: "Balears, Illes",
+                    receipt: "es-ES",
+                  }
+                : {
+                    name: "Casa Delgado",
+                    postal_code: "28013",
+                    province: "Madrid",
+                    receipt: staff === "es" ? "es-ES" : "en-GB",
+                  };
+          expect(first.env.WAITRON_TILL_LOCALE).toBe(expected.receipt);
+          const store = await openVenueDatabase(opts.venueDir);
+          try {
+            const locations = store.venue.all(
+              sql`select name,postal_code,province,invoice_locales from locations`,
+            );
+            expect(locations).toEqual([
+              {
+                name: expected.name,
+                postal_code: expected.postal_code,
+                province: expected.province,
+                invoice_locales: JSON.stringify([expected.receipt]),
+              },
+            ]);
+            const rows = store.venue.all<{ name: string }>(sql`select name from products`);
+            expect(rows.some((p) => p.name === "Botifarra amb mongetes")).toBe(region !== "madrid");
+            expect(store.venue.all(sql`select country from tenants`)).toEqual([{ country: "ES" }]);
+          } finally {
+            await store.close();
+          }
+          vi.stubEnv("WAITRON_DEMO_REGION", region === "madrid" ? "catalonia" : "madrid");
+          const reused = await devSetup(opts);
+          expect(reused.reused).toBe(true);
+          expect(reused.env).toEqual(first.env);
+        } finally {
+          await rm(root, { recursive: true, force: true });
+        }
+      }, 30000);
+});

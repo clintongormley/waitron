@@ -272,12 +272,19 @@ el nombre de cocina, los precios y las respuestas de los modificadores. Los camb
 catálogo se aplican a las selecciones nuevas. El pedido aparcado, la comanda de cocina, el ticket y la
 reimpresión siguen mostrando los datos guardados con ese pedido.
 
-Cuando preparas una demostración en español, los nombres del personal y de cocina están en
+Cuando preparas una demostración de Madrid en español, los nombres del personal y de cocina están en
 español. La caja muestra **Menú del Día**, mientras que su nombre para el cliente es **Menú del
 mediodía**. **Ensalada** usa el nombre de cocina **ENSALADA · MENÚ** y una unidad propia,
 **Ración**, abreviada **rac**. **Café de la casa** tiene dos variantes y el nombre de cocina
 **CAFÉ · BAR DE ABAJO**. Los nombres para el cliente conservan los idiomas de contenido del
 local, por lo que cambiar los nombres internos no sustituye las palabras del ticket.
+
+Una demostración en Cataluña o las Islas Baleares empieza como **Can Delgado**. La sección
+**Especialitats de la casa** incluye **Botifarra amb mongetes**, y la carta de bebidas incluye
+**Copa de cava**. Los nombres internos y de cocina están en catalán aunque las pantallas estén
+en español o inglés. Los textos para el cliente conservan el catalán, el español y el inglés.
+Durante la preparación, el nombre sugerido sigue el código postal o la provincia hasta que lo editas.
+Después de escribir un nombre, Waitron lo conserva al cambiar de región, también al revisar y volver.
 
 Casa Delgado y Menú del Día incluyen una carta **Bebidas** como carpeta. Bebidas pone la
 **Caña** a 3,00 en lugar de su precio de producto de 2,80; las dos cartas que la incluyen

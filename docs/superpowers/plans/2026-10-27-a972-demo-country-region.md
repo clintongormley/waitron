@@ -510,3 +510,41 @@ That CI also failed an unchanged recovery process-death case before its child
 printed the activation marker. Its cause remains unknown and is recorded in the
 [CI backlog](../../backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point);
 a local single-case pass is not a repair claim. Retain the original assertions.
+
+### Cut 3 installed-demo qualification — 2026-10-28
+
+Include `src/demo-seed.db.test.ts` in the server checks for regional cuts. Its
+Barcelona case now expects Catalan staff names even when the administrator uses
+Spanish, as the regional plain-name override specifies. It finds the inherited
+salad by its unchanged English customer text and requires the stored name
+`Amanida`; the Catalan content-default assertion and Madrid fiscal case remain
+unchanged. Removing the override in an installed disposable checkout produces
+`Ensalada` and fails that assertion; restoring it passes both cases.
+
+
+### Cut 3 local qualification and review — 2026-10-28
+
+Catalonia and the Balearic Islands select the shared Catalan dataset from stored
+geography. Focused real database cases cover regional staff/customer names,
+translation gaps, every regional offer's price and VAT class, Drinks inclusion in
+the restaurant and lunch menus, full sale pools, a forced regional sale and both
+media roots. The original Madrid comparison and protected fiscal suites pass
+without changes to their assertions or expected data.
+
+Setup ownership, server normalization and real provisioning checks pass. The
+independent restoration control initially escaped through a remount; the added
+retained-form case catches the missing ownership restore. Stored-province,
+plain-language and wine-placement faults also fail their owning assertions.
+
+The one Claude run-it review found an untouched automatic name stopped following
+geography after Demo/Live/Demo. A failing journey reproduced it; leaving Demo now
+clears an explicitly automatic name with its source marker. New mode-roundtrip
+cases preserve names authored in Live and protect marker removal. Regional receipt
+defaults use the country rules, without redundant copies in the new presets.
+
+Both browser builds and the bundle-isolation check pass. Native setup views were
+inspected in English and Spanish, both themes, at phone and desktop widths.
+`WAITRON_DEMO_REGION=catalonia wa-wt demo waitron-feat-a972-catalan-demo` with an
+owned temporary state directory refuses at Mailpit because the Docker socket is
+absent. Live till, kitchen and dashboard observations remain unqualified; reading
+the image configuration does not qualify them.

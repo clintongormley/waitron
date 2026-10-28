@@ -346,3 +346,19 @@ describe("demo company identity", () => {
     });
   });
 });
+
+describe("regional demo identities", () => {
+  it.each(["08", "17", "25", "43", "07"])(
+    "offers the shared Catalan demo in province %s",
+    (code) => {
+      expect(SPAIN.administrativeAreas.find((area) => area.code === code)?.demo).toStrictEqual({
+        dataSet: "casa-delgado-ca",
+        locationName: "Can Delgado",
+      });
+    },
+  );
+  it("leaves the Madrid and other regional demos on the country default", () => {
+    for (const code of ["28", "46", "15"])
+      expect(SPAIN.administrativeAreas.find((area) => area.code === code)?.demo).toBeUndefined();
+  });
+});

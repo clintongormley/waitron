@@ -1,4 +1,4 @@
-import { DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
+import { DEMO_DEVELOPER_PRESETS, DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Idempotent local-dev bootstrap: provision ONE preproduction venue into a local venue directory and
 // write its identity to `apps/server/.env`. Run from the repo root via `pnpm dev:setup`; never
 // against a production directory — it chains real fiscal records under `preproduction`, and it
@@ -7,6 +7,11 @@ import { DEFAULT_DEMO_DEVELOPER_PRESET } from "@waitron/country-packs/demo";
 // Re-registering a node starts a new hash chain (CLAUDE.md §5), so this reuses a venue the `.env`
 // names and refuses when the directory holds one it cannot account for. The only "start over" is
 // `pnpm dev:reset`, which removes the venue directory.
+import {
+  receiptLanguageRules,
+  findAdministrativeArea,
+  type CountryDemoDeveloperPreset,
+} from "@waitron/country";
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -32,7 +37,7 @@ import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
 import { DEMO_ADMIN_EMAIL, DEMO_DASHBOARD_PASSWORD } from "./demo-seed/credentials.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./demo-seed/locale.js";
-import { demoDataSetFor } from "./demo-seed/data-set.js";
+import { readDemoSeedSelection } from "./demo-seed/data-set.js";
 import { applyDeveloperDemoVenue } from "./demo-seed/allocation.js";
 
 export { parseEnvFile };
@@ -54,10 +59,14 @@ export const DEV_VENUE_TERRITORY = "ES-common";
 export const ADMIN_PIN = "5555";
 const ADMIN_PASSWORD = DEMO_DASHBOARD_PASSWORD;
 
-/**
- * The demo's seed language: English unless `WAITRON_SEED_LOCALE=es-ES`. Read at call time so a
- * one-shot `WAITRON_SEED_LOCALE=es-ES pnpm dev:reset` takes effect.
- */
+export function resolveDeveloperDemo(value: string | undefined): CountryDemoDeveloperPreset {
+  const selector = value?.trim() || "madrid";
+  const presets: Readonly<Record<string, CountryDemoDeveloperPreset>> = DEMO_DEVELOPER_PRESETS;
+  if (!Object.hasOwn(presets, selector))
+    throw new Error(`dev-setup: unknown demo region "${selector}"`);
+  return presets[selector]!;
+}
+
 export function resolveSeedLocale(): SeedLocale {
   return process.env.WAITRON_SEED_LOCALE === "es-ES" ? "es" : "en";
 }
@@ -138,6 +147,7 @@ export function buildDevEnv(input: {
   credentialsKey: string;
   ids: DevVenueIds;
   seedLocale: SeedLocale;
+  receiptLocale?: string;
   httpPort?: string;
 }): DevEnv {
   const { venueDir, credentialsKey, ids, seedLocale } = input;
@@ -150,7 +160,7 @@ export function buildDevEnv(input: {
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_TILL_NODE_ID: ids.nodeId,
     WAITRON_TILL_LOCATION_ID: ids.locationId,
-    WAITRON_TILL_LOCALE: SEED_INVOICE_LOCALE[seedLocale],
+    WAITRON_TILL_LOCALE: input.receiptLocale ?? SEED_INVOICE_LOCALE[seedLocale],
   };
 }
 
@@ -192,31 +202,37 @@ export async function inspectVenues(
   }
 }
 
-const DEMO_IDENTITY = getCountryPack(DEFAULT_DEMO_DEVELOPER_PRESET.country)!.demo!;
-
 async function provisionVenue(
   db: Database,
   seedLocale: SeedLocale,
   salesDays: number,
-): Promise<DevVenueIds> {
+  preset: CountryDemoDeveloperPreset,
+): Promise<DevVenueIds & { receiptLocale: string }> {
+  const pack = getCountryPack(preset.country)!;
+  const identity = pack.demo!;
+  const province = findAdministrativeArea(pack, preset.province)!.name;
+  const receiptLocale =
+    preset === DEFAULT_DEMO_DEVELOPER_PRESET
+      ? SEED_INVOICE_LOCALE[seedLocale]
+      : receiptLanguageRules(pack, province).defaultLocale;
   const venue = await applyDeveloperDemoVenue(
     planVenue(
       {
-        country: DEFAULT_DEMO_DEVELOPER_PRESET.country,
-        taxId: DEMO_IDENTITY.taxId,
-        legalName: DEMO_IDENTITY.legalName,
+        country: preset.country,
+        taxId: identity.taxId,
+        legalName: identity.legalName,
         location: {
-          name: DEFAULT_DEMO_DEVELOPER_PRESET.locationName,
+          name: preset.locationName,
           fiscalTerritory: DEV_VENUE_TERRITORY,
-          invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
+          invoiceLocales: [receiptLocale],
           operationDescription: "In-store sales",
-          addressLine1: DEFAULT_DEMO_DEVELOPER_PRESET.addressLine1,
-          addressLine2: DEFAULT_DEMO_DEVELOPER_PRESET.addressLine2,
-          postalCode: DEFAULT_DEMO_DEVELOPER_PRESET.postalCode,
-          city: DEFAULT_DEMO_DEVELOPER_PRESET.city,
-          province: DEFAULT_DEMO_DEVELOPER_PRESET.province,
-          timeZone: DEFAULT_DEMO_DEVELOPER_PRESET.timeZone,
-          dayCutover: DEFAULT_DEMO_DEVELOPER_PRESET.dayCutover,
+          addressLine1: preset.addressLine1,
+          addressLine2: preset.addressLine2,
+          postalCode: preset.postalCode,
+          city: preset.city,
+          province,
+          timeZone: preset.timeZone,
+          dayCutover: preset.dayCutover,
         },
         seriesCode: "A",
         rectificativeSeriesCode: "R",
@@ -238,17 +254,18 @@ async function provisionVenue(
     locationId: venue.locationId,
   };
 
+  const selection = await readDemoSeedSelection(db, ids.locationId);
   const seeded = await seedDemoRestaurant(db, {
     venue: ids,
     locale: seedLocale,
     salesDays,
-    departmentTradingNames: DEMO_IDENTITY.departmentTradingNames,
-    dataSet: demoDataSetFor(DEMO_IDENTITY),
+    departmentTradingNames: selection.identity.departmentTradingNames,
+    dataSet: selection.dataSet,
   });
 
-  await seedDemoDevices(db, ids, seedLocale, seeded);
+  await seedDemoDevices(db, ids, receiptLocale, seeded);
 
-  return ids;
+  return { ...ids, receiptLocale };
 }
 
 /** What `pnpm dev:setup` prints under "Pick a pre-enrolled device"; one entry per enrolled device. */
@@ -267,14 +284,14 @@ export const DEMO_DEVICE_LINES: readonly string[] = [
 async function seedDemoDevices(
   db: Database,
   ids: DevVenueIds,
-  seedLocale: SeedLocale,
+  receiptLocale: string,
   seeded: SeedDemoResult,
 ): Promise<void> {
   const cfg: TillConfig = {
     nodeId: brandNodeId(ids.nodeId),
     locationId: brandLocationId(ids.locationId),
-    locale: SEED_INVOICE_LOCALE[seedLocale],
-    invoiceLocales: [SEED_INVOICE_LOCALE[seedLocale]],
+    locale: receiptLocale,
+    invoiceLocales: [receiptLocale],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
   };
@@ -345,6 +362,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   // Before the directory is read or migrated: the seed's own guard fires only after `applyVenue`
   // has committed, which leaves a directory only `pnpm dev:reset` recovers.
   demoSeedEnvironment(process.env);
+  const preset = resolveDeveloperDemo(process.env.WAITRON_DEMO_REGION);
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
   const expectedLocationId =
@@ -377,7 +395,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   let ids;
   try {
     log("dev-setup: provisioning a preproduction venue + seeding the demo restaurant…");
-    ids = await provisionVenue(store.venue, seedLocale, salesDays);
+    ids = await provisionVenue(store.venue, seedLocale, salesDays, preset);
   } finally {
     await store.close();
   }
@@ -387,6 +405,7 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
     credentialsKey: randomBytes(32).toString("base64"),
     ids,
     seedLocale,
+    receiptLocale: ids.receiptLocale,
     httpPort: opts.httpPort,
   });
   writeFileSync(envPath, renderEnvFile(env));

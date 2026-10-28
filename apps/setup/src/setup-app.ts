@@ -176,6 +176,7 @@ export function assembleBody(draft: DeepPartial<ProvisionBody>): ProvisionBody {
     delete body.aeatCert;
   }
   if (draft.mode !== "live") delete body.email;
+  if (draft.mode !== "demo") delete body.demoLocationNameSource;
   return body as ProvisionBody;
 }
 
@@ -879,6 +880,9 @@ export class SetupApp extends LitElement {
       (mode === "demo" || this.draft.mode === "demo")
     ) {
       const venue = { ...this.draft.venue, location: { ...this.draft.venue?.location } };
+      if (this.draft.mode === "demo" && this.draft.demoLocationNameSource === "automatic") {
+        delete venue.location.name;
+      }
       delete venue.taxId;
       delete venue.legalName;
       delete venue.seriesCode;
@@ -887,6 +891,7 @@ export class SetupApp extends LitElement {
       delete venue.location.dayCutover;
       delete venue.location.invoiceLocales;
       this.draft = { ...this.draft, venue };
+      delete this.draft.demoLocationNameSource;
       delete this.draft.configurationImport;
       delete this.draft.newTaxpayer;
       this.#invalidateFiscalTest();

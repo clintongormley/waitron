@@ -23,6 +23,7 @@ export interface AdministrativeArea {
   readonly name: string;
   readonly aliases?: readonly string[];
   readonly postalPrefixes: readonly string[];
+  readonly demo?: { readonly dataSet: string; readonly locationName: string };
   /** Not the content languages a venue here must keep: those are `requiredContentLocales`. */
   readonly defaultLocale?: string;
   readonly timeZone?: string;

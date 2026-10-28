@@ -1,9 +1,13 @@
 import {
   CASA_DELGADO_ES,
+  CASA_DELGADO_CA,
   DEMO_DEVELOPER_PRESETS as SPAIN_PRESETS,
   DEMO_MEDIA_ROOTS as SPAIN_MEDIA,
 } from "@waitron/country-es/demo";
-export const DEMO_DATA_SETS = { [CASA_DELGADO_ES.id]: CASA_DELGADO_ES } as const;
+export const DEMO_DATA_SETS = {
+  [CASA_DELGADO_ES.id]: CASA_DELGADO_ES,
+  [CASA_DELGADO_CA.id]: CASA_DELGADO_CA,
+} as const;
 export const DEFAULT_DEMO_DATA_SET_ID = CASA_DELGADO_ES.id;
 export const DEMO_DEVELOPER_PRESETS = { ...SPAIN_PRESETS } as const;
 export const DEFAULT_DEMO_DEVELOPER_PRESET = DEMO_DEVELOPER_PRESETS.madrid;

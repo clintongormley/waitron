@@ -270,3 +270,50 @@ describe("holiday calendars", () => {
     expect(findAdministrativeArea(spain, "Nowhere")).toBeUndefined();
   });
 });
+
+describe("installed demo geography", () => {
+  it.each([
+    "08",
+    "17",
+    "25",
+    "43",
+    "07",
+    "Barcelona",
+    "Girona",
+    "Gerona",
+    "Lleida",
+    "Lérida",
+    "Tarragona",
+    "Balears, Illes",
+    "Illes Balears",
+  ])("resolves %s without changing the company or department identity", async (area) => {
+    const registry = await import("./registry.js");
+    expect(registry).toHaveProperty("resolveInstalledDemoIdentity", expect.any(Function));
+    const result = registry.resolveInstalledDemoIdentity({ country: " es ", area });
+    expect(result).toStrictEqual({
+      ...getCountryPack("ES")!.demo,
+      dataSet: "casa-delgado-ca",
+      locationName: "Can Delgado",
+    });
+  });
+  it.each([undefined, null, "Madrid", "28", "unknown", "constructor", "__proto__"])(
+    "retains the country default for %s",
+    async (area) => {
+      const registry = await import("./registry.js");
+      expect(registry).toHaveProperty("resolveInstalledDemoIdentity", expect.any(Function));
+      expect(registry.resolveInstalledDemoIdentity({ country: "ES", area })).toStrictEqual(
+        getCountryPack("ES")!.demo,
+      );
+      expect(registry.resolveInstalledDemoIdentity({ country: "GB", area })).toStrictEqual(
+        getCountryPack("GB")!.demo,
+      );
+    },
+  );
+  it("does not manufacture an identity for an unknown or absent country", async () => {
+    const registry = await import("./registry.js");
+    expect(registry).toHaveProperty("resolveInstalledDemoIdentity", expect.any(Function));
+    expect(registry.resolveInstalledDemoIdentity({ country: "XX", area: "08" })).toBeUndefined();
+    expect(registry.resolveInstalledDemoIdentity({ area: "08" })).toBeUndefined();
+    expect(getVenueSetupCountryPack("GB")).toBeUndefined();
+  });
+});

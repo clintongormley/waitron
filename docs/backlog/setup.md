@@ -31,10 +31,9 @@ What constrains the next change to the wizard:
   pack's demo value (`CountryPack.demo`; Spain's, `B00000000`, in `packages/country-es/src/spain.ts`),
   which passes Spain's own check as a company's: it is safe only because a demo box files nothing.
   Prepare and Live start with an empty tax ID and legal name, and leaving Demo for either clears both
-  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). The location name is not on that list,
-  so a Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live. There
-  the location-name field starts filled in but takes its hint, which the filled value hides, and no
-  "?", because `#field` (`apps/setup/src/screens/venue-screen.ts`) chooses the "?" by Demo mode alone.
+  from the draft (`#onPatch`, `apps/setup/src/setup-app.ts`). Leaving Demo also clears an explicitly
+  automatic location name with its draft ownership marker; a name you authored remains. The
+  Demo/Live/Demo cases in `apps/setup/src/setup-app-venue.unsaved-changes.test.ts` cover both paths.
 - **Default both series codes to values that survive a cold restore.** A cold restore appends
   `-<installation number>` and `stripOwnSuffixes` would then re-number a trailing `-<digits>`, so
   default to **FS** (factura simplificada — every till sale is `TipoFactura` F2) and **FR**

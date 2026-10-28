@@ -593,11 +593,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
   run. [Detail](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 
-- **A Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live**
-  (whether this is wanted is not recorded; it sits among the wizard's constraints). The location
-  name is not on the list leaving Demo clears (`#onPatch`, `apps/setup/src/setup-app.ts`).
-  [Detail](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2)
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
   the option is still there and the flow still runs, so an operator can still spend a box on it.
   Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
@@ -5854,7 +5849,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [plan](superpowers/plans/2026-10-27-a972-demo-country-region.md) covers the data move,
   English names, then Catalonia with the Balearic Islands, Valencia and Galicia.
   Spain's records and pictures have moved behind the pack's secondary demo export,
-  with the frozen Madrid comparison and browser-boundary checks. The three regional cuts remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  with the frozen Madrid comparison and browser-boundary checks. Catalonia and the shared Balearic demo now have regional dishes, Catalan plain names and geography-aware setup. Valencia and Galicia remain open. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+
+- **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in both
+  screen languages, themes and phone/desktop widths when the stack is available. The Catalan cut's
+  local Mailpit start refused the absent Docker socket. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **Demo media regeneration.** Preserve the committed Negroni picture when
   defining regeneration behavior; today's generator produces a different tile.

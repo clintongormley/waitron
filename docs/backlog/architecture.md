@@ -466,9 +466,13 @@ until A977).
   Staff and kitchen names now resolve English/Spanish pairs, including modifiers, reporting
   categories, stations and reused menu periods. The frozen Madrid comparison permits only
   explicit name-cell changes and their dependent identities/publication hashes.
-  The remaining cuts supply Catalonia/Balearic data, Valencia and Galicia. Regional restaurant defaults follow the
+  Catalonia and the Balearic Islands now share Can Delgado, with seven regional dishes, cava and Catalan plain names. The remaining cuts supply Valencia and Galicia. Regional restaurant defaults follow the
   province without overwriting a typed name; regional staff and kitchen names are demo data, separate from the
   staff apps' language. The durable owner decisions are below.
+- **Regional demo screen qualification.** Inspect the seeded till, kitchen and dashboard in
+  English/Spanish, both themes and phone/desktop widths when the development stack can start.
+  The Catalan cut's local launch refused at Mailpit's absent Docker socket; its native setup
+  component views and database/media checks do not qualify those live screens.
 - **Demo media regeneration changes the committed Negroni picture.** The moved
   generator produces different pixels for Negroni; a decoded-pixel comparison
   preserves this finding across tested Node compression versions. Preserve the

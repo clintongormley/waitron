@@ -1,0 +1,66 @@
+{
+  "sausage": {
+    "staff": "Botifarra amb mongetes",
+    "kitchen": "Botifarra amb mongetes · cuina",
+    "customer": {
+      "ca": "Botifarra amb mongetes de la casa",
+      "es": "Butifarra con judías de la casa",
+      "en": "House Catalan sausage with white beans"
+    }
+  },
+  "wine": "Copa de cava",
+  "drinks": "Begudes",
+  "plain": {
+    "drinks": "Begudes",
+    "restaurant": "Restaurant i bar",
+    "deli": "Xarcuteria",
+    "upstairs": "Bar de dalt",
+    "counter": "Taulell de xarcuteria"
+  },
+  "menus": {
+    "restaurant": "Can Delgado",
+    "lunch": "Menú del dia"
+  },
+  "products": [
+    {
+      "staff": "Escalivada",
+      "price": "8.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Esqueixada de bacallà",
+      "price": "11.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Botifarra amb mongetes",
+      "price": "13.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Fideuà",
+      "price": "15.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Mel i mató",
+      "price": "5.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Canelons de rostit",
+      "price": "12.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Suquet de peix",
+      "price": "17.50",
+      "vatClass": "reduced"
+    },
+    {
+      "staff": "Copa de cava",
+      "price": "4.50",
+      "vatClass": "general"
+    }
+  ]
+}

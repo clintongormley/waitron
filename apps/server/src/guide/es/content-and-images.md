@@ -7,7 +7,11 @@ Tus productos, secciones, [modificadores](modifiers.md) y unidades comparten est
 La biblioteca de imágenes también los usa, pero una fotografía necesita un nombre en el idioma
 predeterminado al subirla o editarla.
 
-En una demostración en español, la biblioteca de fotografías muestra nombres internos como **Café de la casa** y **Pollo asado**. En una demostración en inglés, muestra **House coffee** y **Roast chicken**. Las fotografías y las traducciones para el cliente se mantienen.
+En una demostración de Madrid en español, la biblioteca de fotografías muestra nombres internos como **Café de la casa** y **Pollo asado**. En la misma demostración en inglés, muestra **House coffee** y **Roast chicken**. Las fotografías y las traducciones para el cliente se mantienen.
+
+En Cataluña y las Islas Baleares, la biblioteca de demostración usa nombres internos en catalán,
+como **Botifarra amb mongetes**, tanto en las pantallas en español como en inglés. Las imágenes
+regionales pertenecen a ese restaurante de práctica; las eliges y sustituyes de la misma manera.
 
 ## Elige los idiomas de tu contenido {#languages}
 

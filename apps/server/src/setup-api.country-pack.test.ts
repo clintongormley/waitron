@@ -1,3 +1,9 @@
+import { sql } from "drizzle-orm";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
+import { ALL_MODULES } from "@waitron/composition";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import type { CountryPack } from "@waitron/country";
@@ -201,4 +207,129 @@ describe("POST /setup-api/provision for country packs other than Spain", () => {
     });
     expect(requests).toEqual([]);
   });
+});
+
+describe("Demo location-name ownership", () => {
+  function spanishVenue(name: string) {
+    const request = venue("ES", {
+      name,
+      fiscalTerritory: "ES-common",
+      postalCode: "08001",
+      city: "Barcelona",
+      province: "08",
+      timeZone: "Europe/Madrid",
+      invoiceLocales: ["ca-ES"],
+    });
+    return { ...request, taxId: "B00000000", legalName: "Waitron Demo S.L." };
+  }
+  it.each([
+    ["automatic", "Stale default", "Can Delgado"],
+    ["custom", "Casa Delgado", "Casa Delgado"],
+    [undefined, "Casa Delgado", "Casa Delgado"],
+    ["custom", "My restaurant", "My restaurant"],
+  ])("normalizes only explicit automatic names (%s)", async (source, name, want) => {
+    const app = new Hono();
+    const { deps: setupDeps, requests } = deps();
+    mountSetup(app, setupDeps, () => {});
+    const res = await post(app, {
+      mode: "demo",
+      demoLocationNameSource: source,
+      venue: spanishVenue(name!),
+    });
+    expect(res.status).toBe(200);
+    expect(requests[0]!.venue.location).toMatchObject({ name: want, province: "Barcelona" });
+    expect(requests[0]).not.toHaveProperty("demoLocationNameSource");
+  });
+  it.each([null, 0, {}, [], true, "", "AUTOMATIC", "unknown"])(
+    "refuses malformed ownership %j",
+    async (source) => {
+      const app = new Hono();
+      const { deps: setupDeps, requests } = deps();
+      mountSetup(app, setupDeps, () => {});
+      const res = await post(app, {
+        mode: "demo",
+        demoLocationNameSource: source,
+        venue: spanishVenue("Custom"),
+      });
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "demoLocationNameSource" } },
+      });
+      expect(requests).toHaveLength(0);
+    },
+  );
+  it.each(["prepare", "live"])("refuses ownership outside Demo (%s)", async (mode) => {
+    const app = new Hono();
+    const { deps: setupDeps, requests } = deps();
+    mountSetup(app, setupDeps, () => {});
+    const res = await post(app, {
+      mode,
+      demoLocationNameSource: "automatic",
+      venue: spanishVenue("Custom"),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      error: { code: "setup.request_invalid", params: { field: "demoLocationNameSource" } },
+    });
+    expect(requests).toHaveLength(0);
+  });
+});
+
+describe("persisted Demo name ownership", () => {
+  const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+  it.each([
+    ["automatic", "Stale default", "Can Delgado"],
+    ["custom", "Casa Delgado", "Casa Delgado"],
+    [undefined, "Casa Delgado", "Casa Delgado"],
+    ["custom", "My restaurant", "My restaurant"],
+  ])(
+    "persists the normalized geography and %s name through real provisioning",
+    async (source, name, want) => {
+      const app = new Hono();
+      const { deps: setupDeps } = deps();
+      setupDeps.provision = async (request) =>
+        applyHistoricalTestVenue(planVenue(request.venue, ALL_MODULES), {
+          db: suite.db,
+          modules: ALL_MODULES,
+        });
+      mountSetup(app, setupDeps, () => {});
+      const body = venue("ES", {
+        name,
+        fiscalTerritory: "ES-common",
+        postalCode: "08001",
+        city: "Barcelona",
+        province: "08",
+        timeZone: "Europe/Madrid",
+        invoiceLocales: ["ca-ES"],
+      });
+      const response = await post(app, {
+        mode: "demo",
+        demoLocationNameSource: source,
+        venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
+      });
+      expect(response.status).toBe(200);
+      expect(suite.db.all(sql`select name,province from locations`)).toEqual([
+        { name: want, province: "Barcelona" },
+      ]);
+      expect(suite.db.all(sql`select legal_name,tax_id from tenants`)).toEqual([
+        { legal_name: "Waitron Demo S.L.", tax_id: "B00000000" },
+      ]);
+    },
+  );
+});
+
+it("refuses an unknown country before deriving an automatic demo name", async () => {
+  const app = new Hono();
+  const { deps: setupDeps, requests } = deps();
+  mountSetup(app, setupDeps, () => {});
+  const response = await post(app, {
+    mode: "demo",
+    demoLocationNameSource: "automatic",
+    venue: venue("XX"),
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: { code: "setup.request_invalid", params: { field: "country" } },
+  });
+  expect(requests).toHaveLength(0);
 });

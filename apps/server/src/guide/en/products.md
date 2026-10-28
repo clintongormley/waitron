@@ -260,11 +260,18 @@ When you park or complete an order, Waitron saves the chosen product and variant
 prices and modifier answers. Later catalogue edits apply to new selections. The parked order,
 kitchen ticket, receipt and reprint continue to show the facts saved with that order.
 
-When you set up an English demo, its staff and kitchen names are in English. The till shows
+When you set up a Madrid demo in English, its staff and kitchen names are in English. The till shows
 **Set lunch**, while its customer name is **Lunch menu**. **Salad** uses the kitchen name
 **SALAD · LUNCH** and a custom **Portion** unit, abbreviated **ptn**. **House coffee** has two
 variants and the kitchen name **COFFEE · DOWNSTAIRS BAR**. Customer names keep the venue's
 content languages, so changing staff wording does not replace the words on a receipt.
+
+A demo in Catalonia or the Balearic Islands starts as **Can Delgado**. Its extra
+**Especialitats de la casa** section includes **Botifarra amb mongetes**, and its Drinks
+menu includes **Copa de cava**. Staff and kitchen names are Catalan even when the screens
+are in English or Spanish. Customer wording keeps Catalan, Spanish and English.
+During setup, the suggested restaurant name follows the postcode or province until you edit it.
+Once you type a name, Waitron keeps it when you change the region, including after Review and Back.
 
 Casa Delgado and Set lunch include a **Drinks** menu as a folder. Drinks prices **Beer** at
 3.00 instead of its product price of 2.80; both including menus inherit that price. Set lunch
