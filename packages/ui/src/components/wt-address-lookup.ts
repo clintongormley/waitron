@@ -252,7 +252,7 @@ export class WtAddressLookup extends LitElement {
         })}
         ?data-disabled=${this.disabled}
       >
-        ${this.label ? fieldLabel(this.inputId, this.label, false) : nothing}
+        ${fieldLabel(this.inputId, this.label, false)}
         <input
           class="field-control"
           id=${this.inputId}
@@ -267,7 +267,7 @@ export class WtAddressLookup extends LitElement {
             this.activeIndex >= 0 ? `${this.listId}-${this.activeIndex}` : nothing
           }
           aria-describedby=${line ? this.statusId : nothing}
-          placeholder=${this.placeholder || nothing}
+          placeholder=${this.placeholder}
           ?disabled=${this.disabled}
           .value=${this.query}
           @input=${this.onInput}
@@ -279,7 +279,7 @@ export class WtAddressLookup extends LitElement {
         id=${this.listId}
         class="list"
         role="listbox"
-        aria-label=${this.label || nothing}
+        aria-label=${this.label}
         ?hidden=${!open}
         @pointerdown=${(event: PointerEvent) => event.preventDefault()}
       >

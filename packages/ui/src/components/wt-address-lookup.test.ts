@@ -456,3 +456,61 @@ test("the line under the field is drawn, in the muted text colour", async () => 
   expect(box.width).toBeGreaterThan(100);
   expect(getComputedStyle(line).color).toBe("rgb(16, 17, 18)");
 });
+
+test("a refused answer to an older search says nothing", async () => {
+  for (const which of ["suggest", "resolve"] as const) {
+    const refusals: ((error: Error) => void)[] = [];
+    const late = () => new Promise<never>((_, reject) => refusals.push(reject));
+    const el = await mountLookup(
+      fakeProvider([MAYOR], which === "suggest" ? { suggest: late } : { resolve: late }),
+    );
+    type(el, "Calle Mayor");
+    await settle(el);
+    if (which === "resolve") await userEvent.click(options(el)[0]!);
+    type(el, "Ca");
+    refusals[0]!(new Error("down"));
+    await settle(el);
+    expect(status(el), which).toBe("");
+    cleanup();
+  }
+});
+
+test("removing the provider drops a pending search and an open list", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider();
+  const el = await mountLookup(provider);
+  el.delay = 300;
+  type(el, "Calle Mayor");
+  el.provider = undefined;
+  await el.updateComplete;
+  vi.advanceTimersByTime(300);
+  expect(provider.calls.suggest).toHaveLength(0);
+  vi.useRealTimers();
+
+  el.provider = provider;
+  el.delay = 0;
+  await el.updateComplete;
+  type(el, "Calle Mayor");
+  await settle(el);
+  expect(options(el)).toHaveLength(2);
+  input(el).focus();
+  await userEvent.keyboard("{ArrowDown}");
+  el.provider = undefined;
+  await el.updateComplete;
+  expect(options(el)).toHaveLength(0);
+  input(el).dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+  await settle(el);
+  expect(provider.calls.resolve).toHaveLength(0);
+});
+
+test("a key the list does not use leaves it as it is", async () => {
+  const el = await mountLookup();
+  type(el, "Calle Mayor");
+  await settle(el);
+  const key = new KeyboardEvent("keydown", { key: "Home", cancelable: true });
+  input(el).dispatchEvent(key);
+  await el.updateComplete;
+  expect(key.defaultPrevented).toBe(false);
+  expect(options(el)).toHaveLength(2);
+  expect(input(el).hasAttribute("aria-activedescendant")).toBe(false);
+});
