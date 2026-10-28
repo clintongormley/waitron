@@ -1341,9 +1341,16 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect((await placeOf(billId, 2)).groupId).toBe((await placeOf(billId, 1)).groupId);
   });
 
-  /** Bind line `lineNo` to a portion of a cohort of its own, as the portion writers will. */
+  /** Bind line `lineNo` to a portion of a cohort of its own, as the portion writers do; a line the
+   * writer already bound keeps its portion. Answers the portion's cohort. */
   async function bindAsPortion(billId: string, lineNo: number): Promise<string> {
     const lineId = await lineIdOf(venue, billId, lineNo);
+    const [bound] = venue.db.all<{ cohortId: string }>(
+      sql`select p.cohort_id as cohortId from working_line_portions b
+          join order_portions p on p.id = b.portion_id
+          where b.working_order_line_id = ${lineId}`,
+    );
+    if (bound !== undefined) return bound.cohortId;
     const cohortId = randomUUID();
     await inTx(venue, (tx) =>
       registerPortions(tx, [
@@ -3023,9 +3030,12 @@ describe("part of a dish with extras (B11d)", () => {
   );
 
   /** Pizza ×3 with 2 olives, written by hand: no product path is known to store an extra that is
-   * not a whole count a dish. */
+   * not a whole count a dish. Grouped, as a counter order moved to a table keeps it (plan D1): a
+   * portion's olives are its own. */
   async function unevenOlives() {
-    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }], {
+      shape: "grouped",
+    });
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)

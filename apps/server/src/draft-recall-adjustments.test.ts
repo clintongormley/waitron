@@ -91,11 +91,11 @@ async function draftOn(partyId: string, draftId: string) {
   expect(read.status).toBe(200);
   return (read.json as unknown as { drafts: Draft[] }).drafts.find((d) => d.id === draftId)!;
 }
-async function setup(release: "hold" | "fire" = "hold") {
+async function setup(release: "hold" | "fire" = "hold", shape?: "grouped") {
   const p = await billWith(
     venue,
     [{ name: "Pizza", quantity: "3", olives: 2 }, { name: "Water" }],
-    { release },
+    { release, ...(shape === undefined ? {} : { shape }) },
   );
   const [line, extra] = await rowsOf(venue, p.billId);
   const row = await todayLine(venue, p.billId, 1);
@@ -247,7 +247,8 @@ describe("adjusting an owned recalled family", () => {
   });
 
   it("places a split source next to its original without colliding with fresh or recalled draft rows", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup("hold", "grouped");
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
       personId: venue.staffId,
@@ -360,7 +361,8 @@ describe("adjusting an owned recalled family", () => {
   });
 
   it("keeps both parts of a partially comped recalled family unsent with their allergy assignment", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup("hold", "grouped");
     const allergy = await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, p.partyId));
       const snapshot = await savePartyAllergy(

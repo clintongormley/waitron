@@ -42,6 +42,14 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
 
 import { placeGroups } from "./group-submit-fixture.js";
+import { printHoldTickets, recordGroupEvent, startGroup } from "../order-groups.js";
+import {
+  bumpRevision,
+  fireLines,
+  insertTabRound,
+  priceTabRound,
+  type TabRoundLine,
+} from "../working-order.js";
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";
@@ -510,16 +518,37 @@ export interface RoundLine {
   olives?: number;
 }
 
+/** The round `lines` ask for, as a placed group's lines. */
+function roundLines(venue: AdjustmentVenue, lines: RoundLine[]): TabRoundLine[] {
+  return lines.map((line) => ({
+    menuItemId: venue.item(line.name),
+    quantity: line.quantity ?? "1",
+    ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
+    ...(line.olives === undefined
+      ? {}
+      : {
+          extras: [
+            {
+              listId: venue.pizzaExtras,
+              picks: [{ productId: venue.olivesId, quantity: line.olives }],
+            },
+          ],
+        }),
+  }));
+}
+
 /**
  * A party seated at a fresh table by `operatorId`, with `lines` placed on its bill as one group,
- * fired or held. Answers the party, its bill and the bill's revision.
+ * fired or held. Answers the party, its bill and the bill's revision. With `shape: "grouped"` each
+ * line is one stored line of its count, as `createOpenOrder` stores a counter order's.
  */
 export async function billWith(
   venue: AdjustmentVenue,
   lines: RoundLine[],
-  opts: { release?: "fire" | "hold"; operatorId?: string } = {},
+  opts: { release?: "fire" | "hold"; operatorId?: string; shape?: "grouped" } = {},
 ): Promise<{ partyId: string; billId: string; revision: number }> {
   const operatorId = opts.operatorId ?? venue.staffId;
+  const release = opts.release ?? "fire";
   return inTx(venue, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `M-${randomUUID().slice(0, 8)}`,
@@ -531,28 +560,11 @@ export async function billWith(
       operatorId,
     });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, operatorId);
-    if (lines.length > 0) {
+    if (lines.length > 0 && opts.shape === "grouped") {
+      await placeGrouped(tx, venue, seated, roundLines(venue, lines), release, operatorId);
+    } else if (lines.length > 0) {
       await placeGroups(tx, venue.cfg, seated.partyId, {
-        groups: [
-          {
-            lines: lines.map((line) => ({
-              menuItemId: venue.item(line.name),
-              quantity: line.quantity ?? "1",
-              ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
-              ...(line.olives === undefined
-                ? {}
-                : {
-                    extras: [
-                      {
-                        listId: venue.pizzaExtras,
-                        picks: [{ productId: venue.olivesId, quantity: line.olives }],
-                      },
-                    ],
-                  }),
-            })),
-            release: opts.release ?? "fire",
-          },
-        ],
+        groups: [{ lines: roundLines(venue, lines), release }],
         operatorId,
         billId: seated.tabId,
       });
@@ -562,6 +574,47 @@ export async function billWith(
       .from(workingOrders)
       .where(eq(workingOrders.id, seated.tabId));
     return { partyId: seated.partyId, billId: seated.tabId, revision: order!.revision };
+  });
+}
+
+/** One group placed as `placeGroups` placed it before portions, each line stored once. */
+async function placeGrouped(
+  tx: Transaction,
+  venue: AdjustmentVenue,
+  seated: { partyId: string; tabId: string },
+  lines: TabRoundLine[],
+  release: "fire" | "hold",
+  operatorId: string,
+): Promise<void> {
+  const fire = release === "fire";
+  const round = await priceTabRound(
+    tx,
+    venue.cfg,
+    seated.tabId,
+    lines.map((line) => ({ ...line, hold: !fire, release: fire })),
+    "checked",
+  );
+  const groupId = await startGroup(tx, seated.partyId, release, operatorId);
+  const inserted = await insertTabRound(
+    tx,
+    venue.cfg,
+    round,
+    round.rows.map((row) => ({ ...row, groupId, creditedTo: operatorId })),
+  );
+  await fireLines(
+    tx,
+    venue.cfg,
+    seated.tabId,
+    inserted.map((row) => ({ ...row, hold: !fire, release: fire })),
+  );
+  if (!fire) await printHoldTickets(tx, venue.cfg, [groupId]);
+  await bumpRevision(tx, [seated.tabId]);
+  await recordGroupEvent(tx, {
+    partyId: seated.partyId,
+    groupId,
+    kind: "submitted",
+    actorId: operatorId,
+    detail: { workingOrderId: seated.tabId, release },
   });
 }
 
