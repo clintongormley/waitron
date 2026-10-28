@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, expectNoA11yViolations, mountWidget } from "./test-helpers.js";
+import {
+  cleanupWidgets,
+  COUNTER_LOGO as LOGO,
+  expectNoA11yViolations,
+  mountWidget,
+  QUIET_COUNTER as QUIET,
+} from "./test-helpers.js";
 import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
@@ -27,15 +33,6 @@ const full: Partial<TillShell> = {
   canSwitchProfile: true,
   loadLocales,
 };
-
-// Copied from till-shell.counter-logo.test.ts.
-const QUIET: Partial<TillShell> = {
-  formFactor: "till",
-  activeScreen: "counter",
-  operatorName: "Ana",
-  legalName: "Bar Lucía SL",
-};
-const LOGO = png(120, 40);
 
 async function atViewport(width: number, height: number, run: () => Promise<void>): Promise<void> {
   const before = { width: window.innerWidth, height: window.innerHeight };

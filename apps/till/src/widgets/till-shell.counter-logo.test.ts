@@ -12,35 +12,16 @@ import {
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import {
+  BUSY_COUNTER as BUSY,
+  cleanupWidgets,
+  COUNTER_LOGO as LOGO,
+  mountWidget,
+  QUIET_COUNTER as QUIET,
+} from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
-const BUSY: Partial<TillShell> = {
-  formFactor: "till",
-  activeScreen: "counter",
-  showCounter: true,
-  showFloor: true,
-  counterZones: [
-    { id: "a", name: "Barra" },
-    { id: "b", name: "Terraza" },
-  ],
-  selectedCounterZoneId: "a",
-  parkedCount: 3,
-  waitingCount: 2,
-  operatorName: "Ana Fernández",
-  affordances: ["expo"],
-  transferAvailable: true,
-  transferCount: 2,
-  legalName: "Bar Lucía SL",
-};
-const QUIET: Partial<TillShell> = {
-  formFactor: "till",
-  activeScreen: "counter",
-  operatorName: "Ana",
-  legalName: "Bar Lucía SL",
-};
-const LOGO = png(120, 40);
 const WIDE = png(160, 40);
 
 const never = () => new Promise<Response>(() => {});
@@ -491,6 +472,23 @@ describe("the cash register's bar measures its room again", () => {
       } finally {
         observe.mockRestore();
         disconnect.mockRestore();
+      }
+    });
+  });
+
+  it("a render queued before the counter leaves the page does not observe it again", async () => {
+    await atViewport(1280, 800, async () => {
+      const observe = vi.spyOn(ResizeObserver.prototype, "observe");
+      try {
+        const el = await quietEdge();
+        expect(observe.mock.calls.filter(([target]) => target === el)).toHaveLength(1);
+        observe.mockClear();
+        el.operatorName = "Beatriz";
+        el.remove();
+        await el.updateComplete;
+        expect(observe.mock.calls.filter(([target]) => target === el)).toHaveLength(0);
+      } finally {
+        observe.mockRestore();
       }
     });
   });

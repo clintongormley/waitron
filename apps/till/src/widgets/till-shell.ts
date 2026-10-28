@@ -86,8 +86,9 @@ export class TillShell extends LitElement {
     super();
     new LocaleChangeController(this);
     new ThemeChoiceController(this);
-    // No step back: the bar draws its logo only while no step is taken. An error is heard here
-    // because a box failing a logo already reported failed changes no state that would refit.
+    // A handheld refits with no step back, since its bar draws the logo only while no step is
+    // taken; a counter measures its room again. An error is heard here because a box failing a
+    // logo already reported failed changes no state that would refit.
     this.addEventListener("wt-logo-load", () => void this.#refit());
     this.addEventListener("wt-logo-error", () => void this.#refit());
     this.addEventListener("wt-guide-open", (event) =>
@@ -460,7 +461,6 @@ export class TillShell extends LitElement {
       this.#observe();
       this.#retryHiddenLogo();
     }
-    if (this.hasUpdated && this.formFactor === "till") this.#observeCounter();
   }
 
   override disconnectedCallback(): void {
@@ -654,6 +654,7 @@ export class TillShell extends LitElement {
    * the last render are observed, since each new observation reports once, and one made while
    * notifications are being delivered is a ResizeObserver loop. */
   #observeCounter(): void {
+    if (!this.isConnected) return;
     this.#counterObserver ??= new ResizeObserver(() => void this.#measureCounterLogo());
     const targets = new Set<Element>([
       this,

@@ -13,7 +13,7 @@ import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/wai
 import { FIXTURE_ANSWER } from "@waitron/ui/test/venue-theme-fixture.js";
 import { nextLogoLoad, png } from "@waitron/ui/test/venue-logo-fixture.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import { cleanupWidgets, mountWidget } from "./test-helpers.js";
+import { BUSY_COUNTER as BUSY, cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
 
@@ -49,26 +49,6 @@ const counter: Partial<TillShell> = {
   operatorName: "Ana",
   affordances: ["find-bill", "schedule"],
   legalName: "Bar Pepe SL",
-};
-
-// Copied from till-shell.counter-logo.test.ts.
-const BUSY: Partial<TillShell> = {
-  formFactor: "till",
-  activeScreen: "counter",
-  showCounter: true,
-  showFloor: true,
-  counterZones: [
-    { id: "a", name: "Barra" },
-    { id: "b", name: "Terraza" },
-  ],
-  selectedCounterZoneId: "a",
-  parkedCount: 3,
-  waitingCount: 2,
-  operatorName: "Ana Fernández",
-  affordances: ["expo"],
-  transferAvailable: true,
-  transferCount: 2,
-  legalName: "Bar Lucía SL",
 };
 
 const frame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
