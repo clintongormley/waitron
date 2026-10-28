@@ -1000,7 +1000,7 @@ async function bootServer(
   // beside it.
   const store = await openVenueDatabase(config.venueDir);
   undoOnFailure.push(() => store.close());
-  // Set by the start only when it runs a selected backup recovery's target folder.
+  // Set by the start when it boots from folders other than the configured ones.
   const spareDir = isUnset(env.WAITRON_SPARE_SPACE_DIR)
     ? config.stateDir
     : env.WAITRON_SPARE_SPACE_DIR;

@@ -5,8 +5,8 @@ import type { Logger } from "./logger.js";
 
 export interface DiskFullState {
   /**
-   * A full disk was detected: an engine refusal, or a start under FULL_DISK_BYTES. Keeps the first
-   * time until cleared.
+   * A full disk was detected: an engine refusal, a start under FULL_DISK_BYTES, or a start with the
+   * spare's release marker. Keeps the first time until cleared.
    */
   noteRefused(): void;
   /** Whether a refusal is noted now. Reads no disk. */
@@ -60,7 +60,8 @@ export function createDiskFullState(deps: {
 
 /**
  * Notes a refusal on `state` when the spare's release marker exists or the folder has less than
- * FULL_DISK_BYTES free; an unreadable reading notes nothing and logs. Called once, at start.
+ * FULL_DISK_BYTES free; an unreadable reading, with no marker, notes nothing and logs. Called once,
+ * at start.
  */
 export async function noteFullAtStart(
   state: DiskFullState,

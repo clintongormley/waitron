@@ -30,7 +30,7 @@ const seen = vi.hoisted(() => ({
   created: [] as { deps: { dir: string }; state: unknown }[],
   watched: [] as { state: unknown; stores: readonly unknown[] }[],
   unsubscribed: 0,
-  noted: [] as { state: unknown; deps: { dir: string }; notedAfter: boolean }[],
+  noted: [] as { state: unknown; deps: { dir: string }; notedAfter: boolean; fullAfter: boolean }[],
   tillDeps: [] as unknown[],
   billDeps: [] as unknown[],
   deviceDeps: [] as unknown[],
@@ -68,7 +68,10 @@ vi.mock("./disk-full-state.js", async (importOriginal) => {
     },
     noteFullAtStart: async (...args: Parameters<typeof actual.noteFullAtStart>) => {
       const result = await actual.noteFullAtStart(...args);
-      seen.noted.push({ state: args[0], deps: args[1], notedAfter: args[0].noted() });
+      // Read here, before the free-space watch starts and can write the spare back.
+      const notedAfter = args[0].noted();
+      const fullAfter = await args[0].full();
+      seen.noted.push({ state: args[0], deps: args[1], notedAfter, fullAfter });
       return result;
     },
   };
@@ -260,6 +263,8 @@ describe("boot's full-disk stop wiring", () => {
       server = await startServer(env, env, { spareBytes: 4096 });
       expect(seen.noted).toHaveLength(1);
       expect(seen.noted[0]!.notedAfter).toBe(true);
+      // The temporary folder has far more than 16 MiB free: only the marker keeps the stop.
+      expect(seen.noted[0]!.fullAfter).toBe(true);
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });
@@ -278,6 +283,25 @@ describe("boot's full-disk stop wiring", () => {
       server = await startServer(withSpare, withSpare, { spareBytes: 4096 });
       expect(seen.noted).toHaveLength(1);
       expect(seen.noted[0]!.notedAfter).toBe(true);
+    } finally {
+      await server?.close();
+      await rm(scratch, { recursive: true, force: true });
+      await rm(spareDir, { recursive: true, force: true });
+    }
+  });
+
+  it("with WAITRON_SPARE_SPACE_DIR set, a marker in the state folder notes nothing", async () => {
+    beforeServerStarts();
+    const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
+    const spareDir = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-spare-"));
+    let server: StartedServer | undefined;
+    try {
+      const { env } = await startEnv(scratch);
+      await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
+      const withSpare = { ...env, WAITRON_SPARE_SPACE_DIR: spareDir };
+      server = await startServer(withSpare, withSpare, { spareBytes: 4096 });
+      expect(seen.noted).toHaveLength(1);
+      expect(seen.noted[0]!.notedAfter).toBe(false);
     } finally {
       await server?.close();
       await rm(scratch, { recursive: true, force: true });

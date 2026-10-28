@@ -3,6 +3,7 @@ import { FULL_DISK_BYTES } from "./boot-failure.js";
 import {
   createDiskFullState,
   diskFullRefusal,
+  type DiskFullState,
   noteFullAtStart,
   watchForDiskFull,
 } from "./disk-full-state.js";
@@ -208,6 +209,20 @@ describe("createDiskFullState with the spare's marker", () => {
     expect(logs.events("storage.disk_space_back")).toEqual([
       { level: "info", event: "storage.disk_space_back", fields: { freeBytes: FULL_DISK_BYTES } },
     ]);
+  });
+
+  it("keeps the stop when a refusal is noted while the marker is read", async () => {
+    let state!: DiskFullState;
+    const spareReleased = async () => {
+      state.noteRefused();
+      return false;
+    };
+    const set = setup({ spareReleased });
+    state = set.state;
+    state.noteRefused();
+    set.disk.free(FULL_DISK_BYTES);
+    expect(await state.full()).toBe(true);
+    expect(state.noted()).toBe(true);
   });
 });
 
