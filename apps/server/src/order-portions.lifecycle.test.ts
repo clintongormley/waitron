@@ -19,7 +19,7 @@ import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { saveDraft, splitDraft, type BillEditExpected } from "./order-drafts.js";
-import type { PortionRef } from "./order-portions.js";
+import { expandPortionRows, registerPortions, type PortionRef } from "./order-portions.js";
 import { partyRevision, seatTable } from "./parties.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { cancelLine, cancelReasonId } from "./testing/cancel-line.js";
@@ -27,7 +27,14 @@ import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { createTable } from "./testing/live-table.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import { advanceTicketItem, updateHeldOrder, type TabRoundLine } from "./working-order.js";
+import {
+  advanceTicketItem,
+  insertTabRound,
+  priceTabRound,
+  readTabLines,
+  updateHeldOrder,
+  type TabRoundLine,
+} from "./working-order.js";
 
 afterEach(() => yieldTurn());
 
@@ -430,5 +437,38 @@ describe("A803 portion lifecycle: cancellations", () => {
     );
     expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
     expect(eventsOf(p.portions)).toEqual([]);
+  });
+});
+
+describe("A803 portion grouping: the bill line read", () => {
+  it("says portion: true only on a dish line bound to a whole, unmeasured portion", async () => {
+    const p = await fixture();
+    const [first] = p.portions;
+    const { unbound, measured } = await inTx(venue, async (tx) => {
+      const plain = await priceTabRound(tx, venue.cfg, p.billId, burgersWithCheese("1"), "checked");
+      await insertTabRound(tx, venue.cfg, plain, plain.rows);
+      const weighed = await priceTabRound(tx, venue.cfg, p.billId, burgersWithCheese("1"), "checked");
+      const out = expandPortionRows(
+        weighed.rows,
+        weighed.lineContexts,
+        weighed.rows.map(() => false),
+        weighed.rows[0]!.lineNo,
+      );
+      await insertTabRound(tx, venue.cfg, { ...weighed, lineContexts: out.lineContexts }, out.rows);
+      await registerPortions(tx, out.portions);
+      return { unbound: plain.rows[0]!.lineNo, measured: out.rows[0]!.lineNo };
+    });
+    const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, p.billId));
+    const portion = (lineNo: number) => lines.find((line) => line.lineNo === lineNo)!.portion;
+    const extraOf = (lineNo: number) =>
+      lines.find((line) => line.parentLineNo === lineNo)!.portion;
+    const firstNo = lines.find((line) => line.id === first!.lineId)!.lineNo;
+    expect({
+      bound: portion(firstNo),
+      extra: extraOf(firstNo),
+      measured: portion(measured),
+      unbound: portion(unbound),
+      unboundExtra: extraOf(unbound),
+    }).toEqual({ bound: true, extra: false, measured: false, unbound: false, unboundExtra: false });
   });
 });

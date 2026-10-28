@@ -4163,6 +4163,8 @@ export interface TabLine {
   /** On a dish sold as a variant, `productId` names the variant and this its parent product;
    * otherwise null. */
   parentProductId: string | null;
+  /** True on a dish line bound to a whole, unmeasured portion: only those may share a till row. */
+  portion: boolean;
 }
 
 /** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
@@ -4172,7 +4174,7 @@ export async function readTabLines(
   tabId: string,
 ): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
-  // `ticket_items` is unique per line, so the join never multiplies rows.
+  // `ticket_items` and `working_line_portions` are unique per line, so no join multiplies rows.
   const rows = await tx
     .select({
       lineNo: workingOrderLines.lineNo,
@@ -4205,12 +4207,15 @@ export async function readTabLines(
       note: workingOrderLines.note,
       listId: workingOrderLines.extraListId,
       productParentId: products.parentId,
+      portionMeasured: orderPortions.measured,
     })
     .from(workingOrderLines)
     .leftJoin(ticketItems, eq(ticketItems.workingOrderLineId, workingOrderLines.id))
     .leftJoin(kitchenStations, eq(kitchenStations.id, ticketItems.stationId))
     .leftJoin(products, eq(products.id, workingOrderLines.productId))
     .leftJoin(kitchenCourses, eq(kitchenCourses.id, workingOrderLines.courseId))
+    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, tabId))
     .orderBy(workingOrderLines.lineNo);
   const nutrition = await readLineNutrition(
@@ -4264,6 +4269,7 @@ export async function readTabLines(
       listId: row.listId,
       menuItemId: menuItemByLine.get(row.id) ?? null,
       parentProductId: sold.variantId === null ? null : sold.productId,
+      portion: row.portionMeasured === false,
     };
   });
 }
