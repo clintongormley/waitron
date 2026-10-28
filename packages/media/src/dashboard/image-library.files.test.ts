@@ -18,7 +18,7 @@ async function setup() {
   const api = {
     listImages: vi.fn().mockResolvedValue({ images: [], total: 0 }),
     uploadImage: vi.fn().mockResolvedValue({
-      image: { id: "one", filename: "one.png", names: { es: "Patatas bravas" } },
+      image: { id: "one", filename: "one.png", names: { es: "Spicy potatoes" } },
       created: true,
     }),
   };
@@ -46,9 +46,9 @@ async function choose(filename: string | null) {
   if (field) await field.updateComplete;
 }
 it.each([
-  ["patatas-bravas.jpg", "Patatas bravas"],
-  ["calamares__fritos.PNG", "Calamares fritos"],
-  ["tarta.v2-final.jpg", "Tarta.v2 final"],
+  ["spicy-potatoes.jpg", "Spicy potatoes"],
+  ["fried__squid.PNG", "Fried squid"],
+  ["cake.v2-final.jpg", "Cake.v2 final"],
   ["árroz_negro.webp", "Árroz negro"],
   ["---.png", "---.png"],
   ["", "Photo"],
@@ -68,24 +68,24 @@ it("replaces only an untouched suggestion and clears it back to the clean draft"
   await setup();
   await choose("bread.png");
   expect(name().value).toBe("Bread");
-  await choose("croquetas.png");
-  expect(name().value).toBe("Croquetas");
+  await choose("croquettes.png");
+  expect(name().value).toBe("Croquettes");
   await choose(null);
   expect(name().value).toBe("");
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-test=save]")!.disabled,
   ).toBe(true);
   await choose("bread.png");
-  name().dispatchEvent(new CustomEvent("wt-change", { detail: { value: "Mi pan" } }));
+  name().dispatchEvent(new CustomEvent("wt-change", { detail: { value: "My bread" } }));
   await el.updateComplete;
   await choose("toast.png");
-  expect(name().value).toBe("Mi pan");
+  expect(name().value).toBe("My bread");
   await choose(null);
-  expect(name().value).toBe("Mi pan");
+  expect(name().value).toBe("My bread");
 });
 it("a dropped photo stages one file, shows its size and saves the suggested metadata only on Save", async () => {
   const api = await setup();
-  const f = new File(["photo"], "patatas-bravas.jpg", { type: "image/jpeg" });
+  const f = new File(["photo"], "spicy-potatoes.jpg", { type: "image/jpeg" });
   const data = new DataTransfer();
   data.items.add(f);
   const field = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-file-input"]>(
@@ -103,10 +103,10 @@ it("a dropped photo stages one file, shows its size and saves the suggested meta
   await el.updateComplete;
   await field!.updateComplete;
   expect(api.uploadImage).not.toHaveBeenCalled();
-  expect(name().value).toBe("Patatas bravas");
+  expect(name().value).toBe("Spicy potatoes");
   expect(field!.shadowRoot!.textContent).toContain("5 B");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=save]")!.click();
   await vi.waitFor(() =>
-    expect(api.uploadImage).toHaveBeenCalledExactlyOnceWith(f, { names: { es: "Patatas bravas" } }),
+    expect(api.uploadImage).toHaveBeenCalledExactlyOnceWith(f, { names: { es: "Spicy potatoes" } }),
   );
 });

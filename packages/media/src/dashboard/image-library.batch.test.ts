@@ -80,17 +80,17 @@ it("uploads a mixed batch sequentially, preserves default-language names and kee
     .mockReturnValueOnce(one.promise)
     .mockReturnValueOnce(two.promise)
     .mockReturnValueOnce(three.promise);
-  const files = [file("patatas-bravas.jpg"), file("damaged.png"), file("same.webp")];
+  const files = [file("spicy-potatoes.jpg"), file("damaged.png"), file("same.webp")];
   expect(drag("drop", files).defaultPrevented).toBe(true);
   await vi.waitFor(() => expect(api.uploadImage).toHaveBeenCalledTimes(1));
-  expect(api.uploadImage).toHaveBeenLastCalledWith(files[0], { names: { es: "Patatas bravas" } });
+  expect(api.uploadImage).toHaveBeenLastCalledWith(files[0], { names: { es: "Spicy potatoes" } });
   drag("drop", [file("intruder.png")]);
   expect(api.uploadImage).toHaveBeenCalledTimes(1);
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
   expect(text()).toContain("0 of 3 photos uploaded.");
   el.shadowRoot!.querySelector<HTMLElement>("[data-test=upload]")!.click();
   expect(el.shadowRoot!.querySelector("wt-modal")).toBeNull();
-  one.resolve({ image: image("new", "Patatas bravas"), created: true });
+  one.resolve({ image: image("new", "Spicy potatoes"), created: true });
   await vi.waitFor(() => expect(api.uploadImage).toHaveBeenCalledTimes(2));
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   two.reject({ code: "image.invalid_file" });

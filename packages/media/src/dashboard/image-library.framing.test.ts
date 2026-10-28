@@ -10,8 +10,8 @@ const image: LibraryImage = {
   id: "photo",
   filename: "photo.png",
   sourceFilename: "photo.png",
-  originalFilename: "patatas-bravas.jpg",
-  names: { en: "Bravas", es: "Patatas" },
+  originalFilename: "spicy-potatoes.jpg",
+  names: { en: "Spicy potatoes", es: "Patatas" },
   framing: { x: 2500, y: 7500, zoom: 200 },
   revision: 3,
   usageCount: 2,
@@ -96,7 +96,7 @@ async function replace() {
 it("Edit photo shows the human filename, with a stored-filename fallback and no write", async () => {
   const api = await mount();
   expect(el.shadowRoot!.querySelector("[data-test=photo-filename]")?.textContent).toContain(
-    "patatas-bravas.jpg",
+    "spicy-potatoes.jpg",
   );
   expect(el.shadowRoot!.querySelector("wt-file-input[name=image-file]")).not.toBeNull();
   expect(save().disabled).toBe(true);
@@ -163,7 +163,7 @@ it("an unreadable replacement remains retryable, and choosing another never rena
   expect(api.updateImage.mock.calls[1]).toEqual([
     "photo",
     {
-      names: { en: "Bravas", es: "Patatas" },
+      names: { en: "Spicy potatoes", es: "Patatas" },
       framing: { x: 5000, y: 5000, zoom: 100 },
       expectedRevision: 3,
     },
@@ -193,7 +193,7 @@ it("unchanged Done stays quiet, Escape discards subdraft, and Reset only stages 
   save().click();
   await vi.waitFor(() =>
     expect(api.updateImage).toHaveBeenCalledWith("photo", {
-      names: { en: "Bravas", es: "Patatas" },
+      names: { en: "Spicy potatoes", es: "Patatas" },
       framing: { x: 5000, y: 5000, zoom: 100 },
       expectedRevision: 3,
     }),
@@ -208,7 +208,7 @@ it("replacement resets framing, retains every name and submits the accepted fram
   );
   expect(
     el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>("[name=name-en]")!.value,
-  ).toBe("Bravas");
+  ).toBe("Spicy potatoes");
   const dialog = await adjust();
   expect(dialog.framing).toEqual({ x: 5000, y: 5000, zoom: 100 });
   await vi.waitFor(() =>
@@ -229,7 +229,7 @@ it("replacement resets framing, retains every name and submits the accepted fram
   expect(api.updateImage).toHaveBeenCalledWith(
     "photo",
     {
-      names: { en: "Bravas", es: "Patatas" },
+      names: { en: "Spicy potatoes", es: "Patatas" },
       framing: { x: 6000, y: 5000, zoom: 100 },
       expectedRevision: 3,
     },
