@@ -533,7 +533,6 @@ export function createFirstSetupResolutionActions(
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
-          if (!held && !["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
           const noOtherHistory = inspection.artifacts.every(
             (artifact) =>
               ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(

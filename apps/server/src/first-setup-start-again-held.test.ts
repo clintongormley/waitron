@@ -378,6 +378,20 @@ it("in the held state, a request carrying confirmMissingDatabase is refused setu
   );
 });
 
+it("in the held state, a request answering no-current-master is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup();
+  const startAgain = await askStartAgain(f);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      startAgain.run({
+        confirmRecoveryDiscard: { shown: startAgain.shown },
+        register: { kind: "no-current-master", confirmed: true },
+      }),
+    { code: "setup.not_ready" },
+  );
+});
+
 it("a held setup database with no recovery started still refuses Start again setup.not_ready, and nothing changes", async () => {
   const f = await heldSetup({ recovery: false });
   // With no recovery, a confirmRecoveryDiscard is refused setup.attempt_conflict before this check.
