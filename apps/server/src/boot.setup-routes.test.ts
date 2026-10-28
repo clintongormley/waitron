@@ -652,7 +652,6 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
     }
   }, 120_000);
 
-  /** Cell 12 of the A680 plan's refusal matrix, read from the venue a Demo setup made. */
   function expectThrowawayVenue(db: Database, taxId: string): void {
     expect(db.all(sql`select numero_instalacion from registro_sif`)).toEqual([
       { numero_instalacion: "0CNNW" },

@@ -349,10 +349,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   (`packages/module/src/provisioning.ts`); finish-branch's convention review asked for `taxId`.
   Left as is because the English-only guard allows "NIF" and lane E's A679 was given this exact
   shape, so a rename changes both. Owner's call.
-- The route tests in `apps/server/src/setup-throwaway.route.test.ts` are named after its plan's
-  table ("cell 1" … "cell 14"), which goes when plans are deleted at go-live, and the file does
-  not follow its siblings' `setup-api.<topic>.test.ts` pattern. Rename both to describe the
-  behaviour.
 - Whether a throwaway venue can get an offline recovery pack is untested. #1717's recovery pack
   checks the allocation's recipient venue; a reviewer read that a throwaway venue would probably
   be refused one, which fits a practice-only venue, but nothing ran it.
