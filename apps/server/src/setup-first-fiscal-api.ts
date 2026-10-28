@@ -10,7 +10,7 @@ import { parseEmailSettings } from "./email-settings-api.js";
 import { sendSmtpTestMessage } from "./smtp-test-message.js";
 import type { Context, Hono, MiddlewareHandler, Next } from "hono";
 import { TLSSocket } from "node:tls";
-import { AppError } from "@waitron/shared";
+import { AppError, isAppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
@@ -23,6 +23,7 @@ import { createErrorBoundary } from "@waitron/server-kit";
 import type { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { requestFromBox } from "./request-from-box.js";
+import { FULL_DISK_BYTES, fullDiskFailure } from "./boot-failure.js";
 import { publicFirstSetupState, type FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -772,9 +773,28 @@ export function mountFirstSetupResolutionApi(
     >["startAgainSummary"];
     requestRestart?: () => void;
     withPublication?: <T>(body: (deps: SetupDeps) => Promise<T>) => Promise<T>;
+    /** The lower free space of the setup's folders; given, the Start-again flow can say the disk is full. */
+    freeSpace?: () => Promise<number | null>;
   } = {},
 ) {
   const root = "/setup-api/first-setup";
+  const freeSpace = async () => (await options.freeSpace?.().catch(() => null)) ?? null;
+  // A refused record write reaches here as setup.attempt_invalid with no cause, so on a nearly full
+  // disk it is taken for a full disk, as recovery-start-again.ts does for its own form.
+  const diskFullOr = async <T>(body: () => Promise<T>): Promise<T> => {
+    try {
+      return await body();
+    } catch (error) {
+      if (options.freeSpace !== undefined) {
+        const free = await freeSpace();
+        const full = isAppError(error)
+          ? error.code === "setup.attempt_invalid" && free !== null && free < FULL_DISK_BYTES
+          : fullDiskFailure(error, free);
+        if (full) throw new AppError("storage.disk_full", {});
+      }
+      throw error;
+    }
+  };
   for (const path of [`${root}/resolution`, `${root}/resolution/*`])
     app.use(path, (c, next) => {
       c.header("Cache-Control", "no-store");
@@ -783,7 +803,13 @@ export function mountFirstSetupResolutionApi(
   app.get(`${root}/resolution`, (c) =>
     boundary(c, log, async () => {
       assertFirstFiscalRequest(c);
-      return c.json(await host.resolution.inspectFirstSetupResolution());
+      const inspection = await host.resolution.inspectFirstSetupResolution();
+      // On a full disk the database cannot be judged, which would hide Start again without a word.
+      if (inspection.database === "unknown" || inspection.database === "partial") {
+        const free = await freeSpace();
+        if (free !== null && free < FULL_DISK_BYTES) throw new AppError("storage.disk_full", {});
+      }
+      return c.json(inspection);
     }),
   );
   app.post(`${root}/resolution/recover`, (c) =>
@@ -806,13 +832,15 @@ export function mountFirstSetupResolutionApi(
       )
         invalid();
       return c.json(
-        await host.owner.recoverFirstSetupOwner({
-          inspectionId: text(body.inspectionId),
-          revision: body.revision as number,
-          ownerGeneration: body.ownerGeneration as number,
-          clientClaimNonce: text(body.clientClaimNonce),
-          password: text(body.password),
-        }),
+        await diskFullOr(() =>
+          host.owner.recoverFirstSetupOwner({
+            inspectionId: text(body.inspectionId),
+            revision: body.revision as number,
+            ownerGeneration: body.ownerGeneration as number,
+            clientClaimNonce: text(body.clientClaimNonce),
+            password: text(body.password),
+          }),
+        ),
       );
     }),
   );
@@ -950,12 +978,14 @@ export function mountFirstSetupResolutionApi(
           invalid();
         const owner = firstFiscalOwner(c);
         return c.json(
-          await options.summary!({
-            inspectionId: text(body.inspectionId),
-            revision: body.revision as number,
-            ownerGeneration: body.ownerGeneration as number,
-            owner,
-          }),
+          await diskFullOr(() =>
+            options.summary!({
+              inspectionId: text(body.inspectionId),
+              revision: body.revision as number,
+              ownerGeneration: body.ownerGeneration as number,
+              owner,
+            }),
+          ),
         );
       }),
     );
@@ -1001,21 +1031,23 @@ export function mountFirstSetupResolutionApi(
           ? unreadableConfirmation(body.confirmUnreadable)
           : undefined;
         try {
-          await options.startAgain!({
-            inspectionId: text(body.inspectionId),
-            revision: body.revision as number,
-            ownerGeneration: body.ownerGeneration as number,
-            register,
-            ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
-            ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
-            ...(confirmUnreadable === undefined ? {} : { confirmUnreadable }),
-            ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
-              ? { recoveryRecordDamagedShown: true as const }
-              : {}),
-            ...(c.req.header("X-Waitron-Setup-Owner") === undefined
-              ? {}
-              : { owner: firstFiscalOwner(c) }),
-          });
+          await diskFullOr(() =>
+            options.startAgain!({
+              inspectionId: text(body.inspectionId),
+              revision: body.revision as number,
+              ownerGeneration: body.ownerGeneration as number,
+              register,
+              ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
+              ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+              ...(confirmUnreadable === undefined ? {} : { confirmUnreadable }),
+              ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
+                ? { recoveryRecordDamagedShown: true as const }
+                : {}),
+              ...(c.req.header("X-Waitron-Setup-Owner") === undefined
+                ? {}
+                : { owner: firstFiscalOwner(c) }),
+            }),
+          );
         } catch (error) {
           // The next start tries to finish what Start again left.
           if (error instanceof AppError && error.code === "setup.start_again_incomplete")

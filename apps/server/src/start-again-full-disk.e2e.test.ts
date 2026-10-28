@@ -13,6 +13,7 @@ import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import "@waitron/provisioning";
 import {
   SPARE_SPACE_FILE,
+  isEmptiedTombstone,
   readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
@@ -150,7 +151,7 @@ async function filesUnder(dir: string): Promise<string[]> {
   return names;
 }
 
-it("with the box's spare file, the password step, the summary and Start again all work on a full disk, the stopped recovery's copy is deleted, and the note carries its series name", async (ctx) => {
+it("with the box's spare file, the password step, the summary and Start again all work on a full disk, the stopped recovery's copy is emptied, and the note carries its series name", async (ctx) => {
   const small = needDisk(ctx);
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
@@ -178,6 +179,7 @@ it("with the box's spare file, the password step, the summary and Start again al
     phase: "abandoned",
     target: { recoveryId: f.session.recoveryId },
   });
+  expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
   expect(await filesUnder(copy)).not.toContain("target/state/module-preparation-state.json");
   await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
@@ -199,8 +201,8 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
     { stateDir: f.roots.stateDir },
   );
   if (entry.kind !== "resolution") throw new Error("repair app missing");
-  // With 64 KiB left the refusal comes before the placement is recorded, and such a recovery counts as
-  // running until its lease lapses; 128 KiB lets the placement begin and fail.
+  // With 64 KiB left the refusal came before the placement was recorded, and the recovery still
+  // counted as running; 128 KiB lets the placement begin and fail.
   small.fill(128 * 1024);
 
   await expect(
@@ -208,7 +210,7 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
   ).rejects.toMatchObject({ code: "ENOSPC" });
   expect(f.service.runningInMemory()).toBe(false);
   expect((await f.workspace.read()).at(-1)?.phase).toBe("placement-started");
-  // The failed placement gives back its staging; fill that too, so the page opens on a full disk.
+  // Fill again, so the page opens on a full disk whatever the failed placement left free.
   small.fill();
   expect(small.free()).toBeLessThan(65_536);
 
@@ -221,4 +223,41 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
     target: { recoveryId: f.session.recoveryId },
   });
   expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
+});
+
+it("without a spare file, the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
+  const small = needDisk(ctx);
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReturnValue(f.service);
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    () => {},
+    { stateDir: f.roots.stateDir },
+  );
+  if (entry.kind !== "resolution") throw new Error("repair app missing");
+  const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
+  small.fill();
+  expect(small.free()).toBeLessThan(65_536);
+
+  const recovered = await entry.app.request(
+    `${ROUTE}/recover`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        inspectionId: inspected.inspectionId,
+        revision: inspected.revision,
+        ownerGeneration: inspected.ownerGeneration,
+        clientClaimNonce: randomBytes(32).toString("base64url"),
+        password: PASSWORD,
+      }),
+    },
+    tls(),
+  );
+
+  expect(recovered.status, await recovered.clone().text()).toBe(507);
+  expect(await recovered.json()).toMatchObject({ error: { code: "storage.disk_full" } });
 });

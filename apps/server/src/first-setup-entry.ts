@@ -377,6 +377,7 @@ async function resolutionApp(
   mountFirstSetupResolutionApi(app, host, log, {
     startAgain: actions.startAgainFirstSetup,
     summary: actions.startAgainSummary,
+    freeSpace: () => lowestFreeBytes([roots.stateDir, roots.venueDir], spare?.statfs),
     ...(moduleConfig === undefined
       ? {}
       : {
