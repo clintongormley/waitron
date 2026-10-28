@@ -1176,6 +1176,17 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Split the menu patch window's file before adding to it (left open by A1151).**
   `apps/dashboard/src/widgets/menu-patch-dialog.ts` is large; split it before more is added to it.
 
+- **After Remove image, or a pick from the image library, focus drops to the page instead of
+  returning to "Choose image" (found in the menu patch window, A1151).** `dashboard-image-upload`
+  (`apps/dashboard/src/widgets/image-upload.ts`, `#setOpen`) returns focus when the picker closes
+  only in its logo modes; the plain chooser every product form uses has no such step. The logo
+  step came from main (A841 slice 8a, #2035); A1151 did not change it.
+
+- **While the content-languages read is slow, a refused send in the menu patch window can show
+  "Enter text for each translation." under a Spanish name field that has text (left open by
+  A1151).** Seen with a forced 4-second delay on that read; in normal use it would flash for about
+  a tenth of a second at most.
+
 - **A1150. Allergens and diet labels come from the live product on every screen** (owner,
   2026-10-27). Needs its own design before it is built. Today the till's menu and product info
   read them from the published menu version, while the kitchen screen, the table's allergy check
