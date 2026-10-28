@@ -1153,6 +1153,20 @@ describe("the full-disk page's free space and uncounted start", () => {
     });
   });
 
+  it("a discarded copy refused for holding a link logs the refusal's code", async () => {
+    const log = vi.fn();
+    await bodyOf(
+      appWith({
+        discardedCopyBytes: () => Promise.reject(new AppError("setup.attempt_uncertain", {})),
+        log,
+      }),
+    );
+    expect(log).toHaveBeenCalledWith("warn", "recovery.discarded_copy_unreadable", {
+      errno: null,
+      reason: "setup.attempt_uncertain",
+    });
+  });
+
   it("keeps /recovery-api/status to its named fields", async () => {
     const app = appWith(
       { freeSpace: async () => 1_228_800 },

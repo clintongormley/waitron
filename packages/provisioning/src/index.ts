@@ -245,7 +245,11 @@ export {
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
 } from "./first-setup-backup-workspace.js";
-export { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "./first-setup-backup-discard.js";
+export {
+  abandonedRecoveryBytes,
+  emptyAbandonedBackupRecovery,
+  isEmptiedTombstone,
+} from "./first-setup-backup-discard.js";
 export type {
   BackupRepairTarget,
   BackupRepairObservation,

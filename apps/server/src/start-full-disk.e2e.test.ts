@@ -19,7 +19,7 @@ import { DatabaseSync } from "node:sqlite";
 import { eq, sql } from "drizzle-orm";
 import { unzipSync } from "fflate";
 import { Hono } from "hono";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   devices,
   drawerOpens,
@@ -787,6 +787,9 @@ describe("a start on a real full disk", () => {
     const discarded = await discardedRecovery(stateDir);
     const filler = join(stateDir, "filler");
     writeFileSync(filler, Buffer.alloc(1024 * 1024, 69));
+    // A failed assertion below must not leave the filler and the copy filling the shared disk.
+    onTestFinished(() => rmSync(discarded.database, { force: true }));
+    onTestFinished(() => rmSync(filler, { force: true }));
     small.fill();
     expect(small.free()).toBeLessThan(65_536);
 

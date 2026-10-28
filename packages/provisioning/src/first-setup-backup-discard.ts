@@ -35,8 +35,10 @@ async function canonical(anchor: FirstSetupRoots, recoveryId: string): Promise<F
  * What emptying would remove under the recovery's folder, deepest first; `null` when the folder
  * is missing. A symlink, or anything that is neither a file nor a folder, is refused.
  */
-async function removals(base: string): Promise<{ path: string; kind: "file" | "folder" }[] | null> {
-  const out: { path: string; kind: "file" | "folder" }[] = [];
+async function removals(
+  base: string,
+): Promise<{ path: string; kind: "file" | "folder"; bytes: number }[] | null> {
+  const out: { path: string; kind: "file" | "folder"; bytes: number }[] = [];
   async function walk(directory: string, inTarget: boolean, removable: boolean): Promise<boolean> {
     let kept = false;
     for (const name of (await readdir(directory)).sort()) {
@@ -57,9 +59,9 @@ async function removals(base: string): Promise<{ path: string; kind: "file" | "f
         kept = true;
         continue;
       }
-      out.push({ path, kind: "file" });
+      out.push({ path, kind: "file", bytes: info.size });
     }
-    if (removable && !kept) out.push({ path: directory, kind: "folder" });
+    if (removable && !kept) out.push({ path: directory, kind: "folder", bytes: 0 });
     return kept;
   }
   try {
@@ -91,6 +93,16 @@ async function venuePointerNames(anchor: FirstSetupRoots, recoveryId: string): P
       ? pointer.target.recoveryId
       : undefined;
   return !(typeof named === "string" && isUuid(named) && named !== recoveryId);
+}
+
+/** The bytes of the files emptying would remove from the recovery's folder; 0 when it is missing. */
+export async function abandonedRecoveryBytes(
+  anchor: FirstSetupRoots,
+  recoveryId: string,
+): Promise<number> {
+  const roots = await canonical(anchor, recoveryId);
+  const left = await removals(join(roots.stateDir, NAMESPACE, recoveryId));
+  return (left ?? []).reduce((total, entry) => total + entry.bytes, 0);
 }
 
 /**

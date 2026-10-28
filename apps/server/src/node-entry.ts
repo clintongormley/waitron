@@ -404,7 +404,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
         discardedCopyBytes: () =>
-          discardedCopyBytes({ stateDir: rooted.stateDir, venueDir: rooted.venueDir }),
+          discardedCopyBytes({ stateDir: deps.stateDir, venueDir: deps.venueDir }),
         log: deps.log,
       }),
       transport,

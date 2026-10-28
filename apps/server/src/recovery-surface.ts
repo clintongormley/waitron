@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
 import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
 import type { Statfs } from "./free-bytes.js";
@@ -620,7 +620,10 @@ async function readDiscardedCopy(deps: RecoveryDeps): Promise<number | null> {
   try {
     return await deps.discardedCopyBytes();
   } catch (error) {
-    deps.log?.("warn", "recovery.discarded_copy_unreadable", { errno: errnoOf(error) ?? null });
+    deps.log?.("warn", "recovery.discarded_copy_unreadable", {
+      errno: errnoOf(error) ?? null,
+      ...(error instanceof AppError ? { reason: error.code } : {}),
+    });
     return null;
   }
 }

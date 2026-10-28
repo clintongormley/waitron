@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import {
+  abandonedRecoveryBytes,
   createFirstSetupBackupWorkspace,
   emptyAbandonedBackupRecovery,
 } from "@waitron/provisioning";
@@ -80,6 +81,7 @@ it("answers the bytes a discarded recovery's copy still holds", async () => {
   await (await stoppedRecovery()).abandon(ID);
   const before = await discardedCopyBytes(anchor);
   expect(before).toBeGreaterThanOrEqual(4096);
+  expect(before).toBe(await abandonedRecoveryBytes(anchor, ID));
   writeFileSync(join(base, "target", "venue", "venue.db-wal"), Buffer.alloc(MiB, 1));
   expect(await discardedCopyBytes(anchor)).toBe(before! + MiB);
 });
