@@ -596,6 +596,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   measured on a box. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
+- **A1131c: starting a restore from backup wipes what a failed setup left, and Start again's page
+  drops the item counts** (owner, 2026-10-28). A failed setup never starts trading, so nothing in its
+  database is anything that cannot be typed again; a restore should therefore remove it when it
+  starts, after recording every installation and invoice-series name it held in the start-again
+  note so none is reused. Start again then says only what it deletes ("what was entered in the
+  setup that stopped part way. Nothing was sent to AEAT."). The refusals for an invoice or a
+  never-deleted record, saved trading settings and a finished setup stay. Design first; lane A.
+
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
   missing.** Only Reconnect is enabled today. Waits for the owner's 2026-10-28 design: a recovered
   database moves to the standard database path before anything writes to it.
