@@ -23,6 +23,8 @@ vi.mock("./first-setup-entry.js", async (importOriginal) => {
 
 const dirs: string[] = [];
 afterEach(async () => {
+  watch.seen = [];
+  watch.leftover = "";
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
@@ -55,6 +57,39 @@ it("deletes the leftovers before first-setup resolution runs", async () => {
     logDir,
     statfs: () => Promise.resolve({ bavail: 10, frsize: 1 }),
     freeSpaceFloor: 1000,
+  });
+
+  expect(watch.seen).toEqual([false]);
+});
+
+it("deletes the spare before first-setup resolution runs", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-order-state-"));
+  const venueDir = await mkdtemp(join(tmpdir(), "wt-entry-order-venue-"));
+  const logDir = await mkdtemp(join(tmpdir(), "wt-entry-order-"));
+  dirs.push(stateDir, venueDir, logDir);
+  watch.leftover = join(stateDir, "spare-space");
+  await writeFile(watch.leftover, Buffer.alloc(4096, 1));
+
+  await runEntry({
+    args: [],
+    baseEnv: {},
+    stateDir,
+    venueDir,
+    assertNotAhead: vi.fn(() => Promise.resolve()),
+    clearReplacedDatabases: vi.fn(() => Promise.resolve()),
+    lockVenue: vi.fn(() => Promise.resolve({ release: () => {} })),
+    loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
+    readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
+    writeRecoveryState: vi.fn(() => Promise.resolve()),
+    withRecoveryLock: (_stateDir, body) => body(),
+    startServer: vi.fn(() => Promise.resolve({ close: () => Promise.resolve() })),
+    serveRecovery: vi.fn(() => Promise.resolve()),
+    installShutdownHandlers: vi.fn(),
+    scheduleStayedUp: vi.fn(),
+    log: vi.fn(),
+    logDir,
+    statfs: () => Promise.resolve({ bavail: 1024 * 1024, frsize: 1 }),
+    spareBytes: 4096,
   });
 
   expect(watch.seen).toEqual([false]);

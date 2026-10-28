@@ -57,7 +57,7 @@ import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
-import { SPARE_SPACE_BYTES, topUpSpare } from "./spare-space.js";
+import { SPARE_SPACE_BYTES, releaseSpare, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
@@ -262,6 +262,28 @@ export async function assertNotAhead(venueDir: string, migrationsRoot: string): 
 }
 
 /**
+ * Deletes the box's spare file when the start could not boot without its room: under
+ * SPARE_SPACE_BYTES free (a boot was measured to need about 4.25 MiB), or under FULL_DISK_BYTES
+ * when the last start failed for a full disk. Runs before first-setup resolution, which on a full
+ * disk would serve its own page instead of a boot (item 7 of `runEntry`).
+ */
+async function releaseSpareToStart(
+  deps: EntryDeps,
+  roots: { stateDir: string; venueDir: string },
+): Promise<void> {
+  const lowest = await lowestFreeBytes(
+    [...new Set([deps.stateDir, deps.venueDir, roots.stateDir, roots.venueDir])],
+    deps.statfs,
+  );
+  if (lowest === null || lowest >= FULL_DISK_BYTES) return;
+  if (
+    lowest < SPARE_SPACE_BYTES ||
+    (await deps.readRecoveryState(roots.stateDir)).lastErrorCode === "storage.disk_full"
+  )
+    await releaseSpare(deps.stateDir, deps.log);
+}
+
+/**
  * One container start: decide the level, bring the venue directory into shape, hand the server its
  * environment, and start it — or serve the recovery page instead.
  *
@@ -343,6 +365,8 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
               ? join(cleanupRoots.stateDir, "logs")
               : (deps.logDir ?? join(deps.stateDir, "logs")),
         });
+
+  if (backupEntry.kind !== "repair") await releaseSpareToStart(deps, cleanupRoots);
 
   const admission = await resolveFirstSetupEntry(
     deps,

@@ -466,6 +466,40 @@ it("a start running from a selected backup recovery writes the spare in the conf
   });
 });
 
+it("a start from a selected backup recovery reads the failure from the recovery's state folder, judges the recovery's folders too, and deletes the spare in the configured state folder", async () => {
+  const f = await fixture("selected");
+  const target = f.target.target;
+  const spare = join(f.roots.stateDir, "spare-space");
+  await writeFile(spare, Buffer.alloc(4096, 1));
+  const recovery = new Set([target.stateDir, target.venueDir]);
+  await superviseSelected(f, {
+    spareBytes: 4096,
+    // The configured folders hold 16 MiB: not low enough to release, too little to refill.
+    statfs: async (dir) => ({ bavail: (recovery.has(dir) ? 12 : 16) * 1024 * 1024, frsize: 1 }),
+    readRecoveryState: async (dir) =>
+      dir === target.stateDir
+        ? { ...FRESH, failures: 1, lastErrorCode: "storage.disk_full" }
+        : FRESH,
+  });
+  await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
+  expect((await stat(join(f.roots.stateDir, "spare-space.released"))).isFile()).toBe(true);
+  await expect(stat(join(target.stateDir, "spare-space.released"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("a start at a recovery's repair stage on a nearly full disk keeps the spare", async () => {
+  const f = await fixture();
+  const spare = join(f.roots.stateDir, "spare-space");
+  await writeFile(spare, Buffer.alloc(4096, 1));
+  const { surface } = await superviseSelected(f, {
+    spareBytes: 4096,
+    statfs: async () => ({ bavail: 1024 * 1024, frsize: 1 }),
+  });
+  expect(surface).toBeDefined();
+  expect((await stat(spare)).size).toBe(4096);
+});
+
 it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
   const f = await fixture("selected");
   const backup = await resolveFirstSetupBackupEntry(f.roots);
