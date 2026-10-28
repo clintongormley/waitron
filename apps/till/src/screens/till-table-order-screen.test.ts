@@ -6237,8 +6237,16 @@ describe("till-table-order-screen", () => {
         id: `cafe-${lineNo}`,
         lineNo,
         quantity: "1.000",
+        portion: true,
       })),
-      { ...pendingLine, id: "tea-4", lineNo: 4, productId: "te", quantity: "1.000" },
+      {
+        ...pendingLine,
+        id: "tea-4",
+        lineNo: 4,
+        productId: "te",
+        quantity: "1.000",
+        portion: true,
+      },
     ];
 
     it("A803 portion grouping: ticking a grouped row in Transfer items sends every member's line number", async () => {

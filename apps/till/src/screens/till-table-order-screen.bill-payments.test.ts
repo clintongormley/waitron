@@ -349,7 +349,13 @@ describe("till-table-order-screen: items already paid for", () => {
 
   it("A803 portion grouping: groups identical portions only when paid alike, never a part-paid one", async () => {
     const burger = (lineNo: number) =>
-      line({ lineNo, name: "Burger", unitPriceGross: "9.50", priceQuantity: "1.000" });
+      line({
+        lineNo,
+        name: "Burger",
+        unitPriceGross: "9.50",
+        priceQuantity: "1.000",
+        portion: true,
+      });
     const el = await mountScreen({
       lines: [4, 5, 6, 7, 8, 9].map(burger),
       bills: [partlyPaid],

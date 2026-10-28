@@ -31,10 +31,11 @@ export function portionGroups<T>(
 
 const one = (value: string | undefined) => value === undefined || trimQuantity(value) === "1";
 
-/** A sent line carries no measure flag, so a whole portion is read as a line of one in a unit with
- * no decimals, priced per one unit. */
+/** A dish line the server reads as bound to a whole, unmeasured portion, and still a line of one in
+ * a unit with no decimals, priced per one unit. */
 function wholePortion(line: TabLine): boolean {
   return (
+    line.portion === true &&
     (line.parentLineNo ?? null) === null &&
     line.unitPrecision === 0 &&
     trimQuantity(line.quantity) === "1" &&

@@ -85,9 +85,11 @@ function steakLines(id: string, lineNo: number, kind: Kind): TabLine[] {
     parentProductId: null,
     stationId: "grill",
     movable: true,
+    portion: true,
   };
   const lime: TabLine = {
     ...dish,
+    portion: false,
     id: `${id}-lime`,
     name: "Lime",
     lineNo: lineNo + 10,

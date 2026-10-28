@@ -227,6 +227,7 @@ it("A803 portion grouping: a portion ticked for a guest's allergy stands apart f
     quantity: "1.000",
     priceQuantity: "1.000",
     listUnitPriceGross: undefined,
+    portion: true,
   });
   const view = allergy();
   const ticked: PartyAllergyRead = {

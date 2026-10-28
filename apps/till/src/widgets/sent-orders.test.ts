@@ -905,6 +905,7 @@ const billLine = (id: string, lineNo: number): TabLine => ({
   note: null,
   listId: null,
   menuItemId: "offer-burger",
+  portion: true,
 });
 const burgers = [billLine("burger-1", 1), billLine("burger-2", 2), billLine("burger-3", 3)];
 const burger = (id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}) =>

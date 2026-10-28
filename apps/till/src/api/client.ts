@@ -2371,6 +2371,9 @@ export interface TabLine {
   /** On a dish sold as a variant, {@link productId} names the variant and this its parent product;
    * otherwise null. */
   parentProductId: string | null;
+  /** True on a dish line bound to a whole, unmeasured portion: only those share a row. Absent only
+   * on a fixture that omits it, read as false. */
+  portion?: boolean;
 }
 
 /**

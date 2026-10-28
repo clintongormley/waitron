@@ -27,6 +27,7 @@ function line(id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine 
     note: null,
     listId: null,
     menuItemId: "offer-burger",
+    portion: true,
     ...over,
   };
 }
@@ -45,6 +46,14 @@ const keyOf = (lines: TabLine[]) => (dish: TabLine) => tabLinePortionKey(dish, l
 const ids = (groups: TabLine[][]) => groups.map((group) => group.map((member) => member.id));
 
 describe("A803 portion grouping: bill lines", () => {
+  it.each<[string, Partial<TabLine>]>([
+    ["false", { portion: false }],
+    ["absent", { portion: undefined }],
+  ])("never groups two identical one-unit lines whose portion fact is %s", (_, over) => {
+    const lines = [line("b1", 1, over), line("b2", 2, over)];
+    expect(lines.map((dish) => tabLinePortionKey(dish, lines))).toEqual([null, null]);
+  });
+
   it("puts identical whole portions in one group at the first one's place, members by line number", () => {
     const lines = [
       line("b3", 3),

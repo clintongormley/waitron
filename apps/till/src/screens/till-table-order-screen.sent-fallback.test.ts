@@ -246,6 +246,7 @@ const portion = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabLi
   firedAt: "2026-09-28T19:50:00.000Z",
   state: "queued",
   nutrition: undefined,
+  portion: true,
   ...over,
 });
 const portionCheese = (id: string, parentLineNo: number): TabLine =>
@@ -256,6 +257,7 @@ const portionCheese = (id: string, parentLineNo: number): TabLine =>
     unitPriceGross: "1.00",
     listId: "toppings",
     state: null,
+    portion: false,
   });
 const fallbackRows = (el: HTMLElement) =>
   [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((node) => [

@@ -947,6 +947,7 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
       id: `portion-${lineNo}`,
       lineNo,
       quantity: "1.000",
+      portion: true,
     }));
     const { el, host } = await mountWidget<TillTableOrderScreen>(
       "till-table-order-screen",
