@@ -36,8 +36,8 @@ vuelve a mostrar la recuperación. Si la base de datos de la configuración ya g
 también dice cuántos, y que ninguno es una factura. Lo borra todo cuando marcas «Borrar el intento
 anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**. Empezar de nuevo no se ofrece
 si la configuración ya guardó los ajustes con los que vende el equipo. Si la base de datos tiene una
-factura u otro elemento que Waitron nunca borra, o la configuración ya terminó, la página lo indica
-después de que introduzcas la contraseña, y Empezar de nuevo no se lleva a cabo.
+factura u otro elemento que Waitron nunca borra, la página lo indica después de que introduzcas la
+contraseña, y Empezar de nuevo no se lleva a cabo.
 
 Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
 de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para

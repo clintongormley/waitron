@@ -684,7 +684,7 @@ reading when it places the recovery. Next step: measure that on a box.
 - **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
   setup database holds records; the page says what is there and what is lost.**
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
-  confirmation in the PR):** Start again stays off when the database holds an invoice or another
+  confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
   when it finished; the start-again note's floor also covers the database's own series names.
 

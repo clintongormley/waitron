@@ -830,8 +830,9 @@ The tables in Tasks 8a, 8b and 9 above are the plan; where the built code differ
 - Amendment 4b0: a held Start again also deletes the setup's `modules.json` under the deletion
   marker.
 - A held database whose holdings read 0 rows is refused `setup.not_ready`.
-- A `claimed` attempt with a `no-venue-rows` database holding rows beside a stopped recovery is
-  refused `setup.not_ready`.
+- A `claimed` attempt with a `no-venue-rows` database holding rows beside a stopped recovery:
+  Start again refuses it `setup.not_ready`; the summary answers without `held`, which the page
+  reads as unreadable.
 - With a damaged recovery-key record, the server compares the page's flag with the summary's own
   reading.
 - The guide's wording (Task 9) is the one in `apps/server/src/guide/*/backup-recovery.md`.

@@ -34,8 +34,8 @@ administrator password and shows the recovery again. If the setup's database alr
 items, it also says how many, and that none is an invoice. It deletes them all once you tick
 "Delete the old attempt and start again." and choose **Start again** once more. Start again is not
 offered if the setup already saved the settings the box trades with. If the database holds an
-invoice or another item Waitron never deletes, or the setup already finished, the page says so
-after you enter the password, and Start again does not go ahead.
+invoice or another item Waitron never deletes, the page says so after you enter the password, and
+Start again does not go ahead.
 
 If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes by itself within an
 hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's

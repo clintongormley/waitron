@@ -89,8 +89,8 @@ function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
 /**
- * The held state's refusals, in this order. Both before the password: a completed setup cannot be
- * signed into again (`recoverFirstSetupOwner` refuses it), and the page already sees `trading.env`.
+ * The held state's refusals, in this order, all before the password: the page already sees
+ * `trading.env`, and `recoverFirstSetupOwner` refuses a setup whose publication completed.
  */
 function assertHeldStartAgainOffered(
   inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
