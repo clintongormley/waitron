@@ -1,5 +1,6 @@
 import type { KeyRing } from "@waitron/credentials";
 import type { Database, DeploymentEnvironment, Transaction } from "@waitron/db";
+import type { NodeId } from "@waitron/shared";
 import type { DrainResult, FiscalBackend } from "./backend.js";
 import type { TrustedClock } from "./clock.js";
 
@@ -176,4 +177,7 @@ export interface FiscalContribution {
   };
   readonly certificate?: FiscalCertificateSeat;
   readonly outbox?: FiscalOutboxSeat;
+  /** When the current installation began, so the box deletes no backup from before it; null when it
+   * cannot tell. */
+  installationStartedAt?(tx: Transaction, nodeId: NodeId): Promise<Date | null>;
 }
