@@ -4469,12 +4469,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 
-- **A1173. With exactly one late order the dashboard overview says «1 pedidos con retraso» (and
-  "1 orders overdue").** `overview.overdue_count` is one suffix word for every count
-  (`apps/dashboard/src/screens/dashboard-overview-screen.ts:274`), so a single order reads as a
-  plural in both languages. Found by A1138's review (#2188); main before A1138 said «1 pedidos
-  atrasados».
-
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)
 
