@@ -1593,6 +1593,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   a band starts the clock at 0. Fix: a case with a non-zero `queuedAtMs`. Found in A797 slice 6's
   review; predates it.
 
+- **A1166. Add station drops "The change could not be saved." at the next keystroke.** design-system.md →
+  Forms keeps a request refusal until Save is pressed again; `#change` in `prep-stations-screen.ts`
+  clears the bottom line whenever no field has an error. Found in A1134's review; the line is
+  already at `914d55202`.
+
 - **A1061. At 1280 px the station editor's minutes grid and held-work note are wider than its fields**
   [Detail](backlog/kitchen.md#a1061-at-1280-px-the-station-editors-minutes-grid-and-held-work-note-are-wider-than-its-fields)
 
