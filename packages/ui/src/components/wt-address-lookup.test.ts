@@ -514,3 +514,222 @@ test("a key the list does not use leaves it as it is", async () => {
   expect(options(el)).toHaveLength(2);
   expect(input(el).hasAttribute("aria-activedescendant")).toBe(false);
 });
+
+type Change = "remove the provider" | "replace the provider" | "change the country" | "disable it";
+
+async function change(el: WtAddressLookup, what: Change): Promise<void> {
+  if (what === "remove the provider") el.provider = undefined;
+  if (what === "replace the provider") el.provider = fakeProvider();
+  if (what === "change the country") el.countryCode = "PT";
+  if (what === "disable it") el.disabled = true;
+  await el.updateComplete;
+}
+
+const CHANGES: readonly Change[] = [
+  "remove the provider",
+  "replace the provider",
+  "change the country",
+  "disable it",
+];
+
+test.each(CHANGES)("a resolve answer, or its refusal, is dropped after you %s", async (what) => {
+  for (const settleWith of ["answer", "refusal"] as const) {
+    const answers: ((address: AddressLookupResult) => void)[] = [];
+    const refusals: ((error: Error) => void)[] = [];
+    const el = await mountLookup(
+      fakeProvider([MAYOR], {
+        resolve: () =>
+          new Promise((resolve, reject) => {
+            answers.push(resolve);
+            refusals.push(reject);
+          }),
+      }),
+    );
+    const chosen = vi.fn();
+    el.addEventListener("wt-address-chosen", chosen);
+    type(el, "Calle Mayor");
+    await settle(el);
+    await userEvent.click(options(el)[0]!);
+    await change(el, what);
+    if (settleWith === "answer") answers[0]!(RESOLVED);
+    else refusals[0]!(new Error("down"));
+    await settle(el);
+    expect(chosen, settleWith).not.toHaveBeenCalled();
+    expect(status(el), settleWith).toBe("");
+    cleanup();
+  }
+});
+
+test.each(CHANGES)(
+  "a search answer is dropped, and an open list closes, after you %s",
+  async (what) => {
+    const answers: ((list: readonly AddressLookupSuggestion[]) => void)[] = [];
+    const el = await mountLookup(fakeProvider([MAYOR]));
+    type(el, "Calle Mayor");
+    await settle(el);
+    expect(options(el)).toHaveLength(1);
+    await change(el, what);
+    expect(options(el)).toHaveLength(0);
+
+    cleanup();
+    const late = await mountLookup(
+      fakeProvider([], { suggest: () => new Promise((resolve) => answers.push(resolve)) }),
+    );
+    type(late, "Calle Mayor");
+    await settle(late);
+    await change(late, what);
+    answers[0]!([MAYOR]);
+    await settle(late);
+    expect(options(late)).toHaveLength(0);
+    expect(status(late)).toBe("");
+  },
+);
+
+test("leaving the field before the answer arrives keeps the list closed", async () => {
+  const answers: ((list: readonly AddressLookupSuggestion[]) => void)[] = [];
+  const el = await mountLookup(
+    fakeProvider([], { suggest: () => new Promise((resolve) => answers.push(resolve)) }),
+  );
+  input(el).focus();
+  type(el, "Calle Mayor");
+  await settle(el);
+  input(el).blur();
+  answers[0]!([MAYOR]);
+  await settle(el);
+  expect(options(el)).toHaveLength(0);
+  expect(status(el)).toBe("");
+});
+
+test("leaving the field before the pause ends asks nothing", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const provider = fakeProvider();
+  const el = await mountLookup(provider);
+  el.delay = 300;
+  input(el).focus();
+  type(el, "Calle Mayor");
+  input(el).blur();
+  vi.advanceTimersByTime(300);
+  expect(provider.calls.suggest).toHaveLength(0);
+});
+
+test("a chosen suggestion still arrives after focus leaves the field", async () => {
+  const answers: ((address: AddressLookupResult) => void)[] = [];
+  const el = await mountLookup(
+    fakeProvider([MAYOR], { resolve: () => new Promise((resolve) => answers.push(resolve)) }),
+  );
+  const chosen = vi.fn();
+  el.addEventListener("wt-address-chosen", chosen);
+  input(el).focus();
+  type(el, "Calle Mayor");
+  await settle(el);
+  await userEvent.click(options(el)[0]!);
+  input(el).blur();
+  answers[0]!(RESOLVED);
+  await settle(el);
+  expect(chosen).toHaveBeenCalledOnce();
+});
+
+test("cancelSearch drops a chosen suggestion still on its way and the open list, keeping the text", async () => {
+  const answers: ((address: AddressLookupResult) => void)[] = [];
+  const el = await mountLookup(
+    fakeProvider([MAYOR], { resolve: () => new Promise((resolve) => answers.push(resolve)) }),
+  );
+  const chosen = vi.fn();
+  el.addEventListener("wt-address-chosen", chosen);
+  type(el, "Calle Mayor");
+  await settle(el);
+  await userEvent.click(options(el)[0]!);
+  el.cancelSearch();
+  answers[0]!(RESOLVED);
+  await settle(el);
+  expect(chosen).not.toHaveBeenCalled();
+  expect(input(el).value).toBe("Calle Mayor");
+
+  type(el, "Calle Mayor");
+  await settle(el);
+  expect(options(el)).toHaveLength(1);
+  el.cancelSearch();
+  await el.updateComplete;
+  expect(options(el)).toHaveLength(0);
+
+  el.provider = fakeProvider([]);
+  await el.updateComplete;
+  type(el, "Nowhere street");
+  await settle(el);
+  expect(status(el)).toBe("No address found.");
+  el.cancelSearch();
+  await el.updateComplete;
+  expect(status(el)).toBe("");
+});
+
+test("Enter on an active suggestion stops at the field; Enter with none active reaches the page", async () => {
+  const el = await mountLookup();
+  const outside = vi.fn();
+  host.addEventListener("keydown", outside);
+  input(el).focus();
+  type(el, "Calle Mayor");
+  await settle(el);
+  await userEvent.keyboard("{ArrowDown}");
+  outside.mockClear();
+  await userEvent.keyboard("{Enter}");
+  expect(outside).not.toHaveBeenCalled();
+  await settle(el);
+  await userEvent.keyboard("{Enter}");
+  expect(outside).toHaveBeenCalledOnce();
+});
+
+test("a click on a suggestion stops at the field", async () => {
+  const el = await mountLookup();
+  const outside = vi.fn();
+  host.addEventListener("click", outside);
+  type(el, "Calle Mayor");
+  await settle(el);
+  await userEvent.click(options(el)[0]!);
+  expect(outside).not.toHaveBeenCalled();
+});
+
+test("each suggestion row is at least the dropdown row height tall", async () => {
+  const el = await mountLookup();
+  host.style.setProperty("--wt-dropdown-row-height", "90px");
+  type(el, "Calle Mayor");
+  await settle(el);
+  expect(options(el).map((row) => row.getBoundingClientRect().height)).toEqual([90, 90]);
+});
+
+test("the search field takes the name a form gives it, and has none otherwise", async () => {
+  const el = await mountLookup();
+  expect(input(el).hasAttribute("name")).toBe(false);
+  el.name = "domicile-search";
+  await el.updateComplete;
+  expect(input(el).getAttribute("name")).toBe("domicile-search");
+});
+
+test("a new search hides the form's line about the last choice, and the search's own line shows", async () => {
+  const provider = fakeProvider([MAYOR]);
+  const el = await mountLookup(provider);
+  el.message = "That address is in another country.";
+  await el.updateComplete;
+  type(el, "Nowhere");
+  await el.updateComplete;
+  expect(status(el)).toBe("");
+  el.provider = fakeProvider([]);
+  await el.updateComplete;
+  type(el, "Nowhere street");
+  await settle(el);
+  expect(status(el)).toBe("No address found.");
+  el.message = "That address is in another province.";
+  await el.updateComplete;
+  expect(status(el)).toBe("That address is in another province.");
+});
+
+test("the form's line shows again for the next choice, even when its text is the same", async () => {
+  const el = await mountLookup(fakeProvider([MAYOR]));
+  el.message = "That address is in another country.";
+  await el.updateComplete;
+  type(el, "Calle Mayor");
+  await settle(el);
+  expect(status(el)).toBe("");
+  await userEvent.click(options(el)[0]!);
+  await settle(el);
+  expect(status(el)).toBe("That address is in another country.");
+});

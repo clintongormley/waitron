@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { fieldLabel, fieldLabelState, fieldStyles } from "@waitron/ui-core/field-styles";
 import { baseStyles } from "../base-styles.js";
@@ -78,7 +78,7 @@ export class WtAddressLookup extends LitElement {
         display: flex;
         flex-direction: column;
         justify-content: center;
-        min-height: var(--wt-tap-min);
+        min-height: var(--wt-dropdown-row-height);
         padding: var(--wt-space-2) var(--wt-space-3);
         border-radius: var(--wt-radius-md);
         cursor: pointer;
@@ -109,10 +109,12 @@ export class WtAddressLookup extends LitElement {
   @property({ attribute: false }) provider?: AddressLookupProvider;
   @property({ attribute: "country-code" }) countryCode = "";
   @property() label = "";
+  @property() name = "";
   @property() placeholder = "";
   @property({ attribute: "no-results-label" }) noResultsLabel = "";
   @property({ attribute: "unavailable-label" }) unavailableLabel = "";
-  /** The form's own line under the field, e.g. why a chosen address was not copied. */
+  /** The form's own line under the field about the last choice, e.g. why it was not copied; a new
+   * search hides it until the next choice or a new message. */
   @property() message = "";
   @property({ type: Boolean, reflect: true }) disabled = false;
   /** How long typing must pause, in milliseconds, before the provider is asked. */
@@ -124,14 +126,28 @@ export class WtAddressLookup extends LitElement {
   @state() private notice: "" | "none" | "unavailable" = "";
 
   #generation = 0;
+  /** The generation of the chosen suggestion being resolved, which leaving the field keeps. */
+  #resolving?: number;
+  #messageCurrent = true;
   #timer?: ReturnType<typeof setTimeout>;
   #session = sessionToken();
   private readonly inputId = uniqueId("wt-address-lookup");
   private readonly listId = uniqueId("wt-address-lookup-list");
   private readonly statusId = uniqueId("wt-address-lookup-status");
 
-  protected override willUpdate(): void {
+  protected override willUpdate(changed: PropertyValues<this>): void {
     this.hidden = this.provider === undefined;
+    if (changed.has("message")) this.#messageCurrent = true;
+    if (changed.has("provider") || changed.has("countryCode") || changed.has("disabled"))
+      this.cancelSearch();
+  }
+
+  /** Drops the open list and every answer still on its way, a chosen suggestion's included; the
+   * typed text stays. */
+  cancelSearch(): void {
+    this.#forget();
+    this.#close();
+    this.notice = "";
   }
 
   override disconnectedCallback(): void {
@@ -153,6 +169,7 @@ export class WtAddressLookup extends LitElement {
   private onInput(event: Event): void {
     event.stopPropagation();
     this.query = (event.target as HTMLInputElement).value;
+    this.#messageCurrent = false;
     this.#forget();
     this.#close();
     this.notice = "";
@@ -189,6 +206,7 @@ export class WtAddressLookup extends LitElement {
     const generation = this.#generation;
     const session = this.#session;
     this.#close();
+    this.#resolving = generation;
     let address: AddressLookupResult;
     try {
       address = await provider.resolve({ suggestionId: suggestion.id, sessionToken: session });
@@ -200,6 +218,7 @@ export class WtAddressLookup extends LitElement {
     this.#session = sessionToken();
     this.query = "";
     this.notice = "";
+    this.#messageCurrent = true;
     this.dispatchEvent(
       new CustomEvent<AddressChosenDetail>("wt-address-chosen", {
         detail: { address },
@@ -209,12 +228,20 @@ export class WtAddressLookup extends LitElement {
     );
   }
 
+  private onBlur(): void {
+    if (this.#resolving !== this.#generation) this.#forget();
+    this.#close();
+  }
+
   private onKeydown(event: KeyboardEvent): void {
     const count = this.suggestions.length;
     if (event.key === "Enter") {
       // A form that submits on Enter skips a handled key; Enter here chooses, never submits.
       event.preventDefault();
-      if (this.activeIndex >= 0) void this.#choose(this.activeIndex);
+      if (this.activeIndex >= 0) {
+        event.stopPropagation();
+        void this.#choose(this.activeIndex);
+      }
       return;
     }
     if (count === 0) return;
@@ -234,7 +261,7 @@ export class WtAddressLookup extends LitElement {
   override render() {
     const open = this.suggestions.length > 0;
     const line =
-      this.message ||
+      (this.#messageCurrent && this.message) ||
       (this.notice === "none"
         ? this.noResultsLabel
         : this.notice === "unavailable"
@@ -256,7 +283,7 @@ export class WtAddressLookup extends LitElement {
         <input
           class="field-control"
           id=${this.inputId}
-          name="address-search"
+          name=${this.name || nothing}
           type="text"
           autocomplete="off"
           role="combobox"
@@ -272,7 +299,7 @@ export class WtAddressLookup extends LitElement {
           .value=${this.query}
           @input=${this.onInput}
           @keydown=${this.onKeydown}
-          @blur=${() => this.#close()}
+          @blur=${this.onBlur}
         />
       </div>
       <ul
@@ -290,7 +317,10 @@ export class WtAddressLookup extends LitElement {
               class=${index === this.activeIndex ? "option active" : "option"}
               role="option"
               aria-selected=${index === this.activeIndex ? "true" : "false"}
-              @click=${() => void this.#choose(index)}
+              @click=${(event: MouseEvent) => {
+                event.stopPropagation();
+                void this.#choose(index);
+              }}
             >
               <span>${suggestion.label}</span>
               ${

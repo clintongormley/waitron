@@ -41,9 +41,10 @@ test("discovers at least one interactive primitive", () => {
   expect(interactiveComponents.length).toBeGreaterThan(0);
 });
 
-test("the interactive set is exactly wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
+test("the interactive set is exactly wt-address-lookup, wt-button, wt-colour-chooser, wt-combobox, wt-file-input, wt-help-switch, wt-input, wt-number-stepper, wt-price-input, wt-row-actions, wt-segmented-control, wt-slider, wt-switch, and wt-textarea", () => {
   // A primitive leaving or joining the set otherwise changes only how many tests run below.
   expect(interactiveComponents.map(({ tag }) => tag).sort()).toEqual([
+    "wt-address-lookup",
     "wt-button",
     "wt-colour-chooser",
     "wt-combobox",
@@ -88,6 +89,14 @@ async function mountNarrow(
       { value: "staff", label: "Staff only" },
     ];
     choices.value = "staff";
+  }
+  if (tag === "wt-address-lookup") {
+    const search = el as HTMLElementTagNameMap["wt-address-lookup"];
+    search.label = "Find the address";
+    search.provider = {
+      suggest: async () => [],
+      resolve: () => Promise.reject(new Error("unused")),
+    };
   }
   await el.updateComplete;
   return el;
