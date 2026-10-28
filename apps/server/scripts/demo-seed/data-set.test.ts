@@ -1,3 +1,13 @@
+import { readFile } from "node:fs/promises";
+import { DEMO_BASELINE_FIXTURE_ROOTS } from "@waitron/country-packs/demo/testing";
+const catalan = (
+  JSON.parse(
+    await readFile(
+      new URL("catalan-names.json", DEMO_BASELINE_FIXTURE_ROOTS["casa-delgado-es"]),
+      "utf8",
+    ),
+  ) as { plain: Record<string, string> }
+).plain;
 import { describe, expect, it } from "vitest";
 import { resolveFiscalJurisdiction } from "@waitron/country";
 import type { CountryDemoIdentity, CountryPack } from "@waitron/country";
@@ -13,6 +23,7 @@ import {
   demoDataSet,
   demoDataSetFor,
   demoLanguagesFor,
+  demoPlainText,
   inLanguages,
   type DemoDataSet,
 } from "./data-set.js";
@@ -148,16 +159,21 @@ describe("demo data sets", () => {
     expect(set.floor.tables).toBe(DEMO_TABLES);
     expect(set.staff).toBe(DEMO_STAFF);
     expect(set.adjustmentReasons).toBe(DEMO_ADJUSTMENT_REASONS);
-    expect(set.menus.drinksName).toEqual({ en: "Drinks", es: "Bebidas" });
+    expect(set.menus.drinksName).toEqual({ en: "Drinks", es: "Bebidas", ca: catalan.drinks });
     expect(set).not.toHaveProperty("watcherName");
     expect(set.floor.departmentNames).toEqual({
-      restaurant: { en: "Restaurant and bar", es: "Restaurante y bar" },
-      deli: { en: "Deli", es: "Charcutería" },
+      restaurant: { en: "Restaurant and bar", es: "Restaurante y bar", ca: catalan.restaurant },
+      deli: { en: "Deli", es: "Charcutería", ca: catalan.deli },
     });
-    expect(set.floor.upstairsBarZone).toEqual({ en: "Upstairs bar", es: "Bar de arriba" });
+    expect(set.floor.upstairsBarZone).toEqual({
+      en: "Upstairs bar",
+      es: "Bar de arriba",
+      ca: catalan.upstairs,
+    });
     expect(set.floor.deliCounterZone).toEqual({
       en: "Deli counter",
       es: "Mostrador de charcutería",
+      ca: catalan.counter,
     });
   });
 
@@ -287,4 +303,25 @@ describe("a country with no demo data", () => {
       "GB GB-vat: none has no operation description",
     ]);
   });
+});
+
+it("requires the regional override instead of silently using the staff language", () => {
+  const regional = DEMO_DATA_SETS["casa-delgado-ca"]!;
+  expect(() => demoPlainText({ en: "English label", es: "Spanish label" }, regional, "en")).toThrow(
+    "missing ca text",
+  );
+  expect(
+    demoPlainText(
+      { en: "English label", es: "Spanish label", ca: "Regional label" },
+      regional,
+      "es",
+    ),
+  ).toBe("Regional label");
+  expect(
+    demoPlainText(
+      { en: "English label", es: "Spanish label" },
+      DEMO_DATA_SETS["casa-delgado-es"]!,
+      "es",
+    ),
+  ).toBe("Spanish label");
 });

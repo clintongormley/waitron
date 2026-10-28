@@ -16,6 +16,7 @@ import {
   findAdministrativeArea,
   findAdministrativeAreaByPostalCode,
   receiptLanguageRules,
+  resolveCountryDemoIdentity,
   resolveFiscalJurisdiction,
 } from "@waitron/country";
 import { getVenueSetupCountryPack, resolveInstalledCountryLocale } from "@waitron/country-packs";
@@ -548,7 +549,26 @@ function parseProvisionPayload(
   }
   if (body.newTaxpayer === true && body.configurationImport !== true) invalidRequest("newTaxpayer");
 
-  const venue = parseVenue(body.venue, acceptLanguage);
+  const nameSource = body.demoLocationNameSource;
+  if (
+    nameSource !== undefined &&
+    (mode !== "demo" || (nameSource !== "automatic" && nameSource !== "custom"))
+  ) {
+    invalidRequest("demoLocationNameSource");
+  }
+  const parsedVenue = parseVenue(body.venue, acceptLanguage);
+  const pack = getVenueSetupCountryPack(parsedVenue.country)!;
+  const identity =
+    nameSource === "automatic"
+      ? resolveCountryDemoIdentity(pack, parsedVenue.location.province)
+      : undefined;
+  const venue =
+    identity === undefined
+      ? parsedVenue
+      : {
+          ...parsedVenue,
+          location: { ...parsedVenue.location, name: identity.locationName },
+        };
   if (mode !== "demo" && !venue.taxpayerDomicile?.trim()) {
     invalidRequest("taxpayerDomicile");
   }

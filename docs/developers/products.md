@@ -929,3 +929,19 @@ A null allergen declaration draws no icons. Counter lines keep their existing `a
 and `asServedDiet` calculation and retrieved snapshots. Persisted table rows receive `nutrition`
 from `readLineNutrition`, a live effective-product read like the kitchen queue’s own nutrition read.
 Each extra stays separate. The retired Allergens screen has no destination or print path.
+
+
+### Regional practice names
+
+A demo set up in Catalonia or the Balearic Islands uses the pack's
+`casa-delgado-ca` data and Can Delgado location default. The stored tenant country
+and location province select the data. Catalan staff and kitchen names are a
+demo-only override; customer content remains Catalan, Spanish and English.
+The staff screens remain English or Spanish. Madrid retains English/Spanish
+staff-name selection and its frozen database comparison.
+
+Setup tracks whether the suggested name is automatic or has been edited.
+An edit keeps the name through later region changes and Review/Back, including
+an edit back to an earlier default. Discard restores that ownership with the
+name. The server repeats automatic-name derivation from validated geography;
+this temporary draft marker is never a venue-table field.

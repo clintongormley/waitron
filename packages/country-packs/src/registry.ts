@@ -4,7 +4,12 @@ import type {
   ReceiptLabels,
   ReceiptLanguageRules,
 } from "@waitron/country";
-import { contentLanguageRules, receiptLanguageRules, resolveCountryLocale } from "@waitron/country";
+import {
+  contentLanguageRules,
+  receiptLanguageRules,
+  resolveCountryLocale,
+  resolveCountryDemoIdentity,
+} from "@waitron/country";
 import { contentLanguageCode, FALLBACK_LOCALE, type ContentLanguageRules } from "@waitron/shared";
 import { SPAIN, SPAIN_RECEIPT_LABELS } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
@@ -75,6 +80,11 @@ export function resolveInstalledCountryLocale<Locale extends string>(
 export interface VenueGeography {
   readonly country?: string | null;
   readonly area?: string | null;
+}
+
+export function resolveInstalledDemoIdentity(input: VenueGeography) {
+  const pack = packFor(input);
+  return pack === undefined ? undefined : resolveCountryDemoIdentity(pack, input.area);
 }
 
 function packFor(input: VenueGeography): CountryPack | undefined {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { leaveCoordinatorFor } from "@waitron/ui";
-import { SetupApp, type DeepPartial, type Screen } from "./setup-app.js";
+import { SetupApp, assembleBody, type DeepPartial, type Screen } from "./setup-app.js";
 import type { ProvisionBody, SetupApi } from "./api/client.js";
 import type { SetupVenueScreen } from "./screens/venue-screen.js";
 import type { WtInput } from "@waitron/ui/src/components/wt-input.js";
@@ -362,5 +362,86 @@ describe("setup venue unsaved changes", () => {
         return active;
       })
       .toBe(button);
+  });
+});
+
+describe("demo name ownership across wizard drafts", () => {
+  const demoDraft = (): DeepPartial<ProvisionBody> => ({
+    mode: "demo",
+    demoLocationNameSource: "automatic",
+    venue: {
+      ...structuredClone(initialVenue),
+      location: { ...structuredClone(initialVenue.location), name: "Casa Delgado" },
+    },
+  });
+  async function nativeName(venue: SetupVenueScreen) {
+    const input = field(venue, "name");
+    await input.updateComplete;
+    return input.shadowRoot!.querySelector<HTMLInputElement>("input")!;
+  }
+  it.each(["keep", "discard"] as const)(
+    "restores custom name ownership after Review and Discard (%s)",
+    async (decision) => {
+      const { el, venue } = await mount(demoDraft());
+      const input = await nativeName(venue);
+      input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+      await venue.updateComplete;
+      expect(unload()).toBe(true);
+      back(venue);
+      await expect.poll(() => warning(el).open).toBe(true);
+      await choose(el, decision);
+      if (decision === "discard") {
+        await expect.poll(() => (el as unknown as State).screen).toBe("admin");
+        Object.assign(el, { screen: "venue" });
+        await el.updateComplete;
+      }
+      const restored = el.shadowRoot!.querySelector<SetupVenueScreen>("setup-venue-screen")!;
+      await restored.updateComplete;
+      await edit(restored, "postalCode", "08001");
+      expect((await nativeName(restored)).value).toBe(
+        decision === "discard" ? "Can Delgado" : "Casa Delgado",
+      );
+      next(restored);
+      await expect.poll(() => (el as unknown as State).screen).toBe("review");
+      expect((el as unknown as State).draft.demoLocationNameSource).toBe(
+        decision === "discard" ? "automatic" : "custom",
+      );
+      const review = el.shadowRoot!.querySelector("setup-review-screen")!;
+      review.dispatchEvent(
+        new CustomEvent("setup-goto", {
+          detail: { screen: "venue" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+      await expect.poll(() => (el as unknown as State).screen).toBe("venue");
+      const again = el.shadowRoot!.querySelector<SetupVenueScreen>("setup-venue-screen")!;
+      await again.updateComplete;
+      await edit(again, "postalCode", "28013");
+      await edit(again, "postalCode", "08001");
+      expect((await nativeName(again)).value).toBe(
+        decision === "discard" ? "Can Delgado" : "Casa Delgado",
+      );
+    },
+  );
+  it("retains a same-text custom choice after reconnect", async () => {
+    const { el, venue, host } = await mount(demoDraft());
+    (await nativeName(venue)).dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await venue.updateComplete;
+    el.remove();
+    host.append(el);
+    await el.updateComplete;
+    await venue.updateComplete;
+    expect(unload()).toBe(true);
+    await edit(venue, "postalCode", "08001");
+    expect((await nativeName(venue)).value).toBe("Casa Delgado");
+    next(venue);
+    await expect.poll(() => (el as unknown as State).screen).toBe("review");
+    expect((el as unknown as State).draft.demoLocationNameSource).toBe("custom");
+  });
+  it("removes the demo-only source from every non-demo wire body", () => {
+    for (const mode of ["prepare", "live"] as const)
+      expect(assembleBody({ ...demoDraft(), mode })).not.toHaveProperty("demoLocationNameSource");
+    expect(assembleBody(demoDraft())).toHaveProperty("demoLocationNameSource", "automatic");
   });
 });

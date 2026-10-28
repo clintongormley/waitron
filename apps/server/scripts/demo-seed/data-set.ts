@@ -1,3 +1,6 @@
+import { sql } from "drizzle-orm";
+import type { Database } from "@waitron/db";
+import { resolveCountryDemoIdentity } from "@waitron/country";
 import type { DietaryLabel, PricingUnit, VatClass } from "@waitron/catalogue";
 import type { PersonRoleValue } from "@waitron/identity";
 import type { AdjustmentReasonInput } from "@waitron/adjustments";
@@ -19,6 +22,7 @@ import {
 } from "@waitron/country-packs/demo";
 import {
   getCountryPack,
+  resolveInstalledDemoIdentity,
   resolveInstalledStartingContentLanguages,
   type StartingContentLanguages,
   type VenueGeography,
@@ -135,19 +139,39 @@ function englishFallbackLanguages(starting: StartingContentLanguages): DemoLangu
   };
 }
 
-/** The languages a demo from `set` is written in: the area's starting languages when `set` is the
- * one the venue's pack names, the English fallback otherwise. */
 export function demoLanguagesFor(set: DemoDataSet, geography: VenueGeography): DemoLanguages {
   const starting = demoContentLanguages(geography);
-  return getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id
-    ? starting
-    : englishFallbackLanguages(starting);
+  const ownsSet =
+    resolveInstalledDemoIdentity(geography)?.dataSet === set.id ||
+    getCountryPack(geography.country ?? "")?.demo?.dataSet === set.id;
+  return ownsSet ? starting : englishFallbackLanguages(starting);
 }
 
 export function demoPlainText(
   text: DemoPlainText,
-  _set: DemoDataSet,
+  set: DemoDataSet,
   locale: StaffLanguage,
 ): string {
-  return text[locale];
+  const language = set.plainNameLanguage ?? locale;
+  const value = text[language];
+  if (value === undefined) throw new Error(`demoPlainText: missing ${language} text`);
+  return value;
+}
+
+export async function readDemoSeedSelection(
+  db: Database,
+  locationId: string,
+): Promise<{ identity: CountryDemoIdentity; dataSet: DemoDataSet }> {
+  const { rows } = await db.execute<{ country: string; province: string | null }>(
+    sql`select t.country, l.province from tenants t cross join locations l where l.id = ${locationId}`,
+  );
+  const geography = rows[0];
+  const pack = geography === undefined ? undefined : getCountryPack(geography.country);
+  const identity =
+    pack === undefined ? undefined : resolveCountryDemoIdentity(pack, geography?.province);
+  if (identity === undefined)
+    throw new Error(
+      `readDemoSeedSelection: no demo identity for ${geography?.country ?? "missing location"}`,
+    );
+  return { identity, dataSet: demoDataSetFor(identity) };
 }

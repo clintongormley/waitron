@@ -1,5 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import { sql } from "drizzle-orm";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createDemoVenueProvisioner } from "../scripts/demo-seed/testing/provision-venue.js";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { VenueRequest, VenueResult } from "@waitron/provisioning";
 
 const { seedDemoRestaurant } = vi.hoisted(() => ({ seedDemoRestaurant: vi.fn() }));
@@ -36,12 +39,23 @@ function venueWithLocales(invoiceLocales: string[], country = "ES"): VenueReques
   } as unknown as VenueRequest;
 }
 
-const RESULT = {
-  locationId: "location-1",
-  nodeId: "node-1",
-  seriesIds: ["series-standard", "series-rectificative"],
-  seeded: [],
-} satisfies VenueResult;
+let RESULT: VenueResult;
+const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+beforeEach(async () => {
+  seedDemoRestaurant.mockReset();
+  seedDemoRestaurant.mockResolvedValue(undefined);
+  const ids = await createDemoVenueProvisioner(() => suite.db, {
+    nifBase: 95000000,
+    invoiceLocale: "es-ES",
+    nifFormat: "calculated",
+  })();
+  RESULT = {
+    nodeId: ids.nodeId,
+    locationId: ids.locationId,
+    seriesIds: [ids.seriesId],
+    seeded: [],
+  };
+});
 
 describe("demoSeedLocale", () => {
   it.each([
@@ -77,13 +91,8 @@ describe("demoSeedLocale", () => {
 describe("seedInstalledDemo", () => {
   it("seeds the provisioned venue's own ids, a month of practice sales, and its admin's staff language", async () => {
     seedDemoRestaurant.mockResolvedValue(undefined);
-    const db = {} as Database;
-    const result = {
-      locationId: "location-1",
-      nodeId: "node-1",
-      seriesIds: ["series-standard", "series-rectificative"],
-      seeded: [],
-    } satisfies VenueResult;
+    const db = suite.db;
+    const result = RESULT;
 
     await seedInstalledDemo(db, result, venueWithLocales(["es-ES"]));
 
@@ -92,9 +101,9 @@ describe("seedInstalledDemo", () => {
     expect(seedDemoRestaurant.mock.calls[0]![0]).toBe(db);
     expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
-        nodeId: "node-1",
-        seriesId: "series-standard",
-        locationId: "location-1",
+        nodeId: RESULT.nodeId,
+        seriesId: RESULT.seriesIds[0],
+        locationId: RESULT.locationId,
       },
       locale: "es",
       salesDays: 30,
@@ -107,7 +116,7 @@ describe("seedInstalledDemo", () => {
     seedDemoRestaurant.mockReset();
     seedDemoRestaurant.mockResolvedValue(undefined);
 
-    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"]));
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
 
     expect(seedDemoRestaurant.mock.calls[0]![1].dataSet).toBe(DEMO_DATA_SETS["casa-delgado-es"]);
   });
@@ -116,8 +125,8 @@ describe("seedInstalledDemo", () => {
     seedDemoRestaurant.mockReset();
     seedDemoRestaurant.mockResolvedValue(undefined);
 
-    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["en-GB"]));
-    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"]));
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["en-GB"]));
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
 
     const [english, spanish] = seedDemoRestaurant.mock.calls.map(([, input]) => input);
     expect(english.locale).toBe("en");
@@ -132,8 +141,9 @@ describe("seedInstalledDemo", () => {
   it("refuses, seeding nothing, a venue whose country has no demo identity", async () => {
     seedDemoRestaurant.mockReset();
 
+    await suite.db.execute(sql`update tenants set country='GB'`);
     await expect(
-      seedInstalledDemo({} as Database, RESULT, venueWithLocales(["en-GB"], "GB")),
+      seedInstalledDemo(suite.db, RESULT, venueWithLocales(["en-GB"], "GB")),
     ).rejects.toThrow(/GB/);
     expect(seedDemoRestaurant).not.toHaveBeenCalled();
   });
@@ -142,14 +152,15 @@ describe("seedInstalledDemo", () => {
     seedDemoRestaurant.mockReset();
     seedDemoRestaurant.mockResolvedValue(undefined);
 
-    await seedInstalledDemo({} as Database, RESULT, venueWithLocales(["es-ES"], "XX"));
+    await suite.db.execute(sql`update tenants set country='XX'`);
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"], "XX"));
 
     expect(seedDemoRestaurant).toHaveBeenCalledTimes(1);
     expect(seedDemoRestaurant.mock.calls[0]![1]).toStrictEqual({
       venue: {
-        nodeId: "node-1",
-        seriesId: "series-standard",
-        locationId: "location-1",
+        nodeId: RESULT.nodeId,
+        seriesId: RESULT.seriesIds[0],
+        locationId: RESULT.locationId,
       },
       locale: "en",
       salesDays: 30,
@@ -157,4 +168,23 @@ describe("seedInstalledDemo", () => {
       dataSet: DEMO_DATA_SETS["casa-delgado-es"],
     });
   });
+});
+
+it.each(["Barcelona", "Balears, Illes"])(
+  "seeds from stored %s geography rather than stale request geography",
+  async (province) => {
+    await suite.db.execute(
+      sql`update locations set province=${province} where id=${RESULT.locationId}`,
+    );
+    await seedInstalledDemo(suite.db, RESULT, venueWithLocales(["es-ES"]));
+    expect(seedDemoRestaurant.mock.calls[0]![1].dataSet.id).toBe("casa-delgado-ca");
+    expect(seedDemoRestaurant.mock.calls[0]![1].locale).toBe("es");
+  },
+);
+
+it("refuses an absent stored location before seeding", async () => {
+  await expect(
+    seedInstalledDemo(suite.db, { ...RESULT, locationId: "missing" }, venueWithLocales(["es-ES"])),
+  ).rejects.toThrow("missing location");
+  expect(seedDemoRestaurant).not.toHaveBeenCalled();
 });

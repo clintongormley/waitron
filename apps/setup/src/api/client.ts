@@ -89,6 +89,7 @@ export type EmailTestResult =
   { accepted: true } | { accepted: false; code: "email.test_refused" | "email.test_timeout" };
 
 export interface ProvisionBody {
+  demoLocationNameSource?: "automatic" | "custom";
   mode: "demo" | "prepare" | "live";
   firstSetup?: { attemptId: string; revision: number };
   configurationImport?: boolean;

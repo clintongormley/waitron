@@ -1,0 +1,20 @@
+{
+  "sausage": {
+    "staff": "Botifarra amb mongetes",
+    "kitchen": "Botifarra amb mongetes · cuina",
+    "customer": {
+      "ca": "Botifarra amb mongetes de la casa",
+      "es": "Butifarra con judías de la casa",
+      "en": "House Catalan sausage with white beans"
+    }
+  },
+  "wine": "Copa de cava",
+  "drinks": "Begudes",
+  "plain": {
+    "drinks": "Begudes",
+    "restaurant": "Restaurant i bar",
+    "deli": "Xarcuteria",
+    "upstairs": "Bar de dalt",
+    "counter": "Taulell de xarcuteria"
+  }
+}

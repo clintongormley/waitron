@@ -825,3 +825,19 @@ sniffing. Chosen over renaming the bundle to `dist/server.mjs` (which forces the
 the file's extension instead, unconditionally of Node version or flags) because a rename also
 touches `package.json`'s `waitron.commands` entry, the CI gate's smoke-test paths, and this README's own
 `node dist/server.js` examples, for no behavioural difference once `dist/package.json` exists.
+
+### Regional developer demos
+
+For a fresh practice venue in Catalonia, run
+`WAITRON_DEMO_REGION=catalonia wa-wt demo <worktree-name>`. Use `balearic` for
+Palma or `madrid` for the Madrid demo. An unset, empty or whitespace-only selector
+uses Madrid; an unknown selector refuses before database or settings work.
+
+Catalonia and the Balearic Islands share Can Delgado's Catalan staff and kitchen
+names, regional dishes and cava. A new Catalonia venue uses Catalan receipts;
+a Balearic venue uses Spanish receipts. Madrid retains the receipt choice from
+`WAITRON_SEED_LOCALE`. Screens remain English or Spanish.
+
+Changing `WAITRON_DEMO_REGION` keeps an existing venue's stored geography and data.
+To replace a throwaway venue you own, run
+`WAITRON_DEMO_REGION=catalonia wa-wt reset demo <worktree-name>`.

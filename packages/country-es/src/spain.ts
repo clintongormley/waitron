@@ -270,6 +270,9 @@ const administrativeAreas: readonly AdministrativeArea[] = PROVINCES.map(
     ...(localeFor(code) === undefined ? {} : { defaultLocale: localeFor(code) }),
     timeZone: code === "35" || code === "38" ? "Atlantic/Canary" : "Europe/Madrid",
     ...languageRulesFor(code),
+    ...(CATALONIA_PROVINCES.has(code) || BALEARIC_PROVINCES.has(code)
+      ? { demo: { dataSet: "casa-delgado-ca", locationName: "Can Delgado" } }
+      : {}),
   }),
 );
 
