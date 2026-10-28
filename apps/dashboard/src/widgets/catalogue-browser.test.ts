@@ -4509,7 +4509,7 @@ it.each(["products", "category"])(
 
 it.each([
   ["en", "Products", "Menus"],
-  ["es", "Productos", "Menús"],
+  ["es", "Productos", "Cartas"],
 ])(
   "names the single product blocking a category archive (%s)",
   async (locale, productsLabel, menusLabel) => {

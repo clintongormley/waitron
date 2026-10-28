@@ -2087,9 +2087,6 @@ export const en = {
   "product.course": "Course",
   "product.no_course": "— none —",
   "product.search": "Search products",
-  "product.disable_warning":
-    "This disables the product: the till stops selling it and it leaves this list until you choose to show disabled products. You can enable it again, and its past sales are kept.",
-  "product.disabled_badge": "Disabled",
   "product.archive_extra_lists": "Removed from these extras lists:",
   "product.archive": "Archive",
   "product.view": "View",
@@ -3771,7 +3768,7 @@ export const es: Record<StringKey, string> = {
   "folders.off_menus_one": "Salen de la carta en la que están.",
   "folders.off_menus_unknown": "Salen de todas las cartas en las que están.",
   "folders.delete_off_menus":
-    "Los productos archivados por esta eliminación salen de todos los menús en los que están.",
+    "Los productos archivados por esta eliminación salen de todas las cartas en las que están.",
   "folders.delete_heading": "¿Eliminar {count} elementos?",
   "folders.delete_heading_one": "¿Eliminar 1 elemento?",
   "folders.deleting": "Categorías a eliminar:",
@@ -5627,9 +5624,6 @@ export const es: Record<StringKey, string> = {
   "product.course": "Curso",
   "product.no_course": "— ninguno —",
   "product.search": "Buscar productos",
-  "product.disable_warning":
-    "Esto deshabilita el producto: la caja deja de venderlo y sale de esta lista hasta que elijas mostrar los productos deshabilitados. Puedes volver a habilitarlo, y sus ventas anteriores se conservan.",
-  "product.disabled_badge": "Deshabilitado",
   "product.archive_extra_lists": "Sale de estas listas de extras:",
   "product.archive": "Archivar",
   "product.view": "Ver",
@@ -5645,7 +5639,7 @@ export const es: Record<StringKey, string> = {
   "product.variant_archived_badge": "Archivada",
   "product.archived_notice":
     "Este producto está archivado. Puedes consultarlo, pero no modificarlo.",
-  "product.refusal_menus": "Menús",
+  "product.refusal_menus": "Cartas",
   "product.refusal_products": "Productos",
   "product.off_menus": "Sale de las {count} cartas en las que está.",
   "product.off_menus_one": "Sale de la carta en la que está.",

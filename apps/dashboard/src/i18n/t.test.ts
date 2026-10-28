@@ -1,6 +1,7 @@
 import { afterEach, expect, it } from "vitest";
 import { currentLocale, fill, setLocale, subscribeLocale, t } from "./t.js";
 import { catalogues, en, es } from "./strings.js";
+import { codeMessage } from "./codes.js";
 
 afterEach(() => {
   // Reset to the shipped default so a setLocale in one test cannot leak into another.
@@ -66,6 +67,15 @@ it("calls restaurant menus cartas in Spanish, keeping the account menu distinct"
   expect(t("menus.include_menu", "es-ES")).toBe("Incluir una carta");
   expect(t("menus.remove_included", "es-ES")).toBe("Quitar de esta carta");
   expect(t("nav.account_menu", "es-ES")).toBe("Menú de cuenta");
+});
+
+it("says menú in Spanish only for an on-screen menu, never a restaurant one", () => {
+  const menu = /(?<!\p{L})men[úu]s?(?!\p{L})/iu;
+  const saysMenu = Object.entries(es)
+    .filter(([, text]) => menu.test(text.replace(/\{\w+\}/g, "")))
+    .map(([key]) => key);
+  expect(saysMenu.sort()).toEqual(["appearance.colour.surface-raised", "nav.account_menu"]);
+  expect(codeMessage("product.on_live_menu", "es")).not.toMatch(menu);
 });
 
 it.each([

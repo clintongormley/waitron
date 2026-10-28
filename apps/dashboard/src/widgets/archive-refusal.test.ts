@@ -7,7 +7,7 @@ afterEach(() => setLocale("es"));
 
 describe.each([
   ["en", "Menus", "Products"],
-  ["es", "Menús", "Productos"],
+  ["es", "Cartas", "Productos"],
 ])("archive refusal (%s)", (locale, menusLabel, productsLabel) => {
   it("names menus, adding products only for a bulk refusal", () => {
     setLocale(locale!);

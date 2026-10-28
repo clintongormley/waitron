@@ -800,7 +800,7 @@ describe("a stored line whose period's menus no longer offer the row", () => {
   it("says it in Spanish", async () => {
     setLocale("es");
     const el = await mount({ periods: [{ periodId: "breakfast", target: up, notOffered: true }] });
-    expect(notes(el)).toEqual(["No está en los menús de Breakfast"]);
+    expect(notes(el)).toEqual(["No está en las cartas de Breakfast"]);
   });
 });
 

@@ -1429,9 +1429,9 @@ describe("venue-routing-grid", () => {
       it("says the mark in Spanish", async () => {
         setLocale("es");
         const { el } = await mount(flagged(["lunch"]));
-        expect(drawn(el, "c:drinks", "every")[1]).toBe("flag: No está en los menús de Lunch");
+        expect(drawn(el, "c:drinks", "every")[1]).toBe("flag: No está en las cartas de Lunch");
         await named(combo(el, "c:drinks", "every")!).toHaveAccessibleName(
-          containing("Lunch: Kitchen No está en los menús de Lunch Staff lunch: Bar"),
+          containing("Lunch: Kitchen No está en las cartas de Lunch Staff lunch: Bar"),
         );
       });
     });

@@ -64,7 +64,7 @@ it.each([
   [
     "staff_menus",
     "Removes {count} staff menu settings.",
-    "Quita {count} ajustes de menús del personal.",
+    "Quita {count} ajustes de cartas del personal.",
   ],
   ["seasons", "Removes hours in {count} seasons.", "Quita los horarios de {count} temporadas."],
   [
@@ -361,7 +361,10 @@ it.each([
   [
     "staff_menus",
     ["Removes {count} staff menu setting.", "Removes {count} staff menu settings."],
-    ["Quita {count} ajuste de menú del personal.", "Quita {count} ajustes de menús del personal."],
+    [
+      "Quita {count} ajuste de carta del personal.",
+      "Quita {count} ajustes de cartas del personal.",
+    ],
   ],
   [
     "seasons",

@@ -45,7 +45,7 @@ de uno en uno con cada toque. El ticket imprime la cantidad con la abreviatura d
 0,35 kg. Un producto cuya cantidad pide la caja no admite extras. Tampoco un producto en una unidad
 con **Mide una cantidad (ml, g…) — sin extras** activado: cuando Waitron prepara un local, los mililitros, litros, gramos,
 kilogramos y miligramos que trae empiezan con él activado, una unidad que añades empieza con él desactivado,
-y un cambio llega a la caja cuando vuelves a publicar los menús que venden los productos de esa unidad.
+y un cambio llega a la caja cuando vuelves a publicar las cartas que venden los productos de esa unidad.
 
 Cuando cambias el nombre de una unidad que usa un extra, la vista previa de la carta muestra
 el nombre anterior y el nuevo aunque la abreviatura siga igual. Si la etiqueta de la unidad y
