@@ -695,6 +695,36 @@ export async function cancelRowMembers(
   return row.membersOf.get(row.dish.id)!.map(({ id }) => id);
 }
 
+/**
+ * The dish lines `lineIds` names, gathered into the rows the till would draw them as, each row in
+ * line order and the rows in the order of their first line in `lineIds`: whole portions in one filed
+ * group, its cohort included, with the same note and course; any other line alone. For a Discard,
+ * which names no rows (plan D31's one exception).
+ */
+export async function rowsAmong(
+  tx: Transaction,
+  orderId: string,
+  lineIds: readonly string[],
+): Promise<string[][]> {
+  const rows = await readRows(tx, orderId);
+  const whole = await readWholePortionLines(tx, lineIds);
+  const groups = await readLockedLines(tx, orderId);
+  const keyOf = (id: string) => {
+    if (!whole.has(id)) return id;
+    const row = rows.find((one) => one.id === id)!;
+    const group = groups.findIndex(({ identity }) => (identity.lineIds ?? []).includes(id));
+    return canonical([group, row.note, row.courseId]);
+  };
+  const byKey = new Map<string, Row[]>();
+  for (const id of lineIds) {
+    const key = keyOf(id);
+    byKey.set(key, [...(byKey.get(key) ?? []), rows.find((one) => one.id === id)!]);
+  }
+  return [...byKey.values()].map((row) =>
+    row.sort((a, b) => a.lineNo - b.lineNo).map(({ id }) => id),
+  );
+}
+
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
  * whose total merely rounds to nothing. */
 function zeroed(subjects: readonly Subject[]): Change[] {

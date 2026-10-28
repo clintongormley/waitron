@@ -40,7 +40,8 @@ import { completeBillPayment } from "./bill-payments.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { partyRevision, partyRevisionOfOrder, seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
-import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
+import { discardDraft, type BillDraftSnapshot, type Draft } from "./order-drafts.js";
+import { finishPartyService, type UnservedDish } from "./finish-party-service.js";
 import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import {
@@ -2653,7 +2654,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
           reasonId: venue.reasonId.houseVoid,
           expectedPartyRevision: party!.revision,
           expectedBillRevision: order!.revision,
-          expectedContext: await readCancellationContext(tx, bill.partyId, lineId),
+          expectedContext: await readCancellationContext(tx, bill.partyId, lineId, ask.lineIds),
           submissionId: randomUUID(),
           ...ask,
         },
@@ -2973,6 +2974,10 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     body: Record<string, unknown>,
     cookie = venue.cookie.manager,
   ) {
+    const row =
+      Array.isArray(body.lineIds) && body.lineIds.every((id) => typeof id === "string")
+        ? (body.lineIds as string[])
+        : undefined;
     const ask = await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, bill.partyId));
       const [order] = await tx
@@ -2984,7 +2989,7 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
         reasonId: venue.reasonId.houseVoid,
         expectedPartyRevision: party!.revision,
         expectedBillRevision: order!.revision,
-        expectedContext: await readCancellationContext(tx, bill.partyId, lineId),
+        expectedContext: await readCancellationContext(tx, bill.partyId, lineId, row),
         submissionId: randomUUID(),
       };
     });
@@ -3115,5 +3120,236 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
       ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
     }
     expect(await rowsOf(venue, bill.billId)).toEqual(before);
+  });
+
+  /** The till's cancellation read, naming the row's portions when `lineIds` is given. */
+  async function cancellationRead(bill: Bill, lineId: string, lineIds?: readonly string[]) {
+    const query = (lineIds ?? []).map((id) => `lineIds=${id}`).join("&");
+    const answer = await send(
+      venue.app,
+      venue.cookie.manager,
+      "GET",
+      `/api/parties/${bill.partyId}/lines/${lineId}/cancellation${query === "" ? "" : `?${query}`}`,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    return answer.json as {
+      context: { stage: string; components: { lineId: string; id: string | null }[] };
+      refundValue?: { quantity: string; gross: string };
+    };
+  }
+
+  it("A803 portions: the cancellation read for a row lists every portion's components and the row's refund value, its count and summed gross, as one line of three's", async () => {
+    const grouped = await groupedBill(burgerRow("3"));
+    const portions = await portionsBill(burgerRow("3"));
+    const [line] = await dishesNamed(grouped.billId, "Burger");
+    const members = await dishesNamed(portions.billId, "Burger");
+    await paid(grouped);
+    await paid(portions);
+
+    const today = await cancellationRead(grouped, line!);
+    const row = await cancellationRead(portions, members[1]!, members);
+
+    expect(row.context.components.map((component) => component.lineId).sort()).toEqual(
+      [...members].sort(),
+    );
+    expect(row.context.components.every((component) => component.id !== null)).toBe(true);
+    expect(row.context.stage).toBe(today.context.stage);
+    expect(today.refundValue).toEqual({ quantity: "3.000", gross: "36.00" });
+    expect(row.refundValue).toEqual(today.refundValue);
+  });
+
+  it("A803 portions: a cancel against a row's stale cancellation read is refused tab.cancel_context_changed, changing nothing", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    const read = await cancellationRead(bill, members[0]!, members);
+    await serve(bill.billId, members[2]!);
+    const before = await rowsOf(venue, bill.billId);
+
+    const answer = await postCancel(bill, members[0]!, {
+      quantity: "1",
+      outcome: "remove_charge",
+      preparationStarted: true,
+      lineIds: members,
+      expectedContext: read.context,
+    });
+
+    expect(answer.status, JSON.stringify(answer.json)).toBe(409);
+    expect(answer.json).toMatchObject({ code: "tab.cancel_context_changed" });
+    expect(await rowsOf(venue, bill.billId)).toEqual(before);
+  });
+
+  /** Recall each of `lineIds` into the manager's one draft, then discard it under a void reason. */
+  async function recallAndDiscard(bill: Bill, lineIds: readonly string[]) {
+    let draft: Draft | undefined;
+    for (const lineId of lineIds) {
+      const answer = await send(
+        venue.app,
+        venue.cookie.manager,
+        "POST",
+        `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
+        {
+          submissionId: randomUUID(),
+          expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+        },
+      );
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      draft = (answer.json as { draft: Draft }).draft;
+    }
+    return inTx(venue, async (tx) => {
+      const expectedEdit = await readBillEditState(tx, bill.billId);
+      return discardDraft(
+        tx,
+        venue.cfg,
+        bill.partyId,
+        draft!.id,
+        venue.managerId,
+        {
+          expectedEdit,
+          submissionId: randomUUID(),
+          revision: expectedEdit.draftRevision!,
+          expectedRevision: await readOrderRevision(tx, bill.billId),
+          reasonId: venue.reasonId.houseVoid,
+          note: null,
+        },
+        venue.venueLocale,
+      );
+    });
+  }
+
+  it("A803 portions: discarding a draft that recalled every portion of a row records one cancel for the row, as discarding one recalled line of three does", async () => {
+    const grouped = await groupedBill(burgerRow("3"));
+    const portions = await portionsBill(burgerRow("3"));
+    const [line] = await dishesNamed(grouped.billId, "Burger");
+    const members = await dishesNamed(portions.billId, "Burger");
+
+    const today = await recallAndDiscard(grouped, [line!]);
+    const row = await recallAndDiscard(portions, members);
+
+    expect(today.adjustmentIds).toHaveLength(1);
+    expect(row.adjustmentIds).toHaveLength(1);
+    expect(await cancelRecord(portions.billId, members)).toEqual({
+      ...(await cancelRecord(grouped.billId, [line!])),
+      line: 0,
+    });
+    expect(await dishesNamed(portions.billId, "Burger")).toEqual([]);
+  });
+
+  it("A803 portions: discarding a draft that recalled a burger from each of two sends records one cancel for each, as today's two lines do", async () => {
+    const bill = await portionsBill(burgerRow("1"));
+    await inTx(venue, (tx) =>
+      addPortionRound(tx, venue.cfg, bill.billId, roundOf([{ name: "Burger" }]), { fire: true }),
+    );
+    const members = await dishesNamed(bill.billId, "Burger");
+    expect(members).toHaveLength(2);
+
+    const discarded = await recallAndDiscard(bill, members);
+
+    expect(discarded.adjustmentIds).toHaveLength(2);
+  });
+
+  it("A803 portions: discarding a draft that recalled two burgers, one with a note, records one cancel for each", async () => {
+    const bill = await portionsBill(burgerRow("2"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await inTx(venue, (tx) =>
+      tx
+        .update(workingOrderLines)
+        .set({ note: "No onion" })
+        .where(eq(workingOrderLines.id, members[1]!)),
+    );
+
+    const discarded = await recallAndDiscard(bill, members);
+
+    expect(discarded.adjustmentIds).toHaveLength(2);
+  });
+
+  it("A803 portions: discarding a draft that recalled two pizzas of one send, one with an olive and one with two, records one cancel for each", async () => {
+    const bill = await portionsBill([
+      { name: "Pizza", olives: 1 },
+      { name: "Pizza", olives: 2 },
+    ]);
+    const pizzas = await dishesNamed(bill.billId, "Pizza");
+    expect(pizzas).toHaveLength(2);
+
+    const discarded = await recallAndDiscard(bill, pizzas);
+
+    expect(discarded.adjustmentIds).toHaveLength(2);
+  });
+
+  it("A803 portions: discarding a draft that recalled two burgers of one send, one in a course, records one cancel for each", async () => {
+    const bill = await portionsBill(burgerRow("2"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await inTx(venue, async (tx) => {
+      const course = await createCourse(tx, venue.cfg, {
+        name: `Mains ${randomUUID()}`,
+        displayOrder: 91,
+      });
+      await tx
+        .update(workingOrderLines)
+        .set({ courseId: course.id })
+        .where(eq(workingOrderLines.id, members[1]!));
+    });
+
+    const discarded = await recallAndDiscard(bill, members);
+
+    expect(discarded.adjustmentIds).toHaveLength(2);
+  });
+
+  it("A803 portions: Finish table lists each unserved portion of a row as its own dish and cancels each with its own keep-charge cancel and slip", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await paid(bill);
+    const args = async () => ({
+      partyId: bill.partyId,
+      expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
+      operatorId: venue.managerId,
+      expectedEdits: [await inTx(venue, (tx) => readBillEditState(tx, bill.billId))],
+      submissionId: randomUUID(),
+    });
+    const first = await args();
+    const listed = await inTx(venue, (tx) => finishPartyService(tx, venue.cfg, first)).then(
+      () => [],
+      (error: { code: string; params: { dishes: UnservedDish[] } }) => {
+        expect(error.code).toBe("party.unserved_dishes");
+        return error.params.dishes;
+      },
+    );
+    const burgersListed = listed.filter((dish) => members.includes(dish.lineId));
+    expect(burgersListed.map((dish) => [dish.lineId, dish.quantity])).toEqual(
+      members.map((id) => [id, "1.000"]),
+    );
+
+    const confirmed = await args();
+    const { jobs } = await newJobs(() =>
+      inTx(venue, (tx) =>
+        finishPartyService(tx, venue.cfg, {
+          ...confirmed,
+          cancellations: listed.map((dish) => ({
+            lineId: dish.lineId,
+            quantity: dish.quantity,
+            expectedBillRevision: dish.billRevision,
+            expectedContext: dish.context,
+            preparationStarted: false,
+            reasonId: venue.reasonId.houseVoid,
+          })),
+        }),
+      ),
+    );
+
+    const cancels = (await recordedOn(bill.billId)).filter((record) => record.action === "cancel");
+    expect(
+      cancels
+        .filter((record) => members.includes(record.lineId!))
+        .map((record) => [members.indexOf(record.lineId!), record.quantity]),
+    ).toEqual([
+      [0, 1000],
+      [1, 1000],
+      [2, 1000],
+    ]);
+    expect(jobs.flat().filter((printed) => printed.includes("BURG"))).toEqual([
+      "1.000 x BURG",
+      "1.000 x BURG",
+      "1.000 x BURG",
+    ]);
   });
 });

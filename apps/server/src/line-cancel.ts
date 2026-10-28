@@ -25,7 +25,7 @@ import { findAdjustmentReason, policySnapshotOf, recordAdjustment } from "@waitr
 import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
-import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
 import {
   applyAdjustment,
@@ -134,7 +134,13 @@ export async function cancelItem(
       approverId: ask.approver?.personId,
     },
     async () => {
-      const context = await requireCancellationContext(tx, partyId, lineId, ask.expectedContext);
+      const context = await requireCancellationContext(
+        tx,
+        partyId,
+        lineId,
+        ask.expectedContext,
+        ask.lineIds,
+      );
       if (
         ask.preparationStarted === true &&
         !context.components.some((component) => component.firedAt !== null)
@@ -407,18 +413,10 @@ export async function cancelItem(
                 ask.quantity,
               );
           } else {
-            // The row stands for today's line: its count, and each portion's filed value.
-            const values = [];
-            for (const dish of dishes)
-              values.push(await cancellationRefundValue(tx, bill!.id, sale.id, dish.id));
-            if (values.every((value) => value !== undefined))
+            const value = await rowRefundValue(tx, bill!.id, sale.id, dishIds);
+            if (value !== undefined)
               refundValue = cancelRefundShare(
-                {
-                  quantity: thousandthsToDecimal(
-                    dishes.reduce((total, dish) => total + dish.quantity, 0),
-                  ),
-                  gross: sumDecimals(values.map((value) => decimal(value.gross))),
-                },
+                value,
                 thousandthsToDecimal(
                   dishes.reduce((total, dish) => total + (priorOf(dish.id)?.quantity ?? 0), 0),
                 ),

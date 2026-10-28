@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
+import { cancelRowMembers } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { isStarted, type TicketState } from "./kitchen-print.js";
 import { readLineCancellations } from "./line-service-state.js";
@@ -38,6 +39,7 @@ export async function readCancellationContext(
   tx: Transaction,
   partyId: string,
   lineId: string,
+  lineIds?: readonly string[],
 ): Promise<CancellationContext> {
   const [subject] = await tx
     .select({ parentId: workingOrderLines.parentLineId, bill: workingOrders })
@@ -53,6 +55,9 @@ export async function readCancellationContext(
     throw new AppError("bill.other_party", { workingOrderId: subject.bill.id });
   if (subject.bill.status === "abandoned")
     throw new AppError("tab.not_open", { tabId: subject.bill.id });
+  // A till row of identical dishes: what the cancel takes from depends on every one of them.
+  const dishIds =
+    lineIds === undefined ? [lineId] : await cancelRowMembers(tx, subject.bill.id, lineId, lineIds);
   const family = await tx
     .select({
       lineId: workingOrderLines.id,
@@ -68,7 +73,10 @@ export async function readCancellationContext(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, subject.bill.id),
-        or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)),
+        or(
+          inArray(workingOrderLines.id, dishIds),
+          inArray(workingOrderLines.parentLineId, dishIds),
+        ),
       ),
     );
   const cancellations = await readLineCancellations(
@@ -99,9 +107,10 @@ export async function requireCancellationContext(
   partyId: string,
   lineId: string,
   expected: CancellationContext,
+  lineIds?: readonly string[],
 ): Promise<CancellationContext> {
   // Kitchen transitions need not advance a bill or party revision.
-  const context = await readCancellationContext(tx, partyId, lineId);
+  const context = await readCancellationContext(tx, partyId, lineId, lineIds);
   if (!isDeepStrictEqual(orderedCancellationContext(expected), context))
     throw new AppError("tab.cancel_context_changed", { context });
   return context;

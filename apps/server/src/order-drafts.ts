@@ -56,7 +56,7 @@ import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { saveRecalledLine } from "./draft-recall.js";
-import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
+import { applyAdjustment, rowsAmong, type AdjustmentArgs } from "./adjustments-apply.js";
 import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import {
@@ -1005,14 +1005,20 @@ export async function discardDraft(
         .orderBy(orderDraftRecalledLines.position);
       if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
       const adjustmentIds: string[] = [];
-      for (const source of sources) {
+      // A row of identical dishes recalled together is cancelled as one, as today's one line is.
+      const rows = await rowsAmong(
+        tx,
+        billId,
+        sources.map((source) => source.sourceLineId),
+      );
+      for (const row of rows) {
         // Reservation release and charge cancellation share the validated Discard transaction.
         await tx
           .delete(orderDraftRecalledLines)
           .where(
             and(
               eq(orderDraftRecalledLines.draftId, draft.id),
-              eq(orderDraftRecalledLines.sourceLineId, source.sourceLineId),
+              inArray(orderDraftRecalledLines.sourceLineId, row),
             ),
           );
         const applied = await applyAdjustment(
@@ -1023,7 +1029,8 @@ export async function discardDraft(
             expectedEdit: await readBillEditState(tx, billId),
             expectedRevision: await readOrderRevision(tx, billId),
             submissionId: newId(),
-            lineId: source.sourceLineId,
+            lineId: row[0]!,
+            ...(row.length === 1 ? {} : { lineIds: row }),
             action: "cancel",
             reasonId: input.reasonId!,
             note: input.note,

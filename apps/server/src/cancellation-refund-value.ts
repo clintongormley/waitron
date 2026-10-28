@@ -1,6 +1,12 @@
 import { eq } from "drizzle-orm";
 import { saleLinePortions, saleLines, workingOrderLines, type Transaction } from "@waitron/db";
-import { addDecimal, centsToDecimal, decimal, thousandthsToDecimal } from "@waitron/shared";
+import {
+  addDecimal,
+  centsToDecimal,
+  decimal,
+  sumDecimals,
+  thousandthsToDecimal,
+} from "@waitron/shared";
 import { readPortionBindings } from "./order-portions.js";
 
 type Filed = typeof saleLines.$inferSelect;
@@ -12,6 +18,31 @@ export async function cancellationRefundValue(
   saleId: string,
   lineId: string,
 ): Promise<{ quantity: string; gross: string } | undefined> {
+  return (await refundValues(tx, billId, saleId, [lineId]))[0];
+}
+
+/** A till row of identical portions valued as today's one line (plan D32): the portions' count and
+ * the sum of each one's filed value; none when any portion's value cannot be read. */
+export async function rowRefundValue(
+  tx: Transaction,
+  billId: string,
+  saleId: string,
+  lineIds: readonly string[],
+): Promise<{ quantity: string; gross: string } | undefined> {
+  const values = await refundValues(tx, billId, saleId, lineIds);
+  if (values.some((value) => value === undefined)) return undefined;
+  return {
+    quantity: sumDecimals(values.map((value) => decimal(value!.quantity))),
+    gross: sumDecimals(values.map((value) => decimal(value!.gross))),
+  };
+}
+
+async function refundValues(
+  tx: Transaction,
+  billId: string,
+  saleId: string,
+  lineIds: readonly string[],
+): Promise<({ quantity: string; gross: string } | undefined)[]> {
   const stored = await tx
     .select()
     .from(workingOrderLines)
@@ -22,34 +53,42 @@ export async function cancellationRefundValue(
     .from(saleLines)
     .where(eq(saleLines.saleId, saleId))
     .orderBy(saleLines.lineNo);
-  const parent = stored.find((row) => row.id === lineId && row.parentLineId === null);
-  if (parent === undefined) return undefined;
   const bindings = await readPortionBindings(
     tx,
     stored.filter((row) => row.parentLineId === null).map((row) => row.id),
   );
-  if (bindings.size === 0) return byPosition(stored, filed, lineId);
-  const links = await tx
-    .select({ saleLineId: saleLinePortions.saleLineId, portionId: saleLinePortions.portionId })
-    .from(saleLinePortions)
-    .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
-    .where(eq(saleLines.saleId, saleId));
-  const binding = bindings.get(lineId);
-  if (binding === undefined) {
-    const linked = new Set(links.map((link) => link.saleLineId));
-    const bound = (row: Stored) => bindings.has(row.parentLineId ?? row.id);
-    return byPosition(
-      stored.filter((row) => !bound(row)),
-      filed.filter((row) => !linked.has(row.id)),
-      lineId,
+  const links =
+    bindings.size === 0
+      ? []
+      : await tx
+          .select({
+            saleLineId: saleLinePortions.saleLineId,
+            portionId: saleLinePortions.portionId,
+          })
+          .from(saleLinePortions)
+          .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
+          .where(eq(saleLines.saleId, saleId));
+  return lineIds.map((lineId) => {
+    const parent = stored.find((row) => row.id === lineId && row.parentLineId === null);
+    if (parent === undefined) return undefined;
+    if (bindings.size === 0) return byPosition(stored, filed, lineId);
+    const binding = bindings.get(lineId);
+    if (binding === undefined) {
+      const linked = new Set(links.map((link) => link.saleLineId));
+      const bound = (row: Stored) => bindings.has(row.parentLineId ?? row.id);
+      return byPosition(
+        stored.filter((row) => !bound(row)),
+        filed.filter((row) => !linked.has(row.id)),
+        lineId,
+      );
+    }
+    return byPortion(
+      filed,
+      links,
+      binding.portionId,
+      stored.filter((row) => row.id === lineId || row.parentLineId === lineId),
     );
-  }
-  return byPortion(
-    filed,
-    links,
-    binding.portionId,
-    stored.filter((row) => row.id === lineId || row.parentLineId === lineId),
-  );
+  });
 }
 
 /** Unbound lines, each paired by position with a filed row no portion is linked to. */
