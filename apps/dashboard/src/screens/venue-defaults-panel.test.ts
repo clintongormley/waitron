@@ -591,33 +591,221 @@ it("a read begun before a successful save does not put back the old language", a
   expect(unload()).toBe(false);
 });
 
-it.each(["success", "refusal"] as const)(
-  "ignores a departed card's late %s once it is back",
-  async (answer) => {
+const savedLanguage = (el: Panel) => text(q(el, "[data-test=saved-receiptLanguage]"));
+async function save(el: Panel) {
+  saveButton(el).click();
+  await flush(el);
+}
+
+it("a save answer that arrives after a newer live value ends on the newer value", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  const reads = r.api.getVenueDefaults.mock.calls.length;
+  r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(reads + 1);
+  await frame();
+  await flush(el);
+  pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await expect.poll(() => savedLanguage(el)).toBe("Galician");
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "[data-test=read-error]")).toBeNull();
+});
+
+it("a live read begun during the save that answers after it does not leave the save's answer showing", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  const late = deferred<VenueDefaults>();
+  r.api.getVenueDefaults.mockImplementationOnce(() => late.promise);
+  const reads = r.api.getVenueDefaults.mock.calls.length;
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => r.api.getVenueDefaults.mock.calls.length).toBe(reads + 1);
+  r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
+  pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  late.resolve({ ...MADRID, receiptLanguage: "gl-ES" });
+  await late.promise;
+  await frame();
+  await flush(el);
+  await expect.poll(() => savedLanguage(el)).toBe("Galician");
+  expect(q(el, "form")).toBeNull();
+});
+
+it("after a successful save the card reads the defaults again through the background client", async () => {
+  setLocale("en-GB");
+  const r = withBackground();
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
+  expect(r.api.getVenueDefaults).toHaveBeenCalledTimes(1);
+  expect(savedLanguage(el)).toBe("Catalan");
+});
+
+it("a failed read after a successful save is a read failure, and the editor stays closed", async () => {
+  setLocale("en-GB");
+  const r = withBackground();
+  r.background.getVenueDefaults.mockRejectedValueOnce({ code: "server.unavailable" });
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(text(q(el, "[data-test=read-error]"))).toBe(codeMessage("server.unavailable"));
+  expect(q(el, "form")).toBeNull();
+  expect(q(el, "[data-test=edit]")).toBeTruthy();
+  expect(savedLanguage(el)).toBe("Catalan");
+  expect(r.api.putVenueDefaults).toHaveBeenCalledTimes(1);
+  (q(el, "[data-test=retry]") as HTMLElement).click();
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeNull();
+  expect(savedLanguage(el)).toBe("Catalan");
+});
+
+it("a card removed while its save is in flight reads nothing more once the save succeeds", async () => {
+  setLocale("en-GB");
+  const r = withBackground();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  expect(saveButton(el).loading).toBe(true);
+  const parent = el.parentNode!;
+  el.remove();
+  r.state.stored = { ...MADRID, receiptLanguage: "ca-ES" };
+  pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+  await pending.promise;
+  await frame();
+  await flush(el);
+  expect(r.background.getVenueDefaults).not.toHaveBeenCalled();
+  parent.appendChild(el);
+  await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(savedLanguage(el)).toBe("Catalan");
+  await edit(el);
+  expect(saveButton(el).loading).toBe(false);
+  expect(combo(el, "receiptLanguage")!.disabled).toBe(false);
+  expect((q(el, "[data-test=cancel]") as WtButton).disabled).toBe(false);
+});
+
+it.each(["answer", "failure"] as const)(
+  "a re-read begun before the card left and came back is ignored, whatever its %s",
+  async (outcome) => {
     setLocale("en-GB");
-    const r = rig();
-    const pending = deferred<VenueDefaults>();
-    r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+    const r = withBackground();
+    const reread = deferred<VenueDefaults>();
+    const reload = deferred<VenueDefaults>();
+    r.background.getVenueDefaults
+      .mockImplementationOnce(() => reread.promise)
+      .mockImplementationOnce(() => reload.promise);
     const el = await mount(r.api);
     await edit(el);
     await pick(el, "receiptLanguage", "ca-ES");
-    saveButton(el).click();
-    await el.updateComplete;
-    await reattachAfterDetachedUpdate(el);
-    await pick(el, "receiptLanguage", "gl-ES");
-    if (answer === "success") pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
-    else pending.reject({ code: "management.failed" });
-    await pending.promise.catch(() => {});
+    await save(el);
+    await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+    await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+    await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(2);
+    if (outcome === "answer") reread.resolve({ ...MADRID, receiptLanguage: "eu-ES" });
+    else reread.reject({ code: "server.unavailable" });
+    await reread.promise.catch(() => {});
     await frame();
     await flush(el);
-    expect(q(el, "[data-test=edit]")).toBeNull();
-    expect(combo(el, "receiptLanguage")!.value).toBe("gl-ES");
-    expect(combo(el, "receiptLanguage")!.error).toBe("");
-    expect(bottom(el)).toBe("");
-    expect(saveButton(el).loading).toBe(false);
-    expect(saveButton(el).disabled).toBe(false);
+    expect(savedLanguage(el)).toBe("Catalan");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+    reload.resolve({ ...MADRID, receiptLanguage: "gl-ES" });
+    await expect.poll(() => savedLanguage(el)).toBe("Galician");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
   },
 );
+
+it.each(["answer", "failure"] as const)(
+  "a re-read overtaken by a later live read leaves the live read showing, whatever its %s",
+  async (outcome) => {
+    setLocale("en-GB");
+    const r = withBackground();
+    const reread = deferred<VenueDefaults>();
+    r.background.getVenueDefaults.mockImplementationOnce(() => reread.promise);
+    const el = await mount(r.api);
+    await edit(el);
+    await pick(el, "receiptLanguage", "ca-ES");
+    await save(el);
+    await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+    await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(1);
+    r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
+    r.liveData.invalidate([{ type: "locations" }]);
+    await expect.poll(() => savedLanguage(el)).toBe("Galician");
+    if (outcome === "answer") reread.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+    else reread.reject({ code: "server.unavailable" });
+    await reread.promise.catch(() => {});
+    await frame();
+    await flush(el);
+    expect(savedLanguage(el)).toBe("Galician");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  },
+);
+
+it("reconnecting while a save is in flight keeps Save disabled, so a second click sends nothing", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  await reattachAfterDetachedUpdate(el);
+  await flush(el);
+  expect(saveButton(el).loading).toBe(true);
+  expect(saveButton(el).disabled).toBe(true);
+  saveButton(el).click();
+  await flush(el);
+  expect(r.api.putVenueDefaults).toHaveBeenCalledTimes(1);
+  r.state.stored = { ...MADRID, receiptLanguage: "ca-ES" };
+  pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  expect(q(el, "form")).toBeNull();
+  expect(savedLanguage(el)).toBe("Catalan");
+  expect(r.api.putVenueDefaults).toHaveBeenCalledTimes(1);
+});
+
+it("a refusal that arrives after reconnecting during the save goes under its field in the resumed draft", async () => {
+  setLocale("en-GB");
+  const r = rig();
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  await reattachAfterDetachedUpdate(el);
+  pending.reject({ code: "receipt.language_orders_open" });
+  await pending.promise.catch(() => {});
+  await frame();
+  await flush(el);
+  expect(combo(el, "receiptLanguage")!.value).toBe("ca-ES");
+  expect(combo(el, "receiptLanguage")!.error).toBe(codeMessage("receipt.language_orders_open"));
+  expect(saveButton(el).loading).toBe(false);
+  expect(saveButton(el).disabled).toBe(false);
+});
 
 it("a save in flight when the card turns read-only shows its answer once it succeeds", async () => {
   setLocale("en-GB");
