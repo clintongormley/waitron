@@ -1347,6 +1347,9 @@ declare module "@waitron/shared" {
      * stopped before writing more there. Before the copy, `neededBytes` is the run's need plus the
      * free-space floor; after it, the copy's size. `availableBytes` is what it reported. */
     "backup.staging_space_low": { neededBytes: number; availableBytes: number };
+    /** A backup run deleted `count` of its oldest backups to make room for itself; `date` is the
+     * venue's calendar day of the deletion, `YYYY-MM-DD`. Recorded as an incident, never thrown. */
+    "backup.archives_deleted": { count: number; date: string };
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
     "backup.destination_cancelled": Record<string, never>;

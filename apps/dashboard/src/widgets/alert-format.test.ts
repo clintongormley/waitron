@@ -32,7 +32,11 @@ it("names a device alert by its device and a job alert by its source, in the cho
   expect(sourceLabel({ source: "operator_script", deviceId: null, deviceName: null })).toBe(
     "Operator script",
   );
+  expect(sourceLabel({ source: "backup", deviceId: null, deviceName: null })).toBe("Backups");
   setLocale("es-ES");
+  expect(sourceLabel({ source: "backup", deviceId: null, deviceName: null })).toBe(
+    "Copias de seguridad",
+  );
   expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
     "Comprobación de pagos",
   );

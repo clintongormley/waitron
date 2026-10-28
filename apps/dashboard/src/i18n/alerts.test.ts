@@ -335,6 +335,23 @@ describe("a backup that stopped before reaching any destination", () => {
   });
 });
 
+it("says the box deleted its oldest backups for low disk space, and on which day", () => {
+  const one = { count: 1, date: "2026-10-28" };
+  const three = { count: 3, date: "2026-10-28" };
+  expect(alertMessage("backup.archives_deleted", one, "en")).toBe(
+    "Low disk space: the box deleted its oldest backup (28 Oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", three, "en")).toBe(
+    "Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", one, "es")).toBe(
+    "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", three, "es")).toBe(
+    "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).",
+  );
+});
+
 it("says how many Translate all suggestions wait, and how many could not be done", () => {
   expect(alertMessage("content.suggestions_ready", { count: 1050, failed: 0 }, "en")).toBe(
     "Translations ready: 1050 suggestions are waiting for review.",

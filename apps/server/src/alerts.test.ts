@@ -17,6 +17,7 @@ import type { AlertSource } from "@waitron/module";
 import type { Logger } from "@waitron/server-kit";
 import {
   AppError,
+  backupOrigin,
   deviceOrigin,
   locationId as brandLocationId,
   type DeviceId,
@@ -195,6 +196,32 @@ describe("readOpenAlerts", () => {
     });
     expect(byCode.get("payment.reconcile_orphan")!.area).toBe("payments");
     expect("screen" in byCode.get("payment.reconcile_orphan")!).toBe(false);
+  });
+
+  it("shows an old-backups-deleted alert in Backups to system.manage holders only", async () => {
+    await seedVenue();
+    await asApp((tx) =>
+      recordIncident(tx, {
+        origin: backupOrigin(),
+        error: new AppError("backup.archives_deleted", { count: 2, date: "2026-09-14" }),
+        severity: "warning",
+        detectedAt: NOW,
+      }),
+    );
+    const [alert] = await asApp((tx) =>
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, new Set(["system.manage"])),
+    );
+    expect(alert).toMatchObject({
+      code: "backup.archives_deleted",
+      area: "backup",
+      screen: "backup",
+      source: "backup",
+      params: { count: 2, date: "2026-09-14" },
+    });
+    const withoutIt = await asApp((tx) =>
+      readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),
+    );
+    expect(withoutIt).toEqual([]);
   });
 
   it("puts errors first, then the newest", async () => {

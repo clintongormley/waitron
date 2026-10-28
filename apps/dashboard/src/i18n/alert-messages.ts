@@ -81,6 +81,15 @@ export const ALERT_MESSAGES: Readonly<
     en: "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue. {errorCode:backup_stop}",
     es: "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan. {errorCode:backup_stop}",
   },
+  "backup.archives_deleted": {
+    en: "Low disk space: the box deleted its {count} oldest backups ({date:date}).",
+    es: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas ({date:date}).",
+    one: {
+      param: "count",
+      en: "Low disk space: the box deleted its oldest backup ({date:date}).",
+      es: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua ({date:date}).",
+    },
+  },
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
     es: "No se está guardando ninguna copia de tus datos: no hay copias de seguridad programadas, y la copia en el bucket está desactivada o no está al día. Configura una en la página de Copias.",
