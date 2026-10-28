@@ -4208,8 +4208,8 @@ slice 5), built with `settingsCard` and `settingsRows`, and below it Themes
   clipped away, so no line starts with it.
 - **Under Brand colour's lines, the dark version's own button colour** (A841 slice 6, D13): while
   dark Main buttons is not set by hand, a link "Pick a different colour for dark screens" opens
-  Advanced's Buttons section, then Advanced, and focuses that value's code field, leaving the other
-  sections as they were; once set, the link gives way to "Buttons on dark
+  Advanced at its Buttons section and focuses that value's code field, leaving the other sections as
+  they were; once set, the link gives way to "Buttons on dark
   screens: {colour}, set by hand · Use the brand colour", drawn with the Undo line's markup, and Use
   the brand colour is Use worked-out colour on that value. Both are disabled while a save is under
   way. The light version has no such line.

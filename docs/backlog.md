@@ -3071,7 +3071,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   tills are checked at, each with a fix; the saved card lists the text set by hand.
   Slice 12 landed 2026-10-28 (#PR): Advanced is folded into five sections — Page and surfaces, Text
   colours and links, Buttons, Fields and focus, and Text — each closed when the editor opens and
-  saying what in it is set by hand and how many of its own values are hard to read; a section
+  saying what in it is set by hand and how many of those are hard to read; a section
   holding an error opens itself; Pick a different colour for dark screens opens Buttons.
   Next: 14 (with A1096's last part, below).
 
@@ -5476,10 +5476,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   shards over four minutes from CI measurements; refreshing the table remains manual.
   [Receipt](developers/ci-and-gates.md#the-servers-shards-sixteen-packed-by-measured-duration)
 
-- **The other sharded packages still use Vitest's file-count split.** On main run 40597297102
-  (2026-10-27) the dashboard's four shards' runs took about 115, 202, 235 and 239 s, and shard 4's
-  job 4 min 46 s; A841 slice 12's suites add to shard 4
-  ([the plan](superpowers/plans/2026-10-27-a841-12-advanced-sections.md)).
+- **The other sharded packages still use Vitest's file-count split.**
   [Detail](backlog/ci.md#the-other-sharded-packages-still-use-vitests-file-count-split)
 
 - **Nothing checks, on every CI run, that each server test file ran in exactly one shard.**
