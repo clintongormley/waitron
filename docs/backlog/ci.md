@@ -723,7 +723,9 @@ the hosted timeout. Both CI and licence checkout attempts now emit Git Trace2 JS
 and successful checkouts print stored-pack byte counts. See the
 [measured diagnosis and its limits](../developers/ci-and-gates.md#checkout-stage-diagnostics-28-october-2026-a1178).
 Capture the hosted stage of a recurrence before attributing it to GitHub, the network or local
-indexing. A separately measured shallow checkout for jobs that do not read history remains open.
+indexing. Suite jobs use depth one, with full history retained for change classification and
+sign-off. Full-suite selection and hosted before/after measurements are still being qualified;
+the history change reduces requested data, not a proved timeout cause.
 
 On 28 October, [main run 40750935978, till shard 3](https://github.com/clintongormley/waitron/actions/runs/40750935978/job/123038600113)
 exhausted both 120-second attempts with `--depth=1`, before installation or tests. Reducing

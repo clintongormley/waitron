@@ -2143,6 +2143,26 @@ returned the same ref on stdout. Hosted stage capture and a separately measured 
 checkout for jobs that do not read history are the next qualification steps. A later successful
 checkout alone does not explain an earlier timeout.
 
+#### Checkout history belongs to the job that reads it (A1178)
+
+The `changes` job needs history for `scripts/ci-diff-paths.sh`'s merge-base and range
+comparisons. The licence workflow's `dco` job enumerates the push or pull-request range with
+`git rev-list`. Both keep `fetch-depth: 0` on both attempts. The suite jobs use depth one;
+their commands take fixed package filters or scope values supplied by `changes` rather than
+calculating a Git range themselves. This reduces the history requested by those jobs. It does
+not establish the cause of a hosted checkout timeout, including the shallow-checkout failure
+in main run `40750935978`, till shard 3 (`123038600113`).
+
+The “uses full history only for change classification and sign-off” case in
+`scripts/ci-workflow.test.mjs` checks each literal checkout step in the workflow files. It is
+weaker than its name: it reads text, assumes omitted depth means one, and does not inspect
+external reusable workflows, composite actions or dynamically selected actions. It names the
+two full-history jobs and checks both attempts. Local controls reverted each of the 22 changed
+suite checkout inputs independently and deleted each of the four required full-history inputs;
+all 26 changes failed this guard, and the restored candidate passed. Existing behavioral
+assertions are unchanged. Hosted full-suite selection and before/after measurements remain
+required before this conversion is qualified.
+
 | Source | Source's words | Use |
 | --- | --- | --- |
 | [Git Trace2 API](https://git-scm.com/docs/api-trace2#_enabling_a_target), checked 28 October 2026 | “`1` or `true` - Writes to `STDERR`.” | Send the event target to the existing step log without a separate artifact upload. |

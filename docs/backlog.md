@@ -5544,7 +5544,8 @@ values rather than PIN substrings inside random IDs. See the
 
 - **Whether the checkout stalls were a GitHub-side incident remains unverified (A935).**
   A1178 adds checkout-stage traces and stored-pack measurements in CI and licence jobs;
-  capture a hosted recurrence and qualify shallow checkout separately for jobs that read no history.
+  capture a hosted recurrence to locate the underlying wait. Suite jobs use depth one while
+  change classification and sign-off retain full history; hosted before/after qualification is pending.
   The 27 October bookings checkout and 28 October full-history and shallow checkouts exhausted
   both attempts before running tests. Their underlying causes remain unknown.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).

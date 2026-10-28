@@ -137,9 +137,6 @@ jobs:
       shared: ${{ steps.gates.outputs.shared }}
     steps:
       # Each checkout is three steps: docs/developers/ci-and-gates.md, "Every checkout is bounded".
-      # fetch-depth: 0 is load-bearing. The default is 1, which leaves no merge base to diff
-      # against and no history for pnpm's own change detection — both would then silently report
-      # "nothing changed" and skip the entire suite.
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
@@ -796,7 +793,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -809,7 +806,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -977,7 +974,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -990,7 +987,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -1282,7 +1279,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -1295,7 +1292,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2332,7 +2329,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2345,7 +2342,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2402,7 +2399,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2415,7 +2412,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2473,7 +2470,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2486,7 +2483,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2543,7 +2540,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2556,7 +2553,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2757,7 +2754,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2770,7 +2767,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2811,7 +2808,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2824,7 +2821,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2869,7 +2866,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2882,7 +2879,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2972,7 +2969,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
@@ -2985,7 +2982,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
-          fetch-depth: 0
+          fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
           GIT_HTTP_LOW_SPEED_TIME: 20
