@@ -201,6 +201,7 @@ export {
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
 export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+export { SPARE_SPACE_FILE } from "./spare-space-name.js";
 export {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,
@@ -239,11 +240,16 @@ export {
   type SetAsideIo,
 } from "./first-setup-start-again-set-aside.js";
 export {
+  ABANDONABLE as ABANDONABLE_BACKUP_PHASES,
   createFirstSetupBackupWorkspace,
   resolveFirstSetupBackupWorkspace,
   assertFirstSetupBackupBootTarget,
 } from "./first-setup-backup-workspace.js";
-export { emptyAbandonedBackupRecovery, isEmptiedTombstone } from "./first-setup-backup-discard.js";
+export {
+  abandonedRecoveryBytes,
+  emptyAbandonedBackupRecovery,
+  isEmptiedTombstone,
+} from "./first-setup-backup-discard.js";
 export type {
   BackupRepairTarget,
   BackupRepairObservation,

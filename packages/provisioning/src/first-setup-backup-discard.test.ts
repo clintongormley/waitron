@@ -500,3 +500,46 @@ it("empties a recovery whose venue and state folders are one folder, keeping the
   expect((await f.store.read()).at(-1)!.phase).toBe("abandoned");
   expect(await provision.isEmptiedTombstone(f.anchor, recoveryId)).toBe(true);
 });
+
+it("counts the bytes emptying would remove, leaving out the records and the lock files it keeps", async () => {
+  const f = await abandoned();
+  const before = await provision.abandonedRecoveryBytes(f.anchor, recoveryId);
+  expect(before).toBeGreaterThan(0);
+  await writeFile(join(f.venue, "venue.db-shm"), Buffer.alloc(65_536, 1));
+  expect(await provision.abandonedRecoveryBytes(f.anchor, recoveryId)).toBe(before + 65_536);
+  await writeFile(join(f.base, "9999.json"), Buffer.alloc(65_536, 1));
+  await writeFile(join(f.venue, "venue.lock-journal"), Buffer.alloc(65_536, 1));
+  expect(await provision.abandonedRecoveryBytes(f.anchor, recoveryId)).toBe(before + 65_536);
+});
+
+it("counts nothing once emptying has removed what it removes, before or after the venue pointer goes", async () => {
+  const f = await abandoned();
+  await expect(
+    provision.emptyAbandonedBackupRecovery(
+      f.anchor,
+      recoveryId,
+      lockVenueDatabase,
+      async (path, kind) => {
+        if (path === venuePointer(f)) throw new Error("cut before the pointer");
+        await (kind === "file" ? unlink(path) : rmdir(path));
+      },
+    ),
+  ).rejects.toThrow("cut before the pointer");
+  expect(await provision.abandonedRecoveryBytes(f.anchor, recoveryId)).toBe(0);
+  await provision.emptyAbandonedBackupRecovery(f.anchor, recoveryId);
+  expect(await provision.abandonedRecoveryBytes(f.anchor, recoveryId)).toBe(0);
+});
+
+it("counts nothing for a recovery folder that is not there", async () => {
+  const f = await abandoned();
+  await rm(f.base, { recursive: true });
+  expect(await provision.abandonedRecoveryBytes(f.anchor, recoveryId)).toBe(0);
+});
+
+it("refuses to count a recovery folder holding a link, as emptying refuses it", async () => {
+  const f = await abandoned();
+  await symlink(f.root, join(f.venue, "elsewhere"));
+  await expect(provision.abandonedRecoveryBytes(f.anchor, recoveryId)).rejects.toMatchObject({
+    code: "setup.attempt_uncertain",
+  });
+});

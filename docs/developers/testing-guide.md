@@ -1294,6 +1294,20 @@ Desktop during the slice's review (2026-10-21), where the 32 MiB tmpfs mounted a
 `WAITRON_FULL_DISK_DIR: /home/runner/work/_temp/full-disk`; the job's whole run printed
 `Tests  36 passed (36)`.
 
+**A second real-disk file has its own small filesystem.** `apps/server/src/start-again-full-disk.e2e.test.ts`
+(A1127) runs the repair page's Start-again flow beside a stopped backup recovery on a full disk: with
+the box's spare file the flow works and the spare is gone; without it the password step answers
+`507 storage.disk_full`. It builds its stopped recovery from the A731 fixture, whose module-level
+hooks must not run in `start-full-disk.e2e.test.ts`, so it is a file of its own, and two files filling
+one filesystem at once could fail each other: the server's test files run up to four at once
+(`maxWorkers: 4`, `apps/server/vitest.config.ts`). It calls `openSmallDisk("WAITRON_FULL_DISK_DIR_START_AGAIN")`,
+and CI mounts a second 32 MiB tmpfs at `$RUNNER_TEMP/full-disk-start-again` for it in the same
+`test-server-stream` step. On macOS each file makes its own image. While it runs, the file points
+`TMPDIR` at the small disk's `tmp` folder, so each case's folders land on the small disk (the suite's
+database, made earlier, does not). In `start-full-disk.e2e.test.ts`, `entryDeps` (which
+`startedBefore` uses) sets `spareBytes` to 1 MiB, so a start with room writes a 1 MiB spare; a case
+passes `spareBytes: 0` for none, as the discarded-recovery case without a spare does.
+
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
 it. Find it, detach it by its mount path, then remove its folder:
@@ -1312,7 +1326,9 @@ included, inside that filesystem instead; delete it.
 (7)`. The same command rerun 2026-10-24 on macOS 26.6.2, Node v26.11.1, Vitest 4.1.12, with the
 staged-copies case below: `Tests  17 passed (17)`. Rerun 2026-10-25 on the A1042 branch (macOS
 26.6.2, Node v26.11.1, Vitest 4.1.12), after its workspace case was removed: `Tests  18 passed
-(18)` (the file holds cases this list does not cover).
+(18)` (the file holds cases this list does not cover). Rerun 2026-10-28 on the A1127 branch (macOS
+26.6.2, Node v26.11.1, Vitest 4.1.12) with `WAITRON_REQUIRE_FULL_DISK=1`: `Tests  26 passed (26)`;
+the full-disk page's words quoted below are the ones that run asserted.
 
 - A start whose leftovers free enough deletes rotated logs `waitron.log.2` to `.5`, a crash report
   eight days old and a 2 MiB file in `backup-staging`, keeps `waitron.log.1`, counts itself and
@@ -1324,8 +1340,9 @@ staged-copies case below: `Tests  17 passed (17)`. Rerun 2026-10-25 on the A1042
   `startServer` never (`Tests  1 failed | 16 skipped (17)`). Now `startServer` is called once,
   `staged-recovery` is gone, and `restore-staging` and its `archive-download-x` folder stay.
 - A start with nothing to delete serves the recovery page at once: over HTTPS, trusting the box's
-  own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted what it
-  could make again, and that was not enough." and "Free space on the box's disk: 0 MB.";
+  own CA, `GET /` answered 200 with the full-disk title, the sentence "The box has deleted the
+  temporary copies, old logs and crash reports it can make again, and the disk is still full." (and
+  not "left by a recovery from backup") and "Free space on the box's disk: 0 MB.";
   `recovery.json` was byte for byte what it was before, and both locks kept their inodes. After the
   filler is removed, the same folder boots.
 - A box whose first setup finished gets the full-disk page, not first-setup resolution

@@ -502,10 +502,24 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
-- **A full disk while a backup recovery fills it is a dead end for the person.** The box empties a
-  discarded recovery only under its folders' locks, which a full disk refuses; the full-disk page
-  then sends the person elsewhere. Follow-up: A1127. Left open by A1042.
-  [Detail](backlog/setup.md#a-full-disk-while-a-backup-recovery-fills-it-is-a-dead-end-for-the-person)
+- **On a full disk, boot fully from the spare file, then prompt to delete old backups.** The
+  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Next: a
+  design, parked for the owner. Left open by A1127.
+  [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
+
+- **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
+  stopped recovery, read not run. Left open by A1127.
+  [Detail](backlog/setup.md#a-resume-can-use-the-room-the-spare-file-gave)
+
+- **The spare file's size is measured on HFS+ and Linux tmpfs only** — not ext4, copy-on-write
+  filesystems, or a `logs` volume on another disk. Left open by A1127.
+  [Detail](backlog/setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
+
+- **The repair page draws a Start-again error twice**, under the password and under the tick box.
+  [Detail](backlog/setup.md#the-repair-page-draws-a-start-again-error-twice)
+
+- **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
+  holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
 - **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
   again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
@@ -4749,9 +4763,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Detail](backlog/box.md#on-a-full-disk-a-box-whose-kept-certificates-cannot-be-used-shows-the-connection-set-up-page-with-no-word-of-the-full-disk)
 
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
-  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; A798-B slice 2 names `ENOSPC`
-  a full disk at start only (`fullDiskFailure`, `apps/server/src/boot-failure.ts`), because adding
-  it to `diskFullIn` changes every route's answer.
+  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
+  (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
+  recover, summary and start-again routes (A1127); every other route still answers
+  `server.internal`, because adding it to `diskFullIn` changes every route's answer.
 
 - **The recovery page served at once on a full disk does not notice freed space by itself.** It
   shows the free space as it is on every load, but only Retry, which restarts the app, tries the

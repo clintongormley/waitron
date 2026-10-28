@@ -9,7 +9,8 @@ export { serveRecovery, recoveryTlsFiles } from "./recovery-listener.js";
 export type { RecoveryServeOptions } from "./recovery-listener.js";
 export { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { realpathSync } from "node:fs";
-import { join } from "node:path";
+import { realpath } from "node:fs/promises";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
 import { AppError, isAppError, MAX_CAUSE_DEPTH } from "@waitron/shared";
@@ -29,6 +30,7 @@ import { assertNotAhead as assertDatabaseNotAhead } from "@waitron/provisioning"
 import { DEFAULT_MIGRATIONS_ROOT, DEFAULT_STATE_ROOT, startServer } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
 import { DEFAULT_HTTP_HOST, resolveConfigDir } from "./config.js";
+import { discardedCopyBytes } from "./discarded-copy.js";
 import { isUnset } from "./env-value.js";
 import { createLogger, type Logger } from "./logger.js";
 import { createRotatingFileSink } from "./log-file.js";
@@ -54,7 +56,8 @@ import { runStagedReset, type StagedResetDeps } from "./reset-request.js";
 import { clearReplacedDatabases } from "./restore.js";
 import { loadCloudOrigin } from "./cloud-client.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
-import { fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { FULL_DISK_BYTES, fullDiskFailure, startFailureCode } from "./boot-failure.js";
+import { SPARE_SPACE_BYTES, topUpSpare } from "./spare-space.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
 import { START_FREE_SPACE_FLOOR, freeSpaceAtStart, lowestFreeBytes } from "./start-space.js";
@@ -123,6 +126,8 @@ export interface EntryDeps {
   freeSpaceFloor?: number;
   /** Reads a folder's filesystem; defaults to the real `statfs`. */
   statfs?: Statfs;
+  /** The spare file's size; defaults to `SPARE_SPACE_BYTES`, and `0` keeps none. */
+  spareBytes?: number;
 }
 
 /* v8 ignore start -- the real process binding; every test supplies its own `exit` instead */
@@ -312,6 +317,20 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   };
   const backupEntry = await resolveFirstSetupBackupEntry(deps);
   const cleanupRoots = backupEntry.kind === "selected" ? backupEntry.roots : deps;
+  if (backupEntry.kind === "repair") {
+    const logDir = deps.logDir ?? join(deps.stateDir, "logs");
+    // The recovery's originals digest covers both roots, so a deletion inside them would change it.
+    if (!(await insideAny(logDir, [deps.stateDir, deps.venueDir]))) {
+      await freeSpaceAtStart({
+        ...cleanUp,
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        logDir,
+        stagingLeftovers: false,
+      });
+    }
+  }
+  // The repair stage keeps its page: its clean-up above is for the deletions only.
   const space =
     backupEntry.kind === "repair"
       ? { freeBytes: null, belowFloor: false }
@@ -330,6 +349,7 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
     deps.baseEnv,
     () => (deps.exit ?? DEFAULT_EXIT)(0),
     deps.log,
+    { stateDir: deps.stateDir, statfs: deps.statfs },
   );
   const transportEnv = await loadBoxEnv(deps.baseEnv, admission.roots.stateDir);
   const transportPort = httpPortFrom(transportEnv);
@@ -366,10 +386,12 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   const dirs = [rooted.stateDir, rooted.venueDir];
   const moved = rooted.stateDir !== deps.stateDir || rooted.venueDir !== deps.venueDir;
   let belowFloor = space.belowFloor;
-  if (moved) {
+  if (moved && backupEntry.kind !== "repair") {
     const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir, ...dirs], deps.statfs);
     belowFloor = (lowest ?? floor) < floor;
   }
+  const discardedCopy = () =>
+    discardedCopyBytes({ stateDir: deps.stateDir, venueDir: deps.venueDir });
   let check: CountCheck;
   if (belowFloor && !(check = await countWritable(rooted)).written) {
     const exit = deps.exit ?? DEFAULT_EXIT;
@@ -383,12 +405,26 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
           exit(0);
         },
         freeSpace: () => lowestFreeBytes(dirs, deps.statfs),
+        discardedCopyBytes: discardedCopy,
         log: deps.log,
       }),
       transport,
     );
     deps.log("warn", "recovery.serving_disk_full", { freeBytes: check.freeBytes });
     return;
+  }
+
+  const spareBytes = deps.spareBytes ?? SPARE_SPACE_BYTES;
+  if (spareBytes > 0) {
+    await topUpSpare({
+      stateDir: deps.stateDir,
+      bytes: spareBytes,
+      log: deps.log,
+      hasRoom: async () => {
+        const lowest = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+        return lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES;
+      },
+    });
   }
 
   if (admission.kind === "refused") {
@@ -450,7 +486,20 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
   }
 
   const selected = !moved ? deps : rooted;
-  return admission.run((venueHeld) => runAdmittedEntry(selected, transport, venueHeld));
+  return admission.run((venueHeld) =>
+    runAdmittedEntry(selected, transport, venueHeld, discardedCopy),
+  );
+}
+
+/** Whether `path`, resolved through links, is one of `roots` or inside one; a path that does not exist is judged as configured. */
+async function insideAny(path: string, roots: readonly string[]): Promise<boolean> {
+  const real = async (p: string) => realpath(p).catch(() => resolve(p));
+  const target = await real(path);
+  for (const root of roots) {
+    const base = await real(root);
+    if (target === base || target.startsWith(base + sep)) return true;
+  }
+  return false;
 }
 
 type CountCheck = { written: true } | { written: false; freeBytes: number | null };
@@ -485,11 +534,15 @@ export function recordedStartFailureCode(error: unknown): string | undefined {
   return typeof error === "object" && error !== null ? recordedCodes.get(error) : undefined;
 }
 
-/** `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. */
+/**
+ * `venueHeld`: the caller holds `deps.venueDir`'s lock for the whole call. `discardedCopy` reads the
+ * box's configured folders, which `deps` may not be.
+ */
 async function runAdmittedEntry(
   deps: EntryDeps,
   transport: RecoveryServeOptions,
   venueHeld: boolean,
+  discardedCopy: () => Promise<number | null>,
 ): Promise<void> {
   // Outside the recovery lock: it decides only whether this start boots or serves the page. Every change
   // below re-reads under the lock, so a write made since is kept rather than overwritten.
@@ -514,6 +567,10 @@ async function runAdmittedEntry(
           exit(0);
         },
         freeSpace: () => lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs),
+        // Only after a full-disk failure: its words say the disk has no room.
+        ...(state.lastErrorCode === "storage.disk_full"
+          ? { discardedCopyBytes: discardedCopy }
+          : {}),
         log: deps.log,
       }),
       {

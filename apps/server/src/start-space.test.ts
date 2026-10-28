@@ -177,6 +177,28 @@ describe("freeSpaceAtStart", () => {
     });
   });
 
+  it("with staging leftovers off, a start below the floor deletes rotated logs and old crash reports and leaves backup and restore staging alone", async () => {
+    const crash = join(logDir, "crash-reports", "holder-frozen-a.json");
+    const staged = join(stateDir, "restore-staging", "staged-recovery", "venue.db");
+    await touch(rotated(2));
+    await touch(crash, 8 * DAY_MS);
+    await touch(staging());
+    await touch(staged);
+    const { deps: d } = deps({ stagingLeftovers: false });
+    expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 100, belowFloor: true });
+    expect(existsSync(rotated(2))).toBe(false);
+    expect(existsSync(crash)).toBe(false);
+    expect(existsSync(staging())).toBe(true);
+    expect(existsSync(staged)).toBe(true);
+  });
+
+  it("with staging leftovers off and room, deletes nothing", async () => {
+    await touch(staging());
+    const { deps: d } = deps({ stagingLeftovers: false, free: 5000 });
+    expect(await freeSpaceAtStart(d)).toEqual({ freeBytes: 5000, belowFloor: false });
+    expect(existsSync(staging())).toBe(true);
+  });
+
   it("reports not below the floor when the deletions freed enough", async () => {
     await touch(rotated(2));
     const { deps: d } = deps({

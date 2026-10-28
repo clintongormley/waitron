@@ -286,6 +286,139 @@ it("retains an empty V2 namespace as uncertain repair evidence", async () => {
   );
 });
 
+/** A supervised start of `f`'s box at its recovery's repair stage, on a nearly full disk. */
+async function superviseRepair(
+  roots: { stateDir: string; venueDir: string },
+  over: Partial<Parameters<typeof runEntry>[0]> = {},
+) {
+  const forbidden = vi.fn(async () => {
+    throw new Error("ordinary work reached retained roots");
+  });
+  const log = vi.fn();
+  let surface: Hono | undefined;
+  await runEntry({
+    ...roots,
+    args: [],
+    baseEnv: {},
+    statfs: async () => ({ bavail: 1024 * 1024, frsize: 1 }),
+    readRecoveryState: async () => FRESH,
+    writeRecoveryState: async () => {},
+    loadBoxEnv: forbidden,
+    runStagedRestore: forbidden,
+    runStagedReset: forbidden,
+    clearReplacedDatabases: forbidden,
+    assertNotAhead: forbidden,
+    startServer: forbidden,
+    serveRecovery: async (app) => {
+      surface = app;
+    },
+    installShutdownHandlers: forbidden,
+    scheduleStayedUp: forbidden,
+    log,
+    ...over,
+  });
+  expect(forbidden).not.toHaveBeenCalled();
+  return { surface, log };
+}
+
+async function expectRepairPage(run: Awaited<ReturnType<typeof superviseRepair>>) {
+  expect(run.log).not.toHaveBeenCalledWith("warn", "recovery.serving_disk_full", expect.anything());
+  expect(
+    (await run.surface!.request("/setup-api/first-setup/resolution/backup/status")).status,
+  ).toBe(200);
+}
+
+async function rotatedLogs(logDir: string): Promise<string[]> {
+  await mkdir(logDir, { recursive: true });
+  const paths = [join(logDir, "waitron.log.1"), join(logDir, "waitron.log.2")];
+  for (const path of paths) await writeFile(path, "old lines");
+  return paths;
+}
+
+it("a start at a recovery's repair stage below the floor deletes rotated logs in a log folder outside both roots", async () => {
+  const f = await fixture();
+  const logDir = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-logs-")));
+  directories.push(logDir);
+  const [newest, older] = await rotatedLogs(logDir);
+  await expectRepairPage(await superviseRepair(f.roots, { logDir }));
+  await expect(stat(older!)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(newest!, "utf8")).toBe("old lines");
+  expect((await f.workspace.read()).at(-1)).toEqual(f.record);
+});
+
+it("a start at a recovery's repair stage below the floor deletes nothing when the log folder is inside the state folder", async () => {
+  const f = await fixture();
+  const logDir = join(f.roots.stateDir, "logs");
+  const [, older] = await rotatedLogs(logDir);
+  await expectRepairPage(await superviseRepair(f.roots, { logDir }));
+  expect(await readFile(older!, "utf8")).toBe("old lines");
+});
+
+it("a start at a recovery's repair stage below the floor deletes nothing in a log folder whose parent is a link into the state folder", async () => {
+  const f = await fixture();
+  const [, older] = await rotatedLogs(join(f.roots.stateDir, "logs"));
+  const outside = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-link-")));
+  directories.push(outside);
+  await symlink(f.roots.stateDir, join(outside, "box"));
+  await expectRepairPage(await superviseRepair(f.roots, { logDir: join(outside, "box", "logs") }));
+  expect(await readFile(older!, "utf8")).toBe("old lines");
+});
+
+it("a start at a recovery's repair stage below the floor deletes nothing in the state folder's logs named by their real path, when the roots are configured through a link", async () => {
+  const f = await fixture();
+  const [, older] = await rotatedLogs(join(f.roots.stateDir, "logs"));
+  const linkRoot = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-linked-roots-")));
+  directories.push(linkRoot);
+  await symlink(dirname(f.roots.stateDir), join(linkRoot, "box"));
+  const linked = {
+    stateDir: join(linkRoot, "box", "state"),
+    venueDir: join(linkRoot, "box", "venue"),
+  };
+  await expectRepairPage(await superviseRepair(linked, { logDir: join(f.roots.stateDir, "logs") }));
+  expect(await readFile(older!, "utf8")).toBe("old lines");
+});
+
+it("a start at a recovery's repair stage below the floor deletes rotated logs in a sibling folder whose name starts with the state folder's", async () => {
+  const f = await fixture();
+  const logDir = `${f.roots.stateDir}2`;
+  const [, older] = await rotatedLogs(logDir);
+  await expectRepairPage(await superviseRepair(f.roots, { logDir }));
+  await expect(stat(older!)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a start at a recovery's repair stage below the floor never deletes backup staging", async () => {
+  const f = await fixture();
+  const logDir = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-logs-")));
+  directories.push(logDir);
+  await expectRepairPage(await superviseRepair(f.roots, { logDir }));
+  await expect(
+    readFile(join(f.roots.stateDir, "backup-staging", "waitron-20261016T120000Z.dump"), "utf8"),
+  ).resolves.toBe("retained interrupted dump");
+});
+
+it("a start at the repair stage below the floor whose count cannot be written still serves the repair page, not the full-disk page", async () => {
+  const f = await fixture();
+  const full = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  await expectRepairPage(
+    await superviseRepair(f.roots, { writeRecoveryState: async () => Promise.reject(full) }),
+  );
+});
+
+it("a repair-stage start from a recorded journal under an unresolved configured path, below the floor, still serves the repair page", async () => {
+  const f = await fixture();
+  const linkRoot = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-unresolved-")));
+  directories.push(linkRoot);
+  await symlink(dirname(f.roots.stateDir), join(linkRoot, "box"));
+  const unresolved = {
+    stateDir: join(linkRoot, "box", "state"),
+    venueDir: join(linkRoot, "box", "venue"),
+  };
+  const full = Object.assign(new Error("database or disk is full"), { errcode: 13 });
+  await expectRepairPage(
+    await superviseRepair(unresolved, { writeRecoveryState: async () => Promise.reject(full) }),
+  );
+});
+
 /** A supervised start of `f`'s box with the staged steps stubbed and the server's env recorded. */
 async function superviseSelected(
   f: Awaited<ReturnType<typeof fixture>>,
@@ -323,6 +456,15 @@ async function superviseSelected(
   });
   return { env, surface, statfsCalls };
 }
+
+it("a start running from a selected backup recovery writes the spare in the configured state folder, not the recovery's target folder", async () => {
+  const f = await fixture("selected");
+  await superviseSelected(f, { spareBytes: 4096 });
+  expect((await stat(join(f.roots.stateDir, "spare-space"))).size).toBe(4096);
+  await expect(stat(join(f.target.target.stateDir, "spare-space"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
 
 it("a supervised start after a finished backup recovery runs the server on the restored target", async () => {
   const f = await fixture("selected");

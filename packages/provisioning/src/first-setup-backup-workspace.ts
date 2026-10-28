@@ -11,6 +11,7 @@ import { canonicalFirstSetupDirectory, firstSetupDirectory } from "./first-setup
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+import { SPARE_SPACE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
 export interface BackupRepairTarget {
@@ -68,7 +69,12 @@ const PHASES: BackupRepairPhase[] = [
   "selected",
   "abandoned",
 ];
-const ABANDONABLE: BackupRepairPhase[] = ["prepared", "placement-started", "restored"];
+/** The phases a recovery can be abandoned from: a stopped recovery Start again would discard. */
+export const ABANDONABLE: readonly BackupRepairPhase[] = [
+  "prepared",
+  "placement-started",
+  "restored",
+];
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 const missing = (error: unknown) =>
   error !== null && typeof error === "object" && "code" in error && error.code === "ENOENT";
@@ -306,6 +312,7 @@ async function originals(
   );
   const pointers = new Set(currentPaths(anchor));
   const recoveries = join(anchor.stateDir, NAMESPACE);
+  const spare = join(anchor.stateDir, SPARE_SPACE_FILE);
   const rootsToRead = [...new Set([...Object.values(anchor), ...Object.values(source)])].sort();
   async function walk(path: string, isRoot = false): Promise<void> {
     if (path === output || pointers.has(path)) return;
@@ -328,9 +335,11 @@ async function originals(
     try {
       info = await lstat(path);
     } catch (error) {
-      if (missing(error) && isRoot) return;
+      if (missing(error) && (isRoot || path === spare)) return;
       throw error;
     }
+    // The spare file is deleted and written back around a full disk; it holds nothing.
+    if (path === spare && !isRoot && info.isFile()) return;
     if (info.isSymbolicLink()) invalid();
     if (info.isDirectory()) {
       if (!isRoot && !containers.has(path))

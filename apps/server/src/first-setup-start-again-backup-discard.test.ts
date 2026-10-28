@@ -23,11 +23,13 @@ import { Hono } from "hono";
 
 import { afterEach, expect, it, vi } from "vitest";
 
-import "@waitron/shared";
+import { AppError } from "@waitron/shared";
 
 import "@waitron/db";
 
+import * as provisioning from "@waitron/provisioning";
 import {
+  SPARE_SPACE_FILE,
   START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
   readStartAgainMarker,
@@ -62,6 +64,7 @@ import {
 } from "./setup-first-fiscal-api.js";
 
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
+import { releaseSpareBeforeStartAgain } from "./spare-space.js";
 
 import "./first-setup-backup-source.js";
 
@@ -899,4 +902,47 @@ it("with the database present, the fence refuses a well-formed discard while the
   startAgain.mockResolvedValueOnce(undefined);
   await send(appWith(false));
   expect(startAgain).toHaveBeenCalledTimes(1);
+});
+
+it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it and raises the note to its series name", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
+  await writeFile(spare, Buffer.alloc(4096, 1));
+  const app = new Hono();
+  app.use(
+    "*",
+    releaseSpareBeforeStartAgain({
+      stateDir: f.roots.stateDir,
+      roots: f.roots,
+      statfs: async () => ({ bavail: 1024 * 1024, frsize: 1 }),
+      recovery: f.service,
+      log: () => {},
+    }),
+  );
+  app.route("/", repairApp(f).app);
+  await app.request("https://box.test/setup-api/first-setup/resolution");
+  await expect(access(spare)).rejects.toMatchObject({ code: "ENOENT" });
+  const startAgain = await presentOver(f, f.service);
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+});
+
+it("when the note cannot be written, Start again abandons, empties and deletes nothing", async () => {
+  const f = await selectedRepair();
+  await f.service.close(f.session.sessionId);
+  const last = (await f.workspace.readChain()).at(-1)!;
+  const startAgain = await presentOver(f, f.service);
+  vi.mocked(provisioning.raiseStartAgainNote).mockRejectedValueOnce(
+    new AppError("setup.attempt_invalid", {}),
+  );
+  await expect(startAgain.run()).rejects.toMatchObject({ code: "setup.attempt_invalid" });
+  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  const left = Object.keys(await tree(dirname(dirname(f.record.target.target.stateDir))));
+  expect(left).toEqual(
+    expect.arrayContaining(["evidence/0.bin", "target/state/module-preparation-state.json"]),
+  );
+  await access(join(f.roots.stateDir, "first-setup.json"));
+  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
 });

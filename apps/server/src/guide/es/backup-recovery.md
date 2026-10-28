@@ -54,6 +54,11 @@ seguir.
 Si la página dice que «Empezar de nuevo» no ha terminado, recárgala para ver lo que falta. Si el
 equipo se está reiniciando, espera a que responda.
 
+Si la recuperación llenó el disco del equipo, «Empezar de nuevo» sigue funcionando: el equipo guarda
+unos 8 MB de su disco en reserva, y cede ese espacio para poder quitar la recuperación. Si ni eso
+basta, la página dice que el disco está lleno. Al reiniciar el equipo, se quitan los registros y los
+avisos de fallo antiguos mientras arranca, y eso puede dejar sitio suficiente para volver a intentarlo.
+
 Si un «Empezar de nuevo» se interrumpió y después el equipo encuentra archivos que «Empezar de
 nuevo» no creó, como un local copiado desde una copia de seguridad, el equipo no arranca. Si su
 página muestra los archivos, también pide, con la conexión segura del equipo, la contraseña de

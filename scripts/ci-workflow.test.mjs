@@ -68,6 +68,7 @@ const STREAM_TEST_FILES = [
   "src/aws-rehearsal-interrupt.e2e.test.ts",
   "src/testing/s3-test-server.test.ts",
   "src/start-full-disk.e2e.test.ts",
+  "src/start-again-full-disk.e2e.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
@@ -2442,23 +2443,38 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     expect(mtu, "loopback's packet size must be set before the tests run").toBeLessThan(run);
   });
 
-  it("mounts a small filesystem before it runs them, and names it to the tests", () => {
-    const body = stream().body;
-    const code = (line) => !line.trim().startsWith("#");
-    const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
-    const mount = body.findIndex(
-      (line) =>
-        code(line) &&
-        /^\s*sudo mount -t tmpfs -o size=32m tmpfs "\$RUNNER_TEMP\/full-disk"\s*$/.test(line),
-    );
-    expect(mount, "no step mounts a 32m tmpfs at $RUNNER_TEMP/full-disk").toBeGreaterThan(-1);
-    expect(mount, "the small filesystem must be mounted before the tests run").toBeLessThan(run);
-    const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
-    const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
-    expect(body.slice(stepStart, runKey)).toContain(
-      "          WAITRON_FULL_DISK_DIR: ${{ runner.temp }}/full-disk",
-    );
-  });
+  // Each real-disk file fills its own filesystem, so one file's fill never takes another's room.
+  it.each([
+    ["full-disk", "WAITRON_FULL_DISK_DIR"],
+    ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN"],
+  ])(
+    "mounts a small filesystem at %s before it runs them, and names it to the tests as %s",
+    (dir, variable) => {
+      const body = stream().body;
+      const code = (line) => !line.trim().startsWith("#");
+      const run = body.findIndex((line) => code(line) && line.includes("test:shard"));
+      const mount = body.findIndex(
+        (line) =>
+          code(line) &&
+          line.trim() === `sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/${dir}"`,
+      );
+      expect(mount, `no step mounts a 32m tmpfs at $RUNNER_TEMP/${dir}`).toBeGreaterThan(-1);
+      expect(mount, "the small filesystem must be mounted before the tests run").toBeLessThan(run);
+      const at = (text) => body.findIndex((line) => code(line) && line.trim() === text);
+      expect(at(`mkdir -p "$RUNNER_TEMP/${dir}"`), `no mkdir of ${dir} before its mount`).toBe(
+        mount - 1,
+      );
+      expect(
+        at(`sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/${dir}"`),
+        `no chown of ${dir} after its mount`,
+      ).toBe(mount + 1);
+      const stepStart = body.findLastIndex((line, at) => at < run && /^ {6}- /.test(line));
+      const runKey = body.findIndex((line, at) => at > stepStart && /^ {8}run:/.test(line));
+      expect(body.slice(stepStart, runKey)).toContain(
+        `          ${variable}: \${{ runner.temp }}/${dir}`,
+      );
+    },
+  );
 
   it("is the only job that installs the binaries", () => {
     for (const { id, body } of jobs.filter(({ id }) => id !== STREAM_JOB)) {

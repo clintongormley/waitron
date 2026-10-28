@@ -500,7 +500,7 @@ describe("curated operator text", () => {
     );
     expect(english).toContain(
       escapeHtml(
-        "Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
+        "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full. Your sales and the venue's database are not touched. Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's. Once more space is free, press “Retry a normal boot”. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
       ),
     );
     const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
@@ -509,7 +509,7 @@ describe("curated operator text", () => {
     );
     expect(spanish).toContain(
       escapeHtml(
-        "Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
+        "El equipo ha quitado las copias temporales, los registros y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
       ),
     );
   });
@@ -517,13 +517,24 @@ describe("curated operator text", () => {
   it("says the box has already deleted what it could, in both languages", async () => {
     const english = await pageFor("storage.disk_full");
     expect(english).toContain(
-      escapeHtml("The box has deleted what it could make again, and that was not enough."),
+      escapeHtml(
+        "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full.",
+      ),
     );
     const spanish = await pageFor("storage.disk_full", undefined, SPANISH);
     expect(spanish).toContain(
-      escapeHtml("El equipo ha quitado lo que podía volver a crear, y no ha bastado."),
+      escapeHtml(
+        "El equipo ha quitado las copias temporales, los registros y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno.",
+      ),
     );
-    expect(spanish).toContain(escapeHtml("Pide a quien instaló este equipo"));
+  });
+
+  it("the full-disk page names nobody to ask, in English and Spanish", () => {
+    const text = OPERATOR_TEXT["storage.disk_full"]!;
+    for (const lang of ["en-GB", "es-ES"] as const) {
+      expect(text[lang].title, lang).not.toMatch(/whoever installed|quien instaló/i);
+      expect(text[lang].action, lang).not.toMatch(/whoever installed|quien instaló/i);
+    }
   });
 
   it("names a removed or changed safeguard on the permanent records, in both languages", async () => {
@@ -1090,6 +1101,70 @@ describe("the full-disk page's free space and uncounted start", () => {
       expect(body).not.toContain("Free space");
       expect(body).not.toContain("Espacio libre");
     }
+  });
+
+  const EN_COPY =
+    "This disk also still holds 4.2 MB left by a recovery from backup that Start again discarded. The box removes it as it starts, but it needs a little free space to do that safely, and has none.";
+  const ES_COPY =
+    "Este disco también guarda todavía 4,2 MB de una recuperación desde copia de seguridad que «Empezar de nuevo» descartó. El equipo la quita al arrancar, pero necesita un poco de espacio libre para hacerlo con seguridad, y no lo tiene.";
+
+  it("with a discarded recovery's copy still on the disk, the page names it and its size", async () => {
+    const app = appWith({ discardedCopyBytes: async () => 4_194_304 });
+    const action = OPERATOR_TEXT["storage.disk_full"]!;
+    expect(await bodyOf(app)).toContain(
+      `<p>${escapeHtml(action["en-GB"].action)}</p>\n<p>${escapeHtml(EN_COPY)}</p>\n`,
+    );
+    expect(await bodyOf(app, SPANISH)).toContain(
+      `<p>${escapeHtml(action["es-ES"].action)}</p>\n<p>${escapeHtml(ES_COPY)}</p>\n`,
+    );
+  });
+
+  it("the discarded-copy line suggests no wiping, in either language", async () => {
+    const app = appWith({ discardedCopyBytes: async () => 4_194_304 });
+    expect(EN_COPY).not.toMatch(/\bwipe\b|\berase\b|\bdelete\b|\breset\b/i);
+    expect(ES_COPY).not.toMatch(NEVER_WIPE_ES);
+    expect(await bodyOf(app)).toContain(escapeHtml(EN_COPY));
+  });
+
+  it("without a discarded recovery's copy, the page has no such line", async () => {
+    const reader = vi.fn(async () => null);
+    const without = await bodyOf(appWith({ discardedCopyBytes: reader }));
+    expect(reader).toHaveBeenCalledTimes(1);
+    expect(without).toBe(await bodyOf(appWith({})));
+    expect(without).not.toContain("left by a recovery from backup");
+    expect(await bodyOf(appWith({ discardedCopyBytes: reader }), SPANISH)).not.toContain(
+      "de una recuperación desde copia de seguridad",
+    );
+  });
+
+  it("a discarded copy's size that cannot be read leaves the line out and logs once", async () => {
+    const log = vi.fn();
+    const app = appWith({
+      discardedCopyBytes: () =>
+        Promise.reject(Object.assign(new Error("lstat failed"), { code: "EACCES" })),
+      log,
+    });
+    const res = await app.request("/");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe(await bodyOf(appWith({})));
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("warn", "recovery.discarded_copy_unreadable", {
+      errno: "EACCES",
+    });
+  });
+
+  it("a discarded copy refused for holding a link logs the refusal's code", async () => {
+    const log = vi.fn();
+    await bodyOf(
+      appWith({
+        discardedCopyBytes: () => Promise.reject(new AppError("setup.attempt_uncertain", {})),
+        log,
+      }),
+    );
+    expect(log).toHaveBeenCalledWith("warn", "recovery.discarded_copy_unreadable", {
+      errno: null,
+      reason: "setup.attempt_uncertain",
+    });
   });
 
   it("keeps /recovery-api/status to its named fields", async () => {

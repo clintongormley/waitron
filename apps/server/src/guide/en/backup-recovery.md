@@ -50,6 +50,11 @@ it is more than two and a half minutes away, tells you when you can carry on.
 If the page says that Start again has not finished, reload it to see what is left to do. If the box
 is restarting, wait until it answers.
 
+If the recovery filled the box's disk, Start again still works: the box keeps about 8 MB of its disk
+spare, and gives that space up so it can delete the recovery. If even that is not enough, the page
+says the disk is full. Restarting the box deletes old logs and crash reports as it starts, which can
+make enough room to try again.
+
 If a Start again was cut off and the box then finds files that Start again did not create, such as
 a venue copied from a backup, the box does not start. If its page lists the files, it also asks,
 over the box's secure connection, for the administrator password you chose during setup. **Keep everything

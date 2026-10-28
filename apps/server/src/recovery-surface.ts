@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { Hono } from "hono";
 import type { Context } from "hono";
-import { FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
+import { AppError, FALLBACK_LOCALE, type ErrorCode, type SupportedLocale } from "@waitron/shared";
 import { LOG_FILE_NAME, type VenueHolderKind } from "@waitron/db";
 import type { StartAgainSurvey, chooseStartAgainLeftovers } from "@waitron/provisioning";
 import type { Statfs } from "./free-bytes.js";
@@ -28,6 +28,8 @@ export interface RecoveryDeps {
   onRetry: (level: RecoveryLevel) => Promise<void>;
   /** Bytes free on the box's disk, read on every request; null when it cannot be read. */
   freeSpace?: () => Promise<number | null>;
+  /** Bytes a discarded backup recovery's copy still holds, read on every request; null when there is none. */
+  discardedCopyBytes?: () => Promise<number | null>;
   /** This start could not record its failure, so `failures` does not count it. */
   uncounted?: true;
   /** This start was refused before it began, so `failures` does not count it. */
@@ -168,6 +170,7 @@ const PAGE_TEXT: Readonly<
       uncountedStatus: (level: string) => string;
       refusedAtStartStatus: (level: string) => string;
       freeSpace: (amount: string) => string;
+      discardedCopy: (amount: string) => string;
       unknownSpace: string;
       missingTriggers: (names: string) => string;
       changedTriggers: (names: string) => string;
@@ -191,6 +194,8 @@ const PAGE_TEXT: Readonly<
     refusedAtStartStatus: (level) =>
       `Level: ${level}. This start was refused before it began, and was not counted.`,
     freeSpace: (amount) => `Free space on the box's disk: ${amount}.`,
+    discardedCopy: (amount) =>
+      `This disk also still holds ${amount} left by a recovery from backup that Start again discarded. The box removes it as it starts, but it needs a little free space to do that safely, and has none.`,
     unknownSpace: "unknown",
     missingTriggers: (names) => `Missing triggers: ${names}`,
     changedTriggers: (names) => `Changed triggers: ${names}`,
@@ -213,6 +218,8 @@ const PAGE_TEXT: Readonly<
     refusedAtStartStatus: (level) =>
       `Nivel: ${level}. Este arranque se rechazó antes de empezar y no se ha contado.`,
     freeSpace: (amount) => `Espacio libre en el disco del equipo: ${amount}.`,
+    discardedCopy: (amount) =>
+      `Este disco también guarda todavía ${amount} de una recuperación desde copia de seguridad que «Empezar de nuevo» descartó. El equipo la quita al arrancar, pero necesita un poco de espacio libre para hacerlo con seguridad, y no lo tiene.`,
     unknownSpace: "desconocido",
     missingTriggers: (names) => `Disparadores que faltan: ${names}`,
     changedTriggers: (names) => `Disparadores cambiados: ${names}`,
@@ -320,12 +327,12 @@ export const OPERATOR_TEXT: Readonly<Partial<Record<RecoveryCode, OperatorText>>
     "en-GB": {
       title: "The box's disk is full, so Waitron cannot save anything.",
       action:
-        "The box has deleted what it could make again, and that was not enough. Ask whoever installed this box to free some space (old backups, earlier versions of Waitron) or fit a bigger disk. Your sales are not touched.",
+        "The box has deleted the temporary copies, old logs and crash reports it can make again, and the disk is still full. Your sales and the venue's database are not touched. Waitron cannot free more space by itself: the rest of the disk holds the venue's data, the backups kept on this box and files that are not Waitron's. Once more space is free, press “Retry a normal boot”. If you reinstall Waitron instead, the box starts fresh, but everything on it is lost, sales included, unless a backup is restored afterwards.",
     },
     "es-ES": {
       title: "El disco del equipo está lleno, así que Waitron no puede guardar nada.",
       action:
-        "El equipo ha quitado lo que podía volver a crear, y no ha bastado. Pide a quien instaló este equipo que libere espacio (copias antiguas, versiones anteriores de Waitron) o ponga un disco mayor. Tus ventas no se tocan.",
+        "El equipo ha quitado las copias temporales, los registros y los avisos de fallo antiguos que puede volver a crear, y el disco sigue lleno. Tus ventas y la base de datos del local no se tocan. Waitron no puede liberar más espacio por sí solo: el resto del disco guarda los datos del local, las copias de seguridad que se guardan en este equipo y archivos que no son de Waitron. Cuando haya más espacio libre, pulsa «Reintentar un arranque normal». Si en cambio reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene, ventas incluidas, salvo que después se restaure una copia de seguridad.",
     },
   },
   "migrations.incomplete": {
@@ -597,14 +604,33 @@ async function readFreeSpace(deps: RecoveryDeps): Promise<FreeSpaceReading> {
   return bytes;
 }
 
+function megabytes(bytes: number, locale: SupportedLocale): string {
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB`;
+}
+
 function freeSpaceLine(bytes: FreeSpaceReading, locale: SupportedLocale): string {
   if (bytes === undefined) return "";
   const page = PAGE_TEXT[locale];
-  const amount =
-    bytes === null
-      ? page.unknownSpace
-      : `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(bytes / 1_000_000)} MB`;
+  const amount = bytes === null ? page.unknownSpace : megabytes(bytes, locale);
   return `<p>${escapeHtml(page.freeSpace(amount))}</p>\n`;
+}
+
+async function readDiscardedCopy(deps: RecoveryDeps): Promise<number | null> {
+  if (deps.discardedCopyBytes === undefined) return null;
+  try {
+    return await deps.discardedCopyBytes();
+  } catch (error) {
+    deps.log?.("warn", "recovery.discarded_copy_unreadable", {
+      errno: errnoOf(error) ?? null,
+      ...(error instanceof AppError ? { reason: error.code } : {}),
+    });
+    return null;
+  }
+}
+
+function discardedCopyLine(bytes: number | null, locale: SupportedLocale): string {
+  if (bytes === null) return "";
+  return `<p>${escapeHtml(PAGE_TEXT[locale].discardedCopy(megabytes(bytes, locale)))}</p>\n`;
 }
 
 function renderPage(
@@ -612,6 +638,7 @@ function renderPage(
   log: LogView,
   locale: SupportedLocale,
   freeBytes: FreeSpaceReading,
+  copyBytes: number | null,
   state: RecoveryState = deps.state,
   section = "",
   answer?: string,
@@ -647,7 +674,7 @@ function renderPage(
     answer ??
     `<p>${escapeHtml(text.title)}</p>
 <p>${escapeHtml(text.action)}</p>
-${section}<form method="post" action="/recovery-api/retry">
+${discardedCopyLine(copyBytes, locale)}${section}<form method="post" action="/recovery-api/retry">
 <button type="submit">${escapeHtml(page.retry)}</button>
 </form>
 `;
@@ -686,8 +713,12 @@ export function startAgainDraw(
   let moveUnfinished = false;
   let moved: StartAgainView["message"];
   return async (view) => {
-    const [log, freeBytes] = await Promise.all([readLog(deps.logDir), readFreeSpace(deps)]);
-    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes);
+    const [log, freeBytes, copyBytes] = await Promise.all([
+      readLog(deps.logDir),
+      readFreeSpace(deps),
+      readDiscardedCopy(deps),
+    ]);
+    if (startAgain === undefined) return renderPage(deps, log, view.locale, freeBytes, copyBytes);
     if (view.code === "setup.start_again_move_unfinished") moveUnfinished = true;
     if (view.message?.kind === "moved") moved = view.message;
     if (moved !== undefined) view = { ...view, message: moved };
@@ -698,7 +729,7 @@ export function startAgainDraw(
         : null;
     if (settled !== null) {
       const state: RecoveryState = { ...deps.state, lastErrorCode: settled };
-      return renderPage(deps, log, view.locale, freeBytes, state);
+      return renderPage(deps, log, view.locale, freeBytes, copyBytes, state);
     }
     const section = renderStartAgainSection({
       survey: startAgain.survey,
@@ -709,8 +740,8 @@ export function startAgainDraw(
       ...(view.chosen === undefined ? {} : { chosen: view.chosen }),
     });
     if (view.message?.kind === "moved")
-      return renderPage(deps, log, view.locale, freeBytes, deps.state, "", section);
-    return renderPage(deps, log, view.locale, freeBytes, deps.state, section);
+      return renderPage(deps, log, view.locale, freeBytes, copyBytes, deps.state, "", section);
+    return renderPage(deps, log, view.locale, freeBytes, copyBytes, deps.state, section);
   };
 }
 

@@ -52,7 +52,9 @@ Cuando no pasa nada, cada fila dice:
   Cuando no tiene una comparación válida, por ejemplo justo después de arrancar el equipo, dice
   **Aún no se ha comparado con Hacienda**.
 - **Espacio en disco**: cuánto espacio queda libre del total, y cuánto ocupan la base de datos,
-  las copias guardadas en el equipo, los registros de actividad y el resto del disco.
+  las copias guardadas en el equipo, los registros de actividad y el resto del disco. El resto del
+  disco incluye unos 8 MB que el equipo guarda en reserva para poder quitar, con el disco lleno, lo
+  que ya no necesita.
 
 Después de que falle un envío a Hacienda, la fila **Hacienda** dice cuántos registros esperan, y si
 el equipo los reintenta solo o el encargado tiene que resolver alguno.

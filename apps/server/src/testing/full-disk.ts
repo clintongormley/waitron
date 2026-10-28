@@ -75,13 +75,16 @@ function smallDiskAt(root: string, close: () => void): SmallDisk {
   };
 }
 
-function namedFolder(dir: string): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
+function namedFolder(
+  variable: string,
+  dir: string,
+): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
   const stats = statfsSync(dir);
   const size = Number(stats.blocks) * Number(stats.frsize);
   if (size > MAX_FILESYSTEM_BYTES) {
     return {
       ok: false,
-      reason: `WAITRON_FULL_DISK_DIR (${dir}) holds ${size} bytes; the full-disk tests fill only a filesystem of 64 MiB or less`,
+      reason: `${variable} (${dir}) holds ${size} bytes; the full-disk tests fill only a filesystem of 64 MiB or less`,
     };
   }
   const root = mkdtempSync(join(dir, "wt-full-disk-"));
@@ -132,13 +135,18 @@ function hdiutilImage(): { ok: true; disk: SmallDisk } {
   return { ok: true, disk: smallDiskAt(mount, close) };
 }
 
-/** A filesystem of 64 MiB or less that the tests may fill, or why there is none. */
-export function openSmallDisk(): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
-  const dir = process.env.WAITRON_FULL_DISK_DIR;
-  if (dir !== undefined && dir !== "") return namedFolder(dir);
+/**
+ * A filesystem of 64 MiB or less that the tests may fill, or why there is none. Each file that fills
+ * one names its own variable, so one file's fill never takes the room another's case measures.
+ */
+export function openSmallDisk(
+  variable = "WAITRON_FULL_DISK_DIR",
+): { ok: true; disk: SmallDisk } | { ok: false; reason: string } {
+  const dir = process.env[variable];
+  if (dir !== undefined && dir !== "") return namedFolder(variable, dir);
   if (process.platform === "darwin") return hdiutilImage();
   return {
     ok: false,
-    reason: "no small filesystem: set WAITRON_FULL_DISK_DIR to one of 64 MiB or less",
+    reason: `no small filesystem: set ${variable} to one of 64 MiB or less`,
   };
 }

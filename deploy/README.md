@@ -282,8 +282,9 @@ In the same step it deletes `restore-staging/staged-recovery` in the state folde
 wizard keeps a backup uploaded for checking. On a box where a backup recovery from the setup
 repair page has selected its own folders, the start does this in those folders instead.
 
-Every start, with the same exception, also deletes, when the state folder or the database's folder
-has under 256 MiB free:
+Every start also deletes, when the state folder or the database's folder has under 256 MiB free
+(a start at a backup recovery's repair stage only when the `logs` folder, followed through links, is
+inside neither the state folder nor the database's folder):
 
 - rotated log files except the newest (`waitron.log.2` and later; `waitron.log` and `waitron.log.1`
   stay);
@@ -295,13 +296,26 @@ folder, `backup-staging` or `restore-staging` is a symbolic link, the start leav
 points at alone.
 
 If that frees enough, the box starts as usual. If the start still cannot write, the page appears at
-once, without counting the start, and says "The box has deleted what it could make again, and that
-was not enough." Below the status line it shows the free space on the box's disk, read again each
-time you load the page. A start that fails later because the disk filled is named `storage.disk_full`
+once, without counting the start, and says "The box has deleted the temporary copies, old logs and
+crash reports it can make again, and the disk is still full." It says that sales and the database
+are not touched, that Waitron cannot free more space by itself, and what reinstalling costs. While a
+recovery that Start again discarded still holds its copy, it also names that copy's size; the
+ordinary recovery page shows the same line when the failure it recorded is `storage.disk_full`. Below the
+status line it shows the free space on the box's disk, read again each time you load the page. A start that fails later because the disk filled is named `storage.disk_full`
 as well, and deletes the same files before it records the failure.
 
 Free space on the disk, then press Retry. The page does not notice the freed space by itself: Retry
 restarts the app, and the next start tries again.
+
+The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data, and a
+backup recovery's check of the box's files leaves it out. Within the server, only two steps delete it,
+and only when the state folder or the database's folder has under 16 MiB free: a start that finds a
+backup recovery Start again discarded, just before it deletes that recovery's copy; and the setup
+repair page, before the steps of Start again beside a stopped or discarded recovery
+(`waitron.sh reset` deletes it too). Both need a little room to take the
+database's locks, and the spare gives it. Every start that has at least 24 MiB free writes the spare
+back. A repair-stage start never shows the full-disk page; the repair page itself says when the disk
+is full.
 
 ### Trying a branch before it merges
 

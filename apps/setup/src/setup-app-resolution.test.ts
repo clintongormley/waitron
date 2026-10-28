@@ -606,6 +606,8 @@ async function damagedRecord(
     status?: "claimed" | "consumption-intent" | "abandoned";
     locale?: string;
     refuseFlagged?: number;
+    /** The code those refused sends answer; `setup.attempt_conflict` when not given. */
+    refuseCode?: string;
     inspectionFailsAfterRefusal?: boolean;
     /** Merged into every inspection read after the refused send. */
     inspectionAfterRefusal?: Partial<FirstSetupInspection>;
@@ -613,6 +615,8 @@ async function damagedRecord(
     damagedSummary?: StartAgainSummary;
     /** The summary route refuses instead of answering `damagedSummary`. */
     summaryRefused?: boolean;
+    /** The code of that refusal; `server.internal` when not given. */
+    summaryRefusedCode?: string;
     /** Answered by the summary route in place of `damagedSummary` once a send was refused. */
     damagedSummaryAfterRefusal?: StartAgainSummary;
   } = {},
@@ -634,16 +638,20 @@ async function damagedRecord(
         );
       if (path.endsWith("/start-again/summary") && options.damagedSummary)
         return options.summaryRefused
-          ? Response.json({ error: { code: "server.internal", params: {} } }, { status: 500 })
+          ? Response.json(
+              { error: { code: options.summaryRefusedCode ?? "server.internal", params: {} } },
+              { status: options.summaryRefusedCode === "storage.disk_full" ? 507 : 500 },
+            )
           : Response.json(
               (refused ? options.damagedSummaryAfterRefusal : undefined) ?? options.damagedSummary,
             );
       if (path.endsWith("/resolution/start-again") && refusals > 0) {
         refusals -= 1;
         refused = true;
+        const code = options.refuseCode ?? "setup.attempt_conflict";
         return Response.json(
-          { error: { code: "setup.attempt_conflict", params: {} } },
-          { status: 409 },
+          { error: { code, params: {} } },
+          { status: code === "storage.disk_full" ? 507 : 409 },
         );
       }
       const status = options.status ?? "claimed";
@@ -2194,4 +2202,93 @@ it("with the database present, a tab closed while a refused Start again reads th
   } finally {
     vi.useRealTimers();
   }
+});
+
+const DISK_FULL = {
+  "en-GB":
+    "The box's disk is full, so Waitron cannot save anything. Restart the box: as it starts, it removes old logs and crash reports to make room. Then try again. If the disk is still full, Waitron cannot free more space by itself. If you reinstall Waitron, the box starts fresh, but everything on it is lost.",
+  "es-ES":
+    "El disco del equipo está lleno, así que Waitron no puede guardar nada. Reinicia el equipo: al arrancar, quita registros y avisos de fallo antiguos para hacer sitio. Después, vuelve a intentarlo. Si el disco sigue lleno, Waitron no puede liberar más espacio por sí solo. Si reinstalas Waitron, el equipo empieza de cero, pero se pierde todo lo que contiene.",
+} as const;
+const diskFull = () =>
+  Response.json({ error: { code: "storage.disk_full", params: {} } }, { status: 507 });
+
+it.each(["en-GB", "es-ES"] as const)(
+  "a Start again refused storage.disk_full says the disk is full, in %s",
+  async (locale) => {
+    const { app } = await mount({
+      intercept(path) {
+        if (path.endsWith("/start-again")) return diskFull();
+      },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+    await userEvent.click(
+      q<WtButton>(app, "confirm-start-again").shadowRoot!.querySelector("button")!,
+    );
+    await expect.poll(() => formErrors(app)).toContain(DISK_FULL[locale]);
+  },
+);
+
+it("with the database present, a summary read refused storage.disk_full says the disk is full", async () => {
+  const { app } = await damagedRecord({
+    damagedSummary: picksSummary(false),
+    summaryRefused: true,
+    summaryRefusedCode: "storage.disk_full",
+  });
+  await password(app);
+  await click(app, "damaged-record-continue");
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
+  expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+});
+
+it("a damaged record's Start again refused storage.disk_full says the disk is full and goes back to the password", async () => {
+  const { app, requests } = await damagedRecord({
+    refuseFlagged: 1,
+    refuseCode: "storage.disk_full",
+  });
+  await unlockDamagedRecord(app);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  expect(startAgainRequests(requests)).toHaveLength(2);
+});
+
+it("the password step refused storage.disk_full says the disk is full", async () => {
+  const { app } = await mount({
+    intercept(path) {
+      if (path.endsWith("/resolution/recover")) return diskFull();
+    },
+  });
+  await password(app);
+  await userEvent.click(q<WtButton>(app, "resume").shadowRoot!.querySelector("button")!);
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
+});
+
+it("the repair page's inspection read refused storage.disk_full says the disk is full", async () => {
+  const { api } = wizardApi({
+    claimed: true,
+    intercept(path) {
+      if (path.endsWith("/resolution")) return diskFull();
+    },
+  });
+  const { el: app } = await mountWidget<SetupApp>("setup-app", { api });
+  await expect.poll(() => q(app, "screen-first-owner")).not.toBeNull();
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
+});
+
+it("a connection check refused storage.disk_full keeps the connection-failure words and stays on its screen", async () => {
+  const { api } = wizardApi({
+    intercept(path) {
+      if (path === "/setup-api/status") return diskFull();
+    },
+  });
+  const { el: app } = await mountWidget<SetupApp>("setup-app", { api });
+  const screen = () => q<HTMLElement & { errorMessage?: string }>(app, "screen-connection");
+  await expect.poll(() => screen()?.errorMessage).toBe(shellEn["shell.connection.server_problem"]);
+  expect(q(app, "screen-first-owner")).toBeNull();
 });
