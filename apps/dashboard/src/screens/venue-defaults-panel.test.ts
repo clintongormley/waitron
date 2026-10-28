@@ -1060,3 +1060,66 @@ it("a VAT refusal and its value survive a live read", async () => {
   expect(bottom(el)).toBe(t("form.fix_fields"));
   expect(saveButton(el).disabled).toBe(false);
 });
+
+async function savedOverNewerLiveValueThenFollowUpFails(r: ReturnType<typeof withBackground>) {
+  setLocale("en-GB");
+  const pending = deferred<VenueDefaults>();
+  r.api.putVenueDefaults.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await pick(el, "receiptLanguage", "ca-ES");
+  await save(el);
+  const reads = r.background.getVenueDefaults.mock.calls.length;
+  r.state.stored = { ...MADRID, receiptLanguage: "gl-ES" };
+  r.liveData.invalidate([{ type: "locations" }]);
+  await expect.poll(() => r.background.getVenueDefaults.mock.calls.length).toBe(reads + 1);
+  await expect
+    .poll(() => (el as unknown as { model?: VenueDefaults }).model?.receiptLanguage)
+    .toBe("gl-ES");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  r.background.getVenueDefaults.mockRejectedValueOnce({ code: "server.unavailable" });
+  pending.resolve({ ...MADRID, receiptLanguage: "ca-ES" });
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(savedLanguage(el)).toBe("Catalan");
+  return el;
+}
+
+it("a failed read after a save answered over a newer live value is tried again and ends on the newer value", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => savedLanguage(el)).toBe("Galician");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a card removed after its failed follow-up read reads nothing more", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    const reads = r.background.getVenueDefaults.mock.calls.length;
+    el.remove();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(r.background.getVenueDefaults.mock.calls.length).toBe(reads);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a live read shown after a failed follow-up read stops the tries", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    r.liveData.invalidate([{ type: "locations" }]);
+    await expect.poll(() => savedLanguage(el)).toBe("Galician");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+    const reads = r.background.getVenueDefaults.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(r.background.getVenueDefaults.mock.calls.length).toBe(reads);
+  } finally {
+    vi.useRealTimers();
+  }
+});
