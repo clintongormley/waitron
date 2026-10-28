@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import {
+  lstat,
   mkdir,
   mkdtemp,
   open,
@@ -15,9 +16,18 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { lockVenueDatabase } from "@waitron/db";
-import { SPARE_SPACE_FILE, createFirstSetupBackupWorkspace } from "@waitron/provisioning";
+import {
+  SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
+  createFirstSetupBackupWorkspace,
+} from "@waitron/provisioning";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { releaseSpare, releaseSpareBeforeStartAgain, topUpSpare } from "./spare-space.js";
+import {
+  releaseSpare,
+  releaseSpareBeforeStartAgain,
+  spareReleased,
+  topUpSpare,
+} from "./spare-space.js";
 
 let root: string;
 let stateDir: string;
@@ -28,6 +38,8 @@ beforeEach(async () => {
   await mkdir(stateDir);
 });
 afterEach(() => rm(root, { recursive: true, force: true }));
+
+const marker = () => join(stateDir, SPARE_SPACE_RELEASED_FILE);
 
 describe("releaseSpare", () => {
   it("deletes the spare, logs storage.spare_released and answers the bytes it held", async () => {
@@ -87,6 +99,43 @@ describe("releaseSpare", () => {
     expect(await releaseSpare(stateDir, log)).toBe(0);
     expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
     expect(log).not.toHaveBeenCalled();
+  });
+
+  it("writes the marker after deleting a spare that held bytes", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    await releaseSpare(stateDir, vi.fn());
+    const info = await lstat(marker());
+    expect(info.isFile()).toBe(true);
+    expect(info.size).toBe(0);
+  });
+
+  it("writes no marker when there is no spare, an empty spare, or a link or folder at the spare's path", async () => {
+    const log = vi.fn();
+    await releaseSpare(stateDir, log);
+    expect(existsSync(marker())).toBe(false);
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), "");
+    await releaseSpare(stateDir, log);
+    expect(existsSync(marker())).toBe(false);
+    await symlink(join(root, "outside"), join(stateDir, SPARE_SPACE_FILE));
+    await releaseSpare(stateDir, log);
+    expect(existsSync(marker())).toBe(false);
+    await rm(join(stateDir, SPARE_SPACE_FILE));
+    await mkdir(join(stateDir, SPARE_SPACE_FILE));
+    await releaseSpare(stateDir, log);
+    expect(existsSync(marker())).toBe(false);
+  });
+
+  it("a marker that cannot be written is logged as storage.spare_marker_write_failed with its errno, and the release still answers the bytes", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    const log = vi.fn();
+    const full = () => Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" }));
+    expect(await releaseSpare(stateDir, log, { open: full })).toBe(4096);
+    expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
+    expect(existsSync(marker())).toBe(false);
+    expect(log.mock.calls).toEqual([
+      ["warn", "storage.spare_released", { bytes: 4096 }],
+      ["warn", "storage.spare_marker_write_failed", { errno: "ENOSPC" }],
+    ]);
   });
 });
 
@@ -224,12 +273,97 @@ describe("topUpSpare", () => {
     expect((await stat(spare())).size).toBeLessThanOrEqual(9 * MiB);
   });
 
+  it("deletes the marker once the spare is whole, and logs storage.spare_restored", async () => {
+    await writeFile(spare(), Buffer.alloc(1000, 7));
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    expect((await stat(spare())).size).toBe(4096);
+    expect(existsSync(marker())).toBe(false);
+    expect(log.mock.calls).toEqual([["info", "storage.spare_restored", { bytes: 4096 }]]);
+  });
+
+  it("deletes the marker when the spare is already whole", async () => {
+    await writeFile(spare(), Buffer.alloc(4096, 7));
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: async () => false });
+    expect(existsSync(marker())).toBe(false);
+    expect(log.mock.calls).toEqual([["info", "storage.spare_restored", { bytes: 4096 }]]);
+  });
+
+  it("keeps the marker when it writes nothing for want of room, and when its write is refused part way", async () => {
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: async () => false });
+    expect(existsSync(marker())).toBe(true);
+    const refusing: Parameters<typeof topUpSpare>[0]["open"] = async (path, flags, mode) => {
+      const handle = await open(path, flags, mode);
+      return {
+        stat: () => handle.stat(),
+        sync: () => handle.sync(),
+        close: () => handle.close(),
+        write: () => Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" })),
+      };
+    };
+    await topUpSpare({ stateDir, bytes: 4096, log, open: refusing });
+    expect(existsSync(marker())).toBe(true);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_write_failed", { errno: "ENOSPC" }]]);
+  });
+
+  it("deletes the marker when, with room, the spare's path is a link or a folder, and still logs storage.spare_unusable", async () => {
+    await mkdir(spare());
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    await topUpSpare({ stateDir, bytes: 4096, log, hasRoom: async () => false });
+    expect(existsSync(marker())).toBe(true);
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    expect(existsSync(marker())).toBe(false);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "folder" }]]);
+    await rm(spare(), { recursive: true });
+    await symlink(join(root, "outside"), spare());
+    await writeFile(marker(), "");
+    await topUpSpare({ stateDir, bytes: 4096, log });
+    expect(existsSync(marker())).toBe(false);
+  });
+
+  it("a marker that cannot be deleted is logged as storage.spare_marker_delete_failed with its errno, and the spare stays whole", async () => {
+    await writeFile(spare(), Buffer.alloc(1000, 7));
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    const refused = Object.assign(new Error("denied"), { code: "EACCES" });
+    await topUpSpare({ stateDir, bytes: 4096, log, unlink: () => Promise.reject(refused) });
+    expect((await stat(spare())).size).toBe(4096);
+    expect(existsSync(marker())).toBe(true);
+    expect(log.mock.calls).toEqual([
+      ["warn", "storage.spare_marker_delete_failed", { errno: "EACCES" }],
+    ]);
+  });
+
   it("writes nothing when the state folder is missing", async () => {
     const missing = join(root, "missing");
     const log = vi.fn();
     await topUpSpare({ stateDir: missing, bytes: 4096, log });
     expect(existsSync(missing)).toBe(false);
     expect(log.mock.calls).toEqual([["warn", "storage.spare_write_failed", { errno: "ENOENT" }]]);
+  });
+});
+
+describe("spareReleased", () => {
+  it("answers whether the marker is a regular file there", async () => {
+    const log = vi.fn();
+    expect(await spareReleased(stateDir, log)).toBe(false);
+    await writeFile(marker(), "");
+    expect(await spareReleased(stateDir, log)).toBe(true);
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("a marker that cannot be read answers true and logs storage.spare_marker_unread with its errno", async () => {
+    const file = join(root, "a-file");
+    await writeFile(file, "");
+    const log = vi.fn();
+    expect(await spareReleased(file, log)).toBe(true);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_marker_unread", { errno: "ENOTDIR" }]]);
   });
 });
 
