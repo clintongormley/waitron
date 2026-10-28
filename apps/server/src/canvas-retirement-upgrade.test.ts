@@ -523,6 +523,10 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       custom_themes: [],
       adjustment_refunds: [],
       order_group_hold_stations: [],
+      order_portions: [],
+      working_line_portions: [],
+      sale_line_portions: [],
+      order_portion_events: [],
     };
     delete retained.canvases;
     delete retained.table_service_statuses;
