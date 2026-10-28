@@ -15,19 +15,16 @@ const saleProbe = table(
   { source: saleSourceColumn("source").notNull(), deviceId: id("device_id") },
   (t) => originChecks("sale_origin_probe", t.source, t.deviceId),
 );
-
-/** Built inside the case that uses it, so the file still loads if the column builder is missing. */
-const incidentProbe = () =>
-  table(
-    "incident_origin_probe",
-    { source: incidentSourceColumn("source").notNull(), deviceId: id("device_id") },
-    (t) => originChecks("incident_origin_probe", t.source, t.deviceId),
-  );
+const incidentProbe = table(
+  "incident_origin_probe",
+  { source: incidentSourceColumn("source").notNull(), deviceId: id("device_id") },
+  (t) => originChecks("incident_origin_probe", t.source, t.deviceId),
+);
 
 const render = (fragment: SQL) => new SQLiteSyncDialect().sqlToQuery(fragment).sql;
 
 /** The table's DDL with its checks as drizzle renders them (the way `columns.test.ts` renders one). */
-function ddl(t: typeof probe | typeof saleProbe | ReturnType<typeof incidentProbe>): string {
+function ddl(t: typeof probe | typeof saleProbe | typeof incidentProbe): string {
   const config = getTableConfig(t);
   const checks = config.checks.map(
     (c) => `constraint "${c.name}" check (${render(c.value).replaceAll(`"${config.name}".`, "")})`,
@@ -65,10 +62,14 @@ describe("originChecks", () => {
   it("only an incident table accepts the backup job", () => {
     const db = new DatabaseSync(":memory:");
     db.exec(ddl(probe));
-    db.exec(ddl(incidentProbe()));
+    db.exec(ddl(saleProbe));
+    db.exec(ddl(incidentProbe));
     expect(() =>
       db.prepare("insert into origin_probe (source, device_id) values ('backup', null)").run(),
     ).toThrow(/origin_probe_source_ck/);
+    expect(() =>
+      db.prepare("insert into sale_origin_probe (source, device_id) values ('backup', null)").run(),
+    ).toThrow(/sale_origin_probe_source_ck/);
     db.prepare(
       "insert into incident_origin_probe (source, device_id) values ('backup', null)",
     ).run();
