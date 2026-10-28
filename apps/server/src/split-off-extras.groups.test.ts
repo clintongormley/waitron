@@ -14,6 +14,7 @@ import {
   moveLinesToGroup,
   placeGroups,
 } from "./testing/group-composition-fixture.js";
+import { placeGrouped } from "./testing/adjustment-venue.js";
 import { readBillSignals } from "./table-signals.js";
 import { advanceTicketItem } from "./working-order.js";
 import "./errors.js";
@@ -197,10 +198,9 @@ describe("groups with split-off extras", () => {
   it("names Fryer as ready and counts plates rather than the extra's pieces", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      const placed = await placeGroups(tx, v.cfg, v.party.partyId, {
-        operatorId: OPERATOR,
-        groups: [{ lines: [line(v, "burger", 2, "2")], release: "fire" }],
-      });
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      await placeGrouped(tx, v.cfg, v.party, [line(v, "burger", 2, "2")], "fire", OPERATOR);
+      const placed = v.party;
       const fryer = (await records(tx, placed.tabId)).find(
         (item) => item.stationId === v.stations.fryer,
       )!;
