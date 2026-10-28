@@ -70,6 +70,7 @@ const STREAM_TEST_FILES = [
   "src/start-full-disk.e2e.test.ts",
   "src/start-again-full-disk.e2e.test.ts",
   "src/start-from-spare.e2e.test.ts",
+  "src/backup-room.e2e.test.ts",
 ];
 const STREAM_BINARY_INSTALLERS = [
   "node scripts/setup-litestream.mjs",
@@ -2449,6 +2450,7 @@ describe("the job of the tests that need Litestream, versitygw or a small filesy
     ["full-disk", "WAITRON_FULL_DISK_DIR"],
     ["full-disk-start-again", "WAITRON_FULL_DISK_DIR_START_AGAIN"],
     ["full-disk-from-spare", "WAITRON_FULL_DISK_DIR_FROM_SPARE"],
+    ["full-disk-backup-room", "WAITRON_FULL_DISK_DIR_BACKUP_ROOM"],
   ])(
     "mounts a small filesystem at %s before it runs them, and names it to the tests as %s",
     (dir, variable) => {
