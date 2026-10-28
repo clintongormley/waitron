@@ -19,6 +19,12 @@ installed” do not provide a self-service remedy. The only exception is a state
 can cause: establish that at its site and identify it as a fault in Waitron. No guard enforces this
 rule.
 
+A second exception, the owner's of 2026-10-28 (A1127 Q4): the till and handheld full-disk strip
+keeps «Tell a manager». A waiter at a stopped till has no step of their own to take, and the
+in-place sign-in that would have given them one (A1127's slice 4) was declined. It is stated at the
+strip's words, `FIXED` in `apps/till/src/i18n/staff-notices.ts`. The till's other full-disk refusal
+words also say «Tell a manager» and are not covered by this answer (backlog).
+
 The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
 administrator or installer. Their passing tests exercised those messages and existing retries;
 they did not establish a self-service remedy for a persistent refusal. All four need separate
