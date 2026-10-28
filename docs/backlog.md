@@ -3133,6 +3133,19 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
   app sets right to left yet.
 
+- **`wt-slider` shows the value it was given, not the one the range snapped to.** With min 2, max
+  10, step 3 and value 4 the browser puts the thumb at 5, and since A1180 (#2211) the filled part
+  follows the thumb, but the number beside the label still reads 4 (`shown ?? this.value` in
+  `render`, `packages/ui/src/components/wt-slider.ts`, from 02be48653). Found by A1180's Codex
+  review; no screen today passes an off-step value that we know of. Decide whether the number
+  should follow the snapped value, test-first.
+
+- **The floor map may hide keyboard focus on a held merged table.** `[part="table"][data-held][data-merge]`
+  draws `--wt-selected-ring` as the table button's own outline (`packages/ui/src/components/wt-floor-map.ts`),
+  and that selector outranks `button[part="table"]:focus-visible`, the same shape that hid focus on
+  the colour field's chosen option (fixed in A1180, #2211). Read, not run: first write a test that
+  tabs to a held merged table and checks its focus ring, and fix only if it fails.
+
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
   to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
   the side menu open the form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
