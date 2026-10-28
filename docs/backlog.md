@@ -5895,9 +5895,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
   suites, server till-API and configuration-transfer fixtures, and file names.
-  Keep fixture text with A976, including catalogue display names, recipe ingredient names and
-  seasonal venue and zone names, printer-screen display labels, counter-screen display text and
-  station-screen display names, plus kitchen-ticket grouping, payment/queue widget display text,
+  Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
+  display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
+  labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
+  payment/queue widget display text,
   variant media fixtures and device/printer deletion fixture text.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
 

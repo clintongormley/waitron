@@ -483,7 +483,8 @@ until A977).
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
   naming sites remain in the till's boot and counter-payment suites
   and the server's till-API and configuration-transfer fixtures.
-  String-selected product keys stay with their fixture text under A976, as do the service-period menu keys.
+  Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
+  under A976, as do the service-period menu keys.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
   also stay with A976, along with counter-screen display text, station-screen display names,
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
