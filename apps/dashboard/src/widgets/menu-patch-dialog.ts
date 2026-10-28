@@ -531,6 +531,13 @@ export class MenuPatchDialog extends LitElement {
     this.#retireRefusal();
     this.#scope?.changed();
     this.requestUpdate();
+    // A review left with nothing to put live goes back to the form, where the bottom message says
+    // what the languages took.
+    if (this.step === "review" && this.changes.length === 0)
+      void this.#toStep(
+        "edit",
+        this.#reviewBlocked() ? '[data-test="close"]' : '[data-test="review"]',
+      );
   }
 
   /** After a rebase a staged translated change can hold text the person did not type (stored text

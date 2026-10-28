@@ -1978,6 +1978,31 @@ it("never moves back to an older version that a delayed Reload reads", async () 
   expect(bottomMessage(el)).toBe("");
 });
 
+it("goes back to editing, saying why, when a removed language leaves the review step nothing to put live", async () => {
+  const document = lunch();
+  const drinks = document.root.members[1] as Extract<
+    MenuDocument["root"]["members"][number],
+    { kind: "section" }
+  >;
+  drinks.names = { en: "Bar", es: "Bebidas" };
+  drinks.fixed = { names: { en: "Bar" } };
+  const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
+  await pick(el, "Drinks");
+  await type(el, "wt-input", "names-es", "Copas");
+  await press(el, "review");
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).not.toBeNull();
+  setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+  await flush(el);
+  expect(el.changes).toEqual([]);
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
+  expect(footerButton(el, "put-live")).toBeNull();
+  expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
+  expect(trimmedNote(el)).toBe(
+    "1 change lost what was typed in a language removed from the content languages.",
+  );
+  expect(el.shadowRoot!.activeElement).toBe(footerButton(el, "close"));
+});
+
 it("retires a no-longer-fits refusal once the content languages drop the change it was about", async () => {
   const document = lunch();
   const drinks = document.root.members[1] as Extract<
@@ -2001,10 +2026,12 @@ it("retires a no-longer-fits refusal once the content languages drop the change 
   await flush(el);
   expect(el.changes).toEqual([]);
   expect(refusalsIn(el)).toBe("");
-  expect(footerButton(el, "put-live")!.disabled).toBe(true);
-  expect(footerButton(el, "put-live")!.variant).toBe("secondary");
-  footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
+  expect(footerButton(el, "put-live")).toBeNull();
+  expect(footerButton(el, "review")!.disabled).toBe(true);
+  expect(footerButton(el, "review")!.variant).toBe("secondary");
+  footerButton(el, "review")!.dispatchEvent(new MouseEvent("click"));
   await flush(el);
+  expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
   expect(patchLiveMenu).toHaveBeenCalledTimes(1);
   expect(droppedNote(el)).toBeNull();
   expect(trimmedNote(el)).toBe(
