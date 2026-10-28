@@ -561,7 +561,7 @@ export async function billWith(
     });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, operatorId);
     if (lines.length > 0 && opts.shape === "grouped") {
-      await placeGrouped(tx, venue, seated, roundLines(venue, lines), release, operatorId);
+      await placeGrouped(tx, venue.cfg, seated, roundLines(venue, lines), release, operatorId);
     } else if (lines.length > 0) {
       await placeGroups(tx, venue.cfg, seated.partyId, {
         groups: [{ lines: roundLines(venue, lines), release }],
@@ -578,9 +578,9 @@ export async function billWith(
 }
 
 /** One group placed as `placeGroups` placed it before portions, each line stored once. */
-async function placeGrouped(
+export async function placeGrouped(
   tx: Transaction,
-  venue: AdjustmentVenue,
+  cfg: DeviceRequestConfig,
   seated: { partyId: string; tabId: string },
   lines: TabRoundLine[],
   release: "fire" | "hold",
@@ -589,7 +589,7 @@ async function placeGrouped(
   const fire = release === "fire";
   const round = await priceTabRound(
     tx,
-    venue.cfg,
+    cfg,
     seated.tabId,
     lines.map((line) => ({ ...line, hold: !fire, release: fire })),
     "checked",
@@ -597,17 +597,17 @@ async function placeGrouped(
   const groupId = await startGroup(tx, seated.partyId, release, operatorId);
   const inserted = await insertTabRound(
     tx,
-    venue.cfg,
+    cfg,
     round,
     round.rows.map((row) => ({ ...row, groupId, creditedTo: operatorId })),
   );
   await fireLines(
     tx,
-    venue.cfg,
+    cfg,
     seated.tabId,
     inserted.map((row) => ({ ...row, hold: !fire, release: fire })),
   );
-  if (!fire) await printHoldTickets(tx, venue.cfg, [groupId]);
+  if (!fire) await printHoldTickets(tx, cfg, [groupId]);
   await bumpRevision(tx, [seated.tabId]);
   await recordGroupEvent(tx, {
     partyId: seated.partyId,
