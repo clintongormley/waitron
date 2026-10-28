@@ -60,8 +60,8 @@ caller admits those locales is unverified.
   `product.off_menus` and `folders.off_menus_unknown`, say "carta". Two strings in
   `packages/venue-service/src/dashboard/strings.ts` say "menús" too: `routing.period_not_on_menus`
   ("No está en los menús de {periods}", drawn by `routing-cell-editor.ts` and
-  `routing-grid-model.ts`) and `venue.delete_item_staff_menus` ("Quita {count} ajustes de menús del
-  personal").
+  `routing-grid-model.ts`) and `venue.delete_item_staff_menus` with its `_one` twin ("Quita {count}
+  ajustes de menús del personal", "Quita 1 ajuste de menú del personal").
 - `product.disable_warning` and `product.disabled_badge` are declared in English and Spanish, and no
   other file under `apps/` or `packages/` names them (grep, 2026-10-18); the last change to their
   use was A435's first step (#1464, products and variants archived for good). Delete them.

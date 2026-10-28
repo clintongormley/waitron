@@ -414,6 +414,22 @@ Once anything is edited the dialog keeps its whole draft (since #1891, `ef59aa44
 the dialog keeping each untouched field in step with incoming updates. Left open by A756 PR 4's
 review.
 
+## A1174. Delete previews say "Remove 1 normal routing rules."
+
+These lines in `packages/venue-service/src/dashboard/strings.ts` have one plural wording in English
+and Spanish, so a single item reads wrongly:
+
+- `{count}` lines in the station preview (`station-delete-copy.ts`): `prep.delete_work` ("1 dishes
+  are still waiting or being prepared."), `prep.delete_station_unsent_lines`, `_draft_lines`,
+  `_routing_cells`, `_routing_periods` and `_daily_states`.
+- "these …: {names}" lines given one name: `prep.delete_screens`, `prep.delete_station_printers`,
+  `_made_here`, `_device_screens`, `_profile_screens` and `_daily_destinations`;
+  `venue.delete_item_transfer_desks`, `venue.delete_item_profile_starting_zones`,
+  `venue.delete_refusal_table_booked` and `venue.delete_refusal_table_delivery_in_progress`.
+
+Fix: a `_one` wording for each, used for one item, as `service-delete-copy.ts` does for the
+`venue.delete_item_*` `{count}` lines.
+
 ## A1084. A confirmed late dish routes by the period running when it is sent, not the period the kitchen agreed for
 
 A routing cell's line for Lunch does not apply to a Lunch dish confirmed
