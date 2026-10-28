@@ -88,8 +88,8 @@ export class TillShell extends LitElement {
     new ThemeChoiceController(this);
     // No step back: the bar draws its logo only while no step is taken. An error is heard here
     // because a box failing a logo already reported failed changes no state that would refit.
-    this.addEventListener("wt-logo-load", () => void this.#fit());
-    this.addEventListener("wt-logo-error", () => void this.#fit());
+    this.addEventListener("wt-logo-load", () => void this.#refit());
+    this.addEventListener("wt-logo-error", () => void this.#refit());
     this.addEventListener("wt-guide-open", (event) =>
       this.#onGuideOpen(event as CustomEvent<{ href: string }>),
     );
@@ -143,6 +143,11 @@ export class TillShell extends LitElement {
 
       .head > wt-venue-logo {
         flex: none;
+      }
+      /* Kept in the page so it keeps its loaded image and its own retry while it has no room. */
+      .head > wt-venue-logo.counter-logo:not([data-room]) {
+        position: absolute;
+        visibility: hidden;
       }
 
       .brand {
@@ -473,7 +478,9 @@ export class TillShell extends LitElement {
   /** With More closed and above phone width: 0, the brand mark (the venue's logo, or the word) and
    * the name on the bar; 1, the brand mark hidden; 2, the brand mark hidden and the name in More. */
   @state() private steps = 0;
+  @state() private counterLogoRoom = false;
   #run = 0;
+  #counterRun = 0;
   #stepBackOwed = false;
   readonly #venueLogo = new VenueLogoController(this);
   // Compared in `updated`, not taken from the controller's `onChange`: a host coming back to the
@@ -521,7 +528,10 @@ export class TillShell extends LitElement {
 
   override updated(changed: PropertyValues): void {
     super.updated(changed);
-    if (this.formFactor === "till") return;
+    if (this.formFactor === "till") {
+      void this.#measureCounterLogo();
+      return;
+    }
     this.#observe();
     const logo = logoKey(this.#venueLogo.state);
     const logoChanged = logo !== this.#drawnLogo;
@@ -647,6 +657,35 @@ export class TillShell extends LitElement {
     await Promise.all([...children].map((child) => (child as Partial<LitElement>).updateComplete));
   }
 
+  #refit(): Promise<void> {
+    return this.formFactor === "till" ? this.#measureCounterLogo() : this.#fit();
+  }
+
+  /** The strip's width is taken as it would be with the logo in the row. A box still loading, or
+   * failed, is 0 px wide and so never has room. */
+  async #measureCounterLogo(): Promise<void> {
+    const run = ++this.#counterRun;
+    await this.#settled();
+    if (run !== this.#counterRun || this.formFactor !== "till" || !this.isConnected) return;
+    const head = this.renderRoot.querySelector<HTMLElement>(".head");
+    const strip = head?.querySelector<HTMLElement>(".till-strip");
+    const box = head?.querySelector<HTMLElement>(":scope > wt-venue-logo.counter-logo");
+    if (!head || !strip || !box) {
+      this.counterLogoRoom = false;
+      return;
+    }
+    const logoWidth = box.getBoundingClientRect().width;
+    const gap = parseFloat(getComputedStyle(head).columnGap) || 0;
+    const rects = [...strip.children].map((child) => child.getBoundingClientRect());
+    const content =
+      rects.length === 0
+        ? 0
+        : Math.max(...rects.map((r) => r.right)) - Math.min(...rects.map((r) => r.left));
+    const stripWidth =
+      strip.getBoundingClientRect().width + (box.hasAttribute("data-room") ? logoWidth + gap : 0);
+    this.counterLogoRoom = logoWidth > 0 && content + logoWidth + gap <= stripWidth;
+  }
+
   #wraps(): boolean {
     const head = this.renderRoot.querySelector<HTMLElement>(".head");
     const tabs = this.renderRoot.querySelector<HTMLElement>(".head .tabs");
@@ -705,6 +744,22 @@ export class TillShell extends LitElement {
       @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
       ><span class="brand" slot="fallback">${BRAND}</span></wt-venue-logo
     >`;
+  }
+
+  #counterLogo(): TemplateResult | typeof nothing {
+    const state = this.#venueLogo.state;
+    if (state.kind !== "logo") return nothing;
+    const { logo } = state;
+    return html`<wt-venue-logo
+      class="counter-logo"
+      size="bar"
+      light=${logo.light}
+      dark=${logo.dark ?? nothing}
+      alt=${this.legalName}
+      ?data-room=${this.counterLogoRoom}
+      @wt-logo-error=${() => reportVenueLogoFailure(logo)}
+      @wt-logo-load=${() => reportVenueLogoLoaded(logo)}
+    ></wt-venue-logo>`;
   }
 
   #emit(type: string, detail?: unknown): void {
@@ -1124,7 +1179,7 @@ export class TillShell extends LitElement {
               : nothing
             : html`
                 <header class=${this.phone ? "head phone" : "head"}>
-                  ${this.formFactor === "till" || this.steps > 0 || this.phone ? nothing : this.#brandMark()}
+                  ${this.formFactor === "till" ? this.#counterLogo() : this.steps > 0 || this.phone ? nothing : this.#brandMark()}
                   ${
                     this.formFactor === "till"
                       ? html`<div class="till-strip">

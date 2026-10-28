@@ -279,12 +279,21 @@ describe("the venue logo in a handheld's bar", () => {
     });
   });
 
-  it("a counter till draws neither", async () => {
+  it("a counter till draws the logo, never the word", async () => {
+    const loaded = nextLogoLoad();
     startFrom(withLogo(LIGHT));
     await atViewport(1280, async () => {
-      const { el } = await mount({ formFactor: "till" });
+      const { el } = await mount({
+        formFactor: "till",
+        activeScreen: "counter",
+        operatorName: "Ana",
+      });
+      await loaded;
       await settle(el);
-      expect(el.shadowRoot!.querySelector("wt-venue-logo")).toBeNull();
+      const box = el.shadowRoot!.querySelector("wt-venue-logo");
+      expect(box).not.toBeNull();
+      expect(box!.classList.contains("counter-logo")).toBe(true);
+      expect(head(el).firstElementChild).toBe(box);
       expect(word(el)).toBeNull();
     });
   });
@@ -495,27 +504,22 @@ describe("the bar refits when the logo changes", () => {
     });
   });
 
-  it("a counter till and a handheld at phone width keep no timer for a failed logo", async () => {
+  it("a handheld at phone width keeps no timer for a failed logo", async () => {
     const answer = withLogo(LIGHT);
     startFrom(answer);
     reportVenueLogoFailure(answer.logo);
-    for (const [width, props] of [
-      [1280, { formFactor: "till" }],
-      [390, {}],
-    ] as const) {
-      await atViewport(width, async () => {
-        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-        try {
-          const { el } = await mount(props);
-          await settle(el);
-          expect(el.shadowRoot!.querySelector("wt-venue-logo")).toBeNull();
-          expect(vi.getTimerCount()).toBe(0);
-        } finally {
-          vi.useRealTimers();
-          cleanupWidgets();
-        }
-      });
-    }
+    await atViewport(390, async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      try {
+        const { el } = await mount({});
+        await settle(el);
+        expect(el.shadowRoot!.querySelector("wt-venue-logo")).toBeNull();
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+        cleanupWidgets();
+      }
+    });
   });
 
   it("a failing logo refits the bar", async () => {
