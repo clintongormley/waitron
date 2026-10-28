@@ -155,7 +155,7 @@ it("reloads a mounted library's first page passively on an interface-language ch
   );
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   setLocale("es-ES");
   await vi.waitFor(() =>
@@ -166,7 +166,7 @@ it("reloads a mounted library's first page passively on an interface-language ch
   expect(
     (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
       .value,
-  ).toBe("Pan editado");
+  ).toBe("Edited bread");
 });
 
 it("refreshes image ordering passively after content-language settings change", async () => {
@@ -176,7 +176,7 @@ it("refreshes image ordering passively after content-language settings change", 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-fr", "Brouillon");
+  field("name-fr", "Draft");
   background.listImages.mockResolvedValue({
     images: [{ ...image, id: "two", names: { es: "First" } }, image],
     total: 2,
@@ -191,7 +191,7 @@ it("refreshes image ordering passively after content-language settings change", 
   expect(
     (el.shadowRoot!.querySelector("wt-input[name=name-fr]") as HTMLElement & { value: string })
       .value,
-  ).toBe("Brouillon");
+  ).toBe("Draft");
 });
 
 // `countUsages` (packages/media/src/images.ts) counts a live or queued version's photos, and an
@@ -611,7 +611,7 @@ it("closes a successfully saved editor even when refreshing the list fails", asy
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan nuevo");
+  field("name-es", "New loaf");
   client.listImages.mockRejectedValueOnce(new Error("refresh"));
   click("[data-test=save]");
   await vi.waitFor(() => expect(client.updateImage).toHaveBeenCalledOnce());
@@ -696,18 +696,18 @@ it("retains every translation while editing enabled languages and keeps a draft 
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Nuevo pan");
+  field("name-es", "New bread");
   setContentLanguages({ defaultLanguage: "es", languages: ["es", "fr", "de"] });
   await el.updateComplete;
   expect(
     (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
       .value,
-  ).toBe("Nuevo pan");
+  ).toBe("New bread");
   expect(el.shadowRoot!.querySelector("wt-input[name=name-de]")).not.toBeNull();
   click("[data-test=save]");
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
-      names: { es: "Nuevo pan", en: "Bread" },
+      names: { es: "New bread", en: "Bread" },
       framing: { x: 5000, y: 5000, zoom: 100 },
       expectedRevision: 1,
     }),
@@ -725,7 +725,7 @@ it("keeps a failed save open, ignores repeated saves while pending and allows re
         reject = rejectPromise;
       }),
   );
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   click("[data-test=save]");
@@ -854,7 +854,7 @@ it("updates interface language without discarding an image draft", async () => {
   await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   setLocale("es-ES");
   await el.updateComplete;
@@ -862,7 +862,7 @@ it("updates interface language without discarding an image draft", async () => {
   expect(
     (el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement & { value: string })
       .value,
-  ).toBe("Pan editado");
+  ).toBe("Edited bread");
 });
 
 it("keeps an enclosing picker open when its metadata editor is cancelled", async () => {
@@ -883,7 +883,7 @@ it("keeps draft translations under their languages when the default changes live
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   setContentLanguages({ defaultLanguage: "fr", languages: ["fr", "es"] });
   await el.updateComplete;
   const french = el.shadowRoot!.querySelector("wt-input[name=name-fr]") as HTMLElement & {
@@ -894,7 +894,7 @@ it("keeps draft translations under their languages when the default changes live
   };
   expect(french.value).toBe("");
   expect(french.hasAttribute("required")).toBe(true);
-  expect(spanish.value).toBe("Pan editado");
+  expect(spanish.value).toBe("Edited bread");
   expect(spanish.hasAttribute("required")).toBe(false);
   click("[data-test=save]");
   await el.updateComplete;
@@ -904,7 +904,7 @@ it("keeps draft translations under their languages when the default changes live
   click("[data-test=save]");
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
-      names: { es: "Pan editado", en: "Bread", fr: "Pain" },
+      names: { es: "Edited bread", en: "Bread", fr: "Pain" },
       framing: { x: 5000, y: 5000, zoom: 100 },
       expectedRevision: 1,
     }),
@@ -1048,7 +1048,7 @@ it("cancelling the editor discards the draft without saving it", async () => {
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan descartado");
+  field("name-es", "Discarded bread");
   await el.updateComplete;
   click("wt-modal wt-button[slot=cancel]");
   await el.updateComplete;
@@ -1068,7 +1068,7 @@ it("keeps the editor open through a close requested mid-save, so a refusal is st
   await el.updateComplete;
   const save = deferred<never>();
   client.updateImage.mockReturnValueOnce(save.promise);
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   click("wt-modal wt-button[slot=cancel]");
@@ -1084,7 +1084,7 @@ it("ignores Escape while a save is in flight and honours it once the save has se
   await el.updateComplete;
   const save = deferred<never>();
   client.updateImage.mockReturnValueOnce(save.promise);
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   await el.updateComplete;
@@ -1106,14 +1106,14 @@ it("saves the image when Enter is pressed in a name field", async () => {
   const client = await mount();
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   const name = el.shadowRoot!.querySelector("wt-input[name=name-es]") as HTMLElement;
   name.focus();
   await userEvent.keyboard("{Enter}");
   await vi.waitFor(() =>
     expect(client.updateImage).toHaveBeenCalledWith("one", {
-      names: { es: "Pan editado", en: "Bread" },
+      names: { es: "Edited bread", en: "Bread" },
       framing: { x: 5000, y: 5000, zoom: 100 },
       expectedRevision: 1,
     }),
@@ -1497,7 +1497,7 @@ it.each([
       ).toBe(fileInput()),
     );
 
-    field("name-es", "Pan blanco");
+    field("name-es", "White bread");
     await el.updateComplete;
     expect(fileError()).toBe(codeMessage(code));
     expect(saveButton().hasAttribute("disabled")).toBe(false);
@@ -1522,7 +1522,7 @@ it("puts a refused translation under that language's name until the name changes
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
 
@@ -1541,7 +1541,7 @@ it("puts a refused translation under that language's name until the name changes
   expect(nameInput("es").error).toBe(message);
   expect(saveButton().hasAttribute("disabled")).toBe(false);
 
-  field("name-es", "Pan blanco");
+  field("name-es", "White bread");
   await el.updateComplete;
   expect(nameInput("es").error).toBe("");
   expect(await bottomOf()).toBe("");
@@ -1558,7 +1558,7 @@ it("sends again when Save is pressed with a refused field unchanged, and drops t
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(() =>
@@ -1584,7 +1584,7 @@ it("says a refused translation in a language the form does not show above Save, 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
 
@@ -1603,7 +1603,7 @@ it("says a photo refusal beside the replacement field and above Save, leaving re
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
 
@@ -1624,7 +1624,7 @@ it("leaves Save working on a refusal that names no field, and drops it on the ne
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
 
@@ -1650,7 +1650,7 @@ it("shows the refusal and the generic sentence together when both apply", async 
   await mount(client);
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   const refused = `The image could not be saved. ${codeMessage("image.invalid_metadata")}`;
@@ -1687,7 +1687,7 @@ it("starts again when reopened: no messages and Save quiet", async () => {
 
   click("[data-test=edit-one]");
   await el.updateComplete;
-  field("name-es", "Pan editado");
+  field("name-es", "Edited bread");
   await el.updateComplete;
   click("[data-test=save]");
   await vi.waitFor(async () => expect(await bottomOf()).toContain("could not be saved"));
@@ -2119,7 +2119,7 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
   client.getImage.mockResolvedValue({
     image: { ...image, usageCount: 2 },
     uses: [
-      { kind: "theme_logo", id: "t1", name: "Bar Lucía" },
+      { kind: "theme_logo", id: "t1", name: "River Inn" },
       { kind: "theme_logo", id: "t2", name: "a&b/<c>" },
     ] as ImageUsage[],
   });
@@ -2128,7 +2128,7 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
   await vi.waitFor(() => expect(el.shadowRoot!.querySelectorAll("wt-modal li")).toHaveLength(2));
   const entries = () => [...el.shadowRoot!.querySelectorAll("wt-modal li")];
   expect(entries().map((li) => li.textContent?.trim())).toEqual([
-    "Logo of theme Bar Lucía",
+    "Logo of theme River Inn",
     "Logo of theme a&b/<c>",
   ]);
   for (const li of entries()) {
@@ -2139,11 +2139,11 @@ it("shows a theme's logo use as 'Logo of theme {name}', linking to the Appearanc
   setLocale("es-ES");
   await vi.waitFor(() =>
     expect(entries()[0]!.textContent?.trim()).toBe(
-      ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
+      ES["image.theme_logo"].replace("{name}", "River Inn"),
     ),
   );
   expect(entries()[0]!.textContent?.trim()).toBe(
-    ES["image.theme_logo"].replace("{name}", "Bar Lucía"),
+    ES["image.theme_logo"].replace("{name}", "River Inn"),
   );
   expect(el.shadowRoot!.querySelector('[data-test="confirm-delete"]')).toBeNull();
   expect(client.deleteImage).not.toHaveBeenCalled();
