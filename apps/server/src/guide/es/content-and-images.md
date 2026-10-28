@@ -212,7 +212,7 @@ biblioteca para tus otros productos.
 
 Para quitar la propia fotografía, elige **Eliminar** en su menú **⋮** y confirma. Si algún producto,
 variante de producto o sección todavía la usa, la eliminación se bloquea. Ves enlaces a esos
-productos, incluidos los archivados, que la lista marca con **(Producto deshabilitado)**, y a esas
+productos, incluidos los archivados, que la lista marca con **(Producto archivado)**, y a esas
 secciones, cada una mostrada por su nombre interno. Quita la fotografía de cada registro editable
 antes de volver a intentar eliminarla. Un producto archivado abre sus datos en solo lectura y no se
 le puede quitar la imagen desde el editor de productos, así que una imagen que todavía usa sigue sin
