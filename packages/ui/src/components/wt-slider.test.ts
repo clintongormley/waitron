@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { WtSlider } from "./wt-slider.js";
 import "./wt-slider.js";
@@ -323,6 +323,79 @@ test("the range paints from the primary token", async () => {
   const el = await mountSlider();
   host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
   expect(getComputedStyle(inputOf(el)).accentColor).toBe("rgb(16, 17, 18)");
+});
+
+/** The colour drawn at a viewport point, read from a screenshot of the page. */
+async function pixelAt(x: number, y: number): Promise<string> {
+  const image = new Image();
+  image.src = `data:image/png;base64,${await page.screenshot({ save: false })}`;
+  await image.decode();
+  const scale = image.naturalWidth / window.innerWidth;
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  const [r, g, b] = context.getImageData(Math.round(x * scale), Math.round(y * scale), 1, 1).data;
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Given an accent colour, Chromium picks a native range's unfilled track from that colour's
+// lightness alone: near-white under a dark one, dark grey under a light one, in either theme.
+describe.each([
+  ["light", "rgb(16, 40, 120)"],
+  ["light", "rgb(160, 230, 190)"],
+  ["dark", "rgb(16, 40, 120)"],
+  ["dark", "rgb(160, 230, 190)"],
+] as const)("the range's track (%s theme, primary %s)", (theme, primary) => {
+  async function mountPainted(value: number): Promise<{ el: WtSlider; at: (share: number) => Promise<string> }> {
+    const el = await mountSlider();
+    host.setAttribute("data-theme", theme);
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    host.style.setProperty("--wt-color-primary", primary);
+    host.style.setProperty("--wt-color-track", "rgb(90, 20, 20)");
+    el.value = value;
+    await el.updateComplete;
+    const box = inputOf(el).getBoundingClientRect();
+    return { el, at: (share) => pixelAt(box.left + box.width * share, box.top + box.height / 2) };
+  }
+
+  test("the part past the thumb paints from the track token", async () => {
+    const { at } = await mountPainted(6);
+    expect(await at(0.85)).toBe("rgb(90, 20, 20)");
+  });
+
+  test("the part before the thumb, and the thumb, paint from the primary token", async () => {
+    const { at } = await mountPainted(6);
+    expect(await at(0.2)).toBe(primary);
+    expect(await at(0.5)).toBe(primary);
+  });
+
+  test("the filled part follows the value", async () => {
+    const { el, at } = await mountPainted(2);
+    expect(await at(0.2)).toBe("rgb(90, 20, 20)");
+    el.value = 10;
+    await el.updateComplete;
+    expect(await at(0.85)).toBe(primary);
+  });
+
+  test("the thumb is drawn at the thumb-size token", async () => {
+    const { el } = await mountPainted(2);
+    const box = inputOf(el).getBoundingClientRect();
+    const belowTrack = () => pixelAt(box.left + 20, box.top + box.height / 2 + 6);
+    const background = await pixelAt(box.left + 20, box.top + 2);
+    expect(await belowTrack()).toBe(background);
+    host.style.setProperty("--wt-slider-thumb-size", "32px");
+    expect(await belowTrack()).toBe(primary);
+  });
+
+  test("a range with no travel still draws its track", async () => {
+    const { el, at } = await mountPainted(10);
+    el.min = 10;
+    await el.updateComplete;
+    expect(await at(0.85)).toBe("rgb(90, 20, 20)");
+  });
 });
 
 test("the field max-width token bounds the slider's width", async () => {
