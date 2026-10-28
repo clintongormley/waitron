@@ -17,6 +17,7 @@ import { DatabaseSync } from "node:sqlite";
 import { dirname, join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
+import { AppError } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Database } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
@@ -148,6 +149,50 @@ it("answers setup.not_ready when the private copy cannot be removed", async () =
   await rm(dirname(copy!), { recursive: true, force: true });
 });
 
+it("keeps a failed read as the reason when the private copy then cannot be removed", async () => {
+  const held = await heldSetup({ pendingWal: true });
+  let copy: string | undefined;
+  const modules = withHoldings(held, async (db) => {
+    copy = await mainFile(db);
+    throw Object.assign(new Error("seat failed"), { code: "ESEAT" });
+  });
+  vi.mocked(fileSystem.rm).mockRejectedValueOnce(
+    Object.assign(new Error("busy"), { code: "EBUSY" }),
+  );
+  await expect(read(held, modules)).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "read failed: ESEAT",
+  });
+  await rm(dirname(copy!), { recursive: true, force: true });
+});
+
+it("passes on a module seat's error code, never its reason", async () => {
+  const held = await heldSetup({ recovery: false });
+  const modules = withHoldings(held, async () => {
+    throw new AppError("setup.attempt_invalid", {}, { reason: "a value read from the database" });
+  });
+  await expect(read(held, modules)).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "read failed: setup.attempt_invalid",
+  });
+});
+
+it("refuses a write through the private copy", async () => {
+  const held = await heldSetup({ pendingWal: true });
+  let refusal: unknown;
+  const modules = withHoldings(held, async (db) => {
+    expect(await mainFile(db)).toMatch(/waitron-setup-holdings-/);
+    try {
+      await db.execute("create table seat_write (a)");
+    } catch (error) {
+      refusal = error;
+    }
+    return { records: 0, accepted: 0 };
+  });
+  await read(held, modules);
+  expect(String(refusal)).toMatch(/readonly/);
+});
+
 it.each([
   ["succeeds", async () => ({ records: 0, accepted: 0 })],
   [
@@ -234,6 +279,18 @@ it("sums records and accepted filings over every module with a holdings seat", a
   } as unknown as WaitronModule;
   const result = await read(held, [stub, ...held.host.modules!]);
   expect(result).toMatchObject({ records: 0, accepted: 2 });
+});
+
+it("adds a holdings seat's records to the next module's", async () => {
+  const held = await heldSetup({ recovery: false });
+  const stub = {
+    name: "stub-holdings",
+    provisioning: {
+      initialSetup: { startAgainHoldings: async () => ({ records: 1, accepted: 2 }) },
+    },
+  } as unknown as WaitronModule;
+  const result = await read(held, [stub, ...held.host.modules!]);
+  expect(result).toMatchObject({ records: 1, accepted: 2 });
 });
 
 it("does not count Litestream's own tables", async () => {

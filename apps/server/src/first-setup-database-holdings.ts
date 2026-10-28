@@ -48,6 +48,7 @@ export async function readSetupDatabaseHoldings(
   const database = join(roots.venueDir, "venue.db");
   let scratch: string | undefined;
   let connection: DatabaseSync | undefined;
+  let failed = false;
   try {
     const journal = await lstat(`${database}-journal`).then(
       () => true,
@@ -73,22 +74,24 @@ export async function readSetupDatabaseHoldings(
           : notReady(`copy failed: ${codeOf(error)}`),
       );
       if (!present) notReady("database missing");
-      // Read-write: SQLite may have to roll back a leftover -journal, and this copy is thrown away.
+      // Read-write so SQLite can roll back a leftover -journal; `query_only` refuses any other write.
       connection = new DatabaseSync(join(scratch, "venue.db"));
+      connection.exec("pragma query_only = 1");
     }
     return await readHoldings(connection!, modules);
   } catch (error) {
+    failed = true;
     if (error instanceof AppError && error.code === "setup.not_ready") throw error;
-    return notReady(
-      `read failed: ${error instanceof AppError ? (error.reason ?? error.code) : codeOf(error)}`,
-    );
+    // A module seat's own reason is free text, so only its code is passed on.
+    return notReady(`read failed: ${error instanceof AppError ? error.code : codeOf(error)}`);
   } finally {
     try {
       connection?.close();
     } finally {
       if (scratch !== undefined)
+        // After a failed read, that failure stays the reason.
         await rm(scratch, { recursive: true, force: true }).catch((error: unknown) =>
-          notReady(`copy not removed: ${codeOf(error)}`),
+          failed ? undefined : notReady(`copy not removed: ${codeOf(error)}`),
         );
     }
   }
