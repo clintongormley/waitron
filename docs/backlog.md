@@ -3069,7 +3069,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   Slice 11b landed 2026-10-27 (#2140): Advanced on the Look card sets the typeface, the four sizes
   and the three weights by hand, warns when text is too small and notes when it is larger than the
   tills are checked at, each with a fix; the saved card lists the text set by hand.
-  Slice 12 landed 2026-10-28 (#PR): Advanced is folded into five sections — Page and surfaces, Text
+  Slice 12 landed 2026-10-28 (#2167): Advanced is folded into five sections — Page and surfaces, Text
   colours and links, Buttons, Fields and focus, and Text — each closed when the editor opens and
   saying what in it is set by hand and how many of those are hard to read; a section
   holding an error opens itself; Pick a different colour for dark screens opens Buttons.
