@@ -23,6 +23,8 @@ import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
+import { fiscalReservations } from "./schema/reservations.js";
+import { registroSif } from "./schema/sif.js";
 import { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
 
 const configured = FISCAL_INITIAL_SETUP.configure!({} as ModuleOperationHost);
@@ -39,11 +41,8 @@ function readOnly(db: Database): { target: Pick<Database, "execute">; close(): v
   const dialect = new SQLiteSyncDialect();
   return {
     target: {
-      execute<Row extends Record<string, unknown>>(query: SQLWrapper | string) {
-        const compiled =
-          typeof query === "string"
-            ? { sql: query, params: [] }
-            : dialect.sqlToQuery(query.getSQL());
+      execute<Row extends Record<string, unknown>>(query: SQLWrapper) {
+        const compiled = dialect.sqlToQuery(query.getSQL());
         return {
           rows: connection
             .prepare(compiled.sql)
@@ -224,10 +223,40 @@ describe("startAgainHistory", () => {
         .update(invoiceSeries)
         .set({ retiredAt: new Date("2026-10-16T12:30:00Z") })
         .where(eq(invoiceSeries.code, "FF-0CNNW"));
+      await suite.db
+        .update(registroSif)
+        .set({ revocadoEn: new Date("2026-10-16T12:30:00Z") })
+        .where(eq(registroSif.numeroInstalacion, "0CNNW"));
+      await suite.db.insert(fiscalReservations).values({
+        eventKey: "dormant",
+        allocationKey: "reserved",
+        nodeId: TENANT_A.nodeId2,
+        sourceNodeId: TENANT_A.nodeId,
+        taxpayerNif: "89890001K",
+        softwareId: "OTHER",
+        environment: "preproduction",
+        installationIdentity: "0CNPG",
+        evidence: { public: "retained" },
+        bases: [{ code: "different", purpose: "standard" }],
+        establishedAt: new Date("2026-10-16T12:00:00Z"),
+      });
 
       const expected = await transactionSource();
       expect(expected.complete).toBe(true);
-      expect(expected.records.length).toBeGreaterThan(0);
+      const references = expected.records.map((row) => (row as { reference: string }).reference);
+      for (const table of [
+        "registro_sif/",
+        "invoice_series/",
+        "fiscal_allocations/",
+        "fiscal_reservations/",
+      ])
+        expect(references.some((reference) => reference.startsWith(table))).toBe(true);
+      expect(expected.records).toContainEqual(
+        expect.objectContaining({
+          kind: "activation",
+          recordedAtMs: Date.parse("2026-10-16T12:30:00Z"),
+        }),
+      );
       const connection = readOnly(suite.db);
       try {
         expect(await seat.startAgainHistory!(connection.target)).toEqual([expected]);

@@ -1,12 +1,19 @@
 import { sql } from "drizzle-orm";
 import type { Database, DeploymentEnvironment } from "@waitron/db";
 import type { InitialSetupContribution } from "@waitron/module";
-import { hourHistorySource } from "./hour-history-reader.js";
+import { hourHistorySource, type HourHistoryRows } from "./hour-history-reader.js";
 
-/** Must equal the append-only tables a first-setup activation writes (A1131 Task 0's probe). */
+/** Must equal the append-only tables a first-setup activation writes. */
 export const FISCAL_START_AGAIN_DELETABLE: readonly string[] = ["fiscal_allocations"];
 
 type Target = Pick<Database, "execute">;
+type Row<K extends Exclude<keyof HourHistoryRows, "tenant">> = HourHistoryRows[K][number];
+/** A row as stored: its JSON columns are still text. */
+type Stored<K extends "allocations" | "reservations", Json extends keyof Row<K>> = Omit<
+  Row<K>,
+  Json
+> &
+  Record<Json, string>;
 
 async function count(db: Target, query: ReturnType<typeof sql>): Promise<number> {
   const { rows } = await db.execute<{ n: number }>(query);
@@ -25,15 +32,15 @@ export const startAgainHoldings: NonNullable<
 });
 
 // Drizzle's json columns parse on read; these are the same not-null text columns read raw.
-function parsed(value: unknown): unknown {
-  return JSON.parse(value as string);
+function parsed(value: string): unknown {
+  return JSON.parse(value);
 }
 
-async function rows<Row extends Record<string, unknown>>(
+async function rows<T extends Record<string, unknown>>(
   db: Target,
   query: ReturnType<typeof sql>,
-): Promise<Row[]> {
-  return (await db.execute<Row>(query)).rows;
+): Promise<T[]> {
+  return (await db.execute<T>(query)).rows;
 }
 
 // The same tables and columns `readHourHistory` reads, without a transaction, so a read-only
@@ -48,46 +55,18 @@ export const startAgainHistory: NonNullable<InitialSetupContribution["startAgain
   );
   const environment = deployed?.environment ?? null;
   const tenant = (await rows(db, sql`select 1 as present from tenants where id = 1`)).length > 0;
-  const series = await rows<{
-    id: string;
-    nodeId: string;
-    code: string;
-    purpose: string;
-    retiredAt: string | null;
-  }>(
+  const series = await rows<Row<"series">>(
     db,
     sql`select id, node_id as "nodeId", code, purpose, retired_at as "retiredAt" from invoice_series`,
   );
-  const sifs = await rows<{
-    id: string;
-    nodeId: string;
-    nif: string;
-    idSistemaInformatico: string;
-    numeroInstalacion: string;
-    registradoEn: string | null;
-    revocadoEn: string | null;
-  }>(
+  const sifs = await rows<Row<"sifs">>(
     db,
     sql`select id, node_id as "nodeId", nif, id_sistema_informatico as "idSistemaInformatico",
       numero_instalacion as "numeroInstalacion", registrado_en as "registradoEn",
       revocado_en as "revocadoEn" from registro_sif`,
   );
   const allocations = (
-    await rows<{
-      eventKey: string;
-      allocationKey: string;
-      nodeId: string;
-      sifId: string;
-      taxpayerNif: string;
-      softwareId: string;
-      environment: string;
-      installationIdentity: string;
-      allocation: unknown;
-      approval: unknown;
-      bases: unknown;
-      result: unknown;
-      activatedAt: string | null;
-    }>(
+    await rows<Stored<"allocations", "allocation" | "approval" | "bases" | "result">>(
       db,
       sql`select event_key as "eventKey", allocation_key as "allocationKey", node_id as "nodeId",
         sif_id as "sifId", taxpayer_nif as "taxpayerNif", software_id as "softwareId", environment,
@@ -96,25 +75,13 @@ export const startAgainHistory: NonNullable<InitialSetupContribution["startAgain
     )
   ).map((row) => ({
     ...row,
-    allocation: parsed(row.allocation) as never,
-    approval: parsed(row.approval) as never,
+    allocation: parsed(row.allocation) as Row<"allocations">["allocation"],
+    approval: parsed(row.approval) as Row<"allocations">["approval"],
     bases: parsed(row.bases),
-    result: parsed(row.result) as never,
+    result: parsed(row.result) as Row<"allocations">["result"],
   }));
   const reservations = (
-    await rows<{
-      eventKey: string;
-      allocationKey: string;
-      nodeId: string;
-      sourceNodeId: string;
-      taxpayerNif: string;
-      softwareId: string;
-      environment: string;
-      installationIdentity: string;
-      evidence: unknown;
-      bases: unknown;
-      establishedAt: string | null;
-    }>(
+    await rows<Stored<"reservations", "evidence" | "bases">>(
       db,
       sql`select event_key as "eventKey", allocation_key as "allocationKey", node_id as "nodeId",
         source_node_id as "sourceNodeId", taxpayer_nif as "taxpayerNif", software_id as "softwareId",
