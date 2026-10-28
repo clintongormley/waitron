@@ -877,3 +877,61 @@ it("reports a deletion at the second check with the clock's time then, not the r
   expect(await left(s.dir)).not.toContain(s.keys[0]);
   expect(reported.map((at) => at.toISOString())).toEqual(["2026-10-29T00:00:01.000Z"]);
 });
+
+it("a run with room to spare never reads the installation start", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(1), 500],
+  ]);
+  const installationStartedAt = vi.fn(async () => days(10));
+  const backend = new Watched("a", s.dir);
+  await runOnce({
+    ...deps(f, [backend]),
+    stagingEstimateBytes: async () => 10,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 10,
+    statfs: freeSpace(10_000_000),
+    installationStartedAt,
+  });
+  expect(backend.puts).toBe(1);
+  expect(installationStartedAt).not.toHaveBeenCalled();
+});
+
+it("a run that deletes at both of its checks reads the installation start once", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 10_000],
+    [days(2), 10_000],
+    [days(1), 10_000],
+  ]);
+  const gone = (i: number) =>
+    stat(join(s.dir, s.keys[i]!)).then(
+      () => false,
+      () => true,
+    );
+  // The first check is short until the oldest archive goes; the second, until the next one does.
+  const statfs = vi.fn(async () => {
+    const dir = (await readdir(f.stagingDir)).find((n) => n.startsWith(BACKUP_ENCRYPT_DIR_PREFIX));
+    if (dir === undefined) return { bavail: 39 + ((await gone(0)) ? 10_000 : 0), frsize: 1 };
+    const encrypted = (await stat(join(f.stagingDir, dir, "artifact"))).size;
+    return { bavail: encrypted + 9 + ((await gone(1)) ? 10_000 : 0), frsize: 1 };
+  });
+  const installationStartedAt = vi.fn(async () => days(10));
+  const onArchivesDeleted = vi.fn(async () => {});
+  const backend = new Watched("a", s.dir);
+  await runOnce({
+    ...deps(f, [backend]),
+    stagingEstimateBytes: async () => 10,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 10,
+    statfs,
+    installationStartedAt,
+    onArchivesDeleted,
+  });
+  expect(backend.puts).toBe(1);
+  expect(onArchivesDeleted).toHaveBeenCalledTimes(2);
+  expect(await left(s.dir)).not.toContain(s.keys[0]);
+  expect(await left(s.dir)).not.toContain(s.keys[1]);
+  expect(installationStartedAt).toHaveBeenCalledOnce();
+});

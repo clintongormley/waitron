@@ -20,8 +20,12 @@ export function createBackupRoomHooks(deps: {
   return {
     // A write-lock turn with no change-list drain: the drain is a write, and this read must answer
     // on a nearly full disk.
-    readInstallationStart: () =>
-      db.withWriteLock(async () => (await fiscal?.installationStartedAt?.(db, nodeId)) ?? null),
+    readInstallationStart: async () => {
+      if (!fiscal?.installationStartedAt) return null;
+      return db.withWriteLock(
+        async () => (await fiscal.installationStartedAt!(db, nodeId)) ?? null,
+      );
+    },
     recordArchivesDeleted: (deleted, at) =>
       withTransaction(db, async (tx) => {
         const clock = await resolveVenueClock(tx, nodeId);

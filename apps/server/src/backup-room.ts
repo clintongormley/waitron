@@ -146,7 +146,8 @@ export interface MakeRoomOptions {
   stagingDir: string;
   statfs?: Statfs;
   folders: readonly BackupFolder[];
-  installationStartedAt: Date | null;
+  /** Asked only when free space is under the aim, so a step with room never waits for it. */
+  installationStartedAt: () => Promise<Date | null>;
   signal: AbortSignal;
   log: Logger;
   /** Called once, before the step returns or throws, whenever it deleted anything. Its failure is
@@ -180,7 +181,7 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
   const aim = opts.neededBytes + Math.max(opts.aimBytes, opts.floorBytes);
   let free = await freeBytes(opts.stagingDir, opts.statfs);
   if (free === null || free >= aim) return;
-  const archives = await listDeletableArchives(opts.folders, opts.installationStartedAt);
+  const archives = await listDeletableArchives(opts.folders, await opts.installationStartedAt());
   const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
   if (free + offered < floor)
     throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });

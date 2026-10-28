@@ -428,7 +428,7 @@ describe("makeRoom", () => {
         stagingDir: f.staging,
         statfs: d.statfs,
         folders: [{ destination: "da", dir: f.dir }],
-        installationStartedAt: T,
+        installationStartedAt: async () => T,
         signal: new AbortController().signal,
         log,
         onDeleted,

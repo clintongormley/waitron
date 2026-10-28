@@ -1,5 +1,5 @@
 import { eq, sql } from "drizzle-orm";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { incidents, locations, withTransaction, type Database } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -145,6 +145,20 @@ describe("readInstallationStart", () => {
     expect(
       await createBackupRoomHooks({ db, nodeId, fiscal: undefined }).readInstallationStart(),
     ).toBe(null);
+  });
+
+  it("answers null without waiting for the write lock when the seat has no such member", async () => {
+    const withWriteLock = vi.fn();
+    const locked = { withWriteLock } as unknown as Database;
+    for (const fiscal of [{}, null, undefined])
+      expect(
+        await createBackupRoomHooks({
+          db: locked,
+          nodeId: "node-1" as NodeId,
+          fiscal,
+        }).readInstallationStart(),
+      ).toBe(null);
+    expect(withWriteLock).not.toHaveBeenCalled();
   });
 
   it("reads with a change waiting in the change list and leaves it waiting", async () => {

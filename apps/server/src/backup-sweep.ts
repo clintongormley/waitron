@@ -116,7 +116,8 @@ export interface BackupSweepDeps {
   /** Free space a tick makes room toward beyond its need; defaults to `SPACE_LOW_BYTES`. */
   spaceAimBytes?: number;
   /** When the current installation began; an archive taken at or before it is never deleted to
-   * make room. Absent, null or throwing: nothing is deleted. */
+   * make room. Read at most once a run, and only when free space is under the aim. Absent, null or
+   * throwing: nothing is deleted. */
   installationStartedAt?: () => Promise<Date | null>;
   /** Told what a run deleted to make room, before the run goes on or is refused; `at` is the time
    * of the report, just after the deleting. Its failure is logged and never changes the run's
@@ -230,7 +231,8 @@ export async function runOnce(
     let room: ((neededBytes: number) => Promise<void>) | undefined;
     let copies = 0;
     if (deps.stagingEstimateBytes) {
-      const installationStartedAt = await readInstallationStart(deps);
+      let installationStart: Promise<Date | null> | undefined;
+      const installationStartedAt = () => (installationStart ??= readInstallationStart(deps));
       const estimate = await deps.stagingEstimateBytes();
       const onDisk = await localFoldersOnDisk(deps);
       copies = onDisk.copies;

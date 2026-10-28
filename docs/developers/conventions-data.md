@@ -2685,7 +2685,9 @@ case is "the managers' email reads its context on a full disk with a change wait
 `apps/server/src/start-full-disk.e2e.test.ts`.
 
 Since A1167 slice 1, a backup run reads the installation start in one `withWriteLock` turn with no
-drain (`createBackupRoomHooks`, `apps/server/src/backup-deletion-alert.ts`). Its case, "reads with a
+drain (`createBackupRoomHooks`, `apps/server/src/backup-deletion-alert.ts`), at most once a run and
+only when free space is under the aim; a box whose fiscal seat has no `installationStartedAt` takes
+no turn at all. Its case, "reads with a
 change waiting in the change list and leaves it waiting" in
 `apps/server/src/backup-deletion-alert.test.ts`, uses a waiting change, not a full disk.
 
@@ -4552,7 +4554,8 @@ began. The installation start comes from the fiscal seat's optional `installatio
 row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when the node has none.
 `createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside
 `db.withWriteLock` with no change-list drain, because the drain is a write and this read must answer
-on a nearly full disk. A box whose fiscal module has no such member (the no-regime module), a null
+on a nearly full disk. A run asks for it only when a room step finds free space under the aim, and
+at most once, so a run with room never waits for the write lock. A box whose fiscal module has no such member (the no-regime module), a null
 answer, or a read that throws (logged `backup.installation_start_unreadable`) deletes nothing; the
 room check still runs. A bucket destination has no folder and is never deleted from.
 
