@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type { AddressAutocompleteProvider } from "@waitron/country";
 import type {
@@ -279,6 +279,102 @@ describe("the venue screen's address search", () => {
     expect(value(el, "taxpayerDomicile")).toBe("");
     expect(lookup(el, "domicile-lookup")!.message).not.toBe("");
     expect(lookup(el)!.message).toBe("");
+  });
+
+  it("names its two search fields for the address each fills", async () => {
+    const el = await mount({ addressProvider: providerFor(MADRID) });
+    const nameOf = (which: string) =>
+      lookup(el, which)!.shadowRoot!.querySelector("input")!.getAttribute("name");
+    expect(nameOf("address-lookup")).toBe("address-search");
+    expect(nameOf("domicile-lookup")).toBe("domicile-search");
+  });
+
+  async function startChoosing(el: SetupVenueScreen, which: string): Promise<void> {
+    const field = lookup(el, which)!;
+    field.delay = 0;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = "Calle Mayor";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await vi.waitFor(() =>
+      expect(field.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
+    );
+    await userEvent.click(field.shadowRoot!.querySelector('[role="option"]')!);
+  }
+
+  it("drops a chosen address still on its way once the person types into a field it fills", async () => {
+    for (const [which, edited] of [
+      ["address-lookup", "addressLine1"],
+      ["address-lookup", "addressLine2"],
+      ["address-lookup", "postalCode"],
+      ["address-lookup", "city"],
+      ["domicile-lookup", "taxpayerDomicile"],
+    ] as const) {
+      const answers: ((address: AddressLookupResult) => void)[] = [];
+      const el = await mount({
+        addressProvider: {
+          ...providerFor(MADRID),
+          resolve: () => new Promise((resolve) => answers.push(resolve)),
+        },
+      });
+      await startChoosing(el, which);
+      await type(el, edited, "Typed by hand");
+      answers[0]!(MADRID);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await el.updateComplete;
+      expect(value(el, edited), edited).toBe("Typed by hand");
+      if (which === "address-lookup") expect(value(el, "city"), edited).not.toBe("Madrid");
+      cleanupWidgets();
+    }
+  });
+
+  it("drops a chosen address still on its way once the person picks a province", async () => {
+    const answers: ((address: AddressLookupResult) => void)[] = [];
+    const el = await mount({
+      addressProvider: {
+        ...providerFor(BARCELONA),
+        resolve: () => new Promise((resolve) => answers.push(resolve)),
+      },
+    });
+    await startChoosing(el, "address-lookup");
+    q(el, "[data-test=province]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "28" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    answers[0]!(BARCELONA);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(value(el, "province")).toBe("28");
+    expect(value(el, "addressLine1")).toBe("");
+  });
+
+  it("still fills from a chosen address when a field it does not fill was edited meanwhile", async () => {
+    const answers: ((address: AddressLookupResult) => void)[] = [];
+    const el = await mount({
+      addressProvider: {
+        ...providerFor(MADRID),
+        resolve: () => new Promise((resolve) => answers.push(resolve)),
+      },
+    });
+    await startChoosing(el, "address-lookup");
+    await type(el, "legalName", "Deli del Sol SL");
+    answers[0]!(MADRID);
+    await vi.waitFor(() => expect(value(el, "addressLine1")).toBe("Calle Mayor 1"));
+  });
+
+  it("a new search with no results shows its own line in place of an earlier refusal", async () => {
+    const el = await mount({
+      addressProvider: { ...providerFor(MADRID), suggest: async () => [] },
+    });
+    await choose(el, { ...MADRID, countryCode: "PT" });
+    const field = lookup(el)!;
+    const status = () =>
+      field.shadowRoot!.querySelector('[role="status"]')?.textContent?.trim() ?? "";
+    expect(status()).toBe("That address is not in Spain. Choose another or type it below.");
+    field.delay = 0;
+    const input = field.shadowRoot!.querySelector("input")!;
+    input.value = "Nowhere street";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await vi.waitFor(() => expect(status()).toBe("No address found. Type it below."));
   });
 
   it("speaks Spanish", async () => {

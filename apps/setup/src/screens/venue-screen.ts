@@ -8,6 +8,7 @@ import {
   type AddressChosenDetail,
   type AddressLookupProvider,
   type DraftScope,
+  type WtAddressLookup,
 } from "@waitron/ui";
 import {
   findAdministrativeArea,
@@ -88,6 +89,15 @@ type FieldKey = TextField | "invoiceLocales";
 
 /** The venue's own address, or the business's one-line registered address. */
 type AddressSearch = "address" | "domicile";
+
+const SEARCH_FILLS: Readonly<Partial<Record<TextField, AddressSearch>>> = {
+  addressLine1: "address",
+  addressLine2: "address",
+  postalCode: "address",
+  city: "address",
+  province: "address",
+  taxpayerDomicile: "domicile",
+};
 
 interface VenueForm {
   demoLocationNameSource: "automatic" | "custom";
@@ -248,7 +258,7 @@ export class SetupVenueScreen extends LitElement {
 
   @property({ attribute: false }) draft: DeepPartial<ProvisionBody> = {};
   @property({ attribute: false }) defaults: VenueDefaults = {};
-  /** Address suggestions; without one the address search fields stay hidden. Nothing sets it yet. */
+  /** Address suggestions; without one the address search fields stay hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
 
   constructor() {
@@ -474,6 +484,7 @@ export class SetupVenueScreen extends LitElement {
     // Editing the field the server refused retires that mark: the new value has not been refused.
     if (this.serverInvalid?.key === key) this.serverInvalid = undefined;
     const value = event.detail.value;
+    this.#cancelAddressSearch(SEARCH_FILLS[key]);
     if (key === "name") this.#demoLocationNameSource = "custom";
     if (key === "postalCode") {
       const pack = this.#pack();
@@ -496,6 +507,12 @@ export class SetupVenueScreen extends LitElement {
     }
     this.values = { ...this.values, [key]: value };
     this.#scope?.changed();
+  }
+
+  /** So an address still on its way cannot overwrite what the person typed. */
+  #cancelAddressSearch(which: AddressSearch | undefined): void {
+    if (which === undefined) return;
+    this.shadowRoot!.querySelector<WtAddressLookup>(`[data-test=${which}-lookup]`)?.cancelSearch();
   }
 
   #onAddressChosen(which: AddressSearch, event: CustomEvent<AddressChosenDetail>): void {
@@ -563,6 +580,7 @@ export class SetupVenueScreen extends LitElement {
     event.stopPropagation();
     const pack = this.#pack();
     if (pack === undefined) return;
+    this.#cancelAddressSearch("address");
     const area = findAdministrativeArea(pack, event.detail.value);
     this.values = { ...this.values, province: area?.name ?? "" };
     if (area !== undefined) this.#followDemoName(pack, area);
@@ -770,6 +788,7 @@ export class SetupVenueScreen extends LitElement {
     return html`<wt-address-lookup
       class="field"
       data-test=${`${which}-lookup`}
+      name=${`${which}-search`}
       .provider=${this.addressProvider}
       country-code=${pack?.countryCode ?? ""}
       label=${t(which === "address" ? "venue.address_lookup.label" : "venue.address_lookup.domicile_label")}

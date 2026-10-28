@@ -891,7 +891,7 @@ export const en = {
   "venue_details.address_lookup.other_country":
     "That address is not in {country}. Choose another or type it below.",
   "venue_details.address_lookup.other_province":
-    "That address is in another province. The province cannot be changed here.",
+    "That address is in another province, and the province cannot change here. Choose another or type it below.",
   "venue_details.postalCode": "Postcode",
   "venue_details.city": "City",
   "venue_details.province": "Province",
@@ -4369,7 +4369,7 @@ export const es: Record<StringKey, string> = {
   "venue_details.address_lookup.other_country":
     "Esa dirección no está en {country}. Elige otra o escríbela abajo.",
   "venue_details.address_lookup.other_province":
-    "Esa dirección está en otra provincia. La provincia no se puede cambiar aquí.",
+    "Esa dirección está en otra provincia, y la provincia no se puede cambiar aquí. Elige otra o escríbela abajo.",
   "venue_details.postalCode": "Código postal",
   "venue_details.city": "Ciudad",
   "venue_details.province": "Provincia",

@@ -1,6 +1,11 @@
 import { LitElement, html } from "lit";
 import { afterEach, expect, it } from "vitest";
-import { LeaveController, type WtInput } from "@waitron/ui";
+import {
+  LeaveController,
+  type AddressLookupProvider,
+  type AddressLookupResult,
+  type WtInput,
+} from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, VenueDetailWrite, VenueDetailsModel } from "../api/client.js";
 import { venueDetailsFixture, venueClockPreviewFixture } from "../testing/venue-details-fixture.js";
@@ -12,8 +17,12 @@ import { codeMessage } from "../i18n/codes.js";
 class VenueDetailsLeaveApp extends LitElement {
   readonly leave = new LeaveController(this);
   api!: DashboardApi;
+  addressProvider?: AddressLookupProvider;
   override render() {
-    return html`<dashboard-venue-details-panel .api=${this.api}></dashboard-venue-details-panel>
+    return html`<dashboard-venue-details-panel
+        .api=${this.api}
+        .addressProvider=${this.addressProvider}
+      ></dashboard-venue-details-panel>
       ${this.leave.render({ heading: t("unsaved.heading"), message: t("unsaved.message"), keepLabel: t("unsaved.keep"), discardLabel: t("unsaved.discard") })}`;
   }
 }
@@ -32,7 +41,10 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
-async function mount(overrides: Partial<DashboardApi> = {}) {
+async function mount(
+  overrides: Partial<DashboardApi> = {},
+  addressProvider?: AddressLookupProvider,
+) {
   let stored = venueDetailsFixture();
   const writes: VenueDetailWrite[] = [];
   const liveData = new LiveData();
@@ -52,6 +64,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
   } as unknown as DashboardApi;
   const { el: app } = await mountWidget<VenueDetailsLeaveApp>("venue-details-leave-test-app", {
     api,
+    addressProvider,
   });
   const panel = app.shadowRoot!.querySelector("dashboard-venue-details-panel")!;
   await expect.poll(() => panel.shadowRoot?.querySelector("[data-test=edit]")).toBeTruthy();
@@ -145,6 +158,53 @@ it("page discard restores the opening values in a retained editor", async () => 
   expect(
     field(panel, "addressLine1").shadowRoot!.querySelector<HTMLInputElement>("input")!.value,
   ).toBe("Calle Mayor 1");
+  expect(unload()).toBe(false);
+});
+const MADRID: AddressLookupResult = {
+  lines: ["Calle Mayor 2"],
+  locality: "Madrid",
+  administrativeAreaCode: "28",
+  postalCode: "28013",
+  countryCode: "ES",
+};
+it("a chosen address from the address search counts as an unsaved change", async () => {
+  const { panel } = await mount({}, { suggest: async () => [], resolve: async () => MADRID });
+  expect(unload()).toBe(false);
+  panel.shadowRoot!.querySelector("wt-address-lookup")!.dispatchEvent(
+    new CustomEvent("wt-address-chosen", {
+      detail: { address: MADRID },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await panel.updateComplete;
+  expect(field(panel, "addressLine1").value).toBe("Calle Mayor 2");
+  expect(unload()).toBe(true);
+});
+it("page discard drops a chosen address still on its way", async () => {
+  const answers: ((address: AddressLookupResult) => void)[] = [];
+  const { app, panel } = await mount(
+    {},
+    {
+      suggest: async () => [{ id: "s1", label: "Calle Mayor 2" }],
+      resolve: () => new Promise((resolve) => answers.push(resolve)),
+    },
+  );
+  const search = panel.shadowRoot!.querySelector("wt-address-lookup")!;
+  search.delay = 0;
+  const input = search.shadowRoot!.querySelector("input")!;
+  input.value = "Calle Mayor";
+  input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+  await expect.poll(() => search.shadowRoot!.querySelectorAll('[role="option"]').length).toBe(1);
+  search.shadowRoot!.querySelector<HTMLElement>('[role="option"]')!.click();
+  await change(panel, "venueName", "Changed venue");
+  const request = leave(app);
+  await choose(app, "discard");
+  expect(await request).toBe("proceeded");
+  answers[0]!(MADRID);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await panel.updateComplete;
+  expect(field(panel, "addressLine1").value).toBe("Calle Mayor 1");
   expect(unload()).toBe(false);
 });
 it("an accepted write clears protection before a failed refresh", async () => {

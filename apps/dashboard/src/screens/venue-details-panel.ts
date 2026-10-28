@@ -16,6 +16,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-address-lookup.js";
 import "./business-day-start-editor.js";
+import { foldForSearch } from "@waitron/shared";
 import { DashboardQueries } from "../api/query-controller.js";
 import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
@@ -63,7 +64,13 @@ const REASONS: Record<string, StringKey> = {
 };
 const nameOf = (field: VenueDetailField) => (field === "name" ? "venueName" : field);
 /** The fields a chosen address fills; the province is never among them, as the server locks it. */
-const SEARCH_FILLS = ["addressLine1", "addressLine2", "postalCode", "city"] as const;
+const SEARCH_FILLS: readonly VenueDetailField[] = [
+  "addressLine1",
+  "addressLine2",
+  "postalCode",
+  "city",
+];
+const provinceKey = (value: string) => foldForSearch(value.trim().replace(/\s+/g, " "));
 
 @customElement("dashboard-venue-details-panel")
 export class VenueDetailsPanel extends LitElement {
@@ -137,7 +144,7 @@ export class VenueDetailsPanel extends LitElement {
   ];
   @property({ attribute: false }) api!: DashboardApi;
   @property({ attribute: false }) readOnly = false;
-  /** Address suggestions; without one the address search stays hidden. Nothing sets it yet. */
+  /** Address suggestions; without one the address search stays hidden. */
   @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @state() private model?: VenueDetailsModel;
   @state() private draft?: VenueDetailValues;
@@ -255,6 +262,7 @@ export class VenueDetailsPanel extends LitElement {
       snapshot: (value) => ({ ...value }),
       equal: (a, b) => Object.keys(venueDetailPatch(a, b)).length === 0,
       restore: (value) => {
+        this.#cancelAddressSearch();
         this.draft = value;
         this.errors = {};
         this.actionError = "";
@@ -423,7 +431,12 @@ export class VenueDetailsPanel extends LitElement {
   }
   #change(field: VenueDetailField, event: CustomEvent<{ value: string }>): void {
     event.stopPropagation();
+    if (SEARCH_FILLS.includes(field)) this.#cancelAddressSearch();
     this.#apply({ [field]: event.detail.value });
+  }
+  /** So an address still on its way cannot overwrite what the person typed or restored. */
+  #cancelAddressSearch(): void {
+    this.renderRoot.querySelector("wt-address-lookup")?.cancelSearch();
   }
   #addressChosen(event: CustomEvent<AddressChosenDetail>): void {
     event.stopPropagation();
@@ -434,8 +447,7 @@ export class VenueDetailsPanel extends LitElement {
       code === undefined
         ? undefined
         : this.model.provinces.find(
-            ({ code: known, name }) =>
-              known === code || name.toLocaleLowerCase() === code.toLocaleLowerCase(),
+            ({ code: known, name }) => known === code || provinceKey(name) === provinceKey(code),
           );
     if (address.countryCode !== this.model.issuer.country) this.refusedAddress = "country";
     else if (area !== undefined && area.name !== this.draft.province)
@@ -606,10 +618,9 @@ export class VenueDetailsPanel extends LitElement {
   #addressSearch(): TemplateResult | typeof nothing {
     const model = this.model!;
     if (SEARCH_FILLS.some((field) => model.policy[field].decision === "refuse")) return nothing;
-    const expected = this.#expected;
-    const generation = this.#generation;
     return html`<wt-address-lookup
       class="field"
+      name="address-search"
       .provider=${this.addressProvider}
       country-code=${model.issuer.country}
       label=${t("venue_details.address_lookup.label")}
@@ -628,10 +639,7 @@ export class VenueDetailsPanel extends LitElement {
             : ""
       }
       ?disabled=${this.submitting}
-      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => {
-        if (this.isConnected && expected === this.#expected && generation === this.#generation)
-          this.#addressChosen(event);
-      }}
+      @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#addressChosen(event)}
     ></wt-address-lookup>`;
   }
   #fields(): TemplateResult {
