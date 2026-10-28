@@ -89,7 +89,12 @@ it("offers no label filter, no labels field and no alt-text field", async () => 
 
 for (const { locale, edit, remove, use } of [
   { locale: "en-GB", edit: "Edit", remove: "Delete", use: "Use image" },
-  { locale: "es-ES", edit: "Editar", remove: "Eliminar", use: "Usar imagen" },
+  {
+    locale: "es-ES",
+    edit: MEDIA_STRINGS.es["action.edit"],
+    remove: MEDIA_STRINGS.es["image.delete"],
+    use: MEDIA_STRINGS.es["image.select"],
+  },
 ]) {
   it(`labels each card's actions briefly and names the image in each one's accessible name (${locale})`, async () => {
     setLocale(locale);
@@ -958,7 +963,7 @@ it("links a live menu version using the image to its menu, and blocks the delete
 
 for (const [locale, label] of [
   ["en-GB", "Lunch Menu (Scheduled menu)"],
-  ["es-ES", "Lunch Menu (Carta programada)"],
+  ["es-ES", `Lunch Menu (${ES["image.scheduled_menu"]})`],
 ]) {
   it(`links a queued menu edition using the image to its menu, and blocks the delete (${locale})`, async () => {
     setLocale(locale);
@@ -990,7 +995,12 @@ for (const [locale, label] of [
 
 for (const [locale, label] of [
   ["en-GB", "Drinks folder in Lunch Menu"],
-  ["es-ES", "Carpeta Drinks en Lunch Menu"],
+  [
+    "es-ES",
+    ES["image.included_menu_folder"]
+      .replace("{included}", "Drinks")
+      .replace("{menu}", "Lunch Menu"),
+  ],
 ]) {
   it(`links an include's folder using the image to its menu's structure, and blocks the delete (${locale})`, async () => {
     setLocale(locale);
@@ -1275,7 +1285,7 @@ it("confirms the image asked about last when an earlier usage lookup fails late"
 
 it.each([
   ["en-GB", "Old toast (Disabled product)"],
-  ["es-ES", "Old toast (Producto deshabilitado)"],
+  ["es-ES", `Old toast (${ES["image.disabled_product"]})`],
 ])("in %s, marks a disabled product among an image's blocking uses", async (locale, marked) => {
   setLocale(locale);
   const client = api();
@@ -1296,7 +1306,7 @@ it.each([
 
 it.each([
   ["en-GB", "Dining receipt logo"],
-  ["es-ES", "Logotipo del recibo de Dining"],
+  ["es-ES", ES["image.department_receipt_logo"].replace("{department}", "Dining")],
 ])(
   "in %s, links the department using the image as its logo to its receipt editor, and blocks the delete",
   async (locale, label) => {
@@ -1421,7 +1431,7 @@ it("on an invalid submission shows the field and bottom messages, focuses the ph
 
   setLocale("es-ES");
   await el.updateComplete;
-  expect(await bottomOf()).toBe("Corrige los campos marcados para continuar.");
+  expect(await bottomOf()).toBe(ES["image.fix_fields"]);
 });
 
 it("focuses the default-language name when an edit is saved without one", async () => {
@@ -1708,7 +1718,7 @@ it("names each language section with a capital letter in Spanish, where the brow
     legend.textContent!.trim(),
   );
   expect(new Intl.DisplayNames(["es-ES"], { type: "language" }).of("fr")).toBe("francés");
-  expect(legends).toEqual(["Español (Predeterminado)", "Francés"]);
+  expect(legends).toEqual([`Español (${ES["image.default"]})`, "Francés"]);
 });
 
 it("clears a failed load's message once the server answers again", async () => {
@@ -1781,7 +1791,7 @@ for (const picker of [false, true]) {
 
 for (const [locale, label] of [
   ["en-GB", "Preview"],
-  ["es-ES", "Vista previa"],
+  ["es-ES", ES["image.preview_open"]],
 ]) {
   it(`names the thumbnail's button as a preview of the image, and shows that it opens one (${locale})`, async () => {
     setLocale(locale);
@@ -2067,7 +2077,11 @@ it("leaves Edit and Delete working as before once a preview has been opened and 
 
 it.each([
   ["en-GB", "Bar receipt logo (Deleted department)", "Dining receipt logo"],
-  ["es-ES", "Logotipo del recibo de Bar (Departamento eliminado)", "Logotipo del recibo de Dining"],
+  [
+    "es-ES",
+    `${ES["image.department_receipt_logo"].replace("{department}", "Bar")} (${ES["image.deleted_department"]})`,
+    ES["image.department_receipt_logo"].replace("{department}", "Dining"),
+  ],
 ])(
   "in %s, names retained department logos and links only live Receipt tabs",
   async (locale, deleted, active) => {
