@@ -4,7 +4,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   boxEmailMessage,
   isBoxEmailCode,
-  readOpenClockIncidents,
+  readOpenEmailedIncidents,
   STORAGE_EMAIL_CODES,
   type BoxEmailCode,
 } from "./box-alert-email.js";
@@ -270,7 +270,7 @@ describe("every clock email", () => {
   });
 });
 
-describe("readOpenClockIncidents", () => {
+describe("readOpenEmailedIncidents", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads the open restart and wrongly dated alerts, oldest first, and no handled or other one", async () => {
@@ -290,11 +290,104 @@ describe("readOpenClockIncidents", () => {
         row("clock.behind_chain_restarted", "2026-10-21T09:30:00.000Z", "2026-10-21T10:00:00.000Z"),
         row("clock.behind_chain", "2026-10-22T09:29:00.000Z"),
       ]);
-    const open = await readOpenClockIncidents(suite.db);
+    const open = await readOpenEmailedIncidents(suite.db);
     expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
       { code: "clock.behind_chain_restarted", params: { at: "2026-10-22T09:30:00.000Z" } },
       { code: "clock.records_misdated", params: { at: "2026-10-22T09:31:00.000Z" } },
     ]);
     expect(open.every(({ id }) => typeof id === "string" && id !== "")).toBe(true);
+  });
+});
+
+describe("boxEmailMessage for old backups deleted", () => {
+  it("words one deleted backup and the deletion day, in both languages", () => {
+    expect(
+      boxEmailMessage("backup.archives_deleted", "en", "Corner Bistro", {
+        count: 1,
+        date: "2026-10-28",
+      }),
+    ).toEqual({
+      subject: "Old backups deleted: low disk space",
+      text: "Low disk space: the box deleted its oldest backup (28 Oct 2026).",
+    });
+    expect(
+      boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", {
+        count: 1,
+        date: "2026-10-28",
+      }),
+    ).toEqual({
+      subject: "Copias antiguas borradas: poco espacio en disco",
+      text: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
+    });
+  });
+
+  it("words several deleted backups, in both languages", () => {
+    expect(
+      boxEmailMessage("backup.archives_deleted", "en", "Corner Bistro", {
+        count: 3,
+        date: "2026-10-28",
+      }).text,
+    ).toBe("Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).");
+    expect(
+      boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", {
+        count: 3,
+        date: "2026-10-28",
+      }).text,
+    ).toBe("Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).");
+  });
+
+  it("draws the day as the bell does", () => {
+    // The bell's strings for 2026-10-28, pinned in apps/dashboard/src/i18n/alerts.test.ts.
+    const bell = { en: "28 Oct 2026", es: "28 oct 2026" };
+    for (const language of LANGUAGES) {
+      const { text } = boxEmailMessage("backup.archives_deleted", language, "Corner Bistro", {
+        count: 1,
+        date: "2026-10-28",
+      });
+      expect(text).toContain(`(${bell[language]}).`);
+    }
+  });
+});
+
+describe("boxEmailMessage for a backup refused for lack of room", () => {
+  const sizes = { neededBytes: 6_300_000_000, availableBytes: 1_900_000_000 };
+
+  it("words both sizes, in English", () => {
+    expect(boxEmailMessage("backup.run_stopped", "en", "Corner Bistro", sizes)).toEqual({
+      subject: "Backup not made: low disk space",
+      text: "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
+    });
+  });
+
+  it("words both sizes, in Spanish", () => {
+    expect(boxEmailMessage("backup.run_stopped", "es", "Corner Bistro", sizes)).toEqual({
+      subject: "Copia no hecha: poco espacio en disco",
+      text: "Copia no hecha: necesita 6,3 GB libres y el disco tiene 1,9 GB.",
+    });
+  });
+});
+
+describe("readOpenEmailedIncidents for backups", () => {
+  const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
+
+  it("reads an open old-backups-deleted alert and no handled one", async () => {
+    const row = (detectedAt: string, acknowledgedAt: string | null = null) => ({
+      source: "backup" as const,
+      code: "backup.archives_deleted",
+      params: { count: 2, date: detectedAt.slice(0, 10) },
+      severity: "warning" as const,
+      detectedAt,
+      acknowledgedAt,
+    });
+    await suite.db
+      .insert(incidents)
+      .values([
+        row("2026-10-27T03:00:00.000Z", "2026-10-27T09:00:00.000Z"),
+        row("2026-10-28T03:00:00.000Z"),
+      ]);
+    const open = await readOpenEmailedIncidents(suite.db);
+    expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
+      { code: "backup.archives_deleted", params: { count: 2, date: "2026-10-28" } },
+    ]);
   });
 });

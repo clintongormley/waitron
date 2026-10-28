@@ -5,8 +5,9 @@ import {
   startBoxEmailDuty,
   type BoxEmailCode,
   type BoxEmailContext,
-  type ClockIncident,
+  type EmailedIncident,
 } from "./box-alert-email.js";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { EmailDelivery } from "./email-delivery.js";
 import { BOX_EMAIL_WORDS } from "./i18n/box-emails.js";
 import type { FreeSpaceReading } from "./free-space-watch.js";
@@ -37,7 +38,8 @@ function duty() {
     recipients: [ANA, BEN] as readonly ManagerEmailRecipient[],
     delivery: { mode: "smtp", smtp: SMTP } as EmailDelivery,
     notices: { notices: [], unavailable: [] } as StaffNoticesRead,
-    incidents: [] as readonly ClockIncident[],
+    incidents: [] as readonly EmailedIncident[],
+    backupStopped: undefined as BackupOutcomeHolder["runStopped"],
     primary: true,
   };
   const context = vi.fn(async (): Promise<BoxEmailContext> => ({
@@ -46,7 +48,7 @@ function duty() {
     delivery: state.delivery,
   }));
   const moduleNotices = vi.fn(async (): Promise<StaffNoticesRead> => state.notices);
-  const clockIncidents = vi.fn(async (): Promise<readonly ClockIncident[]> => state.incidents);
+  const clockIncidents = vi.fn(async (): Promise<readonly EmailedIncident[]> => state.incidents);
   const send = vi.fn<TextEmailSender>(async () => "sent");
   const handle = startBoxEmailDuty({
     disk: { since: () => state.diskSince },
@@ -58,6 +60,7 @@ function duty() {
     },
     moduleNotices,
     clockIncidents,
+    backupStopped: () => state.backupStopped,
     context,
     send,
     isPrimary: () => state.primary,
@@ -112,7 +115,7 @@ function clockStop(params: typeof STOP): OwnedStaffNotice {
   return { ...notice("clock.behind_chain"), params };
 }
 
-const RESTART: ClockIncident = {
+const RESTART: EmailedIncident = {
   id: "i-restart",
   code: "clock.behind_chain_restarted",
   params: {
@@ -124,7 +127,7 @@ const RESTART: ClockIncident = {
   },
 };
 
-const MISDATED: ClockIncident = {
+const MISDATED: EmailedIncident = {
   id: "i-misdated",
   code: "clock.records_misdated",
   params: {
@@ -139,7 +142,7 @@ const MISDATED: ClockIncident = {
   },
 };
 
-function clockEmail(incident: ClockIncident, recipient: ManagerEmailRecipient) {
+function clockEmail(incident: EmailedIncident, recipient: ManagerEmailRecipient) {
   return {
     recipient: recipient.email,
     ...boxEmailMessage(incident.code, recipient.language, VENUE, incident.params),
@@ -583,7 +586,7 @@ describe("startBoxEmailDuty", () => {
 
   it("stop during the alert read sends nothing", async () => {
     const d = duty();
-    const read = held<readonly ClockIncident[]>();
+    const read = held<readonly EmailedIncident[]>();
     d.clockIncidents.mockImplementationOnce(() => read.promise);
     d.armed[0]!.fn();
     await vi.waitFor(() => expect(d.clockIncidents).toHaveBeenCalled());
@@ -672,5 +675,116 @@ describe("startBoxEmailDuty", () => {
     expect(d.sent().filter((m) => m.recipient === ANA.email)).toHaveLength(8);
     expect(d.events("box_email.sent")).toHaveLength(2);
     expect(d.events("box_email.send_failed")).toHaveLength(2);
+  });
+});
+
+const DELETED: EmailedIncident = {
+  id: "i-deleted",
+  code: "backup.archives_deleted",
+  params: { count: 3, date: "2026-10-28" },
+};
+
+const REFUSED = {
+  code: "backup.staging_space_low",
+  at: "2026-10-28T03:00:00.000Z",
+  sizes: { neededBytes: 6_300_000_000, availableBytes: 1_900_000_000 },
+};
+
+function refusedEmail(recipient: ManagerEmailRecipient, sizes = REFUSED.sizes) {
+  return {
+    recipient: recipient.email,
+    ...boxEmailMessage("backup.run_stopped", recipient.language, VENUE, sizes),
+  };
+}
+
+describe("startBoxEmailDuty for backups", () => {
+  it("emails each manager once while old backups deleted stays open, in their own language", async () => {
+    const d = duty();
+    d.state.incidents = [DELETED];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(DELETED, ANA), clockEmail(DELETED, BEN)]);
+    expect(d.sent()[1]!.text).toBe(
+      "Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).",
+    );
+  });
+
+  it("tries a failed deletion email again while the alert stays open, and not once it is handled", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.state.incidents = [DELETED];
+    await d.tick();
+    await d.tick();
+    d.state.incidents = [];
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(DELETED, BEN), clockEmail(DELETED, BEN)]);
+  });
+
+  it("emails each manager once per refusal for lack of room, with its sizes", async () => {
+    const d = duty();
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(ANA), refusedEmail(BEN)]);
+    expect(d.sent()[1]!.text).toBe(
+      "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
+    );
+    expect(d.events("box_email.sent")).toContainEqual([
+      "info",
+      "box_email.sent",
+      { code: "backup.run_stopped" },
+    ]);
+  });
+
+  it("keeps the sizes of the first sighting while the refusal lasts", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    d.state.backupStopped = {
+      ...REFUSED,
+      at: "2026-10-28T04:00:00.000Z",
+      sizes: { neededBytes: 7_000_000_000, availableBytes: 1_000_000_000 },
+    };
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
+  });
+
+  it("tries a failed refusal email at each check while the refusal lasts, and not once it clears", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    await d.tick();
+    d.state.backupStopped = undefined;
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
+  });
+
+  it("emails a refusal again after the backups ran and were refused once more", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    d.state.backupStopped = undefined;
+    await d.tick();
+    d.state.backupStopped = REFUSED;
+    await d.tick();
+    expect(d.sent()).toEqual([refusedEmail(BEN), refusedEmail(BEN)]);
+  });
+
+  it("does not email a backup run that stopped on anything else", async () => {
+    const d = duty();
+    d.state.backupStopped = { code: "backup.recovery_key_missing", at: REFUSED.at };
+    await d.tick();
+    await d.tick();
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.context).not.toHaveBeenCalled();
   });
 });

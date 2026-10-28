@@ -182,7 +182,7 @@ import { deviceNoticeSources, devicePrinterNoticeSources } from "./box-staff-not
 import {
   BOX_EMAIL_CHECK_MS,
   readBoxEmailContext,
-  readOpenClockIncidents,
+  readOpenEmailedIncidents,
   startBoxEmailDuty,
 } from "./box-alert-email.js";
 import { createTextEmailSender } from "./text-email.js";
@@ -2346,7 +2346,8 @@ async function bootServer(
       reading.settle(read.unavailable);
       return read;
     },
-    clockIncidents: () => readOpenClockIncidents(db),
+    clockIncidents: () => readOpenEmailedIncidents(db),
+    backupStopped: () => backupOutcomes.runStopped,
     context: () =>
       readBoxEmailContext(db, {
         ring,

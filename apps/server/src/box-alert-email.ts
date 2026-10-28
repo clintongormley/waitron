@@ -2,17 +2,21 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { KeyRing } from "@waitron/credentials";
 import { incidents, locations, type Database } from "@waitron/db";
 import { codeOf } from "@waitron/server-kit";
+import { formatBytes } from "@waitron/shared";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { DiskFullState } from "./disk-full-state.js";
 import { resolveEmailDeliveryIn, type EmailDelivery } from "./email-delivery.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import {
+  BACKUP_DELETED_EMAIL_WORDS,
+  BACKUP_REFUSED_EMAIL_WORDS,
   BOX_EMAIL_WORDS,
   CLOCK_CONFIRMED_BY_WORDS,
   CLOCK_MISDATED_EMAIL_WORDS,
   CLOCK_RESTARTED_EMAIL_WORDS,
 } from "./i18n/box-emails.js";
 import type { Logger } from "./logger.js";
-import { receiptDateTimeNumeric } from "./receipt-dates.js";
+import { receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
 import {
   readManagerEmailRecipients,
   type ManagerEmailRecipient,
@@ -31,18 +35,24 @@ export function isBoxEmailCode(code: string): code is BoxEmailCode {
 }
 
 /** The alerts the duty emails while they stay open, read from the incidents table. */
-export const CLOCK_INCIDENT_EMAIL_CODES = [
+export const INCIDENT_EMAIL_CODES = [
   "clock.behind_chain_restarted",
   "clock.records_misdated",
+  "backup.archives_deleted",
 ] as const;
 
-export type ClockIncidentEmailCode = (typeof CLOCK_INCIDENT_EMAIL_CODES)[number];
+export type IncidentEmailCode = (typeof INCIDENT_EMAIL_CODES)[number];
 
-export interface ClockIncident {
+export interface EmailedIncident {
   readonly id: string;
-  readonly code: ClockIncidentEmailCode;
+  readonly code: IncidentEmailCode;
   readonly params: Readonly<Record<string, unknown>>;
 }
+
+/** Emailed while the backup run's `runStopped` names `backup.staging_space_low`. */
+export const BACKUP_REFUSED_EMAIL_CODE = "backup.run_stopped";
+
+type EmailCode = BoxEmailCode | IncidentEmailCode | typeof BACKUP_REFUSED_EMAIL_CODE;
 
 /** Each time placeholder and the param holding the offset it is written in. */
 const TIME_PLACEHOLDERS = {
@@ -53,10 +63,30 @@ const TIME_PLACEHOLDERS = {
 } as const;
 
 function wordsFor(
-  code: BoxEmailCode | ClockIncidentEmailCode,
+  code: EmailCode,
   language: "en" | "es",
   params?: Readonly<Record<string, unknown>>,
 ): { subject: string; text: string } {
+  if (code === "backup.archives_deleted") {
+    const words = BACKUP_DELETED_EMAIL_WORDS[language];
+    const count = params?.["count"];
+    const date = params?.["date"];
+    const day =
+      typeof date === "string" ? receiptDay(date, language === "es" ? "es-ES" : "en-GB") : "";
+    const text = (count === 1 ? words.one : words.text)
+      .replaceAll("{count}", () => String(count))
+      .replaceAll("{date}", () => day);
+    return { subject: words.subject, text };
+  }
+  if (code === BACKUP_REFUSED_EMAIL_CODE) {
+    const words = BACKUP_REFUSED_EMAIL_WORDS[language];
+    return {
+      subject: words.subject,
+      text: words.text
+        .replaceAll("{needed}", () => formatBytes(params?.["neededBytes"], language))
+        .replaceAll("{available}", () => formatBytes(params?.["availableBytes"], language)),
+    };
+  }
   if (code === "clock.behind_chain_restarted") {
     const by = CLOCK_CONFIRMED_BY_WORDS[language];
     const source = params?.["confirmedBy"];
@@ -86,7 +116,7 @@ function wordsFor(
 /** The subject and text for `code` in `language`, `{venue}` replaced by the venue's name and each
  * time placeholder by its param, written `dd/mm/yyyy hh:mm` in its own offset. */
 export function boxEmailMessage(
-  code: BoxEmailCode | ClockIncidentEmailCode,
+  code: EmailCode,
   language: "en" | "es",
   venue: string,
   params?: Readonly<Record<string, unknown>>,
@@ -106,21 +136,18 @@ export function boxEmailMessage(
   return { subject: filled(words.subject), text: filled(words.text) };
 }
 
-/** The open alerts of `CLOCK_INCIDENT_EMAIL_CODES`, oldest first, read in one write-lock turn with
- * no change-log drain. */
-export async function readOpenClockIncidents(db: Database): Promise<ClockIncident[]> {
+/** The open alerts of `INCIDENT_EMAIL_CODES`, oldest first, read in one write-lock turn with no
+ * change-log drain. */
+export async function readOpenEmailedIncidents(db: Database): Promise<EmailedIncident[]> {
   return db.withWriteLock(async () => {
     const rows = await db
       .select({ id: incidents.id, code: incidents.code, params: incidents.params })
       .from(incidents)
       .where(
-        and(
-          inArray(incidents.code, [...CLOCK_INCIDENT_EMAIL_CODES]),
-          isNull(incidents.acknowledgedAt),
-        ),
+        and(inArray(incidents.code, [...INCIDENT_EMAIL_CODES]), isNull(incidents.acknowledgedAt)),
       )
       .orderBy(asc(incidents.detectedAt), asc(incidents.id));
-    return rows.map((row) => ({ ...row, code: row.code as ClockIncidentEmailCode }));
+    return rows.map((row) => ({ ...row, code: row.code as IncidentEmailCode }));
   });
 }
 
@@ -157,7 +184,7 @@ export async function readBoxEmailContext(
 }
 
 interface Episode {
-  readonly code: BoxEmailCode | ClockIncidentEmailCode;
+  readonly code: EmailCode;
   /** The module that gave the notice; absent for the disk's episodes and the alerts'. */
   readonly owner?: string;
   /** Set for an open alert's episode, which lasts while the alert stays open. */
@@ -181,7 +208,9 @@ export function startBoxEmailDuty(deps: {
   space: Pick<FreeSpaceState, "current">;
   /** The enabled modules' notices, read in turns. */
   moduleNotices: () => Promise<StaffNoticesRead>;
-  clockIncidents: () => Promise<readonly ClockIncident[]>;
+  clockIncidents: () => Promise<readonly EmailedIncident[]>;
+  /** The backup run's memory of its last stop. */
+  backupStopped: () => BackupOutcomeHolder["runStopped"];
   context: () => Promise<BoxEmailContext>;
   send: TextEmailSender;
   isPrimary: () => boolean;
@@ -207,7 +236,7 @@ export function startBoxEmailDuty(deps: {
 
   function begin(
     key: string,
-    code: BoxEmailCode | ClockIncidentEmailCode,
+    code: EmailCode,
     owner?: string,
     params?: Readonly<Record<string, unknown>>,
     incident?: true,
@@ -288,6 +317,16 @@ export function startBoxEmailDuty(deps: {
         due.push({
           episode: begin("storage.space_low", "storage.space_low"),
           toldAlready: episodes.get("storage.disk_full")?.sentTo,
+        });
+      }
+      const stoppedRun = deps.backupStopped();
+      if (stoppedRun?.code !== "backup.staging_space_low") {
+        episodes.delete(BACKUP_REFUSED_EMAIL_CODE);
+      } else {
+        due.push({
+          episode: begin(BACKUP_REFUSED_EMAIL_CODE, BACKUP_REFUSED_EMAIL_CODE, undefined, {
+            ...stoppedRun.sizes,
+          }),
         });
       }
       const notices = await read(deps.moduleNotices);
