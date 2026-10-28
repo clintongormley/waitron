@@ -554,11 +554,6 @@ only the app keeps from deletion; no trigger protects it either.
   A change to one that misses the other shows the waiter one number and stores another.
 - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
   amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-- Rename the `sale_receipt_guests.guests` column to `guest_count`, matching `parties.guest_count`
-  (till requests and the drizzle property already say `guestCount`, A988). Needs the owner's yes to
-  map the renamed column in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which compares every
-  table's columns with the frozen Madrid export; the recipe and measurements are Task 5 of
-  `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`.
 - Some code names holding the guest count still say `guests` after A988 (#2163), which renamed
   only the wire fields and the drizzle property: `readBillGuests` and `guestsOfParty`
   (`apps/server/src/receipt-guests.ts`, `apps/till/src/state/receipt-guests.ts`),
@@ -650,8 +645,11 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 - **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
   guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle
   property, and Split a table's two counts are `guestCounts.staying` and
-  `guestCounts.leaving`. Until the owner allows the frozen-fixture comparison to map a renamed
-  column, the `sale_receipt_guests` column keeps the name `guests`. Route paths
+  `guestCounts.leaving`. The `sale_receipt_guests` column is `guest_count` too (A1164, owner
+  2026-10-28); the frozen Madrid export still says `guests`, so
+  `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts` maps that one renamed column
+  (`RENAMED_COLUMNS`) on the export's side before comparing, and refuses an entry it does not
+  use. Route paths
   (`PUT /api/parties/:id/guests`), file and table names, the printed receipt's guests line
   (`ReceiptDocument.guests`), and many function, property and event names (for example
   `readReceiptGuests`, `setPartyGuests`) keep the word.
