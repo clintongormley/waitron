@@ -1,3 +1,9 @@
+import { sql } from "drizzle-orm";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { applyHistoricalTestVenue } from "@waitron/provisioning/testing/allocated-venue";
+import { planVenue } from "@waitron/provisioning";
+import { ALL_MODULES } from "@waitron/composition";
 import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import type { CountryPack } from "@waitron/country";
@@ -267,4 +273,47 @@ describe("Demo location-name ownership", () => {
     });
     expect(requests).toHaveLength(0);
   });
+});
+
+describe("persisted Demo name ownership", () => {
+  const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
+  it.each([
+    ["automatic", "Stale default", "Can Delgado"],
+    ["custom", "Casa Delgado", "Casa Delgado"],
+    [undefined, "Casa Delgado", "Casa Delgado"],
+    ["custom", "My restaurant", "My restaurant"],
+  ])(
+    "persists the normalized geography and %s name through real provisioning",
+    async (source, name, want) => {
+      const app = new Hono();
+      const { deps: setupDeps } = deps();
+      setupDeps.provision = async (request) =>
+        applyHistoricalTestVenue(planVenue(request.venue, ALL_MODULES), {
+          db: suite.db,
+          modules: ALL_MODULES,
+        });
+      mountSetup(app, setupDeps, () => {});
+      const body = venue("ES", {
+        name,
+        fiscalTerritory: "ES-common",
+        postalCode: "08001",
+        city: "Barcelona",
+        province: "08",
+        timeZone: "Europe/Madrid",
+        invoiceLocales: ["ca-ES"],
+      });
+      const response = await post(app, {
+        mode: "demo",
+        demoLocationNameSource: source,
+        venue: { ...body, taxId: "B00000000", legalName: "Waitron Demo S.L." },
+      });
+      expect(response.status).toBe(200);
+      expect(suite.db.all(sql`select name,province from locations`)).toEqual([
+        { name: want, province: "Barcelona" },
+      ]);
+      expect(suite.db.all(sql`select legal_name,tax_id from tenants`)).toEqual([
+        { legal_name: "Waitron Demo S.L.", tax_id: "B00000000" },
+      ]);
+    },
+  );
 });
