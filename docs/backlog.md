@@ -5568,6 +5568,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#retain-failure-screenshots-for-long-browser-test-names).
 
 - **A pnpm setup retry does not identify which command failed.**
+  Also investigate the setup step that remained active in main CI run 40644939856 after cancellation.
   [Detail](backlog/ci.md#identify-which-pnpm-setup-command-failed).
 
 - **Root guard deadlines under extreme external load (left open by A751).**

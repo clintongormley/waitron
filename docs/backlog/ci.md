@@ -501,6 +501,15 @@ or the version check failed, so stderr alone may not distinguish them. On recurr
 separate statuses and timings for both commands before assigning the cause. The controlled
 short-limit measurement is in [the CI guide](../developers/ci-and-gates.md#give-a-healthy-version-check-its-normal-allowance).
 
+On 2026-10-28, main run [40644939856](https://github.com/clintongormley/waitron/actions/runs/40644939856)
+reported workforce job `122671628160` in `Set up pnpm` from `06:37:54Z` through repeated
+API snapshots. At the cancellation request that step had lasted 438 seconds; the same step in
+successful run `40626865577` lasted two seconds. Normal cancellation left that job active while
+other jobs finished cancelling. Running-job log retrieval refused until completion. Retain its
+completed log and distinguish a running command from stale runner reporting before changing the
+installer, retry limits or job deadline. The cause is unverified. Lane F retains the snapshots in
+`receipts/a976-media-localized-20261028/`; no unchanged rerun was requested.
+
 ## The step-watch guard received an undefined held-thread result
 
 On 2026-10-16, A737 Part 2's normal push at `877d14981`, rebased onto A751's
