@@ -272,14 +272,14 @@ test("the add row is not offered for a label that differs only in accents or cap
 });
 
 test("the search and the add row follow an option's new label, even on the same option object", async () => {
-  const cafe: ComboboxOption = { value: "cafe", label: "Café" };
-  const { el, search } = await openSearch([cafe, { value: "te", label: "Té" }]);
+  const coffeeOption: ComboboxOption = { value: "cafe", label: "Café" };
+  const { el, search } = await openSearch([coffeeOption, { value: "te", label: "Té" }]);
   el.allowAdd = true;
   await el.updateComplete;
   await userEvent.type(search, "cafe");
   expect(optionLabels(el)).toEqual(["Café"]);
   expect(el.shadowRoot!.querySelector(".add")).toBeNull();
-  cafe.label = "Cortado";
+  coffeeOption.label = "Cortado";
   el.options = [...el.options];
   await el.updateComplete;
   expect(optionLabels(el)).toEqual(["Add 'cafe'"]);
