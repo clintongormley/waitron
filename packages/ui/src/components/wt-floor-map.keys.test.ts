@@ -461,3 +461,69 @@ it("a focused table's ring is drawn over the table beside it", async () => {
   const across = [2, 3, 4].map((d) => read(box.right + d, box.top + box.height / 2));
   expect(across.some((p) => distance(p, ring) < distance(p, fill))).toBe(true);
 });
+
+describe("a merge reached by Tab", () => {
+  const FOCUS = "3px solid rgb(1, 2, 3)";
+  const SELECTED = "2px solid rgb(4, 5, 6)";
+
+  async function tabToMerge(): Promise<{ el: WtFloorMap; merge: HTMLButtonElement }> {
+    const outer = await mountThemed(
+      `<div><button id="before">Before</button><wt-floor-map style="width: 400px; height: 200px"></wt-floor-map></div>`,
+      "light",
+    );
+    const el = outer.querySelector<WtFloorMap>("wt-floor-map")!;
+    el.style.setProperty("--wt-focus-ring", FOCUS);
+    el.style.setProperty("--wt-selected-ring", SELECTED);
+    el.reducedMotion = true;
+    el.tables = [
+      { ...t("a", { x: 0 }), joinId: "j" },
+      { ...t("b", { x: 4 }), joinId: "j" },
+    ];
+    await settled(el);
+    outer.querySelector<HTMLButtonElement>("#before")!.focus();
+    await userEvent.tab();
+    const merge = button(el, "a");
+    expect(merge.hasAttribute("data-merge")).toBe(true);
+    expect(el.shadowRoot!.activeElement).toBe(merge);
+    expect(merge.matches(":focus-visible")).toBe(true);
+    return { el, merge };
+  }
+
+  const outline = (element: Element, pseudo?: string) => {
+    const style = getComputedStyle(element, pseudo);
+    return `${style.outlineWidth} ${style.outlineStyle} ${style.outlineColor}`;
+  };
+
+  it("shows the focus ring", async () => {
+    const { merge } = await tabToMerge();
+    expect(outline(merge)).toBe(FOCUS);
+  });
+
+  it("held, shows the focus ring and keeps its selected ring", async () => {
+    const { el, merge } = await tabToMerge();
+    const shape = merge.querySelector('[part="shape"]')!;
+    const box = shape.getBoundingClientRect();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      shape.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          pointerId: 1,
+          pointerType: "touch",
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+        }),
+      );
+      vi.advanceTimersByTime(500);
+    } finally {
+      vi.useRealTimers();
+    }
+    await el.updateComplete;
+    expect(merge.hasAttribute("data-held")).toBe(true);
+    expect(merge.matches(":focus-visible")).toBe(true);
+    expect(outline(merge)).toBe(FOCUS);
+    expect(outline(merge, "::after")).toBe(SELECTED);
+  });
+});

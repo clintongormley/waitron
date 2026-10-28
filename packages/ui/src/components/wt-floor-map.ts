@@ -303,6 +303,23 @@ export class WtFloorMap extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
+      /* With keyboard focus the button's outline is the focus ring, so the selected ring moves to a
+         layer of its own and the focus ring goes past it: right only while the selected ring is no
+         wider than --wt-focus-offset (both 2px). */
+      [part="table"][data-held][data-merge]:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: calc(var(--wt-focus-offset) * 2);
+      }
+
+      [part="table"][data-held][data-merge]:focus-visible::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        outline: var(--wt-selected-ring);
+        outline-offset: var(--wt-focus-offset);
+        pointer-events: none;
+      }
+
       /* Above every other table, so a moving table is not hidden under the one it is dragged onto
          and a held merge's ring is not cut by a table touching it. */
       [part="table"][data-held] {
