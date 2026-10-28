@@ -354,15 +354,36 @@ it("a start at a recovery's repair stage below the floor deletes nothing when th
   expect(await readFile(older!, "utf8")).toBe("old lines");
 });
 
-it("a start at a recovery's repair stage below the floor deletes nothing in a log folder reached through a link into the state folder", async () => {
+it("a start at a recovery's repair stage below the floor deletes nothing in a log folder whose parent is a link into the state folder", async () => {
   const f = await fixture();
-  const inside = join(f.roots.stateDir, "logs");
-  const [, older] = await rotatedLogs(inside);
+  const [, older] = await rotatedLogs(join(f.roots.stateDir, "logs"));
   const outside = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-link-")));
   directories.push(outside);
-  await symlink(inside, join(outside, "logs"));
-  await expectRepairPage(await superviseRepair(f.roots, { logDir: join(outside, "logs") }));
+  await symlink(f.roots.stateDir, join(outside, "box"));
+  await expectRepairPage(await superviseRepair(f.roots, { logDir: join(outside, "box", "logs") }));
   expect(await readFile(older!, "utf8")).toBe("old lines");
+});
+
+it("a start at a recovery's repair stage below the floor deletes nothing in the state folder's logs named by their real path, when the roots are configured through a link", async () => {
+  const f = await fixture();
+  const [, older] = await rotatedLogs(join(f.roots.stateDir, "logs"));
+  const linkRoot = await realpath(await mkdtemp(join(tmpdir(), "backup-entry-linked-roots-")));
+  directories.push(linkRoot);
+  await symlink(dirname(f.roots.stateDir), join(linkRoot, "box"));
+  const linked = {
+    stateDir: join(linkRoot, "box", "state"),
+    venueDir: join(linkRoot, "box", "venue"),
+  };
+  await expectRepairPage(await superviseRepair(linked, { logDir: join(f.roots.stateDir, "logs") }));
+  expect(await readFile(older!, "utf8")).toBe("old lines");
+});
+
+it("a start at a recovery's repair stage below the floor deletes rotated logs in a sibling folder whose name starts with the state folder's", async () => {
+  const f = await fixture();
+  const logDir = `${f.roots.stateDir}2`;
+  const [, older] = await rotatedLogs(logDir);
+  await expectRepairPage(await superviseRepair(f.roots, { logDir }));
+  await expect(stat(older!)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
 it("a start at a recovery's repair stage below the floor never deletes backup staging", async () => {
