@@ -5893,7 +5893,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** Bookings’ native suites use English
-  sample location, operation, contact and note text. Other helpers and screen expectations remain.
+  sample location, operation, contact and note text. UI switch behavior and accessibility suites
+  use English sample labels and descriptions. Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.

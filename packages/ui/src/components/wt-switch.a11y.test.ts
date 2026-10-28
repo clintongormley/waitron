@@ -7,23 +7,23 @@ afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-switch a11y (%s theme)", (theme) => {
   test("unchecked", async () => {
-    await mountThemed('<wt-switch label="Modo formación"></wt-switch>', theme);
+    await mountThemed('<wt-switch label="Training mode"></wt-switch>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("checked", async () => {
-    await mountThemed('<wt-switch label="Activado" checked></wt-switch>', theme);
+    await mountThemed('<wt-switch label="Enabled" checked></wt-switch>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("hidden label", async () => {
-    await mountThemed('<wt-switch label="Disponible" hide-label checked></wt-switch>', theme);
+    await mountThemed('<wt-switch label="Available" hide-label checked></wt-switch>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("row-specific accessible name", async () => {
     const el = await mountThemed(
-      '<wt-switch label="Disponible" accessible-name="Media" hide-label checked></wt-switch>',
+      '<wt-switch label="Available" accessible-name="Media" hide-label checked></wt-switch>',
       theme,
     );
     expect(el.shadowRoot!.querySelector("input")!.getAttribute("aria-label")).toBe("Media");
@@ -32,17 +32,17 @@ describe.each(["light", "dark"] as const)("wt-switch a11y (%s theme)", (theme) =
 
   test("with a description read to assistive technology", async () => {
     const el = await mountThemed(
-      '<wt-switch label="Todas las zonas" description="Incluye las zonas que se añadan" checked></wt-switch>',
+      '<wt-switch label="Every zone" description="Includes zones added later" checked></wt-switch>',
       theme,
     );
     const input = el.shadowRoot!.querySelector("input")!;
     const described = el.shadowRoot!.getElementById(input.getAttribute("aria-describedby")!);
-    expect(described?.textContent).toBe("Incluye las zonas que se añadan");
+    expect(described?.textContent).toBe("Includes zones added later");
     await expectNoA11yViolations(host);
   });
 
   test("disabled", async () => {
-    await mountThemed('<wt-switch label="Activado" disabled></wt-switch>', theme);
+    await mountThemed('<wt-switch label="Enabled" disabled></wt-switch>', theme);
     await expectNoA11yViolations(host);
   });
 });
