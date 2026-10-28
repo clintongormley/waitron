@@ -56,7 +56,7 @@ import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 
 import { resolveMakers, setRoutingCell } from "./routing-store.js";
-import { departments, zoneSalePolicies } from "./schema/service.js";
+import { departments, workingLineContexts, zoneSalePolicies } from "./schema/service.js";
 import { menuPeriods } from "./schema/menus.js";
 import { STARTER_PERIOD_NAMES } from "./starter-content.js";
 import { replaceMenuWeek, saveMenuPeriod } from "./menu-timetable.js";
@@ -65,6 +65,7 @@ import {
   type Department,
   copyOrderServiceContext,
   copyWorkingLineContext,
+  copyWorkingLineContexts,
   configureZone,
   createDepartment,
   createServiceZone,
@@ -432,7 +433,7 @@ async function seedStation(locationId: LocationId, name: string, active = true):
 }
 
 /**
- * The drizzle session the two query-count cases below spy on. `session` is marked `@internal`, so
+ * The drizzle session the query-count cases below spy on. `session` is marked `@internal`, so
  * it is on the object at runtime and off the published type.
  */
 const sessionOf = (tx: Transaction) =>
@@ -2312,6 +2313,77 @@ describe("order service context", () => {
 
       await expect(findOrderServiceContext(tx, cfg, to)).resolves.toBeNull();
       await expect(listWorkingLineContexts(tx, cfg, to)).resolves.toEqual([]);
+    });
+  });
+
+  it("copies many lines' snapshots in one read and one write, each from its own line, skipping a line that never had one", async () => {
+    const venue = await seedSellingVenue();
+    const { cfg } = venue;
+    await scoped(async (tx) => {
+      const orderId = await openOrder(tx, venue, 1);
+      await recordOrderServiceContext(tx, cfg, orderId, venue.diningZone);
+      const lineIds: string[] = [];
+      for (let lineNo = 1; lineNo <= 7; lineNo++)
+        lineIds.push(await addLine(tx, venue, orderId, lineNo));
+      const [onTime, late, bare, onTimeCopy, onTimeCopy2, lateCopy, bareCopy] = lineIds as [
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+        string,
+      ];
+      await recordWorkingLineContexts(
+        tx,
+        cfg,
+        orderId,
+        [
+          { workingOrderLineId: onTime, menuItemId: venue.menuItemId },
+          {
+            workingOrderLineId: late,
+            menuItemId: venue.menuItemId,
+            late: { periodName: "Lunch", confirmedBy: randomUUID() },
+          },
+        ],
+        await listZoneOffers(tx, cfg, venue.diningZone),
+      );
+      const prepared = vi.spyOn(sessionOf(tx), "prepareQuery");
+
+      await copyWorkingLineContexts(tx, cfg, []);
+      expect(prepared).not.toHaveBeenCalled();
+      await copyWorkingLineContexts(tx, cfg, [
+        { from: onTime, to: onTimeCopy },
+        { from: onTime, to: onTimeCopy2 },
+        { from: late, to: lateCopy },
+        { from: bare, to: bareCopy },
+      ]);
+      expect(prepared).toHaveBeenCalledTimes(2);
+      prepared.mockRestore();
+
+      const recorded = new Map(
+        (
+          await tx
+            .select()
+            .from(workingLineContexts)
+            .where(inArray(workingLineContexts.workingOrderLineId, lineIds))
+        ).map((row) => [row.workingOrderLineId, row]),
+      );
+      expect([...recorded.keys()].sort()).toEqual(
+        [onTime, late, onTimeCopy, onTimeCopy2, lateCopy].sort(),
+      );
+      expect(recorded.get(onTime)).not.toEqual({
+        ...recorded.get(late),
+        workingOrderLineId: onTime,
+      });
+      for (const [copy, original] of [
+        [onTimeCopy, onTime],
+        [onTimeCopy2, onTime],
+        [lateCopy, late],
+      ] as const)
+        expect({ ...recorded.get(copy), workingOrderLineId: original }).toEqual(
+          recorded.get(original),
+        );
     });
   });
 });

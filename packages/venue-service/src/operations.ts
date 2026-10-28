@@ -1514,6 +1514,28 @@ export async function copyWorkingLineContext(
   });
 }
 
+/** {@link copyWorkingLineContext} for many lines, in one read and one write. */
+export async function copyWorkingLineContexts(
+  tx: Transaction,
+  cfg: VenueScope,
+  pairs: readonly { from: string; to: string }[],
+): Promise<void> {
+  void cfg;
+  if (pairs.length === 0) return;
+  const contexts = await tx
+    .select()
+    .from(workingLineContexts)
+    .where(
+      inArray(workingLineContexts.workingOrderLineId, [...new Set(pairs.map(({ from }) => from))]),
+    );
+  const byLine = new Map(contexts.map((context) => [context.workingOrderLineId, context]));
+  const copies = pairs.flatMap(({ from, to }) => {
+    const context = byLine.get(from);
+    return context === undefined ? [] : [{ ...context, workingOrderLineId: to }];
+  });
+  if (copies.length > 0) await tx.insert(workingLineContexts).values(copies);
+}
+
 type ZoneKeepOpenState = NonNullable<ZoneMenuState["service"]["zoneKeepOpen"]>;
 
 /** The floor closing summary of each zone with a closure still to come today. */
