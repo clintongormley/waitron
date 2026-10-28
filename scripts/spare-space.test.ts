@@ -3,15 +3,16 @@
  * delete and write the spare: the start on a nearly full disk (`node-entry.ts`), the start's
  * emptying and the repair host (`first-setup-entry.ts`) release it; a start with room
  * (`node-entry.ts`) writes it back with `topUpSpare`, and the running box (`boot.ts`) through
- * `spareRestorer`, the one write-back the free-space watch and Box status's Free button share.
- * Reading the marker (`spareReleased`) is not guarded: it changes nothing, and an options field of
- * that name would match it.
+ * `spareRestorer`, whose `restoreSpare` closure only the free-space watch and Box status's Free
+ * button receive. Each allowed file must still name its entry. Reading the marker
+ * (`spareReleased`) is not guarded: it changes nothing, and an options field of that name would
+ * match it.
  *
  * Weaker than its name: it reads TEXT — a non-test `.ts` file under `apps/<app>/src` or
- * `packages/<package>/src` naming `SPARE_SPACE_FILE`, the literal `"spare-space"`,
- * `SPARE_SPACE_RELEASED_FILE`, the literal `"spare-space.released"`, `releaseSpare`,
- * `releaseSpareBeforeStartAgain`, `topUpSpare` or `spareRestorer` — so a path built another way, or
- * a function reached under another name, escapes it.
+ * `packages/<package>/src` naming `SPARE_SPACE_FILE`, `"spare-space"` in any quotes,
+ * `SPARE_SPACE_RELEASED_FILE`, `"spare-space.released"` in any quotes, `releaseSpare`,
+ * `releaseSpareBeforeStartAgain`, `topUpSpare`, `spareRestorer` or `restoreSpare` — so a path built
+ * another way, or a function reached under another name, escapes it.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -21,7 +22,7 @@ const ROOT = join(import.meta.dirname, "..");
 
 const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
   {
-    pattern: /\bSPARE_SPACE_FILE\b|"spare-space"/,
+    pattern: /\bSPARE_SPACE_FILE\b|["'`]spare-space["'`]/,
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/first-setup-backup-workspace.ts",
@@ -38,7 +39,7 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
     ],
   },
   {
-    pattern: /\bSPARE_SPACE_RELEASED_FILE\b|"spare-space\.released"/,
+    pattern: /\bSPARE_SPACE_RELEASED_FILE\b|["'`]spare-space\.released["'`]/,
     allowed: [
       "apps/server/src/spare-space.ts",
       "packages/provisioning/src/first-setup-backup-workspace.ts",
@@ -53,6 +54,14 @@ const NAMES: ReadonlyArray<{ pattern: RegExp; allowed: readonly string[] }> = [
   {
     pattern: /\bspareRestorer\b/,
     allowed: ["apps/server/src/boot.ts", "apps/server/src/spare-space.ts"],
+  },
+  {
+    pattern: /\brestoreSpare\b/,
+    allowed: [
+      "apps/server/src/boot.ts",
+      "apps/server/src/free-space-now.ts",
+      "apps/server/src/free-space-watch.ts",
+    ],
   },
 ];
 
@@ -104,12 +113,14 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
         text: readFileSync(file, "utf8"),
       }));
     expect(strays(files)).toEqual([]);
-    // Each allowed name is still found, so a renamed function or file cannot leave the guard idle.
-    for (const { pattern } of NAMES) {
-      expect(
-        files.some(({ text }) => pattern.test(text)),
-        pattern.source,
-      ).toBe(true);
+    // Each allowed file still names its entry, so a file that stops using a name loses its pass.
+    for (const { pattern, allowed } of NAMES) {
+      for (const path of allowed) {
+        expect(
+          files.some((file) => file.path === path && pattern.test(file.text)),
+          `${path}: ${pattern.source}`,
+        ).toBe(true);
+      }
     }
   });
 
@@ -138,7 +149,7 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
     ).toEqual([
       "apps/server/src/first-setup-entry.ts: \\btopUpSpare\\b",
       "apps/server/src/free-space-now.ts: \\breleaseSpare\\b|\\breleaseSpareBeforeStartAgain\\b",
-      'apps/server/src/start-space.ts: \\bSPARE_SPACE_FILE\\b|"spare-space"',
+      "apps/server/src/start-space.ts: \\bSPARE_SPACE_FILE\\b|[\"'`]spare-space[\"'`]",
     ]);
   });
 
@@ -170,11 +181,20 @@ describe("the spare file guard (weaker than its name: reads text)", () => {
           text: 'import { spareRestorer } from "./spare-space.js";',
         },
         { path: "apps/server/src/start-space.ts", text: 'join(stateDir, "spare-space.released")' },
+        { path: "apps/server/src/backup-sweep.ts", text: "join(stateDir, `spare-space`)" },
+        {
+          path: "apps/server/src/backup-staging-turn.ts",
+          text: "join(stateDir, `spare-space.released`)",
+        },
+        { path: "apps/server/src/backup-run.ts", text: "watch({ restoreSpare })" },
       ]),
     ).toEqual([
+      "apps/server/src/backup-run.ts: \\brestoreSpare\\b",
+      "apps/server/src/backup-staging-turn.ts: \\bSPARE_SPACE_RELEASED_FILE\\b|[\"'`]spare-space\\.released[\"'`]",
+      "apps/server/src/backup-sweep.ts: \\bSPARE_SPACE_FILE\\b|[\"'`]spare-space[\"'`]",
       "apps/server/src/boot.ts: \\btopUpSpare\\b",
       "apps/server/src/free-space-watch.ts: \\bspareRestorer\\b",
-      'apps/server/src/start-space.ts: \\bSPARE_SPACE_RELEASED_FILE\\b|"spare-space\\.released"',
+      "apps/server/src/start-space.ts: \\bSPARE_SPACE_RELEASED_FILE\\b|[\"'`]spare-space\\.released[\"'`]",
     ]);
   });
 });
