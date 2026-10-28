@@ -118,8 +118,9 @@ export interface BackupSweepDeps {
   /** When the current installation began; an archive taken at or before it is never deleted to
    * make room. Absent, null or throwing: nothing is deleted. */
   installationStartedAt?: () => Promise<Date | null>;
-  /** Told what a run deleted to make room, before the run goes on or is refused; `at` is the run's
-   * time. Its failure is logged and never changes the run's outcome. */
+  /** Told what a run deleted to make room, before the run goes on or is refused; `at` is the time
+   * of the report, just after the deleting. Its failure is logged and never changes the run's
+   * outcome. */
   onArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   /** DI for tests; which disk a folder is on. */
   deviceOf?: DeviceOf;
@@ -182,9 +183,10 @@ async function readInstallationStart(
 export async function runOnce(
   deps: Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">,
 ): Promise<void> {
-  const nowMs = (deps.now ?? (() => new Date()))().getTime();
+  const now = deps.now ?? (() => new Date());
+  const nowMs = now().getTime();
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
-  const stamp = (deps.now ?? (() => new Date()))();
+  const stamp = now();
   const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
   let dumped = false;
@@ -193,7 +195,7 @@ export async function runOnce(
   const reportDeleted = async (deleted: readonly DeletableArchive[]) => {
     if (!deps.onArchivesDeleted) return;
     try {
-      await deps.onArchivesDeleted(deleted, stamp);
+      await deps.onArchivesDeleted(deleted, now());
     } catch (err) {
       deps.log("warn", "backup.archives_deleted_alert_failed", {
         errorCode: codeOf(err),

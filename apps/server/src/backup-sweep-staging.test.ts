@@ -590,7 +590,7 @@ it("the aim defaults to SPACE_LOW_BYTES", async () => {
   expect(backend.puts).toBe(1);
 });
 
-it("calls onArchivesDeleted once with what the first check deleted and the run's time", async () => {
+it("calls onArchivesDeleted once with what the first check deleted and the time of the report", async () => {
   const f = await fixture();
   const s = await seeded(f, [
     [days(3), 200],
@@ -841,4 +841,39 @@ it("a bucket-only run makes no second check", async () => {
   });
   expect(folder.puts).toBe(1);
   expect(withFolder).toHaveBeenCalledTimes(3);
+});
+
+it("reports a deletion at the second check with the clock's time then, not the run's start", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 10_000],
+    [days(1), 10_000],
+  ]);
+  let clock = new Date("2026-10-28T23:59:59.000Z");
+  const d = deps(f, [new Watched("a", s.dir)]);
+  const deleted = () => d.log.mock.calls.some(([, event]) => event === "backup.archive_deleted");
+  // Room for the first check and the after-copy check; at the second, one byte short until the
+  // oldest archive is gone.
+  const { statfs } = thenEncrypted(f, [1e9, 1e9], (encrypted) =>
+    deleted() ? encrypted + 10_000 : encrypted - 1,
+  );
+  const reported: Date[] = [];
+  await runOnce({
+    ...d,
+    now: () => clock,
+    archive: vi.fn(async (path: string) => {
+      await writeFile(path, DUMP);
+      clock = new Date("2026-10-29T00:00:01.000Z");
+    }),
+    stagingEstimateBytes: async () => 10,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 10,
+    statfs,
+    installationStartedAt: async () => days(10),
+    onArchivesDeleted: async (_, at) => {
+      reported.push(at);
+    },
+  });
+  expect(await left(s.dir)).not.toContain(s.keys[0]);
+  expect(reported.map((at) => at.toISOString())).toEqual(["2026-10-29T00:00:01.000Z"]);
 });
