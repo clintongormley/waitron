@@ -27,6 +27,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { vatClassName } from "../i18n/domain.js";
 import { fill, t } from "../i18n/t.js";
 import { receiptLanguageName, receiptLanguageWarning } from "../widgets/receipt-language.js";
+import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 
 type Draft = Pick<VenueDefaults, "receiptLanguage" | "defaultProductVatClass">;
@@ -87,6 +88,7 @@ export class VenueDefaultsPanel extends LitElement {
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
   #generation = 0;
+  #retries = new AbortController();
   /** Each read and each save answer takes the next place when it begins (an answer when it
    * arrives); the card shows a value only if its place is later than the one it shows. */
   #places = 0;
@@ -119,11 +121,13 @@ export class VenueDefaultsPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation++;
+    this.#retries = new AbortController();
     this.#registerDraft();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation++;
+    this.#retries.abort();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -235,7 +239,14 @@ export class VenueDefaultsPanel extends LitElement {
       this.model = answer;
       if (draft === this.draft) this.#cancel();
       else this.#adopt(answer);
-      if (this.isConnected) void this.#reread();
+      const answeredAt = this.#places;
+      const generation = this.#generation;
+      if (this.isConnected)
+        void readAfterSave(
+          () => this.#reread(),
+          () => generation === this.#generation && this.#shownPlace <= answeredAt,
+          this.#retries.signal,
+        );
     } catch (error) {
       if (draft !== this.draft) return;
       const code = codeOf(error);
@@ -262,15 +273,17 @@ export class VenueDefaultsPanel extends LitElement {
     this.readError = "";
     this.#adopt(value);
   }
-  async #reread(): Promise<void> {
+  async #reread(): Promise<boolean> {
     const generation = this.#generation;
     const place = ++this.#places;
     try {
       const value = await (this.api.background ?? this.api).getVenueDefaults();
       if (generation === this.#generation) this.#show(place, value);
+      return true;
     } catch (error) {
       if (generation === this.#generation && place > this.#shownPlace)
         this.readError = codeMessage(codeOf(error));
+      return false;
     }
   }
   #form(model: VenueDefaults) {

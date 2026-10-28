@@ -858,3 +858,85 @@ it("a refusal that arrives after the card turned read-only and back leaves the n
   expect(bottom(el)).toBe("");
   expect(saveButton(el).loading).toBe(false);
 });
+
+async function savedOverNewerLiveValueThenFollowUpFails(
+  r: ReturnType<typeof withBackground>,
+  { putBack = false } = {},
+) {
+  const pending = deferred<VenuePrivacy>();
+  r.api.putVenuePrivacy.mockImplementationOnce(() => pending.promise);
+  const el = await mount(r.api);
+  await edit(el);
+  await type(el, "privacyEmail", "first@example.com");
+  await save(el);
+  const reads = r.background.getVenuePrivacy.mock.calls.length;
+  r.state.stored = { ...STORED, privacyEmail: "second@example.com" };
+  if (putBack) {
+    const parent = el.parentNode!;
+    el.remove();
+    parent.appendChild(el);
+  } else r.liveData.invalidate([{ type: "tenants" }]);
+  await expect.poll(() => r.background.getVenuePrivacy.mock.calls.length).toBe(reads + 1);
+  await expect
+    .poll(() => (el as unknown as { model?: VenuePrivacy }).model?.privacyEmail)
+    .toBe("second@example.com");
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  r.background.getVenuePrivacy.mockRejectedValueOnce({ code: "server.unavailable" });
+  pending.resolve({ ...STORED, privacyEmail: "first@example.com" });
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(savedEmail(el)).toBe("first@example.com");
+  return el;
+}
+
+it("a failed read after a save answered over a newer live value is tried again and ends on the newer value", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a card put back during a save still tries a failed follow-up read again", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r, { putBack: true });
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a card removed after its failed follow-up read reads nothing more", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    const reads = r.background.getVenuePrivacy.mock.calls.length;
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(r.background.getVenuePrivacy.mock.calls.length).toBe(reads);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a live read shown after a failed follow-up read stops the tries", async () => {
+  const r = withBackground();
+  try {
+    const el = await savedOverNewerLiveValueThenFollowUpFails(r);
+    r.liveData.invalidate([{ type: "tenants" }]);
+    await expect.poll(() => savedEmail(el)).toBe("second@example.com");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+    const reads = r.background.getVenuePrivacy.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(r.background.getVenuePrivacy.mock.calls.length).toBe(reads);
+  } finally {
+    vi.useRealTimers();
+  }
+});

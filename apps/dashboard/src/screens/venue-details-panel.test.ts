@@ -949,3 +949,90 @@ it("after the legal-name dialog's answer the card reads again, so a change in a 
   await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
   expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
 });
+
+async function savedBehindReconnectReadThenFollowUpFails(r: ReturnType<typeof rig>) {
+  const { el, pending } = await savingThroughReconnect(r);
+  const saved = venueDetailsFixture({ addressLine1: "New street" });
+  r.set(saved);
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+  pending.resolve({ changed: true, model: structuredClone(saved) });
+  await expect.poll(() => q(el, "[data-test=edit]")).toBeTruthy();
+  await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+  expect(text(q(el, "[data-test=saved-addressLine1]"))).toBe("Calle Mayor 1");
+  return el;
+}
+
+it("a failed read after a save whose answer a reconnect read overtook is tried again and ends on the saved values", async () => {
+  const r = rig();
+  try {
+    const el = await savedBehindReconnectReadThenFollowUpFails(r);
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => text(q(el, "[data-test=saved-addressLine1]"))).toBe("New street");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a card removed after its failed follow-up read after a save reads nothing more", async () => {
+  const r = rig();
+  try {
+    const el = await savedBehindReconnectReadThenFollowUpFails(r);
+    const reads = vi.mocked(r.api.getVenueDetails).mock.calls.length;
+    el.remove();
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(vi.mocked(r.api.getVenueDetails).mock.calls.length).toBe(reads);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a failed read after the legal-name dialog's answer is tried again and ends on the stored values", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  const fixture = venueDetailsFixture();
+  const renamed = { ...fixture, issuer: { ...fixture.issuer, legalName: "Nuevo SL" } };
+  r.set({ ...venueDetailsFixture({ name: "Other manager" }), issuer: renamed.issuer });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+    q(el, "dashboard-legal-name-dialog")!.dispatchEvent(
+      new CustomEvent("venue-identity-changed", { detail: { model: renamed } }),
+    );
+    await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+    expect(text(q(el, "[data-test=saved-name]"))).toBe("Venue");
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
+    expect(text(q(el, "[data-test=issuer]"))).toContain("Nuevo SL");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a failed read after the business-day editor's answer is tried again and ends on the stored values", async () => {
+  const r = rig();
+  const el = await mount(r.api);
+  const fixture = venueDetailsFixture();
+  const answer = { ...fixture, businessDayClock: { ...fixture.businessDayClock, revision: 1 } };
+  r.set({
+    ...venueDetailsFixture({ name: "Other manager" }),
+    businessDayClock: answer.businessDayClock,
+  });
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  try {
+    vi.mocked(r.api.getVenueDetails).mockRejectedValueOnce({ code: "connection.failed" });
+    q(el, "dashboard-business-day-start-editor")!.dispatchEvent(
+      new CustomEvent("saved", { detail: answer, bubbles: true, composed: true }),
+    );
+    await expect.poll(() => q(el, "[data-test=read-error]")).toBeTruthy();
+    expect(text(q(el, "[data-test=saved-name]"))).toBe("Venue");
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect.poll(() => text(q(el, "[data-test=saved-name]"))).toBe("Other manager");
+    expect(q(el, "[data-test=read-error]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});

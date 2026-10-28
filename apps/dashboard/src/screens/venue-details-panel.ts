@@ -14,6 +14,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./business-day-start-editor.js";
 import { DashboardQueries } from "../api/query-controller.js";
+import { readAfterSave } from "../widgets/read-after-save.js";
 import { settingsCard, settingsCardStyles, settingsRows } from "../widgets/settings-card.js";
 import type {
   DashboardApi,
@@ -145,6 +146,7 @@ export class VenueDetailsPanel extends LitElement {
   #previewSequence = 0;
   #expected?: VenueDetailValues;
   #generation = 0;
+  #retries = new AbortController();
   /** Each read and each save takes the next place when it is sent, a dialog's answer when it
    * arrives; the card shows a value only if its place is later than the one it shows. */
   #places = 0;
@@ -172,11 +174,13 @@ export class VenueDetailsPanel extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#generation += 1;
+    this.#retries = new AbortController();
     this.#registerDraft();
     void this.#load();
   }
   override disconnectedCallback(): void {
     this.#generation += 1;
+    this.#retries.abort();
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -185,7 +189,7 @@ export class VenueDetailsPanel extends LitElement {
     this.clockPreview = undefined;
     super.disconnectedCallback();
   }
-  async #load(): Promise<void> {
+  async #load(): Promise<boolean> {
     const generation = this.#generation;
     try {
       await this.#queries.watchSent(
@@ -202,9 +206,21 @@ export class VenueDetailsPanel extends LitElement {
           this.#refreshPreview();
         },
       );
+      return true;
     } catch (error) {
       if (generation === this.#generation) this.readError = codeMessage(codeOf(error));
+      return false;
     }
+  }
+  /** Call as an answer arrives: a send-time generation would stop the retries after a reconnect. */
+  #readAfterAnswer(): void {
+    const answeredAt = this.#places;
+    const generation = this.#generation;
+    void readAfterSave(
+      () => this.#load(),
+      () => generation === this.#generation && this.#shownPlace <= answeredAt,
+      this.#retries.signal,
+    );
   }
   #show(place: number, model: VenueDetailsModel): void {
     if (place <= this.#shownPlace) return;
@@ -474,7 +490,7 @@ export class VenueDetailsPanel extends LitElement {
     } finally {
       this.submitting = false;
     }
-    if (this.isConnected) await this.#load();
+    if (this.isConnected) this.#readAfterAnswer();
   }
   #lockedNotes(): TemplateResult | typeof nothing {
     const keys = new Set<StringKey>();
@@ -612,7 +628,7 @@ export class VenueDetailsPanel extends LitElement {
               @venue-identity-changed=${(event: CustomEvent<VenueIdentityChanged>) => {
                 if (generation === this.#generation) {
                   this.#show(++this.#places, event.detail.model);
-                  void this.#load();
+                  this.#readAfterAnswer();
                 }
               }}
             ></dashboard-legal-name-dialog>
@@ -714,7 +730,7 @@ export class VenueDetailsPanel extends LitElement {
               @saved=${(event: CustomEvent<VenueDetailsModel>) => {
                 event.stopPropagation();
                 this.#show(++this.#places, event.detail);
-                void this.#load();
+                this.#readAfterAnswer();
               }}
             ></dashboard-business-day-start-editor>
           `
