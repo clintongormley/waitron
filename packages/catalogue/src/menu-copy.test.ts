@@ -437,4 +437,20 @@ describe("duplicateMenu", () => {
     });
     expect(await count()).toBe(menus);
   });
+  it.each(["Lunch", "  lUNCH  ", "Desserts"])(
+    "refuses the taken copy name %j without changing either menu",
+    async (name) => {
+      const f = await fixture();
+      const before = await fx.db.select().from(catalogues);
+      const source = await rowsOf(f.lunch);
+      const other = await rowsOf(f.desserts);
+      await expect(app((tx) => duplicateMenu(tx, f.lunch, name))).rejects.toMatchObject({
+        code: "menu.name_taken",
+        params: { field: "name" },
+      });
+      expect(await fx.db.select().from(catalogues)).toEqual(before);
+      expect(await rowsOf(f.lunch)).toEqual(source);
+      expect(await rowsOf(f.desserts)).toEqual(other);
+    },
+  );
 });

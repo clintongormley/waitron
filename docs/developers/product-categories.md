@@ -152,8 +152,10 @@ products' menu prices and its variant prices (`duplicateMenu`,
 `packages/catalogue/src/menu-copy.ts`). An include, and a Home shortcut into an included menu,
 still name the other menu's sections. Published versions, scheduled publications and menu periods
 are not copied, so the copy starts unpublished. A blank name answers `management.request_invalid`
-(400, `field: "name"`); an unknown menu answers `catalogue.not_found` (404). The dashboard names
-the copy "<name> (copy)" in the reader's language.
+(400, `field: "name"`); a name another menu holds, ignoring case, Unicode normalization and
+surrounding whitespace, answers `menu.name_taken` (409, `field: "name"`). An unknown menu answers
+`catalogue.not_found` (404). The dashboard's Copy… asks for an empty, required new name before
+sending the request; Cancel creates nothing.
 
 `PATCH /management-api/catalogues/:id/items/:itemId` returns 204. Set `grossPrice` to a price or
 null. Null clears this menu's price so the combined menu can supply it; omitting it keeps the saved

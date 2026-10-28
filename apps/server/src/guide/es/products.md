@@ -262,6 +262,19 @@ entonces el producto ya está guardado, así que un sitio que lo rechaza no desh
 ventana nombra los sitios que fallaron y los deja marcados para que puedas volver a intentarlo. Las
 secciones de una carta se crean en **Productos y cartas → Cartas**.
 
+## Copia una carta {#copy-menu}
+
+Si tu próxima carta se parece a una que ya tienes, empieza con una copia. En **Productos y
+cartas → Cartas**, abre el ⋮ de la carta y elige **Copiar…**. Introduce un nombre nuevo y pulsa
+**Copiar**. El nombre no puede estar usado por otra carta; las mayúsculas y las minúsculas cuentan
+como el mismo nombre. **Cancelar** no crea nada. Si ya has escrito un nombre, al cerrar la ventana
+puedes seguir editándolo o descartarlo.
+
+La copia empieza sin publicar, con las secciones de trabajo, los precios y los ajustes de la
+página de inicio de la carta original. Las versiones publicadas y las publicaciones programadas
+se quedan en la original. Editar las secciones propias de la copia deja la original como estaba;
+las cartas incluidas siguen apuntando a las mismas cartas compartidas.
+
 ## Corrige la carta publicada en una emergencia {#patch-live-menu}
 
 Usa una corrección cuando encuentres un error en la carta publicada, como un precio equivocado,

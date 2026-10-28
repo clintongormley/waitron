@@ -321,6 +321,7 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   // Raised by the op's `decimalToCents`, not by this file's screens.
   "shared.decimal_overflow": 400,
   "catalogue.not_found": 404,
+  "menu.name_taken": 409,
   "location.not_found": 404,
   "category.not_found": 404,
   "category.invalid": 400,

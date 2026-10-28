@@ -1254,6 +1254,23 @@ describe("mountCatalogueApi — catalogues", () => {
     expect(rows.find((r) => r.id === source)?.name).toBe("Duplicable lunch");
   });
 
+  it("refuses a copy name already held by another menu with an inline name refusal", async () => {
+    const app = mountApp();
+    const source = await createCatalogueVia(app, "Copy source");
+    await createCatalogueVia(app, "Taken copy name");
+    const before = await catalogueCount();
+    const response = await send(app, "POST", duplicatePath(source), {
+      body: { name: "  tAKEN COPY NAME  " },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "menu.name_taken", params: { field: "name" } },
+    });
+    expect(await catalogueCount()).toBe(before);
+    const rows = await (await send(app, "GET", "/management-api/catalogues")).json();
+    expect(rows).toContainEqual(expect.objectContaining({ id: source, name: "Copy source" }));
+  });
+
   it("POST /management-api/catalogues/:id/duplicate unauthenticated → 401, nothing written", async () => {
     const app = mountApp();
     const source = await createCatalogueVia(app, "Unauthenticated source");

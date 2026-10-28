@@ -1,6 +1,7 @@
 import { eq, inArray } from "drizzle-orm";
-import { newId, type Transaction } from "@waitron/db";
+import { catalogues, newId, type Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { foldName } from "./name-uniqueness.js";
 import { batches } from "./batches.js";
 import { insertCatalogue, type Catalogue } from "./operations.js";
 import { menuDetails, menuItems } from "./schema/menu.js";
@@ -25,6 +26,9 @@ export async function duplicateMenu(
   if (details === undefined)
     throw new AppError("catalogue.not_found", { catalogueId: sourceMenuId });
   const { internalName } = await sectionPatchValues(tx, { internalName: name });
+  const existing = await tx.select({ name: catalogues.name }).from(catalogues);
+  if (existing.some((menu) => foldName(menu.name) === foldName(internalName!)))
+    throw new AppError("menu.name_taken", { field: "name" });
   const owned = await tx.select().from(sections).where(eq(sections.ownerMenuId, sourceMenuId));
   const members = [];
   for (const batch of batches(owned.map((section) => section.id)))
