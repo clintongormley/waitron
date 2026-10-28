@@ -513,12 +513,27 @@ export function createFirstSetupResolutionActions(
             (missing || request.confirmRecoveryDiscard !== undefined)
           )
             conflict();
-          if (missing) {
+          const held =
+            !missing &&
+            (inspection.database !== "no-venue-rows" ||
+              !PRESENT_START_AGAIN_STATUSES.includes(state.status));
+          if (held) {
+            const holdsRecords =
+              inspection.database === "occupied" ||
+              (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
+            if (found?.kind !== "stopped" || !holdsRecords) unavailable();
+            if (
+              inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !==
+              "missing"
+            )
+              refused("trading-settings");
+            if (state.status === "complete") refused("setup-finished");
+          } else if (missing) {
             // D3a: with the database missing, any status but complete, and only once confirmed.
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
-          if (!["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
+          if (!held && !["no-venue-rows", "missing"].includes(inspection.database)) unavailable();
           const noOtherHistory = inspection.artifacts.every(
             (artifact) =>
               ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
@@ -538,7 +553,14 @@ export function createFirstSetupResolutionActions(
           const unusedAssignment = Boolean(assignment);
           const recoveryRecordDamaged =
             !missing && typeof assignment === "object" && assignment.recoveryRecordDamaged;
-          if (request.owner === undefined) {
+          let holdings: SetupDatabaseHoldings | undefined;
+          if (held) {
+            await assertRecoveredOwner(request.owner, state);
+            if (request.register?.kind === "no-current-master") unavailable();
+            if (host.modules === undefined) unavailable();
+            holdings = await readSetupDatabaseHoldings(roots, host.modules);
+            if (holdings.kept > 0 || holdings.records > 0) refused("kept-records");
+          } else if (request.owner === undefined) {
             if (
               !unusedAssignment &&
               (!emptyWorkspace ||
@@ -554,8 +576,9 @@ export function createFirstSetupResolutionActions(
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();
-          const box = await assertStartAgainAllowedOnDisk(roots, discarding);
-          const markerFor = async (markerOptions: { discarding?: string }) => {
+          const heldOption = held ? { held: true as const } : {};
+          const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
+          const markerFor = async (markerOptions: { discarding?: string; held?: true }) => {
             const marker = await startAgainMarkerFor(
               box,
               { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
@@ -569,7 +592,7 @@ export function createFirstSetupResolutionActions(
               unavailable();
             return marker;
           };
-          let marker = await markerFor(discarding);
+          let marker = await markerFor({ ...discarding, ...heldOption });
           const picksDamaged =
             !missing &&
             host.modules !== undefined &&
@@ -592,6 +615,7 @@ export function createFirstSetupResolutionActions(
             discarding,
             found?.kind === "stopped" ? found.floor : null,
             missing,
+            holdings?.history,
           );
           const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
@@ -606,7 +630,17 @@ export function createFirstSetupResolutionActions(
           const confirmation = request.confirmMissingDatabase;
           const shown =
             missing || discardsStopped || presentUnreadable
-              ? summaryOf(state, gathered, recovery)
+              ? {
+                  ...summaryOf(state, gathered, recovery),
+                  ...(holdings !== undefined && {
+                    held: {
+                      rows: holdings.rows,
+                      kept: holdings.kept,
+                      records: holdings.records,
+                      accepted: holdings.accepted,
+                    },
+                  }),
+                }
               : undefined;
           if (
             missing &&
@@ -671,8 +705,8 @@ export function createFirstSetupResolutionActions(
                 );
               },
             );
-            await assertStartAgainAllowedOnDisk(box);
-            marker = await markerFor({});
+            await assertStartAgainAllowedOnDisk(box, heldOption);
+            marker = await markerFor(heldOption);
           }
           await writeStartAgainMarker(box, marker);
           try {
