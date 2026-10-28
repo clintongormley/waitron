@@ -500,16 +500,6 @@ device rule. Spec: [A268 §4](../superpowers/specs/2026-10-04-add-a-device-desig
   retired `tills`, W111 added location-address refreshes, and A366 slice 7 replaces the editor
   and its preview triggers. The printer/device case has not been re-probed on that branch.
 
-## The Receipts preview redraws the whole receipt once per highlighted part
-
-It finds each
-part it highlights (a "mark") by drawing the receipt again without that part and comparing the
-two (`apps/server/src/receipt-preview-api.ts`). W111 took the marks
-from 2 to 6, so one preview can draw the receipt up to 7 times, and the screen asks for a
-preview after each pause in typing. Cheaper: have `formatReceipt`
-(`apps/server/src/receipt-ticket.ts`) record the byte range each part emits, so one draw yields
-every mark. Not measured.
-
 ## Left open by #1261's review, not acted on (2026-10-05)
 
 - **Left open by #1261's review:** no database trigger protects the logo image; the app-level
@@ -903,14 +893,6 @@ A231q changed how a job the printer is holding is reported. Left open by A231q.
   the mouse wheel, End/PageDown and a validation error never did. `.body { position: relative }`
   removed the excess in the probe. Untested: a screen reader's cursor or find-in-page landing on a
   hint.
-
-## A department's Receipts preview logs nothing when its saved logo's read fails.
-
-When the draft
-names the saved logo, `apps/server/src/receipt-preview-api.ts` reads the stored picture through
-`readPrintedDepartmentReceipt` with the plain scope, no `receiptDiagnostic`, unlike the no-logo
-branch beside it (since `082553a65`, 2026-10-12; found by #2050's review). Pass the same
-diagnostic, with a test that a failed read warns.
 
 ## Half of an older receipt test can no longer fail.
 
