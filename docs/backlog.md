@@ -593,11 +593,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **Android/iOS on-device install and trust rows** — real phones on the shop WiFi, the owner's to
   run. [Detail](backlog/setup.md#androidios-on-device-install-and-trust-rows)
 
-- **A Demo's "Casa Delgado" stays in the draft when the operator switches to Prepare or Live**
-  (whether this is wanted is not recorded; it sits among the wizard's constraints). The location
-  name is not on the list leaving Demo clears (`#onPatch`, `apps/setup/src/setup-app.ts`).
-  [Detail](backlog/setup.md#setup-wizard--the-constraints-a2s-rework-left-behind-a2)
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** But
   the option is still there and the flow still runs, so an operator can still spend a box on it.
   Removing or disabling it until slice 3 lands the replacement is a product call, not a wording one.
