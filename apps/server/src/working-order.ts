@@ -6448,12 +6448,10 @@ async function applyLineEdits(
 }
 
 /** How many portions raising a whole portion of 1 to `requested` adds. */
-function addedPortions(lineId: string, quantity: Decimal, requested: Decimal): number {
+export function addedPortions(lineId: string, quantity: Decimal, requested: Decimal): number {
   const added = Number(subtractDecimal(requested, quantity));
   if (compareDecimal(quantity, decimal("1")) !== 0 || !Number.isInteger(added))
-    throw new Error(
-      `applyLineEdits: whole portion ${lineId} of ${quantity} cannot rise to ${requested}`,
-    );
+    throw new Error(`whole portion ${lineId} of ${quantity} cannot rise to ${requested}`);
   return added;
 }
 

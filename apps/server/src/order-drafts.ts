@@ -617,16 +617,20 @@ export async function saveDraft(
     }),
     snapshot,
   );
+  const copiesOf = new Map<string, { referenceId: string; sourceLineId: string }[]>();
   for (const line of lines) {
     if (line.sourceLineId !== null)
-      await saveRecalledLine(
-        tx,
-        cfg,
-        partyId,
-        line.sourceLineId,
-        line,
-        operatorId,
-        sourcePlans.get(line.sourceLineId),
+      copiesOf.set(
+        line.id!,
+        await saveRecalledLine(
+          tx,
+          cfg,
+          partyId,
+          line.sourceLineId,
+          line,
+          operatorId,
+          sourcePlans.get(line.sourceLineId),
+        ),
       );
   }
   const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
@@ -638,23 +642,36 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line): DraftLine & { measured?: boolean } =>
-        line.sourceLineId === null
-          ? {
+      lines.flatMap((line): (DraftLine & { measured?: boolean })[] => {
+        if (line.sourceLineId === null)
+          return [
+            {
               ...line,
               source: null,
               id: line.id ?? newId(),
               noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
               unavailable: false,
               measured: soldMeasured(offers.get(line.menuItemId)),
-            }
-          : {
-              ...(owned.get(line.id)! as RecalledDraftLine),
-              slot: line.slot,
-              joinGroupId: line.joinGroupId,
-              afterGroupId: line.afterGroupId,
             },
-      ),
+          ];
+        const recalled: RecalledDraftLine = {
+          ...(owned.get(line.id)! as RecalledDraftLine),
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+        };
+        // A raised portion's copies are placed with it, straight after it.
+        return [
+          recalled,
+          ...copiesOf
+            .get(line.id)!
+            .map((copy) => ({
+              ...recalled,
+              id: copy.referenceId,
+              sourceLineId: copy.sourceLineId,
+            })),
+        ];
+      }),
     ),
   );
   if (lines.length === 0) {

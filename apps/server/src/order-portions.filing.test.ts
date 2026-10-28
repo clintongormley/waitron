@@ -5,6 +5,7 @@ import { createAdjustmentReason } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   locationCatalogues,
+  orderDraftRecalledLines,
   orderPortions,
   products,
   saleLinePortions,
@@ -27,6 +28,7 @@ import { createCourse } from "./kitchen.js";
 import { resolveKitchenAllergyBlocks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moveBill } from "./move-bill.js";
+import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
 import { readOrderDetail } from "./orders-list.js";
 import type { PortionRef } from "./order-portions.js";
 import { partyRevision } from "./parties.js";
@@ -1285,5 +1287,301 @@ describe("A803 portions: raising a dish", () => {
       ["Burger", 2000, 666, null],
       ["Cheese", 2000, 70, null],
     ]);
+  });
+
+  /** Recall `lineId` into this operator's draft on its bill. */
+  async function recallLine(bill: { billId: string; partyId: string }, lineId: string) {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${bill.partyId}/lines/${lineId}/recall`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    return (answer.json as unknown as { draft: Draft }).draft;
+  }
+
+  async function saveDraftLines(
+    bill: { billId: string; partyId: string },
+    draft: Draft,
+    lines: Draft["lines"],
+  ) {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "PUT",
+      `/api/parties/${bill.partyId}/drafts`,
+      {
+        billId: bill.billId,
+        draftId: draft.id,
+        revision: draft.revision,
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+        lines,
+        personId: venue.operatorId,
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    return (answer.json as unknown as BillDraftSnapshot).draft!;
+  }
+
+  /** Recall the bill's first dish and save its draft line raised to `quantity`. */
+  async function raiseRecalled(bill: { billId: string; partyId: string }, quantity: string) {
+    const [dish] = linesOf(bill.billId);
+    const [line] = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, bill.billId),
+          eq(workingOrderLines.lineNo, dish!.lineNo),
+        ),
+      );
+    const draft = await recallLine(bill, line!.id);
+    return saveDraftLines(bill, draft, [{ ...draft.lines[0]!, quantity }]);
+  }
+
+  async function submitAll(bill: { billId: string; partyId: string }, draft: Draft) {
+    const answer = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${bill.partyId}/drafts/${draft.id}/submit`,
+      {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await inTx(venue, (tx) => partyRevision(tx, bill.partyId)),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+        draftRevision: draft.revision,
+        groups: [{ release: "fire", lineIds: draft.lines.map((line) => line.id) }],
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+  }
+
+  it("A803 portions: raising a recalled burger to 3 saves two reserved portions of its cohort", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const cohort = bound.portions[0]!.pricingCohortId;
+
+    const draft = await raiseRecalled(bound, "3");
+
+    const lines = linesOf(bound.billId);
+    expect(lines.map((line) => [line.name, line.quantity, line.lineTotal, line.ordinal])).toEqual(
+      [1, 2, 3].flatMap((ordinal) => [
+        ["Burger", 1000, 333, ordinal],
+        ["Cheese", 1000, 35, null],
+      ]),
+    );
+    expect(new Set(lines.flatMap((line) => line.cohortId ?? []))).toEqual(new Set([cohort]));
+    const dishIds = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, bound.billId),
+          isNull(workingOrderLines.parentLineId),
+        ),
+      )
+      .orderBy(workingOrderLines.lineNo);
+    expect(draft.lines.map((line) => [line.sourceLineId, line.quantity])).toEqual(
+      dishIds.map(({ id }) => [id, "1.000"]),
+    );
+    const reserved = await venue.db
+      .select({ sourceLineId: orderDraftRecalledLines.sourceLineId })
+      .from(orderDraftRecalledLines)
+      .where(eq(orderDraftRecalledLines.draftId, draft.id));
+    expect(reserved.map((row) => row.sourceLineId).sort()).toEqual(
+      dishIds.map(({ id }) => id).sort(),
+    );
+    expect(
+      await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, bound.billId)),
+    ).toEqual([]);
+  });
+
+  it("A803 portions: submitting places all three recalled portions in the chosen group", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const draft = await raiseRecalled(bound, "3");
+
+    await submitAll(bound, draft);
+
+    const dishes = await venue.db
+      .select({ id: workingOrderLines.id, groupId: workingOrderLines.groupId })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, bound.billId),
+          isNull(workingOrderLines.parentLineId),
+        ),
+      );
+    expect(dishes).toHaveLength(3);
+    expect(dishes[0]!.groupId).not.toBeNull();
+    expect(new Set(dishes.map((dish) => dish.groupId)).size).toBe(1);
+    const items = await venue.db
+      .select({ lineId: ticketItems.workingOrderLineId, quantity: ticketItems.quantity })
+      .from(ticketItems)
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          dishes.map((dish) => dish.id),
+        ),
+      );
+    expect(items.map((item) => item.quantity)).toEqual([1000, 1000, 1000]);
+    expect(
+      await venue.db
+        .select()
+        .from(orderDraftRecalledLines)
+        .where(eq(orderDraftRecalledLines.draftId, draft.id)),
+    ).toEqual([]);
+  });
+
+  it("A803 portions: discarding a raised recalled burger leaves what today's discard leaves", async () => {
+    // Held, so cancelling needs no refund approval.
+    const bound = await billOf(burgersWithCheese("1"), { bound: true });
+    const today = await billOf(burgersWithCheese("1"), { bound: false });
+    for (const { billId } of [bound, today])
+      await inTx(venue, async (tx) => {
+        const lines = await tx
+          .select(fireableLineColumns)
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, billId));
+        await fireLines(
+          tx,
+          venue.cfg,
+          billId,
+          lines.map((line) => ({ ...line, hold: true })),
+        );
+      });
+    const reasonId = await inTx(
+      venue,
+      async (tx) =>
+        (
+          await createAdjustmentReason(tx, {
+            name: `Void-${randomUUID()}`,
+            names: {},
+            kind: "void",
+            actions: ["cancel"],
+            maxPercentBp: null,
+            maxAmount: null,
+            applyRoles: [],
+            approverRoles: [],
+            noteRequired: false,
+          })
+        ).id,
+    );
+
+    for (const bill of [bound, today]) {
+      const draft = await raiseRecalled(bill, "3");
+      const answer = await send(
+        venue.app,
+        venue.cookie,
+        "POST",
+        `/api/parties/${bill.partyId}/drafts/${draft.id}/discard`,
+        {
+          submissionId: randomUUID(),
+          revision: draft.revision,
+          expectedRevision: await inTx(venue, (tx) => readOrderRevision(tx, bill.billId)),
+          expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, bill.billId)),
+          reasonId,
+          note: null,
+        },
+      );
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    }
+
+    expect(linesOf(today.billId)).toEqual([]);
+    expect(linesOf(bound.billId)).toEqual([]);
+    const cancelled = venue.db.all<{ kind: string }>(
+      sql`select e.kind from order_portion_events e
+          join order_portions p on p.id = e.portion_id
+          where p.cohort_id = ${bound.portions[0]!.pricingCohortId}`,
+    );
+    expect(cancelled.map((event) => event.kind)).toEqual(["cancelled", "cancelled", "cancelled"]);
+  });
+
+  it("A803 portions: a raised recalled burger, sent again, files one row of 3 as today's does", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const today = await billOf(burgersWithCheese("1"), { bound: false, fire: true });
+    for (const bill of [bound, today]) await submitAll(bill, await raiseRecalled(bill, "3"));
+
+    expect(linesOf(today.billId).map((line) => [line.name, line.quantity])).toEqual([
+      ["Burger", 3000],
+      ["Cheese", 3000],
+    ]);
+    await payInCash(bound.billId);
+    await payInCash(today.billId);
+    const filed = await filedRows(bound.billId);
+    expect(filed.map(({ name, quantity }) => [name, quantity])).toEqual([
+      ["Burger", 3000],
+      ["Cheese", 3000],
+    ]);
+    expect(filed[0]!.portions).toHaveLength(3);
+    expect(await filedFacts(bound.billId)).toEqual(await filedFacts(today.billId));
+  });
+
+  it("A803 portions: each recalled copy keeps its original's sale context and guest tick, and saving the draft again adds nothing", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const dishId = bound.portions[0]!.lineId;
+    const guestId = await inTx(venue, async (tx) => {
+      await VENUE_SERVICE.writePartyAllergy(
+        tx,
+        bound.partyId,
+        {
+          answer: "allergies",
+          guests: [{ who: "Green coat", allergens: { milk: {} }, note: null }],
+        },
+        venue.adminId,
+      );
+      const { guests } = await VENUE_SERVICE.readPartyAllergy(tx, bound.partyId);
+      await VENUE_SERVICE.setAllergyLineTicks(tx, bound.partyId, [
+        { guestId: guests[0]!.id, draftLineId: null, workingLineId: dishId },
+      ]);
+      return guests[0]!.id;
+    });
+
+    const draft = await raiseRecalled(bound, "3");
+
+    const contexts = venue.db.all<Record<string, unknown>>(
+      sql`select c.* from working_line_contexts c
+          join working_order_lines l on l.id = c.working_order_line_id
+          where l.working_order_id = ${bound.billId} order by l.line_no`,
+    );
+    const facts = contexts.map((row) => ({ ...row, working_order_line_id: undefined }));
+    expect(facts).toEqual([facts[0], facts[1], facts[0], facts[1], facts[0], facts[1]]);
+    const { ticks } = await inTx(venue, (tx) => VENUE_SERVICE.readPartyAllergy(tx, bound.partyId));
+    expect(
+      draft.lines.map(
+        (line) => ticks.find((tick) => tick.workingLineId === line.sourceLineId)?.guestId,
+      ),
+    ).toEqual([guestId, guestId, guestId]);
+
+    const again = await saveDraftLines(bound, draft, draft.lines);
+    expect(again.lines.map((line) => line.sourceLineId)).toEqual(
+      draft.lines.map((line) => line.sourceLineId),
+    );
+    expect(linesOf(bound.billId)).toHaveLength(6);
+  });
+
+  it("A803 portions: a measured recalled portion rises in place and stays one portion", async () => {
+    const bound = await billOf(croquetas("1"), { bound: true, fire: true });
+    await inTx(venue, async (tx) => {
+      const [measured] = await tx
+        .insert(orderPortions)
+        .values({ cohortId: randomUUID(), ordinal: 1, measured: true })
+        .returning({ id: orderPortions.id });
+      await tx
+        .update(workingLinePortions)
+        .set({ portionId: measured!.id })
+        .where(eq(workingLinePortions.workingOrderLineId, bound.portions[0]!.lineId));
+    });
+
+    const draft = await raiseRecalled(bound, "3");
+
+    expect(draft.lines.map((line) => line.quantity)).toEqual(["3.000"]);
+    expect(
+      linesOf(bound.billId).map((line) => [line.quantity, line.ordinal, line.measured]),
+    ).toEqual([[3000, 1, 1]]);
   });
 });

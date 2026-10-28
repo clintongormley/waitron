@@ -1,4 +1,5 @@
-import { and, eq, inArray, max } from "drizzle-orm";
+import { and, eq, inArray, max, or, sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import {
   orderDraftRecalledLines,
@@ -27,7 +28,9 @@ import { readLineCancellations } from "./line-service-state.js";
 import { readStationChanges, refuseChangesAfterSending } from "./changes-after-sending.js";
 import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
+import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
+import { readGrowingPortions, registerPortions, type PortionRef } from "./order-portions.js";
 import { appendRecalledLine, type Draft, type DraftLineInput } from "./order-drafts.js";
 import { requireLiveCourse } from "./kitchen.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -36,6 +39,7 @@ import { checkAndBumpParty, requireBillOfParty, runServiceCommand } from "./part
 import type { TradingContext } from "./trading-context.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import {
+  addedPortions,
   bumpRevision,
   extraQuantityFor,
   prepareRecalledModifiers,
@@ -55,6 +59,11 @@ import {
 import type { BillEditExpected, BillEditState } from "./order-drafts.js";
 import "./errors.js";
 
+/**
+ * Save a recalled line's edit to the stored line. A whole portion raised above 1 stays 1 and is
+ * copied, with its extras, once per added unit into its cohort; each copy is reserved in the same
+ * draft and returned as `{ referenceId, sourceLineId }`, for the caller to place after the line.
+ */
 export async function saveRecalledLine(
   tx: Transaction,
   cfg: TradingContext,
@@ -63,9 +72,9 @@ export async function saveRecalledLine(
   input: DraftLineInput,
   operatorId: string,
   prepared?: RecalledModifierPlan,
-): Promise<void> {
+): Promise<{ referenceId: string; sourceLineId: string }[]> {
   const [owned] = await tx
-    .select({ line: workingOrderLines })
+    .select({ line: workingOrderLines, draftId: orderDraftRecalledLines.draftId })
     .from(orderDraftRecalledLines)
     .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftRecalledLines.draftId))
     .innerJoin(workingOrderLines, eq(workingOrderLines.id, orderDraftRecalledLines.sourceLineId))
@@ -107,7 +116,7 @@ export async function saveRecalledLine(
     line.note !== input.note ||
     line.courseId !== input.courseId ||
     line.makeAtStationId !== input.makeAt;
-  if (!changed) return;
+  if (!changed) return [];
   await requireBillOfParty(tx, partyId, line.workingOrderId);
   await refusePaymentInFlight(tx, [line.workingOrderId]);
   assertQuantityPrecision(input.quantity, line.unitPrecision ?? MAX_UNIT_PRECISION, {
@@ -126,6 +135,12 @@ export async function saveRecalledLine(
     (quantity !== line.quantity || extrasChanged) && cfg.simplifiedInvoiceLimit !== null
       ? await storedOrderTotal(tx, line.workingOrderId)
       : null;
+  const portion = (await readGrowingPortions(tx, [line.id])).get(line.id);
+  const copies =
+    quantity > line.quantity && portion !== undefined && !portion.measured
+      ? addedPortions(line.id, thousandthsToDecimal(line.quantity), decimal(input.quantity))
+      : 0;
+  const inPlace = copies === 0 ? quantity : line.quantity;
   await tx
     .update(workingOrderLines)
     .set({
@@ -133,7 +148,7 @@ export async function saveRecalledLine(
       courseId: input.courseId,
       makeAtStationId: input.makeAt,
       optionSnapshots: modifiers.options,
-      ...(quantity === line.quantity
+      ...(inPlace === line.quantity
         ? {}
         : {
             quantity,
@@ -147,7 +162,7 @@ export async function saveRecalledLine(
           }),
     })
     .where(eq(workingOrderLines.id, sourceLineId));
-  if (quantity !== line.quantity) {
+  if (inPlace !== line.quantity) {
     for (const { child, perDish } of modifiers.kept) {
       const childQuantity = extraQuantityFor(perDish, decimal(input.quantity), child.priceQuantity);
       await tx
@@ -197,12 +212,77 @@ export async function saveRecalledLine(
       modifiers.added.offers,
     );
   }
+  const reserved =
+    copies === 0
+      ? []
+      : await copyRecalledPortion(tx, cfg, line.id, owned.draftId, portion!, copies);
   if (quantity !== line.quantity || extrasChanged) {
     await assertBillInvariant(tx, [line.workingOrderId]);
     await refuseOrderOverSimplifiedLimit(tx, cfg, line.workingOrderId, before);
   }
   await bumpRevision(tx, [line.workingOrderId]);
   await partyAfterEdit(tx, line.workingOrderId, [], operatorId);
+  return reserved;
+}
+
+/**
+ * Write `copies` copies of the stored dish `lineId` and its extras as it now reads, each a new
+ * portion of its cohort with its sale context and guest tick, and reserve each in `draftId`.
+ */
+async function copyRecalledPortion(
+  tx: Transaction,
+  cfg: TillConfig,
+  lineId: string,
+  draftId: string,
+  portion: { cohortId: string; nextOrdinal: number },
+  copies: number,
+): Promise<{ referenceId: string; sourceLineId: string }[]> {
+  const [dish, ...extras] = await tx
+    .select()
+    .from(workingOrderLines)
+    .where(or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)))
+    .orderBy(sql`${workingOrderLines.parentLineId} is not null`, workingOrderLines.lineNo);
+  const [last] = await tx
+    .select({ number: max(workingOrderLines.lineNo) })
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, dish!.workingOrderId));
+  let lineNo = last!.number!;
+  const rows: (typeof workingOrderLines.$inferSelect)[] = [];
+  const contexts: { from: string; to: string }[] = [];
+  const dishes: { from: string; to: string }[] = [];
+  const portions: PortionRef[] = [];
+  for (let k = 0; k < copies; k++) {
+    const id = randomUUID();
+    rows.push({ ...dish!, id, lineNo: ++lineNo });
+    contexts.push({ from: lineId, to: id });
+    dishes.push({ from: lineId, to: id });
+    portions.push({
+      portionId: randomUUID(),
+      lineId: id,
+      ordinal: portion.nextOrdinal + k,
+      pricingCohortId: portion.cohortId,
+      measured: false,
+    });
+    for (const extra of extras) {
+      const extraId = randomUUID();
+      rows.push({ ...extra, id: extraId, parentLineId: id, lineNo: ++lineNo });
+      contexts.push({ from: extra.id, to: extraId });
+    }
+  }
+  await tx.insert(workingOrderLines).values(rows);
+  await VENUE_SERVICE.copyLineContexts(tx, cfg, contexts);
+  await registerPortions(tx, portions);
+  await copyAllergyWorkingTicks(tx, dishes);
+  const reserved = dishes.map(({ to }) => ({ referenceId: randomUUID(), sourceLineId: to }));
+  await tx.insert(orderDraftRecalledLines).values(
+    reserved.map((row) => ({
+      id: row.referenceId,
+      draftId,
+      sourceLineId: row.sourceLineId,
+      position: 0,
+    })),
+  );
+  return reserved;
 }
 
 export async function recallToDraft(
