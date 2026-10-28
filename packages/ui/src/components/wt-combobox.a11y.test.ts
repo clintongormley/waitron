@@ -75,12 +75,12 @@ const MUTED_FIRST: ComboboxOption[] = [
 ];
 
 const WITH_DISABLED: ComboboxOption[] = [
-  { value: "pan", label: "Pan de centeno" },
+  { value: "bread", label: "Rye bread" },
   {
-    value: "vino",
-    label: "Vino",
+    value: "wine",
+    label: "Wine",
     disabled: true,
-    description: "Tiene variantes, así que no puede ser un extra",
+    description: "Has variants, so it cannot be an extra",
   },
 ];
 
@@ -162,7 +162,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
   test("closed, with a value chosen", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Etiquetas" value="vegan"></wt-combobox>',
+      '<wt-combobox label="Tags" value="vegan"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = TAGS;
@@ -171,13 +171,13 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
 
   test("open, with the chosen row ticked", async () => {
-    await openThemed('<wt-combobox label="Etiquetas" value="vegan"></wt-combobox>', theme);
+    await openThemed('<wt-combobox label="Tags" value="vegan"></wt-combobox>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("open, with icons", async () => {
-    await openThemed('<wt-combobox label="Etiquetas"></wt-combobox>', theme, [
-      { value: "vegan", label: "Vegano", icon: "leaf" },
+    await openThemed('<wt-combobox label="Tags"></wt-combobox>', theme, [
+      { value: "vegan", label: "Vegan option", icon: "leaf" },
       { value: "halal", label: "Halal", icon: "check" },
     ]);
     await expectNoA11yViolations(host);
@@ -227,18 +227,18 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("closed, with a disabled option among the options and chosen", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Producto" value="vino"></wt-combobox>',
+      '<wt-combobox label="Product" value="wine"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = WITH_DISABLED;
     await el.updateComplete;
-    expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Vino");
+    expect(el.shadowRoot!.querySelector(".value")!.textContent!.trim()).toBe("Wine");
     await expectNoA11yViolations(host);
   });
 
   test("open, with a disabled option and its second line", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Producto"></wt-combobox>',
+      '<wt-combobox label="Product"></wt-combobox>',
       theme,
       WITH_DISABLED,
     );
@@ -251,7 +251,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with the cursor over a disabled row", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Producto" search="never"></wt-combobox>',
+      '<wt-combobox label="Product" search="never"></wt-combobox>',
       theme,
       WITH_DISABLED,
     );
@@ -264,7 +264,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("opened from the keyboard, with a disabled row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Producto" search="never"></wt-combobox>',
+      '<wt-combobox label="Product" search="never"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = WITH_DISABLED;
@@ -278,23 +278,23 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
 
   test("open, with groups", async () => {
-    await openThemed('<wt-combobox label="Miembros"></wt-combobox>', theme, [
-      { value: "ana", label: "Ana", group: "Personal" },
-      { value: "luis", label: "Luis", group: "Personal" },
-      { value: "bar", label: "Barra", group: "Puestos" },
+    await openThemed('<wt-combobox label="Members"></wt-combobox>', theme, [
+      { value: "ana", label: "Ana", group: "Staff" },
+      { value: "luis", label: "Luis", group: "Staff" },
+      { value: "bar", label: "Counter", group: "Stations" },
     ]);
     await expectNoA11yViolations(host);
   });
 
   const WITH_PRIMARY: ComboboxOption[] = [
-    { value: "pan", label: "Pan extra", group: "Extras" },
-    { value: "new-extras", label: "Nueva lista de extras…", group: "Extras", primary: true },
-    { value: "coccion", label: "Punto", group: "Opciones" },
-    { value: "new-options", label: "Nueva lista de opciones…", group: "Opciones", primary: true },
+    { value: "bread", label: "Extra bread", group: "Extras" },
+    { value: "new-extras", label: "New extras list…", group: "Extras", primary: true },
+    { value: "doneness", label: "Doneness", group: "Options" },
+    { value: "new-options", label: "New options list…", group: "Options", primary: true },
   ];
 
   test("open, with a primary row in each group", async () => {
-    const el = await openThemed('<wt-combobox label="Modificadores"></wt-combobox>', theme, [
+    const el = await openThemed('<wt-combobox label="Modifiers"></wt-combobox>', theme, [
       ...WITH_PRIMARY.slice(0, 2).map((option) => ({ ...option, icon: "leaf" })),
       ...WITH_PRIMARY.slice(2),
     ]);
@@ -306,7 +306,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with the cursor over a primary row", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Modificadores" search="never"></wt-combobox>',
+      '<wt-combobox label="Modifiers" search="never"></wt-combobox>',
       theme,
       WITH_PRIMARY,
     );
@@ -320,7 +320,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("opened from the keyboard, with a primary row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Modificadores" search="never"></wt-combobox>',
+      '<wt-combobox label="Modifiers" search="never"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = WITH_PRIMARY;
@@ -328,47 +328,44 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
     el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
     await userEvent.keyboard("{ArrowDown}{ArrowDown}");
     const active = el.shadowRoot!.querySelector(".option.active")!;
-    expect(active.textContent!.trim()).toBe("Nueva lista de extras…");
+    expect(active.textContent!.trim()).toBe("New extras list…");
     const plain = el.shadowRoot!.querySelector('[role="option"]')!;
     expect(getComputedStyle(active).color).not.toBe(getComputedStyle(plain).color);
     await expectNoA11yViolations(host);
   });
 
   test("open, with an action row", async () => {
-    await openThemed('<wt-combobox label="Unidad" value="kg"></wt-combobox>', theme, [
-      { value: "kg", label: "Kilogramo" },
-      { value: "add-unit", label: "Añadir unidad…", action: true },
+    await openThemed('<wt-combobox label="Unit" value="kg"></wt-combobox>', theme, [
+      { value: "kg", label: "Kilogram" },
+      { value: "add-unit", label: "Add a unit…", action: true },
     ]);
     await expectNoA11yViolations(host);
   });
 
   test("open, without a search box", async () => {
-    await openThemed('<wt-combobox label="Papel" search="never"></wt-combobox>', theme);
+    await openThemed('<wt-combobox label="Role" search="never"></wt-combobox>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("open, with focus back on the trigger", async () => {
-    const el = await openThemed('<wt-combobox label="Etiquetas"></wt-combobox>', theme);
+    const el = await openThemed('<wt-combobox label="Tags"></wt-combobox>', theme);
     el.shadowRoot!.querySelector<HTMLElement>(".trigger")!.focus();
     await expectNoA11yViolations(host);
   });
 
   test("compact, with its label hidden", async () => {
-    await mountThemed('<wt-combobox label="Plato" hide-label></wt-combobox>', theme);
+    await mountThemed('<wt-combobox label="Dish" hide-label></wt-combobox>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("with a hint shown as the placeholder", async () => {
-    await mountThemed(
-      '<wt-combobox label="Etiquetas" hint="Elige la principal"></wt-combobox>',
-      theme,
-    );
+    await mountThemed('<wt-combobox label="Tags" hint="Choose the main tag"></wt-combobox>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("with a help button beside it", async () => {
     await mountThemed(
-      '<wt-combobox label="Etiquetas"><button slot="help" aria-label="Ayuda">?</button></wt-combobox>',
+      '<wt-combobox label="Tags"><button slot="help" aria-label="Help">?</button></wt-combobox>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -376,7 +373,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("disabled, with a value chosen", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Etiquetas" value="vegan" disabled></wt-combobox>',
+      '<wt-combobox label="Tags" value="vegan" disabled></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = TAGS;
@@ -385,7 +382,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
   test("opened from the keyboard without a search box, focus on the list and a row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Papel" search="never" value="vegan"></wt-combobox>',
+      '<wt-combobox label="Role" search="never" value="vegan"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = TAGS;
@@ -399,20 +396,25 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
 
   const TREE: ComboboxOption[] = [
-    { value: "", label: "Sin categoría" },
-    { value: "bebidas", label: "Bebidas", valueLabel: "Bebidas", depth: 0 },
-    { value: "alcohol", label: "Con alcohol", valueLabel: "Bebidas › Con alcohol", depth: 1 },
+    { value: "", label: "No category" },
+    { value: "drinks", label: "Drinks", valueLabel: "Drinks", depth: 0 },
     {
-      value: "cocteles",
-      label: "Cócteles",
-      valueLabel: "Bebidas › Con alcohol › Cócteles",
+      value: "alcohol",
+      label: "Alcoholic drinks",
+      valueLabel: "Drinks › Alcoholic drinks",
+      depth: 1,
+    },
+    {
+      value: "cocktails",
+      label: "Cocktails",
+      valueLabel: "Drinks › Alcoholic drinks › Cocktails",
       depth: 2,
     },
   ];
 
   test("open, with rows indented by depth", async () => {
     const el = await openThemed(
-      '<wt-combobox label="Categoría" value="cocteles"></wt-combobox>',
+      '<wt-combobox label="Category" value="cocktails"></wt-combobox>',
       theme,
       TREE,
     );
@@ -428,11 +430,11 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   async function mountLink(attrs: string): Promise<WtCombobox> {
     const el = (await mountThemed(
-      `<wt-combobox label="Categoría" appearance="link" ${attrs}></wt-combobox>`,
+      `<wt-combobox label="Category" appearance="link" ${attrs}></wt-combobox>`,
       theme,
     )) as WtCombobox;
     el.options = TREE;
-    el.actionLabel = "Cambiar";
+    el.actionLabel = "Change";
     await el.updateComplete;
     // Without this the scan could pass on a field-box trigger.
     expect(el.shadowRoot!.querySelector(".field")).toBeNull();
@@ -440,7 +442,7 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   }
 
   test("link appearance, closed, with a value chosen", async () => {
-    await mountLink('value="cocteles"');
+    await mountLink('value="cocktails"');
     await expectNoA11yViolations(host);
   });
 
@@ -450,31 +452,31 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
   });
 
   test("link appearance, focused", async () => {
-    const el = await mountLink('value="cocteles"');
+    const el = await mountLink('value="cocktails"');
     el.focus();
     await expectNoA11yViolations(host);
   });
 
   test("link appearance, open", async () => {
-    const el = await mountLink('value="cocteles"');
+    const el = await mountLink('value="cocktails"');
     await userEvent.click(el.shadowRoot!.querySelector(".trigger")!);
     expect(el.shadowRoot!.querySelector("[popover]")!.matches(":popover-open")).toBe(true);
     await expectNoA11yViolations(host);
   });
 
   test("link appearance, with an error", async () => {
-    await mountLink('value="cocteles" error="Elige una categoría"');
+    await mountLink('value="cocktails" error="Choose a category"');
     await expectNoA11yViolations(host);
   });
 
   test("link appearance, disabled", async () => {
-    await mountLink('value="cocteles" disabled');
+    await mountLink('value="cocktails" disabled');
     await expectNoA11yViolations(host);
   });
 
   test("opened from the keyboard with a search box and a row active", async () => {
     const el = (await mountThemed(
-      '<wt-combobox label="Etiquetas" value="vegan"></wt-combobox>',
+      '<wt-combobox label="Tags" value="vegan"></wt-combobox>',
       theme,
     )) as WtCombobox;
     el.options = TAGS;
