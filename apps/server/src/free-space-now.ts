@@ -115,7 +115,7 @@ export function createSpaceFreer(
     /** Called once after each deletion settles, so boot can start a fresh disk usage walk. */
     onFreed?: () => void;
     /** Writes the box's spare file back while it is given up; see `startFreeSpaceWatch`. */
-    restoreSpare?: () => Promise<boolean>;
+    restoreSpare?: () => Promise<void>;
   },
 ): (personId: string) => Promise<FreedSpace> {
   let running: Promise<FreedSpace> | null = null;

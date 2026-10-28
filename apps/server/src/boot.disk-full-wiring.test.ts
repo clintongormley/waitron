@@ -35,6 +35,7 @@ const seen = vi.hoisted(() => ({
   billDeps: [] as unknown[],
   deviceDeps: [] as unknown[],
   scheduleDeps: [] as unknown[],
+  freers: [] as ((personId: string) => Promise<unknown>)[],
   failMountTillApi: false,
 }));
 
@@ -119,6 +120,18 @@ vi.mock("./schedule-api.js", async (importOriginal) => {
   };
 });
 
+vi.mock("./free-space-now.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./free-space-now.js")>();
+  return {
+    ...actual,
+    createSpaceFreer: (...args: Parameters<typeof actual.createSpaceFreer>) => {
+      const freer = actual.createSpaceFreer(...args);
+      seen.freers.push(freer);
+      return freer;
+    },
+  };
+});
+
 const migrations = migrationOptionsFor(manifestSets(), null);
 const suite = useVenueDb({ migrations });
 
@@ -164,6 +177,7 @@ beforeEach(() => {
   seen.billDeps.length = 0;
   seen.deviceDeps.length = 0;
   seen.scheduleDeps.length = 0;
+  seen.freers.length = 0;
   seen.failMountTillApi = false;
 });
 
@@ -314,26 +328,72 @@ describe("boot's full-disk stop wiring", () => {
     /** A free-space stub for the watch and its room check, recording each folder it is asked about. */
     function stubbed(bytes: number) {
       const asked: string[] = [];
+      const free = { bytes };
       const statfs: Statfs = async (dir) => {
         asked.push(dir);
-        return { bavail: bytes, frsize: 1 };
+        return { bavail: free.bytes, frsize: 1 };
       };
       const count = (dir: string) => asked.filter((seenDir) => seenDir === dir).length;
-      return { statfs, count };
+      return { statfs, count, free };
     }
 
-    async function booted(free: number, withMarker: boolean) {
+    async function booted(
+      free: number,
+      withMarker: boolean,
+      options: { spareDir?: string; intervalMs?: number } = {},
+    ) {
       beforeServerStarts();
       const scratch = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-"));
-      const { env, venueDir } = await startEnv(scratch);
-      if (withMarker) await writeFile(join(scratch, SPARE_SPACE_RELEASED_FILE), "");
+      const { env: base, venueDir } = await startEnv(scratch);
+      const env = options.spareDir ? { ...base, WAITRON_SPARE_SPACE_DIR: options.spareDir } : base;
+      const markerDir = options.spareDir ?? scratch;
+      if (withMarker) await writeFile(join(markerDir, SPARE_SPACE_RELEASED_FILE), "");
       const stub = stubbed(free);
       const server = await startServer(env, env, {
         spareBytes: SPARE,
-        freeSpaceWatch: { intervalMs: 50, statfs: stub.statfs },
+        freeSpaceWatch: { intervalMs: options.intervalMs ?? 50, statfs: stub.statfs },
       });
       return { scratch, venueDir, server, stub };
     }
+
+    it("with WAITRON_SPARE_SPACE_DIR set, the watch writes the spare back in that folder and deletes the marker there", async () => {
+      const spareDir = await mkdtemp(join(tmpdir(), "waitron-boot-disk-full-wiring-spare-"));
+      const { scratch, server } = await booted(SPARE + FULL_DISK_BYTES, true, { spareDir });
+      try {
+        await vi.waitFor(
+          async () => {
+            expect((await stat(join(spareDir, SPARE_SPACE_FILE))).size).toBe(SPARE);
+            expect(existsSync(join(spareDir, SPARE_SPACE_RELEASED_FILE))).toBe(false);
+          },
+          { timeout: 10_000 },
+        );
+        expect(existsSync(join(scratch, SPARE_SPACE_FILE))).toBe(false);
+      } finally {
+        await server.close();
+        await rm(scratch, { recursive: true, force: true });
+        await rm(spareDir, { recursive: true, force: true });
+      }
+    });
+
+    it("Box status's Free writes a released spare back once there is room, before the watch's next reading", async () => {
+      const { scratch, server, stub } = await booted(SPARE + FULL_DISK_BYTES - 1, true, {
+        intervalMs: 3_600_000,
+      });
+      try {
+        await vi.waitFor(() => expect(stub.count(scratch)).toBeGreaterThanOrEqual(1), {
+          timeout: 10_000,
+        });
+        expect(existsSync(join(scratch, SPARE_SPACE_FILE))).toBe(false);
+        stub.free.bytes = SPARE + FULL_DISK_BYTES;
+        expect(seen.freers).toHaveLength(1);
+        await seen.freers[0]!("person-1");
+        expect((await stat(join(scratch, SPARE_SPACE_FILE))).size).toBe(SPARE);
+        expect(existsSync(join(scratch, SPARE_SPACE_RELEASED_FILE))).toBe(false);
+      } finally {
+        await server.close();
+        await rm(scratch, { recursive: true, force: true });
+      }
+    });
 
     it("the watch writes a released spare back once exactly the spare plus 16 MiB is free, deletes the marker, and the stop lifts", async () => {
       const { scratch, server } = await booted(SPARE + FULL_DISK_BYTES, true);

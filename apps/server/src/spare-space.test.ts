@@ -26,8 +26,10 @@ import {
   releaseSpare,
   releaseSpareBeforeStartAgain,
   spareReleased,
+  spareRestorer,
   topUpSpare,
 } from "./spare-space.js";
+import { FULL_DISK_BYTES } from "./boot-failure.js";
 
 let root: string;
 let stateDir: string;
@@ -390,6 +392,63 @@ describe("spareReleased", () => {
     const log = vi.fn();
     expect(await spareReleased(file, log)).toBe(true);
     expect(log.mock.calls).toEqual([["warn", "storage.spare_marker_unread", { errno: "ENOTDIR" }]]);
+  });
+});
+
+describe("spareRestorer", () => {
+  const spare = () => join(stateDir, SPARE_SPACE_FILE);
+  const venueDir = () => join(root, "venue");
+  function restorer(free: (dir: string) => number) {
+    const asked: string[] = [];
+    const log = vi.fn();
+    const restore = spareRestorer({
+      stateDir,
+      venueDir: venueDir(),
+      bytes: 4096,
+      log,
+      statfs: async (dir) => {
+        asked.push(dir);
+        return { bavail: free(dir), frsize: 1 };
+      },
+    });
+    return { restore, asked, log };
+  }
+
+  it("while no marker exists, writes nothing and reads no free space", async () => {
+    const r = restorer(() => 2 ** 40);
+    await r.restore();
+    expect(existsSync(spare())).toBe(false);
+    expect(r.asked).toEqual([]);
+  });
+
+  it("with the marker and the spare plus 16 MiB free in both folders, writes the spare and deletes the marker", async () => {
+    await writeFile(marker(), "");
+    const r = restorer(() => 4096 + FULL_DISK_BYTES);
+    await r.restore();
+    expect((await stat(spare())).size).toBe(4096);
+    expect(existsSync(marker())).toBe(false);
+    expect(r.asked).toEqual([stateDir, venueDir()]);
+    expect(r.log.mock.calls).toEqual([["info", "storage.spare_restored", { bytes: 4096 }]]);
+  });
+
+  it("writes nothing while the venue folder has one byte under the spare plus 16 MiB, whatever the state folder has", async () => {
+    await writeFile(marker(), "");
+    const r = restorer((dir) => (dir === stateDir ? 2 ** 40 : 4096 + FULL_DISK_BYTES - 1));
+    await r.restore();
+    expect(existsSync(spare())).toBe(false);
+    expect(existsSync(marker())).toBe(true);
+  });
+
+  it("two calls at once write the spare once and log storage.spare_restored once", async () => {
+    await writeFile(marker(), "");
+    const r = restorer(() => 2 ** 40);
+    await Promise.all([r.restore(), r.restore()]);
+    expect((await stat(spare())).size).toBe(4096);
+    expect(r.log.mock.calls).toEqual([["info", "storage.spare_restored", { bytes: 4096 }]]);
+    await writeFile(marker(), "");
+    await rm(spare());
+    await r.restore();
+    expect((await stat(spare())).size).toBe(4096);
   });
 });
 

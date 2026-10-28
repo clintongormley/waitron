@@ -170,8 +170,7 @@ import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
 import { isUnset } from "./env-value.js";
-import { SPARE_SPACE_BYTES, spareReleased, topUpSpare } from "./spare-space.js";
-import { lowestFreeBytes } from "./start-space.js";
+import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import {
   createFreeSpaceState,
   FREE_SPACE_CHECK_MS,
@@ -307,7 +306,6 @@ import { createStagingTurn } from "./backup-staging-turn.js";
 import { readDiskUsage, type DiskUsage } from "./disk-usage.js";
 import { createSpaceFreer, surveyLeftovers, type LeftoverDeps } from "./free-space-now.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
-import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.js";
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
@@ -1005,22 +1003,13 @@ async function bootServer(
     ? config.stateDir
     : env.WAITRON_SPARE_SPACE_DIR;
   const released = () => spareReleased(spareDir, log);
-  const spareBytes = seams.spareBytes ?? SPARE_SPACE_BYTES;
-  const spareStatfs = seams.freeSpaceWatch?.statfs;
-  // Only while the marker exists: otherwise every booted server with room would write 8 MiB.
-  const restoreSpare = async (): Promise<boolean> => {
-    if (!(await released())) return false;
-    await topUpSpare({
-      stateDir: spareDir,
-      bytes: spareBytes,
-      log,
-      hasRoom: async () => {
-        const lowest = await lowestFreeBytes([spareDir, config.venueDir], spareStatfs);
-        return lowest !== null && lowest >= spareBytes + FULL_DISK_BYTES;
-      },
-    });
-    return true;
-  };
+  const restoreSpare = spareRestorer({
+    stateDir: spareDir,
+    venueDir: config.venueDir,
+    bytes: seams.spareBytes ?? SPARE_SPACE_BYTES,
+    log,
+    ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
+  });
   const diskFull = createDiskFullState({
     dir: config.venueDir,
     now,

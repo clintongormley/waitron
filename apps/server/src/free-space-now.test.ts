@@ -672,7 +672,7 @@ describe("createSpaceFreer", () => {
       statfs?: () => Promise<{ bavail: number; frsize: number }>;
       remove?: LeftoverDeps["remove"];
       full?: () => Promise<boolean>;
-      restoreSpare?: () => Promise<boolean>;
+      restoreSpare?: () => Promise<void>;
     } = {},
   ) {
     const order: string[] = [];
@@ -753,7 +753,7 @@ describe("createSpaceFreer", () => {
 
   it("a Free writes the spare back after the deletion and before it reads free space and asks the stop to re-check", async () => {
     await stagingFiles();
-    const f = freer({ noted: true, restoreSpare: async () => false });
+    const f = freer({ noted: true, restoreSpare: async () => {} });
     await f.free("person-1");
     expect(f.order.filter((step) => step !== "remove")).toEqual([
       "restore",
@@ -771,7 +771,6 @@ describe("createSpaceFreer", () => {
       statfs: async () => ({ bavail, frsize: 4096 }),
       restoreSpare: async () => {
         bavail = 900;
-        return true;
       },
     });
     expect((await f.free("person-1")).freeBytes).toBe(4096 * 900);

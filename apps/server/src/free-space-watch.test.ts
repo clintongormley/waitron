@@ -129,7 +129,7 @@ describe("startFreeSpaceWatch", () => {
       disk?: Pick<DiskFullState, "noted" | "full">;
       statfs?: Statfs;
       log?: Logger;
-      restoreSpare?: () => Promise<boolean>;
+      restoreSpare?: () => Promise<void>;
     } = {},
   ) {
     const spy = logSpy();
@@ -280,7 +280,6 @@ describe("startFreeSpaceWatch", () => {
     };
     const restoreSpare = async () => {
       calls.push("restore");
-      return false;
     };
     const w = watch({ disk, restoreSpare });
     await w.tick();
@@ -289,36 +288,28 @@ describe("startFreeSpaceWatch", () => {
   });
 
   it("a reading calls restoreSpare whether or not a stop is noted", async () => {
-    const restoreSpare = vi.fn(async () => false);
+    const restoreSpare = vi.fn(async () => {});
     const w = watch({ restoreSpare });
     await w.tick();
     await w.tick();
     expect(restoreSpare).toHaveBeenCalledTimes(2);
   });
 
-  it("a reading whose restore answered true records the free space read after it", async () => {
+  it("a reading reads free space once, after the restore", async () => {
     let w: ReturnType<typeof watch> | undefined;
     const restoreSpare = async () => {
       w!.reading.free = 3 * GIB - 8 * MIB;
-      return true;
     };
     w = watch({ restoreSpare });
     w.reading.free = 3 * GIB;
     await w.tick();
     expect(w.state.current().freeBytes).toBe(3 * GIB - 8 * MIB);
-    expect(w.seen).toEqual([DIR, DIR]);
-  });
-
-  it("a reading whose restore answered false reads free space once", async () => {
-    const w = watch({ restoreSpare: async () => false });
-    await w.tick();
     expect(w.seen).toEqual([DIR]);
-    expect(w.state.current().freeBytes).toBe(10 * GIB);
   });
 
   it("a restore that throws is logged as storage.spare_restore_failed, and the same reading still records and asks the stop to re-check", async () => {
     const disk = { noted: () => true, full: vi.fn(async () => true) };
-    const restoreSpare = async (): Promise<boolean> => {
+    const restoreSpare = async (): Promise<void> => {
       throw Object.assign(new Error("no space"), { code: "ENOSPC" });
     };
     const w = watch({ disk, restoreSpare });
@@ -330,24 +321,31 @@ describe("startFreeSpaceWatch", () => {
     expect(disk.full).toHaveBeenCalledTimes(2);
   });
 
-  it("after stop(), a reading in flight writes nothing back", async () => {
-    let release!: (free: number) => void;
-    const held = new Promise<number>((resolve) => (release = resolve));
-    const restoreSpare = vi.fn(async () => true);
-    const w = watch({ statfs: async () => ({ bavail: await held, frsize: 1 }), restoreSpare });
+  it("stop() answers only once a write-back in flight has finished", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let restoring = false;
+    const restoreSpare = async () => {
+      restoring = true;
+      await held;
+    };
+    const w = watch({ restoreSpare });
     w.armed[0]!.fn();
-    w.handle.stop();
-    release(GIB);
+    await vi.waitFor(() => expect(restoring).toBe(true));
+    let stopped = false;
+    const stopping = w.handle.stop().then(() => (stopped = true));
     await new Promise((resolve) => setImmediate(resolve));
-    await new Promise((resolve) => setImmediate(resolve));
-    expect(restoreSpare).not.toHaveBeenCalled();
+    expect(stopped).toBe(false);
+    release();
+    await stopping;
+    expect(w.armed).toHaveLength(1);
+    expect(w.state.current().freeBytes).toBeNull();
   });
 
   it("a stop during the restore records and arms nothing", async () => {
     let w: ReturnType<typeof watch> | undefined;
     const restoreSpare = async () => {
-      w!.handle.stop();
-      return true;
+      void w!.handle.stop();
     };
     w = watch({ restoreSpare });
     w.armed[0]!.fn();

@@ -51,9 +51,10 @@ export function createFreeSpaceState(deps: { log: Logger }): FreeSpaceState {
 
 /**
  * Reads `dir`'s free space at once and then every `intervalMs`, each timer armed after the reading
- * before it finished. Each reading first lets `restoreSpare` write the box's spare file back, and
- * reads again when it answers true. While `disk` holds a noted stop, each reading also asks it to
- * re-check, so a stop lifts when space is freed even if nothing writes.
+ * before it finished. Each reading lets `restoreSpare` write the box's spare file back, then reads
+ * free space. While `disk` holds a noted stop, each reading also asks it to re-check, so a stop
+ * lifts when space is freed even if nothing writes. `stop()` answers once the reading in flight,
+ * and any write-back in it, has finished.
  */
 export function startFreeSpaceWatch(deps: {
   dir: string;
@@ -63,42 +64,47 @@ export function startFreeSpaceWatch(deps: {
   now: () => Date;
   log: Logger;
   statfs?: Statfs;
-  restoreSpare?: () => Promise<boolean>;
+  restoreSpare?: () => Promise<void>;
   timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => void } {
+}): { stop: () => Promise<void> } {
   const timer = deps.timer ?? unrefTimer;
   let stopped = false;
+  let reading: Promise<void> = Promise.resolve();
 
   async function read(): Promise<void> {
     try {
-      let free = await freeBytes(deps.dir, deps.statfs);
+      await restore();
       if (stopped) return;
-      if (await restore()) free = await freeBytes(deps.dir, deps.statfs);
+      const free = await freeBytes(deps.dir, deps.statfs);
       if (stopped) return;
       deps.state.record(free, deps.now());
       if (deps.disk.noted()) await deps.disk.full();
     } catch (error) {
       deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
     } finally {
-      if (!stopped) armed = timer(deps.intervalMs, () => void read());
+      if (!stopped) armed = timer(deps.intervalMs, start);
     }
   }
 
-  async function restore(): Promise<boolean> {
+  async function restore(): Promise<void> {
     try {
-      return (await deps.restoreSpare?.()) ?? false;
+      await deps.restoreSpare?.();
     } catch (error) {
       deps.log("warn", "storage.spare_restore_failed", { errno: errnoOf(error) ?? null });
-      return false;
     }
   }
 
-  let armed = timer(0, () => void read());
+  function start(): void {
+    reading = read();
+  }
+
+  let armed = timer(0, start);
 
   return {
     stop: () => {
       stopped = true;
       armed.cancel();
+      return reading;
     },
   };
 }

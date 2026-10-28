@@ -117,6 +117,38 @@ export async function spareReleased(stateDir: string, log: Logger): Promise<bool
   }
 }
 
+/**
+ * The running box's write-back: only while the marker exists (otherwise every booted server with
+ * room would write the spare), and only with the spare plus 16 MiB free in both folders. A call
+ * while one is under way answers that one's promise, so two callers cannot both write.
+ */
+export function spareRestorer(options: {
+  stateDir: string;
+  venueDir: string;
+  bytes: number;
+  log: Logger;
+  statfs?: Statfs;
+}): () => Promise<void> {
+  const { stateDir, venueDir, bytes, log, statfs } = options;
+  let running: Promise<void> | null = null;
+  async function restore(): Promise<void> {
+    if (!(await spareReleased(stateDir, log))) return;
+    await topUpSpare({
+      stateDir,
+      bytes,
+      log,
+      hasRoom: async () => {
+        const lowest = await lowestFreeBytes([stateDir, venueDir], statfs);
+        return lowest !== null && lowest >= bytes + FULL_DISK_BYTES;
+      },
+    });
+  }
+  return () =>
+    (running ??= restore().finally(() => {
+      running = null;
+    }));
+}
+
 async function writeMarker(stateDir: string, log: Logger, open: OpenSpare): Promise<void> {
   try {
     const { O_WRONLY, O_CREAT, O_TRUNC, O_NOFOLLOW } = constants;
