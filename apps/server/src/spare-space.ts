@@ -6,7 +6,7 @@ import type { Logger } from "./logger.js";
 
 /**
  * Deletes the box's spare file so a nearly full disk has room to take a venue folder's lock; answers
- * the bytes it held. Only a regular file is deleted. Nothing is thrown.
+ * the bytes it held. A link or folder at its path is left alone. Nothing is thrown.
  */
 export async function releaseSpare(
   stateDir: string,
@@ -17,11 +17,12 @@ export async function releaseSpare(
   try {
     const info = await lstat(path);
     if (!info.isFile()) {
-      log("warn", "storage.spare_unusable", { kind: "other" });
+      const kind = info.isSymbolicLink() ? "link" : info.isDirectory() ? "folder" : "other";
+      log("warn", "storage.spare_unusable", { kind });
       return 0;
     }
     await fs.unlink(path);
-    log("warn", "storage.spare_released", { bytes: info.size });
+    if (info.size > 0) log("warn", "storage.spare_released", { bytes: info.size });
     return info.size;
   } catch (error) {
     const errno = errnoOf(error);

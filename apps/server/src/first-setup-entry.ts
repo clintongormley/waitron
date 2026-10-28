@@ -211,7 +211,10 @@ function setAsideFailure(roots: FirstSetupRoots, error: unknown): string {
   return `set-aside failed: ${code}${where === undefined ? "" : ` ${where}`}`;
 }
 
-/** Finishes a discard a power cut stopped after the abandon; a refusal is logged and the start goes on. */
+/**
+ * Finishes a discard a power cut stopped after the abandon, first deleting the box's spare file on a
+ * nearly full disk; a refusal is logged and the start goes on.
+ */
 async function emptyDiscardedRecovery(
   roots: FirstSetupRoots,
   log: Logger,

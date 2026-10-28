@@ -146,7 +146,7 @@ onto a disk that would then read as nearly full, and a disk that fills slowly ge
    (`apps/server/src/first-setup-backup-recovery.ts:1465-1471`), so `runningInMemory()` turns false and
    the next request of the flow releases the spare.
 
-A release that deleted bytes logs `storage.spare_released` with the free space before and the bytes
+A release that deleted bytes logs `storage.spare_released` with the bytes
 released; finding no spare logs nothing. No other
 path releases it: not the recovery's own steps under `/resolution/backup/`, not the start's log
 clean-up, not Box status's **Free** (`apps/server/src/free-space-now.ts`), not the running server.

@@ -39,7 +39,7 @@ describe("releaseSpare", () => {
     expect(await releaseSpare(stateDir, log)).toBe(0);
     expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(true);
     expect(await readFile(outside, "utf8")).toBe("kept");
-    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "other" }]]);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "link" }]]);
   });
 
   it("leaves a folder at the spare's path alone and logs storage.spare_unusable", async () => {
@@ -48,7 +48,7 @@ describe("releaseSpare", () => {
     const log = vi.fn();
     expect(await releaseSpare(stateDir, log)).toBe(0);
     expect(existsSync(join(stateDir, SPARE_SPACE_FILE, "inside"))).toBe(true);
-    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "other" }]]);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_unusable", { kind: "folder" }]]);
   });
 
   it("logs storage.spare_release_failed with the errno when the spare cannot be deleted, and answers 0", async () => {
@@ -57,5 +57,22 @@ describe("releaseSpare", () => {
     const refused = Object.assign(new Error("denied"), { code: "EACCES" });
     expect(await releaseSpare(stateDir, log, { unlink: () => Promise.reject(refused) })).toBe(0);
     expect(log.mock.calls).toEqual([["warn", "storage.spare_release_failed", { errno: "EACCES" }]]);
+  });
+
+  it("logs a refused delete with no errno as errno null", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(16, 1));
+    const log = vi.fn();
+    expect(
+      await releaseSpare(stateDir, log, { unlink: () => Promise.reject(new Error("x")) }),
+    ).toBe(0);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_release_failed", { errno: null }]]);
+  });
+
+  it("deletes an empty spare without logging a release", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), "");
+    const log = vi.fn();
+    expect(await releaseSpare(stateDir, log)).toBe(0);
+    expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(false);
+    expect(log).not.toHaveBeenCalled();
   });
 });
