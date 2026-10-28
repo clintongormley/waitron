@@ -4,19 +4,35 @@ import type {
   FiscalModules,
   ReceiptLabels,
   ReceiptLanguageRules,
+  RecipientIdentifierResult,
 } from "@waitron/country";
 import {
   contentLanguageRules,
   receiptLanguageRules,
   resolveCountryLocale,
   resolveCountryDemoIdentity,
+  validateRecipientIdentifier,
 } from "@waitron/country";
 import { contentLanguageCode, FALLBACK_LOCALE, type ContentLanguageRules } from "@waitron/shared";
-import { SPAIN, SPAIN_RECEIPT_LABELS, SPAIN_RECIPIENT_REGION_NAMES } from "@waitron/country-es";
+import {
+  SPAIN,
+  SPAIN_RECEIPT_LABELS,
+  SPAIN_RECIPIENT_REGION_NAMES,
+  SPAIN_RECIPIENT_IDENTIFIER_POLICY,
+} from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
 export type { FiscalModules } from "@waitron/country";
+export type {
+  RecipientIdentifier,
+  RecipientIdentifierType,
+  RecipientIdentifierResult,
+} from "@waitron/country";
 export { SPAIN_RECIPIENT_REGION_NAMES as RECIPIENT_REGION_NAMES };
+
+export function recipientIdentifierResult(input: unknown): RecipientIdentifierResult {
+  return validateRecipientIdentifier(input, SPAIN_RECIPIENT_IDENTIFIER_POLICY);
+}
 
 /** The sole registry of country implementations installed in this build. */
 export const COUNTRY_PACKS: readonly CountryPack[] = [SPAIN, UNITED_KINGDOM];

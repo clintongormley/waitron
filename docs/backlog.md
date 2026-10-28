@@ -5821,9 +5821,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 
 - **A963. Full invoices accept recipient addresses in any country (owner, 2026-10-28).**
-  Country is part of the address; Spain's postcode/province and NIF rules apply only to ES.
-  Complete the held PR's country selector and foreign-identity path after the accepted-identifier
-  and recipient-builder scope answer. [Rework plan](superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
+  Postal country is independent of the required Spanish NIF or explicitly typed document.
+  Complete the held PR's identity storage, filing, exports and form integration.
+  [Rework plan](superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
 
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
   `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),

@@ -1,4 +1,4 @@
-> **2026-10-28:** The [foreign-recipient rework plan](2026-10-28-a963-foreign-recipient-rework.md) supersedes the ES-only target below; its fiscal-identity owner gate remains pending. Completed tasks below are historical.
+> **2026-10-28:** The [foreign-recipient rework plan](2026-10-28-a963-foreign-recipient-rework.md) supersedes the ES-only target below; the owner approved its accepted-identifier and recipient-builder scope on 2026-10-28. Completed tasks below are historical.
 
 # A963 Invoice Address and Country Implementation Plan
 
