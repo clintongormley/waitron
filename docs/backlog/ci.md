@@ -722,10 +722,17 @@ and eight retries. Fresh local full-history pack controls grew by 1.49%; they di
 the hosted timeout. Both CI and licence checkout attempts now emit Git Trace2 JSON events,
 and successful checkouts print stored-pack byte counts. See the
 [measured diagnosis and its limits](../developers/ci-and-gates.md#checkout-stage-diagnostics-28-october-2026-a1178).
-Capture the hosted stage of a recurrence before attributing it to GitHub, the network or local
-indexing. Suite jobs use depth one, with full history retained for change classification and
-sign-off. Full-suite selection and hosted before/after measurements are still being qualified;
-the history change reduces requested data, not a proved timeout cause.
+In full comparison run `40765243305`, both a full-history and a shallow first attempt reached
+`fetch_refs` with a started `index-pack` child and no matching completion before timeout. This
+does not distinguish waiting for incoming data from local indexing. Capture more evidence at
+that boundary before attributing the wait to GitHub, the network or local indexing.
+Suite jobs use depth one, with full history retained for change classification and sign-off.
+Full baseline `40757792434` and shallow comparison `40765243305` each passed 76 jobs, with
+one skipped publish. Package test counts matched; the root gained the new history guard.
+Across the 35 converted suite instances, median stored pack bytes fell from 408,161,710 to
+206,776,315 and median first-checkout time from 32 to 22 seconds. Stored bytes are not wire
+traffic, and these hosted runs do not isolate timing from runner or network conditions. Both
+coverage gates passed; the history change reduces requested data, not a proved timeout cause.
 
 On 28 October, [main run 40750935978, till shard 3](https://github.com/clintongormley/waitron/actions/runs/40750935978/job/123038600113)
 exhausted both 120-second attempts with `--depth=1`, before installation or tests. Reducing

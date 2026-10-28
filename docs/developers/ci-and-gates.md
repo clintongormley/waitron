@@ -2139,9 +2139,15 @@ and failure-only retry remain in place. Other workflows do not enable these diag
 
 A local `git ls-remote https://github.com/actions/checkout.git HEAD` control emitted no trace
 events; the same command with `GIT_TRACE2_EVENT=1` emitted 26 JSON events on stderr and
-returned the same ref on stdout. Hosted stage capture and a separately measured shallow
-checkout for jobs that do not read history are the next qualification steps. A later successful
-checkout alone does not explain an earlier timeout.
+returned the same ref on stdout.
+
+Hosted comparison run `40765243305` captured first-attempt timeouts in full-history `changes`
+job `123087529127` and shallow `test-payments-stripe` job `123089528738`. Both entered
+`fetch_refs` and started `index-pack`, with no matching completion before the 120-second bound.
+Their second attempts passed in 90 and 19 seconds. An unfinished `index-pack` can still be
+waiting for incoming data; these events do not distinguish transfer from local indexing or
+establish the underlying cause. A later successful checkout alone does not explain an earlier
+timeout.
 
 #### Checkout history belongs to the job that reads it (A1178)
 
@@ -2160,8 +2166,27 @@ external reusable workflows, composite actions or dynamically selected actions. 
 two full-history jobs and checks both attempts. Local controls reverted each of the 22 changed
 suite checkout inputs independently and deleted each of the four required full-history inputs;
 all 26 changes failed this guard, and the restored candidate passed. Existing behavioral
-assertions are unchanged. Hosted full-suite selection and before/after measurements remain
-required before this conversion is qualified.
+assertions are unchanged.
+
+Full diagnostic baseline [40757792434](https://github.com/clintongormley/waitron/actions/runs/40757792434)
+at `f5975bdf5` and full shallow comparison
+[40765243305](https://github.com/clintongormley/waitron/actions/runs/40765243305) at `d6afda128`
+each passed 76 jobs, with only publishing skipped. Their package test-file and test counts
+matched, including all shard merge reports. The root gained one case, the new history guard
+(9,323 to 9,324). Coverage gates, mutation, bundle and image checks passed in both runs.
+Individual coverage percentages varied slightly; passing thresholds does not assert identical
+execution paths.
+
+Across the same 35 converted suite instances:
+
+| Measurement | Full history | Depth one |
+| --- | --- | --- |
+| Stored pack bytes, median (range) | 408,161,710 (404,847,975–408,185,911) | 206,776,315 (206,774,141–206,776,386) |
+| First-checkout seconds, median (range) | 32 (13–114) | 22 (6–120) |
+
+These are stored pack sizes, not bytes transferred over the network. The two hosted runs do
+not isolate timing from runner or network conditions. The shallow Stripe job needed its second
+attempt, so this conversion reduces requested history without eliminating checkout timeouts.
 
 | Source | Source's words | Use |
 | --- | --- | --- |
