@@ -360,7 +360,6 @@ en valenciano mientras las pantallas siguen en español o inglés. Los textos pa
 el cliente empiezan en valenciano, español e inglés; los tiques salen en español
 por defecto.
 
-
 En Galicia, la demostración empieza como **A Casa Delgado**. Su sección
 **Especialidades da casa** incluye **Empanada galega**, **Lacón con grelos** y
 **Filloas**, y Bebidas incluye **Copa de Albariño**. Los nombres internos y de cocina
