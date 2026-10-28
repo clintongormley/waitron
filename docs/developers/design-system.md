@@ -3320,6 +3320,21 @@ inside the drop box for `wt-file-input`. A paragraph placed beside the `wt-input
 no description (measured 2026-09-26 with Playwright 1.63.0's Chromium, reading its accessibility
 tree; the same reference inside the shadow root did describe it).
 
+#### Addresses
+
+A form that asks for a postal address puts `wt-address-lookup` above its address fields (owner,
+2026-10-28, A1171). The search is hidden until the form is handed an address provider; with none,
+the form is its manual fields alone, and nothing hands one over yet. Choosing a suggestion fills
+the form's own fields, which stay editable and keep their checks; the form's Save or Next is the
+confirmation. Address line 2 is replaced only when the chosen address has a second line. An
+address in another country fills nothing, and the form says why on the search's own line. The
+setup venue screen takes the province from the address's area code, else its postcode; the
+dashboard's Venue card never fills the province, which the server keeps, refuses an address in
+another province, and offers the search only while the street, line 2, postcode and city can all
+change. A one-line address (the setup screen's registered business address) is filled as
+"lines, postcode city, province". Guard: `scripts/address-lookup-forms.test.ts`, weaker than its
+name: it finds forms by the literals `"addressLine1"` and `"streetAddress"`.
+
 #### A field that falls back to another value
 
 Customer translation fields remain optional, including the default language. Units keep required

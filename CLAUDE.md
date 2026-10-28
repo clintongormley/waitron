@@ -226,6 +226,10 @@ called weaker than its name, the topic file lists what it does not see.
   comes from a field primitive; where none fits, add to one or add one (owner, 2026-10-01). Guard:
   `scripts/native-form-fields.test.ts`, weaker than its name — it reads string literals, and holds
   the files it allows by name only to a line count.
+- **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
+  (owner, 2026-10-28, A1171); it stays hidden until the form is handed an address provider. Guard:
+  `scripts/address-lookup-forms.test.ts`, weaker than its name: it finds forms by the literals
+  `"addressLine1"` and `"streetAddress"`, so a one-line address under another name is unseen.
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
