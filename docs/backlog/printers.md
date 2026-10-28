@@ -3,6 +3,24 @@
 The open entries are listed in [the backlog](../backlog.md), under "Printers, the print agent and receipts". This file holds
 their full text.
 
+## A1175: an Android app for venues run from Waitron Cloud
+
+Owner, 2026-10-28: "We also need to start thinking about building an android app to provide a
+local print server when Waitron is running in cloud. And to think about what else the android app
+would provide." The owner moved it up with the Cloud-reached features (online booking, the
+table's QR code, online ordering) and asked to brainstorm it later.
+
+Why it is needed: the print agent is the one piece that must stay on the venue's premises when
+the primary is in the cloud (cloud-compatibility rule 5 in [the backlog](../backlog.md)). A venue
+with no box needs something else on its premises to run it.
+
+Open, for the brainstorm: what else the app provides; which printers and connections it must
+reach (network, USB, Bluetooth); whether it is a dedicated device or a till that also prints; and
+how it compares with printers that fetch jobs from the cloud themselves
+([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
+[Epson Server Direct Print](../superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md)).
+Nothing is decided.
+
 ## A790: document and printer routing plan
 
 The owner approved the complete
