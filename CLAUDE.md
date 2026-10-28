@@ -604,9 +604,10 @@ browser test** — most of these rules exist because a test passed while proving
   interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 - **Full-disk start tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` and
-  `WAITRON_FULL_DISK_DIR_FROM_SPARE` for the second and third files: two files filling one
-  filesystem could fail each other, as the server's `maxWorkers: 4` can run them at once), otherwise skips locally and fails CI. Interrupted
+  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE` and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` for the second to fourth
+  files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the

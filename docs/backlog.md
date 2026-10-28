@@ -4690,12 +4690,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
   [Audit](backlog/self-service-refusals.md#backup-settings).
 
-- **A1167: backups make room for themselves.** When the disk runs short the box deletes its oldest
-  backups (never the newest, never one from before the last restore) and tells an administrator; a
-  backup that still has no room is refused before it copies anything and a manager is told. Also closes
-  the measured gap where a backup to a folder on the box's own disk passes its space check and then
-  fills the disk. Designed; the owner answered its four questions on 2026-10-28
-  (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
+- **A1167: backups make room for themselves — slices left.** Slice 1 landed (PR #TBD): each backup
+  run deletes its oldest deletable backups to make room, or is refused before it copies anything,
+  and managers and administrators are told on the bell and by email. Still open: slice 2 (the
+  free-space watch deletes old backups when the disk runs short) and the start deleting old backups
+  by itself in place of the full-disk page's button (owner's Q4 answer).
   [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
 
 - **Backup destination failures log no elapsed time or operation phase.**

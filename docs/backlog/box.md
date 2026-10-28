@@ -70,13 +70,22 @@ running out of disk space, plus alert the administrator, plus refuse to do a bac
 isn't enough space, and alert the manager."
 
 Design: [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md).
-It reuses A1127's rules for which backups may be deleted, changes what A1127 slice 3's dialog and the
-full-disk page's button are for, and fixes a measured gap: a backup to a folder on the box's own disk
-needs about three copies of the database at its peak while its space check counts two, so with room
-for between two and three the copy into the folder fails `ENOSPC` with nothing stored
-(`~/waitron-campaign/a1167-measure/`). The owner answered its four questions on 2026-10-28
-(who is told of automatic deletions; whether a refused backup is emailed; A1127 slice 3's dialog; the
-full-disk page's button; `~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
+The owner answered its four questions on 2026-10-28 (`~/waitron-campaign/questions.md`, "OWNER
+ANSWERS — A1167").
+
+Slice 1 landed (PR #TBD; plan
+[2026-10-28-a1167-1-room-before-backup.md](../superpowers/plans/2026-10-28-a1167-1-room-before-backup.md)):
+before each backup run copies anything, it deletes its oldest deletable backups on the disk that
+holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
+managers and administrators. How it works and its limits: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
+
+Still open:
+
+- **Slice 2: the free-space watch deletes old backups** when a reading is under 2 GiB, up to
+  2.5 GiB, while no backup run holds the staging turn (design §2 and "Slices").
+- **The start deletes old backups by itself** in place of the full-disk page's button (Q4 A),
+  measured first, and only if the installation's start can be read without opening the venue
+  database (design Q4).
 
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
@@ -567,9 +576,10 @@ way `UNREADABLE_CREDENTIAL` (`apps/server/src/credentials.ts`) groups them. Pred
 
 ## Nothing checks that the error codes in the dashboard's `backup_stop` word list are still real.
 
-`apps/dashboard/src/i18n/alert-messages.ts` gives `backup.staging_space_low` and
-`recovery.state_incomplete` their own sentence on the `backup.run_stopped` alert; a renamed code
-would quietly fall back to "Contact support.". The printer word list has such a check
+`apps/dashboard/src/i18n/alert-messages.ts` gives `recovery.state_incomplete` its own sentence on
+the `backup.run_stopped` alert; a renamed code would quietly fall back to "Contact support.".
+(`backup.staging_space_low` left that list on 2026-10-28, A1167 slice 1: the alert's `spaceLow`
+variant draws it, and the server sets `spaceLow` from the code.) The printer word list has such a check
 (`scripts/a4-hold-code-copies.test.ts`). Left open by A595 (#1675).
 
 ## No test covers the supervisor ignoring results from a backup run a reload replaced.

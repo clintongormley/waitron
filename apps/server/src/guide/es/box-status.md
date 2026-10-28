@@ -105,19 +105,20 @@ copias, ni siquiera lo que dejó en ella una copia interrumpida, y la página di
 no se cuentan.
 
 Los tamaños bajo **Espacio en disco** muestran qué está llenando el disco. En **Copias de
-seguridad**, puedes elegir cuántas copias conservar. Las antiguas solo se borran después de guardar
-una nueva en ese destino, así que cambiar este ajuste no libera espacio de inmediato en un disco
-lleno. Sal sin cambiar los ajustes para parar. Conserva la base de datos, las claves de recuperación
-y las copias guardadas.
+seguridad**, puedes elegir cuántas copias conservar. Sal sin cambiar los ajustes para parar.
+Conserva la base de datos, las claves de recuperación y las copias guardadas.
 
-Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor. Si **Liberar**
-no basta y no se puede hacer una copia nueva, esa vía de recuperación no está disponible aquí.
+Antes de cada copia de seguridad, si falta espacio en el disco, el equipo puede borrar sus copias
+más antiguas de ese disco para hacer sitio. Nunca borra la copia más reciente de una carpeta, una
+copia anterior a la última restauración o puesta en marcha desde cero del equipo, ni una copia de un
+bucket. Si aun así no basta, la copia no se hace y la campana dice cuánto espacio necesita.
 
-Si la campana avisa de que no se pudo preparar una copia por falta de espacio, abre
-**Estado del equipo** y revisa **Espacio en disco**. Pulsa **Liberar** si está disponible, o sal
-sin pulsarlo para no hacer la limpieza. Liberar espacio no inicia una copia. Si no basta,
-**Liberar** no puede borrar otros archivos por ti; conserva la base de datos, las claves de
-recuperación y las copias guardadas.
+Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor.
+
+Si la campana dice **Copia no hecha**, abre **Estado del equipo** y revisa **Espacio en disco**.
+Pulsa **Liberar** si está disponible, o sal sin pulsarlo para no hacer la limpieza. Liberar espacio
+no inicia una copia. Si no basta, **Liberar** no puede borrar otros archivos por ti; conserva la
+base de datos, las claves de recuperación y las copias guardadas.
 
 ## Cuando el equipo no tiene espacio {#out-of-space}
 
@@ -386,7 +387,9 @@ correo cuando:
   venta;
 - su reloj marca una hora anterior a la de su última venta, así que se han parado los cobros;
 - se confirmó su hora durante una de esas paradas, y los cobros se reanudaron;
-- encontró ventas con fecha incorrecta tras una de esas paradas, o vio que no puede saber cuáles son.
+- encontró ventas con fecha incorrecta tras una de esas paradas, o vio que no puede saber cuáles son;
+- borró copias de seguridad antiguas para hacer sitio;
+- no se hizo una copia de seguridad por falta de espacio.
 
 Cada persona recibe un correo por problema, en su propio idioma, o en el del local si no ha elegido
 ninguno. Si no se puede enviar, porque el equipo no tiene internet o el servidor de correo lo
@@ -394,10 +397,11 @@ rechaza (por ejemplo, porque los ajustes del servidor de correo tienen una contr
 el equipo lo vuelve a intentar cada minuto mientras dura el problema, hasta que el servidor de
 correo lo acepta. Así, el correo llega en cuanto se arregla la conexión o los ajustes. Si el
 problema termina antes, por ejemplo porque se puso bien la hora, el equipo deja de intentarlo y no
-envía nada. En los dos últimos casos, el equipo lo sigue intentando mientras su aviso esté abierto
-en la campana. Un disco lleno al que solo se le libera parte del espacio sigue casi sin espacio, así
-que quien no recibió el correo de disco lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el mismo correo
-otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
+envía nada. Si se confirmó la hora, si hay ventas con fecha incorrecta o si se borraron copias, el
+equipo lo sigue intentando mientras su aviso esté abierto en la campana. Un disco lleno al que solo
+se le libera parte del espacio sigue casi sin espacio, así que quien no recibió el correo de disco
+lleno recibe en su lugar el de poco espacio. Un reinicio mientras dura el problema puede enviar el
+mismo correo otra vez. Mientras no haya ningún servidor de correo configurado, no se envía nada.
 
 Un equipo cuyo reloj marca una fecha anterior al 28 de octubre de 2024 normalmente no puede enviar
 su correo: con una fecha tan temprana no puede comprobar el certificado del servidor de correo.

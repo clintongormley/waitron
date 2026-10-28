@@ -100,17 +100,20 @@ While a backup is running, **Free** leaves the backup's working folder alone, in
 cut-off backup left there, and the page says those files are not counted.
 
 The sizes under **Disk space** show what is filling the disk. On **Backups**, you can choose how
-many archives to keep. Older archives are removed only after a new backup succeeds at that
-destination, so changing this setting cannot free a full disk immediately. Leave without changing
-the settings to stop. Keep your database, recovery keys and saved backups.
+many archives to keep. Leave without changing the settings to stop. Keep your database, recovery
+keys and saved backups.
 
-This page cannot remove other files or move your data to a larger disk. If **Free** is not enough
-and no new backup can be made, that recovery route is not available here.
+Before each backup, when the disk is short of space, the box can delete its oldest backups on that
+disk to make room. It never deletes the newest backup in a folder, a backup from before the box's
+last restore or fresh setup, or a backup in a bucket. If that is still not enough, the backup is not
+made, and the bell says how much room it needs.
 
-When the bell says a backup could not be prepared because there is not enough space, open
-**Box status** and check **Disk space**. Use **Free** if it is available, or leave without
-pressing it to skip cleanup. Freeing space does not start a backup. If the cleanup is not enough,
-**Free** cannot remove other files for you; keep your database, recovery keys and saved backups.
+This page cannot remove other files or move your data to a larger disk.
+
+When the bell says **Backup not made**, open **Box status** and check **Disk space**. Use **Free**
+if it is available, or leave without pressing it to skip cleanup. Freeing space does not start a
+backup. If the cleanup is not enough, **Free** cannot remove other files for you; keep your
+database, recovery keys and saved backups.
 
 ## When the box is out of space {#out-of-space}
 
@@ -358,17 +361,20 @@ The box emails everyone who can manage the system and has an email address when:
 - its clock is set before 28 October 2024, so no sale can be recorded;
 - its clock reads earlier than its last sale, so payments have stopped;
 - its clock was confirmed during such a stop, so payments restarted;
-- it found sales dated wrongly after such a stop, or found that it cannot tell which ones were.
+- it found sales dated wrongly after such a stop, or found that it cannot tell which ones were;
+- it deleted old backups to make room;
+- a backup was not made for lack of room.
 
 Each person gets one email per problem, in their own language, or the venue's if they have not
 chosen one. If it cannot be sent, because the box has no internet or the mail server refuses it (for
 example, because the mail server settings have a wrong password), the box tries again each minute
 while the problem lasts, until the mail server accepts it. So the email arrives once the connection
 or the settings are fixed. If the problem ends first, for example because the clock was set right,
-the box stops trying and sends nothing. For the last two, the box keeps trying while their alert
-is open in the bell. A full disk that is only partly freed is still nearly out of
-space, so anyone the full-disk email did not reach is sent the nearly-out-of-space email instead. A restart while the problem lasts can
-send the same email again. While no mail server is set up, nothing is sent.
+the box stops trying and sends nothing. For a confirmed clock, sales dated wrongly and deleted
+backups, the box keeps trying while their alert is open in the bell. A full disk that is only partly
+freed is still nearly out of space, so anyone the full-disk email did not reach is sent the
+nearly-out-of-space email instead. A restart while the problem lasts can send the same email again.
+While no mail server is set up, nothing is sent.
 
 A box whose clock reads before 28 October 2024 usually cannot send its email: with a date that
 early it cannot check the mail server's certificate.

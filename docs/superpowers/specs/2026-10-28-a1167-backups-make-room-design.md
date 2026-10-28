@@ -1,5 +1,9 @@
 # A1167: backups make room for themselves
 
+_2026-10-28: slice 1 is built by [the slice 1 plan](../plans/2026-10-28-a1167-1-room-before-backup.md)
+(PR #TBD). The owner's answers replace §5's words, and the plan's "Deviations from the design" list
+where the build differs from this design. Slice 2 and the start-time slice (Q4) are not built._
+
 The owner, 2026-10-28 ~08:35 CET (`~/waitron-campaign/questions.md`, "WATCHER … A1167 queued for
 you"):
 

@@ -79,6 +79,14 @@ comment lists:
 The guard also requires wording for `alert.source_unavailable`, the alert the server builds in place
 of an ongoing check that failed.
 
+**The `backup` source is for incidents only.** `incidents.source` takes `INCIDENT_SOURCES` (every
+entry of `SOURCES` plus `backup`, `packages/shared/src/origin.ts`, declared through
+`incidentSourceColumn` in `packages/db/src/schema/origin.ts`); every other column declared from
+that file takes `SOURCES` (`sourceColumn`) or `SALE_SOURCES` (`saleSourceColumn`). Why: a backup
+run writes only incidents, and widening the general list would rebuild `working_orders`, `order_amendments`, `unpaid_departures` and
+`time_entries` too, and `working_orders` has many children pointing at it (A1167 slice 1 plan,
+deviation 3).
+
 A sibling guard, `scripts/ongoing-alert-codes.test.ts`, holds the ongoing (non-incident) source codes
 to the same English-and-Spanish wording bar; it too reads source TEXT and hand-lists its source files
 (`apps/server/src/alert-sources.ts`, `packages/fiscal-verifactu/src/submission-alerts.ts`,
@@ -2850,6 +2858,8 @@ stopped it — stopping the supervisor aborts a run under way and waits for it t
 `free-space-now.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
 which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
 `BACKUP_STAGING_DIR` or `"backup-staging"`.
+A run's deletions of old backups to make room (`makeRoom`, `apps/server/src/backup-room.ts`) are
+steps of `runOnce`, so they happen inside that run's own turn (A1167 slice 1).
 `apps/server/scripts/cloud-backup-fixture.ts`, a development fixture, calls `runOnce` outside any
 turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
 
@@ -4111,7 +4121,7 @@ alert names (`readMisdatedHandled`), so the later list is then not shown by eith
 the list of the alert it names, open or handled, and answers `alert.not_found` for one that cannot
 tell. Every closing stays in
 `clock_confirmations`. The managers' email duty emails each open `clock.behind_chain_restarted` and
-`clock.records_misdated` once (`CLOCK_INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
+`clock.records_misdated` once (`INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`).
 
 **A jump** (decision 14). The clock watch takes the wall clock to have jumped when, between two
 checks, it moved more than 60 000 ms further than an elapsed-time clock; `trustedUntil` is the
@@ -4502,6 +4512,91 @@ cannot establish a target-bound approval. A saved v2 operation still requires it
 at staging, restart and placement. Unknown, duplicate-key or unparseable saved protocol state is
 refused before mutation rather than guessed to be v1. Preserve that state for diagnosis; this
 interface does not provide a reset or erase operation.
+
+## A backup run makes room for itself, or is refused before it copies
+
+A1167 slice 1 (plan `docs/superpowers/plans/2026-10-28-a1167-1-room-before-backup.md`). The code
+is `makeRoom` and `foldersOnDisk` in `apps/server/src/backup-room.ts`, called from `runOnce` in
+`apps/server/src/backup-sweep.ts`; the cases are `backup-room.test.ts`, the backup-sweep suites and
+the real-disk file `backup-room.e2e.test.ts`.
+
+**The need.** "The disk" is the one holding the run's working folder (`<state>/backup-staging`),
+where the run reads free space. Before the copy the run needs twice the database file's size (the
+working copy and its encrypted file) plus the database file's size once for each local backup
+destination on that disk, because each folder copy writes a whole working copy before its rename
+and the run copies to every destination at once (`Promise.allSettled`). `foldersOnDisk` judges a
+folder by the device of its real path, or of its nearest existing parent when it does not exist
+yet. Two destinations that reach one folder are counted twice for the need and listed once for
+deletion. A destination whose real path or disk cannot be read is counted and never listed; when
+the working folder's disk cannot be read, every local destination is counted, none is listed, and
+the run logs `backup.staging_disk_unreadable`.
+
+**The floor and the aim.** The floor is the need plus `START_FREE_SPACE_FLOOR` (256 MiB); the aim
+is the need plus `SPACE_LOW_BYTES` (2 GiB), never less than the floor (`spaceFloorBytes` and
+`spaceAimBytes` override them; only tests do). Free space at or above the aim, or unreadable, lets
+the run through. Otherwise, if free space plus the size of every deletable archive is under the
+floor, the run deletes nothing and is refused `backup.staging_space_low` with `neededBytes` (the
+floor) and `availableBytes`. If not, it deletes toward the aim when the sum reaches it, else toward
+the floor.
+
+**What may be deleted** (A1127 §4's set, `listDeletableArchives`). In each listed folder: plain
+files (`lstat`, so a link is never followed or counted) named as archives (`parseBackupArchiveKey`),
+never the newest in that folder, and only those taken strictly after the current installation
+began. The installation start comes from the fiscal seat's optional `installationStartedAt`
+(`packages/fiscal/src/contribution.ts`); the Veri\*Factu module answers the live `registro_sif`
+row's `registrado_en` (`packages/fiscal-verifactu/src/slot.ts`), or null when the node has none.
+`createBackupRoomHooks` (`apps/server/src/backup-deletion-alert.ts`) reads it inside
+`db.withWriteLock` with no change-list drain, because the drain is a write and this read must answer
+on a nearly full disk. A box whose fiscal module has no such member (the no-regime module), a null
+answer, or a read that throws (logged `backup.installation_start_unreadable`) deletes nothing; the
+room check still runs. A bucket destination has no folder and is never deleted from.
+
+**Deleting.** Oldest first (ties by key), one at a time. Before each, the file must still be a plain
+file and its folder's real path the one it was listed by, or it is skipped. Free space is read again
+after each, and deleting stops once that reading reaches the goal or the deleted sizes cover the
+shortfall first read. Each deletion logs `backup.archive_deleted` with `destination`, `key`, `bytes`
+and `reason: "backup_room"`. An `unlink` that fails other than `ENOENT` logs
+`backup.archive_delete_failed` and ends the deleting for that step; the step is then refused when
+the last reading is under the floor, as it is after the last deletion. A reading that cannot be
+taken lets the run through. A stop (the run's signal) ends the step with the stop itself.
+
+**The second check.** After the copy, the run refuses (deleting nothing) when free space is under
+the copy's own size, as before. After encrypting, when at least one local destination is counted
+as on the disk, the same room step runs again with the encrypted file's real size once per such
+destination.
+
+**The report and the alert.** A room step that deleted anything calls `onArchivesDeleted` once on
+every way out: success, refusal, a stop or a failed `unlink`, before the refusal is rethrown. Boot
+wires it to `recordArchivesDeleted`, which records `backup.archives_deleted` (`count`, and `date`:
+the run's calendar day in the venue's time zone) with the `backup` origin through
+`recordIncidentOnce`, so while one is open a later deletion changes nothing. A failure to record is
+logged `backup.archives_deleted_alert_failed` and never changes the run's outcome. Core's
+`CORE_ALERTS` claims `backup.` for `system.manage` (`packages/db/src/alerts.ts`). The managers' email
+duty emails the open alert (it is in `INCIDENT_EMAIL_CODES`, `apps/server/src/box-alert-email.ts`),
+and emails a refusal while the run's in-memory `runStopped` names `backup.staging_space_low`
+(`BACKUP_REFUSED_EMAIL_CODE`); a run that passes its room checks clears `runStopped`.
+
+**Limits.**
+
+- An archive can free less than its size (a hard link, a sparse file, a file another process holds
+  open), so a step can delete what the sum promised and still be refused. A failed `unlink` part way
+  can also end in a refusal after deleting, and a stop part way ends the run after deleting. Not
+  measured on ext4.
+- A backup folder on another disk is never deleted from, and a run can still fill that disk and
+  fail `ENOSPC` there without being refused first.
+- A folder two boxes share holds archive names with no box id, so one box can delete the other's
+  archives, as its pruning can.
+- An archive stamped while a clock read ahead can look newer than the installation start and so be
+  deleted, and stays "the newest" in its folder until a later one exists, so the real latest backup
+  can be deleted.
+- A restore reading an archive in another process can race its deletion (A1127's limit). Not
+  measured.
+- The folder check before each deletion narrows, but does not close, the window in which a folder
+  swapped for a link is followed.
+- A crash between a deletion and recording its alert loses the alert; so does a disk still too full
+  for the alert's write (`storage.disk_full`). The deletion's log lines are then the only record.
+- The macOS case for one folder reached by two real paths runs only on macOS; a Linux bind mount
+  was not built.
 
 
 ## Root receipt excerpts moved on 2026-10-23
