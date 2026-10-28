@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "./errors.js";
 import {
+  INCIDENT_SOURCES,
   SALE_SOURCES,
   SOURCES,
+  backupOrigin,
   deviceOrigin,
   isSaleOrigin,
   jobOrigin,
+  readIncidentOrigin,
   readOrigin,
   readSaleOrigin,
 } from "./origin.js";
@@ -24,6 +27,10 @@ describe("the source vocabulary", () => {
       "readiness_test",
       "operator_script",
     ]);
+  });
+
+  it("lists the incident sources: every source, then backup", () => {
+    expect(INCIDENT_SOURCES).toEqual([...SOURCES, "backup"]);
   });
 
   it("allows only named sale sources", () => {
@@ -94,6 +101,37 @@ describe("origins", () => {
   ])("refuses (%s, %s) as a sale's stored pair", (source, device) => {
     expect(() => readSaleOrigin(source, device)).toThrow(
       expect.objectContaining({ code: "origin.invalid", params: { source, deviceId: device } }),
+    );
+  });
+});
+
+describe("incident origins", () => {
+  it("a backup origin carries no device", () => {
+    expect(backupOrigin()).toEqual({ source: "backup", deviceId: null });
+  });
+
+  it("reads a stored backup pair back, and every other source as readOrigin does", () => {
+    expect(readIncidentOrigin("backup", null)).toEqual({ source: "backup", deviceId: null });
+    expect(readIncidentOrigin("device", DEVICE)).toEqual({ source: "device", deviceId: DEVICE });
+    expect(readIncidentOrigin("operator_script", null)).toEqual(jobOrigin("operator_script"));
+  });
+
+  it.each([
+    ["backup", DEVICE],
+    ["system", null],
+    ["device", null],
+  ])("refuses (%s, %s) as an incident's stored pair", (source, device) => {
+    expect(() => readIncidentOrigin(source, device)).toThrow(
+      expect.objectContaining({ code: "origin.invalid", params: { source, deviceId: device } }),
+    );
+  });
+
+  it("keeps backup out of every other table's origins", () => {
+    expect(() => readOrigin("backup", null)).toThrow(
+      expect.objectContaining({
+        code: "origin.invalid",
+        params: { source: "backup", deviceId: null },
+      }),
     );
   });
 });

@@ -32,16 +32,22 @@ export {
   workingOrderLineId,
 } from "./ids.js";
 export {
+  backupOrigin,
   deviceOrigin,
+  INCIDENT_SOURCES,
   isSaleOrigin,
   jobOrigin,
+  readIncidentOrigin,
   readOrigin,
   readSaleOrigin,
   SALE_SOURCES,
   SOURCES,
 } from "./origin.js";
 export type {
+  BackupOrigin,
   DeviceOrigin,
+  IncidentOrigin,
+  IncidentSource,
   JobOrigin,
   JobSource,
   Origin,

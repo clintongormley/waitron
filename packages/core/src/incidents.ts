@@ -3,8 +3,15 @@ import "./errors.js";
 import { and, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { devices, incidents, newId, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError, isAppError, readOrigin } from "@waitron/shared";
-import type { DeviceId, ErrorCode, ErrorParams, Origin, SaleId, Source } from "@waitron/shared";
+import { AppError, isAppError, readIncidentOrigin } from "@waitron/shared";
+import type {
+  DeviceId,
+  ErrorCode,
+  ErrorParams,
+  IncidentSource,
+  Origin,
+  SaleId,
+} from "@waitron/shared";
 
 export class IssuanceRefusal<C extends ErrorCode = ErrorCode> extends AppError<C> {
   declare readonly incident: { readonly origin: Origin; readonly detectedAt: Date };
@@ -78,7 +85,7 @@ export interface RecordIncidentInput {
 
 export interface Incident {
   id: string;
-  source: Source;
+  source: IncidentSource;
   deviceId: DeviceId | null;
   saleId: SaleId | null;
   code: string;
@@ -170,7 +177,7 @@ export async function openIncidents(tx: Transaction, origin: Origin): Promise<In
 
   return rows.map((row) => ({
     id: row.id,
-    ...readOrigin(row.source, row.deviceId),
+    ...readIncidentOrigin(row.source, row.deviceId),
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
@@ -218,7 +225,7 @@ type TenantIncidentRow = {
 function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   return {
     id: row.id,
-    ...readOrigin(row.source, row.deviceId),
+    ...readIncidentOrigin(row.source, row.deviceId),
     deviceName: row.deviceName,
     saleId: row.saleId as SaleId | null,
     code: row.code,
