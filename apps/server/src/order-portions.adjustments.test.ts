@@ -3448,3 +3448,55 @@ describe("A803 portions: a cancel on a row of identical portions", () => {
     ]);
   });
 });
+
+describe("A803 portions: a whole-bill discount that prices a row two ways records today's split (plan D33)", () => {
+  it("A803 portions: S4 — 30% off a row of three bottles, then €0.01 off the bill leaves them at two prices and records the split; 30% more on the cheaper bottle asks, as today", async () => {
+    const lines = [{ name: "Bottle", quantity: "3" }];
+    const grouped = await groupedBill(lines);
+    const portions = await portionsBill(lines);
+    const [line] = await dishesNamed(grouped.billId, "Bottle");
+    const row = await dishesNamed(portions.billId, "Bottle");
+    await adjust(grouped.billId, crew({ lineId: line! }, undefined, 3000));
+    await adjust(portions.billId, crew(rowOf(row), undefined, 3000));
+    const cent: Ask = { action: "discount_amount", amount: "0.01" };
+    await adjust(grouped.billId, cent);
+    await adjust(portions.billId, cent);
+
+    expect(await pricesOf(portions.billId)).toEqual([
+      ["Bottle", "21.00", "30.00"],
+      ["Bottle", "21.00", "30.00"],
+      ["Bottle", "20.99", "30.00"],
+    ]);
+    const [carved] = (await dishesNamed(grouped.billId, "Bottle")).slice(1);
+    expect((await recordedOn(grouped.billId))[1]).toMatchObject({
+      lineId: null,
+      splits: [{ from: line, to: carved }],
+    });
+    expect((await recordedOn(portions.billId))[1]).toMatchObject({
+      lineId: null,
+      splits: [{ from: row[0], to: row[2] }],
+    });
+
+    const today = await asked(grouped.billId, crew({ lineId: carved! }, undefined, 3000));
+    expect(today).toEqual(ASKS);
+    expect(await asked(portions.billId, crew({ lineId: row[2]! }, undefined, 3000))).toEqual(today);
+  });
+
+  it("A803 portions: a full invoice marks the croquetas a bill discount split as one family, and not a dish only its own discount touched", async () => {
+    const lines = [{ name: "Burger" }, { name: "Croquetas", quantity: "3" }];
+    const outcome = async (bill: Bill) => {
+      const [burger] = await dishesNamed(bill.billId, "Burger");
+      await adjust(bill.billId, { ...tenOff, lineId: burger! });
+      await adjust(bill.billId, tenOff);
+      return invoiceOf(bill.billId);
+    };
+    const today = await outcome(await groupedBill(lines));
+    expect(today.map((one) => [one.descriptions["es-ES"], one.dishFamily])).toEqual([
+      ["Hamburguesa", undefined],
+      ["Croquetas de jamón", 1],
+      ["Croquetas de jamón", 1],
+    ]);
+
+    expect(invoiceRows(await outcome(await portionsBill(lines)))).toEqual(invoiceRows(today));
+  });
+});

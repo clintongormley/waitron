@@ -419,13 +419,16 @@ function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
  * A whole-bill discount over the rows the bill files (plan D29): bound portions grouped as
  * {@link readLockedLines} groups them for filing, each group spread as one line at its first member's
  * line number, then the group's rows handed to its portions in ordinal order, the higher price first.
- * A bill holding no bound portion is spread line by line.
+ * A group of bound portions left at two prices pushes onto `splits` the split today's line would
+ * record (plan D33): from its first portion to its first portion at the lower price. A bill holding
+ * no bound portion is spread line by line.
  */
 async function spreadOverFiledRows(
   tx: Transaction,
   orderId: string,
   subjects: readonly Subject[],
   discount: Decimal,
+  splits: AdjustmentSplit[],
 ): Promise<Change[]> {
   const bindings = await readPortionBindings(
     tx,
@@ -453,12 +456,20 @@ async function spreadOverFiledRows(
     discount,
   );
   const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
-  return groups.flatMap((members) =>
-    handOut(
+  return groups.flatMap((members) => {
+    const priced = results.get(members[0]!.row.id)!.rows;
+    const handed = handOut(
       [...members].sort((a, b) => ordinal(a) - ordinal(b)),
-      results.get(members[0]!.row.id)!.rows,
-    ).filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
-  );
+      priced,
+    );
+    const lower = priced[1]?.unitGross;
+    const second =
+      lower === undefined
+        ? undefined
+        : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
+    if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
+    return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
+  });
 }
 
 /** One line's priced rows handed to the lines standing for it, in the order given, each taking
@@ -801,6 +812,7 @@ export async function planAdjustment(
         exact: row.parentLineId === null && !families.has(row.id) && (row.unitPrecision ?? 0) === 0,
       })),
       requestedDiscount(ask, before),
+      rowSplits,
     );
     reduction = sumDecimals(changes.map((change) => change.reduction));
     nominal = sumDecimals(rows.map((row) => listValue(row, row.quantity)));
