@@ -94,8 +94,7 @@ const stationScreen = (...stationIds: string[]): DeviceKitchenScreen => ({
 });
 const passScreen: DeviceKitchenScreen = { kind: "pass", stationIds: null, zoneIds: null };
 
-/** A fresh table's Paella, fired to Bar. */
-async function paella() {
+async function sentDish() {
   const { tabId } = await seatedWith(venue, "Paella");
   const [item] = await inTx(venue, (tx) =>
     tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, tabId)),
@@ -121,7 +120,7 @@ const move = (
 describe("POST /api/device/working-orders/:id/lines/move-station", () => {
   it("keeps kitchen authority when another person edits this bill", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const saved = await inTx(venue, async (tx) => {
       const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, tabId));
       const expectedEdit = await readBillEditState(tx, tabId);
@@ -204,7 +203,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("moves a queued dish at the screen's station to another active station", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const answer = await move(screen.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
@@ -233,7 +232,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
   it("the receiving kitchen display reads the move's device when nobody was signed in", async () => {
     const source = await display(stationScreen(bar));
     const receiving = await display(stationScreen(grill));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const answer = await move(source.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
@@ -261,7 +260,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("refuses a dish at a station the screen does not work, and moves nothing", async () => {
     const screen = await display(stationScreen(grill));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const answer = await move(screen.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
@@ -280,7 +279,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("refuses a display whose profile does not take orders", async () => {
     const screen = await display(stationScreen(bar), ["prepare-orders"]);
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const answer = await move(screen.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: grill,
@@ -293,7 +292,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
   });
 
   it("refuses a till with a session and a station screen, and a display with only a pass screen", async () => {
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const pass = await display(passScreen);
     for (const cookie of [await tillAtBar(), pass.cookie]) {
       const answer = await move(cookie, tabId, {
@@ -343,8 +342,8 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("refuses a dish from another order beside one of its own, and moves nothing", async () => {
     const screen = await display(stationScreen(bar));
-    const own = await paella();
-    const other = await paella();
+    const own = await sentDish();
+    const other = await sentDish();
     const answer = await move(screen.cookie, own.tabId, {
       lineIds: [own.item.workingOrderLineId, other.item.workingOrderLineId],
       stationId: grill,
@@ -364,7 +363,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("answers a started dish and a deleted destination as the till does", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const inactive = await move(screen.cookie, tabId, {
       lineIds: [item.workingOrderLineId],
       stationId: off,
@@ -384,7 +383,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("validates its order id and body as the till's route does", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const lineId = item.workingOrderLineId;
     const badOrder = await move(screen.cookie, "not-a-uuid", {
       lineIds: [lineId],
@@ -416,7 +415,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("replays a retried submission without a second move", async () => {
     const screen = await display(stationScreen(bar, grill));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const request = { submissionId: randomUUID(), lineIds: [item.workingOrderLineId] };
     const first = await move(screen.cookie, tabId, { ...request, stationId: grill });
     const again = await move(screen.cookie, tabId, { ...request, stationId: grill });
@@ -427,7 +426,7 @@ describe("POST /api/device/working-orders/:id/lines/move-station", () => {
 
   it("replays the first answer even once the dish sits at a station the screen does not work", async () => {
     const screen = await display(stationScreen(bar));
-    const { tabId, item } = await paella();
+    const { tabId, item } = await sentDish();
     const request = {
       submissionId: randomUUID(),
       lineIds: [item.workingOrderLineId],

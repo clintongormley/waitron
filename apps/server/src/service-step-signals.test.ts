@@ -265,7 +265,7 @@ describe("readTableSteps", () => {
       tx.update(workingOrders).set({ status: "abandoned" }).where(eq(workingOrders.id, abandoned)),
     );
     await openDraft(v, partyId, tabId);
-    const paella = await lineIdOf(v, tabId, "Paella");
+    const lineId = await lineIdOf(v, tabId, "Paella");
     await inTx(v, async (tx) => {
       const [draft] = await tx
         .select({ id: orderDrafts.id })
@@ -273,7 +273,7 @@ describe("readTableSteps", () => {
         .where(eq(orderDrafts.partyId, partyId));
       await tx
         .insert(orderDraftRecalledLines)
-        .values({ draftId: draft!.id, sourceLineId: paella, position: 1 });
+        .values({ draftId: draft!.id, sourceLineId: lineId, position: 1 });
     });
 
     const servedAt = await serve(v, tabId, "Burger");

@@ -31,7 +31,7 @@ const MIGRATIONS = migrationOptionsFor(manifestSets(), null);
 interface OpenVenue {
   venue: BillVenue;
   counter: ZoneOffers;
-  paella: string;
+  productId: string;
 }
 
 /** A bill venue whose counter offers every dish, and whose "Counter till" profile, and so every
@@ -45,7 +45,7 @@ async function openVenue(db: Database): Promise<OpenVenue> {
     set capabilities = json_insert(json_insert(capabilities, '$[#]', 'print-receipt'), '$[#]', 'clock-in')
     where name = 'Counter till'
   `);
-  return { venue, counter, paella: dish!.id };
+  return { venue, counter, productId: dish!.id };
 }
 
 function clockAt(ms: number): TrustedClock {
@@ -75,7 +75,7 @@ function cashSale(open: OpenVenue, app: Hono, id: string) {
   return send(app, open.venue.cookie, "POST", "/api/sales", {
     workingOrderId: id,
     zoneId: open.counter.zoneId,
-    lines: [{ menuItemId: open.counter.offerFor(open.paella), quantity: "1" }],
+    lines: [{ menuItemId: open.counter.offerFor(open.productId), quantity: "1" }],
     tender: { method: "cash", amount: "35.00" },
   });
 }
@@ -211,7 +211,7 @@ describe("while the latest record is a day after the box's clock", () => {
     const deps = { db: venue.db, backend: venue.backend, clock: issuedAt };
     await parkOrder(deps, venue.cfg, {
       id: billId,
-      lines: [{ menuItemId: open.counter.offerFor(open.paella), quantity: "1" }],
+      lines: [{ menuItemId: open.counter.offerFor(open.productId), quantity: "1" }],
       zoneId: open.counter.zoneId,
       operatorId: venue.operatorId,
     });

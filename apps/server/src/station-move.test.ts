@@ -3292,7 +3292,7 @@ describe("moveDishesToStation", () => {
       expect(recorded).toEqual([kitchen]);
       return {
         tabId,
-        paella: lineOf("Paella"),
+        mainLineId: lineOf("Paella"),
         burger: lineOf("Burger"),
         flan: lineOf("Flan"),
         move: (lineId: string, stationId: string) =>
@@ -3334,7 +3334,7 @@ describe("moveDishesToStation", () => {
         const kitchenBefore = (await jobs(kitchenPrinter)).length;
         const barBefore = (await jobs(barPrinter)).length;
 
-        await held.move(held.paella, bar);
+        await held.move(held.mainLineId, bar);
 
         const kitchenPaper = await paperSince(kitchenPrinter, kitchenBefore);
         expect(kitchenPaper).toHaveLength(1);

@@ -92,14 +92,14 @@ function pay(
   );
 }
 
-const paella = () => tabWith(venue, "Paella");
+const unpaidBill = () => tabWith(venue, "Paella");
 const collects = () => venue.card.collectCalls.length;
 
 describe("bill payments under a clock before 28-10-2024", () => {
   it("takes a reader payment at 00:00 local on 28-10-2024, and refuses one a millisecond earlier", async () => {
     const before = collects();
 
-    const early = await paella();
+    const early = await unpaidBill();
     const refused = await pay(early, readerPart(), {
       clock: clockAt("2024-10-27T22:59:59.999Z"),
     });
@@ -110,7 +110,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
     });
     expect(collects()).toBe(before);
 
-    const billId = await paella();
+    const billId = await unpaidBill();
     const taken = await pay(billId, readerPart(), { clock: clockAt("2024-10-27T23:00:00.000Z") });
     expect(taken.status).toBe(200);
     expect(taken.json.outcome).toBe("received");
@@ -119,7 +119,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
 
   // Part payments: neither records a sale.
   it("answers a retry of a reader payment taken earlier under a clock in 2001", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const body = readerPart();
     const first = await pay(billId, body);
     expect(first.status).toBe(200);
@@ -135,7 +135,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
   });
 
   it("answers a retry of a cash payment taken earlier under a clock in 2001", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const body = cashPart();
     const first = await pay(billId, body);
     expect(first.status).toBe(200);
@@ -149,7 +149,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
   });
 
   it("refuses a reader payment under a clock in 2001, before the reader", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const before = collects();
 
     const answer = await pay(billId, readerPart(), { clock: clockAt("2001-01-01T11:00:00.000Z") });
@@ -164,7 +164,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
   });
 
   it("refuses a cash part payment and a manual card under such a clock", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const clock = clockAt("2001-01-01T11:00:00.000Z");
 
     for (const body of [cashPart(), manualCardPart()]) {
@@ -181,7 +181,7 @@ describe("bill payments under a clock before 28-10-2024", () => {
 
 describe("a reader bill payment while the full-disk stop holds", () => {
   it("refuses a reader payment while a refused write is noted, before the reader", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const disk = diskState({ bytes: 0 });
     disk.noteRefused();
     const before = collects();
@@ -195,7 +195,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
   });
 
   it("asks the reader when nothing is noted", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const before = collects();
 
     const answer = await pay(billId, readerPart(), { disk: diskState({ bytes: 0 }) });
@@ -210,7 +210,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
     const log: Logger = (level, event, fields) => {
       entries.push({ level, event, fields: fields ?? {} });
     };
-    const billId = await paella();
+    const billId = await unpaidBill();
     const disk = diskState({ bytes: 0 });
     disk.noteRefused();
 
@@ -227,7 +227,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
   });
 
   it("answers a retry of a payment already taken while the stop holds", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const body = readerPart();
     const first = await pay(billId, body);
     expect(first.status).toBe(200);
@@ -250,13 +250,13 @@ describe("a reader bill payment while the full-disk stop holds", () => {
     disk.noteRefused();
     const before = collects();
 
-    const short = await pay(await paella(), readerPart(), { disk });
+    const short = await pay(await unpaidBill(), readerPart(), { disk });
     expect(short.status).toBe(507);
     expect(short.json.code).toBe("storage.disk_full");
     expect(collects()).toBe(before);
 
     free.bytes = FULL_DISK_BYTES;
-    const answer = await pay(await paella(), readerPart(), { disk });
+    const answer = await pay(await unpaidBill(), readerPart(), { disk });
     expect(answer.status).toBe(200);
     expect(answer.json.outcome).toBe("received");
     expect(collects()).toBe(before + 1);
@@ -265,7 +265,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
 
   // This double pins that the read taken before the first transaction is consulted.
   it("refuses before the reader on the free-space read taken before the first transaction", async () => {
-    const billId = await paella();
+    const billId = await unpaidBill();
     const disk: DiskFullState = {
       noteRefused: () => {},
       noted: () => false,
@@ -309,7 +309,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
 
     it("refuses before the reader when a refusal is noted while the payment waits", async () => {
       const { disk, queuedBody } = queuingState((state) => state.noteRefused());
-      const billId = await paella();
+      const billId = await unpaidBill();
       const before = collects();
 
       const answer = await pay(billId, readerPart(), { disk });
@@ -325,7 +325,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
       const { disk, queuedBody } = queuingState(() => {});
       const before = collects();
 
-      const answer = await pay(await paella(), readerPart(), { disk });
+      const answer = await pay(await unpaidBill(), readerPart(), { disk });
       await queuedBody();
 
       expect(answer.status).toBe(200);
@@ -350,7 +350,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
     }
 
     it("refuses before the reader when a refusal is noted after the first transaction, and fails the payment", async () => {
-      const billId = await paella();
+      const billId = await unpaidBill();
       const disk = scriptedState(2);
       const before = collects();
 
@@ -367,7 +367,7 @@ describe("a reader bill payment while the full-disk stop holds", () => {
       const disk = scriptedState(Number.POSITIVE_INFINITY);
       const before = collects();
 
-      const answer = await pay(await paella(), readerPart(), { disk });
+      const answer = await pay(await unpaidBill(), readerPart(), { disk });
 
       expect(answer.status).toBe(200);
       expect(answer.json.outcome).toBe("received");

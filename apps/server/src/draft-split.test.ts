@@ -45,8 +45,8 @@ useVenueDb({
     venue = await provisionBillVenue(db);
     extras = await inTx(venue, async (tx) => {
       const { offers } = await VENUE_SERVICE.listZoneOffers(tx, venue.cfg, venue.zoneId);
-      const paella = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
-      const croquetas = offers.find((offer) => offer.id === venue.offerFor("Croquetas"))!;
+      const mainOffer = offers.find((offer) => offer.id === venue.offerFor("Paella"))!;
+      const sideOffer = offers.find((offer) => offer.id === venue.offerFor("Croquetas"))!;
       const list = await createExtraList(
         tx,
         {
@@ -57,14 +57,14 @@ useVenueDb({
           maxPicks: 1,
           active: true,
           items: [
-            { productId: croquetas.productId, maxQuantity: 1, preselected: false, price: "2.50" },
+            { productId: sideOffer.productId, maxQuantity: 1, preselected: false, price: "2.50" },
           ],
         },
         venue.cfg.locale,
       );
-      await writeProductModifiers(tx, paella.productId, [{ kind: "extras", id: list.id }]);
+      await writeProductModifiers(tx, mainOffer.productId, [{ kind: "extras", id: list.id }]);
       await republishMenus(tx);
-      return [{ listId: list.id, picks: [{ productId: croquetas.productId, quantity: 1 }] }];
+      return [{ listId: list.id, picks: [{ productId: sideOffer.productId, quantity: 1 }] }];
     });
   },
 });
