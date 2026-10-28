@@ -36,13 +36,13 @@ const { startServer, httpPort } = ephemeralServerFixture();
 const KiB = 1024;
 const MiB = 1024 * KiB;
 const ORIGIN = "https://dashboard.example.com";
-const insecure = new Agent({ connect: { rejectUnauthorized: false } });
-
+let insecure: Agent | undefined;
 let opened: ReturnType<typeof openSmallDisk> | undefined;
 let disk: SmallDisk | undefined;
 let migrationsRoot: string | undefined;
 
 beforeAll(async () => {
+  insecure = new Agent({ connect: { rejectUnauthorized: false } });
   opened = openSmallDisk("WAITRON_FULL_DISK_DIR_FROM_SPARE");
   if (opened.ok) disk = opened.disk;
   else if (!REQUIRE_FULL_DISK) console.warn(`start-from-spare tests SKIPPED: ${opened.reason}`);
@@ -52,7 +52,7 @@ beforeAll(async () => {
 afterAll(async () => {
   disk?.unfill();
   disk?.close();
-  await insecure.close();
+  if (insecure !== undefined) await insecure.close();
   if (migrationsRoot !== undefined) await rm(migrationsRoot, { recursive: true, force: true });
 });
 
@@ -156,7 +156,7 @@ async function probe(box: Box): Promise<{ status: number; code?: unknown }> {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
-    dispatcher: insecure,
+    dispatcher: insecure!,
   } as RequestInit);
   const body = (await response.json().catch(() => ({}))) as { error?: { code?: unknown } };
   return { status: response.status, code: body.error?.code };
@@ -167,13 +167,13 @@ async function boxAlerts(box: Box): Promise<Alert[]> {
     method: "POST",
     headers: { "content-type": "application/json", origin: ORIGIN },
     body: JSON.stringify({ email: "owner@example.test", password: "dashPass123" }),
-    dispatcher: insecure,
+    dispatcher: insecure!,
   } as RequestInit);
   expect(login.status).toBe(200);
   const cookie = login.headers.get("set-cookie")!.split(";")[0]!;
   const response = await fetch(url(box, "/management-api/alerts"), {
     headers: { cookie },
-    dispatcher: insecure,
+    dispatcher: insecure!,
   } as RequestInit);
   expect(response.status).toBe(200);
   return ((await response.json()) as { alerts: Alert[] }).alerts.filter(
