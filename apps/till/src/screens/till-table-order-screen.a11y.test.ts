@@ -941,6 +941,31 @@ describe.each(["light", "dark"] as const)("till-table-order-screen a11y (%s them
     await expectNoA11yViolations(host);
   });
 
+  it("A803 portion grouping: has no violations in a grouped split row's stepper", async () => {
+    const portions: TabLine[] = [1, 2, 3].map((lineNo) => ({
+      ...lines[0]!,
+      id: `portion-${lineNo}`,
+      lineNo,
+      quantity: "1.000",
+    }));
+    const { el, host } = await mountWidget<TillTableOrderScreen>(
+      "till-table-order-screen",
+      { products, lines: portions, orderId: "wo-1" },
+      theme,
+    );
+    el.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-action="split"]')!.click();
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>('[data-split-line="1"]')!.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector('[data-split-count="1"]')!.textContent!.trim()).toBe("3");
+    await expectNoA11yViolations(host);
+  });
+
   it("has no violations with a bad split quantity refused", async () => {
     const splitLines: TabLine[] = [
       { ...lines[0]!, productId: "jamon", quantity: "0.750", unitPrecision: 3 },

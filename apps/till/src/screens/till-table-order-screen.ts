@@ -1958,6 +1958,7 @@ export class TillTableOrderScreen extends LitElement {
       );
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
+    this.#tidyPickedPortions();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
@@ -4473,12 +4474,14 @@ export class TillTableOrderScreen extends LitElement {
       // `quantity` of them go, each whole.
       const found = members.map(find);
       const picked = found.slice(0, Number.parseInt(trimQuantity(quantity), 10));
+      // Any portion that changed since the dialog opened, picked or not, stops the send.
       if (
         found.some(
           (current) =>
             current === undefined ||
             (undo && !this.#sentBillOpen(current)) ||
-            (!undo && !current.released),
+            (!undo && !current.released) ||
+            compareDecimal(this.#mostToServe(current, undo), decimal("0")) <= 0,
         ) ||
         picked.length === 0 ||
         compareDecimal(quantity, decimal(String(members.length))) > 0
@@ -4488,7 +4491,6 @@ export class TillTableOrderScreen extends LitElement {
         lineId: current!.lineId,
         quantity: trimQuantity(this.#mostToServe(current!, undo)),
       }));
-      if (items.some((item) => compareDecimal(decimal(item.quantity), decimal("0")) <= 0)) return;
       this.#dispatch(undo ? "unserve-lines" : "serve-lines", { items } satisfies ServeLinesDetail);
       return;
     }
@@ -5070,6 +5072,45 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
+  /** A refresh can regroup the pickers' rows. A grouped Transfer row is then picked whole or not
+   * at all, and a grouped Split row's picks become its first portions, as many as were picked, so
+   * a row never sends what it does not show. */
+  #tidyPickedPortions(): void {
+    if (this.actionStep !== "transfer-lines" && this.actionStep !== "split-lines") return;
+    const groups = this.#pickerRows().filter((members) => members.length > 1);
+    if (this.actionStep === "transfer-lines") {
+      const picked = this.transferLineNos;
+      const partly = groups.filter(
+        (members) =>
+          members.some((member) => picked.has(member.lineNo)) &&
+          !members.every((member) => picked.has(member.lineNo)),
+      );
+      if (partly.length === 0) return;
+      const next = new Set(picked);
+      for (const member of partly.flat()) next.delete(member.lineNo);
+      this.transferLineNos = next;
+    } else {
+      let next: Map<number, string> | undefined;
+      for (const members of groups) {
+        const count = members.filter((member) => this.splitQuantities.has(member.lineNo)).length;
+        if (
+          members.every(
+            (member, index) => this.splitQuantities.has(member.lineNo) === index < count,
+          )
+        )
+          continue;
+        next ??= new Map(this.splitQuantities);
+        members.forEach((member, index) => {
+          if (index < count) next!.set(member.lineNo, this.#displayQty(member.quantity));
+          else next!.delete(member.lineNo);
+        });
+      }
+      if (next === undefined) return;
+      this.splitQuantities = next;
+    }
+    this.#actionScope?.changed();
+  }
+
   /** A grouped row picks or drops every member. */
   #toggleTransferLine(members: readonly TabLine[], event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
@@ -5108,7 +5149,8 @@ export class TillTableOrderScreen extends LitElement {
     this.#actionScope?.changed();
   }
 
-  /** A grouped row's count is how many of its first members are picked, each whole. */
+  /** A grouped row's count is how many of its members are picked; its first ones are, each whole
+   * ({@link #tidyPickedPortions} keeps it so after a refresh). */
   #stepSplitGroup(members: readonly TabLine[], delta: -1 | 1, event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
     const count =

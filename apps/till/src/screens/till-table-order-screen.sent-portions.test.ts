@@ -271,6 +271,7 @@ it("A803 portion grouping: Undo served on a grouped row asks how many and takes 
   await userEvent.click(q(el, "[data-sent-line-unserve]"));
   await el.updateComplete;
   expect(text(q(el, "[data-serve-count]"))).toBe("3");
+  expect(q(el, "[data-serve-dialog] .serve-so-far")).toBeNull();
   await userEvent.click(q(el, "[data-serve-dec]"));
   await el.updateComplete;
   await userEvent.click(q(el, "[data-serve-confirm]"));
@@ -332,4 +333,56 @@ it("A803 portion grouping: the sheet of a grouped row says how much of the group
   expect(text(q(el, "[data-sent-line-dialog] [data-line-paid]"))).toBe(
     t("bill_pay.paid_part").replace("{paid}", "1").replace("{quantity}", "2"),
   );
+});
+
+/** Opens the grouped row's how-many dialog for three portions, changes the Current orders read
+ * with `change`, then confirms two. */
+async function serveTwoAfter(
+  kind: "fired" | "served",
+  change: (rows: CurrentOrderRow[], el: TillTableOrderScreen) => void,
+) {
+  const el = await openGrouped(kind, {}, 3);
+  const events = capture(el, kind === "served" ? "unserve-lines" : "serve-lines");
+  if (kind === "served") {
+    await openMore(el);
+    await userEvent.click(q(el, "[data-sent-line-unserve]"));
+  } else await userEvent.click(q(el, "[data-sent-line-serve]"));
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-dec]"));
+  const orders = structuredClone(el.currentOrders!);
+  change(orders.groups[0]!.rows, el);
+  el.currentOrders = orders;
+  await el.updateComplete;
+  await userEvent.click(q(el, "[data-serve-confirm]"));
+  return events;
+}
+
+it("A803 portion grouping: a grouped serve sends nothing once one of its portions is recalled", async () => {
+  const events = await serveTwoAfter("fired", (rows) => {
+    rows.find((each) => each.lineId === "s-3")!.released = false;
+  });
+  expect(events).toEqual([]);
+});
+
+it("A803 portion grouping: a grouped serve sends nothing once one of its portions is served elsewhere", async () => {
+  for (const lineId of ["s-1", "s-3"]) {
+    const events = await serveTwoAfter("fired", (rows) => {
+      Object.assign(
+        rows.find((each) => each.lineId === lineId)!,
+        {
+          servedQuantity: "1.000",
+          servedAt,
+        },
+      );
+    });
+    expect(events).toEqual([]);
+    cleanupWidgets();
+  }
+});
+
+it("A803 portion grouping: a grouped Undo served sends nothing once the bill is closed", async () => {
+  const events = await serveTwoAfter("served", (rows) => {
+    for (const each of rows) each.billStatus = "settled";
+  });
+  expect(events).toEqual([]);
 });
