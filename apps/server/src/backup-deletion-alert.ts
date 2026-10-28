@@ -1,0 +1,41 @@
+import { recordIncidentOnce } from "@waitron/core";
+import { withTransaction, type Database } from "@waitron/db";
+import type { FiscalContribution } from "@waitron/fiscal";
+import { AppError, backupOrigin, businessDayAt, type NodeId } from "@waitron/shared";
+import type { DeletableArchive } from "./backup-room.js";
+import { resolveVenueClock } from "./report-api.js";
+import "./errors.js";
+
+export interface BackupRoomHooks {
+  readInstallationStart(): Promise<Date | null>;
+  recordArchivesDeleted(deleted: readonly DeletableArchive[], at: Date): Promise<void>;
+}
+
+export function createBackupRoomHooks(deps: {
+  db: Database;
+  nodeId: NodeId;
+  fiscal: Pick<FiscalContribution, "installationStartedAt"> | null | undefined;
+}): BackupRoomHooks {
+  const { db, nodeId, fiscal } = deps;
+  return {
+    // A write-lock turn with no change-list drain: the drain is a write, and this read must answer
+    // on a nearly full disk.
+    readInstallationStart: () =>
+      db.withWriteLock(async () => (await fiscal?.installationStartedAt?.(db, nodeId)) ?? null),
+    recordArchivesDeleted: (deleted, at) =>
+      withTransaction(db, async (tx) => {
+        const clock = await resolveVenueClock(tx, nodeId);
+        const date = businessDayAt(
+          { timeZone: clock.timeZone, dayCutover: "00:00", cutoverChanges: [] },
+          at,
+        );
+        // An alert still open keeps its first count: one run can delete at both of its checks.
+        await recordIncidentOnce(tx, {
+          origin: backupOrigin(),
+          error: new AppError("backup.archives_deleted", { count: deleted.length, date }),
+          severity: "warning",
+          detectedAt: at,
+        });
+      }),
+  };
+}
