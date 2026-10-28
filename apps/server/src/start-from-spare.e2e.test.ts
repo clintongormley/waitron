@@ -150,7 +150,7 @@ const url = (box: Box, path: string) =>
   `${mintedBoxLeaf(box.stateDir) ? "https" : "http"}://127.0.0.1:${httpPort()}${path}`;
 
 /** A till write with no credentials: the full-disk gate answers it before the route signs anyone
- *  in, so a 507 shows the stop holds and anything else shows it does not. */
+ *  in, so a 507 shows the stop holds and the route's own 401 shows the request passed the gate. */
 async function probe(box: Box): Promise<{ status: number; code?: unknown }> {
   const response = await fetch(url(box, "/api/working-orders"), {
     method: "POST",
@@ -225,26 +225,31 @@ describe("a box started from its spare file", () => {
     small.unfill();
 
     small.fill(21.5 * MiB);
+    expect(small.free()).toBeGreaterThan(21 * MiB);
+    expect(small.free()).toBeLessThan(FULL_DISK_BYTES + 6 * MiB);
     const restarted = await start(box, 6 * MiB);
     expect(restarted.up()).toBe(true);
-    expect(restarted.events()).not.toContain("storage.spare_released");
     expect(existsSync(spareIn(box))).toBe(false);
+    expect(statSync(markerIn(box)).isFile()).toBe(true);
     // Room enough that free space alone would not stop the tills; only the marker can.
     expect(small.free()).toBeGreaterThanOrEqual(FULL_DISK_BYTES + 512 * KiB);
     expect(await probe(box)).toEqual({ status: 507, code: "storage.disk_full" });
   });
 
-  it("a start that released nothing, with 21.5 MiB free, does not stop the tills", async (ctx) => {
+  it("a start that released nothing, with about 21 MiB free, does not stop the tills", async (ctx) => {
     const small = needDisk(ctx);
     const box = await placeBox(small, "no-release");
     await (await start(box, 6 * MiB)).close();
     expect(statSync(spareIn(box)).size).toBe(6 * MiB);
+    // On the macOS image one venue and the spare leave about 21.2 MiB, so this fill may write nothing.
     small.fill(21.5 * MiB);
+    expect(small.free()).toBeGreaterThan(21 * MiB);
+    expect(small.free()).toBeLessThan(FULL_DISK_BYTES + 6 * MiB);
 
     const started = await start(box, 6 * MiB);
     expect(started.up()).toBe(true);
     expect(small.free()).toBeGreaterThanOrEqual(FULL_DISK_BYTES + 512 * KiB);
-    expect((await probe(box)).status).not.toBe(507);
+    expect(await probe(box)).toEqual({ status: 401, code: "session.required" });
   });
 
   it("the running box writes the spare back once there is room, deletes the marker, and the tills can save again", async (ctx) => {
@@ -263,7 +268,7 @@ describe("a box started from its spare file", () => {
       },
       { timeout: 10_000, interval: 100 },
     );
-    expect((await probe(box)).status).not.toBe(507);
+    expect(await probe(box)).toEqual({ status: 401, code: "session.required" });
     await started.close();
   });
 });
