@@ -376,6 +376,8 @@ pnpm --filter @waitron/setup typecheck
 | root boundaries/deploy/duration | New transitive runtime-import and two-app bundle checks with accepting/rejecting controls; update Docker media path expectation and secondary-registry rule narrowly. Remove a moved server duration entry only if no server test remains at that path. |
 | protected fiscal checks | No edits to `seed-sales.golden.test.ts`, `testing/spanish-practice-sales.golden.json`, fiscal `src/write-path.e2e.test.ts`, `src/inmutabilidad.test.ts`, allocation or existing fiscal assertions. Do not set `WAITRON_WRITE_GOLDEN`. |
 
+2026-10-28 (A1164): the comparator also maps renamed schema columns on the frozen side (`RENAMED_COLUMNS`, `apps/server/scripts/demo-seed/testing/madrid-renamed-columns.ts`); an unused entry fails.
+
 - [ ] Run root focused guards with `pnpm exec vitest run scripts/demo-boundaries.test.ts scripts/check-demo-browser-bundles.test.mjs scripts/workspace-cycles.test.ts scripts/module-seams.test.ts
   scripts/deploy-image-env.test.ts`; add `scripts/vitest-duration-sequencer.test.mjs` when its table changes. Run `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts` and root
   `scripts/guide-links.test.ts` for guide changes. Do not claim text guards prove runtime behavior.

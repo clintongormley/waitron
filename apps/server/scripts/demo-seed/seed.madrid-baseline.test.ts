@@ -14,7 +14,12 @@ import { createDemoVenueProvisioner } from "./testing/provision-venue.js";
 import { seedDemoRestaurant } from "./seed.js";
 import { CASA_DELGADO_ES } from "./testing/data.js";
 import { madridWithNameChanges, type MadridNameChange } from "./testing/madrid-name-changes.js";
+import {
+  madridWithRenamedColumns,
+  type MadridColumnRenames,
+} from "./testing/madrid-renamed-columns.js";
 
+const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 afterEach(() => vi.useRealTimers());
 for (const locale of ["en", "es"] as const) {
@@ -89,6 +94,9 @@ for (const locale of ["en", "es"] as const) {
       await readFile(new URL(`plain-name-changes.${locale}.json`, root), "utf8"),
     ) as MadridNameChange[];
     expected.seeded = madridWithNameChanges(expected.seeded, nameChanges);
+    expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
+    expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
+    expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(

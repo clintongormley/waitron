@@ -3480,8 +3480,14 @@ each of those files equalled the one before it once `id` and
 `0041`'s column rename, so the snapshot chain records none of the hand-written SQL, which is why regenerating from the TypeScript
 does not reproduce it.
 
-Two generated migrations also carry hand-written SQL:
-`packages/media/drizzle/0005_photo_name_only.sql` and `packages/db/drizzle/0036_party_rename.sql`.
+Three generated migrations also carry hand-written SQL:
+`packages/media/drizzle/0005_photo_name_only.sql`, `packages/db/drizzle/0036_party_rename.sql` and
+`packages/db/drizzle/0194_sale_receipt_guest_count.sql`. In `0194` only the copy line's `SELECT` is
+hand-written: drizzle's rebuild for the `guests` → `guest_count` rename selects the NEW column name
+from the old table and fails with `no such column` on every database, a fresh one included (the
+earlier migrations create the table with `guests` before `0194` runs), so a regeneration
+must paste `"sale_id", "guests", "created_at"` back (`sale-receipt-guests-upgrade.test.ts` fails
+without it).
 In `0036` the whole file is hand-written: its header says drizzle-kit's generated SQL for the rename
 rebuilt every table the rename touches and failed on a fresh database, so a regeneration must paste
 the file back rather than keep drizzle's. In `0005`, Drizzle generated its rebuild of `media_images`;
