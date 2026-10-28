@@ -294,7 +294,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
   }
 });
 
-it("HTTPS passes a shown summary carrying held counts on to Start again, and refuses a malformed one", async () => {
+it("HTTPS lets a shown summary carrying held counts past the body check, and refuses a malformed one", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;
   let agent: Agent | undefined;

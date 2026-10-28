@@ -402,6 +402,42 @@ it("a held setup database with no recovery started still refuses Start again set
   await expectStartAgainRefused(f, await handMade(f, true, false), { code: "setup.not_ready" });
 });
 
+it("in the held state, the Start again route passes the shown held counts on, so confirming the summary over HTTPS starts again", async () => {
+  const f = await heldSetup();
+  const startAgain = await askStartAgain(f);
+  expect(startAgain.shown.held).toBeDefined();
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: startAgain.actions.startAgainFirstSetup,
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": startAgain.owner.capability,
+          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
+          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
+          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
+        },
+        body: JSON.stringify({
+          ...startAgain.ids,
+          confirmRecoveryDiscard: { shown: startAgain.shown },
+        }),
+      },
+      { incoming: { socket } },
+    );
+    expect(await response.json()).toEqual({ restarting: true });
+    expect(response.status).toBe(200);
+  } finally {
+    socket.destroy();
+  }
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+});
+
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
   const startAgain = await askStartAgain(f);
