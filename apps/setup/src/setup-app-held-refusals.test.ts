@@ -220,6 +220,32 @@ it.each(["setup-finished", "trading-settings"] as const)(
   },
 );
 
+const formErrors = (app: SetupApp) =>
+  [...app.shadowRoot!.querySelectorAll<HTMLElement & { error: string }>("wt-form-actions")].map(
+    (f) => f.error,
+  );
+
+for (const locale of locales) {
+  it(`${locale}: Start again refused at the send with kept-records: says the setup database changed and asks for the password again`, async () => {
+    const t = stringsFor(locale);
+    const { app, requests } = await heldFixture({
+      locale,
+      startAgain: () => refusedCause("kept-records"),
+    });
+    await heldPasswordAccepted(app);
+    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+    await app.updateComplete;
+    await click(app, "confirm-start-again");
+    await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
+    await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+    await app.updateComplete;
+    expect(formErrors(app)).toEqual([t.heldChanged]);
+    expect(formErrors(app)).not.toContain(t.error);
+    expect(q(app, "resume-password")).not.toBeNull();
+  });
+}
+
 it("Start again refused at the send with a cause the page has no words for keeps the generic refusal", async () => {
   const t = stringsFor("en-GB");
   const { app, requests } = await heldFixture({ startAgain: () => refusedCause("other-cause") });

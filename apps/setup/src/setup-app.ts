@@ -1494,7 +1494,10 @@ export class SetupApp extends LitElement {
           const stopped = this.firstStoppedSummary !== undefined;
           this.firstStoppedSummary = undefined;
           this.firstDamagedSummary = undefined;
-          this.firstOwnerError = this.#describeRepairError(error);
+          this.firstOwnerError =
+            startAgainRefusalCause(error) === "kept-records"
+              ? () => initialOwnerStrings[setupLocale()].heldChanged
+              : this.#describeRepairError(error);
           const inspection = await this.api.inspectFirstSetupResolution().catch(() => undefined);
           if (!current() || !inspection) return;
           this.firstInspection = inspection;

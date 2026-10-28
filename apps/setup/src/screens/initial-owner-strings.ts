@@ -63,6 +63,8 @@ export const initialOwnerStrings = {
     heldKeptOne: "It holds 1 item that Waitron never deletes.",
     heldInvoices: "{records} of them are invoices; AEAT accepted {accepted}.",
     heldInvoiceOne: "1 of them is an invoice; AEAT accepted {accepted}.",
+    heldChanged:
+      "The setup database changed after this page read it. Enter the password again to see what it holds now.",
     heldFault:
       "An unfinished setup should hold none of these, so this is a fault in Waitron. Start again would delete them, so it is not offered. Reconnect keeps everything as it is.",
     tradingSaved:
@@ -153,6 +155,8 @@ export const initialOwnerStrings = {
     heldKeptOne: "Tiene 1 elemento que Waitron nunca borra.",
     heldInvoices: "{records} son facturas; la AEAT aceptó {accepted}.",
     heldInvoiceOne: "1 es una factura; la AEAT aceptó {accepted}.",
+    heldChanged:
+      "La base de datos de configuración cambió después de que esta página la leyera. Vuelve a introducir la contraseña para ver qué guarda ahora.",
     heldFault:
       "Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. Empezar de nuevo los borraría, así que no se ofrece. Reconectar lo deja todo como está.",
     tradingSaved:
