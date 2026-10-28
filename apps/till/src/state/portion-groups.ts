@@ -1,4 +1,4 @@
-import type { TabLine } from "../api/client.js";
+import type { ExpoItem, StationQueueItem, TabLine } from "../api/client.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import type { SentSlice } from "./sent-panel.js";
 
@@ -116,4 +116,57 @@ export function sentSlicePortionKey(
         row.firedAt,
         row.kitchen,
       ]);
+}
+
+/** The facts a kitchen screen draws for a dish, shared by the station queue's items and the pass's. */
+type KitchenDish = Pick<
+  StationQueueItem & ExpoItem,
+  | "name"
+  | "unitName"
+  | "unitPrecision"
+  | "soldInEach"
+  | "optionSnapshots"
+  | "modifiers"
+  | "crossRefs"
+  | "asServed"
+  | "asServedDiet"
+  | "allergy"
+  | "note"
+  | "state"
+  | "firedAt"
+>;
+
+/**
+ * What makes two kitchen items the same portion: everything the screen draws for the dish (extras
+ * compared as a set), its state and whether it is held, plus `shown` — whatever else the caller
+ * draws or acts on, such as its bill or its station. Null unless the item is a whole portion: a count of
+ * one in a unit with no decimals and no unit shown, and not an extra made for a dish elsewhere.
+ */
+export function kitchenPortionKey(
+  dish: KitchenDish,
+  quantity: string,
+  shown: unknown,
+): string | null {
+  const unitShows = dish.unitName != null && dish.soldInEach !== true;
+  if (
+    dish.unitPrecision !== 0 ||
+    unitShows ||
+    trimQuantity(quantity) !== "1" ||
+    (dish.crossRefs ?? []).some((ref) => ref.kind === "for")
+  ) {
+    return null;
+  }
+  return JSON.stringify([
+    dish.name,
+    (dish.optionSnapshots ?? []).map((answer) => JSON.stringify(answer)).sort(),
+    (dish.modifiers ?? []).map((modifier) => JSON.stringify(modifier)).sort(),
+    dish.crossRefs ?? [],
+    dish.asServed ?? null,
+    dish.asServedDiet ?? null,
+    dish.allergy,
+    dish.note ?? null,
+    dish.state,
+    dish.firedAt === null,
+    shown,
+  ]);
 }

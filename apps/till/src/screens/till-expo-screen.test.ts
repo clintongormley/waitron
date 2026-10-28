@@ -3099,3 +3099,69 @@ describe("A773 waiter authority — expo contract", () => {
     expect("fireControl" in el).toBe(false);
   });
 });
+
+describe("A803 portion grouping: the pass", () => {
+  afterEach(cleanupWidgets);
+
+  const portion = (id: string, overrides: Partial<ExpoItem> = {}): ExpoItem => ({
+    ...threeCourseOrder.courses[0]!.items[0]!,
+    id,
+    name: "Burger",
+    qty: "1.000",
+    unitName: null,
+    unitPrecision: 0,
+    soldInEach: true,
+    state: "preparing",
+    ...overrides,
+  });
+  const withItems = (items: ExpoItem[]): ExpoOrder => ({
+    ...threeCourseOrder,
+    courses: [{ ...threeCourseOrder.courses[1]!, items }],
+  });
+  const names = (el: TillExpoScreen) =>
+    [...el.shadowRoot!.querySelectorAll(".item-name")].map((name) => name.textContent);
+
+  it("A803 portion grouping: two identical portions show as 2× Burger on one row", async () => {
+    const el = await mount({
+      api: stubApi([withItems([portion("p1"), portion("f1", { name: "Fish" }), portion("p2")])]),
+    });
+    expect(names(el)).toEqual(["2× Burger", "1× Fish"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it.each<[string, Partial<ExpoItem>]>([
+    ["another state", { state: "ready" }],
+    ["another station", { stationName: "Parrilla" }],
+    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    ["another note", { note: "no salt" }],
+    ["a later fire", { queuedAt: "2026-08-17T10:20:00.000Z" }],
+    ["other timings", { thresholds: { ...DEFAULT_THRESHOLDS, forgottenAfterMinutes: 30 } }],
+    ["a measure", { qty: "200.000", unitName: { "en-GB": "ml" }, soldInEach: false }],
+  ])("A803 portion grouping: a portion with %s shows apart", async (_, overrides) => {
+    const el = await mount({
+      api: stubApi([withItems([portion("p1"), portion("p2", overrides)])]),
+    });
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it("A803 portion grouping: a party's group section shows identical portions as one row", async () => {
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      party: { id: "party-1", revision: 3 },
+      courses: [],
+      groups: [
+        {
+          groupId: "g-3",
+          position: 3,
+          displayNumber: 3,
+          numberPartyId: "party-1",
+          state: "fired",
+          fired: true,
+          items: [portion("p1"), portion("p2")],
+        },
+      ],
+    };
+    const el = await mount({ api: stubApi([order]) });
+    expect(names(el)).toEqual(["2× Burger"]);
+  });
+});

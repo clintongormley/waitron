@@ -4781,3 +4781,102 @@ describe("the late bar", () => {
     }
   });
 });
+
+describe("A803 portion grouping: the station queue", () => {
+  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem => ({
+    allergy: null,
+    id,
+    workingOrderLineId: `wol-${id}`,
+    state: "queued",
+    name: "Burger",
+    quantity: "1.000",
+    unitName: null,
+    unitPrecision: 0,
+    soldInEach: true,
+    course: null,
+    firedAt: "2026-08-17T10:00:00.000Z",
+    queuedAt: "2026-08-17T10:00:00.000Z",
+    ...overrides,
+  });
+  const order = (items: StationQueueItem[], bumpMode: "line" | "ticket" = "line") => ({
+    ...groupA,
+    orderId: "wo-p",
+    bumpMode,
+    items,
+  });
+  const lineTexts = (el: TillStationQueue) =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .line-name")].map((name) =>
+      name.textContent!.trim(),
+    );
+
+  it("A803 portion grouping: two identical portions show as one row, 2× Burger", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order([portion("p1"), portion("p2"), portion("f1", { name: "Fish" })])],
+      stationId: "st-1",
+    });
+    expect(lineTexts(el)).toEqual(["2× Burger", "1× Fish"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it("A803 portion grouping: a portion in another state shows apart", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order([portion("p1"), portion("p2", { state: "preparing" })])],
+      stationId: "st-1",
+    });
+    expect(lineTexts(el)).toEqual(["1× Burger", "1× Burger"]);
+  });
+
+  it("A803 portion grouping: tapping a grouped row advances every portion in it, in one action", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order([portion("p1"), portion("f1", { name: "Fish" }), portion("p2")])],
+      stationId: "st-1",
+    });
+    const item = vi.fn();
+    const dishes = vi.fn();
+    el.addEventListener("advance-ticket-item", (e) => item((e as CustomEvent).detail));
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="p1"]')!.click();
+    expect(dishes.mock.calls).toEqual([
+      [{ itemIds: ["p1", "p2"], stationId: "st-1", to: "preparing" }],
+    ]);
+    expect(item).not.toHaveBeenCalled();
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="f1"]')!.click();
+    expect(item.mock.calls).toEqual([[{ itemId: "f1", stationId: "st-1", to: "preparing" }]]);
+  });
+
+  it("A803 portion grouping: in ticket mode a grouped row moves the card's dishes at its stage, as any row does", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order([portion("p1"), portion("p2"), portion("f1", { name: "Fish" })], "ticket")],
+      stationId: "st-1",
+    });
+    const dishes = vi.fn();
+    el.addEventListener("advance-dishes", (e) => dishes((e as CustomEvent).detail));
+    el.shadowRoot!.querySelector<HTMLElement>('[data-item="p1"]')!.click();
+    expect(dishes.mock.calls).toEqual([
+      [{ itemIds: ["p1", "p2", "f1"], stationId: "st-1", to: "preparing" }],
+    ]);
+  });
+
+  it("A803 portion grouping: Move on a grouped row moves every portion's line", async () => {
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [order([portion("p1"), portion("p2")])],
+      stationId: "st-1",
+      canMove: true,
+    });
+    const moved = vi.fn();
+    el.addEventListener("move-station", (e) => moved((e as CustomEvent).detail));
+    expect(el.shadowRoot!.querySelectorAll("[data-move-station]")).toHaveLength(1);
+    el.shadowRoot!.querySelector<HTMLElement>('[data-move-station="p1"]')!.click();
+    expect(moved.mock.calls).toEqual([
+      [
+        {
+          workingOrderId: "wo-p",
+          lineId: "wol-p1",
+          lineIds: ["wol-p1", "wol-p2"],
+          name: "Burger",
+          stationId: "st-1",
+        },
+      ],
+    ]);
+  });
+});

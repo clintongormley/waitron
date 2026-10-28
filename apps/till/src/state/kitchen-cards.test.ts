@@ -397,3 +397,131 @@ describe("a card's places", () => {
     expect(isCounterOrder(bill("o1", [], { party }))).toBe(false);
   });
 });
+
+describe("A803 portion grouping: a card's rows", () => {
+  /** A whole portion as the server sends one: a count of one in Each. */
+  const portion = (id: string, overrides: Partial<StationQueueItem> = {}): StationQueueItem =>
+    dish(id, "20:00", {
+      name: "Burger",
+      unitName: { "en-GB": "each", "es-ES": "unidad" },
+      unitPrecision: 0,
+      soldInEach: true,
+      ...overrides,
+    });
+  const rows = (card: KitchenCard) =>
+    card.sections.map((section) => section.rows.map((row) => row.map((item) => item.id)));
+
+  it("A803 portion grouping: two identical portions show as one row of two", () => {
+    const card = one(bill("o-1", [portion("a"), portion("b")]));
+    expect(rows(card)).toEqual([[["a", "b"]]]);
+    expect(ids(card)).toEqual(["a", "b"]);
+  });
+
+  it("A803 portion grouping: a group sits where its first portion was read, members in the read's order", () => {
+    const card = one(
+      bill("o-1", [portion("a"), portion("f", { name: "Fish" }), portion("c"), portion("d")]),
+    );
+    expect(rows(card)).toEqual([[["a", "c", "d"], ["f"]]]);
+  });
+
+  it("A803 portion grouping: extras in another order still group", () => {
+    const cheese = { descriptions: { "en-GB": "Cheese" } };
+    const bacon = { descriptions: { "en-GB": "Bacon" } };
+    const card = one(
+      bill("o-1", [
+        portion("a", { modifiers: [cheese, bacon] }),
+        portion("b", { modifiers: [bacon, cheese] }),
+      ]),
+    );
+    expect(rows(card)).toEqual([[["a", "b"]]]);
+  });
+
+  const apart: [string, Partial<StationQueueItem>][] = [
+    ["another name", { name: "Fish" }],
+    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    [
+      "another answer",
+      {
+        optionSnapshots: [
+          {
+            listId: "l",
+            optionId: "o",
+            listNames: { "en-GB": "Cooking" },
+            optionNames: { "en-GB": "Rare" },
+          } as never,
+        ],
+      },
+    ],
+    ["another note", { note: "no salt" }],
+    ["another state", { state: "preparing" }],
+    ["held", { firedAt: null }],
+    ["an allergy block", { allergy: { guests: [], allergens: ["gluten"], notes: [] } as never }],
+    [
+      "another own allergen profile",
+      { asServed: { allergens: { gluten: "contains" }, pending: false } as never },
+    ],
+    ["another diet", { asServedDiet: { vegan: true } as never }],
+    ["a cross reference", { crossRefs: [{ kind: "with", name: "Fries", stationName: "Fryer" }] }],
+    ["another after-period mark", { afterPeriod: "starters" }],
+    [
+      "a last move",
+      {
+        lastMove: {
+          fromStationName: "Bar",
+          personName: null,
+          deviceName: null,
+          movedAt: at("19:59"),
+        },
+      },
+    ],
+  ];
+
+  it.each(apart)("A803 portion grouping: a portion with %s shows apart", (_, overrides) => {
+    const card = one(bill("o-1", [portion("a"), portion("b", overrides)]));
+    expect(rows(card).flat()).toEqual([["a"], ["b"]]);
+  });
+
+  it("A803 portion grouping: another course shows apart, in its own section", () => {
+    const course = { id: "c-1", name: "Mains", displayOrder: 2 };
+    const card = one(bill("o-1", [portion("a"), portion("b", { course })]));
+    expect(rows(card)).toEqual([[["a"]], [["b"]]]);
+  });
+
+  const measured: [string, Partial<StationQueueItem>][] = [
+    ["a measure", { quantity: "200.000", unitName: { "en-GB": "ml" }, soldInEach: false }],
+    [
+      "a weight of one",
+      { quantity: "1.000", unitPrecision: 3, unitName: { "en-GB": "kg" }, soldInEach: false },
+    ],
+    ["a shown unit of one", { unitName: { "en-GB": "ración" }, soldInEach: false }],
+    ["two in one line", { quantity: "2.000" }],
+    ["no known precision", { unitPrecision: null }],
+    [
+      "an extra made here for a dish elsewhere",
+      { crossRefs: [{ kind: "for", name: "Burger", stationName: "Grill" }] },
+    ],
+  ];
+
+  it.each(measured)("A803 portion grouping: %s never groups", (_, overrides) => {
+    const card = one(bill("o-1", [portion("a", overrides), portion("b", overrides)]));
+    expect(rows(card).flat()).toEqual([["a"], ["b"]]);
+  });
+
+  it("A803 portion grouping: portions of two bills on one card show apart", () => {
+    const group = sentGroup("g-1", 1);
+    const [card] = kitchenCards([
+      bill("o-1", [portion("a", { group })], { party }),
+      bill("o-2", [portion("b", { group })], { party }),
+    ]);
+    expect(rows(card!).flat()).toEqual([["a"], ["b"]]);
+  });
+
+  it("A803 portion grouping: Overview counts and the dishes to make are unchanged", () => {
+    const card = one(bill("o-1", [portion("a"), portion("b"), portion("c", { firedAt: null })]));
+    expect(overviewRows(overviewDishes([card]))).toEqual([
+      { name: "Burger", making: 2000, held: 1000 },
+    ]);
+    expect(thousandthsToMake([card])).toBe(2000);
+    expect(dishesAt(card, "queued")).toEqual(["a", "b"]);
+  });
+});

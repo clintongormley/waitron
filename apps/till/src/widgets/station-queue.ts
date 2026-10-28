@@ -872,16 +872,24 @@ export class TillStationQueue extends LitElement {
     );
   }
 
+  /** `members`: the row's portions, its first the one drawn; a grouped row moves them all. */
   #bump(
     card: KitchenCard,
     group: MergedQueueGroup,
-    item: StationQueueItem,
+    members: readonly StationQueueItem[],
     to: Exclude<TicketState, "queued">,
   ): void {
     const stationId = group.stationId ?? this.stationId;
     if (stationId === undefined) return;
+    const [item] = members as [StationQueueItem, ...StationQueueItem[]];
     if (group.bumpMode === "ticket") {
       this.#advanceDishes(dishesAt(card, item.state), stationId, to);
+    } else if (members.length > 1) {
+      this.#advanceDishes(
+        members.map((member) => member.id),
+        stationId,
+        to,
+      );
     } else {
       this.dispatchEvent(
         new CustomEvent("advance-ticket-item", {
@@ -922,12 +930,16 @@ export class TillStationQueue extends LitElement {
     );
   }
 
-  #move(group: MergedQueueGroup, item: StationQueueItem): void {
+  #move(group: MergedQueueGroup, members: readonly StationQueueItem[]): void {
+    const [item] = members as [StationQueueItem, ...StationQueueItem[]];
     this.dispatchEvent(
       new CustomEvent("move-station", {
         detail: {
           workingOrderId: group.orderId,
           lineId: item.workingOrderLineId,
+          ...(members.length > 1
+            ? { lineIds: members.map((member) => member.workingOrderLineId) }
+            : {}),
           name: item.name,
           stationId: group.stationId ?? this.stationId,
         },
@@ -1125,30 +1137,30 @@ export class TillStationQueue extends LitElement {
 
   #courseSection(
     section: CourseSection,
-    row: (item: StationQueueItem) => TemplateResult,
+    row: (members: StationQueueItem[]) => TemplateResult,
     headed: boolean,
   ): TemplateResult {
     return html`<div class="course" data-course=${section.course?.id ?? "none"}>
       ${headed && section.course ? html`<div class="course-head">${section.course.name}</div>` : nothing}
       <ul class="lines">
-        ${this.#sectionLines(section.items, row)}
+        ${this.#sectionLines(section.rows, row)}
       </ul>
     </div>`;
   }
 
   /** A mark row goes above each run of consecutive lines agreed after the same period, within one head. */
   #sectionLines(
-    items: readonly StationQueueItem[],
-    row: (item: StationQueueItem) => TemplateResult,
+    rows: readonly StationQueueItem[][],
+    row: (members: StationQueueItem[]) => TemplateResult,
   ): TemplateResult[] {
-    return items.map((item, index) => {
-      const period = item.afterPeriod;
+    return rows.map((members, index) => {
+      const period = members[0]!.afterPeriod;
       const mark =
-        period !== undefined && items[index - 1]?.afterPeriod !== period
+        period !== undefined && rows[index - 1]?.[0]!.afterPeriod !== period
           ? html`<li class="after-period" data-after-period>${afterPeriodWords(period)}</li>`
           : nothing;
       return html`${mark}
-        <li>${row(item)}</li>`;
+        <li>${row(members)}</li>`;
     });
   }
 
@@ -1338,8 +1350,13 @@ export class TillStationQueue extends LitElement {
         ? "held"
         : this.#accentClasses(classifyBand(since, this.#clockNow(), first.thresholds));
     const labels = cardPlaces(card);
-    const row = (item: StationQueueItem) =>
-      this.#renderLine(card, card.orderOf.get(item.id)!, item, this.#stateWord(card, item));
+    const row = (members: StationQueueItem[]) =>
+      this.#renderLine(
+        card,
+        card.orderOf.get(members[0]!.id)!,
+        members,
+        this.#stateWord(card, members[0]!),
+      );
     const { sections } = card;
     // One shared course is named in the heading; its dishes keep their `.course` wrapper (D5).
     const sharedCourse = sections.length === 1 ? sections[0]!.course : null;
@@ -1429,16 +1446,18 @@ export class TillStationQueue extends LitElement {
     return word === undefined ? nothing : html`<span class="line-state">${word}</span>`;
   }
 
+  /** `members`: identical portions drawn as one row from its first (spec §3.1). */
   #renderLine(
     card: KitchenCard,
     group: MergedQueueGroup,
-    item: StationQueueItem,
+    members: StationQueueItem[],
     state: TemplateResult | typeof nothing,
   ): TemplateResult {
+    const [item] = members as [StationQueueItem, ...StationQueueItem[]];
     const station =
       group.stationId === undefined ? undefined : this.stationNames?.get(group.stationId);
     const main = html`<span class="line-main">
-        <span class="line-name">${this.#dish(item)}</span>${state} </span
+        <span class="line-name">${this.#dish(item, members.length)}</span>${state} </span
       >${
         station === undefined
           ? nothing
@@ -1476,7 +1495,7 @@ export class TillStationQueue extends LitElement {
         : html`<button
             class="line state-${item.state}"
             data-item=${item.id}
-            @click=${() => this.#bump(card, group, item, next)}
+            @click=${() => this.#bump(card, group, members, next)}
           >
             ${main}${attribution}${customisation}${modifiers}${crossRefs}${allergens}${diet}${allergy}
             <span class="visually-hidden">${this.#bumpLabel(group)}</span>
@@ -1489,7 +1508,7 @@ export class TillStationQueue extends LitElement {
         variant="secondary"
         data-move-station=${item.id}
         aria-label=${`${t("table.move_station")} · ${item.name}`}
-        @click=${() => this.#move(group, item)}
+        @click=${() => this.#move(group, members)}
         >${t("table.move_station")}</wt-button
       >
     </div>`;
@@ -1553,8 +1572,8 @@ export class TillStationQueue extends LitElement {
   }
 
   /** The name is the server-resolved kitchen label and is rendered as sent. */
-  #dish(item: StationQueueItem): string {
-    return dishLine(item, item.name);
+  #dish(item: StationQueueItem, portions: number): string {
+    return dishLine(portions === 1 ? item : { ...item, quantity: String(portions) }, item.name);
   }
 
   #bumpLabel(group: StationQueueGroup): string {

@@ -4730,6 +4730,38 @@ describe("till-station-screen moves a dish to another station (A439)", () => {
     await expect.poll(() => vi.mocked(api.getStationQueue).mock.calls.length).toBe(2);
   });
 
+  it("A803 portion grouping: Move on a grouped row moves every portion in one request", async () => {
+    const portion = (id: string) => ({
+      ...kitchenQueue[0]!.items[0]!,
+      id,
+      workingOrderLineId: `wol-${id}`,
+      name: "Burger",
+      quantity: "1.000",
+      unitName: null,
+      unitPrecision: 0,
+      soldInEach: true,
+      state: "queued" as const,
+    });
+    const queue = [{ ...kitchenQueue[0]!, items: [portion("p1"), portion("p2")] }];
+    const { el, api } = await mountMove(
+      {},
+      {
+        getDeviceStationScreen: vi
+          .fn()
+          .mockResolvedValue({ stations: [{ ...kitchenDevice, queue }] }),
+      },
+    );
+    queueWidget(el)!.shadowRoot!.querySelector<HTMLElement>('[data-move-station="p1"]')!.click();
+    await expect.poll(() => dialog(el)).toBeDefined();
+    choose(dialog(el)!, "st-2");
+    await expect.poll(() => vi.mocked(api.deviceMoveDishStation).mock.calls.length).toBe(1);
+    expect(vi.mocked(api.deviceMoveDishStation).mock.calls[0]![1]).toEqual({
+      submissionId: expect.any(String),
+      lineIds: ["wol-p1", "wol-p2"],
+      stationId: "st-2",
+    });
+  });
+
   describe("A773 signed-in station move observations", () => {
     const expectedEdit = { billId: "wo-1", editorVersion: 6, draftId: null, draftRevision: null };
     it("keeps counter station moves unowned when the bill read carries a retained version", async () => {
