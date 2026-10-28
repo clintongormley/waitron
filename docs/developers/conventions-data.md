@@ -2522,8 +2522,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
   long-lived open). While the marker exists the stop holds whatever the free space; it lifts only
   once the spare is back whole and 16 MiB is free.
 - While the stop is on, a write the gate sees, each of the four sale routes and each card-reader
-  payment reads the folder's free space before its first transaction. At 16 MiB or more the stop is
-  forgotten and the write goes on; under it, or unreadable, the stop holds. A reading does not clear
+  payment reads the folder's free space before its first transaction. At 16 MiB or more, with no release
+  marker, the stop is forgotten and the write goes on; under it, or unreadable, the stop holds. A reading does not clear
   the stop when another refusal was noted while it was in flight, even one noted after a faster
   reading had already cleared it. With the stop off, nothing is read: each of those checks awaits
   `full()` only while `since()` names a refusal, because the extra await would let another write's
@@ -2535,7 +2535,8 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - The free-space watch (`apps/server/src/free-space-watch.ts`, started by boot in trading mode)
   reads the venue folder's free space at start, then a minute after each reading finishes. While the
   stop is on, each reading also awaits `full()`, so the stop lifts within about a minute of 16 MiB
-  being free, with no write. The watch never turns the stop on.
+  being free (while the spare's marker exists, of 24 MiB: each reading first writes the spare back,
+  see [The box's spare file](#the-boxs-spare-file)), with no write. The watch never turns the stop on.
 - Below 2 GiB free the watch turns on `storage.space_low`, shown in the bell to people with
   `system.manage`; it goes off only at 2.5 GiB or more. While the stop is on, the bell shows
   `storage.disk_full` instead (`storageAlertSource`, `apps/server/src/alert-sources.ts`). A signed-in
@@ -2933,7 +2934,7 @@ code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses
 `provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
 its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
 recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). The repair page's recover,
-summary and start-again routes use it too (`diskFullOr`, `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
+summary and start-again routes and its inspection read use it too (`diskFullOr`, `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
 full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
 and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
 to spare, so the clean-up floor of 256 MiB cannot be the test.
@@ -2945,7 +2946,7 @@ its own code.
 
 `ENOSPC` is deliberately not in `diskFullIn` (`@waitron/shared`): that would change what every
 route answers. `fullDiskFailure` names it a full disk at start, and on the repair page's recover,
-summary and start-again routes (A1127, `diskFullOr` in `apps/server/src/setup-first-fiscal-api.ts`);
+summary and start-again routes and its inspection read (A1127, `diskFullOr` in `apps/server/src/setup-first-fiscal-api.ts`);
 every other route behind `createErrorBoundary` whose failure is the system's `ENOSPC` still answers
 `server.internal` (backlog).
 
@@ -3318,8 +3319,8 @@ leaves it and its marker out, so writing or deleting either cannot refuse a resu
 three paths leaves it. While it exists the till stop holds, across restarts (owner, A1127 Q3 A):
 `noteFullAtStart` notes the stop when `spareReleased` answers true, and `full()` keeps it while the
 marker exists, whatever the free space ([A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes)).
-`spareReleased` answers true for a marker it cannot read (`storage.spare_marker_unread`, once per
-`full()` call while the stop holds). The marker is deleted only by a top-up that leaves the spare
+`spareReleased` answers true for a marker it cannot read (`storage.spare_marker_unread`, at start, at
+each free-space watch reading and Free press, and at each `full()` call while the stop holds). The marker is deleted only by a top-up that leaves the spare
 whole, or, with room, when a link or folder stands at the spare's path, which the box can never
 write through and an operator with no terminal could never remove.
 
@@ -3389,7 +3390,7 @@ the cap and opens with `O_NOFOLLOW`, leaving anything that is not a regular file
 step still take the venue locks; the spare only gives them room to.
 
 **Which walks see it.** Only code that lists the state folder: the originals walk (which leaves it
-out). Start again's deletion list, its leftovers survey and its series-name floor read named entries
+and its marker out). Start again's deletion list, its leftovers survey and its series-name floor read named entries
 only, as do the setup inspection's fingerprints. The design
 (`docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md`, "Which walks see it") has
 the line references and says which were read rather than run.

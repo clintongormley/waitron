@@ -512,11 +512,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
-- **After a full-disk start, old backups make room by themselves (A1167).** A1127 slice 2 boots
-  fully from the spare file and holds the till stop until the spare is back; what is left (deleting
-  old backups) is A1167's. Left open by A1127.
-  [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
-
 - **Other full-disk words still send the person elsewhere or end with the short reinstall
   sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
   Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the

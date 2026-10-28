@@ -1117,7 +1117,7 @@ setup repair page selected instead, when there is one (the heartbeat fallback is
 conventions-data.md, "Every start takes the venue lock"); one that
 finds under 256 MiB free also deletes rotated logs but the newest and crash reports older than a
 week (a start at a backup recovery's repair stage only when the logs folder, followed through links,
-is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). If it is still below that floor, or the folders the
+is inside neither the state folder nor the venue folder; `apps/server/src/start-space.ts`). Then, under 8 MiB free (16 MiB after a start that failed on a full disk), and never at the repair stage, it deletes the box's spare file (conventions-data.md, "The box's spare file"). If it is still below that floor, or the folders the
 start goes on to run from are (a selected backup recovery's), and it cannot write its count back unchanged
 because the disk is full, it serves the page AT ONCE under `storage.disk_full`, and writes nothing.
 The count was not raised, so where the page would say "Failed N times." it says "Level: recovery. This start was not counted: the

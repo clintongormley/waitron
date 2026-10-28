@@ -290,7 +290,7 @@ inside neither the state folder nor the database's folder):
   stay);
 - crash reports in the `logs` volume's `crash-reports` folder that are more than a week old.
 
-It deletes nothing else: never the database, the lock files, `recovery.json` or a finished backup,
+It deletes nothing else (apart from the spare file, below): never the database, the lock files, `recovery.json` or a finished backup,
 even one whose local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
 folder, `backup-staging` or `restore-staging` is a symbolic link, the start leaves it and what it
 points at alone.
@@ -309,7 +309,7 @@ restarts the app, and the next start tries again.
 
 The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data, and a
 backup recovery's check of the box's files leaves it out. Within the server, three steps delete it:
-a start, before anything else, when the state folder or the database's folder has under 8 MiB free,
+a start, after the clean-up above and before it reads the setup state, when the state folder or the database's folder has under 8 MiB free,
 or under 16 MiB after a start that failed on a full disk (never at a recovery's repair stage); a
 start that finds a backup recovery Start again discarded, under 16 MiB free, just before it deletes
 that recovery's copy; and the setup repair page, under 16 MiB free, before the steps of Start again

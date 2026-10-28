@@ -435,17 +435,6 @@ given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d
 `packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
 `packages/backups/src/recovery.ts`, `recovery_active`).
 
-## On a full disk, boot fully from the spare file, then prompt to delete old backups
-
-The owner's answer to A1127 Q1 (2026-10-28, `~/waitron-campaign/questions.md`, "OWNER ANSWER … A1127
-Q1"), designed in [the design](../superpowers/specs/2026-10-28-a1127-full-boot-and-old-backups-design.md)
-(pictures in [mockups/a1127-full-boot](mockups/a1127-full-boot/README.md)). Slice 2 is built: on a
-nearly full disk the start deletes the spare file and boots normally, and a marker holds the till
-stop, across restarts, until the spare is written back (`docs/developers/conventions-data.md`, "The
-box's spare file"). A1167's answers drop slice 3's dialog and the full-disk page's button: the box
-deletes old backups by itself ([A1167's design](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md)).
-What is left is A1167's.
-
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
 The owner's 2026-10-28 answers covered the till strip («Tell a manager», a stated exception, Q4) and

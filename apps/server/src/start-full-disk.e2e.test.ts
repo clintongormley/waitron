@@ -970,7 +970,7 @@ describe("a start on a real full disk", () => {
 
   let nothingDir: string | undefined;
 
-  it("a start with nothing to delete serves the recovery page at once", async (ctx) => {
+  it("a start with nothing to delete and no spare file serves the recovery page at once", async (ctx) => {
     const small = needDisk(ctx);
     // No spare: this case is the full-disk page, which a spare's release would otherwise avoid.
     const stateDir = await startedBefore(small, "nothing", { spareBytes: 0 });
