@@ -4,6 +4,7 @@ import {
   centsToDecimal,
   decimalToCents,
   rawCentsToDecimal,
+  rawThousandthsToDecimal,
   stringToThousandths,
   type Decimal,
 } from "@waitron/shared";
@@ -86,23 +87,40 @@ export async function recordAdjustment(tx: Transaction, row: NewAdjustment): Pro
   return written!.id;
 }
 
-export interface ReasonTotals {
-  priorReductionOnBill: Decimal;
+/** What one of a reason's comps or discounts took off a line, the line's quantity then, and its
+ * quantity now. */
+export interface ReasonStandingRow {
+  reduction: Decimal;
+  quantityThen: Decimal;
+  quantityNow: Decimal;
 }
 
-/** This reason's earlier comps and discounts on the bill, bill-level discounts included. Its cancels
- * are left out: a reason changed from Void to Comp keeps its id. */
-export async function readReasonTotals(
+/** What the reason's comps and discounts, recorded on any bill, took off each line now on this
+ * bill. Only comps and discounts write rows today; a cancel's would be left out all the same, since
+ * a reason changed from Void to Comp keeps its id. */
+export async function readReasonStanding(
   tx: Transaction,
   query: { workingOrderId: string; reasonId: string },
-): Promise<ReasonTotals> {
+): Promise<ReasonStandingRow[]> {
   const { workingOrderId, reasonId } = query;
-  const reduction = await tx.execute<{ total: string }>(sql`
-    select cast(coalesce(sum(reduction), 0) as text) as total
-    from adjustments
-    where working_order_id = ${workingOrderId} and reason_id = ${reasonId}
-      and action <> 'cancel'`);
-  return { priorReductionOnBill: rawCentsToDecimal(reduction.rows[0]!.total) };
+  const rows = await tx.execute<{
+    reduction: string;
+    quantityThen: string;
+    quantityNow: string;
+  }>(sql`
+    select cast(taken.reduction as text) as "reduction",
+      cast(taken.quantity as text) as "quantityThen",
+      cast(line.quantity as text) as "quantityNow"
+    from adjustment_lines taken
+    join adjustments record on record.id = taken.adjustment_id
+    join working_order_lines line on line.id = taken.line_id
+    where record.reason_id = ${reasonId} and record.action <> 'cancel'
+      and line.working_order_id = ${workingOrderId}`);
+  return rows.rows.map((row) => ({
+    reduction: rawCentsToDecimal(row.reduction),
+    quantityThen: rawThousandthsToDecimal(row.quantityThen),
+    quantityNow: rawThousandthsToDecimal(row.quantityNow),
+  }));
 }
 
 /** A comp or discount still standing on a bill. `lineId` is null for one on the whole bill. */

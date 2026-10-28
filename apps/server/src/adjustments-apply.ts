@@ -10,9 +10,10 @@ import {
   percentReduction,
   policySnapshotOf,
   readAdjustmentSettings,
-  readReasonTotals,
+  readReasonStanding,
   recordAdjustment,
   spreadBillDiscount,
+  standingOff,
   type AdjustmentAction,
   type AdjustmentReason,
   type AdjustmentSplit,
@@ -986,10 +987,9 @@ async function judgeComp(
   },
 ): Promise<AdjustmentVerdict> {
   const { orderId, rows } = ask;
-  const { priorReductionOnBill } = await readReasonTotals(tx, {
-    workingOrderId: orderId,
-    reasonId: reason.id,
-  });
+  const standingOnBill = standingOff(
+    await readReasonStanding(tx, { workingOrderId: orderId, reasonId: reason.id }),
+  );
   const billComped = sumDecimals(
     rows.map((row) => {
       const off = subtractDecimal(listValue(row, row.quantity), gross(row, row.quantity));
@@ -1002,7 +1002,7 @@ async function judgeComp(
     reduction: ask.reduction,
     actorRole: ask.actorRole,
     note: ask.note,
-    priorReductionOnBill,
+    standingOnBill,
     dishes: dishPrices(ask.writes, rows, ask.carve),
     billComped,
     billLimit: { maxAmount: maxBillComp, approverRoles: billApproverRoles },

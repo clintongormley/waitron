@@ -1955,6 +1955,26 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     expect(today).toMatchObject(ASKS);
     expect(await asked(portions.billId, crew({ lineId: copy! }))).toEqual(today);
   });
+
+  it("A803 portions: B8 — a burger 50% off under Guest complaint, recalled and raised to two at its discounted price, has €12.00 off toward the €30", async () => {
+    for (const shape of ["grouped", "portions"] as const) {
+      const lines = [
+        { name: "Burger", quantity: "1" },
+        { name: "Steak", quantity: "1" },
+      ];
+      const bill = await (shape === "grouped" ? groupedBill(lines) : portionsBill(lines));
+      const [burger] = await dishesNamed(bill.billId, "Burger");
+      await adjust(
+        bill.billId,
+        complaint({ lineId: burger! }, { action: "discount_percent", percentBp: 5000 }),
+      );
+
+      await raiseRecalled(bill, burger!, "2.000");
+
+      expect(await steakOff(bill.billId, "18.00"), shape).toBe("through");
+      expect(await steakOff(bill.billId, "18.01"), shape).toEqual(ASKS);
+    }
+  });
   /** A bill holding `lines`, not sent: as portions, or (`bound: false`) as today's grouped lines. */
   function unsentBill(lines: RoundLine[], bound: boolean): Promise<Bill> {
     return inTx(venue, async (tx) => {
@@ -2132,6 +2152,59 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
         lineId: expect.toBeOneOf(await dishesNamed(portions.billId, "Burger")),
       }),
     );
+  });
+});
+
+/** Guest complaint (€30.00 a bill, managers and admins approve) on `target`, by the supervisor,
+ * who may apply it. */
+const complaint = (target: Target, rest: Partial<Ask> = {}): Ask => ({
+  ...target,
+  action: "comp",
+  reasonId: venue.reasonId.complaint,
+  ...rest,
+});
+
+/** `amount` off the bill's steak under Guest complaint: whether the supervisor is asked. */
+async function steakOff(billId: string, amount: string) {
+  const [steak] = await dishesNamed(billId, "Steak");
+  const preview = await inTx(venue, async (tx) =>
+    previewAdjustment(
+      tx,
+      await argsFor(
+        tx,
+        billId,
+        complaint({ lineId: steak! }, { action: "discount_amount", amount }),
+      ),
+      venue.venueLocale,
+    ),
+  );
+  return preview.needsApproval ?? "through";
+}
+
+describe("A803 portions: a reason's euro limit counts what is still off the bill (owner, 2026-10-28; plan D37 rules 3 and 5)", () => {
+  const steak: RoundLine = { name: "Steak", quantity: "1" };
+
+  it("A803 portions: on a row of two €12.00 burgers, 50% off the row, then one cancelled: the reason has €6.00 off, not €12.00", async () => {
+    for (const shape of ["grouped", "portions"] as const) {
+      const lines = [{ name: "Burger", quantity: "2" }, steak];
+      const { billId } = await (shape === "grouped" ? groupedBill(lines) : portionsBill(lines));
+      const burgers = await dishesNamed(billId, "Burger");
+      await adjust(
+        billId,
+        complaint(rowOf(burgers), { action: "discount_percent", percentBp: 5000 }),
+      );
+      expect(await steakOff(billId, "18.01"), shape).toEqual(ASKS);
+
+      await adjust(
+        billId,
+        shape === "grouped"
+          ? { lineId: burgers[0]!, action: "cancel", quantity: "1" }
+          : { lineId: burgers[1]!, action: "cancel" },
+      );
+
+      expect(await steakOff(billId, "24.00"), shape).toBe("through");
+      expect(await steakOff(billId, "24.01"), shape).toEqual(ASKS);
+    }
   });
 });
 

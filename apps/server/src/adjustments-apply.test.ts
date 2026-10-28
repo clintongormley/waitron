@@ -1988,6 +1988,103 @@ describe("cumulative limits (plan D6)", () => {
   });
 });
 
+describe("a reason's euro limit counts what is still off the bill (owner, 2026-10-28; plan D37 rules 3 and 5)", () => {
+  // Guest complaint allows €30.00 a bill and is approved by managers and admins; the supervisor
+  // may apply it.
+  const complaint = (lineId: string): Ask => ({
+    lineId,
+    action: "comp",
+    reasonId: venue.reasonId.complaint,
+  });
+  const verdict = async (billId: string, ask: Ask) =>
+    (await preview(billId, ask)).needsApproval ?? "through";
+  const ASKS_REASON = { by: "reason", roles: ["manager", "admin"] };
+
+  it("another reason's €25 free steak does not count toward Guest complaint's €30", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const burger = await lineIdOf(venue, billId, 2);
+    await adjust(billId, { lineId: steak, action: "comp" });
+
+    expect(await verdict(billId, complaint(burger))).toBe("through");
+  });
+
+  it("a €25 steak given free and then cancelled no longer counts: a €12 burger free goes through", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const burger = await lineIdOf(venue, billId, 2);
+    await adjust(billId, complaint(steak));
+    expect(await verdict(billId, complaint(burger))).toEqual(ASKS_REASON);
+
+    await adjust(billId, { lineId: steak, action: "cancel" });
+
+    expect(await verdict(billId, complaint(burger))).toBe("through");
+  });
+
+  it("after Split bill moves the free €25 steak and a burger to a new bill, the burger left behind goes free without asking, and the one moved asks", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const moving = await lineIdOf(venue, billId, 2);
+    const staying = await lineIdOf(venue, billId, 3);
+    await adjust(billId, complaint(steak));
+    expect(await verdict(billId, complaint(staying))).toEqual(ASKS_REASON);
+    const [party] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+    const moved = (
+      await inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, billId, [{ lineNo: 1 }, { lineNo: 2 }], {
+          operatorId: venue.staffId,
+          expectedPartyRevision: party!.revision,
+        }),
+      )
+    ).billId;
+
+    expect(await verdict(billId, complaint(staying))).toBe("through");
+    expect(await verdict(moved, complaint(moving))).toEqual(ASKS_REASON);
+  });
+
+  it("a whole-bill €10 discount's share on a dish moved away leaves the bill it left", async () => {
+    const reasonId = await inTx(venue, async (tx) => {
+      return (
+        await createAdjustmentReason(tx, {
+          ...REASONS.house,
+          name: "Eleven a bill",
+          names: {},
+          maxAmount: decimal("11.00"),
+          approverRoles: ["manager", "admin"],
+        })
+      ).id;
+    });
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }, { name: "Burger" }]);
+    const staying = await lineIdOf(venue, billId, 3);
+    const euroOff: Ask = { lineId: staying, action: "discount_amount", amount: "1.01", reasonId };
+    await adjust(billId, { action: "discount_amount", amount: "10.00", reasonId });
+    expect(await verdict(billId, euroOff)).toEqual(ASKS_REASON);
+    const [party] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 1 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: party!.revision,
+      }),
+    );
+
+    // The two burgers' shares of the €10.00 stay, under €9.99; the steak's left with it.
+    expect(await verdict(billId, euroOff)).toBe("through");
+  });
+});
+
 describe("the bill's comp limit (A758 §3.5)", () => {
   // The venue is shared by every case in the file, so each case sets the limit it needs.
   const setLimit = (

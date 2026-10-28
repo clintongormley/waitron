@@ -500,7 +500,9 @@ becomes `{ approval: Approval["by"] }`; add `adjustment_reason.void_required: { 
   - "someone on Who can approve it but not Who can apply it goes straight through" (Review focus 2)
   - "past the item limit asks the reason's approver, never refuses" (`itemShareBp` 5001 under
     `maxPercentBp` 5000; exactly 5000 is allowed)
-  - "past the reason's bill amount asks, never refuses" (`priorReductionOnBill` 20 + 10.01 under 30)
+  - "past the reason's bill amount asks, never refuses" (`priorReductionOnBill` 20 + 10.01 under 30;
+    2026-10-28: now `standingOnBill`, what the reason still has off the lines on the bill —
+    `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rules 3 and 5)
   - "reaching the bill's comp limit exactly passes; one cent past asks"
   - "a bill comp limit of none never asks"; "a Void reason asked to comp is refused
     action_not_allowed"; "a Comp reason without An amount refuses an amount"; "a missing required

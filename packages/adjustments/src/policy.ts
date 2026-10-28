@@ -1,8 +1,10 @@
 import { personRole, roleHasPermission, type PersonRoleValue } from "@waitron/identity";
 import {
   addDecimal,
+  centsToDecimal,
   compareDecimal,
   decimal,
+  decimalToCents,
   decimalToThousandths,
   multiplyDecimal,
   subtractDecimal,
@@ -118,8 +120,8 @@ export interface CompRequest {
   reduction: Decimal;
   actorRole: PersonRoleValue;
   note: string | null;
-  /** This reason's earlier reductions on the bill. */
-  priorReductionOnBill: Decimal;
+  /** What this reason still has off the lines now on the bill, as {@link standingOff} counts it. */
+  standingOnBill: Decimal;
   /** Each dish this request takes something off, as the per-dish floor reads it (plan D36). */
   dishes: DishPrice[];
   /** What comps have taken off the items still on the bill, before this request. */
@@ -137,7 +139,7 @@ const ZERO = decimal("0");
 
 /** A malformed request is the caller's bug, so it throws rather than being answered as a verdict. */
 function assertWellFormed(req: CompRequest): void {
-  for (const field of ["reduction", "priorReductionOnBill", "billComped"] as const) {
+  for (const field of ["reduction", "standingOnBill", "billComped"] as const) {
     if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
   }
   for (const { list, after, allowance } of req.dishes) {
@@ -164,7 +166,7 @@ export function evaluateComp(reason: AdjustmentReason, req: CompRequest): Adjust
     pastItem: belowFloor(req.dishes, reason.maxPercentBp),
     pastBill:
       reason.maxAmount !== null &&
-      compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0,
+      compareDecimal(addDecimal(req.standingOnBill, req.reduction), reason.maxAmount) > 0,
     pastBillLimit:
       billMax !== null && compareDecimal(addDecimal(req.billComped, req.reduction), billMax) > 0,
   });
@@ -282,4 +284,23 @@ export function floorAllowance(
     denominator *= p;
   }
   return Number((numerator + denominator - 1n) / denominator);
+}
+
+/** What a reason still has off a bill: each line's reduction scaled by the line's quantity now over
+ * its quantity when taken, summed, then rounded half up to the cent once (owner, 2026-10-28; plan
+ * D37 rules 3 and 5). */
+export function standingOff(
+  rows: readonly { reduction: Decimal; quantityThen: Decimal; quantityNow: Decimal }[],
+): Decimal {
+  let numerator = 0n;
+  let denominator = 1n;
+  for (const { reduction, quantityThen, quantityNow } of rows) {
+    const cents = BigInt(decimalToCents(reduction));
+    const then = BigInt(decimalToThousandths(quantityThen));
+    const now = BigInt(decimalToThousandths(quantityNow));
+    if (cents < 0n || then <= 0n || now < 0n) throw new RangeError("a reduction row is malformed");
+    numerator = numerator * then + cents * now * denominator;
+    denominator *= then;
+  }
+  return centsToDecimal(Number((2n * numerator + denominator) / (2n * denominator)));
 }

@@ -1,17 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, subtractDecimal } from "@waitron/shared";
+import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
   readBillAdjustments,
-  readReasonTotals,
+  readReasonStanding,
   recordAdjustment,
   type NewAdjustment,
 } from "./record.js";
+import { adjustmentLines } from "./schema/adjustment-lines.js";
 import { adjustments, type AdjustmentSplit } from "./schema/adjustments.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
@@ -83,8 +84,51 @@ async function record(row: NewAdjustment): Promise<string> {
   return withTransaction(db, (tx) => recordAdjustment(tx, row));
 }
 
-async function totals(workingOrderId: string, reasonId: string) {
-  return withTransaction(db, (tx) => readReasonTotals(tx, { workingOrderId, reasonId }));
+async function standing(workingOrderId: string, reasonId: string) {
+  const rows = await withTransaction(db, (tx) =>
+    readReasonStanding(tx, { workingOrderId, reasonId }),
+  );
+  return rows
+    .map((row) => `${row.reduction} off ${row.quantityThen} now ${row.quantityNow}`)
+    .sort();
+}
+
+let lineCount = 0;
+
+/** A €10.00 line of `quantity` on `workingOrderId`; returns its id. */
+async function lineOn(workingOrderId: string, quantity: string): Promise<string> {
+  lineCount += 1;
+  const [row] = await db
+    .insert(workingOrderLines)
+    .values({
+      workingOrderId,
+      lineNo: lineCount,
+      name: "Burger",
+      descriptions: { es: "Burger" },
+      quantity: stringToThousandths(quantity),
+      priceQuantity: stringToThousandths("1"),
+      unitPriceGross: decimalToCents(decimal("10.00")),
+      vatClass: "general",
+      lineTotal: 0,
+    })
+    .returning({ id: workingOrderLines.id });
+  return row!.id;
+}
+
+/** Records `row` with what it took off each of `taken`'s lines, at that line's quantity then. */
+async function recordTaking(
+  row: NewAdjustment,
+  taken: { lineId: string; reduction: string; quantity: string }[],
+): Promise<void> {
+  const adjustmentId = await record(row);
+  await db.insert(adjustmentLines).values(
+    taken.map(({ lineId, reduction, quantity }) => ({
+      adjustmentId,
+      lineId,
+      reduction: decimalToCents(decimal(reduction)),
+      quantity: stringToThousandths(quantity),
+    })),
+  );
 }
 
 describe("recordAdjustment", () => {
@@ -229,44 +273,52 @@ describe("recordAdjustment", () => {
   });
 });
 
-describe("readReasonTotals", () => {
-  it("answers nothing taken when the reason has not touched the bill", async () => {
+describe("readReasonStanding: what a reason took off each line now on the bill (plan D37)", () => {
+  it("answers nothing when the reason took nothing off a line on the bill", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    expect(await totals(order, reason.id)).toEqual({ priorReductionOnBill: "0.00" });
+    await lineOn(order, "1");
+    expect(await standing(order, reason.id)).toEqual([]);
   });
 
-  it("sums this reason's reductions on this bill, bill-level discounts included", async () => {
+  it("answers each line's reduction with its quantity then and now, wherever the record was made", async () => {
     const order = await seedWorkingOrder(db);
     const other = await seedWorkingOrder(db);
     const reason = await seedReason(db);
     const another = await seedReason(db);
-    await record(comp(order, reason));
-    await record(comp(order, reason));
-    await record(
-      comp(order, reason, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("15.01"),
-        reduction: decimal("4.99"),
-        nominalValue: decimal("4.99"),
-      }),
-    );
-    await record(comp(order, another));
-    await record(comp(other, reason));
-    expect((await totals(order, reason.id)).priorReductionOnBill).toBe("28.99");
+    const kept = await lineOn(order, "2");
+    const movedHere = await lineOn(order, "1");
+    const movedAway = await lineOn(other, "1");
+    await recordTaking(comp(order, reason), [
+      { lineId: kept, reduction: "12.00", quantity: "3" },
+      { lineId: movedAway, reduction: "4.00", quantity: "1" },
+    ]);
+    await recordTaking(comp(other, reason), [
+      { lineId: movedHere, reduction: "25.00", quantity: "1" },
+    ]);
+    await recordTaking(comp(order, another), [{ lineId: kept, reduction: "1.00", quantity: "2" }]);
+    await recordTaking(comp(order, reason), [
+      { lineId: randomUUID(), reduction: "9.00", quantity: "1" },
+    ]);
+
+    expect(await standing(order, reason.id)).toEqual([
+      "12.00 off 3.000 now 2.000",
+      "25.00 off 1.000 now 1.000",
+    ]);
   });
 
-  it("leaves out the reason's cancels, which a reason changed from Void to Comp still holds", async () => {
+  it("leaves out rows of the reason's cancels, which no cancel writes today", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    await record(comp(order, reason, { action: "cancel" }));
-    await record(
+    const line = await lineOn(order, "1");
+    await recordTaking(comp(order, reason, { action: "cancel" }), [
+      { lineId: line, reduction: "12.00", quantity: "1" },
+    ]);
+    await recordTaking(
       comp(order, reason, { reduction: decimal("1.00"), afterAmount: decimal("11.00") }),
+      [{ lineId: line, reduction: "1.00", quantity: "1" }],
     );
-    expect((await totals(order, reason.id)).priorReductionOnBill).toBe("1.00");
+    expect(await standing(order, reason.id)).toEqual(["1.00 off 1.000 now 1.000"]);
   });
 });
 

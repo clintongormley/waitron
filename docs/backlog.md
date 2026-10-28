@@ -2154,10 +2154,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   someone who can give refunds (`evaluateCancel`, `packages/adjustments/src/policy.ts`). Stricter
   than design D12. Decide whether Discard should ask the question too.
 
-- **A910. A reason's item limit errs toward asking (left open by A758-1).**
-  Revisit if a venue meets an approval it did not expect. Decide whether an item's count should
-  follow it to another bill. [Detail](backlog/till.md#a910-a-reasons-item-limit-errs-toward-asking-left-open-by-a758-1)
-
 - **A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).**
   Free always counts, even after an earlier comp took part of the price, so it prints «Descuento 100%»
   beside what was left, as a 100% percentage already does. Owner to confirm both halves.

@@ -7,6 +7,7 @@ import {
   evaluateComp,
   floorAllowance,
   policySnapshotOf,
+  standingOff,
   type AdjustmentReason,
   type Approval,
   type CancelRequest,
@@ -49,7 +50,7 @@ function comp(overrides: Partial<CompRequest> = {}): CompRequest {
     reduction: decimal("25.00"),
     actorRole: "supervisor",
     note: null,
-    priorReductionOnBill: decimal("0.00"),
+    standingOnBill: decimal("0.00"),
     dishes: [{ list: decimal("25.00"), after: decimal("0.00"), allowance: 1 }],
     billComped: decimal("0.00"),
     billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager", "admin"] },
@@ -114,7 +115,7 @@ describe("evaluateComp", () => {
   });
 
   it("past the reason's bill amount asks, never refuses", () => {
-    const prior = { priorReductionOnBill: decimal("20.00") };
+    const prior = { standingOnBill: decimal("20.00") };
     expect(evaluateComp(COMPLAINT, comp({ ...prior, reduction: decimal("10.01") }))).toEqual(
       BY_REASON,
     );
@@ -293,7 +294,7 @@ describe("evaluateComp", () => {
 
   it.each<[string, Partial<CompRequest>]>([
     ["a negative reduction", { reduction: decimal("-1.00") }],
-    ["a negative prior reduction on the bill", { priorReductionOnBill: decimal("-0.01") }],
+    ["a negative standing reduction on the bill", { standingOnBill: decimal("-0.01") }],
     ["a negative bill comp total", { billComped: decimal("-0.01") }],
     [
       "a negative list",
@@ -474,5 +475,55 @@ describe("floorAllowance: the cents rounding can move on a dish (plan D36 readin
   it("refuses a line whose quantity is not above zero", () => {
     expect(() => floorAllowance([line("-1.500")])).toThrow(RangeError);
     expect(() => floorAllowance([line("1.000", "0.000")])).toThrow(RangeError);
+  });
+});
+
+describe("standingOff: what a reason still has off a bill, its lines prorated (owner, 2026-10-28; plan D37)", () => {
+  const row = (reduction: string, quantityThen: string, quantityNow: string) => ({
+    reduction: decimal(reduction),
+    quantityThen: decimal(quantityThen),
+    quantityNow: decimal(quantityNow),
+  });
+
+  it("is nothing when the reason took nothing off a line on the bill", () => {
+    expect(standingOff([])).toBe("0.00");
+  });
+
+  it("counts a line still whole at what was taken off it", () => {
+    expect(standingOff([row("25.00", "1.000", "1.000"), row("4.99", "2.000", "2.000")])).toBe(
+      "29.99",
+    );
+  });
+
+  it("counts half of a line of two after one is cancelled, and nothing of a line now at none", () => {
+    expect(standingOff([row("12.00", "2.000", "1.000"), row("9.00", "1.000", "0.000")])).toBe(
+      "6.00",
+    );
+  });
+
+  it("prorates a weighed line by its weight now", () => {
+    expect(standingOff([row("3.60", "0.350", "0.175")])).toBe("1.80");
+  });
+
+  it("counts more of a line raised in place than was taken off it then", () => {
+    expect(standingOff([row("3.60", "3.000", "4.000")])).toBe("4.80");
+  });
+
+  it("rounds once, half up, after adding every line's share", () => {
+    expect(standingOff([row("0.01", "2.000", "1.000")])).toBe("0.01");
+    expect(standingOff([row("0.01", "2.000", "1.000"), row("0.01", "2.000", "1.000")])).toBe(
+      "0.01",
+    );
+    expect(standingOff([row("0.02", "3.000", "1.000"), row("0.02", "3.000", "1.000")])).toBe(
+      "0.01",
+    );
+  });
+
+  it.each([
+    ["a negative reduction", row("-0.01", "1.000", "1.000")],
+    ["a quantity then of none", row("1.00", "0.000", "1.000")],
+    ["a negative quantity now", row("1.00", "1.000", "-1.000")],
+  ])("throws on %s, a caller's bug", (_, bad) => {
+    expect(() => standingOff([bad])).toThrow(RangeError);
   });
 });

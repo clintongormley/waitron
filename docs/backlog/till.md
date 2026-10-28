@@ -1508,6 +1508,21 @@ whether those reads should follow today's map once a group is left.
   name's language" in
   [conventions-ui.md](../developers/conventions-ui.md#what-an-open-till-keeps-current).
 
+- **Reductions follow their dish; the price floor and the euro cap read the bill as it stands
+  (owner, 2026-10-28; A803 slice 1, closes A910).** The owner's rules: "a dish is never charged
+  below its floor … after EVERY reduction on it, whatever the reason, each counted once, and the
+  floor follows the dish when it moves bill or course" (1); "a reason's euro-per-bill cap counts
+  only what is still off the bill; a reduction on a dish later voided stops counting" (3); "a
+  reduction stays with its dish and counts against the reason's euro cap on whichever bill the dish
+  is on now; each bill's cap applies to that bill as it stands" (5). What a reason has off a bill
+  is what its comps and discounts took off each line now on it, scaled by the line's quantity now
+  against its quantity then (`standingOff`, `packages/adjustments/src/policy.ts`), so raising a
+  line, in place or by copies that carry its original's rows, counts more than was taken off it
+  then. A dish cancelled with its charge kept stays on the bill, so what was taken off it still
+  counts (a reading, A803 slice 1; the bill's own comp limit reads every line of the bill too,
+  `readRows` in `apps/server/src/adjustments-apply.ts`). Plan:
+  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), D36 and D37.
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
@@ -2736,27 +2751,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A910. A reason's item limit errs toward asking (left open by A758-1).
-
-Each share is rounded
-up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
-discounts on the whole bill took off each row is not recorded, so `judgeComp`
-(`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
-about, and its dish or its extras), capped at what that row is now below its list value less what
-comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
-whole line, nothing split off, at the row's present quantity and list value); the item counts the
-largest of those. A row no bill discount reached, such as one added after them, counts nothing for
-them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
-reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
-priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
-moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
-that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
-item's count starts again on another bill, because the reason's earlier comps are read from the
-item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
-reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
-with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
-an item's count should follow it to another bill.
 
 ## A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).
 
