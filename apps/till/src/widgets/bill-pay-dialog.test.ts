@@ -1463,7 +1463,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: 4 }]);
+    expect(confirmed).toEqual([{ guestCount: 4 }]);
   });
 
   it("carries a stepped-up count", async () => {
@@ -1474,7 +1474,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: 5 }]);
+    expect(confirmed).toEqual([{ guestCount: 5 }]);
   });
 
   it("carries null when emptied, showing the placeholder", async () => {
@@ -1485,7 +1485,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: null }]);
+    expect(confirmed).toEqual([{ guestCount: null }]);
   });
 
   it("starts empty with no count, and carries null", async () => {
@@ -1495,7 +1495,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: null }]);
+    expect(confirmed).toEqual([{ guestCount: null }]);
   });
 
   it("shows no field and carries no guests on a payment that leaves something owing", async () => {
@@ -1518,7 +1518,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: 4 }]);
+    expect(confirmed).toEqual([{ guestCount: 4 }]);
   });
 
   it("shows the field on chosen items that pay the rest", async () => {
@@ -1536,7 +1536,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: 4 }]);
+    expect(confirmed).toEqual([{ guestCount: 4 }]);
   });
 
   it("shows the field on a card that pays the rest", async () => {
@@ -1555,7 +1555,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
 
     await click(el, "[data-pay-confirm]");
 
-    expect(confirmed).toEqual([{ guests: null }]);
+    expect(confirmed).toEqual([{ guestCount: null }]);
   });
 
   it("holds a count it cannot take: says nothing until Take, then marks the field and holds Take until fixed", async () => {
@@ -1579,7 +1579,7 @@ describe("till-bill-pay-dialog: the receipt's guests field", () => {
     expect(actions(el).error).toBe("");
     expect(button(el, "[data-pay-confirm]").disabled).toBe(false);
     await click(el, "[data-pay-confirm]");
-    expect(confirmed).toEqual([{ guests: 3 }]);
+    expect(confirmed).toEqual([{ guestCount: 3 }]);
   });
 
   it("keeps the waiter's count when the payment is refused, and starts again after one is taken", async () => {

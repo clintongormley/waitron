@@ -581,7 +581,7 @@ describe("Split a table's guest counts", () => {
       tableId: second,
       billId: null,
       expectedPartyRevision: revisionOf(ana.partyId),
-      guests: { staying: 3, leaving: 2 },
+      guestCounts: { staying: 3, leaving: 2 },
     });
 
     expect(answer.status).toBe(200);
@@ -596,7 +596,7 @@ describe("Split a table's guest counts", () => {
       tableId: second,
       billId: null,
       expectedPartyRevision: revisionOf(ana.partyId),
-      guests: { staying: null, leaving: null },
+      guestCounts: { staying: null, leaving: null },
     });
 
     expect(answer.status).toBe(200);
@@ -618,20 +618,35 @@ describe("Split a table's guest counts", () => {
     expect(await floorGuests(second)).toBeNull();
   });
 
+  it("ignores the old guests key: the staying party keeps its count and the new party has none", async () => {
+    const { ana, second } = await anaOfFive();
+
+    const answer = await post(`/api/parties/${ana.partyId}/split-table`, {
+      tableId: second,
+      billId: null,
+      expectedPartyRevision: revisionOf(ana.partyId),
+      guests: { staying: 0, leaving: 2 },
+    });
+
+    expect(answer.status).toBe(200);
+    expect(await floorGuests(ana.tableId)).toBe(5);
+    expect(await floorGuests(second)).toBeNull();
+  });
+
   it.each([
-    [{ staying: 0, leaving: 2 }, "guests.staying"],
-    [{ staying: 1000, leaving: 2 }, "guests.staying"],
-    [{ staying: 2.5, leaving: 2 }, "guests.staying"],
-    [{ staying: "2", leaving: 2 }, "guests.staying"],
-    [{ leaving: 2 }, "guests.staying"],
-    [{ staying: 3, leaving: 0 }, "guests.leaving"],
-    [{ staying: 3, leaving: 1000 }, "guests.leaving"],
-    [{ staying: 3, leaving: 2.5 }, "guests.leaving"],
-    [{ staying: 3, leaving: "2" }, "guests.leaving"],
-    [{ staying: 3 }, "guests.leaving"],
-    [null, "guests"],
-    [5, "guests"],
-    [[3, 2], "guests"],
+    [{ staying: 0, leaving: 2 }, "guestCounts.staying"],
+    [{ staying: 1000, leaving: 2 }, "guestCounts.staying"],
+    [{ staying: 2.5, leaving: 2 }, "guestCounts.staying"],
+    [{ staying: "2", leaving: 2 }, "guestCounts.staying"],
+    [{ leaving: 2 }, "guestCounts.staying"],
+    [{ staying: 3, leaving: 0 }, "guestCounts.leaving"],
+    [{ staying: 3, leaving: 1000 }, "guestCounts.leaving"],
+    [{ staying: 3, leaving: 2.5 }, "guestCounts.leaving"],
+    [{ staying: 3, leaving: "2" }, "guestCounts.leaving"],
+    [{ staying: 3 }, "guestCounts.leaving"],
+    [null, "guestCounts"],
+    [5, "guestCounts"],
+    [[3, 2], "guestCounts"],
   ])("refuses guests %j as a bad %s, changing nothing", async (guests, field) => {
     const { ana, second } = await anaOfFive();
     const revision = revisionOf(ana.partyId);
@@ -640,7 +655,7 @@ describe("Split a table's guest counts", () => {
       tableId: second,
       billId: null,
       expectedPartyRevision: revision,
-      guests,
+      guestCounts: guests,
     });
 
     expect(answer.status).toBe(400);
@@ -667,7 +682,7 @@ describe("Split a table's guest counts", () => {
         tableId,
         billId,
         expectedPartyRevision: revisionOf(partyId),
-        guests: { staying: 1, leaving: 1 },
+        guestCounts: { staying: 1, leaving: 1 },
       });
 
     const answers = [

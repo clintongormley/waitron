@@ -169,7 +169,7 @@ export function submissionFor(
 ): Submission {
   const payment: Partial<Confirmation> = { ...confirmation };
   delete payment.expectedEdit;
-  delete payment.guests;
+  delete payment.guestCount;
   const key = JSON.stringify([billId, payment]);
   if (unanswered?.billId === billId && (unanswered.unconfirmed === true || unanswered.key === key))
     return unanswered;

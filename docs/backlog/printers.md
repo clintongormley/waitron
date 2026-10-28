@@ -556,13 +556,15 @@ only the app keeps from deletion; no trigger protects it either.
   A change to one that misses the other shows the waiter one number and stores another.
 - Leaving the payment screen after changing the count asks nothing, while a typed tip or cash
   amount does ask. The plan chose this; the owner has not said whether leaving should ask.
-- The number is `guests` on the wire and in the `sale_receipt_guests` column, but `guestCount` on
-  the seat-a-table route, and Split a table uses `guests` for something else. Free to rename
-  before go-live.
+- Rename the `sale_receipt_guests.guests` column to `guest_count`, matching `parties.guest_count`
+  (till requests and the drizzle property already say `guestCount`, A988). Needs the owner's yes to
+  map the renamed column in `apps/server/scripts/demo-seed/seed.madrid-baseline.test.ts`, which compares every
+  table's columns with the frozen Madrid export; the recipe and measurements are Task 5 of
+  `docs/superpowers/plans/2026-10-27-a988-guest-count-naming.md`.
 - On the bill-paid-in-parts dialog, a count marked wrong stays marked after Back
   (`guestsAttempted` is cleared only on a new payment, `#startAgain`,
-  `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guests` shows only at
-  the bottom: `refusalField` has no `guests` case.
+  `apps/till/src/widgets/bill-pay-dialog.ts`), and a server refusal naming `guestCount` shows only at
+  the bottom: `refusalField` has no `guestCount` case.
 - `#onConfirmPayment` and `#onPayTab` (`apps/till/src/till-app.ts`) pick one of several call
   shapes only so older tests that pin the exact argument count keep passing; one call per path
   sends the same request.
@@ -640,6 +642,15 @@ only its own part (the A758-4 plan's owner point 3). Owner to confirm.
   (`packages/layouts/src/theme-configuration.ts`); a receipt is not.
 
 ## Decisions and deliberate limits
+
+- **The guest count is `guestCount` (A988, 2026-10-27).** A party's or a receipt's number of
+  guests is `guestCount` in every till request and in the `sale_receipt_guests` drizzle
+  property, and Split a table's two counts are `guestCounts.staying` and
+  `guestCounts.leaving`. Until the owner allows the frozen-fixture comparison to map a renamed
+  column, the `sale_receipt_guests` column keeps the name `guests`. Route paths
+  (`PUT /api/parties/:id/guests`), file and table names, the printed receipt's guests line
+  (`ReceiptDocument.guests`), and many function, property and event names (for example
+  `readReceiptGuests`, `setPartyGuests`) keep the word.
 
 - **A receipt's header rows (owner, 2026-10-19, A754).** The first row is the table on the left and
   «Pedido N» on the right (the order alone on the right when there is no table). Then:

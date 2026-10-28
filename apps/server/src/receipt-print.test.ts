@@ -2442,7 +2442,7 @@ describe("a party's receipt prints its guests and the amount per person", () => 
         stored: () =>
           inTx(v, (tx) =>
             tx
-              .select({ guests: saleReceiptGuests.guests })
+              .select({ guests: saleReceiptGuests.guestCount })
               .from(saleReceiptGuests)
               .where(eq(saleReceiptGuests.saleId, saleId)),
           ),

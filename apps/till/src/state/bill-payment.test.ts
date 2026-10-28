@@ -257,14 +257,14 @@ describe("the submission id of a confirmation", () => {
     const original = {
       ...tenEuros,
       expectedEdit: { billId: "wo-1", editorVersion: 2, draftId: null, draftRevision: null },
-      guests: 4,
+      guestCount: 4,
     };
     const first = submissionFor("wo-1", original, null, ids("sub-1"));
     const unanswered = unansweredAfter(first, noAnswer);
     const refreshed = {
       ...original,
       expectedEdit: { billId: "wo-1", editorVersion: 4, draftId: null, draftRevision: null },
-      guests: 9,
+      guestCount: 9,
       amount: "30.00",
       applied: "30.00",
     };
@@ -277,6 +277,17 @@ describe("the submission id of a confirmation", () => {
       ...refreshed,
       submissionId: "sub-2",
     });
+  });
+
+  it("is kept after a refusal when only the receipt's guest count changed", () => {
+    const original = { ...tenEuros, guestCount: 4 };
+    const first = submissionFor("wo-1", original, null, ids("sub-1"));
+    const refused = unansweredAfter(first, { code: "bill.tip_not_allowed", status: 409 });
+
+    expect(
+      submissionFor("wo-1", { ...original, guestCount: 9 }, refused, ids("sub-2")).request
+        .submissionId,
+    ).toBe("sub-1");
   });
 
   it("retains the original complete body when ownership changes after an authorization refusal", () => {

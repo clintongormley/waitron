@@ -8,7 +8,7 @@ export const saleReceiptGuests = table(
   "sale_receipt_guests",
   {
     saleId: id("sale_id").primaryKey(),
-    guests: count("guests"),
+    guestCount: count("guests"),
     createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
   },
   (t) => [
@@ -20,7 +20,7 @@ export const saleReceiptGuests = table(
     // An integer column's affinity alone stores 2.5 as a real; typeof refuses it.
     check(
       "sale_receipt_guests_guests_ck",
-      sql`${t.guests} is null or (typeof(${t.guests}) = 'integer' and ${t.guests} between 1 and 999)`,
+      sql`${t.guestCount} is null or (typeof(${t.guestCount}) = 'integer' and ${t.guestCount} between 1 and 999)`,
     ),
   ],
 );

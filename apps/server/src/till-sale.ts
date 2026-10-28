@@ -107,7 +107,7 @@ import {
   enqueueSaleReceipt,
   printerLookup,
 } from "./receipt-print.js";
-import { recordSaleReceiptFacts, type GuestsChoice } from "./receipt-guests.js";
+import { recordSaleReceiptFacts, type GuestCountChoice } from "./receipt-guests.js";
 
 export interface TillMoneyOperator {
   personId: string;
@@ -226,8 +226,8 @@ export interface TillSaleRequest {
   deliveryTableId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
-  guests?: number | null;
+  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
 }
@@ -522,8 +522,8 @@ export interface PayWorkingOrderRequest {
   zoneId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
-  guests?: number | null;
+  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
 }
@@ -595,8 +595,8 @@ export interface IntegratedPayRequest {
   demoAttemptId?: string;
   /** Stored on the order before filing; see `storeSentReceiptLanguage`. */
   receiptLanguage?: string;
-  /** The guests the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
-  guests?: number | null;
+  /** The guest count the sale's simplified receipts print; absent takes the default (`recordReceiptGuests`). */
+  guestCount?: number | null;
   /** The walk-up basket's confirmation of dishes whose period has ended, set by the route. */
   lateSend?: LateSendConfirmation;
 }
@@ -759,7 +759,7 @@ async function runPayWorkingOrder(
           req.tender,
           order,
           locked?.partyId ?? null,
-          req.guests,
+          req.guestCount,
           operatorId,
         );
         await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -804,7 +804,7 @@ async function fireAndFileSale(
   tender: TillTender | null,
   order: GrossOrder,
   partyId: string | null,
-  guests: GuestsChoice,
+  guestCount: GuestCountChoice,
   operatorId?: string,
 ): Promise<TillSaleResult> {
   const notSent = await fireDishesAtPayment(tx, cfg, workingOrderId, partyId);
@@ -816,7 +816,7 @@ async function fireAndFileSale(
     workingOrderId,
     tender,
     order,
-    guests,
+    guestCount,
     operatorId,
   );
   if (notSent !== null) {
@@ -965,7 +965,7 @@ async function fileImmediateSale(
   workingOrderId: string,
   tender: TillTender | null,
   order: GrossOrder,
-  guests: GuestsChoice,
+  guestCount: GuestCountChoice,
   operatorId?: string,
 ): Promise<TillSaleResult> {
   const operationDescription = await readSaleOperationDescription(tx, cfg, {
@@ -1022,7 +1022,7 @@ async function fileImmediateSale(
     tx,
     cfg,
     { saleId, workingOrderId, counterparty: selected.sale.counterparty },
-    guests,
+    guestCount,
   );
 
   // A manual card also gets a captured `payments` row, linked to the sale in this transaction.
@@ -1297,7 +1297,7 @@ async function payIntegrated(
       const attendanceAt = deps.attendance === undefined ? undefined : reading.instant;
       const issuing = { ...deps, clock: pinnedAt(deps.clock, reading) };
       const ticket = wasPlaced
-        ? await fileImmediateSale(tx, issuing, cfg, req.id, null, order, req.guests, operatorId)
+        ? await fileImmediateSale(tx, issuing, cfg, req.id, null, order, req.guestCount, operatorId)
         : await fireAndFileSale(
             tx,
             issuing,
@@ -1306,7 +1306,7 @@ async function payIntegrated(
             null,
             order,
             locked?.partyId ?? null,
-            req.guests,
+            req.guestCount,
             operatorId,
           );
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -1643,7 +1643,7 @@ async function finalizeCapture(
           tx,
           cfg,
           { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-          req.guests,
+          req.guestCount,
         );
 
         // The provider already recorded the payment row; this only points its `sale_id` at the sale.
@@ -1817,7 +1817,7 @@ async function finalizeRecovery(
         tx,
         cfg,
         { saleId, workingOrderId: req.id, counterparty: selected.sale.counterparty },
-        req.guests,
+        req.guestCount,
       );
 
       await associatePaymentWithSale(tx, {
@@ -2235,7 +2235,7 @@ async function runCollectOrder(
         req.id,
         req.tender,
         order,
-        req.guests,
+        req.guestCount,
         operatorId,
       );
       await captureWholePayment(tx, deps.attendance, req.id, operatorId, attendanceAt);
@@ -2320,7 +2320,7 @@ async function runTillSale(
       deliveryTableId: req.deliveryTableId,
       zoneId: req.zoneId,
       receiptLanguage: req.receiptLanguage,
-      guests: req.guests,
+      guestCount: req.guestCount,
       lateSend: req.lateSend,
     },
     operatorId,

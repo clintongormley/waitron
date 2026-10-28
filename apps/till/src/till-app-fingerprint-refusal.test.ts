@@ -158,14 +158,14 @@ it.each(["en-GB", "es-ES"])(
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
-    emit(dialog(el)!, "bill-pay-confirm", { guests: 4 });
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
     await flush(el);
     expect(inDialog(el, "wt-form-actions")!.error).toBe(codeMessage(refusal.code));
     expect(dialog(el)!.isConnected).toBe(true);
     expect(write).toHaveBeenCalledOnce();
     expect(inDialog(el, "[data-pay-continue]")!.disabled).toBe(false);
     await press(el, "[data-pay-continue]");
-    emit(dialog(el)!, "bill-pay-confirm", { guests: 4 });
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
     await flush(el);
     expect(write).toHaveBeenCalledTimes(2);
     expect(el.shadowRoot!.querySelector("till-paid-view")).toBeNull();

@@ -279,7 +279,7 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     const confirmation = {
       tender: { method: "cash" as const, amount: "50.00" },
       outstanding: "45.00",
-      guests: 3,
+      guestCount: 3,
     };
     const el = await mountScreen({
       handheld: true,
@@ -301,7 +301,7 @@ describe("till-table-order-screen: Pay on a handheld (A796 default 2)", () => {
     const confirmation = {
       tender: { method: "cash" as const, amount: "50.00" },
       outstanding: "45.00",
-      guests: 3,
+      guestCount: 3,
     };
     const el = await mountScreen({ handheld: true, paymentConfirmation: confirmation });
 

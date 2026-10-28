@@ -277,7 +277,7 @@ describe("a discount that leaves a bill fully paid", () => {
     expect(
       await inTx(venue, (tx) =>
         tx
-          .select({ guests: saleReceiptGuests.guests })
+          .select({ guests: saleReceiptGuests.guestCount })
           .from(saleReceiptGuests)
           .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
           .where(eq(sales.workingOrderId, billId)),

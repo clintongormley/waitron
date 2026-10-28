@@ -124,7 +124,7 @@ describe("the bill actions below Sent and New order", () => {
     const holds = capture(el, "park-order");
     tender.dispatchEvent(
       new CustomEvent("confirm-payment", {
-        detail: { method: "cash", amount: "12.00", guests: 3 },
+        detail: { method: "cash", amount: "12.00", guestCount: 3 },
         bubbles: true,
         composed: true,
       }),
@@ -133,7 +133,7 @@ describe("the bill actions below Sent and New order", () => {
       new CustomEvent("park-order", { detail: {}, bubbles: true, composed: true }),
     );
     expect(payments.map((event) => event.detail)).toEqual([
-      { method: "cash", amount: "12.00", guests: 3 },
+      { method: "cash", amount: "12.00", guestCount: 3 },
     ]);
     expect(payments[0]!.bubbles && payments[0]!.composed).toBe(true);
     expect(counter).toEqual([]);
@@ -181,7 +181,7 @@ describe("the bill actions below Sent and New order", () => {
     const confirmation = {
       tender: { method: "cash" as const, amount: "12.00" },
       outstanding: "10.00",
-      guests: 3,
+      guestCount: 3,
     };
     const { el } = await mountFooter({
       bills: [{ ...footerBill, status: "settled", outstanding: "0.00" }],

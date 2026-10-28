@@ -360,7 +360,7 @@ export async function combineParties(
   return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
 }
 
-export interface SplitGuests {
+export interface SplitGuestCounts {
   staying: number | null;
   leaving: number | null;
 }
@@ -380,7 +380,7 @@ export async function splitTable(
   options: {
     expectedPartyRevision: number;
     operatorId: string;
-    guests?: SplitGuests;
+    guestCounts?: SplitGuestCounts;
     expectedEdits: BillEditExpected[];
   },
   attendance?: OrderAttendance,
@@ -390,7 +390,7 @@ export async function splitTable(
     partyId,
     options.expectedPartyRevision,
     "open",
-    options.guests === undefined ? {} : { guestCount: options.guests.staying },
+    options.guestCounts === undefined ? {} : { guestCount: options.guestCounts.staying },
   );
   const held = await memberTables(tx, partyId);
   if (!held.includes(tableId)) throw new AppError("table.not_joined", { tableId, partyId });
@@ -415,7 +415,7 @@ export async function splitTable(
       .from(diningTables)
       .where(eq(diningTables.id, tableId));
     const { partyId: newParty } = await openParty(tx, {
-      guestCount: options.guests?.leaving ?? null,
+      guestCount: options.guestCounts?.leaving ?? null,
       operatorId: options.operatorId,
       tableId,
     });

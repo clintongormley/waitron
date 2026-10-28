@@ -1225,7 +1225,7 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #guestsDetail(shown: boolean): ReceiptGuestsDetail {
-    return shown ? { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null } : {};
+    return shown ? { guestCount: parseGuestCount(this.#guestsText())?.guestCount ?? null } : {};
   }
 
   #takenText(taken: PayTaken): string {

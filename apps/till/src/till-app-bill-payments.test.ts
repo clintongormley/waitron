@@ -1215,7 +1215,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         getFindBill: vi.fn().mockResolvedValue(selected),
       });
       const order = await openTable(el);
-      emit(order, "pay-tab", { method: "cash", amount: "150.00", guests: 4 });
+      emit(order, "pay-tab", { method: "cash", amount: "150.00", guestCount: 4 });
       await flush(el);
       expect(send).toHaveBeenCalledOnce();
       const original = structuredClone(send.mock.calls[0]);
@@ -1321,7 +1321,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "40.00", guests: 9 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "40.00", guestCount: 9 });
       await flush(el);
       expect(send.mock.calls).toEqual([original, original]);
       expect(api.recordSale).not.toHaveBeenCalled();
@@ -1335,7 +1335,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     const send = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({ recordSale: send });
     const order = await openTable(el);
-    emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    emit(order, "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
     await flush(el);
     const reads = vi.mocked(api.getBillBalance).mock.calls.length;
     emit(order, "bill-pay", { way: "contribution", lines: [], amount: "30.00" });
@@ -1367,7 +1367,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         tableOrder(el),
         event,
         event === "pay-tab"
-          ? { method: "cash", amount: "120.00", guests: 4 }
+          ? { method: "cash", amount: "120.00", guestCount: 4 }
           : {
               workingOrderId: "wo-4",
               tender: { method: "cash", amount: "120.00" },
@@ -1398,7 +1398,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         method: "card",
         amount: "120.00",
         externalRef: "original",
-        guests: 4,
+        guestCount: 4,
       });
       await flush(el);
       const original = structuredClone(send.mock.calls[0]);
@@ -1413,7 +1413,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
       emit(floor(el), "open-table", { tableId: "t4", seated: true });
       await flush(el);
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "150.00", guests: 9 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "150.00", guestCount: 9 });
       await flush(el);
       expect(send.mock.calls).toEqual([original, original]);
       expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
@@ -1447,7 +1447,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       await flush(el);
     };
     await signIn("p2", "Luis");
-    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 7 });
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guestCount: 7 });
     await flush(el);
     expect(recordSale).not.toHaveBeenCalled();
     const before = structuredClone(sent());
@@ -1504,13 +1504,13 @@ describe("till-app: a bill payment's refusals and retries", () => {
         ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
       });
       const order = await openTable(el);
-      emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+      emit(order, "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
       await flush(el);
       const original = structuredClone(send.mock.calls[0]);
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guests: 9 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guestCount: 9 });
       await flush(el);
       expect(send.mock.calls[1]).toEqual(original);
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 6 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guestCount: 6 });
       await flush(el);
       expect(send.mock.calls[2]![1]).toEqual({
         method: "cash",
@@ -1542,7 +1542,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
       .toBe(t("bill_pay.unconfirmed"));
     expect(guests.shadowRoot!.querySelector("input")!.disabled).toBe(true);
     await expect.poll(() => guests.shadowRoot!.querySelector("input")!.value).toBe("4");
-    expect(sent()[0]).toHaveProperty("guests", 4);
+    expect(sent()[0]).toHaveProperty("guestCount", 4);
   });
 
   it("keeps the original confirmation visible when Edit is pressed on an unknown payment", async () => {
@@ -1627,7 +1627,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         ...(status === "open" ? { recordSale: send } : { collectOrder: send }),
       });
       const order = await openTable(el);
-      emit(order, "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+      emit(order, "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
       await flush(el);
       expect(send).toHaveBeenCalledOnce();
       const original = structuredClone(send.mock.calls[0]);
@@ -1652,12 +1652,12 @@ describe("till-app: a bill payment's refusals and retries", () => {
       drafts.edit = (billId) => ({ ...priorEdit(billId), editorVersion: 2 });
       window.dispatchEvent(new Event("focus"));
       await flush(el);
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guests: 9 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "130.00", guestCount: 9 });
       await flush(el);
 
       expect(send.mock.calls[1]).toEqual(original);
       expect(el.shadowRoot!.querySelector("till-ticket-view")).toBeNull();
-      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guests: 6 });
+      emit(tableOrder(el), "pay-tab", { method: "cash", amount: "140.00", guestCount: 6 });
       await flush(el);
       expect(send.mock.calls[2]).toEqual(original);
       expect(el.shadowRoot!.querySelector("till-ticket-view")).not.toBeNull();
@@ -1813,7 +1813,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
         method === "cash"
           ? { method, amount: "150.00" }
           : { method, amount: "120.00", externalRef: "operation-17" };
-      emit(order, "pay-tab", { ...tender, guests: 4 });
+      emit(order, "pay-tab", { ...tender, guestCount: 4 });
       await flush(el);
       expect(send).toHaveBeenCalledOnce();
       await showBillFooter(order);
@@ -1892,14 +1892,14 @@ describe("till-app: a bill payment's refusals and retries", () => {
     await type(el, "amount", "40");
     await type(el, "tendered", "50");
     await press(el, "[data-pay-continue]");
-    emit(dialog(el)!, "bill-pay-confirm", { guests: 4 });
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 4 });
     await expect
       .poll(() => inDialog(el, "wt-form-actions")?.error ?? "", { timeout: 10_000 })
       .toBe(t("bill_pay.unconfirmed"));
     const original = structuredClone(sent()[0]);
     expect(original).toMatchObject({
       expectedEdit: { billId: "wo-4", editorVersion: 0, draftId: null, draftRevision: null },
-      guests: 4,
+      guestCount: 4,
     });
 
     const priorEdit = drafts.edit;
@@ -1907,7 +1907,7 @@ describe("till-app: a bill payment's refusals and retries", () => {
     window.dispatchEvent(new Event("focus"));
     await flush(el);
     takeBillPayment.mockResolvedValueOnce(takenOf({}, {}));
-    emit(dialog(el)!, "bill-pay-confirm", { guests: 9 });
+    emit(dialog(el)!, "bill-pay-confirm", { guestCount: 9 });
     await flush(el);
 
     expect(sent().at(-1)).toEqual(original);
@@ -2195,7 +2195,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
         tableOrder(el),
         event,
         event === "pay-tab"
-          ? { method: "cash", amount: "120.00", guests: 4 }
+          ? { method: "cash", amount: "120.00", guestCount: 4 }
           : {
               workingOrderId: "wo-4",
               tender: { method: "cash", amount: "120.00" },
@@ -2233,7 +2233,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
         tableOrder(el),
         event,
         event === "pay-tab"
-          ? { method: "cash", amount: "120.00", guests: 4 }
+          ? { method: "cash", amount: "120.00", guestCount: 4 }
           : {
               workingOrderId: "wo-4",
               tender: { method: "cash", amount: "120.00" },
@@ -2307,7 +2307,7 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     expect(inDialog(el, "[data-pay-continue]")).not.toBeNull();
     emit(dialog(el)!, "bill-pay-close");
     await flush(el);
-    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
     await flush(el);
     expect(el.shadowRoot!.textContent).not.toContain(t("bill_pay.sending"));
     expect(api.recordSale).toHaveBeenCalledOnce();
@@ -2469,7 +2469,7 @@ describe("till-app: a balance read that shows the held payment (A796 default 7)"
     await flush(el);
 
     expect(dialog(el)).toBeNull();
-    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guests: 4 });
+    emit(tableOrder(el), "pay-tab", { method: "cash", amount: "120.00", guestCount: 4 });
     await flush(el);
     expect(api.recordSale).toHaveBeenCalledOnce();
   });
@@ -3810,7 +3810,7 @@ describe("till-app: a partly paid order at the counter", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(1);
-    expect(sent()[0]).toHaveProperty("guests", null);
+    expect(sent()[0]).toHaveProperty("guestCount", null);
   });
 
   it("sends a payment that got no answer again under the same complete request after the guests count changed", async () => {
@@ -3848,12 +3848,12 @@ describe("till-app: a partly paid order at the counter", () => {
     expect(
       sent()
         .slice(0, first)
-        .map((request) => request.guests),
+        .map((request) => request.guestCount),
     ).toEqual(Array(first).fill(null));
-    expect(sent()[first]).toHaveProperty("guests", null);
+    expect(sent()[first]).toHaveProperty("guestCount", null);
   });
 
-  it("asks no guests and sends no guests key on a counter order with a full invoice chosen", async () => {
+  it("asks no guests and sends no guestCount key on a counter order with a full invoice chosen", async () => {
     const takeBillPayment = vi
       .fn()
       .mockResolvedValue(
@@ -3894,7 +3894,7 @@ describe("till-app: a partly paid order at the counter", () => {
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(1);
-    expect(sent()[0]).not.toHaveProperty("guests");
+    expect(sent()[0]).not.toHaveProperty("guestCount");
   });
 });
 
@@ -3953,8 +3953,8 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(2);
-    expect(sent()[0]).not.toHaveProperty("guests");
-    expect(sent()[1]).toHaveProperty("guests", 4);
+    expect(sent()[0]).not.toHaveProperty("guestCount");
+    expect(sent()[1]).toHaveProperty("guestCount", 4);
   });
 
   it("sends the count the waiter changed it to on the one that pays the rest", async () => {
@@ -3976,8 +3976,8 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
     await flush(el);
     await press(el, "[data-pay-confirm]");
 
-    expect(sent()[0]).not.toHaveProperty("guests");
-    expect(sent()[1]).toHaveProperty("guests", 6);
+    expect(sent()[0]).not.toHaveProperty("guestCount");
+    expect(sent()[1]).toHaveProperty("guestCount", 6);
   });
 
   it("starts the field empty on a split bill and sends null", async () => {
@@ -3995,11 +3995,11 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
     expect(guestsField(el)!.value).toBe("");
     await press(el, "[data-pay-confirm]");
 
-    expect(sent()[0]).not.toHaveProperty("guests");
-    expect(sent()[1]).toHaveProperty("guests", null);
+    expect(sent()[0]).not.toHaveProperty("guestCount");
+    expect(sent()[1]).toHaveProperty("guestCount", null);
   });
 
-  it("asks no guests and sends no guests key on a bill with a full invoice chosen", async () => {
+  it("asks no guests and sends no guestCount key on a bill with a full invoice chosen", async () => {
     const { el } = await mountApp({
       ...fullInvoicesOn(),
       ...twoContributions({ invoiceType: "F1" }),
@@ -4015,7 +4015,7 @@ describe("till-app: the guests the receipt of a bill paid in parts prints", () =
     await press(el, "[data-pay-confirm]");
 
     expect(sent()).toHaveLength(2);
-    expect(sent()[1]).not.toHaveProperty("guests");
+    expect(sent()[1]).not.toHaveProperty("guestCount");
   });
 });
 
@@ -4324,7 +4324,7 @@ describe("till-app: the steak's two choices", () => {
         applied: "15.00",
         tip: "10.00",
         entry: "manual",
-        guests: 4,
+        guestCount: 4,
         submissionId: expect.any(String),
       },
     ]);
@@ -5025,9 +5025,9 @@ describe("till-app: a bill payment on the card reader", () => {
 
     it("keeps the guests the confirm carries beside the reader", async () => {
       const el = await handheldConfirming(vi.fn().mockResolvedValue(received()), "card");
-      await confirm(el, { readerId: readers[1]!.id, guests: 4 });
+      await confirm(el, { readerId: readers[1]!.id, guestCount: 4 });
 
-      expect(sent()[0]).toMatchObject({ readerId: readers[1]!.id, guests: 4 });
+      expect(sent()[0]).toMatchObject({ readerId: readers[1]!.id, guestCount: 4 });
     });
 
     it.each([

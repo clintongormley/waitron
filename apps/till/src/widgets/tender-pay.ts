@@ -55,15 +55,15 @@ export type ConfirmPaymentDetail = (
 ) &
   ReceiptGuestsDetail;
 
-/** `guests` is absent unless the screen asks for it; null prints no guests line. */
+/** `guestCount` is absent unless the screen asks for it; null prints no guests line. */
 export interface ReceiptGuestsDetail {
-  guests?: number | null;
+  guestCount?: number | null;
 }
 
 export interface RetainedTender {
   tender: Tender;
   outstanding: string;
-  guests?: number | null;
+  guestCount?: number | null;
 }
 
 export interface ParkOrderDetail {
@@ -553,7 +553,7 @@ export class TillTenderPay extends LitElement {
 
   #guestsDetail(): ReceiptGuestsDetail {
     if (!this.asksGuests) return {};
-    return { guests: parseGuestCount(this.#guestsText())?.guestCount ?? null };
+    return { guestCount: parseGuestCount(this.#guestsText())?.guestCount ?? null };
   }
 
   #resetGuests(): void {
@@ -1206,7 +1206,7 @@ export class TillTenderPay extends LitElement {
       new CustomEvent<ConfirmPaymentDetail>(this.#tenderEventName(), {
         detail: {
           ...confirmation.tender,
-          ...(confirmation.guests === undefined ? {} : { guests: confirmation.guests }),
+          ...(confirmation.guestCount === undefined ? {} : { guestCount: confirmation.guestCount }),
         },
         bubbles: true,
         composed: true,
@@ -1215,7 +1215,7 @@ export class TillTenderPay extends LitElement {
   }
 
   #renderConfirmation(confirmation: RetainedTender) {
-    const { tender, outstanding, guests } = confirmation;
+    const { tender, outstanding, guestCount } = confirmation;
     return html`
       <div class="summary">
         <p class="tender-kind">${t(tender.method === "cash" ? "tender.cash" : "tender.card")}</p>
@@ -1246,10 +1246,10 @@ export class TillTenderPay extends LitElement {
         }
       </div>
       ${
-        guests === undefined
+        guestCount === undefined
           ? nothing
           : guestsStepper({
-              text: guests === null ? "" : String(guests),
+              text: guestCount === null ? "" : String(guestCount),
               disabled: true,
               error: "",
               onChange: (event) => event.stopPropagation(),

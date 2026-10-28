@@ -271,7 +271,7 @@ async function sell(
 async function storedGuests(db: Database, workingOrderId: string) {
   return withTransaction(db, (tx) =>
     tx
-      .select({ guests: saleReceiptGuests.guests })
+      .select({ guests: saleReceiptGuests.guestCount })
       .from(saleReceiptGuests)
       .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
       .where(eq(sales.workingOrderId, workingOrderId)),
@@ -309,7 +309,7 @@ function writtenTables(db: Database): Record<string, unknown[]> {
 describe("/api/sales keeps the guests its receipt prints", () => {
   it("stores the chosen count and prints it with the share of 12,00 €", async () => {
     const v = await venue(suite.db);
-    const sale = await sell(v, { guests: 5 });
+    const sale = await sell(v, { guestCount: 5 });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, sale.id)).toEqual([{ guests: 5 }]);
     const [receipt] = await receipts(suite.db);
@@ -319,7 +319,7 @@ describe("/api/sales keeps the guests its receipt prints", () => {
 
   it("stores no line for null and prints no guests", async () => {
     const v = await venue(suite.db);
-    const sale = await sell(v, { guests: null });
+    const sale = await sell(v, { guestCount: null });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, sale.id)).toEqual([{ guests: null }]);
     const [receipt] = await receipts(suite.db);
@@ -335,13 +335,13 @@ describe("/api/sales keeps the guests its receipt prints", () => {
 
   it.each([[0], [1000], [2.5], ["4"], [true]])(
     "refuses guests %j before writing anything",
-    async (guests) => {
+    async (guestCount) => {
       const v = await venue(suite.db);
       const before = writtenTables(suite.db);
-      const sale = await sell(v, { guests });
+      const sale = await sell(v, { guestCount });
       expect(sale.status).toBe(400);
       expect(sale.body).toEqual({
-        error: { code: "management.request_invalid", params: { field: "guests" } },
+        error: { code: "management.request_invalid", params: { field: "guestCount" } },
       });
       expect(writtenTables(suite.db)).toEqual(before);
     },
@@ -349,16 +349,16 @@ describe("/api/sales keeps the guests its receipt prints", () => {
 
   it("stores the count on a hand-keyed card sale", async () => {
     const v = await venue(suite.db);
-    const sale = await sell(v, { guests: 3 }, { tender: { method: "card", amount: "12.00" } });
+    const sale = await sell(v, { guestCount: 3 }, { tender: { method: "card", amount: "12.00" } });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, sale.id)).toEqual([{ guests: 3 }]);
   });
 
   it("keeps the first count when the same sale is sent again with another", async () => {
     const v = await venue(suite.db);
-    const first = await sell(v, { guests: 5 });
+    const first = await sell(v, { guestCount: 5 });
     expect(first.status).toBe(200);
-    const again = await sell(v, { guests: 7 }, { id: first.id });
+    const again = await sell(v, { guestCount: 7 }, { id: first.id });
     expect(again.status).toBe(200);
     expect(await storedGuests(suite.db, first.id)).toEqual([{ guests: 5 }]);
   });
@@ -395,7 +395,7 @@ describe("/api/sales on a party's bill tells a chosen no line from the default",
   it("stores no line for null, and prints no guests", async () => {
     const v = await venue(suite.db);
     const billId = await partyOfFourBill(v);
-    const sale = await sell(v, { lines: [], guests: null }, { id: billId });
+    const sale = await sell(v, { lines: [], guestCount: null }, { id: billId });
     expect(sale.status).toBe(200);
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
     const [receipt] = await receipts(suite.db);
@@ -462,7 +462,7 @@ describe("/collect of a placed order keeps the guests its receipt prints", () =>
   it("stores no line for a party's bill when the request sends null", async () => {
     const v = await venue(suite.db);
     const id = await placedPartyBill(v);
-    const answer = await collect(v, id, { guests: null });
+    const answer = await collect(v, id, { guestCount: null });
     expect(answer.status).toBe(200);
     expect(await storedGuests(suite.db, id)).toEqual([{ guests: null }]);
   });
@@ -470,7 +470,7 @@ describe("/collect of a placed order keeps the guests its receipt prints", () =>
   it("stores the chosen count", async () => {
     const v = await venue(suite.db);
     const id = await placedCounterOrder(v);
-    const answer = await collect(v, id, { guests: 2 });
+    const answer = await collect(v, id, { guestCount: 2 });
     expect(answer.status).toBe(200);
     expect(await storedGuests(suite.db, id)).toEqual([{ guests: 2 }]);
   });
@@ -486,10 +486,10 @@ describe("/collect of a placed order keeps the guests its receipt prints", () =>
   it("refuses guests 0 and records no sale", async () => {
     const v = await venue(suite.db);
     const id = await placedCounterOrder(v);
-    const answer = await collect(v, id, { guests: 0 });
+    const answer = await collect(v, id, { guestCount: 0 });
     expect(answer.status).toBe(400);
     expect(answer.body).toEqual({
-      error: { code: "management.request_invalid", params: { field: "guests" } },
+      error: { code: "management.request_invalid", params: { field: "guestCount" } },
     });
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -537,7 +537,7 @@ async function salesOf(db: Database, workingOrderId: string) {
 describe("/api/pay keeps the guests its receipt prints", () => {
   it("stores the chosen count of a captured card and prints it with the share of 12,00 €", async () => {
     const v = await venue(suite.db);
-    const pay = await payByReader(v, { guests: 5 });
+    const pay = await payByReader(v, { guestCount: 5 });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await storedGuests(suite.db, pay.id)).toEqual([{ guests: 5 }]);
@@ -548,7 +548,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
 
   it("stores no line for null", async () => {
     const v = await venue(suite.db);
-    const pay = await payByReader(v, { guests: null });
+    const pay = await payByReader(v, { guestCount: null });
     expect(pay.status).toBe(200);
     expect(await storedGuests(suite.db, pay.id)).toEqual([{ guests: null }]);
   });
@@ -565,7 +565,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
   it("stores no line for null on a party's bill", async () => {
     const v = await venue(suite.db);
     const billId = await partyOfFourBill(v);
-    const pay = await payByReader(v, { lines: [], guests: null }, { id: billId });
+    const pay = await payByReader(v, { lines: [], guestCount: null }, { id: billId });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
@@ -573,7 +573,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
 
   it("stores nothing and records no sale when the card is declined", async () => {
     const v = await venue(suite.db);
-    const pay = await payByReader(v, { guests: 5, simulationOutcome: "declined" });
+    const pay = await payByReader(v, { guestCount: 5, simulationOutcome: "declined" });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("declined");
     expect(await salesOf(suite.db, pay.id)).toEqual([]);
@@ -597,7 +597,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
         externalRef: `sim-lost-${randomUUID()}`,
       });
     });
-    const pay = await payByReader(v, { lines: [], guests: 3 }, { id });
+    const pay = await payByReader(v, { lines: [], guestCount: 3 }, { id });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await paymentsOf(suite.db, id)).toHaveLength(1);
@@ -610,7 +610,7 @@ describe("/api/pay keeps the guests its receipt prints", () => {
     const v = await venue(suite.db);
     const pay = await payByReader(v, {
       lines: [{ menuItemId: v.freeItemId, quantity: "1" }],
-      guests: 2,
+      guestCount: 2,
     });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
@@ -620,13 +620,13 @@ describe("/api/pay keeps the guests its receipt prints", () => {
 
   it.each([[0], [1000], [2.5], ["4"], [true]])(
     "refuses guests %j before the reader is asked",
-    async (guests) => {
+    async (guestCount) => {
       const v = await venue(suite.db);
       const before = writtenTables(suite.db);
-      const pay = await payByReader(v, { guests });
+      const pay = await payByReader(v, { guestCount });
       expect(pay.status).toBe(400);
       expect(pay.body).toEqual({
-        error: { code: "management.request_invalid", params: { field: "guests" } },
+        error: { code: "management.request_invalid", params: { field: "guestCount" } },
       });
       expect(await paymentsOf(suite.db, pay.id)).toEqual([]);
       expect(writtenTables(suite.db)).toEqual(before);
@@ -704,7 +704,7 @@ describe("/api/pay with nothing to charge on a placed party bill", () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { menuItemId: v.tableFreeItemId, quantity: "1" });
     await placeOrder({ db: v.db, backend: v.backend, clock }, v.cfg, billId, v.staffId);
-    const pay = await payByReader(v, { lines: [], guests: 2 }, { id: billId });
+    const pay = await payByReader(v, { lines: [], guestCount: 2 }, { id: billId });
     expect(pay.status).toBe(200);
     expect((pay.body as { outcome: string }).outcome).toBe("captured");
     expect(await paymentsOf(suite.db, billId)).toEqual([]);
@@ -748,9 +748,9 @@ describe("/payments keeps the guests of the payment that completes the bill", ()
   it("ignores the guests of a payment that leaves the bill unpaid, and stores the completing one's", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { quantity: "14" });
-    expect((await payPart(v, billId, cashPart("10.00", { guests: 5 }))).status).toBe(200);
+    expect((await payPart(v, billId, cashPart("10.00", { guestCount: 5 }))).status).toBe(200);
     expect(await storedGuests(suite.db, billId)).toEqual([]);
-    const last = await payPart(v, billId, cashPart("11.00", { guests: 3 }));
+    const last = await payPart(v, billId, cashPart("11.00", { guestCount: 3 }));
     expect(last.status).toBe(200);
     expect(last.body.invoice).toBeDefined();
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 3 }]);
@@ -767,7 +767,7 @@ describe("/payments keeps the guests of the payment that completes the bill", ()
       method: "card",
       entry: "manual",
       applied: "11.00",
-      guests: null,
+      guestCount: null,
     });
     expect(last.status).toBe(200);
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: null }]);
@@ -789,7 +789,7 @@ describe("/payments keeps the guests of the payment that completes the bill", ()
       entry: "reader",
       applied: "11.00",
       simulationOutcome: "captured",
-      guests: 2,
+      guestCount: 2,
     });
     expect(last.status).toBe(200);
     expect(last.body.outcome).toBe("received");
@@ -799,10 +799,10 @@ describe("/payments keeps the guests of the payment that completes the bill", ()
   it("refuses guests 2.5 and writes no payment", async () => {
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { quantity: "14" });
-    const refused = await payPart(v, billId, cashPart("10.00", { guests: 2.5 }));
+    const refused = await payPart(v, billId, cashPart("10.00", { guestCount: 2.5 }));
     expect(refused).toEqual({
       status: 400,
-      body: { error: { code: "management.request_invalid", params: { field: "guests" } } },
+      body: { error: { code: "management.request_invalid", params: { field: "guestCount" } } },
     });
     expect(
       await withTransaction(suite.db, (tx) =>
@@ -826,10 +826,13 @@ describe("a bill payment's retry is matched on the payment alone, never its gues
     const v = await venue(suite.db);
     const billId = await partyBill(v, 4, { quantity: "14" });
     const submissionId = randomUUID();
-    const first = await payPart(v, billId, { submissionId, ...cashPart("10.00", { guests: 3 }) });
+    const first = await payPart(v, billId, {
+      submissionId,
+      ...cashPart("10.00", { guestCount: 3 }),
+    });
     expect(first.status).toBe(200);
     const paymentId = (first.body.payment as { id: string }).id;
-    for (const guests of [{ guests: 9 }, { guests: null }, {}]) {
+    for (const guests of [{ guestCount: 9 }, { guestCount: null }, {}]) {
       const again = await payPart(v, billId, { submissionId, ...cashPart("10.00", guests) });
       expect([again.status, (again.body.payment as { id: string } | undefined)?.id]).toEqual([
         200,
@@ -873,13 +876,141 @@ describe("a bill payment's retry is matched on the payment alone, never its gues
     const v = await venue(suite.db);
     const billId = await partlyPaidBill(v);
     const submissionId = randomUUID();
-    const first = await payPart(v, billId, { submissionId, ...cashPart("11.00", { guests: 3 }) });
+    const first = await payPart(v, billId, {
+      submissionId,
+      ...cashPart("11.00", { guestCount: 3 }),
+    });
     expect(first.status).toBe(200);
-    const again = await payPart(v, billId, { submissionId, ...cashPart("11.00", { guests: 9 }) });
+    const again = await payPart(v, billId, {
+      submissionId,
+      ...cashPart("11.00", { guestCount: 9 }),
+    });
     expect(again.status).toBe(200);
     expect((again.body.payment as { id: string }).id).toBe(
       (first.body.payment as { id: string }).id,
     );
     expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 3 }]);
+  });
+});
+
+describe("the payment routes read guestCount and ignore guests", () => {
+  const REFUSED = {
+    error: { code: "management.request_invalid", params: { field: "guestCount" } },
+  };
+
+  describe("POST /api/sales", () => {
+    it("stores the guestCount sent", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const sale = await sell(v, { lines: [], guestCount: 2 }, { id: billId });
+      expect(sale.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+    });
+
+    it("ignores the old name guests and stores the party's 4", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const sale = await sell(v, { lines: [], guests: 2 }, { id: billId });
+      expect(sale.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+    });
+
+    it("refuses guestCount 0 and records no sale", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const sale = await sell(v, { lines: [], guestCount: 0 }, { id: billId });
+      expect([sale.status, sale.body]).toEqual([400, REFUSED]);
+      expect(await salesOf(suite.db, billId)).toEqual([]);
+    });
+  });
+
+  describe("POST /api/pay", () => {
+    it("stores the guestCount sent", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const pay = await payByReader(v, { lines: [], guestCount: 2 }, { id: billId });
+      expect(pay.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+    });
+
+    it("ignores the old name guests and stores the party's 4", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const pay = await payByReader(v, { lines: [], guests: 2 }, { id: billId });
+      expect(pay.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+    });
+
+    it("refuses guestCount 0 and records no sale or payment", async () => {
+      const v = await venue(suite.db);
+      const billId = await partyOfFourBill(v);
+      const pay = await payByReader(v, { lines: [], guestCount: 0 }, { id: billId });
+      expect([pay.status, pay.body]).toEqual([400, REFUSED]);
+      expect(await salesOf(suite.db, billId)).toEqual([]);
+      expect(await paymentsOf(suite.db, billId)).toEqual([]);
+    });
+  });
+
+  describe("POST /api/working-orders/:id/collect", () => {
+    it("stores the guestCount sent", async () => {
+      const v = await venue(suite.db);
+      const id = await placedPartyBill(v);
+      const answer = await collect(v, id, { guestCount: 2 });
+      expect(answer.status).toBe(200);
+      expect(await storedGuests(suite.db, id)).toEqual([{ guests: 2 }]);
+    });
+
+    it("ignores the old name guests and stores the party's 4", async () => {
+      const v = await venue(suite.db);
+      const id = await placedPartyBill(v);
+      const answer = await collect(v, id, { guests: 2 });
+      expect(answer.status).toBe(200);
+      expect(await storedGuests(suite.db, id)).toEqual([{ guests: 4 }]);
+    });
+
+    it("refuses guestCount 0 and records no sale", async () => {
+      const v = await venue(suite.db);
+      const id = await placedPartyBill(v);
+      const answer = await collect(v, id, { guestCount: 0 });
+      expect([answer.status, answer.body]).toEqual([400, REFUSED]);
+      expect(await salesOf(suite.db, id)).toEqual([]);
+    });
+  });
+
+  describe("POST /api/working-orders/:id/payments completing the bill", () => {
+    async function billPaymentsOf(billId: string) {
+      return withTransaction(suite.db, (tx) =>
+        tx
+          .select({ id: billPayments.id })
+          .from(billPayments)
+          .where(eq(billPayments.workingOrderId, billId)),
+      );
+    }
+
+    it("stores the guestCount sent", async () => {
+      const v = await venue(suite.db);
+      const billId = await partlyPaidBill(v);
+      const last = await payPart(v, billId, cashPart("11.00", { guestCount: 2 }));
+      expect(last.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 2 }]);
+    });
+
+    it("ignores the old name guests and stores the party's 4", async () => {
+      const v = await venue(suite.db);
+      const billId = await partlyPaidBill(v);
+      const last = await payPart(v, billId, cashPart("11.00", { guests: 2 }));
+      expect(last.status).toBe(200);
+      expect(await storedGuests(suite.db, billId)).toEqual([{ guests: 4 }]);
+    });
+
+    it("refuses guestCount 0 and records no sale or payment", async () => {
+      const v = await venue(suite.db);
+      const billId = await partlyPaidBill(v);
+      const before = await billPaymentsOf(billId);
+      const refused = await payPart(v, billId, cashPart("11.00", { guestCount: 0 }));
+      expect(refused).toEqual({ status: 400, body: REFUSED });
+      expect(await billPaymentsOf(billId)).toEqual(before);
+      expect(await salesOf(suite.db, billId)).toEqual([]);
+    });
   });
 });

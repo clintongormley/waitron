@@ -147,7 +147,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
       confirmation: {
         tender: { method: "card", amount: "62.40", externalRef: "operation-17" },
         outstanding: "62.40",
-        guests: 4,
+        guestCount: 4,
       },
       refusal: { code: "order.payment_in_flight" },
     });
@@ -236,7 +236,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
         confirmation: {
           tender: { method: "cash", amount: "70.00" },
           outstanding: "62.40",
-          guests: 4,
+          guestCount: 4,
         },
       });
       const panel = el
@@ -476,7 +476,7 @@ describe.each(["light", "dark"] as const)("till-presented-pay-dialog a11y (%s th
           confirmation: {
             tender: { method: "card", amount: "62.40", externalRef: "A-1" },
             outstanding: "62.40",
-            guests: 4,
+            guestCount: 4,
           },
         }),
       button: "[data-presented-pay-resend]",

@@ -1618,7 +1618,7 @@ describe("the guests its invoice's receipts print", () => {
   function guestsRowsOf(billId: string) {
     return inTx(venue, (tx) =>
       tx
-        .select({ guests: saleReceiptGuests.guests })
+        .select({ guests: saleReceiptGuests.guestCount })
         .from(saleReceiptGuests)
         .innerJoin(sales, eq(sales.id, saleReceiptGuests.saleId))
         .where(eq(sales.workingOrderId, billId)),
@@ -1641,7 +1641,7 @@ describe("the guests its invoice's receipts print", () => {
       venue.cookie,
       "POST",
       `/api/working-orders/${party.tabId}/collect`,
-      { tender: { method: "cash", amount: "30.00" }, guests: 2 },
+      { tender: { method: "cash", amount: "30.00" }, guestCount: 2 },
     );
     expect(collected.status).toBe(200);
     expect(await guestsRowsOf(party.tabId)).toEqual([{ guests: 4 }]);
@@ -1676,11 +1676,11 @@ describe("the guests its invoice's receipts print", () => {
       venue.cookie,
       "POST",
       `/api/working-orders/${party.tabId}/collect`,
-      { tender: { method: "cash", amount: "30.00" }, guests: 0 },
+      { tender: { method: "cash", amount: "30.00" }, guestCount: 0 },
     );
     expect(refused).toEqual({
       status: 400,
-      json: { code: "management.request_invalid", params: { field: "guests" } },
+      json: { code: "management.request_invalid", params: { field: "guestCount" } },
     });
     expect(await salesOf(party.tabId)).toEqual(before);
     expect(before).toEqual([{ id: expect.any(String), total: 3000, settledAt: null }]);
@@ -1713,7 +1713,7 @@ describe("the guests its invoice's receipts print", () => {
         tendered: "10.00",
         applied: "10.00",
         tip: "0.00",
-        guests: 2,
+        guestCount: 2,
       },
     );
 

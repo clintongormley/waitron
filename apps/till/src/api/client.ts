@@ -1135,7 +1135,7 @@ export interface BillPaymentRequest extends BillPaymentAsk {
   /** The practice simulator only. */
   simulationOutcome?: "captured" | "declined";
   allowOffline?: false;
-  guests?: number | null;
+  guestCount?: number | null;
 }
 
 /** How one payment splits between the bill, change and tip, or the two ways an item payment that
@@ -2836,7 +2836,7 @@ export class TillApi {
       | undefined,
     receiptLanguage: string | undefined,
     kitchenNote: string | null | undefined,
-    guests: number | null | undefined,
+    guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
     lateSend?: LateSend,
   ): Promise<TillSaleResult> {
@@ -2848,7 +2848,7 @@ export class TillApi {
       ...invoice,
       receiptLanguage,
       kitchenNote,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCount === undefined ? {} : { guestCount }),
       expectedEdit,
       ...(lateSend === undefined ? {} : { lateSend }),
     });
@@ -2875,7 +2875,7 @@ export class TillApi {
     demoAttemptId?: string;
     receiptLanguage?: string;
     kitchenNote?: string | null;
-    guests?: number | null;
+    guestCount?: number | null;
     lateSend?: LateSend;
   }): Promise<PayOutcome> {
     return this.#request<PayOutcome>("/api/pay", "POST", {
@@ -3226,13 +3226,13 @@ export class TillApi {
     id: string,
     tender: Tender,
     receiptLanguage: string | undefined,
-    guests: number | null | undefined,
+    guestCount: number | null | undefined,
     expectedEdit: BillEditExpected | null,
   ): Promise<TillSaleResult> {
     return this.#request<TillSaleResult>(`/api/working-orders/${id}/collect`, "POST", {
       tender,
       receiptLanguage,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCount === undefined ? {} : { guestCount }),
       expectedEdit,
     });
   }
@@ -4596,7 +4596,7 @@ export class TillApi {
 
   /**
    * `tableId` leaves the party and a new party starts there with `billId`, or with a new empty bill
-   * when it is null → `POST /api/parties/:id/split-table`. `guests`, when given, is each side's
+   * when it is null → `POST /api/parties/:id/split-table`. `guestCounts`, when given, is each side's
    * guest count afterwards; without it the staying party keeps its count. Rejects, among others, `table.not_shared`,
    * `table.not_joined`, `party.main_bill_stays`, `group.held_leaves_party` and `party.out_of_date`.
    */
@@ -4606,7 +4606,7 @@ export class TillApi {
     billId: string | null,
     expectedPartyRevision: number,
     expectedEdits: BillEditExpected[],
-    guests?: { staying: number | null; leaving: number | null },
+    guestCounts?: { staying: number | null; leaving: number | null },
   ): Promise<{
     partyId: string;
     mainBillId: string | null;
@@ -4617,7 +4617,7 @@ export class TillApi {
       billId,
       expectedPartyRevision,
       expectedEdits,
-      ...(guests === undefined ? {} : { guests }),
+      ...(guestCounts === undefined ? {} : { guestCounts }),
     });
   }
 

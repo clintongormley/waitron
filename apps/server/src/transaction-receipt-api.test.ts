@@ -218,7 +218,7 @@ it("reprints a duplicate document with an audit row and no drawer or fiscal chan
 });
 it("prints the guests stored with the sale on its copy", async () => {
   const id = await billlessSale(venue);
-  await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guests: 5 }));
+  await inTx(venue, (tx) => tx.insert(saleReceiptGuests).values({ saleId: id, guestCount: 5 }));
   const printed = (await jobs()).prints.length;
   expect((await reprint(id)).status).toBe(200);
   const { prints } = await jobs();

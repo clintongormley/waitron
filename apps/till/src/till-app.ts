@@ -714,8 +714,8 @@ function refusedSplitSide(
   refused: { code?: string; field?: string } | undefined,
 ): "staying" | "leaving" | undefined {
   if (refused?.code !== "management.request_invalid") return undefined;
-  if (refused.field === "guests.staying") return "staying";
-  if (refused.field === "guests.leaving") return "leaving";
+  if (refused.field === "guestCounts.staying") return "staying";
+  if (refused.field === "guestCounts.leaving") return "leaving";
   return undefined;
 }
 
@@ -1160,7 +1160,7 @@ interface WholePayment {
   outstanding: string;
   bill: BillLookupRow | null;
   tender: Tender;
-  guests?: number | null;
+  guestCount?: number | null;
   expectedEdit: BillEditExpected | null;
 }
 
@@ -6369,7 +6369,7 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guestCount, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     // The store's stable working-order id is the pay-idempotency key: a re-tap after a lost response
     // replays against the same row rather than filing a second record.
     const id = this.#store.id;
@@ -6406,7 +6406,7 @@ export class TillApp extends LitElement {
         invoice,
         language,
         this.#store.kitchenNote ?? undefined,
-        guests,
+        guestCount,
         this.#counterExpectedEdit(id),
         ...(lateSend === undefined ? [] : ([lateSend] as const)),
       );
@@ -6571,7 +6571,7 @@ export class TillApp extends LitElement {
             ...(language === undefined ? {} : { receiptLanguage: language }),
             ...(detail.tip ? { tip: detail.tip } : {}),
             ...(detail.allowOffline ? { allowOffline: true } : {}),
-            ...(detail.guests === undefined ? {} : { guests: detail.guests }),
+            ...(detail.guestCount === undefined ? {} : { guestCount: detail.guestCount }),
             ...(detail.simulationOutcome === undefined
               ? {}
               : { simulationOutcome: detail.simulationOutcome }),
@@ -7518,14 +7518,14 @@ export class TillApp extends LitElement {
     this.submitting = true;
     this.#counterSends++;
     const session = this.#operatorSession;
-    const { guests, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
+    const { guestCount, ...tender } = (event as CustomEvent<ConfirmPaymentDetail>).detail;
     const id = this.#store.id;
     const fromWaitingList = this.collectFlow !== undefined;
     this.errorKey = undefined;
     let collected = false;
     try {
       const language = this.#chosenReceiptLanguage(id);
-      const result = await this.api.collectOrder(id, tender, language, guests, null);
+      const result = await this.api.collectOrder(id, tender, language, guestCount, null);
       if (session !== this.#operatorSession) return;
       this.result = result;
       this.#showTicket(id);
@@ -8222,14 +8222,14 @@ export class TillApp extends LitElement {
         undefined,
         undefined,
         undefined,
-        payment.guests,
+        payment.guestCount,
         payment.expectedEdit,
       );
     return api.collectOrder(
       billId,
       payment.tender,
       undefined,
-      payment.guests,
+      payment.guestCount,
       payment.expectedEdit,
     );
   }
@@ -10279,7 +10279,7 @@ export class TillApp extends LitElement {
         .readers=${this.#payReaders()}
         .defaultReaderId=${this.#payDefaultReaderId()}
         .asksGuests=${this.#billPayingAsksGuests(open)}
-        .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guests ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
+        .receiptGuests=${pending?.unconfirmed === true ? (pending.request.guestCount ?? null) : open.surface === "table" ? defaultReceiptGuests(this.orderParty) : null}
         .handheld=${this.handheldMode}
         .notice=${this.nfcNotice}
         .askNfc=${this.nfcPermission === "prompt"}
@@ -15225,7 +15225,8 @@ export class TillApp extends LitElement {
   }
 
   async #onSplitTable(event: Event): Promise<void> {
-    const { tableId, billId, guests, prompt } = (event as CustomEvent<SplitTableDetail>).detail;
+    const { tableId, billId, guestCounts, prompt } = (event as CustomEvent<SplitTableDetail>)
+      .detail;
     const party = this.orderParty;
     if (party === null) return;
     const asked =
@@ -15249,7 +15250,7 @@ export class TillApp extends LitElement {
         billId,
         asked.revisions.expectedPartyRevision!,
         asked.expectedEdits,
-        guests,
+        guestCounts,
       );
     } catch (error) {
       if (!live()) return;
@@ -15260,8 +15261,8 @@ export class TillApp extends LitElement {
           this.splitRefusal = {
             tableId,
             billId,
-            staying: guestField(guests.staying),
-            leaving: guestField(guests.leaving),
+            staying: guestField(guestCounts.staying),
+            leaving: guestField(guestCounts.leaving),
             field: side,
             message: t("seat.guest_count_invalid"),
             ...(prompt === undefined ? {} : { prompt }),
@@ -16985,7 +16986,7 @@ export class TillApp extends LitElement {
       return false;
     }
     this.submitting = true;
-    const { guests, ...tender } = detail;
+    const { guestCount, ...tender } = detail;
     const presented = bill?.status === "placed";
     this.errorKey = undefined;
     let paidMeanwhile = false;
@@ -17014,7 +17015,7 @@ export class TillApp extends LitElement {
         payment = structuredClone({
           presented,
           tender,
-          guests,
+          guestCount,
           expectedEdit,
           invoiced: bill?.receiptAvailable === true,
           outstanding: bill?.outstanding ?? tender.amount,
@@ -17133,18 +17134,18 @@ export class TillApp extends LitElement {
     const detail = (event as CustomEvent<PresentedPayDetail>).detail;
     this.presentedPaying = { ...open, refusal: null };
     if (detail.method === "card") {
-      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guests);
+      await this.#payPresentedOnReader(open.id, bill, detail.readerId, detail.guestCount);
       return;
     }
-    const guests = detail.guests === undefined ? {} : { guests: detail.guests };
+    const guestCount = detail.guestCount === undefined ? {} : { guestCount: detail.guestCount };
     const tender: ConfirmPaymentDetail =
       detail.method === "cash"
-        ? { method: "cash", amount: detail.tendered, ...guests }
+        ? { method: "cash", amount: detail.tendered, ...guestCount }
         : {
             method: "card",
             amount: bill.outstanding,
             ...(detail.externalRef === undefined ? {} : { externalRef: detail.externalRef }),
-            ...guests,
+            ...guestCount,
           };
     const paid = await this.#payWholeTab(tender, (error) => {
       if (this.#presentedNow(open.id) === null) return false;
@@ -17171,7 +17172,7 @@ export class TillApp extends LitElement {
     this.presentedPaying = { ...open, refusal: null };
     const manualCard = held.tender.method === "card";
     const paid = await this.#payWholeTab(
-      { ...held.tender, ...(held.guests === undefined ? {} : { guests: held.guests }) },
+      { ...held.tender, ...(held.guestCount === undefined ? {} : { guestCount: held.guestCount }) },
       (error) => {
         if (this.#presentedNow(open.id) === null) return false;
         if (!isNetworkFailure(error))
@@ -17189,7 +17190,7 @@ export class TillApp extends LitElement {
     id: number,
     bill: PartyBill,
     readerId: string,
-    guests: number | null | undefined,
+    guestCount: number | null | undefined,
   ): Promise<void> {
     if (this.submitting) return;
     this.submitting = true;
@@ -17219,7 +17220,7 @@ export class TillApp extends LitElement {
               id: billId,
               lines: [],
               readerId,
-              ...(guests === undefined ? {} : { guests }),
+              ...(guestCount === undefined ? {} : { guestCount }),
             })
             .then(
               (answer) => {
