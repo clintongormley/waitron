@@ -80,14 +80,34 @@ async function seedSales(db: Database, count: number): Promise<string[]> {
 
 const suite = useVenueDb({ migrations: [], setup: migrateBeforeRename, resetPerTest: false });
 
-it("renames guests to guest_count keeping stored counts, the check and the append-only refusal", async () => {
+function appendOnlyTriggersOn(db: Database, table: string): string[] {
+  return db
+    .all<{ name: string }>(
+      sql`select name from sqlite_master where type = 'trigger' and tbl_name = ${table} order by name`,
+    )
+    .map(({ name }) => name);
+}
+
+it("renames guests to guest_count on a database carrying the append-only triggers, keeping stored counts, the check and the refusal once they are reinstalled", async () => {
   const db = suite.db;
   const [first, second] = await seedSales(db, 2);
   const now = new Date().toISOString();
   await db.run(sql`insert into sale_receipt_guests (sale_id, guests, created_at)
     values (${first!}, 4, ${now}), (${second!}, null, ${now})`);
+  const tables = db
+    .all<{ name: string }>(sql`select name from sqlite_master where type = 'table'`)
+    .map(({ name }) => name);
+  installAppendOnlyTriggers(
+    db,
+    CORE_MIGRATIONS.appendOnlyTables.filter((table) => tables.includes(table)),
+  );
+  expect(appendOnlyTriggersOn(db, "sale_receipt_guests")).toEqual([
+    "sale_receipt_guests_append_only_delete",
+    "sale_receipt_guests_append_only_update",
+  ]);
 
   await runMigrations(db, CORE_MIGRATIONS);
+  installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables);
 
   expect(db.all(sql`select sale_id, guest_count from sale_receipt_guests order by rowid`)).toEqual([
     { sale_id: first, guest_count: 4 },
@@ -103,10 +123,14 @@ it("renames guests to guest_count keeping stored counts, the check and the appen
   );
   expect(stored!.sql).toContain("sale_receipt_guests_guest_count_ck");
 
-  installAppendOnlyTriggers(db, CORE_MIGRATIONS.appendOnlyTables ?? []);
   const updated = await captureError(() =>
     db.run(sql`update sale_receipt_guests set guest_count = 3 where sale_id = ${first!}`),
   );
   expect(isRefusal(updated, TRIGGER_ABORT)).toBe(true);
   expect(engineErrorMessage(updated)).toBe("sale_receipt_guests is append-only");
+  const deleted = await captureError(() =>
+    db.run(sql`delete from sale_receipt_guests where sale_id = ${second!}`),
+  );
+  expect(isRefusal(deleted, TRIGGER_ABORT)).toBe(true);
+  expect(engineErrorMessage(deleted)).toBe("sale_receipt_guests is append-only");
 });
