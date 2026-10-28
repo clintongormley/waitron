@@ -606,6 +606,8 @@ async function damagedRecord(
     status?: "claimed" | "consumption-intent" | "abandoned";
     locale?: string;
     refuseFlagged?: number;
+    /** The code those refused sends answer; `setup.attempt_conflict` when not given. */
+    refuseCode?: string;
     inspectionFailsAfterRefusal?: boolean;
     /** Merged into every inspection read after the refused send. */
     inspectionAfterRefusal?: Partial<FirstSetupInspection>;
@@ -646,9 +648,10 @@ async function damagedRecord(
       if (path.endsWith("/resolution/start-again") && refusals > 0) {
         refusals -= 1;
         refused = true;
+        const code = options.refuseCode ?? "setup.attempt_conflict";
         return Response.json(
-          { error: { code: "setup.attempt_conflict", params: {} } },
-          { status: 409 },
+          { error: { code, params: {} } },
+          { status: code === "storage.disk_full" ? 507 : 409 },
         );
       }
       const status = options.status ?? "claimed";
@@ -2239,6 +2242,20 @@ it("with the database present, a summary read refused storage.disk_full says the
   await click(app, "damaged-record-continue");
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
+});
+
+it("a damaged record's Start again refused storage.disk_full says the disk is full and goes back to the password", async () => {
+  const { app, requests } = await damagedRecord({
+    refuseFlagged: 1,
+    refuseCode: "storage.disk_full",
+  });
+  await unlockDamagedRecord(app);
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
+  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
+  expect(startAgainRequests(requests)).toHaveLength(2);
 });
 
 it("the password step refused storage.disk_full says the disk is full", async () => {

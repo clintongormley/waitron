@@ -1285,7 +1285,10 @@ export class SetupApp extends LitElement {
     const key = code === undefined ? undefined : FIRST_SETUP_ERROR_MESSAGES[code];
     return key ? say(key) : () => initialOwnerStrings[setupLocale()].error;
   }
-  /** The repair page's own reads and Start-again steps; activation keeps `#describeFirstError`. */
+  /**
+   * The repair page's steps before activation, the claim included; activation keeps
+   * `#describeFirstError`.
+   */
   #describeRepairError(error: unknown): Message {
     return (error as { code?: string } | null)?.code === "storage.disk_full"
       ? say("shell.first_setup.disk_full")

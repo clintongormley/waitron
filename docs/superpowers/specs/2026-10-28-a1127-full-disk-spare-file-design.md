@@ -234,8 +234,9 @@ check the saved result. Do not repeat activation." (`apps/setup/src/screens/init
 On Linux a full disk already answers `507 storage.disk_full` (`packages/server-kit/src/error-boundary.ts:34-40`),
 so adding the code to that shared map would make an activation step say "Then try again". The words
 therefore get their own key, `shell.first_setup.disk_full`, drawn by a repair-page helper used only by
-the repair page's inspection reads, the password step, the Start-again summary (`#presentReadsFailed`)
-and Start again. Every other caller keeps its words; a test pins that an activation step refused
+the repair page's inspection reads, the password step, the Start-again summary (`#presentReadsFailed`),
+Start again, and the claim of a replacement setup from the repair page (`#claimFirstSetup`, whose one
+error handler also covers the inspection read it opens with). Every other caller keeps its words; a test pins that an activation step refused
 `storage.disk_full` still draws "Do not repeat activation".
 
 - EN: "The box's disk is full, so this step could not be saved. Restart the box: as it starts, it
