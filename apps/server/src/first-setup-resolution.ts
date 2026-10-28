@@ -456,8 +456,8 @@ export function createFirstSetupResolutionActions(
           const discarding = found === undefined ? {} : { discarding: found.id };
           let holdings: SetupDatabaseHoldings | undefined;
           if (held) {
-            if (host.modules === undefined) unavailable();
-            holdings = await readSetupDatabaseHoldings(roots, host.modules);
+            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
+            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
             if (holdings.rows === 0) unavailable();
           }
@@ -560,8 +560,8 @@ export function createFirstSetupResolutionActions(
           if (held) {
             await assertRecoveredOwner(request.owner, state);
             if (request.register?.kind === "no-current-master") unavailable();
-            if (host.modules === undefined) unavailable();
-            holdings = await readSetupDatabaseHoldings(roots, host.modules);
+            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
+            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             if (holdings.rows === 0) unavailable();
             if (holdings.kept > 0 || holdings.records > 0) refused("kept-records");
           } else if (request.owner === undefined) {
