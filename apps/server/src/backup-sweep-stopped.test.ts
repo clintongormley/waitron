@@ -7,6 +7,7 @@ import type { Database } from "@waitron/db";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const dirs: string[] = [];
@@ -73,6 +74,7 @@ it("records the code a run stopped on before reaching any destination, with the 
   expect(outcomes.runStopped).toEqual({
     code: "backup.staging_space_low",
     at: STAMP.toISOString(),
+    sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
   });
   expect(outcomes.failed.size).toBe(0);
 });
@@ -93,14 +95,20 @@ it("clears the stopped run once a later run reaches its destinations", async () 
         return;
       }
       seen.push(outcomes.runStopped);
-      free = 10_000_000;
+      free = 3000 + START_FREE_SPACE_FLOOR + 1000;
       nowMs += chunk;
     },
   });
 
   await runBackupSweep(deps);
 
-  expect(seen).toEqual([{ code: "backup.staging_space_low", at: STAMP.toISOString() }]);
+  expect(seen).toEqual([
+    {
+      code: "backup.staging_space_low",
+      at: STAMP.toISOString(),
+      sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
+    },
+  ]);
   expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
   expect(outcomes.runStopped).toBeUndefined();
 });
@@ -153,7 +161,7 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
         return;
       }
       seen.push(outcomes.runStopped);
-      free = 10_000_000;
+      free = 3000 + START_FREE_SPACE_FLOOR + 1000;
       nowMs += chunk;
     },
     // An empty directory in place of the staged copy makes the clean-up's non-recursive `rm`
@@ -169,7 +177,13 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
 
   await runBackupSweep(deps);
 
-  expect(seen).toEqual([{ code: "backup.staging_space_low", at: STAMP.toISOString() }]);
+  expect(seen).toEqual([
+    {
+      code: "backup.staging_space_low",
+      at: STAMP.toISOString(),
+      sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
+    },
+  ]);
   expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
   expect(outcomes.failed.size).toBe(0);
   expect(outcomes.runStopped).toBeUndefined();

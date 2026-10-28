@@ -14,7 +14,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { codeOf } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_ENCRYPT_DIR_PREFIX,
@@ -24,6 +24,10 @@ import {
   parseBackupArchiveKey,
 } from "./backup-keys.js";
 import { withDestinationCall } from "./backup-destination-call.js";
+import { foldersOnDisk, makeRoom, type BackupFolder } from "./backup-room.js";
+import type { DeviceOf } from "./disk-usage.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
@@ -91,12 +95,19 @@ export interface BackupSweepDeps {
   buildManifest?: ManifestBuilder;
   now?: () => Date;
   /**
-   * The venue database's current size. The staged copy and its ciphertext sit side by side in
-   * `stagingDir`, so a tick refuses when free space there is under twice this before the copy, and
-   * under the copy's own size after it. Advisory: nothing is reserved, and without this there is no
-   * check.
+   * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
+   * staged copy and its ciphertext) plus this once more for each local destination on the same disk
+   * (each folder copy's working file), and refuses when free space there is under that plus
+   * `spaceFloorBytes`; after the copy it refuses when free space is under the copy's own size.
+   * Advisory: nothing is reserved, and without this there is no check.
    */
   stagingEstimateBytes?: () => Promise<number>;
+  /** Free space a tick keeps beyond its need; defaults to `START_FREE_SPACE_FLOOR`. */
+  spaceFloorBytes?: number;
+  /** Free space a tick makes room toward beyond its need; defaults to `SPACE_LOW_BYTES`. */
+  spaceAimBytes?: number;
+  /** DI for tests; which disk a folder is on. */
+  deviceOf?: DeviceOf;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
   statfs?: Statfs;
   /** Held by each tick, so nothing else in this process touches `stagingDir` while it runs. */
@@ -113,6 +124,26 @@ async function checkStagingSpace(
   if (availableBytes === null) return;
   if (availableBytes < neededBytes)
     throw new AppError("backup.staging_space_low", { neededBytes, availableBytes });
+}
+
+/** The local destinations on the working folder's disk. When that disk cannot be read, every local
+ * destination is counted as on it and none is offered for deletion; the room check still runs, and
+ * lets the run through if free space cannot be read either. */
+async function localFoldersOnDisk(
+  deps: Pick<BackupSweepDeps, "backends" | "stagingDir" | "deviceOf" | "log">,
+): Promise<{ folders: BackupFolder[]; copies: number }> {
+  try {
+    return await foldersOnDisk(deps.backends, deps.stagingDir, deps.deviceOf);
+  } catch (err) {
+    deps.log("warn", "backup.staging_disk_unreadable", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+    return {
+      folders: [],
+      copies: deps.backends.filter((b) => b.localDir !== undefined).length,
+    };
+  }
 }
 
 /**
@@ -154,8 +185,22 @@ export async function runOnce(
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-    if (deps.stagingEstimateBytes)
-      await checkStagingSpace(deps, 2 * (await deps.stagingEstimateBytes()));
+    if (deps.stagingEstimateBytes) {
+      const estimate = await deps.stagingEstimateBytes();
+      const { folders, copies } = await localFoldersOnDisk(deps);
+      await makeRoom({
+        neededBytes: 2 * estimate + estimate * copies,
+        floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
+        aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
+        stagingDir: deps.stagingDir,
+        statfs: deps.statfs,
+        folders,
+        installationStartedAt: null,
+        signal: deps.signal,
+        log: deps.log,
+        onDeleted: async () => {},
+      });
+    }
     await deps.archive(staged);
     dumped = true;
     // The whole venue database in plaintext, created under the process umask.
@@ -215,8 +260,13 @@ export async function runOnce(
     );
   } catch (err) {
     // Only a step before the destination calls lands here: `Promise.allSettled` never rejects.
-    if (!deps.signal.aborted && deps.outcomes)
+    if (!deps.signal.aborted && deps.outcomes) {
       deps.outcomes.runStopped = { code: codeOf(err), at: stamp.toISOString() };
+      if (isAppError(err) && hasCode(err, "backup.staging_space_low")) {
+        const { neededBytes, availableBytes } = err.params;
+        deps.outcomes.runStopped.sizes = { neededBytes, availableBytes };
+      }
+    }
     throw err;
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });

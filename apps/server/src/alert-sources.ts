@@ -127,8 +127,13 @@ export interface BackupOutcomeHolder {
    * after a restart until the next sweep tick. */
   failed: Map<string, { at: string }>;
   /** Set while the most recent backup run stopped before any destination call; `code` is the error
-   * code it stopped on. In memory only, like `failed`. */
-  runStopped?: { code: string; at: string };
+   * code it stopped on, and `sizes` the free space it needed and found when that code is
+   * `backup.staging_space_low`. In memory only, like `failed`. */
+  runStopped?: {
+    code: string;
+    at: string;
+    sizes?: { neededBytes: number; availableBytes: number };
+  };
 }
 
 export function recordBackupOutcome(

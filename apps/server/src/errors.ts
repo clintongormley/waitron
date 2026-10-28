@@ -1344,7 +1344,8 @@ declare module "@waitron/shared" {
      * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
-     * stopped before writing more there; `availableBytes` is what it reported. */
+     * stopped before writing more there. Before the copy, `neededBytes` is the run's need plus the
+     * free-space floor; after it, the copy's size. `availableBytes` is what it reported. */
     "backup.staging_space_low": { neededBytes: number; availableBytes: number };
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
