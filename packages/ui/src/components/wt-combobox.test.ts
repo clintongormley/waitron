@@ -2305,7 +2305,7 @@ test("a long chosen label at phone width is one line cut with an ellipsis, endin
   ]);
   host.style.width = "390px";
   const short = await mountWith('<wt-combobox label="Menu" value="short"></wt-combobox>', [
-    { value: "short", label: "Menú" },
+    { value: "short", label: "Menu" },
   ]);
   host.style.width = "390px";
   const { value, chevron, field } = fieldParts(el);

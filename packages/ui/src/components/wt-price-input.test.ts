@@ -945,7 +945,7 @@ test("the unit button sits inside the field box at its trailing end, centred on 
 
 test("a long label never runs under the unit button", async () => {
   const el = await mount(
-    `<wt-price-input label="${"Selling price to the public including taxes ".repeat(3)}" unit="ración" value="9,00" style="width: 300px"></wt-price-input>`,
+    `<wt-price-input label="${"Selling price to the public including taxes ".repeat(3)}" unit="portion" value="9,00" style="width: 300px"></wt-price-input>`,
   );
   const label = field(el).label!.getBoundingClientRect();
   const unit = el.shadowRoot!.querySelector("button.unit")!.getBoundingClientRect();
@@ -1081,7 +1081,7 @@ test("with no label drawn, an empty field shows its currency sign", async () => 
 
 test("a labelled field with a fixed unit floats its label across the box, past the amount and over the unit", async () => {
   const el = await mount(
-    '<wt-price-input label="Descuento máximo por cuenta" unit="%" fixed-unit value="10" style="width: 400px"></wt-price-input>',
+    '<wt-price-input label="Maximum discount per bill" unit="%" fixed-unit value="10" style="width: 400px"></wt-price-input>',
   );
   const { field: box, label, input } = field(el);
   const text = el.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
@@ -1095,7 +1095,7 @@ test("a labelled field with a fixed unit floats its label across the box, past t
 
 test("while the label rests, a fixed unit is hidden under it and still describes the amount; focus shows it", async () => {
   const el = await mount(
-    '<wt-price-input label="Descuento máximo por cuenta" unit="%" fixed-unit style="width: 400px"></wt-price-input>',
+    '<wt-price-input label="Maximum discount per bill" unit="%" fixed-unit style="width: 400px"></wt-price-input>',
   );
   const { field: box, input } = field(el);
   const unit = el.shadowRoot!.querySelector<HTMLElement>(".unit")!;
