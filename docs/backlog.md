@@ -1767,8 +1767,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Kitchen cards: look points seen in A366 slice 5's look pass, and on its base `4f61b4ab9`
   too** — the overdue badge runs the card's full width; an empty status line leaves a double gap;
-  a held dish shows its own Done, and cards grow tall; Spanish shows "1 atrasados", a plural
-  after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
+  a held dish shows its own Done, and cards grow tall; and at 390 px the cards are of uneven
+  widths. Left open by A366 slice 5 Part A.
 
 - **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
   Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
@@ -4451,11 +4451,6 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
-
-- **A1138. The dashboard overview calls an Overdue order «Atrasado»; the station fields and the
-  till's signal say «Con retraso».** The overview's `overview.band_overdue`, `overview.overdue_count`
-  and `overview.overdue_none` (`apps/dashboard/src/i18n/strings.ts`) and the till's
-  `station.overdue_count` (`apps/till/src/i18n/strings.ts`) say «atrasado(s)». Decide which word wins.
 
 - **A887. Find a bill's state filter still says "Held" for an order the till now calls parked.**
   [Detail](backlog/languages.md#a887-find-a-bills-state-filter-still-says-held-for-an-order-the-till-now-calls-parked)

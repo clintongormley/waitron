@@ -199,6 +199,31 @@ describe("dashboard-overview-screen — overdue orders (KDS order-timing alerts,
     expect(rows[1]!.querySelector("[data-test=overdue-band]")!.textContent).toContain("Overdue");
   });
 
+  it("calls an overdue order «con retraso» in Spanish", async () => {
+    setLocale("es-ES");
+    const api = stubApi({ getOverdueOrders: vi.fn().mockResolvedValue({ orders: overdueOrders }) });
+    const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
+    await flush(el);
+    const root = el.shadowRoot!;
+    expect(root.querySelector("[data-test=overdue-count]")!.textContent).toBe(
+      "2 pedidos con retraso",
+    );
+    expect(
+      root.querySelector("[data-test=overdue-row-1] [data-test=overdue-band]")!.textContent,
+    ).toBe("Con retraso");
+  });
+
+  it("says no order is «con retraso» in Spanish when none is overdue", async () => {
+    setLocale("es-ES");
+    const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", {
+      api: stubApi(),
+    });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("[data-test=overdue-empty]")!.textContent).toBe(
+      "Ningún pedido con retraso",
+    );
+  });
+
   it("shows a calm zero-state when there are no overdue orders", async () => {
     const api = stubApi({ getOverdueOrders: vi.fn().mockResolvedValue({ orders: [] }) });
     const { el } = await mountWidget<OverviewScreen>("dashboard-overview-screen", { api });
