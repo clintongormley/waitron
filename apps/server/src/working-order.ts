@@ -56,6 +56,7 @@ import { withReceiptListPrices } from "./receipt-lines.js";
 import { projectPortionSale, type PortionBinding } from "./portion-sale-projection.js";
 import {
   cancelPortions,
+  copyCoveredLines,
   expandPortionRows,
   linkSalePortions,
   readGrowingPortions,
@@ -6322,6 +6323,7 @@ async function applyLineEdits(
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
     await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
     await registerPortions(tx, newPortions);
+    await copyCoveredLines(tx, copiedContexts);
     await copyAllergyWorkingTicks(tx, copiedDishes);
   }
   const addedToExisting = changes.filter(

@@ -30,7 +30,12 @@ import { dishKitchenItems } from "./dish-kitchen.js";
 import { enqueueCorrectionSlips, enqueueHoldCorrections, isStarted } from "./kitchen-print.js";
 import { copyAllergyWorkingTicks } from "./kitchen-allergy.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { readGrowingPortions, registerPortions, type PortionRef } from "./order-portions.js";
+import {
+  copyCoveredLines,
+  readGrowingPortions,
+  registerPortions,
+  type PortionRef,
+} from "./order-portions.js";
 import { appendRecalledLine, type Draft, type DraftLineInput } from "./order-drafts.js";
 import { requireLiveCourse } from "./kitchen.js";
 import { requireMakeAtStation } from "./dead-ends.js";
@@ -272,6 +277,7 @@ async function copyRecalledPortion(
   await tx.insert(workingOrderLines).values(rows);
   await VENUE_SERVICE.copyLineContexts(tx, cfg, contexts);
   await registerPortions(tx, portions);
+  await copyCoveredLines(tx, contexts);
   await copyAllergyWorkingTicks(tx, dishes);
   const reserved = dishes.map(({ to }) => ({ referenceId: randomUUID(), sourceLineId: to }));
   await tx.insert(orderDraftRecalledLines).values(

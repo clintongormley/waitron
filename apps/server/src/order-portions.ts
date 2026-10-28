@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
+import { adjustmentLines } from "@waitron/adjustments";
 import {
   orderPortionEvents,
   orderPortions,
@@ -129,6 +130,32 @@ export async function registerPortions(
       .insert(workingLinePortions)
       .values({ workingOrderLineId: portion.lineId, portionId: portion.portionId });
   }
+}
+
+/**
+ * For each `{ from, to }` copy, the comps and discounts that covered `from` cover `to` as well, so
+ * an approval limit reads the copy's earlier share as it reads the line it was copied from.
+ */
+export async function copyCoveredLines(
+  tx: Transaction,
+  pairs: readonly { from: string; to: string }[],
+): Promise<void> {
+  if (pairs.length === 0) return;
+  const covered = await tx
+    .select({ adjustmentId: adjustmentLines.adjustmentId, lineId: adjustmentLines.lineId })
+    .from(adjustmentLines)
+    .where(
+      inArray(
+        adjustmentLines.lineId,
+        pairs.map(({ from }) => from),
+      ),
+    );
+  const rows = pairs.flatMap(({ from, to }) =>
+    covered
+      .filter((row) => row.lineId === from)
+      .map((row) => ({ adjustmentId: row.adjustmentId, lineId: to })),
+  );
+  if (rows.length > 0) await tx.insert(adjustmentLines).values(rows);
 }
 
 /** The portion each of `lineIds` holds; a line holding none is absent. */
