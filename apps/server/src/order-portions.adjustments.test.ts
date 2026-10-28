@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { adjustmentLines, adjustments, type AdjustmentAction } from "@waitron/adjustments";
+import {
+  adjustmentLines,
+  adjustments,
+  createAdjustmentReason,
+  type AdjustmentAction,
+} from "@waitron/adjustments";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
@@ -30,6 +35,7 @@ import { formatReceipt } from "./receipt-ticket.js";
 import {
   inTx,
   provisionAdjustmentVenue,
+  REASONS,
   rowsOf,
   type AdjustmentVenue,
   type RoundLine,
@@ -1271,7 +1277,7 @@ describe("A803 portions: the lines a comp or discount covered", () => {
   });
 });
 
-describe("A803 portions: a row's approval limits read what today's line read", () => {
+describe("A803 portions: a row's approval verdicts are one line's", () => {
   it("A803 portions: a second 50% Crew meal on the same row asks, as a second one on one line does", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
@@ -1357,7 +1363,7 @@ describe("A803 portions: a row's approval limits read what today's line read", (
     });
   }
 
-  it("A803 portions: S9 — 50% off a row of three, Split bill moves two to another bill, and 50% off those two there goes straight through", async () => {
+  it("A803 portions: S9 — 50% off a row of three, Split bill moves two to another bill, and 50% off those two there asks: each is already at its floor", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1373,7 +1379,7 @@ describe("A803 portions: a row's approval limits read what today's line read", (
 
     const [moved] = await dishesNamed(groupedB.billId, "Burger");
     const today = await asked(groupedB.billId, crew({ lineId: moved! }));
-    expect(today).toBeNull();
+    expect(today).toMatchObject(ASKS);
     const there = await dishesNamed(portionsB.billId, "Burger");
     expect(there).toEqual(row.slice(0, 2));
     expect(await asked(portionsB.billId, crew(rowOf(there)))).toEqual(today);
@@ -1428,7 +1434,7 @@ describe("A803 portions: a row's approval limits read what today's line read", (
     await serve(grouped.billId, line!);
     await serve(portions.billId, row[0]!);
 
-    // Every quarter step from 5% to 40%, so the bill's share decides some of the verdicts.
+    // Every quarter step from 5% to 40%, which crosses the dishes' floor.
     for (let percentBp = 500; percentBp <= 4000; percentBp += 250) {
       const today = await asked(grouped.billId, crew({ lineId: line! }, "2", percentBp));
       expect(await asked(portions.billId, crew(rowOf(row.slice(1)), undefined, percentBp))).toEqual(
@@ -1437,7 +1443,7 @@ describe("A803 portions: a row's approval limits read what today's line read", (
     }
   });
 
-  it("A803 portions: another reason's 10% off the row does not count toward Crew meal's limit, as on one line", async () => {
+  it("A803 portions: another reason's 10% off the row counts toward Crew meal's floor: 50% more asks, as on one line", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1447,7 +1453,7 @@ describe("A803 portions: a row's approval limits read what today's line read", (
     await adjust(portions.billId, { ...byOther, ...rowOf(row) });
 
     const today = await asked(grouped.billId, crew({ lineId: line! }));
-    expect(today).toBeNull();
+    expect(today).toMatchObject(ASKS);
     expect(await asked(portions.billId, crew(rowOf(row)))).toEqual(today);
   });
 
@@ -1485,9 +1491,9 @@ describe("A803 portions: a row's approval limits read what today's line read", (
     expect(await verdicts(portions.billId, rowOf(row.slice(0, 2)))).toEqual(today);
   });
 
-  describe("A803 portions: an unbound line of three reads its shares as today and records no covered lines", () => {
-    // 25% steps, then 20%: an earlier share of 2500 lets the ask through and one of 5000 asks, so
-    // each verdict tells the two readings apart.
+  describe("A803 portions: an unbound line of three gets the floor's verdicts and records no covered lines", () => {
+    // 25% steps, then 20%: a burger 25% off stays above its floor after 20% more, one 25% off twice
+    // does not.
     const quarter = (target: Target, quantity?: string) => crew(target, quantity, 2500);
     const fifth = (lineId: string) => crew({ lineId }, undefined, 2000);
 
@@ -1586,7 +1592,7 @@ describe("A803 portions: a row of two sends", () => {
 });
 
 describe("A803 portions: approval differences no single line can show", () => {
-  it("A803 portions: a reason's 20% off the two unserved burgers of three, then its 10% off the whole bill: 25% more on the two asks today and goes through on portions (a stated difference, owner question pending)", async () => {
+  it("A803 portions: a reason's 20% off the two unserved burgers of three, then its 10% off the whole bill: 30% more on the two goes through and 32.5% asks, on one line and on portions", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1606,13 +1612,19 @@ describe("A803 portions: approval differences no single line can show", () => {
     await adjust(portions.billId, wholeBill);
 
     const [, carved] = await dishesNamed(grouped.billId, "Burger");
-    expect(await asked(grouped.billId, crew({ lineId: carved! }, undefined, 2500))).toMatchObject(
-      ASKS,
-    );
-    expect(await asked(portions.billId, crew(rowOf(row.slice(1)), undefined, 2500))).toBeNull();
+    for (const [percentBp, verdict] of [
+      [3000, null],
+      [3250, ASKS],
+    ] as const) {
+      const today = await asked(grouped.billId, crew({ lineId: carved! }, undefined, percentBp));
+      expect(today).toEqual(verdict === null ? null : expect.objectContaining(verdict));
+      expect(await asked(portions.billId, crew(rowOf(row.slice(1)), undefined, percentBp))).toEqual(
+        today,
+      );
+    }
   });
 
-  it("A803 portions: S7 — two parts carved off one row by different reasons at one price show as one row, and the first reason again on it reads its own share and asks", async () => {
+  it("A803 portions: S7 — two parts carved off one row by different reasons at one price show as one row, and Crew meal's 10% more asks on the row and on the portion the other reason took to its floor", async () => {
     const { billId } = await portionsBill(burgers("3"));
     const row = await dishesNamed(billId, "Burger");
     await adjust(billId, crew(rowOf(row), "1"));
@@ -1628,9 +1640,9 @@ describe("A803 portions: approval differences no single line can show", () => {
     ]);
 
     expect(await asked(billId, crew(rowOf(row.slice(1)), undefined, 1000))).toMatchObject(ASKS);
-    expect(await asked(billId, crew({ lineId: row[1]! }, undefined, 1000))).toBeNull();
+    expect(await asked(billId, crew({ lineId: row[1]! }, undefined, 1000))).toMatchObject(ASKS);
   });
-  it("A803 portions: S5 with a bill discount — a reason's 20% off a row of three and its 10% off the whole bill, Split bill moving the first two away: 25% more on the one left asks today and goes through on portions (a stated difference, owner question pending)", async () => {
+  it("A803 portions: S5 with a bill discount — a reason's 20% off a row of three and its 10% off the whole bill, Split bill moving the first two away: 30% more on the one left goes through and 32.5% asks, on one line and on portions", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1653,13 +1665,16 @@ describe("A803 portions: approval differences no single line can show", () => {
     );
 
     const [left] = await dishesNamed(grouped.billId, "Burger");
-    expect(await asked(grouped.billId, crew({ lineId: left! }, undefined, 2500))).toMatchObject(
-      ASKS,
-    );
-    expect(await asked(portions.billId, crew({ lineId: row[2]! }, undefined, 2500))).toBeNull();
-    expect(await asked(portions.billId, crew({ lineId: row[2]! }, undefined, 3250))).toMatchObject(
-      ASKS,
-    );
+    for (const [percentBp, verdict] of [
+      [3000, null],
+      [3250, ASKS],
+    ] as const) {
+      const today = await asked(grouped.billId, crew({ lineId: left! }, undefined, percentBp));
+      expect(today).toEqual(verdict === null ? null : expect.objectContaining(verdict));
+      expect(await asked(portions.billId, crew({ lineId: row[2]! }, undefined, percentBp))).toEqual(
+        today,
+      );
+    }
   });
 
   /** A bill whose lines wait in one held group of its party: as portions, or today's grouped lines. */
@@ -1692,7 +1707,7 @@ describe("A803 portions: approval differences no single line can show", () => {
     );
   }
 
-  it("A803 portions: S10 — a portion of a held row moved to another group keeps the row's earlier share and asks, where today's split-off unit reads none", async () => {
+  it("A803 portions: S10 — a portion of a held row 50% off, moved to another group, asks for 50% more, as today's split-off unit does", async () => {
     const grouped = await heldBill(burgers("3"), false);
     const portions = await heldBill(burgers("3"), true);
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1704,11 +1719,12 @@ describe("A803 portions: approval differences no single line can show", () => {
 
     const [, unit] = await dishesNamed(grouped.billId, "Burger");
     expect(unit).toBeDefined();
-    expect(await asked(grouped.billId, crew({ lineId: unit! }))).toBeNull();
-    expect(await asked(portions.billId, crew({ lineId: row[2]! }))).toMatchObject(ASKS);
+    const today = await asked(grouped.billId, crew({ lineId: unit! }));
+    expect(today).toMatchObject(ASKS);
+    expect(await asked(portions.billId, crew({ lineId: row[2]! }))).toEqual(today);
   });
 
-  it("A803 portions: S11 — a portion moved to another bill and back keeps its row's earlier share and asks, where today's part moved back reads none", async () => {
+  it("A803 portions: S11 — a portion of a row 50% off, moved to another bill and back, asks for 50% more, as today's part moved back does", async () => {
     const grouped = await groupedBill(burgers("3"));
     const portions = await portionsBill(burgers("3"));
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1735,9 +1751,10 @@ describe("A803 portions: approval differences no single line can show", () => {
 
     const back = (await dishesNamed(grouped.billId, "Burger")).find((id) => id !== line);
     expect(back).toBeDefined();
-    expect(await asked(grouped.billId, crew({ lineId: back! }))).toBeNull();
+    const today = await asked(grouped.billId, crew({ lineId: back! }));
+    expect(today).toMatchObject(ASKS);
     expect(await dishesNamed(portions.billId, "Burger")).toEqual(row);
-    expect(await asked(portions.billId, crew({ lineId: row[2]! }))).toMatchObject(ASKS);
+    expect(await asked(portions.billId, crew({ lineId: row[2]! }))).toEqual(today);
   });
 });
 
@@ -1893,19 +1910,17 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     };
   }
 
-  it("A803 portions: H2 with the reason's bill discount taken before the raise: 32.5% more on the copy asks on portions and goes through today (a stated difference, owner question pending)", async () => {
-    const { today, portions } = await copyBesideBillDiscount("before", 3250);
-    expect(today).toBeNull();
-    expect(portions).toMatchObject(ASKS);
-  });
+  for (const when of ["before", "after"] as const) {
+    it(`A803 portions: H2 with the reason's bill discount taken ${when} the raise: 30% more on the copy goes through and 32.5% asks, on today's widened line and on portions`, async () => {
+      const thirty = await copyBesideBillDiscount(when, 3000);
+      expect(thirty).toEqual({ today: null, portions: null });
+      const more = await copyBesideBillDiscount(when, 3250);
+      expect(more.today).toMatchObject(ASKS);
+      expect(more.portions).toEqual(more.today);
+    });
+  }
 
-  it("A803 portions: H2 with the reason's bill discount taken after the raise: 30% more on the copy asks today and goes through on portions (a stated difference, owner question pending)", async () => {
-    const { today, portions } = await copyBesideBillDiscount("after", 3000);
-    expect(today).toMatchObject(ASKS);
-    expect(portions).toBeNull();
-  });
-
-  it("A803 portions: 50% off a pizza's olive, the pizza recalled and raised to two: 50% off the copy's olive asks, as on today's widened olives line", async () => {
+  it("A803 portions: 50% off a pizza's olive, the pizza recalled and raised to two: 50% off the copy's olive goes through, as on today's widened olives line, the pizza staying above its floor", async () => {
     const grouped = await groupedBill(pizza);
     const portions = await portionsBill(pizza);
     const [olive] = await olivesOf(grouped.billId);
@@ -1919,13 +1934,13 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     expect(copyOlive).toBeDefined();
     // Today an olives line is discounted only whole.
     const today = await asked(grouped.billId, crew({ lineId: olive! }));
-    expect(today).toMatchObject(ASKS);
+    expect(today).toBeNull();
     expect(await asked(portions.billId, crew({ lineId: copyOlive! }))).toEqual(today);
     const olivePrice = (await describeIds(portions.billId)).get(portionOlive!);
     expect(await coveredOn(portions.billId)).toEqual([[olivePrice, olivePrice]]);
   });
 
-  it("A803 portions: 50% off an unsent pizza's olive, the pizza raised to two by an edit: 50% off the copy's olive asks, as on today's widened olives line", async () => {
+  it("A803 portions: 50% off an unsent pizza's olive, the pizza raised to two by an edit: 50% off the copy's olive goes through, as on today's widened olives line, the pizza staying above its floor", async () => {
     const grouped = await unsentBill(pizza, false);
     const portions = await unsentBill(pizza, true);
     const [olive] = await olivesOf(grouped.billId);
@@ -1940,13 +1955,13 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
     expect(copyOlive).toBeDefined();
     // Today an olives line is discounted only whole.
     const today = await asked(grouped.billId, crew({ lineId: olive! }));
-    expect(today).toMatchObject(ASKS);
+    expect(today).toBeNull();
     expect(await asked(portions.billId, crew({ lineId: copyOlive! }))).toEqual(today);
     const olivePrice = (await describeIds(portions.billId)).get(portionOlive!);
     expect(await coveredOn(portions.billId)).toEqual([[olivePrice, olivePrice]]);
   });
 
-  it("A803 portions: 50% off an unsent burger, raised to two by an edit, adds a burger at a fresh price that reads no earlier share, as today's separately priced line does", async () => {
+  it("A803 portions: 50% off an unsent burger, raised to two by an edit, adds a burger at a fresh price that takes 50% off without asking, as today's separately priced line does", async () => {
     const grouped = await unsentBill(burgers("1"), false);
     const portions = await unsentBill(burgers("1"), true);
     const [line] = await dishesNamed(grouped.billId, "Burger");
@@ -1977,5 +1992,173 @@ describe("A803 portions: a copy of a portion keeps the lines its discounts cover
         lineId: expect.toBeOneOf(await dishesNamed(portions.billId, "Burger")),
       }),
     );
+  });
+});
+
+describe("A803 portions: the per-dish floor (plan D36)", () => {
+  /** `amount` off under Crew meal (50% an item) unless `reasonId` says otherwise, by a manager. */
+  const off = (target: Target, amount: string, reasonId = venue.reasonId.staffMeal): Ask => ({
+    ...target,
+    action: "discount_amount",
+    amount,
+    reasonId,
+    operatorId: venue.managerId,
+  });
+  const wholeBill = (percentBp: number, reasonId: string): Ask => ({
+    action: "discount_percent",
+    percentBp,
+    reasonId,
+    operatorId: venue.managerId,
+  });
+  const oliveOf = async (billId: string): Promise<Target> => ({
+    lineId: (await rowsOf(venue, billId)).find((row) => row.name === "Olives")!.id,
+  });
+
+  type Step = (billId: string, dish: Target) => Promise<Ask>;
+
+  /**
+   * Builds `lines` as today's one line of each and as portions, runs each of `before` on both (by a
+   * manager, who is never asked), and answers whether staff asking `ask` would need approval: one
+   * verdict, the same on both shapes (plan D36 reading 1). `free` names lines whose price is set to
+   * €0.00 first.
+   */
+  async function oneVerdict(
+    lines: RoundLine[],
+    dish: string,
+    ask: Step,
+    before: Step[] = [],
+    free?: string,
+  ) {
+    const verdicts = [];
+    for (const bound of [false, true]) {
+      const { billId } = bound ? await portionsBill(lines) : await groupedBill(lines);
+      if (free !== undefined) {
+        await inTx(venue, (tx) =>
+          tx
+            .update(workingOrderLines)
+            .set({ unitPriceGross: 0, lineTotal: 0 })
+            .where(
+              and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.name, free)),
+            ),
+        );
+      }
+      const ids = await dishesNamed(billId, dish);
+      const target = bound ? rowOf(ids) : { lineId: ids[0]! };
+      for (const step of before) await adjust(billId, await step(billId, target));
+      verdicts.push(await asked(billId, await ask(billId, target)));
+    }
+    expect(verdicts[1]).toEqual(verdicts[0]);
+    return verdicts[0];
+  }
+
+  const reasonAllowing = (maxPercentBp: number) =>
+    inTx(
+      venue,
+      async (tx) =>
+        (
+          await createAdjustmentReason(tx, {
+            ...REASONS.staffMeal,
+            name: `Up to ${maxPercentBp}`,
+            names: {},
+            maxPercentBp,
+          })
+        ).id,
+    );
+
+  it("A803 portions: Crew meal's €6.00 off one €12.00 burger goes through and €6.01 asks", async () => {
+    const burger = burgers("1");
+    expect(await oneVerdict(burger, "Burger", async (_, dish) => off(dish, "6.00"))).toBeNull();
+    expect(await oneVerdict(burger, "Burger", async (_, dish) => off(dish, "6.01"))).toMatchObject(
+      ASKS,
+    );
+  });
+
+  it("A803 portions: another reason's discount counts: Complaint's 10% off a row of three, then Crew meal 42.5% goes through and 45% asks", async () => {
+    const complaint = async (_: string, dish: Target): Promise<Ask> => ({
+      ...tenOff,
+      ...dish,
+      reasonId: venue.reasonId.complaint,
+      operatorId: venue.managerId,
+    });
+    const crewAt = (percentBp: number) => async (_: string, dish: Target) =>
+      crew(dish, undefined, percentBp);
+    expect(await oneVerdict(burgers("3"), "Burger", crewAt(4250), [complaint])).toBeNull();
+    expect(await oneVerdict(burgers("3"), "Burger", crewAt(4500), [complaint])).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: a whole-bill discount counts whoever gave it: Complaint's 10% off the whole bill, then Crew meal 42.5% off the burger goes through and 45% asks", async () => {
+    const complaint = async () => wholeBill(1000, venue.reasonId.complaint);
+    const crewAt = (percentBp: number) => async (_: string, dish: Target) =>
+      crew(dish, undefined, percentBp);
+    expect(await oneVerdict(burgers("1"), "Burger", crewAt(4250), [complaint])).toBeNull();
+    expect(await oneVerdict(burgers("1"), "Burger", crewAt(4500), [complaint])).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: a pizza with its olives is one dish: Crew meal 30% off a €9.00 pizza with €1.50 olives, then 30% off its olives alone, goes through; 50% off the pizza, then 10% off its olives alone, asks; 90% off the olives alone goes through", async () => {
+    const pizza: RoundLine[] = [{ name: "Pizza", quantity: "1", olives: 1 }, bread];
+    const onPizza = (percentBp: number) => async (_: string, dish: Target) =>
+      crew(dish, undefined, percentBp);
+    const onOlives = (percentBp: number) => async (billId: string) =>
+      crew(await oliveOf(billId), undefined, percentBp);
+    expect(await oneVerdict(pizza, "Pizza", onOlives(3000), [onPizza(3000)])).toBeNull();
+    expect(await oneVerdict(pizza, "Pizza", onOlives(1000), [onPizza(5000)])).toMatchObject(ASKS);
+    expect(await oneVerdict(pizza, "Pizza", onOlives(9000))).toBeNull();
+  });
+
+  it("A803 portions: exactly 50% never asks on rounding: 50% off one €3.33 croqueta (€1.66 left) and 50% off a row of three (€4.99 left) go through, as €1.67 off one does; €1.68 off one asks", async () => {
+    const croquetas = (quantity: string): RoundLine[] => [{ name: "Croquetas", quantity }, bread];
+    const half = async (_: string, dish: Target) => crew(dish);
+    expect(await oneVerdict(croquetas("1"), "Croquetas", half)).toBeNull();
+    expect(await oneVerdict(croquetas("3"), "Croquetas", half)).toBeNull();
+    const amount = (value: string) => async (_: string, dish: Target) => off(dish, value);
+    expect(await oneVerdict(croquetas("1"), "Croquetas", amount("1.67"))).toBeNull();
+    expect(await oneVerdict(croquetas("1"), "Croquetas", amount("1.68"))).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: each portion of a row is checked: €5.01 off three €3.33 croquetas leaves each at €1.66 and goes through; €5.02 leaves one at €1.65 and asks", async () => {
+    const three: RoundLine[] = [{ name: "Croquetas", quantity: "3" }, bread];
+    const amount = (value: string) => async (_: string, dish: Target) => off(dish, value);
+    expect(await oneVerdict(three, "Croquetas", amount("5.01"))).toBeNull();
+    expect(await oneVerdict(three, "Croquetas", amount("5.02"))).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: 50% off 3 kg of €12.99 Fish under Crew meal goes through (it takes €19.50 against an exact €19.485); €19.53 off asks", async () => {
+    const fish: RoundLine[] = [{ name: "Fish", quantity: "3" }, bread];
+    expect(await oneVerdict(fish, "Fish", async (_, dish) => crew(dish))).toBeNull();
+    expect(await oneVerdict(fish, "Fish", async (_, dish) => off(dish, "19.53"))).toMatchObject(
+      ASKS,
+    );
+  });
+
+  it("A803 portions: three pizzas with two olives each, under reasons allowing exactly 34.41% and 63.82%: each limit's own percentage goes through", async () => {
+    const pizzas: RoundLine[] = [{ name: "Pizza", quantity: "3", olives: 2 }, bread];
+    for (const percentBp of [3441, 6382]) {
+      const reasonId = await reasonAllowing(percentBp);
+      const ask = async (_: string, dish: Target) => ({
+        ...crew(dish, undefined, percentBp),
+        reasonId,
+      });
+      expect(await oneVerdict(pizzas, "Pizza", ask)).toBeNull();
+    }
+  });
+
+  it("A803 portions: part of a dish with extras: €5.26 off one of three pizzas with an olive each goes through and €5.27 asks", async () => {
+    const pizzas: RoundLine[] = [{ name: "Pizza", quantity: "3", olives: 1 }, bread];
+    const ofOne = (value: string) => async (_: string, dish: Target) => ({
+      ...off(dish, value),
+      quantity: "1",
+    });
+    expect(await oneVerdict(pizzas, "Pizza", ofOne("5.26"))).toBeNull();
+    expect(await oneVerdict(pizzas, "Pizza", ofOne("5.27"))).toMatchObject(ASKS);
+  });
+
+  it("A803 portions: a free pizza with a €1.50 olive is checked on the part asked for: €0.76 off one of three goes through and €0.77 asks", async () => {
+    const pizzas: RoundLine[] = [{ name: "Pizza", quantity: "3", olives: 1 }, bread];
+    const ofOne = (value: string) => async (_: string, dish: Target) => ({
+      ...off(dish, value),
+      quantity: "1",
+    });
+    expect(await oneVerdict(pizzas, "Pizza", ofOne("0.76"), [], "Pizza")).toBeNull();
+    expect(await oneVerdict(pizzas, "Pizza", ofOne("0.77"), [], "Pizza")).toMatchObject(ASKS);
   });
 });

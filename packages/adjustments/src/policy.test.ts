@@ -50,7 +50,7 @@ function comp(overrides: Partial<CompRequest> = {}): CompRequest {
     actorRole: "supervisor",
     note: null,
     priorReductionOnBill: decimal("0.00"),
-    itemShareBp: 10000,
+    dishes: [{ list: decimal("25.00"), after: decimal("0.00"), allowance: 1 }],
     billComped: decimal("0.00"),
     billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager", "admin"] },
     ...overrides,
@@ -101,11 +101,14 @@ describe("evaluateComp", () => {
     });
   });
 
-  it("past the item limit asks the reason's approver, never refuses", () => {
+  it("below the floor asks the reason's approver, never refuses", () => {
     const halves = { ...COMPLAINT, maxPercentBp: 5000 };
     const small = { reduction: decimal("5.00") };
-    expect(evaluateComp(halves, comp({ ...small, itemShareBp: 5001 }))).toEqual(BY_REASON);
-    expect(evaluateComp(halves, comp({ ...small, itemShareBp: 5000 }))).toEqual({
+    const dish = (after: string) => [
+      { list: decimal("25.00"), after: decimal(after), allowance: 1 },
+    ];
+    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.49") }))).toEqual(BY_REASON);
+    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.50") }))).toEqual({
       kind: "allowed",
     });
   });
@@ -214,8 +217,22 @@ describe("evaluateComp", () => {
     ["a negative reduction", { reduction: decimal("-1.00") }],
     ["a negative prior reduction on the bill", { priorReductionOnBill: decimal("-0.01") }],
     ["a negative bill comp total", { billComped: decimal("-0.01") }],
-    ["a negative item share", { itemShareBp: -1 }],
-    ["a fractional item share", { itemShareBp: 12.5 }],
+    [
+      "a negative list",
+      { dishes: [{ list: decimal("-0.01"), after: decimal("0.00"), allowance: 1 }] },
+    ],
+    [
+      "a negative price after",
+      { dishes: [{ list: decimal("1.00"), after: decimal("-0.01"), allowance: 1 }] },
+    ],
+    [
+      "a negative allowance",
+      { dishes: [{ list: decimal("1.00"), after: decimal("0.50"), allowance: -1 }] },
+    ],
+    [
+      "a fractional allowance",
+      { dishes: [{ list: decimal("1.00"), after: decimal("0.50"), allowance: 0.5 }] },
+    ],
   ])("throws on %s, which is a caller's bug and not a verdict", (_case, overrides) => {
     expect(() => evaluateComp(COMPLAINT, comp(overrides))).toThrow(RangeError);
   });

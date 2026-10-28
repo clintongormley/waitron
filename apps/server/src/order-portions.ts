@@ -132,10 +132,7 @@ export async function registerPortions(
   }
 }
 
-/**
- * For each `{ from, to }` copy, the comps and discounts that covered `from` cover `to` as well, so
- * an approval limit reads the copy's earlier share as it reads the line it was copied from.
- */
+/** For each `{ from, to }` copy, the comps and discounts that covered `from` cover `to` as well. */
 export async function copyCoveredLines(
   tx: Transaction,
   pairs: readonly { from: string; to: string }[],

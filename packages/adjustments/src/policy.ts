@@ -117,8 +117,8 @@ export interface CompRequest {
   note: string | null;
   /** This reason's earlier reductions on the bill. */
   priorReductionOnBill: Decimal;
-  /** The most basis points any item this request changes would then carry from this reason. */
-  itemShareBp: number;
+  /** Each dish this request takes something off, as the per-dish floor reads it (plan D36). */
+  dishes: DishPrice[];
   /** What comps have taken off the items still on the bill, before this request. */
   billComped: Decimal;
   billLimit: { maxAmount: Decimal | null; approverRoles: PersonRoleValue[] };
@@ -137,8 +137,12 @@ function assertWellFormed(req: CompRequest): void {
   for (const field of ["reduction", "priorReductionOnBill", "billComped"] as const) {
     if (compareDecimal(req[field], ZERO) < 0) throw new RangeError(`${field} is negative`);
   }
-  if (!Number.isInteger(req.itemShareBp) || req.itemShareBp < 0) {
-    throw new RangeError("itemShareBp is not a whole count of basis points");
+  for (const { list, after, allowance } of req.dishes) {
+    if (compareDecimal(list, ZERO) < 0) throw new RangeError("a dish's list is negative");
+    if (compareDecimal(after, ZERO) < 0) throw new RangeError("a dish's price after is negative");
+    if (!Number.isInteger(allowance) || allowance < 0) {
+      throw new RangeError("a dish's allowance is not a whole count of cents");
+    }
   }
 }
 
@@ -163,7 +167,7 @@ export function evaluateComp(reason: AdjustmentReason, req: CompRequest): Adjust
         };
   }
   if (reason.approverRoles.includes(req.actorRole)) return { kind: "allowed" };
-  const pastItem = reason.maxPercentBp !== null && req.itemShareBp > reason.maxPercentBp;
+  const pastItem = belowFloor(req.dishes, reason.maxPercentBp);
   const pastBill =
     reason.maxAmount !== null &&
     compareDecimal(addDecimal(req.priorReductionOnBill, req.reduction), reason.maxAmount) > 0;
