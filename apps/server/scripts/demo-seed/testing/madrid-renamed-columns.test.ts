@@ -80,6 +80,12 @@ it.each<[MadridColumnRenames, string]>([
     { sale_receipt_guests: { guests: "guest_count", sale_id: "guest_count" } },
     "sale_receipt_guests.sale_id",
   ],
+  [
+    { sale_receipt_guests: { guests: "guest_count", guest_count: "count" } },
+    "sale_receipt_guests.guest_count",
+  ],
+  [{ missing_table: {} }, "missing_table"],
+  [{ sale_receipt_guests: {} }, "sale_receipt_guests"],
 ])("refuses an unused or invalid column rename %#", (invalid, cell) => {
   expect(() => madridWithRenamedColumns(original, invalid)).toThrow(
     `unused or invalid Madrid column rename: ${cell}`,
