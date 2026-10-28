@@ -22,21 +22,18 @@ function contrastRatio(a: string, b: string): number {
 
 describe.each(["light", "dark"] as const)("wt-textarea a11y (%s theme)", (theme) => {
   test("resting label in an empty textarea", async () => {
-    await mountThemed('<wt-textarea label="Nota para cocina"></wt-textarea>', theme);
+    await mountThemed('<wt-textarea label="Kitchen note"></wt-textarea>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("label floated over a value", async () => {
-    await mountThemed(
-      '<wt-textarea label="Nota para cocina" value="Sin cebolla"></wt-textarea>',
-      theme,
-    );
+    await mountThemed('<wt-textarea label="Kitchen note" value="No onion"></wt-textarea>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("textarea with a hint", async () => {
     await mountThemed(
-      '<wt-textarea label="Descripción" hint="La ve el cliente en la carta."></wt-textarea>',
+      '<wt-textarea label="Description" hint="Shown to customers on the menu."></wt-textarea>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -47,49 +44,46 @@ describe.each(["light", "dark"] as const)("wt-textarea a11y (%s theme)", (theme)
   });
 
   test("focused textarea", async () => {
-    const el = await mountThemed('<wt-textarea label="Nota para cocina"></wt-textarea>', theme);
+    const el = await mountThemed('<wt-textarea label="Kitchen note"></wt-textarea>', theme);
     el.focus();
     expect(el.shadowRoot!.activeElement).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
   test("invalid textarea", async () => {
-    await mountThemed(
-      '<wt-textarea label="Nota para cocina" invalid value="x"></wt-textarea>',
-      theme,
-    );
+    await mountThemed('<wt-textarea label="Kitchen note" invalid value="x"></wt-textarea>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("invalid textarea with an error message", async () => {
     await mountThemed(
-      '<wt-textarea label="Nota para cocina" value="x" error="Escribe como mucho 200 caracteres"></wt-textarea>',
+      '<wt-textarea label="Kitchen note" value="x" error="Enter no more than 200 characters"></wt-textarea>',
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
   test("required textarea", async () => {
-    await mountThemed('<wt-textarea label="Nota para cocina" required></wt-textarea>', theme);
+    await mountThemed('<wt-textarea label="Kitchen note" required></wt-textarea>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("disabled textarea holding a value", async () => {
     await mountThemed(
-      '<wt-textarea label="Nota para cocina" value="Sin cebolla" disabled></wt-textarea>',
+      '<wt-textarea label="Kitchen note" value="No onion" disabled></wt-textarea>',
       theme,
     );
     await expectNoA11yViolations(host);
   });
 
   test("textarea with its label hidden", async () => {
-    await mountThemed('<wt-textarea label="Nota para cocina" hide-label></wt-textarea>', theme);
+    await mountThemed('<wt-textarea label="Kitchen note" hide-label></wt-textarea>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("textarea with a help button beside it", async () => {
     await mountThemed(
-      '<wt-textarea label="Nota para cocina"><button slot="help" aria-label="Ayuda">?</button></wt-textarea>',
+      '<wt-textarea label="Kitchen note"><button slot="help" aria-label="Help">?</button></wt-textarea>',
       theme,
     );
     await expectNoA11yViolations(host);

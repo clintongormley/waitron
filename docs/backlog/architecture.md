@@ -502,7 +502,10 @@ until A977).
   the catalogue; its direct error-wording
   and browser language-name checks remain. Keep deliberate Spanish/French metadata, the filename
   suite's accent-sensitive sample and the framing suite's deliberate multilingual metadata.
-  Later cleanup goes package by package from A977's list. Low priority.
+  The core button, input and textarea accessibility suites use English sample text. Their
+  label forwarding, changing descriptions, placeholder precedence and scrolling checks retain
+  their assertions with English fixtures. Later cleanup goes package by package from A977's
+  list. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still
   carry Spanish operation and street examples. Translate those samples in a Cloud change; the

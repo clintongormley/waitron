@@ -6,8 +6,8 @@ import "./wt-button.js";
 afterEach(cleanup);
 
 test("renders slotted content", async () => {
-  const el = await mount("<wt-button>Cobrar</wt-button>");
-  expect(el.textContent?.trim()).toBe("Cobrar");
+  const el = await mount("<wt-button>Pay</wt-button>");
+  expect(el.textContent?.trim()).toBe("Pay");
 });
 
 test("defaults to the secondary variant", async () => {
@@ -75,14 +75,16 @@ test("does not forward a host type attribute to the inner button (no submit-type
 
 test("forwards aria-label to the inner button so icon-only buttons have an accessible name", async () => {
   const el = await mount(
-    '<wt-button aria-label="Cerrar"><wt-icon name="close"></wt-icon></wt-button>',
+    '<wt-button aria-label="Close"><wt-icon name="close"></wt-icon></wt-button>',
   );
   const inner = el.shadowRoot!.querySelector("button")!;
-  expect(inner.getAttribute("aria-label")).toBe("Cerrar");
+  expect(inner.getAttribute("aria-label")).toBe("Close");
 });
 
 test("forwards aria-haspopup and aria-expanded to the inner button, where a screen reader reads them", async () => {
-  const el = await mount('<wt-button aria-haspopup="menu" aria-expanded="true">Idioma</wt-button>');
+  const el = await mount(
+    '<wt-button aria-haspopup="menu" aria-expanded="true">Language</wt-button>',
+  );
   const inner = el.shadowRoot!.querySelector("button")!;
   expect(inner.getAttribute("aria-haspopup")).toBe("menu");
   expect(inner.getAttribute("aria-expanded")).toBe("true");
@@ -90,7 +92,7 @@ test("forwards aria-haspopup and aria-expanded to the inner button, where a scre
 
 test("follows a change to the host's aria-expanded and aria-haspopup, and drops them when removed", async () => {
   const el = (await mount(
-    '<wt-button aria-haspopup="menu" aria-expanded="true">Idioma</wt-button>',
+    '<wt-button aria-haspopup="menu" aria-expanded="true">Language</wt-button>',
   )) as HTMLElement & { updateComplete: Promise<unknown> };
   const inner = el.shadowRoot!.querySelector("button")!;
 
@@ -202,7 +204,7 @@ test("loading disables the button, marks it busy and shows a spinner", async () 
 });
 
 test("the loading spinner is decorative — the button's aria-busy and label carry the state", async () => {
-  const el = await mount("<wt-button loading>Buscando…</wt-button>");
+  const el = await mount("<wt-button loading>Searching…</wt-button>");
   const spinner = el.shadowRoot!.querySelector("wt-spinner")!;
   await (spinner as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
   expect(spinner.hasAttribute("decorative")).toBe(true);
@@ -277,10 +279,10 @@ test("updates and clears the inner button's accessible description", async () =>
   await expect
     .element(page.elementLocator(inner))
     .toHaveAccessibleDescription("Uses the main product's photo");
-  el.setAttribute("aria-description", "Usa la foto del producto principal");
+  el.setAttribute("aria-description", "Uses the variant photo");
   await expect
     .element(page.elementLocator(inner))
-    .toHaveAccessibleDescription("Usa la foto del producto principal");
+    .toHaveAccessibleDescription("Uses the variant photo");
   el.removeAttribute("aria-description");
   await expect.element(page.elementLocator(inner)).toHaveAccessibleDescription("");
 });
