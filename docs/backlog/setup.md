@@ -618,23 +618,32 @@ finishing, the connection closing, or a connection already over. For the Retry t
 run; pressing Retry again would ask for the restart again. Wanted: the Retry uses the same
 once-only restart, with a test that closes the connection before the answer is written.
 
-## A1131: Start again stays enabled beside a stopped recovery or an unreadable recovery record
+## A1131: Start again beside a recovery record that cannot be read, with the setup database missing
 
-Left open by A1042 (#2101), points 2 and 3 of its owner questions.
-- **A stopped recovery beside a setup database that already holds records.** The stopped line says
-  "… did not finish. Start again deletes it." while Start again is disabled because the database
-  holds records; a sentence says why it is disabled, but the promise is false there.
-- **A recovery record that cannot be read, with the setup database missing.** The box refuses both
-  a new recovery and Start again; only Reconnect is enabled, and Reconnect re-reads the same
-  unreadable record.
+Left open by A1042 (#2101), point 3 of its owner questions; the other point (a stopped recovery
+beside a setup database that holds records) was built by A1131 part 1. The box refuses both a new
+recovery and Start again; only Reconnect is enabled, and Reconnect re-reads the same unreadable
+record.
 
-Owner, 2026-10-26 ~15:55 and ~16:00: "Start again shouldn't be disabled. We explain the situation and
-what could be lost, and then leave the choice to the user." In both places Start again is enabled.
-The page says plainly what is on the box (for the first case, what the database holds — for example
-how many records, and whether any were already filed with AEAT), what Start again deletes and what
-could be lost, with a safe Cancel beside it. No new recovery is offered in the second case unless
-enabling Start again needs it. If deleting could lose a filed record or reuse a chain or invoice
-number (CLAUDE.md §5), stop and ask the owner with a worked example instead of building it.
+Owner, 2026-10-26 ~16:00: "Start again shouldn't be disabled. We explain the situation and what
+could be lost, and then leave the choice to the user." Waits for the owner: an unreadable record may
+belong to a recovery the box has been trading from (A1131 question, 2026-10-28). The owner's answer
+(2026-10-28 ~08:10) replaced the options: once a recovery is selected, and before anything writes to
+the restored database, it moves to the standard database path, so a damaged recovery record can no
+longer hide the venue the box trades from. That design comes first; it is likely to remove most of
+this case.
+
+## On a full disk, the repair page's password step needs room for a whole copy of the setup database
+
+The password step keeps a copy of the setup database, encoded as text, before it changes anything
+(`captureFirstSetupOriginals`, `packages/provisioning/src/first-setup-resolution-inspection.ts`,
+since A679). On a full disk that copy has only the box's spare file (8 MiB) to use. A setup database
+of 3,579,904 bytes passed (`apps/server/src/start-again-full-disk.e2e.test.ts`, the held case); one
+whose encoded copy needs more than the spare is believed to answer 507 `storage.disk_full` at the
+password step (not run). A1131 makes such a database more likely on this page: Start again is now
+offered beside a stopped recovery when the setup database holds records. Wanted: measure the
+largest setup database an unfinished setup can leave, and either keep the copy within the spare or
+say on the full-disk page what to do.
 
 ## A stale signed-in setup tab's activation request is not refused while a Waitron Cloud recovery waits
 
@@ -671,6 +680,13 @@ main at 21d01dfac gave the same result. A Cloud download may run for up to 14 mi
 reading when it places the recovery. Next step: measure that on a box.
 
 ## Decisions and deliberate limits
+
+- **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
+  setup database holds records; the page says what is there and what is lost.**
+- **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
+  confirmation in the PR):** Start again stays off when the database holds an invoice or another
+  row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
+  when it finished; the start-again note's floor also covers the database's own series names.
 
 **DECIDED (owner, 2026-10-26 ~15:45; built as A1130): a renewal from the open backup recovery page
 extends the recovery session's 15 minutes.** The page renews every 30 seconds while it is open
