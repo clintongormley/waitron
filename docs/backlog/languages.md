@@ -120,3 +120,8 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
   `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
   “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
   `apps/till/src/i18n/allergen-names.ts`) are not scanned.
+
+- **An overdue order is «Con retraso» on every Spanish screen, never «atrasado»** (owner decision
+  2026-10-28, A1138). The dashboard overview, the till's pass count, the station fields and the
+  till's signal all use it. «Atrasado» stays only where a clock or a backup is behind. Nothing
+  scans the catalogues for it.
