@@ -897,6 +897,7 @@ export class MenuPatchDialog extends LitElement {
       ...refusals.map(refusalWords),
       ...(this.reloadFailure === null ? [] : [codeMessage(this.reloadFailure)]),
       ...(errors ? [fill("menu_patch.fix_items", { items: conjunctionList(toCorrect) })] : []),
+      ...this.#lostNotes(),
     ].join(" ");
     const count = this.#current().length;
     const reload = refusals.some(
@@ -966,34 +967,30 @@ export class MenuPatchDialog extends LitElement {
     return [this.refusal, ...newer];
   }
 
-  #renderDropped(): TemplateResult {
-    return html`${
-      this.dropped === 0
-        ? nothing
-        : html`<p class="note" role="status" data-test="dropped">
-            ${
-              this.dropped === 1
-                ? t("menu_patch.dropped_one")
-                : fill("menu_patch.dropped_many", { count: String(this.dropped) })
-            }
-          </p>`
-    }${
-      this.trimmed.size === 0
-        ? nothing
-        : html`<p class="note" role="status" data-test="trimmed">
-            ${
-              this.trimmed.size === 1
-                ? t("menu_patch.trimmed_one")
-                : fill("menu_patch.trimmed_many", { count: String(this.trimmed.size) })
-            }
-          </p>`
-    }`;
+  /** What newer versions and removed languages took from the draft, said beside the buttons,
+   * where it is seen however far down the form the person is working. */
+  #lostNotes(): string[] {
+    return [
+      ...(this.dropped === 0
+        ? []
+        : [
+            this.dropped === 1
+              ? t("menu_patch.dropped_one")
+              : fill("menu_patch.dropped_many", { count: String(this.dropped) }),
+          ]),
+      ...(this.trimmed.size === 0
+        ? []
+        : [
+            this.trimmed.size === 1
+              ? t("menu_patch.trimmed_one")
+              : fill("menu_patch.trimmed_many", { count: String(this.trimmed.size) }),
+          ]),
+    ];
   }
 
   #renderReview(): TemplateResult {
     const languages = currentContentLanguages();
     return html`<div class="review" data-test="review-step">
-      ${this.#renderDropped()}
       <h3 tabindex="-1">${t("menu_patch.review_heading")}</h3>
       <ul class="changes">
         ${changeLines(this.live!.document, this.changes, languages).map(
@@ -1023,34 +1020,33 @@ export class MenuPatchDialog extends LitElement {
     const shown = search === undefined ? tree : matching(tree, search);
     const picked = this.picked === null ? undefined : findNode(tree, this.picked);
     const marked = new Set(this.#keysToCorrect());
-    return html`${this.#renderDropped()}
-      <div class="layout">
-        <div class="side">
-          <wt-input
-            name="menu-patch-search"
-            type="search"
-            label=${t("menu_patch.search")}
-            placeholder=${t("menu_patch.search_placeholder")}
-            .value=${this.search}
-            @wt-change=${(event: CustomEvent<{ value: string }>) => {
-              event.stopPropagation();
-              this.search = event.detail.value;
-            }}
-          ></wt-input>
-          ${
-            shown.length === 0
-              ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
-              : html`<nav aria-label=${t("menu_patch.tree")} data-test="tree">
-                  ${this.#renderNodes(shown, marked)}
-                </nav>`
-          }
-        </div>
+    return html`<div class="layout">
+      <div class="side">
+        <wt-input
+          name="menu-patch-search"
+          type="search"
+          label=${t("menu_patch.search")}
+          placeholder=${t("menu_patch.search_placeholder")}
+          .value=${this.search}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+            event.stopPropagation();
+            this.search = event.detail.value;
+          }}
+        ></wt-input>
         ${
-          picked === undefined
-            ? html`<p class="message" data-test="pick-prompt">${t("menu_patch.pick")}</p>`
-            : this.#renderForm(picked.target!, picked.label)
+          shown.length === 0
+            ? html`<p class="message" data-test="no-matches">${t("menu_patch.no_matches")}</p>`
+            : html`<nav aria-label=${t("menu_patch.tree")} data-test="tree">
+                ${this.#renderNodes(shown, marked)}
+              </nav>`
         }
-      </div>`;
+      </div>
+      ${
+        picked === undefined
+          ? html`<p class="message" data-test="pick-prompt">${t("menu_patch.pick")}</p>`
+          : this.#renderForm(picked.target!, picked.label)
+      }
+    </div>`;
   }
 
   /** `marked` holds the target keys of the items with a field to correct. */

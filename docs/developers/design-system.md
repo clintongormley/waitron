@@ -2525,7 +2525,9 @@ form's own checks disable the action; an error that comes back from a request ne
   When a field is marked — by the form's own checks, or by a refusal placed under it — the bottom
   message is the form's generic sentence, equivalent to "Correct the highlighted fields to
   continue."; a field's own sentence is never repeated at the bottom. A refusal that names no field
-  and a marked field together show both, one after the other;
+  and a marked field together show both, one after the other. The Patch live menu window adds,
+  last, the sentences saying how many changes a newer live version dropped or a removed content
+  language cut, so they are seen however far down its form the person is working;
 - a folded section (`wt-disclosure`) holding an invalid field opens on a failed submission — every
   fold around it, when folds nest — so the focus lands on the field;
 - reopening or resetting a form starts it again: no messages; a form that saves (below) has its

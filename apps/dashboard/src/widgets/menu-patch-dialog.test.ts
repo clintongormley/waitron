@@ -630,9 +630,7 @@ it("lets go of a section name typed only in a language a newer version's folder 
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
   await reloadOnto(el, 4);
   expect(el.changes).toEqual([]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
   expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
   expect(field(el, "wt-input", "names-en").disabled).toBe(true);
   expect(footerButton(el, "review")!.disabled).toBe(true);
@@ -665,7 +663,7 @@ it("shows a newer version's folder name in its locked language beside a staged c
   await reloadOnto(el, 4);
   expect(field(el, "wt-input", "names-en").value).toBe("Fixed English");
   expect(field(el, "wt-input", "names-es").value).toBe("Para empezar");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(droppedNote(el)).toBeNull();
   expect(el.changes).toEqual([
     {
       target: { kind: "section", sectionId: "sec-starters" },
@@ -783,7 +781,7 @@ it("forgets the typing behind a change a newer version drops", async () => {
   expect(treeLabels(el)).not.toContain("Toppings");
   current = live(5);
   data.invalidate([{ type: "menu_versions", id: "v-5" }]);
-  await vi.waitFor(() => expect(bottomMessage(el)).toBe(newerNotice(5)));
+  await vi.waitFor(() => expect(refusalsIn(el)).toBe(newerNotice(5)));
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   await press(el, "reload");
   expect(modal(el).heading).toBe("Patch version 5 of Lunch Menu");
@@ -885,6 +883,28 @@ const footerButton = (el: MenuPatchDialog, name: string) =>
 
 const bottomMessage = (el: MenuPatchDialog) =>
   el.shadowRoot!.querySelector("wt-form-actions")!.error;
+
+/** The bottom message without the sentences saying what newer versions and removed languages
+ * took, which follow everything else in it. */
+const refusalsIn = (el: MenuPatchDialog) =>
+  [droppedNote(el), trimmedNote(el)]
+    .reduce<string>(
+      (message, note) => (note === null ? message : message.replace(note, "")),
+      bottomMessage(el),
+    )
+    .trim();
+
+/** The bottom message's sentence saying how many changes newer versions dropped, if any. */
+const droppedNote = (el: MenuPatchDialog) =>
+  /\d+ changes? no longer fits? the live version and (?:was|were) dropped\./.exec(
+    bottomMessage(el),
+  )?.[0] ?? null;
+
+/** The bottom message's sentence saying how many changes a removed language cut, if any. */
+const trimmedNote = (el: MenuPatchDialog) =>
+  /\d+ changes? lost what was typed in a language removed from the content languages\./.exec(
+    bottomMessage(el),
+  )?.[0] ?? null;
 
 const reviewLines = (el: MenuPatchDialog) =>
   [...el.shadowRoot!.querySelectorAll('[data-test="review-line"]')].map((line) =>
@@ -1187,7 +1207,7 @@ it("takes away a refusal under a language the venue switches off", async () => {
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
   expect(node(el, "Soup").querySelector('[data-test="needs-correcting"]')).toBeNull();
-  expect(bottomMessage(el)).toBe("");
+  expect(refusalsIn(el)).toBe("");
 });
 
 it("shows the refusal's own reason under the first language of a translated field", async () => {
@@ -1268,14 +1288,12 @@ it("offers to reload onto a newer live version, keeping what still fits and coun
   expect(bottomMessage(el)).toBe(
     "Version 4 went live while you were patching. Reload to patch it instead; changes that still fit are kept.",
   );
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(droppedNote(el)).toBeNull();
   await press(el, "reload");
   expect(getLiveMenu).toHaveBeenCalledTimes(2);
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
-  expect(bottomMessage(el)).toBe("");
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  expect(refusalsIn(el)).toBe("");
   expect(footerButton(el, "reload")).toBeNull();
   expect(el.changes).toEqual([
     { target: { kind: "offer", menuItemId: "mi-salad" }, field: "name", value: "Green salad" },
@@ -1313,7 +1331,7 @@ it("keeps a refused field's own text through a reload", async () => {
   await pick(el, "Salad");
   await type(el, "wt-input", "name", "");
   await press(el, "reload");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(droppedNote(el)).toBeNull();
   expect(field(el, "wt-input", "name").value).toBe("");
   expect(field(el, "wt-input", "name").error).toBe("Enter a name.");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
@@ -1365,9 +1383,7 @@ it("says when reloading onto a newer live version that arrived on its own drops 
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
   await reloadOnto(el, 4);
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "2 changes no longer fit the live version and were dropped.",
-  );
+  expect(droppedNote(el)).toBe("2 changes no longer fit the live version and were dropped.");
 });
 
 it("disables the dialog's actions while the patch is being put live", async () => {
@@ -1570,7 +1586,7 @@ it("stops holding back Review for a refused field whose item a newer version no 
   await reloadOnto(el, 4);
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
   expect(footerButton(el, "review")!.disabled).toBe(false);
-  expect(bottomMessage(el)).toBe("");
+  expect(refusalsIn(el)).toBe("");
 });
 
 it("drops a failed reload's message once a version newer than the refusal named arrives, then reloads onto it", async () => {
@@ -1653,11 +1669,44 @@ it("counts as text let go a change typed only in a language the venue's content 
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBe(
     "1 change lost what was typed in a language removed from the content languages.",
   );
 });
+
+for (const [width, height] of [
+  [1280, 600],
+  [390, 844],
+] as const)
+  it(`says what a removed language took where someone working low in the form sees it, at ${width}×${height}`, async () => {
+    const before = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(width, height);
+    try {
+      const el = await mount();
+      await pick(el, "Soup");
+      await type(el, "wt-input", "customer-name-es", "Sopa");
+      await type(el, "wt-price-input", "price", "4");
+      const body = modal(el).shadowRoot!.querySelector<HTMLElement>(".body")!;
+      expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+      body.scrollTop = body.scrollHeight;
+      setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
+      await el.updateComplete;
+      await modal(el).updateComplete;
+      const sentence =
+        "1 change lost what was typed in a language removed from the content languages.";
+      const message = modal(el).shadowRoot!.querySelector<HTMLElement>(".footer > .form-message");
+      expect(message?.textContent).toContain(sentence);
+      const box = message!.getBoundingClientRect();
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(window.innerHeight);
+      await press(el, "review");
+      expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).not.toBeNull();
+      expect(bottomMessage(el)).toContain(sentence);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  });
 
 it("forgets and counts an error in a language the venue switches off", async () => {
   const document = lunch();
@@ -1676,10 +1725,8 @@ it("forgets and counts an error in a language the venue switches off", async () 
   expect(el.changes).toEqual([]);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
-  expect(bottomMessage(el)).toBe("");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
+  expect(refusalsIn(el)).toBe("");
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
 });
 
 it("shows a refusal for a change the venue's content languages drop while it is being sent", async () => {
@@ -1716,11 +1763,11 @@ it("shows a refusal for a change the venue's content languages drop while it is 
     expect(failures).toEqual([]);
     expect(el.shadowRoot!.querySelector('[data-test="review-step"]')).toBeNull();
     expect(form(el).querySelector("h3")!.textContent!.trim()).toBe("Drinks");
-    expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
-    expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+    expect(droppedNote(el)).toBeNull();
+    expect(trimmedNote(el)).toBe(
       "1 change lost what was typed in a language removed from the content languages.",
     );
-    expect(bottomMessage(el)).toBe("");
+    expect(refusalsIn(el)).toBe("");
   } finally {
     window.removeEventListener("unhandledrejection", record);
   }
@@ -1800,10 +1847,8 @@ it("counts a refused change as dropped when a newer version held during the send
   await flush(el);
   expect(treeLabels(el)).not.toContain("Salad");
   expect(el.changes).toEqual([{ target: soup, field: "price", value: "4.00" }]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
-  expect(bottomMessage(el)).toBe("");
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  expect(refusalsIn(el)).toBe("");
   expect(footerButton(el, "review")!.disabled).toBe(false);
 });
 
@@ -1821,10 +1866,8 @@ it("counts a field showing an error as dropped when reloaded onto a newer versio
   data.invalidate([{ type: "menu_versions", id: "v-4" }]);
   await reloadOnto(el, 4);
   expect(modal(el).heading).toBe("Patch version 4 of Lunch Menu");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')!.textContent!.trim()).toBe(
-    "1 change no longer fits the live version and was dropped.",
-  );
-  expect(bottomMessage(el)).toBe("");
+  expect(droppedNote(el)).toBe("1 change no longer fits the live version and was dropped.");
+  expect(refusalsIn(el)).toBe("");
 });
 
 it("keeps a newer version held during the send when the content languages change after it", async () => {
@@ -1957,14 +2000,14 @@ it("retires a no-longer-fits refusal once the content languages drop the change 
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await flush(el);
   expect(el.changes).toEqual([]);
-  expect(bottomMessage(el)).toBe("");
+  expect(refusalsIn(el)).toBe("");
   expect(footerButton(el, "put-live")!.disabled).toBe(true);
   expect(footerButton(el, "put-live")!.variant).toBe("secondary");
   footerButton(el, "put-live")!.dispatchEvent(new MouseEvent("click"));
   await flush(el);
   expect(patchLiveMenu).toHaveBeenCalledTimes(1);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBe(
     "1 change lost what was typed in a language removed from the content languages.",
   );
 });
@@ -2464,8 +2507,8 @@ it("keeps a translated change in the languages the venue keeps, and counts each 
   setContentLanguages({ defaultLanguage: "es", languages: ["es"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "description", value: { es: "Caliente" } }]);
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBe(
     "2 changes lost what was typed in a language removed from the content languages.",
   );
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
@@ -2491,8 +2534,8 @@ it("sends the stored text of a language switched off and back on that the person
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
   await el.updateComplete;
   expect(field(el, "wt-input", "description-en").value).toBe("Old soup");
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+  expect(droppedNote(el)).toBeNull();
+  expect(trimmedNote(el)).toBeNull();
   await press(el, "review");
   expect(reviewLines(el)).toEqual(["Soup: Description (ES) Sopa vieja → Sopa nueva"]);
   await press(el, "put-live");
@@ -2545,7 +2588,7 @@ it("counts a change once however many times it loses wording to a switched-off l
     setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
     await el.updateComplete;
   }
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+  expect(trimmedNote(el)).toBe(
     "1 change lost what was typed in a language removed from the content languages.",
   );
 });
@@ -2591,8 +2634,8 @@ it("says nothing was lost when a language the person never typed in is removed a
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "description", value: { en: "New soup" } }]);
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(trimmedNote(el)).toBeNull();
+  expect(droppedNote(el)).toBeNull();
 });
 
 /** As `reloadedOntoOtherSpanish`, but the English typed before the Reload fails its own check, so
@@ -2639,8 +2682,8 @@ it("says nothing was lost when a language left untouched in a field failing its 
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
   expect(el.changes).toEqual([{ target: soup, field: "description", value: { en: "New soup" } }]);
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
-  expect(el.shadowRoot!.querySelector('[data-test="dropped"]')).toBeNull();
+  expect(trimmedNote(el)).toBeNull();
+  expect(droppedNote(el)).toBeNull();
 });
 
 it("counts text typed in a language removed while its field fails its own check", async () => {
@@ -2653,7 +2696,7 @@ it("counts text typed in a language removed while its field fails its own check"
   expect(el.changes).toEqual([]);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')!.textContent!.trim()).toBe(
+  expect(trimmedNote(el)).toBe(
     "1 change lost what was typed in a language removed from the content languages.",
   );
   setContentLanguages({ defaultLanguage: "en", languages: ["en", "es"] });
@@ -2700,5 +2743,5 @@ it("judges a field forgotten while failing its own check against the version sho
   ]);
   setContentLanguages({ defaultLanguage: "en", languages: ["en"] });
   await el.updateComplete;
-  expect(el.shadowRoot!.querySelector('[data-test="trimmed"]')).toBeNull();
+  expect(trimmedNote(el)).toBeNull();
 });
