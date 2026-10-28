@@ -89,6 +89,7 @@ import {
   readOrderRevision,
   refusePaymentInFlight,
   removeFromLine,
+  removePortions,
   splitLinesWithinOrder,
   type SplitRow,
   type StoredOrderLine,
@@ -208,6 +209,8 @@ interface Plan {
   covered: number | null;
   /** A cancel's quantity taken off the dish, null for all of it. */
   removed: number | null;
+  /** On a row, the whole portions a cancel takes, each with its extras. */
+  removedPortions: Row[] | null;
   carve: Carve | null;
   /** The prices the action sets, on the line, or on a row's stand-in lines (plan D32). */
   changes: Change[];
@@ -590,18 +593,19 @@ function cohortFreeKey(groups: readonly StoredOrderLine[], lineId: string): stri
 async function standInRow(
   tx: Transaction,
   orderId: string,
-  ask: AdjustmentAsk,
+  ask: Pick<AdjustmentAsk, "lineId" | "lineIds" | "action">,
   rows: readonly Row[],
 ): Promise<StandIn> {
   const ids = ask.lineIds!;
   // Every refusal here is a fault in Waitron: the till names only the rows it grouped.
-  if (ask.action === "cancel") throw invalid("lineIds");
   if (ids.length < 2 || new Set(ids).size !== ids.length || !ids.includes(ask.lineId!)) {
     throw invalid("lineIds");
   }
   const named = ids.map((id) => rows.find((row) => row.id === id));
   if (named.some((one) => one === undefined)) throw invalid("lineIds");
   const extrasRow = named[0]!.parentLineId !== null;
+  // An extra is cancelled on its own only from its own line.
+  if (extrasRow && ask.action === "cancel") throw invalid("lineIds");
   if (named.some((one) => (one!.parentLineId !== null) !== extrasRow)) throw invalid("lineIds");
   const dishIds = extrasRow ? named.map((one) => one!.parentLineId!) : ids;
   if (new Set(dishIds).size !== dishIds.length) throw invalid("lineIds");
@@ -674,6 +678,23 @@ async function standInRow(
   };
 }
 
+/** The dish lines, in line order, of the till row a cancel's `lineIds` names, `lineId` among them;
+ * refused as {@link standInRow} refuses a row the till could not have drawn. */
+export async function cancelRowMembers(
+  tx: Transaction,
+  orderId: string,
+  lineId: string,
+  lineIds: readonly string[],
+): Promise<string[]> {
+  const row = await standInRow(
+    tx,
+    orderId,
+    { lineId, lineIds: [...lineIds], action: "cancel" },
+    await readRows(tx, orderId),
+  );
+  return row.membersOf.get(row.dish.id)!.map(({ id }) => id);
+}
+
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
  * whose total merely rounds to nothing. */
 function zeroed(subjects: readonly Subject[]): Change[] {
@@ -723,6 +744,7 @@ export async function planAdjustment(
   let line: Row | null = null;
   let covered: number | null = null;
   let removed: number | null = null;
+  let removedPortions: Row[] | null = null;
   let carve: Carve | null = null;
   let changes: Change[] = [];
   let writes: Change[] | null = null;
@@ -774,14 +796,20 @@ export async function planAdjustment(
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
-      const cancelled = await readLineCancellations(tx, [target.id]);
-      if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
-        throw new AppError("adjustment.quantity_invalid", {
-          workingOrderId: orderId,
-          lineNo: target.lineNo,
-          quantity: ask.quantity ?? thousandthsToDecimal(covered),
-        });
-      removed = partial ? covered : null;
+      if (row === null) {
+        const cancelled = await readLineCancellations(tx, [target.id]);
+        if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
+          throw new AppError("adjustment.quantity_invalid", {
+            workingOrderId: orderId,
+            lineNo: target.lineNo,
+            quantity: ask.quantity ?? thousandthsToDecimal(covered),
+          });
+        removed = partial ? covered : null;
+      } else {
+        const members = row.membersOf.get(target.id)!;
+        const taken = await takenPortions(tx, orderId, target, members, covered);
+        removedPortions = members.filter((one) => taken.has(one.id));
+      }
       const left = familyAt(family, target.quantity - covered);
       reduction = sumDecimals(
         family.map((row) =>
@@ -790,9 +818,13 @@ export async function planAdjustment(
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
       before = reduction;
-      await refusePaidLines(tx, orderId, [
-        { id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered },
-      ]);
+      await refusePaidLines(
+        tx,
+        orderId,
+        removedPortions === null
+          ? [{ id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered }]
+          : removedPortions.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
+      );
     } else {
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
@@ -917,10 +949,10 @@ export async function planAdjustment(
         });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   const parents = new Set(
-    (ask.action === "cancel"
-      ? [line!]
-      : [...changes.map((change) => change.row), ...(row?.lines ?? [])]
-    ).map((one) => one.parentLineId ?? one.id),
+    [
+      ...(ask.action === "cancel" ? [line!] : changes.map((change) => change.row)),
+      ...(row?.lines ?? []),
+    ].map((one) => one.parentLineId ?? one.id),
   );
   let recalledDraftId: string | null = null;
   if (parents.size > 0) {
@@ -950,6 +982,7 @@ export async function planAdjustment(
     line,
     covered,
     removed,
+    removedPortions,
     carve,
     changes,
     writes: writes ?? changes,
@@ -1280,7 +1313,17 @@ export async function applyAdjustment(
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       let splits: AdjustmentSplit[] = [];
       let taken: LineReduction[] = [];
-      if (args.action === "cancel") {
+      if (plan.removedPortions !== null) {
+        await removePortions(
+          tx,
+          cfg,
+          args.orderId,
+          plan.removedPortions.map(voidTargetOf),
+          args.operatorId,
+          activity,
+          args.preparationStarted,
+        );
+      } else if (args.action === "cancel") {
         await removeFromLine(
           tx,
           cfg,

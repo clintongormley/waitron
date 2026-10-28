@@ -78,6 +78,14 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     body.reasonId === undefined
       ? undefined
       : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
+  if (
+    body.lineIds !== undefined &&
+    (!Array.isArray(body.lineIds) || body.lineIds.some((id) => typeof id !== "string"))
+  )
+    throw invalid("lineIds");
+  const lineIds = (body.lineIds as string[] | undefined)?.map((id) =>
+    requireBodyUuid(id, "lineIds").toLowerCase(),
+  );
   const expectedContext = parseCancellationContext(body.expectedContext);
   if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
     throw invalid("refundHandoff");
@@ -96,6 +104,7 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
     expectedContext,
+    ...(lineIds === undefined ? {} : { lineIds }),
     submissionId: submissionIdOf(body),
     reasonId,
     note: body.note as string | undefined,
@@ -178,6 +187,7 @@ export function mountLineCancelApi(
                   expectedEdit: ask.expectedEdit,
                   expectedRevision: ask.expectedBillRevision,
                   lineId,
+                  ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
                   reasonId: ask.reasonId!,
                   action: "cancel",
                   quantity: ask.quantity,

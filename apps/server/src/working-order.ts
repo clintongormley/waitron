@@ -3190,6 +3190,87 @@ export async function removeFromLine(
 }
 
 /**
+ * {@link removeFromLine} for several whole dish portions of one till row at once, each with its
+ * extras (plan D32): the kitchen is told in one correction, so a station prints one slip for them.
+ */
+export async function removePortions(
+  tx: Transaction,
+  cfg: TillConfig,
+  tabId: string,
+  targets: readonly VoidTarget[],
+  operatorId: string | undefined,
+  attendance?: { recorder: AttendanceRecorder; at: string },
+  preparationStarted = false,
+): Promise<void> {
+  const ids = targets.map(({ id }) => id);
+  const work = await dishKitchenItems(tx, ids);
+  const childrenOf = (target: VoidTarget) =>
+    (work.get(target.id) ?? []).filter((item) => item.extra);
+  const voided = targets.flatMap((target) => [
+    ...(target.firedAt !== null
+      ? [
+          {
+            workingOrderLineId: target.id,
+            stationId: target.stationId!,
+            quantity: target.firedQuantity,
+            wasStarted: preparationStarted || isStarted(target.state),
+          },
+        ]
+      : []),
+    ...childrenOf(target)
+      .filter((item) => item.firedAt !== null)
+      .map((item) => ({
+        workingOrderLineId: item.workingOrderLineId,
+        stationId: item.stationId,
+        quantity: item.firedQuantity,
+        wasStarted: preparationStarted || isStarted(item.state),
+      })),
+  ]);
+  // Before the delete: the notice and the slip re-read the lines.
+  await enqueueCorrectionSlips(tx, cfg, tabId, voided, "VOID");
+  const groupIds = [...new Set(targets.flatMap(({ groupId }) => groupId ?? []))];
+  const printed = await printedHeldGroups(tx, groupIds);
+  const held = targets.flatMap((target) => {
+    const group = target.groupId === null ? undefined : printed.get(target.groupId);
+    if (group === undefined) return [];
+    const at = { workingOrderId: tabId, groupId: target.groupId!, group };
+    return [
+      ...(target.ticketItemId !== null && target.firedAt === null
+        ? [
+            {
+              ...at,
+              workingOrderLineId: target.id,
+              stationId: target.stationId!,
+              quantity: target.firedQuantity,
+            },
+          ]
+        : []),
+      ...childrenOf(target)
+        .filter((item) => item.firedAt === null)
+        .map((item) => ({
+          ...at,
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId,
+          quantity: item.firedQuantity,
+        })),
+    ];
+  });
+  if (held.length > 0) await correctHoldTickets(tx, cfg, held, { kind: "HOLD CANCELLED" });
+  await bumpRevision(tx, [tabId]);
+  await cancelPortions(tx, tabId, ids, operatorId ?? null);
+  await tx
+    .delete(workingOrderLines)
+    .where(
+      and(
+        eq(workingOrderLines.workingOrderId, tabId),
+        or(inArray(workingOrderLines.id, ids), inArray(workingOrderLines.parentLineId, ids)),
+      ),
+    );
+  await assertBillInvariant(tx, [tabId]);
+  await partyAfterEdit(tx, tabId, groupIds, operatorId, attendance);
+}
+
+/**
  * Once an extra is off its dish, tell a kitchen that has the dish which extra to take off: a fired
  * dish, or a held one at a station that has its group's HOLD paper. A dish never sent, held with no HOLD
  * ticket queued, or going to no station tells it nothing.

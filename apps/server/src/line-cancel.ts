@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import {
   lineServiceCancellations,
   nowIso,
@@ -27,7 +27,12 @@ import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
 import type { TradingContext } from "./trading-context.js";
-import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
+import {
+  applyAdjustment,
+  cancelRowMembers,
+  reasonNameIn,
+  type AdjustmentArgs,
+} from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
 import { captureKitchenActivity } from "./attendance-capture.js";
@@ -41,6 +46,7 @@ import {
   assertTabOpen,
   refusePaymentInFlight,
   removeFromLine,
+  removePortions,
   quantityOfLine,
   bumpRevision,
   type OrderAttendance,
@@ -56,6 +62,8 @@ export interface CancelItemAsk {
   expectedPartyRevision: number;
   expectedBillRevision: number;
   expectedContext: CancellationContext;
+  /** Every portion line of one till row, `lineId` among them (plan D31). */
+  lineIds?: string[];
   submissionId: string;
   reasonId?: string;
   note?: string;
@@ -64,6 +72,8 @@ export interface CancelItemAsk {
    * Recorded only when the refund handoff stands (ticked, on a settled bill); otherwise ignored. */
   refundApprovedBy?: string | null;
 }
+
+type Line = typeof workingOrderLines.$inferSelect;
 
 export interface RefundLink {
   lineId: string;
@@ -89,6 +99,11 @@ export async function cancelItem(
   if (ask.outcome !== "remove_charge" && ask.outcome !== "keep_charge") throw invalid("outcome");
   if (ask.preparationStarted !== undefined && typeof ask.preparationStarted !== "boolean")
     throw invalid("preparationStarted");
+  if (
+    ask.lineIds !== undefined &&
+    (!Array.isArray(ask.lineIds) || ask.lineIds.some((id) => typeof id !== "string"))
+  )
+    throw invalid("lineIds");
   const expectedEdit = parseBillEditExpected(ask.expectedEdit);
   const expectedContext = {
     ...ask.expectedContext,
@@ -106,6 +121,7 @@ export async function cancelItem(
     {
       partyId,
       lineId,
+      lineIds: ask.lineIds,
       quantity: ask.quantity,
       outcome: ask.outcome,
       preparationStarted: ask.preparationStarted,
@@ -142,15 +158,30 @@ export async function cancelItem(
           revision: bill!.revision,
         });
       await requireBillEditor(tx, bill!.id, operatorId, expectedEdit);
-      await refuseRecalledWrite(tx, eq(workingOrderLines.id, lineId));
-      const [prior] = await tx
+      const members =
+        ask.lineIds === undefined
+          ? null
+          : await cancelRowMembers(tx, bill!.id, lineId, ask.lineIds);
+      const dishIds = members ?? [lineId];
+      await refuseRecalledWrite(tx, inArray(workingOrderLines.id, dishIds));
+      const dishes =
+        members === null
+          ? [line!]
+          : await tx
+              .select()
+              .from(workingOrderLines)
+              .where(inArray(workingOrderLines.id, members))
+              .orderBy(workingOrderLines.lineNo);
+      const priors = await tx
         .select()
         .from(lineServiceCancellations)
-        .where(eq(lineServiceCancellations.lineId, lineId));
-      const available =
-        line!.quantity -
-        (prior?.quantity ?? 0) -
-        (bill!.status === "settled" ? line!.servedQuantity : 0);
+        .where(inArray(lineServiceCancellations.lineId, dishIds));
+      const priorOf = (id: string) => priors.find((prior) => prior.lineId === id);
+      const availableOf = (dish: Line) =>
+        dish.quantity -
+        (priorOf(dish.id)?.quantity ?? 0) -
+        (bill!.status === "settled" ? dish.servedQuantity : 0);
+      const available = dishes.reduce((total, dish) => total + availableOf(dish), 0);
       const refused = () =>
         new AppError("adjustment.quantity_invalid", {
           workingOrderId: bill!.id,
@@ -163,71 +194,113 @@ export async function cancelItem(
         refused,
       );
       if ((line!.unitPrecision ?? 0) > 0 && removed !== available) throw refused();
+      // A row gives up its last whole portions still cancellable (plan D32).
+      const active = dishes.filter((dish) => availableOf(dish) > 0);
+      const taken =
+        members === null
+          ? [{ dish: line!, off: removed }]
+          : active
+              .slice(active.length - removed / 1000)
+              .map((dish) => ({ dish, off: dish.quantity }));
+      const takenIds = taken.map(({ dish }) => dish.id);
       if (ask.outcome === "keep_charge" && context.billStatus !== "settled" && !started)
         throw invalid("outcome");
+      const groupIds = [...new Set(dishes.flatMap((dish) => dish.groupId ?? []))];
+      const groups =
+        groupIds.length === 0
+          ? []
+          : await tx.select().from(orderGroups).where(inArray(orderGroups.id, groupIds));
+      const groupOf = (dish: Line) => groups.find((group) => group.id === dish.groupId);
       if (ask.outcome === "remove_charge") {
         if (!started) {
           await assertTabOpen(tx, bill!.id);
           await refusePaymentInFlight(tx, [bill!.id]);
-          await refusePaidLines(tx, bill!.id, [
-            { id: lineId, lineNo: line!.lineNo, keeps: line!.quantity - removed },
-          ]);
-          const [ticket] = await tx
+          await refusePaidLines(
+            tx,
+            bill!.id,
+            taken.map(({ dish, off }) => ({
+              id: dish.id,
+              lineNo: dish.lineNo,
+              keeps: dish.quantity - off,
+            })),
+          );
+          const tickets = await tx
             .select()
             .from(ticketItems)
-            .where(eq(ticketItems.workingOrderLineId, lineId));
-          await removeFromLine(
-            tx,
-            cfg,
-            bill!.id,
-            {
-              ...line!,
+            .where(inArray(ticketItems.workingOrderLineId, takenIds));
+          const targetOf = (dish: Line) => {
+            const ticket = tickets.find((item) => item.workingOrderLineId === dish.id);
+            return {
+              ...dish,
               ticketItemId: ticket?.id ?? null,
               firedAt: ticket?.firedAt ?? null,
               stationId: ticket?.stationId ?? null,
               state: ticket?.state ?? null,
               firedQuantity: ticket?.quantity ?? 0,
-            },
-            removed === line!.quantity ? null : removed,
-            operatorId,
+            };
+          };
+          const at =
             attendance === undefined
               ? undefined
               : {
                   recorder: attendance.recorder,
                   at: attendance.clock.now().instant.toISOString(),
-                },
-          );
+                };
+          if (members === null)
+            await removeFromLine(
+              tx,
+              cfg,
+              bill!.id,
+              targetOf(line!),
+              removed === line!.quantity ? null : removed,
+              operatorId,
+              at,
+            );
+          else
+            await removePortions(
+              tx,
+              cfg,
+              bill!.id,
+              taken.map(({ dish }) => targetOf(dish)),
+              operatorId,
+              at,
+            );
           await policy.completeAdjustment?.(bill!.id);
           return { revision: await partyRevision(tx, partyId) };
         }
         if (typeof ask.reasonId !== "string" || ask.reasonId.length === 0)
           throw invalid("reasonId");
-        const [group] =
-          line!.groupId === null
-            ? []
-            : await tx.select().from(orderGroups).where(eq(orderGroups.id, line!.groupId));
         // The adjustment path already corrects printed HOLD work.
-        if (group?.state === "held" && group.holdPrintedAt === null) {
-          const work = (await dishKitchenItems(tx, [lineId])).get(lineId) ?? [];
+        const unprinted = taken.filter(({ dish }) => {
+          const group = groupOf(dish);
+          return group?.state === "held" && group.holdPrintedAt === null;
+        });
+        if (unprinted.length > 0) {
+          const work = await dishKitchenItems(
+            tx,
+            unprinted.map(({ dish }) => dish.id),
+          );
           await enqueueHoldCorrections(
             tx,
             cfg,
             bill!.id,
-            work
-              .filter((item) => item.firedAt === null)
-              .map((item) => ({
-                workingOrderLineId: item.workingOrderLineId,
-                stationId: item.stationId,
-                group: group.displayNumber,
-                quantity: Number(
-                  divideDecimal(
-                    multiplyDecimal(decimal(String(item.lineQuantity)), decimal(String(removed))),
-                    decimal(String(line!.quantity)),
-                    0,
+            unprinted.flatMap(({ dish, off }) =>
+              (work.get(dish.id) ?? [])
+                .filter((item) => item.firedAt === null)
+                .map((item) => ({
+                  workingOrderLineId: item.workingOrderLineId,
+                  stationId: item.stationId,
+                  group: groupOf(dish)!.displayNumber,
+                  quantity: Number(
+                    divideDecimal(
+                      multiplyDecimal(decimal(String(item.lineQuantity)), decimal(String(off))),
+                      decimal(String(dish.quantity)),
+                      0,
+                    ),
                   ),
-                ),
-                wasStarted: isStarted(item.state),
-              })),
+                  wasStarted: isStarted(item.state),
+                })),
+            ),
             { kind: "HOLD CANCELLED" },
           );
         }
@@ -239,6 +312,7 @@ export async function cancelItem(
             expectedEdit,
             expectedRevision: ask.expectedBillRevision,
             lineId,
+            ...(members === null ? {} : { lineIds: members }),
             action: "cancel",
             quantity: ask.quantity,
             reasonId: ask.reasonId,
@@ -266,55 +340,53 @@ export async function cancelItem(
           .from(persons)
           .where(eq(persons.id, operatorId));
         if (actor === undefined) throw new AppError("person.not_found", { personId: operatorId });
-        const quantity = removed + (prior?.quantity ?? 0);
         const rows = await tx
           .select()
           .from(workingOrderLines)
           .where(eq(workingOrderLines.workingOrderId, bill!.id));
-        const work = (await dishKitchenItems(tx, [lineId])).get(lineId) ?? [];
-        const [group] =
-          line!.groupId === null
-            ? []
-            : await tx.select().from(orderGroups).where(eq(orderGroups.id, line!.groupId));
-        const family = rows
-          .filter((row) => row.id === lineId || row.parentLineId === lineId)
-          .map((row) => {
-            const cancelled =
-              row.id === lineId
-                ? quantity
-                : Number(
-                    divideDecimal(
-                      multiplyDecimal(decimal(String(row.quantity)), decimal(String(quantity))),
-                      decimal(String(line!.quantity)),
-                      0,
-                    ),
-                  );
-            return { row, remaining: row.quantity - cancelled };
-          });
+        const work = await dishKitchenItems(tx, dishIds);
+        const families = taken.map(({ dish, off }) => {
+          const prior = priorOf(dish.id);
+          const quantity = off + (prior?.quantity ?? 0);
+          const shareOf = (row: Line, of: number) =>
+            row.id === dish.id
+              ? of
+              : Number(
+                  divideDecimal(
+                    multiplyDecimal(decimal(String(row.quantity)), decimal(String(of))),
+                    decimal(String(dish.quantity)),
+                    0,
+                  ),
+                );
+          return {
+            dish,
+            prior,
+            quantity,
+            family: rows
+              .filter((row) => row.id === dish.id || row.parentLineId === dish.id)
+              .map((row) => ({
+                row,
+                remaining: row.quantity - shareOf(row, quantity),
+                covered: shareOf(row, off),
+              })),
+          };
+        });
         const coveredValue = (list: boolean) =>
           sumDecimals(
-            family.map(({ row }) => {
-              const covered =
-                row.id === lineId
-                  ? removed
-                  : Number(
-                      divideDecimal(
-                        multiplyDecimal(decimal(String(row.quantity)), decimal(String(removed))),
-                        decimal(String(line!.quantity)),
-                        0,
-                      ),
-                    );
-              return divideDecimal(
-                multiplyDecimal(
-                  centsToDecimal(
-                    list ? (row.listUnitPriceGross ?? row.unitPriceGross) : row.unitPriceGross,
+            families.flatMap(({ family }) =>
+              family.map(({ row, covered }) =>
+                divideDecimal(
+                  multiplyDecimal(
+                    centsToDecimal(
+                      list ? (row.listUnitPriceGross ?? row.unitPriceGross) : row.unitPriceGross,
+                    ),
+                    thousandthsToDecimal(covered),
                   ),
-                  thousandthsToDecimal(covered),
+                  thousandthsToDecimal(row.priceQuantity),
+                  MONEY_SCALE,
                 ),
-                thousandthsToDecimal(row.priceQuantity),
-                MONEY_SCALE,
-              );
-            }),
+              ),
+            ),
           );
         const amount = coveredValue(false);
         const refundHandoff = ask.refundHandoff === true && context.billStatus === "settled";
@@ -326,30 +398,57 @@ export async function cancelItem(
             .where(eq(sales.workingOrderId, bill!.id));
           if (sale === undefined)
             throw new AppError("working_order.not_found", { workingOrderId: bill!.id });
-          const value = await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
-          if (value !== undefined)
-            refundValue = cancelRefundShare(
-              value,
-              context.components.find((row) => row.lineId === lineId)!.cancelledQuantity,
-              ask.quantity,
-            );
+          if (members === null) {
+            const value = await cancellationRefundValue(tx, bill!.id, sale.id, lineId);
+            if (value !== undefined)
+              refundValue = cancelRefundShare(
+                value,
+                context.components.find((row) => row.lineId === lineId)!.cancelledQuantity,
+                ask.quantity,
+              );
+          } else {
+            // The row stands for today's line: its count, and each portion's filed value.
+            const values = [];
+            for (const dish of dishes)
+              values.push(await cancellationRefundValue(tx, bill!.id, sale.id, dish.id));
+            if (values.every((value) => value !== undefined))
+              refundValue = cancelRefundShare(
+                {
+                  quantity: thousandthsToDecimal(
+                    dishes.reduce((total, dish) => total + dish.quantity, 0),
+                  ),
+                  gross: sumDecimals(values.map((value) => decimal(value.gross))),
+                },
+                thousandthsToDecimal(
+                  dishes.reduce((total, dish) => total + (priorOf(dish.id)?.quantity ?? 0), 0),
+                ),
+                ask.quantity,
+              );
+          }
         }
+        const first = dishes[0]!;
+        const memberWork = dishIds.flatMap((id) => work.get(id) ?? []);
         const adjustmentId = await recordAdjustment(tx, {
           workingOrderId: bill!.id,
           line: {
-            id: lineId,
-            name: staffPresentationName(line!),
-            quantity: thousandthsToDecimal(line!.quantity),
-            listUnitPriceGross: centsToDecimal(line!.listUnitPriceGross ?? line!.unitPriceGross),
-            creditedTo: line!.creditedTo,
-            stage:
-              line!.servedQuantity > 0
-                ? "served"
-                : context.components.some((item) => item.firedAt !== null)
-                  ? "fired"
-                  : group?.state === "held"
-                    ? "held"
-                    : "unsent",
+            id: first.id,
+            name: staffPresentationName(first),
+            quantity: thousandthsToDecimal(
+              dishes.reduce((total, dish) => total + dish.quantity, 0),
+            ),
+            listUnitPriceGross: centsToDecimal(first.listUnitPriceGross ?? first.unitPriceGross),
+            creditedTo: first.creditedTo,
+            stage: dishes.some((dish) => dish.servedQuantity > 0)
+              ? "served"
+              : (
+                    members === null
+                      ? context.components.some((item) => item.firedAt !== null)
+                      : memberWork.some((item) => item.firedAt !== null)
+                  )
+                ? "fired"
+                : dishes.some((dish) => groupOf(dish)?.state === "held")
+                  ? "held"
+                  : "unsent",
           },
           quantity: thousandthsToDecimal(removed),
           reason: {
@@ -371,77 +470,87 @@ export async function cancelItem(
           refundHandoff,
           refundValue,
         });
-        const corrections = [];
-        for (const { row, remaining } of family) {
-          const item = work.find((item) => item.workingOrderLineId === row.id);
-          if (item !== undefined) {
-            const corrected = item.firedQuantity - Math.min(item.firedQuantity, remaining);
-            if (corrected > 0)
-              corrections.push({
-                workingOrderLineId: row.id,
-                stationId: item.stationId,
-                quantity: corrected,
-                wasStarted: ask.preparationStarted === true || isStarted(item.state),
-                fired: item.firedAt !== null,
-              });
-          }
-        }
+        const corrections = families.flatMap(({ dish, family }) =>
+          family.flatMap(({ row, remaining }) => {
+            const item = (work.get(dish.id) ?? []).find(
+              (item) => item.workingOrderLineId === row.id,
+            );
+            const corrected =
+              item === undefined ? 0 : item.firedQuantity - Math.min(item.firedQuantity, remaining);
+            return corrected === 0
+              ? []
+              : [
+                  {
+                    group: groupOf(dish),
+                    item: {
+                      workingOrderLineId: row.id,
+                      stationId: item!.stationId,
+                      quantity: corrected,
+                      wasStarted: ask.preparationStarted === true || isStarted(item!.state),
+                      fired: item!.firedAt !== null,
+                    },
+                  },
+                ];
+          }),
+        );
         await enqueueCorrectionSlips(
           tx,
           cfg,
           bill!.id,
-          corrections.filter((item) => item.fired),
+          corrections.filter(({ item }) => item.fired).map(({ item }) => item),
           "VOID",
         );
-        if (group !== undefined)
+        if (groups.length > 0)
           await enqueueHoldCorrections(
             tx,
             cfg,
             bill!.id,
-            corrections
-              .filter((item) => !item.fired)
-              .map((item) => ({
-                ...item,
-                group: group.displayNumber,
-                ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
-              })),
+            corrections.flatMap(({ group, item }) =>
+              item.fired || group === undefined
+                ? []
+                : [
+                    {
+                      ...item,
+                      group: group.displayNumber,
+                      ...(group.holdPrintedAt === null ? {} : { holdGroupId: group.id }),
+                    },
+                  ],
+            ),
             { kind: "HOLD CANCELLED" },
           );
-        for (const { row, remaining } of family) {
-          const servedQuantity = Math.min(row.servedQuantity, remaining);
-          const servedAt =
-            servedQuantity > 0 && servedQuantity === remaining ? (row.servedAt ?? nowIso()) : null;
-          if (servedQuantity !== row.servedQuantity || servedAt !== row.servedAt)
-            await tx
-              .update(workingOrderLines)
-              .set({ servedQuantity, servedAt })
-              .where(eq(workingOrderLines.id, row.id));
-          if (remaining === 0)
-            await tx.delete(ticketItems).where(eq(ticketItems.workingOrderLineId, row.id));
-          else
-            await tx
-              .update(ticketItems)
-              .set({ quantity: remaining })
-              .where(eq(ticketItems.workingOrderLineId, row.id));
+        for (const { family } of families) {
+          for (const { row, remaining } of family) {
+            const servedQuantity = Math.min(row.servedQuantity, remaining);
+            const servedAt =
+              servedQuantity > 0 && servedQuantity === remaining
+                ? (row.servedAt ?? nowIso())
+                : null;
+            if (servedQuantity !== row.servedQuantity || servedAt !== row.servedAt)
+              await tx
+                .update(workingOrderLines)
+                .set({ servedQuantity, servedAt })
+                .where(eq(workingOrderLines.id, row.id));
+            if (remaining === 0)
+              await tx.delete(ticketItems).where(eq(ticketItems.workingOrderLineId, row.id));
+            else
+              await tx
+                .update(ticketItems)
+                .set({ quantity: remaining })
+                .where(eq(ticketItems.workingOrderLineId, row.id));
+          }
         }
-        await tx
-          .insert(lineServiceCancellations)
-          .values({
-            lineId,
+        for (const { dish, prior, quantity } of families) {
+          const values = {
             quantity,
             cancelledAt: nowIso(),
             wasStarted: prior?.wasStarted === true || started,
             actorId: operatorId,
-          })
-          .onConflictDoUpdate({
-            target: lineServiceCancellations.lineId,
-            set: {
-              quantity,
-              cancelledAt: nowIso(),
-              wasStarted: prior?.wasStarted === true || started,
-              actorId: operatorId,
-            },
-          });
+          };
+          await tx
+            .insert(lineServiceCancellations)
+            .values({ lineId: dish.id, ...values })
+            .onConflictDoUpdate({ target: lineServiceCancellations.lineId, set: values });
+        }
         await bumpRevision(tx, [bill!.id]);
         await bumpPartyRevision(tx, partyId);
         await captureKitchenActivity(
@@ -454,7 +563,7 @@ export async function cancelItem(
         if (refundHandoff)
           return {
             revision: await partyRevision(tx, partyId),
-            refundLinks: [{ lineId, adjustmentId }],
+            refundLinks: [{ lineId: first.id, adjustmentId }],
           };
       }
       return { revision: await partyRevision(tx, partyId) };

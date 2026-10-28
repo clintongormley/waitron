@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { and, asc, eq, isNull } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   adjustmentLines,
+  adjustmentRefunds,
   adjustments,
   createAdjustmentReason,
   type AdjustmentAction,
@@ -11,10 +12,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
   lineServiceCancellations,
+  orderPortionEvents,
   parties,
+  printJobs,
   saleLines,
   sales,
   tenants,
+  tenders,
   workingOrderLines,
   workingOrders,
   type Transaction,
@@ -37,10 +41,18 @@ import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { partyRevision, partyRevisionOfOrder, seatTable } from "./parties.js";
 import { createCourse } from "./kitchen.js";
 import type { BillDraftSnapshot, Draft } from "./order-drafts.js";
-import { moveLinesToGroup, splitHeldLineIntoUnits, startGroup } from "./order-groups.js";
+import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
+import { readCancellationContext } from "./line-cancel-context.js";
+import {
+  moveLinesToGroup,
+  printHoldTickets,
+  splitHeldLineIntoUnits,
+  startGroup,
+} from "./order-groups.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import {
   inTx,
+  PINS,
   provisionAdjustmentVenue,
   REASONS,
   rowsOf,
@@ -52,6 +64,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
 import { addPortionRound } from "./testing/portion-bill.js";
 import { splitPartyBill } from "./testing/serve-line.js";
+import { setStationPrinting } from "./testing/station-printing.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import {
   bumpRevision,
@@ -65,7 +78,16 @@ import {
   updateOrderLine,
   type TabRoundLine,
 } from "./working-order.js";
+import {
+  watchDerivationsAndLock,
+  watchedDerivationCount,
+  watchedOrder,
+} from "./testing/watched-scrypt.js";
 import "./errors.js";
+
+vi.mock("node:crypto", async (importOriginal) =>
+  (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
+);
 
 // A803 slice 1, Tasks 25a-1 to 25f: a discount or a comp on a row of identical portions acts as
 // today's one line of the same count does. Every comparison builds the same bill twice — today's
@@ -2592,5 +2614,463 @@ describe("A803 portions: what a comp or discount took follows each line it is sp
       .filter((row) => quantityNow.has(row.lineId))
       .map((row) => (row.reduction * quantityNow.get(row.lineId)!) / row.quantity);
     expect(standing).toEqual([120, 120, 120]);
+  });
+});
+
+describe("A803 portions: a cancel on a row of identical portions", () => {
+  const burgerRow = (quantity: string): RoundLine[] => [{ name: "Burger", quantity }, bread];
+
+  async function newJobs<T>(work: () => Promise<T>): Promise<{ result: T; jobs: string[][] }> {
+    const before = new Set(
+      (await inTx(venue, (tx) => tx.select({ id: printJobs.id }).from(printJobs))).map(
+        ({ id }) => id,
+      ),
+    );
+    const result = await work();
+    const jobs = (await inTx(venue, (tx) => tx.select().from(printJobs)))
+      .filter((job) => !before.has(job.id))
+      .map((job) => printedLines(job.payload).filter((line) => / x /.test(line)));
+    return { result, jobs };
+  }
+
+  type CancelAsk = Pick<CancelItemAsk, "quantity" | "outcome"> &
+    Partial<Pick<CancelItemAsk, "refundHandoff" | "preparationStarted" | "lineIds">>;
+
+  function cancelOn(bill: Bill, lineId: string, ask: CancelAsk) {
+    return inTx(venue, async (tx) => {
+      const [party] = await tx.select().from(parties).where(eq(parties.id, bill.partyId));
+      const [order] = await tx
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, bill.billId));
+      return cancelItem(
+        tx,
+        venue.cfg,
+        bill.partyId,
+        lineId,
+        {
+          expectedEdit: await readBillEditState(tx, bill.billId),
+          reasonId: venue.reasonId.houseVoid,
+          expectedPartyRevision: party!.revision,
+          expectedBillRevision: order!.revision,
+          expectedContext: await readCancellationContext(tx, bill.partyId, lineId),
+          submissionId: randomUUID(),
+          ...ask,
+        },
+        venue.managerId,
+      );
+    });
+  }
+
+  async function paid(bill: Bill) {
+    const rows = await rowsOf(venue, bill.billId);
+    const due = toScale(sumDecimals(rows.map((row) => decimal(row.lineTotal))), 2);
+    await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {
+      id: bill.billId,
+      tender: { method: "cash", amount: due },
+      lines: [],
+    });
+    const [sale] = await inTx(venue, (tx) =>
+      tx.select().from(sales).where(eq(sales.workingOrderId, bill.billId)),
+    );
+    const [tender] = await inTx(venue, (tx) =>
+      tx.select().from(tenders).where(eq(tenders.saleId, sale!.id)),
+    );
+    return { saleId: sale!.id, tenderId: tender!.id };
+  }
+
+  async function capOf(adjustmentId: string) {
+    const [row] = await inTx(venue, (tx) =>
+      tx.select().from(adjustments).where(eq(adjustments.id, adjustmentId)),
+    );
+    return row!.refundValue;
+  }
+
+  async function refundLinked(
+    sale: { saleId: string; tenderId: string },
+    appliedAmount: string,
+    cancellationIds: string[],
+  ) {
+    const answer = await send(
+      venue.app,
+      venue.cookie.manager,
+      "POST",
+      `/api/transactions/${sale.saleId}/refunds`,
+      {
+        submissionId: randomUUID(),
+        tenderId: sale.tenderId,
+        appliedAmount,
+        tipAmount: "0.00",
+        reason: "Dish never served",
+        cancellationIds,
+      },
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const links = await inTx(venue, (tx) =>
+      tx
+        .select()
+        .from(adjustmentRefunds)
+        .where(eq(adjustmentRefunds.tenderRefundId, (answer.json as { id: string }).id)),
+    );
+    return links.map((row) => ({ adjustmentId: row.adjustmentId, amount: row.amount }));
+  }
+
+  const cancelledOf = (lineIds: readonly string[]) =>
+    inTx(venue, async (tx) =>
+      Object.fromEntries(
+        (await tx.select().from(lineServiceCancellations))
+          .filter((row) => lineIds.includes(row.lineId))
+          .map((row) => [row.lineId, row.quantity]),
+      ),
+    );
+
+  /** The cancel the bill recorded, its line named by position in `members`. */
+  async function cancelRecord(billId: string, members: readonly string[]) {
+    const records = (await recordedOn(billId)).filter((row) => row.action === "cancel");
+    expect(records).toHaveLength(1);
+    const [record] = records;
+    return {
+      line: members.indexOf(record!.lineId!),
+      quantity: record!.quantity,
+      lineQuantity: record!.lineQuantity,
+      reduction: record!.reduction,
+      nominalValue: record!.nominalValue,
+      stage: record!.stage,
+    };
+  }
+
+  it("A803 portions: cancelling 2 of a row of three fired burgers removes the last two, records one cancel of 2 on the row's first portion, and prints one VOID 2 x BURG slip, as one line of three does", async () => {
+    const grouped = await groupedBill(burgerRow("3"));
+    const portions = await portionsBill(burgerRow("3"));
+    const [line] = await dishesNamed(grouped.billId, "Burger");
+    const members = await dishesNamed(portions.billId, "Burger");
+
+    const today = await newJobs(() =>
+      adjust(grouped.billId, { lineId: line!, action: "cancel", quantity: "2" }),
+    );
+    const row = await newJobs(() =>
+      adjust(portions.billId, {
+        lineId: members[0]!,
+        lineIds: members,
+        action: "cancel",
+        quantity: "2",
+      }),
+    );
+
+    expect(today.jobs).toHaveLength(1);
+    expect(today.jobs[0]!.join("\n")).toContain("2.000 x BURG");
+    expect(row.jobs).toEqual(today.jobs);
+    expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
+    expect(await cancelRecord(portions.billId, members)).toEqual({
+      ...(await cancelRecord(grouped.billId, [line!])),
+      line: 0,
+    });
+    expect((await rowsOf(venue, portions.billId)).map((r) => r.lineTotal)).toEqual(
+      (await rowsOf(venue, grouped.billId)).map((r) => r.lineTotal),
+    );
+  });
+
+  /** A bill whose lines wait in one held group whose HOLD paper printed. */
+  function heldPrinted(lines: RoundLine[], bound: boolean): Promise<Bill> {
+    return inTx(venue, async (tx) => {
+      const bill = await seated(tx);
+      if (bound) await addPortionRound(tx, venue.cfg, bill.billId, roundOf(lines));
+      else {
+        const round = await priceTabRound(tx, venue.cfg, bill.billId, roundOf(lines), "checked");
+        await insertTabRound(tx, venue.cfg, round, round.rows);
+      }
+      const groupId = await startGroup(tx, bill.partyId, "hold", venue.staffId);
+      const stored = await tx
+        .update(workingOrderLines)
+        .set({ groupId })
+        .where(eq(workingOrderLines.workingOrderId, bill.billId))
+        .returning({ ...fireableLineColumns, groupId: workingOrderLines.groupId });
+      await fireLines(
+        tx,
+        venue.cfg,
+        bill.billId,
+        stored.map((row) => ({ ...row, hold: true, release: false })),
+      );
+      await printHoldTickets(tx, venue.cfg, [groupId]);
+      await bumpRevision(tx, [bill.billId]);
+      return bill;
+    });
+  }
+
+  it("A803 portions: a not-started cancel of 2 of a held row of three prints one HOLD CANCELLED of 2 and records two cancelled portion events", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    try {
+      const grouped = await heldPrinted(burgerRow("3"), false);
+      const portions = await heldPrinted(burgerRow("3"), true);
+      const [line] = await dishesNamed(grouped.billId, "Burger");
+      const members = await dishesNamed(portions.billId, "Burger");
+
+      const today = await newJobs(() =>
+        cancelOn(grouped, line!, { quantity: "2", outcome: "remove_charge" }),
+      );
+      const row = await newJobs(() =>
+        cancelOn(portions, members[0]!, {
+          quantity: "2",
+          outcome: "remove_charge",
+          lineIds: members,
+        }),
+      );
+
+      expect(today.jobs).toHaveLength(1);
+      expect(today.jobs[0]!.join("\n")).toContain("2.000 x BURG");
+      expect(row.jobs).toEqual(today.jobs);
+      expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
+      const events = await inTx(venue, (tx) =>
+        tx
+          .select({ kind: orderPortionEvents.kind })
+          .from(orderPortionEvents)
+          .where(eq(orderPortionEvents.fromOrderId, portions.billId)),
+      );
+      expect(events).toEqual([{ kind: "cancelled" }, { kind: "cancelled" }]);
+    } finally {
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("A803 portions: a started cancel of 2 of a fired row of three passes the row on: it removes the last two and records one cancel of 2 on the row's first portion", async () => {
+    const grouped = await groupedBill(burgerRow("3"));
+    const portions = await portionsBill(burgerRow("3"));
+    const [line] = await dishesNamed(grouped.billId, "Burger");
+    const members = await dishesNamed(portions.billId, "Burger");
+    const ask = { quantity: "2", outcome: "remove_charge", preparationStarted: true } as const;
+
+    await cancelOn(grouped, line!, ask);
+    await cancelOn(portions, members[0]!, { ...ask, lineIds: members });
+
+    expect(await dishesNamed(portions.billId, "Burger")).toEqual([members[0]]);
+    expect(await cancelRecord(portions.billId, members)).toEqual({
+      ...(await cancelRecord(grouped.billId, [line!])),
+      line: 0,
+    });
+  });
+
+  it("A803 portions: a keep-charge cancel of 1 of a paid row of three burgers, refund ticked, caps €12.00 and links the row's first portion; a second one naming the two not cancelled caps €12.00 too; a €20.00 refund naming both links 1200 and 800", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    const sale = await paid(bill);
+
+    const first = await cancelOn(bill, members[0]!, {
+      quantity: "1",
+      outcome: "keep_charge",
+      refundHandoff: true,
+      lineIds: members,
+    });
+    expect(first.refundLinks).toEqual([{ lineId: members[0], adjustmentId: expect.any(String) }]);
+    const one = first.refundLinks![0]!.adjustmentId;
+    expect(await cancelledOf(members)).toEqual({ [members[2]!]: 1000 });
+
+    const second = await cancelOn(bill, members[0]!, {
+      quantity: "1",
+      outcome: "keep_charge",
+      refundHandoff: true,
+      lineIds: members.slice(0, 2),
+    });
+    const two = second.refundLinks![0]!.adjustmentId;
+    expect(await cancelledOf(members)).toEqual({ [members[1]!]: 1000, [members[2]!]: 1000 });
+
+    expect([await capOf(one), await capOf(two)]).toEqual([1200, 1200]);
+    expect(await refundLinked(sale, "20.00", [one, two])).toEqual([
+      { adjustmentId: one, amount: 1200 },
+      { adjustmentId: two, amount: 800 },
+    ]);
+  });
+
+  it("A803 portions: a keep-charge cancel of 1 of a row of three records one cancel on the row's first portion with the row's count, as one line of three does", async () => {
+    const grouped = await groupedBill(burgerRow("3"));
+    const portions = await portionsBill(burgerRow("3"));
+    const [line] = await dishesNamed(grouped.billId, "Burger");
+    const members = await dishesNamed(portions.billId, "Burger");
+    const ask = { quantity: "1", outcome: "keep_charge", preparationStarted: true } as const;
+
+    await cancelOn(grouped, line!, ask);
+    await cancelOn(portions, members[0]!, { ...ask, lineIds: members });
+
+    expect(await cancelRecord(portions.billId, members)).toEqual({
+      ...(await cancelRecord(grouped.billId, [line!])),
+      line: 0,
+    });
+  });
+
+  it("A803 portions: after a don't-charge cancel of 1 of a row of seven, a keep-charge cancel of 1 is valued €12.00 and a €12.00 refund links 1200", async () => {
+    const bill = await portionsBill(burgerRow("7"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await cancelOn(bill, members[0]!, {
+      quantity: "1",
+      outcome: "remove_charge",
+      lineIds: members,
+    });
+    const left = await dishesNamed(bill.billId, "Burger");
+    expect(left).toEqual(members.slice(0, 6));
+    const sale = await paid(bill);
+
+    const answer = await cancelOn(bill, left[0]!, {
+      quantity: "1",
+      outcome: "keep_charge",
+      refundHandoff: true,
+      lineIds: left,
+    });
+    const id = answer.refundLinks![0]!.adjustmentId;
+    expect(await capOf(id)).toBe(1200);
+    expect(await refundLinked(sale, "12.00", [id])).toEqual([{ adjustmentId: id, amount: 1200 }]);
+  });
+
+  it("A803 portions: a request whose lineIds still name an already cancelled portion takes the last one still active", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    await paid(bill);
+    const ask = { quantity: "1", outcome: "keep_charge", refundHandoff: true } as const;
+
+    await cancelOn(bill, members[0]!, { ...ask, lineIds: members });
+    const again = await cancelOn(bill, members[0]!, { ...ask, lineIds: members });
+
+    expect(await cancelledOf(members)).toEqual({ [members[1]!]: 1000, [members[2]!]: 1000 });
+    expect(await capOf(again.refundLinks![0]!.adjustmentId)).toBe(1200);
+    await expect(
+      cancelOn(bill, members[0]!, { quantity: "2", outcome: "keep_charge", lineIds: members }),
+    ).rejects.toMatchObject({ code: "adjustment.quantity_invalid" });
+  });
+
+  it("A803 portions: a keep-charge cancel of 1 of a row of three discounted 10% caps the refund as one line of three does", async () => {
+    const caps = [];
+    for (const shape of ["grouped", "portions"] as const) {
+      const bill = await (shape === "grouped" ? groupedBill : portionsBill)(burgerRow("3"));
+      const members = await dishesNamed(bill.billId, "Burger");
+      await adjust(bill.billId, { ...rowOf(members), action: "discount_percent", percentBp: 1000 });
+      await paid(bill);
+      const answer = await cancelOn(bill, members[0]!, {
+        quantity: "1",
+        outcome: "keep_charge",
+        refundHandoff: true,
+        ...(shape === "portions" ? { lineIds: members } : {}),
+      });
+      caps.push(await capOf(answer.refundLinks![0]!.adjustmentId));
+    }
+    expect(caps[0]).toBe(1080);
+    expect(caps[1]).toBe(caps[0]);
+  });
+
+  async function postCancel(
+    bill: Bill,
+    lineId: string,
+    body: Record<string, unknown>,
+    cookie = venue.cookie.manager,
+  ) {
+    const ask = await inTx(venue, async (tx) => {
+      const [party] = await tx.select().from(parties).where(eq(parties.id, bill.partyId));
+      const [order] = await tx
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, bill.billId));
+      return {
+        expectedEdit: await readBillEditState(tx, bill.billId),
+        reasonId: venue.reasonId.houseVoid,
+        expectedPartyRevision: party!.revision,
+        expectedBillRevision: order!.revision,
+        expectedContext: await readCancellationContext(tx, bill.partyId, lineId),
+        submissionId: randomUUID(),
+      };
+    });
+    return send(
+      venue.app,
+      cookie,
+      "POST",
+      `/api/parties/${bill.partyId}/lines/${lineId}/cancel-item`,
+      { ...ask, ...body },
+    );
+  }
+
+  it("A803 portions: the cancel-item route takes the row: a started cancel of 2 of a row of three removes the last two", async () => {
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    const answer = await postCancel(bill, members[0]!, {
+      quantity: "2",
+      outcome: "remove_charge",
+      preparationStarted: true,
+      lineIds: members,
+    });
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(await dishesNamed(bill.billId, "Burger")).toEqual([members[0]]);
+  });
+
+  it("A803 portions: the cancel-item route checks the approver's PIN for the row before the write lock: a staff member's started cancel of 2 of a row of three under a manager's reason goes through with the manager's PIN", async () => {
+    const reason = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        name: `Manager cancel ${randomUUID()}`,
+        names: { en: "Manager cancel" },
+        kind: "void",
+        actions: ["cancel"],
+        maxPercentBp: null,
+        maxAmount: null,
+        applyRoles: [],
+        approverRoles: [],
+        noteRequired: false,
+      }),
+    );
+    const bill = await portionsBill(burgerRow("3"));
+    const members = await dishesNamed(bill.billId, "Burger");
+    watchDerivationsAndLock(venue.db, PINS.manager);
+    const answer = await postCancel(
+      bill,
+      members[0]!,
+      {
+        quantity: "2",
+        outcome: "remove_charge",
+        preparationStarted: true,
+        reasonId: reason.id,
+        lineIds: members,
+        approver: { personId: venue.managerId, pin: PINS.manager },
+      },
+      venue.cookie.staff,
+    );
+    expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    expect(watchedDerivationCount()).toBe(1);
+    expect(await watchedOrder()).toEqual([]);
+    expect(await dishesNamed(bill.billId, "Burger")).toEqual([members[0]]);
+    const [record] = (await recordedOn(bill.billId)).filter((row) => row.action === "cancel");
+    expect(record).toMatchObject({ approvedBy: venue.managerId, requestedBy: venue.staffId });
+  });
+
+  it.each([["a string"], [[1, 2]]])(
+    "A803 portions: the cancel-item route refuses lineIds %j management.request_invalid on lineIds",
+    async (lineIds) => {
+      const bill = await portionsBill(burgerRow("2"));
+      const members = await dishesNamed(bill.billId, "Burger");
+      const answer = await postCancel(bill, members[0]!, {
+        quantity: "1",
+        outcome: "remove_charge",
+        lineIds,
+      });
+      expect(answer.status).toBe(400);
+      expect(answer.json).toEqual({
+        code: "management.request_invalid",
+        params: { field: "lineIds" },
+      });
+    },
+  );
+
+  it("A803 portions: a cancel naming portions of two different rows is refused management.request_invalid on lineIds, changing nothing", async () => {
+    const bill = await portionsBill([
+      { name: "Burger", quantity: "2" },
+      { name: "Croquetas", quantity: "2" },
+    ]);
+    const burgersHere = await dishesNamed(bill.billId, "Burger");
+    const croquetas = await dishesNamed(bill.billId, "Croquetas");
+    const before = await rowsOf(venue, bill.billId);
+    for (const outcome of ["remove_charge", "keep_charge"] as const) {
+      await expect(
+        cancelOn(bill, burgersHere[0]!, {
+          quantity: "1",
+          outcome,
+          preparationStarted: true,
+          lineIds: [burgersHere[0]!, croquetas[0]!],
+        }),
+      ).rejects.toMatchObject({ code: "management.request_invalid", params: { field: "lineIds" } });
+    }
+    expect(await rowsOf(venue, bill.billId)).toEqual(before);
   });
 });
