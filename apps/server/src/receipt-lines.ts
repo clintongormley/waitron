@@ -171,8 +171,12 @@ function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
   });
 }
 
-/** The dish's answers by value: neither their order nor any key order tells two dishes apart. */
 function answersKey(dish: TillSaleLine): string {
+  return optionAnswersKey(dish.optionSnapshots);
+}
+
+/** A dish's answers by value: neither their order nor any key order tells two dishes apart. */
+export function optionAnswersKey(answers: readonly unknown[] | null | undefined): string {
   const sorted = (value: unknown): unknown =>
     value === null || typeof value !== "object"
       ? value
@@ -181,9 +185,7 @@ function answersKey(dish: TillSaleLine): string {
             .sort(([x], [y]) => (x < y ? -1 : 1))
             .map(([key, inner]) => [key, sorted(inner)]),
         );
-  return JSON.stringify(
-    (dish.optionSnapshots ?? []).map((answer) => JSON.stringify(sorted(answer))).sort(),
-  );
+  return JSON.stringify((answers ?? []).map((answer) => JSON.stringify(sorted(answer))).sort());
 }
 
 function groupable(line: TillSaleLine): boolean {

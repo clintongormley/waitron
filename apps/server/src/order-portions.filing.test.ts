@@ -20,6 +20,7 @@ import { withTransaction } from "@waitron/db";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyAdjustment } from "./adjustments-apply.js";
 import { readBillEditState } from "./bill-editing.js";
+import { readOrderDetail } from "./orders-list.js";
 import type { PortionRef } from "./order-portions.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
@@ -52,6 +53,7 @@ let ids: {
   croqueta: string;
   burger: string;
   cheese: string;
+  bacon: string;
   toppings: string;
   reasonId: string;
 };
@@ -84,6 +86,7 @@ useVenueDb({
       const croqueta = await product("Croqueta", "3.33");
       const burger = await product("Burger", "3.33");
       const cheese = await product("Cheese", "0.35");
+      const bacon = await product("Bacon", "0.50");
       const toppings = (
         await createExtraList(
           tx,
@@ -94,7 +97,10 @@ useVenueDb({
             minPicks: 0,
             maxPicks: null,
             active: true,
-            items: [{ productId: cheese, maxQuantity: 2, preselected: false, price: null }],
+            items: [
+              { productId: cheese, maxQuantity: 2, preselected: false, price: null },
+              { productId: bacon, maxQuantity: 1, preselected: false, price: null },
+            ],
           },
           venue.cfg.locale,
         )
@@ -117,7 +123,7 @@ useVenueDb({
           noteRequired: false,
         })
       ).id;
-      return { sweet, croqueta, burger, cheese, toppings, reasonId };
+      return { sweet, croqueta, burger, cheese, bacon, toppings, reasonId };
     });
   },
 });
@@ -570,5 +576,234 @@ describe("A803 portions: filing a bill of portions", () => {
       ),
     ).toEqual([]);
     expect(await inTx(venue, (tx) => tx.select().from(saleLinePortions))).toEqual(linksBefore);
+  });
+});
+
+describe("A803 portion grouping: the dashboard's order detail", () => {
+  const burgerWith = (cheeses: number, note?: string): TabRoundLine[] =>
+    offers.toOfferLines([
+      {
+        productId: ids.burger,
+        quantity: "1",
+        ...(note === undefined ? {} : { note }),
+        extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: cheeses }] }],
+      },
+    ]);
+  const detailLines = (billId: string) =>
+    inTx(venue, async (tx) =>
+      (await readOrderDetail(tx, billId, "all", false)).lines.map((line) => ({
+        name: line.name,
+        quantity: String(line.quantity),
+        total: String(line.total),
+      })),
+    );
+
+  it("A803 portion grouping: two identical portions show one row of 2 with the summed amount", async () => {
+    const { billId } = await seed(burgersWithCheese("2"));
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Burger", quantity: "2.000", total: "6.66" },
+      { name: "Cheese", quantity: "2.000", total: "0.70" },
+    ]);
+  });
+
+  it("A803 portion grouping: different extras show apart, and an identical one joins the first", async () => {
+    const { billId } = await seed([
+      ...burgerWith(1),
+      ...burgerWith(2),
+      ...offers.toOfferLines([{ productId: ids.burger, quantity: "1" }]),
+      ...burgerWith(1),
+    ]);
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Burger", quantity: "2.000", total: "6.66" },
+      { name: "Cheese", quantity: "2.000", total: "0.70" },
+      { name: "Burger", quantity: "1.000", total: "3.33" },
+      { name: "Cheese", quantity: "2.000", total: "0.70" },
+      { name: "Burger", quantity: "1.000", total: "3.33" },
+    ]);
+  });
+
+  it("A803 portion grouping: a note keeps a portion apart", async () => {
+    const { billId } = await seed([...burgerWith(1), ...burgerWith(1, "no onion")]);
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Burger", quantity: "1.000", total: "3.33" },
+      { name: "Cheese", quantity: "1.000", total: "0.35" },
+      { name: "Burger", quantity: "1.000", total: "3.33" },
+      { name: "Cheese", quantity: "1.000", total: "0.35" },
+    ]);
+  });
+
+  it("A803 portion grouping: a discounted portion stays apart, and two discounted alike show one row, apart from one discounted otherwise", async () => {
+    const { billId, portions } = await seed(croquetas("4"));
+    for (const [portion, amount] of [
+      [portions[1]!, "0.10"],
+      [portions[2]!, "0.10"],
+      [portions[3]!, "0.20"],
+    ] as const) {
+      await inTx(venue, async (tx) => {
+        const [order] = await tx
+          .select({ revision: workingOrders.revision })
+          .from(workingOrders)
+          .where(eq(workingOrders.id, billId));
+        await applyAdjustment(
+          tx,
+          venue.cfg,
+          {
+            orderId: billId,
+            expectedEdit: await readBillEditState(tx, billId),
+            submissionId: randomUUID(),
+            expectedRevision: order!.revision,
+            lineId: portion.lineId,
+            reasonId: ids.reasonId,
+            action: "discount_amount",
+            amount: decimal(amount),
+            note: null,
+            operatorId: venue.operatorId,
+          },
+          venue.cfg.locale,
+        );
+      });
+    }
+
+    const lines = await inTx(venue, async (tx) =>
+      (await readOrderDetail(tx, billId, "all", false)).lines.map((line) => ({
+        quantity: String(line.quantity),
+        total: String(line.total),
+        listUnitPrice: line.listUnitPrice === null ? null : String(line.listUnitPrice),
+      })),
+    );
+    expect(lines).toEqual([
+      { quantity: "1.000", total: "3.33", listUnitPrice: null },
+      { quantity: "2.000", total: "6.46", listUnitPrice: "3.33" },
+      { quantity: "1.000", total: "3.13", listUnitPrice: "3.33" },
+    ]);
+  });
+
+  it("A803 portion grouping: two dishes of one price but different names show apart", async () => {
+    const { billId } = await seed(
+      offers.toOfferLines([
+        { productId: ids.burger, quantity: "1" },
+        { productId: ids.croqueta, quantity: "1" },
+      ]),
+    );
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Burger", quantity: "1.000", total: "3.33" },
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+    ]);
+  });
+
+  const sauce = (label: string) => ({
+    listName: { en: "Sauce" },
+    listCustomerName: null,
+    listKitchenName: null,
+    labelName: { en: label },
+    labelCustomerName: null,
+    labelKitchenName: null,
+  });
+  const sauceKeysReversed = (label: string) => ({
+    labelKitchenName: null,
+    labelCustomerName: null,
+    labelName: { en: label },
+    listKitchenName: null,
+    listCustomerName: null,
+    listName: { en: "Sauce" },
+  });
+
+  it.each<[string, Partial<typeof workingOrderLines.$inferInsert>]>([
+    ["list price", { listUnitPriceGross: 400 }],
+    ["variant", { variantName: "Large" }],
+    ["staff credited", { creditedTo: "0000ffff-2222-4000-8000-0000000000bb" }],
+    ["answers", { optionSnapshots: [sauce("Aioli")] }],
+  ])("A803 portion grouping: a portion whose %s differs stays apart", async (_, change) => {
+    const { billId, portions } = await seed(croquetas("2"));
+    await inTx(venue, (tx) =>
+      tx.update(workingOrderLines).set(change).where(eq(workingOrderLines.id, portions[1]!.lineId)),
+    );
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+    ]);
+  });
+
+  it("A803 portion grouping: the same answers in another order, keys in another order, still show one row", async () => {
+    const { billId, portions } = await seed(croquetas("2"));
+    await inTx(venue, async (tx) => {
+      await tx
+        .update(workingOrderLines)
+        .set({ optionSnapshots: [sauce("Aioli"), sauce("Mojo")] })
+        .where(eq(workingOrderLines.id, portions[0]!.lineId));
+      await tx
+        .update(workingOrderLines)
+        .set({ optionSnapshots: [sauceKeysReversed("Mojo"), sauceKeysReversed("Aioli")] })
+        .where(eq(workingOrderLines.id, portions[1]!.lineId));
+    });
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Croqueta", quantity: "2.000", total: "6.66" },
+    ]);
+  });
+
+  it("A803 portion grouping: the same extras stored in another order still show one row", async () => {
+    const { billId, portions } = await seed(
+      offers.toOfferLines([
+        {
+          productId: ids.burger,
+          quantity: "2",
+          extras: [
+            {
+              listId: ids.toppings,
+              picks: [
+                { productId: ids.cheese, quantity: 1 },
+                { productId: ids.bacon, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ]),
+    );
+    await inTx(venue, async (tx) => {
+      const extras = await tx
+        .select({ id: workingOrderLines.id, lineNo: workingOrderLines.lineNo })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.parentLineId, portions[1]!.lineId))
+        .orderBy(workingOrderLines.lineNo);
+      expect(extras).toHaveLength(2);
+      const [first, second] = extras as [(typeof extras)[0], (typeof extras)[0]];
+      const set = (id: string, lineNo: number) =>
+        tx.update(workingOrderLines).set({ lineNo }).where(eq(workingOrderLines.id, id));
+      await set(first.id, 9999);
+      await set(second.id, first.lineNo);
+      await set(first.id, second.lineNo);
+    });
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Burger", quantity: "2.000", total: "6.66" },
+      { name: "Cheese", quantity: "2.000", total: "0.70" },
+      { name: "Bacon", quantity: "2.000", total: "1.00" },
+    ]);
+  });
+
+  it("A803 portion grouping: identical unbound lines stay apart, as today", async () => {
+    const billId = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `D-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+      for (let round = 0; round < 2; round++) {
+        const priced = await priceTabRound(tx, venue.cfg, tabId, croquetas("1"), "checked");
+        await insertTabRound(tx, venue.cfg, priced, priced.rows);
+      }
+      return tabId;
+    });
+
+    expect(await detailLines(billId)).toEqual([
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+      { name: "Croqueta", quantity: "1.000", total: "3.33" },
+    ]);
   });
 });
