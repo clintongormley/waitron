@@ -22,9 +22,7 @@ export function createBackupRoomHooks(deps: {
     // on a nearly full disk.
     readInstallationStart: async () => {
       if (!fiscal?.installationStartedAt) return null;
-      return db.withWriteLock(
-        async () => (await fiscal.installationStartedAt!(db, nodeId)) ?? null,
-      );
+      return db.withWriteLock(() => fiscal.installationStartedAt!(db, nodeId));
     },
     recordArchivesDeleted: (deleted, at) =>
       withTransaction(db, async (tx) => {
