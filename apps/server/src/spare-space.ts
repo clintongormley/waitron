@@ -151,13 +151,22 @@ export function spareRestorer(options: {
 
 async function writeMarker(stateDir: string, log: Logger, open: OpenSpare): Promise<void> {
   try {
-    const { O_WRONLY, O_CREAT, O_TRUNC, O_NOFOLLOW } = constants;
+    const { O_WRONLY, O_CREAT, O_EXCL, O_NOFOLLOW } = constants;
     const path = join(stateDir, SPARE_SPACE_RELEASED_FILE);
-    const handle = await open(path, O_WRONLY | O_CREAT | O_TRUNC | O_NOFOLLOW, 0o600);
     try {
-      await handle.sync();
-    } finally {
-      await handle.close();
+      const handle = await open(path, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o600);
+      try {
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (errnoOf(error) !== "EEXIST") throw error;
+      const info = await lstat(path);
+      if (!info.isFile()) {
+        log("warn", "storage.spare_marker_write_failed", { errno: "EEXIST", kind: kindOf(info) });
+        return;
+      }
     }
     const folder = await open(stateDir, constants.O_RDONLY | constants.O_DIRECTORY, 0);
     try {

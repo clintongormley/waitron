@@ -1,5 +1,7 @@
-import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { constants, existsSync } from "node:fs";
 import {
+  link,
   lstat,
   mkdir,
   mkdtemp,
@@ -150,8 +152,51 @@ describe("releaseSpare", () => {
     expect((await lstat(marker())).isSymbolicLink()).toBe(true);
     expect(log.mock.calls).toEqual([
       ["warn", "storage.spare_released", { bytes: 4096 }],
-      ["warn", "storage.spare_marker_write_failed", { errno: "ELOOP" }],
+      ["warn", "storage.spare_marker_write_failed", { errno: "EEXIST", kind: "link" }],
     ]);
+  });
+
+  it("never truncates a file hard-linked at the marker's path, and counts the link as the marker", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    const outside = join(root, "outside");
+    await writeFile(outside, "must survive");
+    await link(outside, marker());
+    const log = vi.fn();
+    expect(await releaseSpare(stateDir, log)).toBe(4096);
+    expect(await readFile(outside, "utf8")).toBe("must survive");
+    expect((await lstat(marker())).isFile()).toBe(true);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_released", { bytes: 4096 }]]);
+  });
+
+  it("does not wait on a FIFO at the marker's path: leaves it and logs storage.spare_marker_write_failed", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    execFileSync("mkfifo", [marker()]);
+    const log = vi.fn();
+    let timer: NodeJS.Timeout | undefined;
+    const outcome = await Promise.race([
+      releaseSpare(stateDir, log),
+      new Promise<"stuck">((settle) => (timer = setTimeout(() => settle("stuck"), 2000))),
+    ]);
+    clearTimeout(timer);
+    if (outcome === "stuck") {
+      // Opening a reader lets the blocked writer's open return, so the suite does not hang.
+      await (await open(marker(), constants.O_RDONLY | constants.O_NONBLOCK)).close();
+    }
+    expect(outcome).toBe(4096);
+    expect((await lstat(marker())).isFIFO()).toBe(true);
+    expect(log.mock.calls).toEqual([
+      ["warn", "storage.spare_released", { bytes: 4096 }],
+      ["warn", "storage.spare_marker_write_failed", { errno: "EEXIST", kind: "other" }],
+    ]);
+  });
+
+  it("an existing marker is kept as it is, with only the release logged", async () => {
+    await writeFile(join(stateDir, SPARE_SPACE_FILE), Buffer.alloc(4096, 1));
+    await writeFile(marker(), "");
+    const log = vi.fn();
+    expect(await releaseSpare(stateDir, log)).toBe(4096);
+    expect((await lstat(marker())).isFile()).toBe(true);
+    expect(log.mock.calls).toEqual([["warn", "storage.spare_released", { bytes: 4096 }]]);
   });
 });
 
