@@ -67,7 +67,7 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
    (`apps/server/src/venue-details.ts:148`). The search field shows while line 1, line 2,
    postcode and city are all editable. A chosen address whose area code names another province
    (matched against the server's `provinces` by code or name) is refused like another country;
-   with no area code the four fields are filled and the server's existing postcode check
+   with no area code, or one the list does not name, the four fields are filled and the server's existing postcode check
    (`venue-details.ts:224-231`) refuses a postcode outside the saved province.
 8. **No credential reaches the browser** — the field only calls the object it is handed. Nothing in
    this plan talks to Cloud.
@@ -76,8 +76,9 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
    `wt-change`. Enter in the field never reaches a form's Enter-to-submit (`submitOnEnter` stands
    down on a handled key); Escape on an open list stops there, on a closed one it passes on.
 11. **A late answer lands nowhere.** The field drops a resolve answer once it is disconnected or a
-    newer search began; the dashboard applies a chosen address only to the draft that was open
-    when the search began and not while saving.
+    newer search began, or once its provider, country or disabled state changes. Both forms drop a
+    chosen address still on its way once the person edits a field it would fill; the dashboard also
+    drops it when a save begins or the leave-page question's discard keeps the edit open.
 10. **The seam is not changed now.** `packages/country/src/country.ts` is in lane E's open #2145, so
     `@waitron/ui` declares the shape it needs (`AddressLookupProvider`, structurally the same as
     `AddressAutocompleteProvider`), and a type test in the setup app holds the two compatible. What
@@ -93,7 +94,8 @@ auto complete when enabled". Part 3 (the till's invoice recipient dialog) waits 
   `delay` (300 ms).
 - Asks after the person stops typing for 300 ms and the trimmed text has at least 3 characters; a
   shorter text closes the list. An answer to an older text is dropped.
-- One session token (`crypto.randomUUID()`) per search, renewed after each choice.
+- One session token (a random 128-bit hex string from `getRandomValues`; `randomUUID` needs a
+  secure context) per search, renewed after each choice.
 - The list sits under the field in the page flow (no popover). Up/Down move the active row, Enter
   chooses it, Escape closes the list, a click chooses. ARIA combobox: the input has
   `role="combobox"`, `aria-expanded`, `aria-controls` and `aria-activedescendant`; the list is a
@@ -158,9 +160,9 @@ suggestion does not press Save; an answer arriving after Cancel or during a save
 - CLAUDE.md §3 (screens) one line; `docs/developers/design-system.md` → Forms contract and the
   primitives table.
 - Guard `scripts/address-lookup-forms.test.ts`, weaker than its name: every non-test `.ts` under
-  `apps/*/src/screens` and `apps/*/src/widgets` whose text holds the string literal
-  `"addressLine1"` or `"streetAddress"` (the names the forms' address fields go by) holds
-  `<wt-address-lookup`; the till's recipient dialog is listed as waiting for part 3. It reads
+  `apps/*/src` whose text holds the string literal `"addressLine1"` or `"streetAddress"` (the
+  names the forms' address fields go by) and draws a `<wt-input` or `<wt-textarea` holds
+  `<wt-address-lookup`, except `apps/setup/src/setup-app.ts`, which only assembles the draft; the till's recipient dialog is listed as waiting for part 3. It reads
   text: a form naming its fields otherwise (the registered business address, `taxpayerDomicile`)
   is not seen. Proved by deletion.
 - `docs/backlog.md`: A1171 entry for what is left — part 3 and the Cloud bridge's needs from the
