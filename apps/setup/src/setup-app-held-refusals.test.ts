@@ -31,8 +31,11 @@ const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
 const refusedLines = (app: SetupApp) =>
   [...q(app, "held-refused")!.querySelectorAll("p")].map((p) => p.textContent!.trim());
+const startAgainDeletesIt = (t: ReturnType<typeof stringsFor>) =>
+  t.recoveryStopped.split("{started}")[1]!;
 function expectNoHeldConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(q(app, "held-database")).toBeNull();
+  expect(text(app)).not.toContain(startAgainDeletesIt(t));
   for (const words of [t.heldNoInvoices, t.heldNoInvoicesOne, t.heldLost])
     expect(text(app)).not.toContain(words);
   expect(q(app, "retire-confirmed")).toBeNull();

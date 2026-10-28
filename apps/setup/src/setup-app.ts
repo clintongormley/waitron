@@ -2685,7 +2685,6 @@ export class SetupApp extends LitElement {
       ? nothing
       : !missing && held !== undefined && (held.kept > 0 || held.records > 0)
         ? html`${heldRefused(held.rows, held.kept, held.records, held.accepted)}
-            ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
             <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}
               >${cancelStartAgain}</wt-form-actions
             >`

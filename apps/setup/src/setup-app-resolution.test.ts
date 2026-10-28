@@ -1981,6 +1981,9 @@ it.each(["en-GB", "es-ES"])(
       t.heldNoInvoices,
       t.heldLost,
     ]);
+    expect(q(app, "recovery-stopped").textContent).toContain(
+      t.recoveryStopped.split("{started}")[1]!,
+    );
     const order = [
       q(app, "held-database"),
       q(app, "recovery-stopped"),
