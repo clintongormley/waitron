@@ -6004,7 +6004,7 @@ describe("Delete", () => {
   });
   // The shape `deviceDeleteRules` (apps/server/src/device-delete.ts) answers for a till with people
   // signed in, a handheld printer it carries and settings of its own.
-  const cocinaImpact = impactOf("d1", "Pantalla Cocina", {
+  const kitchenImpact = impactOf("d1", "Pantalla Cocina", {
     ends: [
       { key: "sessions", count: 2, targets: [] },
       { key: "held_printers", count: 1, targets: [{ id: "pr1", name: "Mano" }] },
@@ -6017,7 +6017,7 @@ describe("Delete", () => {
     ],
   });
   const refusedImpact: DeleteImpact = {
-    ...cocinaImpact,
+    ...kitchenImpact,
     refusals: [
       {
         code: "device.payment_in_progress",
@@ -6057,7 +6057,7 @@ describe("Delete", () => {
   async function mounted(overrides: Partial<DashboardApi> = {}) {
     const api = stubApi({
       getDeviceDeleteImpact: vi.fn(async (id: string) =>
-        id === "d1" ? cocinaImpact : impactOf(id, devices.find((d) => d.id === id)!.label),
+        id === "d1" ? kitchenImpact : impactOf(id, devices.find((d) => d.id === id)!.label),
       ),
       deleteDevice: vi.fn(async (id: string) => impactOf(id, "")),
       ...overrides,
@@ -6117,7 +6117,7 @@ describe("Delete", () => {
     expect(confirmState(el)).toEqual(quiet);
     expect(api.deleteDevice).not.toHaveBeenCalled();
 
-    read.resolve(cocinaImpact);
+    read.resolve(kitchenImpact);
     await flush(el);
     expect(dialogOf(el)!.loading).toBe(false);
     expect(confirmState(el)).toEqual(red);
@@ -6160,7 +6160,7 @@ describe("Delete", () => {
     confirmOf(el).click();
     expect(api.deleteDevice).toHaveBeenCalledExactlyOnceWith("d1");
 
-    sent.resolve(cocinaImpact);
+    sent.resolve(kitchenImpact);
     await flush(el);
     await flush(el);
     expect(dialogOf(el)!.open).toBe(false);
@@ -6190,7 +6190,7 @@ describe("Delete", () => {
     const deleteDevice = vi
       .fn()
       .mockRejectedValueOnce(coded("connection.failed"))
-      .mockResolvedValueOnce(cocinaImpact);
+      .mockResolvedValueOnce(kitchenImpact);
     const { el } = await mounted({ deleteDevice });
     await openDelete(el, "d1");
     confirmOf(el).click();
@@ -6212,7 +6212,7 @@ describe("Delete", () => {
     const getDeviceDeleteImpact = vi
       .fn()
       .mockRejectedValueOnce(coded("connection.failed"))
-      .mockResolvedValue(cocinaImpact);
+      .mockResolvedValue(kitchenImpact);
     const { el } = await mounted({
       liveData,
       getDeviceDeleteImpact,
@@ -6258,7 +6258,7 @@ describe("Delete", () => {
     await openDelete(el, "d2");
     expect(dialogOf(el)!.loading).toBe(true);
 
-    reads.get("d1")!.resolve(cocinaImpact);
+    reads.get("d1")!.resolve(kitchenImpact);
     await flush(el);
     expect(dialogOf(el)!.impact).toBeNull();
     expect(dialogOf(el)!.loading).toBe(true);
@@ -6394,7 +6394,7 @@ describe("Delete", () => {
   it("a live read answering not-found while the delete is out leaves the answer to the delete", async () => {
     const liveData = new LiveData();
     const sent = deferred<DeleteImpact>();
-    const getDeviceDeleteImpact = vi.fn().mockResolvedValue(cocinaImpact);
+    const getDeviceDeleteImpact = vi.fn().mockResolvedValue(kitchenImpact);
     const { el } = await mounted({
       liveData,
       getDeviceDeleteImpact,
@@ -6410,7 +6410,7 @@ describe("Delete", () => {
     expect(dialogOf(el)!.open).toBe(true);
     expect(dialogOf(el)!.submitting).toBe(true);
 
-    sent.resolve(cocinaImpact);
+    sent.resolve(kitchenImpact);
     await flush(el);
     expect(dialogOf(el)?.open ?? false).toBe(false);
     expect(pageError(el)).toBeUndefined();
