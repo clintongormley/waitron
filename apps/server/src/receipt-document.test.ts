@@ -1291,3 +1291,122 @@ it.each(["58mm", "80mm"] as const)(
     }
   },
 );
+
+describe("identical dishes on the receipt (A803)", () => {
+  const caña = { descriptions: { "es-ES": "Caña" }, quantity: "1", gross: "1.50" };
+  const bravas = { descriptions: { "es-ES": "Bravas" }, quantity: "1", gross: "6.00" };
+  const oneRate = [{ rate: "10.00", base: "8.18", tax: "0.82" }];
+  const simplified = (lines: ReceiptDocumentInput["result"]["lines"], vatBreakdown = oneRate) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.result = {
+      ...withoutOperationDate(),
+      invoiceType: "F2",
+      lines,
+      total: "9.00",
+      vatBreakdown,
+      tender: { method: "unpaid" },
+    };
+    delete input.result.recipient;
+    return buildReceiptDocument(input).elements.flatMap((e): [string, string][] =>
+      e.kind === "amount" ? [[e.caption, e.amount]] : [],
+    );
+  };
+
+  it("A803 portion grouping: two filed rows of Caña at 1.50 print Caña 2 3,00", () => {
+    const rows = simplified([caña, bravas, caña]);
+    expect(rows.slice(2, 4)).toEqual([
+      ["2  Caña", "3,00"],
+      ["1  Bravas", "6,00"],
+    ]);
+  });
+
+  it("A803 portion grouping: a different price, VAT rate, list price or adjustment entry keeps rows apart", () => {
+    const rows = simplified([
+      caña,
+      { ...caña, gross: "1.60" },
+      { ...caña, listGross: "2.00" },
+      {
+        ...caña,
+        adjustments: [{ kind: "comp", amount: "1.50" }],
+        gross: "0.00",
+        listGross: "1.50",
+      },
+    ]);
+    expect(rows.slice(2, 7)).toEqual([
+      ["1  Caña", "1,50"],
+      ["1  Caña", "1,60"],
+      ["1  Caña", "2,00"],
+      ["1  Caña", "1,50"],
+      ["  Descuento 100%", "-1,50"],
+    ]);
+    const twoRates = [
+      { rate: "10.00", base: "1.36", tax: "0.14" },
+      { rate: "21.00", base: "1.24", tax: "0.26" },
+    ];
+    expect(simplified([caña, caña], twoRates).slice(2, 4)).toEqual([
+      ["1  Caña", "1,50"],
+      ["1  Caña", "1,50"],
+    ]);
+  });
+
+  it("A803 portion grouping: a dish's extras print once for the group, their quantities added", () => {
+    const burger = { descriptions: { "es-ES": "Burger" }, quantity: "1", gross: "10.00" };
+    const cheese = (parentLineNo: number) => ({
+      descriptions: { "es-ES": "Queso" },
+      quantity: "2",
+      gross: "2.00",
+      parentLineNo,
+    });
+    expect(simplified([burger, cheese(1), burger, cheese(3)]).slice(2, 4)).toEqual([
+      ["2  Burger", "20,00"],
+      ["  Queso x2", "4,00"],
+    ]);
+  });
+
+  it("A803 portion grouping: measured rows never group", () => {
+    const ham = {
+      descriptions: { "es-ES": "Jamón" },
+      unitName: { es: "kg" },
+      unitPrecision: 3,
+      quantity: "0.150",
+      gross: "4.50",
+    };
+    expect(simplified([ham, ham]).slice(2, 4)).toEqual([
+      ["0.150 kg  Jamón", "4,50"],
+      ["0.150 kg  Jamón", "4,50"],
+    ]);
+  });
+
+  it("A803 portion grouping: printed totals equal the filed total and breakdown", () => {
+    const rows = simplified([caña, bravas, caña]);
+    const goods = rows.slice(
+      2,
+      rows.findIndex(([caption]) => caption === "TOTAL"),
+    );
+    const cents = goods.reduce((sum, [, amount]) => sum + Number(amount.replace(",", "")), 0);
+    expect(cents).toBe(900);
+    expect(rows.slice(-3)).toEqual([
+      ["TOTAL", "9,00 €"],
+      ["Base imponible 10%", "8,18 €"],
+      ["IVA 10%", "0,82 €"],
+    ]);
+  });
+
+  it("A803 portion grouping: the full invoice lists every filed row", () => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    const filedCaña = {
+      ...caña,
+      net: { unitPrice: "1.36", priceQuantity: "1.000", base: "1.36", tax: "0.14", rate: "10" },
+    };
+    input.result.lines = [filedCaña, filedCaña];
+    input.result.total = "3.00";
+    input.result.vatBreakdown = [{ rate: "10", base: "2.72", tax: "0.28" }];
+    const rows = buildReceiptDocument(input).elements.flatMap((e) =>
+      e.kind === "table" ? e.table.rows : [],
+    );
+    expect(rows.map((row) => [row.units, row.item, row.amount])).toEqual([
+      ["1", "Caña", "1,36"],
+      ["1", "Caña", "1,36"],
+    ]);
+  });
+});

@@ -2717,3 +2717,148 @@ it.each([
     `${label}:  Ab-09 /xy `,
   );
 });
+
+describe("till-ticket-view: identical dishes (A803)", () => {
+  const caña = { descriptions: { "es-ES": "Caña" }, quantity: "1", gross: "1.50" };
+  const bravas = { descriptions: { "es-ES": "Bravas" }, quantity: "1", gross: "6.00" };
+  const oneRate = { total: "9.00", vatBreakdown: [{ rate: "10.00", base: "8.18", tax: "0.82" }] };
+  const rowsOf = (el: TillTicketView) =>
+    [...el.shadowRoot!.querySelectorAll("li.line:has(.line-qty)")].map((row) => [
+      row.querySelector(".line-name")!.textContent!.trim(),
+      row.querySelector(".line-qty")!.textContent!.trim(),
+      norm(row.querySelector(".line-gross")?.textContent ?? ""),
+    ]);
+
+  it("A803 portion grouping: two filed rows of Caña at 1.50 show as one row of 2 at 3,00", async () => {
+    const { el } = await mount({ ...oneRate, lines: [caña, bravas, caña] });
+    expect(rowsOf(el)).toEqual([
+      ["Caña", "2", "3,00 €"],
+      ["Bravas", "1", "6,00 €"],
+    ]);
+  });
+
+  it("A803 portion grouping: a different price, VAT rate, list price or adjustment entry keeps rows apart", async () => {
+    const { el } = await mount({
+      ...oneRate,
+      lines: [
+        caña,
+        { ...caña, gross: "1.60" },
+        { ...caña, listGross: "2.00" },
+        { ...caña, adjustments: [{ kind: "discount", amount: "0.50" }] },
+      ],
+    });
+    expect(rowsOf(el)).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Caña", "1", "1,60 €"],
+      ["Caña", "1", "2,00 €"],
+      ["Caña", "1", "1,50 €"],
+    ]);
+    cleanupWidgets();
+    const { el: twoRates } = await mount({
+      vatBreakdown: [
+        { rate: "10.00", base: "1.36", tax: "0.14" },
+        { rate: "21.00", base: "1.24", tax: "0.26" },
+      ],
+      lines: [caña, caña],
+    });
+    expect(rowsOf(twoRates)).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Caña", "1", "1,50 €"],
+    ]);
+  });
+
+  it("A803 portion grouping: rows apart in name, extras, answers or unit stay apart", async () => {
+    const shown = async (lines: TillSaleResult["lines"]) => {
+      cleanupWidgets();
+      const { el } = await mount({ ...oneRate, lines });
+      return [
+        ...rowsOf(el),
+        ...[...el.shadowRoot!.querySelectorAll("li.line.option:not(.modifier-answer)")].map(
+          (row) => [norm(row.textContent!).replace(/\s+/g, " ").trim()],
+        ),
+      ];
+    };
+    const agua = { descriptions: { "es-ES": "Agua" }, quantity: "1", gross: "1.50" };
+    expect(await shown([caña, agua])).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Agua", "1", "1,50 €"],
+    ]);
+    const tapa = (parentLineNo: number, quantity = "1", gross = "1.00") => ({
+      descriptions: { "es-ES": "Queso" },
+      quantity,
+      gross,
+      parentLineNo,
+    });
+    expect(await shown([caña, caña, tapa(2)])).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Caña", "1", "1,50 €"],
+      ["Queso 1,00 €"],
+    ]);
+    expect(await shown([caña, tapa(1), caña, tapa(3, "2", "2.00")])).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Caña", "1", "1,50 €"],
+      ["Queso 1,00 €"],
+      ["Queso x2 2,00 €"],
+    ]);
+    expect(await shown([caña, tapa(1), caña, tapa(3)])).toEqual([
+      ["Caña", "2", "3,00 €"],
+      ["Queso 2,00 €"],
+    ]);
+    const answer = (labelName: Record<string, string>) => ({
+      ...caña,
+      optionSnapshots: [
+        {
+          listName: { es: "Tamaño" },
+          listCustomerName: null,
+          listKitchenName: null,
+          labelName,
+          labelCustomerName: null,
+          labelKitchenName: null,
+        },
+      ],
+    });
+    expect(await shown([answer({ es: "Grande" }), answer({ es: "Pequeña" })])).toEqual([
+      ["Caña", "1", "1,50 €"],
+      ["Caña", "1", "1,50 €"],
+    ]);
+    const reordered = answer({ es: "Grande" });
+    reordered.optionSnapshots = reordered.optionSnapshots.map(
+      (snapshot) => Object.fromEntries(Object.entries(snapshot).reverse()) as typeof snapshot,
+    );
+    expect(await shown([answer({ es: "Grande" }), reordered])).toEqual([["Caña", "2", "3,00 €"]]);
+    const kilo = { ...caña, unitName: { "es-ES": "kg" }, unitPrecision: 3, gross: "30.00" };
+    expect(await shown([kilo, kilo])).toEqual([
+      ["Caña", "1 kg", "30,00 €"],
+      ["Caña", "1 kg", "30,00 €"],
+    ]);
+    const half = { ...caña, quantity: "0.5", gross: "0.75" };
+    expect(await shown([half, half])).toEqual([
+      ["Caña", "0.5", "0,75 €"],
+      ["Caña", "0.5", "0,75 €"],
+    ]);
+  });
+
+  it("A803 portion grouping: printed totals equal the filed total and breakdown", async () => {
+    const { el } = await mount({ ...oneRate, lines: [caña, bravas, caña] });
+    const cents = rowsOf(el).reduce(
+      (sum, [, , gross]) => sum + Number(gross!.replace(/\D/g, "")),
+      0,
+    );
+    expect(cents).toBe(900);
+    expect(text(el)).toContain("9,00 €");
+    expect(text(el)).toContain("8,18 €");
+    expect(text(el)).toContain("0,82 €");
+  });
+
+  it("A803 portion grouping: a full invoice lists every filed row", async () => {
+    const filed = {
+      ...caña,
+      net: { unitPrice: "1.36", priceQuantity: "1.000", base: "1.36", tax: "0.14", rate: "10.00" },
+    };
+    const { el } = await mount({ ...oneRate, invoiceType: "F1", lines: [filed, filed] });
+    expect(rowsOf(el).map(([name, quantity]) => [name, quantity])).toEqual([
+      ["Caña", "1"],
+      ["Caña", "1"],
+    ]);
+  });
+});
