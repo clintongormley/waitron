@@ -495,8 +495,9 @@ until A977).
   split-extras, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults. Screen tests take translated expectations from their strings file.
-  Keep accent tests, AEAT names and official text. Media's main library suite still has sample
-  names to clean. Keep the filename suite's accent-sensitive sample and the framing suite's
+  Keep accent tests, AEAT names and official text. Media's main library suite still has translated UI
+  expectations to read from its strings file. Keep its deliberate Spanish/French metadata,
+  the filename suite's accent-sensitive sample and the framing suite's
   deliberate multilingual metadata. Later cleanup goes package by package from
   A977's list. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
