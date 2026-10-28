@@ -117,10 +117,25 @@ it("a held setup database with no recovery started is still refused setup.not_re
   await expectRefused(await heldSetup({ recovery: false }), { code: "setup.not_ready" });
 });
 
-it.each(["unknown", "partial"] as const)(
-  "a database read as %s beside a stopped recovery is still refused setup.not_ready, and nothing changes",
-  async (database) => {
-    const f = await heldSetup();
+it.each([
+  ["saved trading settings", { recovery: false, tradingSettings: true }, true],
+  ["a complete attempt", { recovery: false, status: "complete" }, false],
+] as const)(
+  "%s with no recovery started is refused setup.not_ready, not start_again_refused, and nothing changes",
+  async (_label, options, signIn) => {
+    await expectRefused(await heldSetup(options), { code: "setup.not_ready" }, { signIn });
+  },
+);
+
+it.each([
+  ["unknown", {}],
+  ["partial", {}],
+  ["unknown", { tradingSettings: true }],
+  ["partial", { tradingSettings: true }],
+] as const)(
+  "a database read as %s beside a stopped recovery (%o) is still refused setup.not_ready, and nothing changes",
+  async (database, options) => {
+    const f = await heldSetup(options);
     const inspect = f.host.resolution.inspectFirstSetupResolution;
     const host = {
       ...f.host,

@@ -441,8 +441,8 @@ export function createFirstSetupResolutionActions(
               inspection.database === "occupied" ||
               (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
             if (found?.kind !== "stopped" || !holdsRecords) unavailable();
-            // Checked before the password: a setup whose publication completed cannot be signed
-            // into again (`recoverFirstSetupOwner` refuses it), so the page could not learn why.
+            // Both before the password: a completed setup cannot be signed into again
+            // (`recoverFirstSetupOwner` refuses it), and the page already sees `trading.env`.
             if (
               inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !==
               "missing"
