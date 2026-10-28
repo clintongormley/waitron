@@ -33,11 +33,19 @@ const refusedLines = (app: SetupApp) =>
   [...q(app, "held-refused")!.querySelectorAll("p")].map((p) => p.textContent!.trim());
 function expectNoHeldConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(q(app, "held-database")).toBeNull();
-  for (const words of [t.heldRowsOne, t.heldNoInvoices, t.heldNoInvoicesOne, t.heldLost])
+  for (const words of [t.heldNoInvoices, t.heldNoInvoicesOne, t.heldLost])
     expect(text(app)).not.toContain(words);
-  expect(text(app)).not.toContain(t.heldRows.split("{rows}")[0]);
   expect(q(app, "retire-confirmed")).toBeNull();
   expect(q(app, "confirm-start-again")).toBeNull();
+}
+function expectInOrder(app: SetupApp, lines: string[]) {
+  const shown = [...q(app, "held-refused")!.querySelectorAll("p")];
+  const order = lines.map((line) => shown.find((p) => p.textContent!.trim() === line)!);
+  for (const [index, element] of order.slice(1).entries())
+    expect(
+      order[index]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
+      String(index),
+    ).toBeTruthy();
 }
 
 for (const locale of locales) {
@@ -50,11 +58,14 @@ for (const locale of locales) {
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
     await app.updateComplete;
-    expect(refusedLines(app)).toEqual([
+    const lines = [
+      t.heldRows.replace("{rows}", "105"),
       t.heldKept.replace("{kept}", "2"),
       t.heldInvoiceOne.replace("{accepted}", "0"),
       t.heldFault,
-    ]);
+    ];
+    expect(refusedLines(app)).toEqual(lines);
+    expectInOrder(app, lines);
     expectNoHeldConfirmation(app, t);
     expect(q<WtButton>(app, "cancel-start-again")!.disabled).toBe(false);
     expect(q(app, "reconnect-first")).not.toBeNull();
@@ -63,7 +74,7 @@ for (const locale of locales) {
     await expect.poll(() => q(app, "held-refused")).toBeNull();
   });
 
-  it(`${locale}: an invoice record and no other kept row after the password: the invoice line alone, then the fault`, async () => {
+  it(`${locale}: an invoice record and no other kept row after the password: the saved items, the invoice line with no kept-items line, then the fault`, async () => {
     const t = stringsFor(locale);
     const { app } = await heldFixture({
       locale,
@@ -72,7 +83,13 @@ for (const locale of locales) {
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
     await app.updateComplete;
-    expect(refusedLines(app)).toEqual([t.heldInvoiceOne.replace("{accepted}", "1"), t.heldFault]);
+    const lines = [
+      t.heldRows.replace("{rows}", "105"),
+      t.heldInvoiceOne.replace("{accepted}", "1"),
+      t.heldFault,
+    ];
+    expect(refusedLines(app)).toEqual(lines);
+    expectInOrder(app, lines);
     expectNoHeldConfirmation(app, t);
   });
 
@@ -86,6 +103,7 @@ for (const locale of locales) {
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
     await app.updateComplete;
     expect(refusedLines(app)).toEqual([
+      t.heldRows.replace("{rows}", "105"),
       t.heldKeptOne,
       t.heldInvoices.replace("{records}", "3").replace("{accepted}", "2"),
       t.heldFault,

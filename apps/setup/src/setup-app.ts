@@ -2617,14 +2617,17 @@ export class SetupApp extends LitElement {
         ${recovery.cloud ? html`<p>${t.recoveryStoppedCloud}</p>` : nothing}
       </div>`;
     const held = this.firstStoppedSummary?.held;
+    const heldRowsLine = (rows: number) =>
+      html`<p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>`;
     const heldBlock = (rows: number) =>
       html`<div data-test="held-database">
-        <p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>
+        ${heldRowsLine(rows)}
         <p>${rows === 1 ? t.heldNoInvoicesOne : t.heldNoInvoices}</p>
         <p>${t.heldLost}</p>
       </div>`;
-    const heldRefused = (kept: number, records: number, accepted: number) =>
+    const heldRefused = (rows: number, kept: number, records: number, accepted: number) =>
       html`<div data-test="held-refused">
+        ${heldRowsLine(rows)}
         ${kept > 0 ? html`<p>${kept === 1 ? t.heldKeptOne : t.heldKept.replace("{kept}", String(kept))}</p>` : nothing}
         ${
           records > 0
@@ -2681,7 +2684,7 @@ export class SetupApp extends LitElement {
     const startAgainConfirm = !this.firstRestartConfirm
       ? nothing
       : !missing && held !== undefined && (held.kept > 0 || held.records > 0)
-        ? html`${heldRefused(held.kept, held.records, held.accepted)}
+        ? html`${heldRefused(held.rows, held.kept, held.records, held.accepted)}
             ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
             <wt-form-actions .error=${this.firstOwnerError?.() ?? ""}
               >${cancelStartAgain}</wt-form-actions
