@@ -92,6 +92,8 @@ export type {
   FirstSetupInspection,
 } from "./first-setup-resolution-inspection.js";
 export { firstSetupDatabaseIsEmpty } from "./first-setup-empty-database.js";
+export { executeTarget, openImmutableWhenWalEmpty } from "./read-only-database.js";
+export type { ImmutableOpen } from "./read-only-database.js";
 export { createSetupOperationStore } from "./setup-operation.js";
 export type {
   SetupOperationKind,

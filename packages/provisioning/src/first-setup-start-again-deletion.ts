@@ -1,8 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
-import { DatabaseSync } from "node:sqlite";
-import { pathToFileURL } from "node:url";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
@@ -14,6 +12,7 @@ import {
 } from "./first-setup-backup-workspace.js";
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
+import { openImmutableWhenWalEmpty } from "./read-only-database.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -480,27 +479,23 @@ export async function assertStartAgainAllowedOnDisk(
   }
   const node = join(canonical.venueDir, "node.db");
   if (await exists(node)) {
-    // An immutable open leaves no side files behind, but reads only the main file, so a -wal
-    // that may hold pages is refused rather than read past.
-    const wal = await info(`${node}-wal`).catch((error: unknown) => {
-      throw notReady(`check failed: ${codeOf(error)} ${node}-wal`);
-    });
-    if (wal !== null && wal.size !== 0) throw notReady("node.db-wal holds pages");
-    const url = pathToFileURL(node);
-    url.searchParams.set("mode", "ro");
-    url.searchParams.set("immutable", "1");
+    const opened = await openImmutableWhenWalEmpty(node);
+    if (opened.kind === "wal") throw notReady("node.db-wal holds pages");
+    if (opened.kind === "failed")
+      throw notReady(
+        opened.stage === "wal"
+          ? `check failed: ${codeOf(opened.error)} ${node}-wal`
+          : "node.db unreadable",
+      );
     let tables: unknown[];
     try {
-      const connection = new DatabaseSync(url, { readOnly: true });
-      try {
-        tables = connection
-          .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
-          .all();
-      } finally {
-        connection.close();
-      }
+      tables = opened.connection
+        .prepare("select name from sqlite_schema where name not like 'sqlite\\_%' escape '\\'")
+        .all();
     } catch {
       throw notReady("node.db unreadable");
+    } finally {
+      opened.connection.close();
     }
     if (tables.length !== 0) throw notReady("node.db holds a table");
   }
