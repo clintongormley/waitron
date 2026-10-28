@@ -33,6 +33,22 @@ describe.each(["light", "dark"] as const)("wt-slider a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 
+  test.each(["", " marks"])(
+    "with a value off the step, spoken as the snapped value%s",
+    async (marks) => {
+      const el = (await mountThemed(
+        `<wt-slider label="Columns" min="2" max="10" step="3" value="4"${marks}></wt-slider>`,
+        theme,
+      )) as WtSlider;
+      el.valueText = (n) => `${n} columns`;
+      await el.updateComplete;
+      await expectNoA11yViolations(host);
+      const input = el.shadowRoot!.querySelector("input")!;
+      expect(el.shadowRoot!.querySelector('[part="value"]')!.textContent).toBe("5");
+      expect(input.getAttribute("aria-valuetext")).toBe("5 columns");
+    },
+  );
+
   test("with an error", async () => {
     await mountThemed(
       '<wt-slider label="Columns" min="2" max="6" value="4" error="Pick a number from 2 to 6"></wt-slider>',

@@ -269,6 +269,38 @@ test("says its value through valueText", async () => {
   expect(input.hasAttribute("aria-valuetext")).toBe(false);
 });
 
+describe("a value the range snaps or clamps shows the number the thumb sits at", () => {
+  test.each([
+    ["off the step, without marks", 'step="3" value="4"', "5"],
+    ["off the step, with marks", 'step="3" value="4" marks', "5"],
+    ["above max", 'value="14"', "10"],
+    ["above max, with marks", 'value="14" marks', "10"],
+    ["below min", 'value="-3"', "2"],
+    ["on a max the step does not reach", 'step="3" value="10"', "8"],
+    ["halfway between two steps", 'step="3" value="3.5"', "5"],
+  ])("%s", async (_, attributes, shown) => {
+    const el = (await mount(
+      `<wt-slider label="Columns" min="2" max="10" ${attributes}></wt-slider>`,
+    )) as WtSlider;
+    el.format = (n) => `${n}%`;
+    el.valueText = (n) => `${n} percent`;
+    await el.updateComplete;
+    expect(inputOf(el).value).toBe(shown);
+    expect(shownOf(el)).toBe(`${shown}%`);
+    expect(inputOf(el).getAttribute("aria-valuetext")).toBe(`${shown} percent`);
+  });
+
+  test("a value set later off the step shows the snapped number, and the value stays as given", async () => {
+    const el = await mountSlider('step="3" value="2"');
+    const heard = hostHears(el);
+    el.value = 7;
+    await el.updateComplete;
+    expect(shownOf(el)).toBe("8");
+    expect(el.value).toBe(7);
+    expect(heard).toEqual([]);
+  });
+});
+
 test("shows a hint under the range, describing it", async () => {
   const el = await mountSlider('hint="Bigger wraps more"');
   const input = inputOf(el);
