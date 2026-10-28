@@ -485,3 +485,36 @@ it.each(["en-GB", "es-ES"])(
     expect(el.shadowRoot!.textContent).toContain("2 Main Street, Paris");
   },
 );
+
+it.each([
+  ["en-GB", "Passport"],
+  ["es-ES", "Pasaporte"],
+])("labels a foreign identifier using screen language %s", async (locale, label) => {
+  setLocale(locale);
+  const filed = {
+    ...detail,
+    invoices: [
+      {
+        ...detail.invoices[0]!,
+        invoiceType: "F1",
+        recipient: {
+          taxId: " Ab-09 /xy ",
+          identifierType: "passport",
+          identifierCountryCode: "FR",
+          legalName: "Guest",
+          countryCode: "ES",
+          address: "2 Main Street, Madrid",
+        },
+      },
+    ],
+  };
+  const api = {
+    getOrder: vi.fn().mockResolvedValue(filed),
+    liveData: new LiveData(),
+  } as unknown as DashboardApi;
+  const { el } = await mountWidget<OrderDetailDialog>("dashboard-order-detail-dialog", {
+    api,
+    orderId: "bill-1",
+  });
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(`${label}:  Ab-09 /xy `));
+});

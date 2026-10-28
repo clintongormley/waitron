@@ -632,7 +632,7 @@ describe("dashboard Orders", () => {
       el.canExportPersonalData = true;
       await el.updateComplete;
       const button = findButton(el)!;
-      expect(button.textContent).toBe("Find a customer by tax number");
+      expect(button.textContent).toBe("Find an invoice customer");
       expect(dialog(el).open).toBe(false);
 
       button.click();

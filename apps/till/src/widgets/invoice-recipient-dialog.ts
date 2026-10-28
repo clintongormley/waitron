@@ -9,7 +9,16 @@ import {
   saveActionState,
 } from "@waitron/ui";
 import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
-import { countryNameFor, getCountryPack } from "@waitron/country-packs";
+import {
+  countryNameFor,
+  RECIPIENT_COUNTRY_CODES,
+  RECIPIENT_IDENTIFIER_POLICY,
+  recipientIdentifierResult,
+  recipientAddressErrors,
+  composeRecipientAddress,
+  type RecipientIdentifier,
+  type RecipientIdentifierType,
+} from "@waitron/country-packs";
 import { isValidEmail } from "@waitron/shared";
 import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
@@ -21,7 +30,7 @@ import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/clien
 
 export interface InvoiceRecipientDetail {
   invoiceType: "F1";
-  recipient: { taxId: string; legalName: string; address: string; countryCode: "ES" };
+  recipient: RecipientIdentifier & { legalName: string; address: string; countryCode: string };
   /** Absent when there is neither a choice to offer nor a saved one to send back. */
   delivery?: InvoiceDeliveryChoice;
 }
@@ -30,6 +39,9 @@ export interface InvoiceRecipientDetail {
 type DeliveryMedium = "receipt" | "a4" | "email" | "saved";
 
 interface RecipientDraft {
+  countryCode: string;
+  identifierType: RecipientIdentifierType;
+  identifierCountryCode: string;
   taxId: string;
   legalName: string;
   streetAddress: string;
@@ -64,6 +76,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
   /** The delivery already staged for the order; kept unless the delivery field is changed. */
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
   @state() private attempted = false;
+  @state() private countryCode = "ES";
+  @state() private identifierType: RecipientIdentifierType = "tax-number";
+  @state() private identifierCountryCode = "";
   @state() private taxId = "";
   @state() private legalName = "";
   @state() private streetAddress = "";
@@ -85,6 +100,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
 
   #value(): RecipientDraft {
     return {
+      countryCode: this.countryCode,
+      identifierType: this.identifierType,
+      identifierCountryCode: this.identifierCountryCode,
       taxId: this.taxId,
       legalName: this.legalName,
       streetAddress: this.streetAddress,
@@ -213,12 +231,20 @@ export class TillInvoiceRecipientDialog extends LitElement {
         Object.keys(a).every((key) => {
           const field = key as keyof RecipientDraft;
           if (field === "email" && a.medium !== "email" && b.medium !== "email") return true;
-          const canonical = (value: string) => {
+          if (
+            field === "identifierCountryCode" &&
+            a.identifierType === "tax-number" &&
+            b.identifierType === "tax-number"
+          )
+            return true;
+          const canonical = (draft: RecipientDraft) => {
+            const value = draft[field];
             if (field !== "taxId") return value.trim();
-            const result = getCountryPack("ES")!.taxIdentifier!.validate(value);
-            return result.valid ? result.normalized : value.trim();
+            if (draft.identifierType !== "tax-number") return value;
+            const result = recipientIdentifierResult({ taxId: value });
+            return result.valid ? result.value.taxId : value.trim();
           };
-          return canonical(a[field]) === canonical(b[field]);
+          return canonical(a) === canonical(b);
         }),
       restore: (value) => Object.assign(this, value),
     });
@@ -240,20 +266,46 @@ export class TillInvoiceRecipientDialog extends LitElement {
     this.renderRoot.querySelector<HTMLElement>("wt-input[name=taxId]")!.focus();
   }
 
-  #taxIdResult() {
-    return getCountryPack("ES")!.taxIdentifier!.validate(this.taxId);
+  #identifierResult() {
+    return recipientIdentifierResult({
+      taxId: this.taxId,
+      ...(this.identifierType === "tax-number"
+        ? {}
+        : {
+            identifierType: this.identifierType,
+            identifierCountryCode: this.identifierCountryCode,
+          }),
+    });
   }
 
   #errors() {
+    const identity = this.#identifierResult();
+    const address = recipientAddressErrors(this.#value());
     return {
-      taxId: this.#taxIdResult().valid ? "" : t("invoice.tax_id_invalid"),
+      taxId:
+        !identity.valid && identity.field === "taxId"
+          ? t(
+              this.taxId.trim() === ""
+                ? "invoice.identifier_required"
+                : this.identifierType === "tax-number"
+                  ? "invoice.tax_id_invalid"
+                  : "invoice.document_number_invalid",
+            )
+          : "",
+      identifierType:
+        !identity.valid && identity.field === "identifierType"
+          ? t("invoice.document_type_invalid")
+          : "",
+      identifierCountryCode:
+        !identity.valid && identity.field === "identifierCountryCode"
+          ? t("invoice.document_country_required")
+          : "",
+      countryCode: address.countryCode ? t("invoice.country_required") : "",
       legalName: this.legalName.trim() === "" ? t("invoice.name_required") : "",
-      streetAddress: this.streetAddress.trim() === "" ? t("invoice.street_address_required") : "",
-      postalCode: getCountryPack("ES")!.postalCode!.validate(this.postalCode).valid
-        ? ""
-        : t("invoice.postal_code_invalid"),
-      locality: this.locality.trim() === "" ? t("invoice.locality_required") : "",
-      province: this.province.trim() === "" ? t("invoice.province_required") : "",
+      streetAddress: address.streetAddress ? t("invoice.street_address_required") : "",
+      postalCode: address.postalCode ? t("invoice.postal_code_invalid") : "",
+      locality: address.locality ? t("invoice.locality_required") : "",
+      province: address.province ? t("invoice.province_required") : "",
       email: this.medium !== "email" || isValidEmail(this.email) ? "" : t("invoice.email_invalid"),
     };
   }
@@ -267,7 +319,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
       await focusFirstInvalid(this.shadowRoot!);
       return;
     }
-    const taxId = this.#taxIdResult();
+    const taxId = this.#identifierResult();
     if (!taxId.valid) return;
     this.#submitted = this.#value();
     const delivery = this.#delivery();
@@ -276,10 +328,10 @@ export class TillInvoiceRecipientDialog extends LitElement {
         detail: {
           invoiceType: "F1",
           recipient: {
-            taxId: taxId.normalized,
+            ...taxId.value,
             legalName: this.legalName.trim(),
-            address: `${this.streetAddress.trim()}, ${this.postalCode.trim()} ${this.locality.trim()}, ${this.province.trim()}`,
-            countryCode: "ES",
+            address: composeRecipientAddress(this.#value()),
+            countryCode: this.countryCode,
           },
           ...(delivery === undefined ? {} : { delivery }),
         },
@@ -310,9 +362,13 @@ export class TillInvoiceRecipientDialog extends LitElement {
   ): void {
     event.stopPropagation();
     if (!this.isConnected || !this.active) return;
-    this[field] = event.detail.value;
+    if (field === "identifierType")
+      this.identifierType = event.detail.value as RecipientIdentifierType;
+    else this[field] = event.detail.value;
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
+    if (field === "identifierType" && this.identifierType === "tax-number")
+      this.#edited("identifierCountryCode");
   }
 
   #chooseDelivery(event: CustomEvent<{ value: string }>): void {
@@ -376,7 +432,16 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const invalid = Object.values(errors).some(Boolean);
     const saveAction = saveActionState(this.#scope);
     const fieldRefused =
-      this.refusal !== "" && ["taxId", "legalName", "address", "email"].includes(this.refusalField);
+      this.refusal !== "" &&
+      [
+        "taxId",
+        "identifierType",
+        "identifierCountryCode",
+        "countryCode",
+        "legalName",
+        "address",
+        "email",
+      ].includes(this.refusalField);
     const bottomMessages: string[] = [];
     if ((this.attempted && invalid) || fieldRefused) bottomMessages.push(t("form.fix_fields"));
     if (this.refusal !== "" && !fieldRefused) bottomMessages.push(this.refusal);
@@ -388,11 +453,34 @@ export class TillInvoiceRecipientDialog extends LitElement {
       @wt-close=${(event: Event) => this.#closed(event)}
     >
       <div class="fields">
+        <wt-combobox
+          name="identifierType"
+          search="never"
+          required
+          .label=${t("invoice.identifier_type")}
+          .value=${this.identifierType}
+          .options=${(["tax-number", "vat-number", "passport", "residence-country-id", "residence-certificate", "other-document"] as const).map((value) => ({ value, label: t(`invoice.identifier.${value}`) }))}
+          .error=${this.#fieldError("identifierType", errors.identifierType)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("identifierType", event)}
+        ></wt-combobox>
+        ${
+          this.identifierType === "tax-number"
+            ? nothing
+            : html`<wt-combobox
+                name="identifierCountryCode"
+                required
+                .label=${t("invoice.identifier_country")}
+                .value=${this.identifierCountryCode}
+                .options=${RECIPIENT_IDENTIFIER_POLICY.documentCountryCodes.map((value) => ({ value, label: countryNameFor(value, currentLocale()) }))}
+                .error=${this.#fieldError("identifierCountryCode", errors.identifierCountryCode)}
+                @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("identifierCountryCode", event)}
+              ></wt-combobox>`
+        }
         <wt-input
           name="taxId"
           required
           autocomplete="off"
-          .label=${t("invoice.tax_id")}
+          .label=${t(this.identifierType === "tax-number" ? "invoice.tax_id" : "invoice.document_number")}
           .value=${live(this.taxId)}
           .error=${this.#fieldError("taxId", errors.taxId)}
           @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("taxId", event)}
@@ -432,7 +520,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         ></wt-input>
         <wt-input
           name="postalCode"
-          required
+          ?required=${this.countryCode === "ES"}
           autocomplete="off"
           .label=${t("invoice.postal_code")}
           .value=${live(this.postalCode)}
@@ -460,7 +548,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
         ></wt-input>
         <wt-input
           name="province"
-          required
+          ?required=${this.countryCode === "ES"}
           autocomplete="off"
           .label=${t("invoice.province")}
           .value=${live(this.province)}
@@ -472,26 +560,29 @@ export class TillInvoiceRecipientDialog extends LitElement {
               this.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]"),
             )}
         ></wt-input>
-        <wt-input
+        <wt-combobox
           name="countryCode"
-          disabled
+          required
           .label=${t("invoice.country")}
-          .value=${countryNameFor("ES", currentLocale())}
-        ></wt-input>
+          .value=${this.countryCode}
+          .options=${RECIPIENT_COUNTRY_CODES.map((value) => ({ value, label: countryNameFor(value, currentLocale()) }))}
+          .error=${this.#fieldError("countryCode", errors.countryCode)}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#change("countryCode", event)}
+        ></wt-combobox>
         ${this.#renderDelivery()}
-        <wt-form-actions .error=${bottomMessages.join(" ")}>
-          <wt-button slot="cancel" variant="secondary" @click=${() => this.#cancel()}
-            >${t("action.cancel")}</wt-button
-          >
-          <wt-button
-            data-invoice-save
-            variant=${saveAction.variant}
-            ?disabled=${saveAction.unchanged || (this.attempted && invalid)}
-            @click=${() => void this.#save()}
-            >${t("invoice.save_choice")}</wt-button
-          >
-        </wt-form-actions>
       </div>
+      <wt-form-actions slot="footer" .error=${bottomMessages.join(" ")}>
+        <wt-button slot="cancel" variant="secondary" @click=${() => this.#cancel()}
+          >${t("action.cancel")}</wt-button
+        >
+        <wt-button
+          data-invoice-save
+          variant=${saveAction.variant}
+          ?disabled=${saveAction.unchanged || (this.attempted && invalid)}
+          @click=${() => void this.#save()}
+          >${t("invoice.save_choice")}</wt-button
+        >
+      </wt-form-actions>
     </wt-dialog>`;
   }
 }

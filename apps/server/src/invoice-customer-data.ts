@@ -145,9 +145,6 @@ interface InvoiceRead {
   }[];
 }
 
-/** Decision 6's invoice turns, then the PDFs outside any turn, with `nextTurn()` after each.
- * `taxId`, already normalised, is written as it is. Throws a plain `Error` (cause attached) when any invoice cannot be made, after logging
- * `invoice_customer.pdf_failed` with its sale id. */
 export async function buildInvoiceCustomerFiles(
   deps: InvoiceCustomerFilesDeps,
   taxId: string,

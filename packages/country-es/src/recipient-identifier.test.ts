@@ -90,3 +90,23 @@ describe("Spain's accepted recipient identifiers", () => {
     ).toEqual({ valid: false, field: "taxId" });
   });
 });
+
+it("exports complete localized identity label resources", async () => {
+  const resources = await import("./index.js");
+  expect(Object.keys(resources.SPAIN_RECIPIENT_IDENTIFIER_LABELS ?? {})).toEqual([
+    "en",
+    "es",
+    "ca",
+    "gl",
+    "eu",
+  ]);
+  for (const row of Object.values(resources.SPAIN_RECIPIENT_IDENTIFIER_LABELS ?? {}))
+    expect(Object.keys(row).sort()).toEqual([
+      "other-document",
+      "passport",
+      "residence-certificate",
+      "residence-country-id",
+      "tax-number",
+      "vat-number",
+    ]);
+});

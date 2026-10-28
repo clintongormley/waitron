@@ -5820,14 +5820,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   items below. A964 comes first: it changes what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 
-- **A963. Full invoices accept recipient addresses in any country (owner, 2026-10-28).**
-  Postal country is independent of the required Spanish NIF or explicitly typed document.
-  The rework branch includes identity storage, transition guards and locally validated recipient filing.
-  Request/read propagation and exact-identity customer export checks now pass locally.
-  Forms, document labels and final integration qualification remain; the PR stays a draft for the owner.
-  Public counter F1 payment still waits for A555.
-  [Rework plan](superpowers/plans/2026-10-28-a963-foreign-recipient-rework.md).
-
 - **A964. Kitchen tickets and the order-number slip follow the venue's language, from
   `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),
   using the saved default content language. Recheck A773-2's printing reservations before

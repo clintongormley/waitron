@@ -29,9 +29,13 @@ describe("till-invoice-recipient-dialog", () => {
   it("shows Spain in the selected language", async () => {
     const el = await mountDialog();
     const country = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-      "wt-input[name=countryCode]",
+      "wt-combobox[name=countryCode]",
     )!;
-    expect(country.value).toBe("Spain");
+    expect(country.value).toBe("ES");
+    expect(
+      (country as HTMLElementTagNameMap["wt-combobox"]).options.find((o) => o.value === "ES")
+        ?.label,
+    ).toBe("Spain");
   });
 
   it.each(["en", "es-ES"])(
@@ -645,11 +649,13 @@ describe("country-free recipient input", () => {
       });
       const country = el.shadowRoot!.querySelector<
         HTMLElement & { value: string; disabled: boolean }
-      >("wt-input[name=countryCode]")!;
-      expect(country.value).toBe(
-        getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale],
-      );
-      expect(country.disabled).toBe(true);
+      >("wt-combobox[name=countryCode]")!;
+      expect(country.value).toBe("ES");
+      expect(
+        (country as HTMLElementTagNameMap["wt-combobox"]).options.find((o) => o.value === "ES")
+          ?.label,
+      ).toBe(getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale]);
+      expect(country.disabled).toBe(false);
     },
   );
   it.each(["00000", "99999"])(

@@ -33,3 +33,48 @@ export const SPAIN_RECIPIENT_IDENTIFIER_POLICY: RecipientIdentifierPolicy = Obje
     countryCode === "ES" ? spanishDocumentTypes : foreignDocumentTypes,
   documentMaxLength: 20,
 });
+
+export const SPAIN_RECIPIENT_IDENTIFIER_LABELS: Readonly<
+  Record<"en" | "es" | "ca" | "gl" | "eu", Readonly<Record<RecipientIdentifierType, string>>>
+> = {
+  en: {
+    "tax-number": "Spanish tax ID",
+    "vat-number": "VAT number",
+    passport: "Passport",
+    "residence-country-id": "Residence-country ID",
+    "residence-certificate": "Residence certificate",
+    "other-document": "Other document",
+  },
+  es: {
+    "tax-number": "NIF español",
+    "vat-number": "Número de IVA",
+    passport: "Pasaporte",
+    "residence-country-id": "Documento de identidad del país de residencia",
+    "residence-certificate": "Certificado de residencia",
+    "other-document": "Otro documento",
+  },
+  ca: {
+    "tax-number": "NIF espanyol",
+    "vat-number": "Número d’IVA",
+    passport: "Passaport",
+    "residence-country-id": "Document d’identitat del país de residència",
+    "residence-certificate": "Certificat de residència",
+    "other-document": "Altre document",
+  },
+  gl: {
+    "tax-number": "NIF español",
+    "vat-number": "Número de IVE",
+    passport: "Pasaporte",
+    "residence-country-id": "Documento de identidade do país de residencia",
+    "residence-certificate": "Certificado de residencia",
+    "other-document": "Outro documento",
+  },
+  eu: {
+    "tax-number": "Espainiako IFZ",
+    "vat-number": "BEZ zenbakia",
+    passport: "Pasaportea",
+    "residence-country-id": "Bizileku-herrialdeko nortasun-agiria",
+    "residence-certificate": "Egoitza-ziurtagiria",
+    "other-document": "Beste dokumentu bat",
+  },
+};

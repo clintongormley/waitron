@@ -136,3 +136,39 @@ describe.each(["light", "dark"] as const)("invoice customer dialog accessibility
     await expectNoA11yViolations(host);
   });
 });
+
+for (const theme of ["light", "dark"] as const) {
+  it(`foreign document fields and errors are accessible in ${theme}`, async () => {
+    setLocale("en-GB");
+    await modules["./invoice-customer-dialog.ts"]!();
+    const { el, host } = await mountWidget<InvoiceCustomerDialog>(
+      "dashboard-invoice-customer-dialog",
+      { open: true, api: {} as DashboardApi },
+      theme,
+    );
+    el.shadowRoot!.querySelector("[name=identifierType]")!.dispatchEvent(
+      new CustomEvent("wt-change", {
+        detail: { value: "passport" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await el.updateComplete;
+    await expectNoA11yViolations(host);
+    el.shadowRoot!.querySelector("[name=taxId]")!.dispatchEvent(
+      new CustomEvent("wt-change", { detail: { value: "P123" }, bubbles: true, composed: true }),
+    );
+    await el.updateComplete;
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=find]")!.click();
+    await el.updateComplete;
+    await expect
+      .poll(
+        () =>
+          el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(
+            "[name=identifierCountryCode]",
+          )!.error,
+      )
+      .not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+}

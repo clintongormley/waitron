@@ -840,10 +840,8 @@ it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
     const { pages } = await rendered(input);
     const text = pages.map((page) => page.text).join(" ");
     expect(text).toContain("2 Main Street, 28013 Madrid, Madrid");
-    expect(text).toContain(
-      getCountryPack("ES")!.countryNames![locale === "en-GB" ? "es-ES" : locale]!,
-    );
-    expect(text).not.toContain("Spain");
+    expect(text).toContain(getCountryPack("ES")!.countryNames![locale]!);
+    expect(text).not.toContain(locale === "en-GB" ? "España" : "Spain");
   },
 );
 
@@ -863,4 +861,23 @@ it("prints a French snapshot country in Catalan in the real PDF", async () => {
   expect(text).toContain(new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!);
   expect(text).not.toContain("France");
   expect(input).toEqual(before);
+});
+
+it.each([
+  ["en-GB", "Passport"],
+  ["es-ES", "Pasaporte"],
+])("renders an actual foreign document label in %s PDF", async (locale, label) => {
+  const input = structuredClone(fixture);
+  input.invoiceLocale = locale;
+  input.result.recipient = {
+    taxId: "Ab-09/xy",
+    identifierType: "passport",
+    identifierCountryCode: "FR",
+    legalName: "Guest",
+    countryCode: "ES",
+    address: "2 Main Street, Madrid",
+  };
+  const { pages } = await rendered(input);
+  expect(pages[0]!.text).toContain(`${label}: Ab-09/xy`);
+  expect(pages[0]!.text).not.toContain("NIF: Ab-09/xy");
 });

@@ -412,3 +412,29 @@ it("a saved email opens clean on Email, and a changed address asks before discar
   await expect.poll(() => app.closes).toBe(1);
   expect(app.submitted).toEqual([]);
 });
+
+for (const [field, value] of [
+  ["countryCode", "FR"],
+  ["identifierType", "passport"],
+]) {
+  it(`recipient ${field} alone asks before discarding and restores the starting choice`, async () => {
+    const { app, form } = await mount();
+    form
+      .shadowRoot!.querySelector(`[name=${field}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    await form.updateComplete;
+    expect(unload()).toBe(true);
+    cancel(form);
+    const q = await question(app);
+    expect(q.open).toBe(true);
+    q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+    await expect.poll(() => app.closes).toBe(1);
+    expect(
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-combobox"]>(`[name=${field}]`)!
+        .value,
+    ).toBe(field === "countryCode" ? "ES" : "tax-number");
+    expect(unload()).toBe(false);
+  });
+}

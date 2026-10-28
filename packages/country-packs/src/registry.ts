@@ -19,6 +19,7 @@ import {
   SPAIN_RECEIPT_LABELS,
   SPAIN_RECIPIENT_REGION_NAMES,
   SPAIN_RECIPIENT_IDENTIFIER_POLICY,
+  SPAIN_RECIPIENT_IDENTIFIER_LABELS,
 } from "@waitron/country-es";
 import { UNITED_KINGDOM } from "@waitron/country-gb";
 
@@ -28,7 +29,11 @@ export type {
   RecipientIdentifierType,
   RecipientIdentifierResult,
 } from "@waitron/country";
-export { SPAIN_RECIPIENT_REGION_NAMES as RECIPIENT_REGION_NAMES };
+export {
+  SPAIN_RECIPIENT_REGION_NAMES as RECIPIENT_REGION_NAMES,
+  SPAIN_RECIPIENT_IDENTIFIER_LABELS as RECIPIENT_IDENTIFIER_LABELS,
+  SPAIN_RECIPIENT_IDENTIFIER_POLICY as RECIPIENT_IDENTIFIER_POLICY,
+};
 
 export function recipientIdentifierResult(input: unknown): RecipientIdentifierResult {
   return validateRecipientIdentifier(input, SPAIN_RECIPIENT_IDENTIFIER_POLICY);

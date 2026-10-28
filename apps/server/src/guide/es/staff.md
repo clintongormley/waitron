@@ -64,11 +64,14 @@ El plazo de un mes para responder y las demás obligaciones del local están en
 ## Descargar los datos de un cliente de factura {#invoice-customer-data}
 
 Cuando un cliente pregunta qué datos suyos tiene el local, un administrador puede buscar sus
-facturas completas por el NIF y descargarlas. En **Pedidos**, pulsa **Buscar un cliente por NIF**,
-escribe el número y pulsa **Buscar**. Las mayúsculas, los espacios, los puntos, los guiones y un ES
-al principio no cambian nada. La ventana muestra todas las facturas completas que llevan ese NIF;
+facturas completas por su identificador y descargarlas. En **Pedidos**, pulsa **Buscar un cliente
+de factura**. Para un NIF español, mantén **NIF español**, escribe el número y pulsa **Buscar**.
+En esa búsqueda las mayúsculas, los espacios, los puntos, los guiones y un ES al principio no
+cambian nada. Para otro documento, elige su tipo y país emisor e introduce el número exacto tal
+como se guardó, incluidos los espacios y las mayúsculas. La ventana muestra las facturas completas
+que coinciden en los tres datos;
 pulsa **Descargar sus datos** para obtener un ZIP con una copia en PDF de cada factura, un archivo
-`invoices.json` con el nombre, el NIF y la dirección de cada una y todas las direcciones de correo
+`invoices.json` con el nombre, el identificador, su tipo y país emisor cuando existen y la dirección de cada una y todas las direcciones de correo
 a las que la caja la envió o intentó enviarla, y un `README.txt` en el idioma del local. Los
 gerentes no ven esta acción. Una reserva no lleva NIF, así que esta búsqueda no encuentra reservas.
 Waitron no guarda una lista de estas solicitudes, así que anota la solicitud y tu respuesta en los
