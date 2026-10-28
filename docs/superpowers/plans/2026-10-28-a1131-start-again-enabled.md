@@ -63,7 +63,8 @@ fixture's venue folder. No invoice record and nothing for AEAT; the series names
 are the attempt's own frozen input, which Start again's floor already reads
 (`gatherStartAgainFloor`'s `attempts`, `apps/server/src/first-setup-resolution.ts:189-202`).
 
-Why that is the only origin the product has for the held state — followed, not run as one test: an
+Why the box itself writes no invoice into an unfinished setup's database — followed, not run as
+one test: an
 attempt whose publication has not completed is kept off the trading start (`needsResolution`,
 `apps/server/src/first-setup-entry.ts:45-62`; the run-time recheck `:299-311`, exercised by
 "startup rechecks a newly activation-started attempt before entering its callback",
@@ -80,6 +81,30 @@ has it and a `committed` one may; Start again's disk check refuses it
 (`REFUSED.state`, `packages/provisioning/src/first-setup-start-again-deletion.ts:36-38`; suite case
 "a stopped recovery beside trading.env: Start again refuses setup.not_ready",
 `apps/server/src/first-setup-start-again-backup-discard.test.ts:449-459`).
+
+### Probe 3 — can a backup recovery start and stop beside a setup database that holds records?
+
+Appended to `apps/server/src/first-setup-start-again-backup.test.ts` (restored afterwards), whose
+harness already runs recoveries: `repairFixture()` (a claimed attempt, no setup database), then
+`suite.db.archiveTo(<venue>/venue.db)` from `apps/server/test/hour-recovery-host.ts:79` (a real,
+populated venue database), a fresh observation, `open`, `prepare({ action: "clock-challenge" })`,
+`close`, `liveness()`. Failing case, written before running (place 1 unreachable this way): `open`
+or `prepare` refuses, or `liveness()` is not `stopped`.
+
+```
+PROBE database occupied empty false status claimed
+PROBE open ok
+PROBE prepare ok
+PROBE after close stopped prepared
+```
+
+So the box opens, runs and stops a recovery beside a setup database that holds records; nothing in
+`open` or `prepare` looks at the setup database's rows. Not shown: the same with the attempt past
+activation. Moving the attempt record straight from `claimed` to `activation-started` through the
+store is refused (`setup.attempt_conflict`, same probe), so that order needs a real activation;
+Task 2 opens with it. The rows in this probe were placed by the test, standing in for rows the
+box did not write itself (a hand-placed or left-over database); the box accepts the state all the
+same, which is why rules 1 and 2 do not rely on where the rows came from.
 
 ### Probe 2 — a recovery record that cannot be read (the second place; NOT built)
 
@@ -110,10 +135,13 @@ Owner decision (2026-10-26): Start again is offered beside a stopped recovery ev
 database holds records, with the page saying what is there and what is lost. The rules below are
 this plan's own, made to respect the owner's fiscal stop; the PR asks the owner to confirm them.
 
-1. **Start again in the held state is refused when the setup database holds any kept row** —
-   invoice records included. Holdings come from every module in `host.modules` that answers
-   (Task 1a–1b), read from the database without writing (Task 3). The page shows the counts and
-   offers no confirmation (Task 8). Why: deleting a row Waitron never deletes is the loss the
+1. **Start again in the held state is refused when the setup database holds any kept row, or any
+   invoice record a module counts** (`kept > 0 || records > 0`, so a module that wrongly lists its
+   invoice table as deletable still cannot let one go). Holdings come from every module in
+   `host.modules` that answers (Task 1a–1b), read from the database without writing (Task 3); the
+   append-only tables come from the manifest and the database's own triggers, not from the enabled
+   modules (Task 3). The page shows the counts and
+   offers no confirmation (Task 8b). Why: deleting a row Waitron never deletes is the loss the
    owner's condition forbids; an unfinished setup never sells, so such a database is a fault, said
    so at the site.
 2. **The note's floor also covers every series name the setup database holds**: the fiscal module's
@@ -126,6 +154,10 @@ this plan's own, made to respect the owner's fiscal stop; the PR asks the owner 
    `apps/setup/src/api/first-setup-types.ts:68-72`, and keeps Start again disabled); status
    `complete` (found after the password; the server answers a new refusal the page has words for,
    as D3a does on the missing-database path, `apps/server/src/first-setup-resolution.ts:480-484`).
+   A real `complete` attempt always has `trading.env` (written before `publication`, above), so the
+   server checks `trading.env` first and the page shows `tradingSaved`; `setupFinished` is reached
+   only when `trading.env` is absent beside a `complete` record, which no product path is known to
+   leave — it is kept as a defence, not a common view.
    Also still refused, unchanged: a database that holds records with no stopped recovery beside it;
    an EMPTY database beside an attempt that reached activation (second row of
    `first-setup-start-again-backup-discard.test.ts:826-846`, unedited).
@@ -137,7 +169,7 @@ this plan's own, made to respect the owner's fiscal stop; the PR asks the owner 
 
 > 1. Beside a stopped recovery, Start again is now offered when the setup database holds records.
 >    After the password the page says how many, that none is an invoice, and that no invoice was
->    sent to AEAT (words in Task 8). Do they say enough about what is lost?
+>    sent to AEAT (words in Tasks 8a and 8b). Do they say enough about what is lost?
 > 2. Start again stays off in three cases, each explained on the page: the database holds an
 >    invoice or another record Waitron never deletes (said to be a fault in Waitron); the setup
 >    already saved the settings the box trades with (the page asks for the setup password to
@@ -169,53 +201,81 @@ Files: none committed except this plan's "Task 0 findings" section.
 - Rebase on main; re-read every line reference above; fix any that moved.
 - Throwaway test: a real first-setup activation with `ALL_MODULES` (not the cut-down fixture of
   Probe 1) that stops at `committed` (inject the failure at publication, as
-  `first-fiscal-interruption.test.ts` does, but with every module). Print (a) every table with rows
-  and its count, excluding SQLite's own tables, each migration set's journal table and
-  `_litestream_*`; (b) which of those are append-only, from `manifestSets()[i].appendOnlyTables`;
-  (c) the owning module of each append-only table with rows.
-- Write (a)–(c) into "Task 0 findings". (b)+(c) is the list Task 1a's declarations must match;
-  the total in (a) replaces "20" in Task 8's worked example.
+  `first-fiscal-interruption.test.ts` does, but with every module), with the database in the
+  fixture's venue folder. Print (a) every table with rows and its count, excluding SQLite's own
+  tables, each migration set's journal table and `_litestream_*`; (b) which of those are
+  append-only, from `manifestSets()[i].appendOnlyTables`; (c) the owning module of each append-only
+  table with rows; (d) `node.db`'s table list (A1042 measured only a fresh and a complete setup).
+- Write (a)–(d) into "Task 0 findings". (b)+(c) is the list Task 1b's declarations must match;
+  the total in (a) replaces "N" in Task 8a's worked example. If (d) lists any table, stop and
+  report: the node-file check would refuse the held state.
 - Commit the findings (`-s`). Delete the probe.
 
 ### Task 1a: The module contract
 
-Files: `packages/module/src/initial-setup.ts`, `packages/module/src/module.ts`, their tests.
+Files: `packages/module/src/initial-setup.ts`, `packages/module/src/module.ts`, the module
+package's error registry and `scripts/errors-reachable.test.ts`'s expectations if it lists codes,
+tests.
 
 - `InitialSetupContribution.startAgainHoldings?(db: Pick<Database, "execute">)
   : Promise<{ readonly records: number; readonly accepted: number }>` — "invoice records in a
   setup database Start again is about to delete; refuses (throws) when its own tables are missing
   from a database whose migration set is applied, never counts them as 0".
-- `WaitronModule.startAgainDeletable?: readonly string[]` — "append-only tables this module's own
-  first-setup activation writes, which Start again may delete with an unfinished setup".
+- `InitialSetupContribution.startAgainHistory?(db: Pick<Database, "execute">)
+  : Promise<readonly unknown[]>` — "the module's name history of a setup database Start again is
+  about to delete, read with plain reads only: no transaction, no write lock, no change-log drain".
+  Why a new seat: the existing `readRecoveryHistory` (`readHourRecoveryHistory`,
+  `packages/fiscal-verifactu/src/hour-recovery-state.ts:15-19`) runs inside `withTransaction`
+  (`packages/db/src/tenancy.ts:30-41`), which takes the write lock and drains the change log with
+  a `delete … returning` — a read-only, immutable connection refuses that write ("attempt to write
+  a readonly database", reviewer's probe). The new seat is used on both read paths of Task 3, so
+  there is one history reader to test.
+- `WaitronModule.startAgainDeletable?: readonly string[]` — "whole append-only tables (every row
+  in them may go) that this module's own first-setup activation writes, which Start again may
+  delete with an unfinished setup. Their names still reach the floor through `startAgainHistory`;
+  listing a table here never hides it from the floor."
 - `startAgainFloor`'s input gains `readonly databaseHistory?: readonly unknown[]` — "what the
-  module's `operations.readRecoveryHistory` returned for the database Start again is about to
-  delete; one the module cannot read in full refuses".
-- Failing test: a descriptor-shape test that a module listing a table its sets do not declare
-  append-only is refused at composition (the same place `appendOnlyTables` is checked; grep
-  `appendOnlyTables` in `packages/module/src/module.ts:1675`).
-- Run: `pnpm --filter @waitron/module exec vitest run` on the touched test file; then
-  `pnpm exec vitest run scripts/module-seams.test.ts`.
+  module's `startAgainHistory` returned; one the module cannot read in full refuses".
+- Composition refuses a module that lists in `startAgainDeletable` a table none of its own
+  migration sets declares append-only, with a new error code (e.g.
+  `module.start_again_deletable_invalid`, registered in the module package's error registry, so
+  `scripts/errors-reachable.test.ts` sees it). The check goes where module descriptors are
+  validated at composition (grep the existing descriptor refusals near
+  `packages/module/src/module.ts:1675`, which is where `appendOnlyTables` is built).
+- Failing test: that refusal, with a table the module does not own; a correct list composes.
+- Run: `pnpm --filter @waitron/module exec vitest run <touched test file>`;
+  `pnpm exec vitest run scripts/module-seams.test.ts scripts/errors-reachable.test.ts`.
 
-### Task 1b: The fiscal module's holdings and its deletable list
+### Task 1b: The fiscal module's holdings, history and deletable list
 
 Files: `packages/fiscal-verifactu/src/initial-hour-setup.ts` (the contribution at `:403`),
-`packages/fiscal-verifactu/src/hour-configuration.ts` (the historical contribution at `:87`), the
-module descriptor, new test `packages/fiscal-verifactu/src/start-again-holdings.test.ts`.
+`packages/fiscal-verifactu/src/hour-configuration.ts` (the historical contribution at `:87`),
+`packages/fiscal-verifactu/src/hour-history-reader.ts`, the module descriptor, new test
+`packages/fiscal-verifactu/src/start-again-holdings.test.ts`.
 
-- Register `startAgainHoldings` in BOTH contributions (`:403` and `:87`); declare
-  `startAgainDeletable` with exactly Task 0's fiscal-owned list (and any other owning module's list
-  in its own descriptor).
-- Failing tests first (fail on the missing seat):
+- Register `startAgainHoldings` and `startAgainHistory` in BOTH contributions (`:403` and `:87`).
+- `startAgainHistory`: `readHourHistory` builds its rows with Drizzle's query builder on a
+  `Transaction` (`hour-history-reader.ts:49-62`), so it cannot run over a plain `execute` target.
+  Split it: the reads stay in `readHourHistory`; the turning of rows into an `HourHistorySource`
+  becomes a pure function both call. `startAgainHistory` reads the same tables with plain
+  `db.execute(sql\`…\`)` statements and hands the rows to that function. A test pins that both give
+  the same source for one database.
+- Declare `startAgainDeletable` with exactly Task 0's fiscal-owned list, pinned by a `toEqual`
+  test (and any other owning module's list in its own descriptor, pinned the same way).
+- Failing tests first (fail on the missing seats):
   1. On a migrated venue database (`useVenueDb` with `TEST_MIGRATIONS`): no invoice record →
      `{ records: 0, accepted: 0 }`; after two invoice records through the package's existing write
      path helpers, one with its `envios` row at `aceptado` → `{ records: 2, accepted: 1 }`; a
      `pendiente` row is not counted as accepted.
   2. A database without the fiscal tables but with the fiscal migration set's journal → refuses.
+  3. `startAgainHistory` over a read-only connection of an activated database equals
+     `readHourHistory`'s source for it.
 - An `envios` row's primary key is its record's id and references it
   (`packages/fiscal-verifactu/src/schema/envios.ts:19-22`), so `records: 0` means no invoice was
   sent — the page's `heldNoInvoices` line rests on that.
 - Deletion control: drop the `accepted` filter → test 1's `pendiente` case fails.
-- Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/start-again-holdings.test.ts`.
+- Run: `pnpm --filter @waitron/fiscal-verifactu exec vitest run src/start-again-holdings.test.ts`
+  and the package's existing history-reader tests (grep `readHourHistory` in `*.test.ts`).
 
 ### Task 1c: The floor reads every name in a database's history, and refuses what it cannot read
 
@@ -223,14 +283,14 @@ Files: `packages/fiscal-verifactu/src/initial-hour-setup.ts` (`hourStartAgainFlo
 its test file (grep `hourStartAgainFloor` under `packages/fiscal-verifactu/src`).
 
 - `hourStartAgainFloor` reads `databaseHistory` itself — it does NOT call `projectHourHistory`,
-  which drops rows (the plan review's probe: one incomplete source with minute 100 under the
-  right taxpayer, minute 900 under another and a nameless row printed
-  `{"greatest":100,"contradictions":["venue:incomplete","c:invalid_record"]}`). It takes the highest
-  minute across every record of every source, whatever the record's taxpayer or environment, and
-  refuses `history_invalid` when a source is not `complete` (`readHourHistory` marks a database
-  incomplete when an `invoice_series` row matches no `registro_sif` row,
-  `packages/fiscal-verifactu/src/hour-history-reader.ts:120-133`), when a record has no readable
-  name, or when a source or record is malformed.
+  which drops rows (the plan reviewer's probe, reported to the planner and not re-run: one
+  incomplete source with minute 100 under the right taxpayer, minute 900 under another and a
+  nameless row printed `{"greatest":100,"contradictions":["venue:incomplete","c:invalid_record"]}`).
+  It takes the highest minute across every record of every source, whatever the record's taxpayer
+  or environment, and refuses `history_invalid` when a source is not `complete`
+  (`readHourHistory` marks a database incomplete when an `invoice_series` row matches no
+  `registro_sif` row, `packages/fiscal-verifactu/src/hour-history-reader.ts:120-133`), when a
+  record has no readable name, or when a source or record is malformed.
 - Failing tests first: (1) a complete source naming minute M → `floorMs = EPOCH_MS + (M + 1) *
   MINUTE_MS` and `lastName` for M; (2) a later minute under ANOTHER taxpayer raises the floor to it;
   (3) an incomplete source → `history_invalid`; (4) a record with no identity → `history_invalid`;
@@ -242,53 +302,69 @@ its test file (grep `hourStartAgainFloor` under `packages/fiscal-verifactu/src`)
 
 ### Task 2: One shared test helper for a held setup
 
-Files: new `apps/server/test/held-setup-database.ts` (the server's fixtures live in
-`apps/server/test/`, beside `first-setup-backup-recovery-fixture.ts`), its own small test.
+Files: new `apps/server/test/held-setup-database.ts` (beside its siblings, e.g.
+`first-setup-backup-recovery-fixture.ts`); its own test in
+`apps/server/src/held-setup-database.test.ts` (the package's Vitest and coverage include only
+`src/**/*.ts`, `apps/server/vitest.config.ts:38`; `apps/server/test/` holds no test files).
 
-- `heldSetup(options)` builds: a real activation in the fixture's venue folder (the database in
-  `<venue>/venue.db`, not a suite database elsewhere), stopped at `committed` with no
-  `trading.env`, then a stopped backup recovery beside it via `selectedRepair()` followed by
-  `service.close(session.sessionId)`; returns the roots, host, workspace, service, owner sign-in
-  helper and the attempt's installation name. Options: `invoices: n` (write n invoice records
-  through the fiscal module's own test write path), `status` (move the attempt record to a given
-  status through the store, as `first-setup-resolution.boot.test.ts:310-311` does),
-  `tradingSettings: true` (write `<state>/trading.env`).
-- Its test: the inspection reads `occupied`, the recovery's `liveness()` is `stopped`, and
-  `invoices: 1` leaves one `registros_facturacion` row (test file only; generic code never names it).
-- Run: `pnpm --filter @waitron/server exec vitest run test/held-setup-database.test.ts`
-  (or wherever the package's config picks up `test/` files — check `apps/server/vitest.config.ts`).
+- Step 1, a probe that decides the order: Probe 3 showed a recovery opens and stops beside a
+  database that holds rows with the attempt at `claimed`; it did NOT show an attempt past
+  activation. `selectedRepair()` builds its own box and takes no roots
+  (`apps/server/test/first-setup-backup-recovery-fixture.ts:136`, through `repairFixture` →
+  `fixture(true)` → `archiveHost()`), so the helper works on ITS box: try (A) `selectedRepair()`,
+  `close` the recovery, then drive `f.host` through activation to `committed`; and (B) activation
+  to `committed` first, then `open`/`prepare`/`close` a recovery. Record which works, with its
+  output, in "Task 0 findings". If neither can be driven, stop and report: the held state is then
+  shown only with rows the box did not write (Probe 3), and the helper builds that instead.
+- `heldSetup(options)` returns the roots, host, workspace, service, an owner sign-in helper and the
+  attempt's installation name. Options: `invoices: n` (n invoice records through the fiscal
+  module's own test write path), `status` (only statuses the store reaches through real steps),
+  `tradingSettings: true` (write `<state>/trading.env`), `pendingWal: true` (leave one committed
+  row in `venue.db-wal`).
+- Its test: the inspection reads `occupied`, `liveness()` is `stopped`, and `invoices: 1` leaves
+  one invoice record (counted through the fiscal module's seat; generic test code names no fiscal
+  table).
+- Run: `pnpm --filter @waitron/server exec vitest run src/held-setup-database.test.ts`.
 
-### Task 3: The server reads holdings and history without writing, and without a copy when it can
+### Task 3: The server reads holdings and history without writing
 
-Files: new `apps/server/src/first-setup-database-holdings.ts` and its test; the private-copy
-logic of `apps/server/src/first-setup-backup-history.ts:31-90` is reused, not duplicated.
+Files: new `apps/server/src/first-setup-database-holdings.ts` and its test; the private-copy logic
+of `apps/server/src/first-setup-backup-history.ts:31-90` is reused, not duplicated.
 
-- `readSetupDatabaseHoldings(roots, modules)` returns `{ rows, kept, records, accepted, history }`:
-  - Opening: when `venue.db-wal` is missing or empty, open `venue.db` read-only with `immutable=1`,
-    as the node file check does (`first-setup-start-again-deletion.ts:483-494`), and wrap it with
-    `drizzleNodeSqlite` (`packages/store/src/index.ts:27`); only when the WAL holds pages, read
-    through the existing private copy. Why: Start again is the way out of a full disk (guide
-    `apps/server/src/guide/en/backup-recovery.md:53`, about 8 MB spare), and the database may be up
-    to 128 MiB.
+- `readSetupDatabaseHoldings(roots, modules)`, called only inside the summary's and Start again's
+  existing venue exclusion and coordinator turn (`host.resolution.withVenueExclusion(() =>
+  host.coordinator.run(…))`, `apps/server/src/first-setup-resolution.ts:403-404`; the exclusion is
+  `lockVenueDatabase`, `packages/db/src/client.ts:84-91`), returns
+  `{ rows, kept, records, accepted, history }`:
+  - Opening: inside that one turn, check `venue.db-wal` and `venue.db-journal`; when the WAL is
+    missing or empty AND no `-journal` exists, open `venue.db` read-only with `immutable=1`, as the
+    node file check does (`first-setup-start-again-deletion.ts:483-494`); otherwise read through
+    the existing private copy (which copies `-wal` and `-journal`, `first-setup-backup-history.ts:65`)
+    opened read-only. Why both conditions: an immutable open ignores WAL pages (reviewer's probe:
+    1 row read where 2 were committed). Why avoid the copy: Start again is the way out of a full
+    disk (guide `apps/server/src/guide/en/backup-recovery.md:53`, about 8 MB spare) and the
+    database may be up to 128 MiB.
+  - Both paths give the module seats a plain `execute` target over that read-only connection, built
+    as `inspectDatabase` builds one (`packages/provisioning/src/first-setup-resolution-inspection.ts:89-101`).
+  - Append-only tables: the union of every set's `appendOnlyTables` in `manifestSets()` (every
+    module in the manifest, enabled or not) and every table in the database carrying a
+    `<table>_append_only_update` or `_delete` trigger (the names
+    `appendOnlyTriggers`, `packages/store/src/append-only.ts:68-80`, gives them), read from
+    `sqlite_schema`. Never from `host.modules`.
   - `rows`: every row of every table except SQLite's own, each migration set's journal table and
-    `_litestream_*`; `kept`: rows in append-only tables that no module lists in
-    `startAgainDeletable`; `records`/`accepted`: summed over EVERY module in `modules` whose initial
-    setup has `startAgainHoldings`; `history`: per module with `startAgainFloor`, its
-    `operations.readRecoveryHistory` — such a module without a history reader refuses
-    `setup.not_ready`.
+    `_litestream_*`; `kept`: rows in those append-only tables that no module in the MANIFEST lists
+    in `startAgainDeletable`; `records`/`accepted`: summed over EVERY module in `modules` whose
+    initial setup has `startAgainHoldings`; `history`: per module with `startAgainFloor`, its
+    `startAgainHistory` — such a module without that seat refuses `setup.not_ready`.
   - A failed read (the copy cannot be written, the file cannot be opened) answers
-    `setup.not_ready`, which the page already words; say so in the test name.
-- Failing tests first (fail: module missing), using Task 2's helper: legitimate → `rows` equals
-  Task 0's total, `kept: 0`, `records: 0`; `invoices: 1` → `kept ≥ 1`, `records: 1`; the original
-  files' bytes and their side files are unchanged after the read; an empty migrated database →
-  `rows: 0`; a pending WAL (write one row after a checkpoint is disabled) is read through the copy
-  and counted.
-- Full-disk case in `apps/server/src/start-again-full-disk.e2e.test.ts`, with its small real
-  filesystem (`apps/server/src/testing/full-disk.ts`): the held state on a full disk with the
-  spare file: the summary answers and Start again completes, as its neighbour case `:150` does for
-  an empty database.
+    `setup.not_ready`, which the page already words; the test name says so.
+- Failing tests first (fail: module missing), on Task 2's helper: legitimate → `rows` equals Task
+  0's total, `kept: 0`, `records: 0`; `invoices: 1` → `kept ≥ 1`, `records: 1`; the original files'
+  bytes and side files are unchanged after the read; an empty migrated database → `rows: 0`;
+  `pendingWal` → read through the copy and the pending row counted; a row in an append-only table
+  of a module that is in the manifest but not in `modules` → counted in `kept`.
 - `apps/server/src/first-setup-backup-history.test.ts` passes unedited.
-- Run: `pnpm --filter @waitron/server exec vitest run src/first-setup-database-holdings.test.ts src/first-setup-backup-history.test.ts src/start-again-full-disk.e2e.test.ts`.
+- Run: `pnpm --filter @waitron/server exec vitest run src/first-setup-database-holdings.test.ts src/first-setup-backup-history.test.ts`.
 
 ### Task 4a: The summary type and the confirmation record (provisioning)
 
@@ -296,7 +372,8 @@ Files: `packages/provisioning/src/first-setup-start-again-confirmation.ts`, its 
 
 - `StartAgainSummary` gains `held?: { rows: number; kept: number; records: number;
   accepted: number }`; the confirmation-record parser accepts exactly those four non-negative safe
-  integers, with `accepted ≤ records ≤ kept ≤ rows`, and nothing else.
+  integers, with `accepted ≤ records` and `kept ≤ rows`, and nothing else. (Not `records ≤ kept`:
+  rule 1's defence case is a module that wrongly lists its invoice table as deletable.)
 - Failing test: a record holding `held` is refused today `setup.attempt_invalid`; an extra key,
   a negative or a non-integer count, or `accepted > records` stays refused.
 - Run: `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-confirmation.test.ts`.
@@ -304,24 +381,26 @@ Files: `packages/provisioning/src/first-setup-start-again-confirmation.ts`, its 
 ### Task 4b: The server's summary in the held state
 
 Files: `apps/server/src/first-setup-resolution.ts` (`startAgainSummary` from `:402`, the refusal
-at `:424-429`; `gatherStartAgainFloor`), `apps/server/src/errors.ts`, test file
-`apps/server/src/first-setup-start-again-held.test.ts` (new).
+at `:424-429`; `gatherStartAgainFloor`), `apps/server/src/errors.ts`,
+`apps/server/src/setup-first-fiscal-api.ts` (its error boundary, `:33-48`, maps an unlisted code to
+`setup.provision_failed`), new test file `apps/server/src/first-setup-start-again-held.test.ts`.
 
 - New error code `setup.start_again_refused`, params `{ cause: "setup-finished" |
-  "kept-records" | "trading-settings" }` (no personal data), mapped to 409 in
-  `setup-first-fiscal-api.ts`'s boundary (`:33-48`).
-- In the held state the summary no longer answers `setup.not_ready` at `:424-429`: it reads
-  holdings (Task 3), passes `history` as `databaseHistory`, runs
-  `assertStartAgainAllowedOnDisk(roots, { discarding })`, and answers with `held`. Status
-  `complete` answers `setup.start_again_refused` `{ cause: "setup-finished" }`; `trading.env`
-  answers `{ cause: "trading-settings" }` (before the disk check, which would say only
-  `setup.not_ready`). `kept > 0` still answers the summary, so the page can explain.
+  "kept-records" | "trading-settings" }` (no personal data), registered in `errors.ts` and mapped
+  to 409 in that boundary.
+- In the held state the summary no longer answers `setup.not_ready` at `:424-429`. In this order:
+  `trading.env` present → `setup.start_again_refused` `trading-settings` (before the disk check,
+  which would say only `setup.not_ready`, and before the status, because a real `complete` attempt
+  always has it); status `complete` → `setup-finished`; then it reads holdings (Task 3), passes
+  `history` as `databaseHistory`, runs `assertStartAgainAllowedOnDisk(roots, { discarding })`, and
+  answers with `held`. `kept > 0 || records > 0` still answers the summary, so the page can explain.
 - Failing tests first, all on Task 2's helper: (1) legitimate → `held: { rows: N, kept: 0,
   records: 0, accepted: 0 }`, the `recovery` block as today; (2) `invoices: 1` → summary with
-  `held.records: 1`; (3) `status: "complete"` → `setup.start_again_refused` `setup-finished`;
-  (4) `tradingSettings` → `trading-settings`; (5) still refused `setup.not_ready`, nothing written:
-  a held database with no recovery started; `database: "unknown"`/`"partial"` beside a stopped
-  recovery; an empty database beside an `activation-started` attempt (the existing row, unedited).
+  `held.records: 1`; (3) `tradingSettings` → `trading-settings`, also when the status is
+  `complete`; (4) `complete` without `trading.env` → `setup-finished`; (5) still refused
+  `setup.not_ready`, nothing written: a held database with no recovery started;
+  `database: "unknown"`/`"partial"` beside a stopped recovery; an empty database beside an
+  `activation-started` attempt (the existing row, unedited).
 - Deletion control: remove the new branch → test 1 fails with `setup.not_ready`.
 - Run: `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-held.test.ts src/first-setup-start-again-backup-discard.test.ts`
   and `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`.
@@ -331,12 +410,12 @@ at `:424-429`; `gatherStartAgainFloor`), `apps/server/src/errors.ts`, test file
 Files: `apps/server/src/first-setup-resolution.ts` (`startAgainFirstSetup`), the same new test file.
 
 - In the held state: owner required, `confirmRecoveryDiscard.shown` must equal the summary (with
-  `held`); `kept > 0` → `setup.start_again_refused` `kept-records`, status `complete` →
-  `setup-finished`, `trading.env` → `trading-settings`, each before any write. The
+  `held`); `trading.env` → `setup.start_again_refused` `trading-settings`, status `complete` →
+  `setup-finished`, `kept > 0 || records > 0` → `kept-records`, each before any write. The
   `PRESENT_START_AGAIN_STATUSES`, `no-venue-rows` and `emptyWorkspace`/`unusedAssignment` gates at
   `:484-518` are skipped for the held state only; the floor includes `databaseHistory`; then the
   existing sequence (confirmation record with `database: "present"`, note, abandon, empty, marker,
-  delete) runs unchanged. The node-file check stays as it is (no tables, per A1042 round 3).
+  delete) runs unchanged. The node-file check stays as it is (Task 0 (d)).
 - Failing tests first, on Task 2's helper:
   1. after Start again the venue and state trees hold only what an empty Start again leaves (the
      discard suite's `tree`/`expectNothingWritten` helpers), the confirmation record holds the
@@ -347,10 +426,24 @@ Files: `apps/server/src/first-setup-resolution.ts` (`startAgainFirstSetup`), the
      `invoice_series` rows (`A-`, `FF-`, `R-` + that name, same node) and one `fiscal_allocations`
      row naming that `registro_sif` — through the fiscal module's test helpers, so the history
      stays `complete`; the note's floor follows that later name, not the attempt's;
-  3. still refused, nothing changed (tree, journal, note, confirmations equal before/after):
-     `invoices: 1`; `status: "complete"`; `tradingSettings`; a `shown` without `held`; a hand-made
-     request with `confirmMissingDatabase`; a held database with no stopped recovery.
+  3. rule 1's defence: with a test module list in which the fiscal module ALSO lists its invoice
+     table as deletable, `invoices: 1` makes `kept` 0 and `records` 1, and Start again still
+     refuses `kept-records`;
+  4. still refused, nothing changed (tree, journal, note, confirmations equal before/after):
+     `invoices: 1`; `complete` without `trading.env`; `tradingSettings`; a `shown` without `held`;
+     a hand-made request with `confirmMissingDatabase`; a held database with no stopped recovery.
 - Run: `pnpm --filter @waitron/server exec vitest run src/first-setup-start-again-held.test.ts src/first-setup-start-again-backup-discard.test.ts src/first-setup-start-again-note.test.ts`.
+
+### Task 5b: The held state on a full disk
+
+Files: `apps/server/src/start-again-full-disk.e2e.test.ts`, with its small real filesystem
+(`apps/server/src/testing/full-disk.ts`; macOS makes it with `hdiutil`, Linux needs
+`WAITRON_FULL_DISK_DIR`, CLAUDE.md §4).
+
+- Failing test first: the held state on a full disk with the spare file — the summary answers with
+  `held` and Start again completes, as its neighbour case at `:150` does for an empty database.
+  Before Task 3's immutable path it fails on the copy (or answers `setup.not_ready`).
+- Run: `pnpm --filter @waitron/server exec vitest run src/start-again-full-disk.e2e.test.ts`.
 
 ### Task 6: The HTTPS route accepts `held`
 
@@ -376,26 +469,21 @@ Files: `apps/setup/src/first-setup-session.ts` (`summaryOf`, `:105-122`; `sameSu
 - Failing tests first: a summary with `held` is refused `setup.attempt_invalid` today; a second
   summary read whose `held` differs from the first (e.g. `rows` 20 → 21) is treated as changed, as
   a changed `recovery` is.
-- The session maps `setup.start_again_refused` with its `cause` to the page (Task 8), not to
+- The session maps `setup.start_again_refused` with its `cause` to the page (Task 8b), not to
   `shell.not_ready`.
 - Run: `pnpm --filter @waitron/setup exec vitest run src/first-setup-retirement.test.ts src/first-setup-session.test.ts`.
 
-### Task 8: The page
+### Task 8a: The page — the held confirmation
 
 Files: `apps/setup/src/screens/initial-owner-strings.ts`, `apps/setup/src/setup-app.ts`
 (`#renderFirstOwner`, `canRestart` and the confirm block), tests
 `apps/setup/src/setup-app-resolution.test.ts`, new `apps/setup/src/setup-app-held-database.a11y.test.ts`.
 
 - Start again is enabled when `stoppedHere` and the inspection says the database holds records,
-  unless `inspection.artifacts` shows `trading.env` present: then it stays disabled and the page
-  shows `tradingSaved` instead of `startUnavailableOccupied`.
+  unless `inspection.artifacts` shows `trading.env` present (Task 8b).
 - Pressing it goes to the existing password step; the summary then shows, above the existing
   stopped-recovery block, the held lines, then `startAgainHelp`, the `retireConfirmed` checkbox,
   Cancel and Start again — unchanged controls.
-- `held.kept > 0`: the page shows the kept lines and `heldFault`, no checkbox, no confirming Start
-  again; Cancel stays; `reconnect-first` is on screen (it is drawn unconditionally,
-  `setup-app.ts:2818`; the test asserts it in this view).
-- `setup.start_again_refused` `setup-finished` after the password shows `setupFinished`.
 - Words (new keys; placeholders replaced with plain numbers):
 
 | key | English | Spanish |
@@ -405,35 +493,61 @@ Files: `apps/setup/src/screens/initial-owner-strings.ts`, `apps/setup/src/setup-
 | `heldNoInvoices` | None of them is an invoice, so no invoice was sent to AEAT. | Ninguno es una factura, así que no se envió ninguna factura a la AEAT. |
 | `heldNoInvoicesOne` | It is not an invoice, so no invoice was sent to AEAT. | No es una factura, así que no se envió ninguna factura a la AEAT. |
 | `heldLost` | Start again deletes them with this attempt. You will enter this setup's details again. | Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración. |
+
+  Worked example (N from Task 0): "The setup database already holds N saved items. None of them is
+  an invoice, so no invoice was sent to AEAT. Start again deletes them with this attempt. You will
+  enter this setup's details again." then today's "A recovery from backup started on … and did not
+  finish. Start again deletes it." and "Deletes this attempt. This box will not use its invoice
+  series names again."
+- `startUnavailableOccupied` stays, shown only for a database that holds records with no stopped
+  recovery.
+- Failing tests first (both locales): (a) the test at `setup-app-resolution.test.ts:1940-1960`
+  changes (see "Tests whose checks change"); (b) after the password the held lines appear in order,
+  `heldRowsOne`/`heldNoInvoicesOne` for `rows: 1`; (c) still refused: a database that holds
+  records with no stopped recovery keeps Start again disabled with `startUnavailableOccupied`.
+- a11y: axe over the held confirmation, light and dark (the pattern of
+  `setup-app-missing-database.a11y.test.ts`).
+- Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app-resolution.test.ts src/setup-app-held-database.a11y.test.ts`.
+
+### Task 8b: The page — the three refusal views
+
+Files: as Task 8a, plus `apps/setup/src/setup-app-held-refusals.test.ts` (new) and the same a11y
+file.
+
+- `trading.env` present in `inspection.artifacts` beside a stopped recovery: Start again stays
+  disabled and the page shows `tradingSaved` instead of `startUnavailableOccupied`. Its last
+  sentence names the password field: the test asserts `resume-password` is on screen in that view;
+  where the inspection says `password: "uncheckable"` the sentence is left off.
+- `held.kept > 0 || held.records > 0` after the password: the kept lines and `heldFault`, no
+  checkbox, no confirming Start again; Cancel stays; `reconnect-first` is on screen (drawn
+  unconditionally, `setup-app.ts:2818`; the test asserts it in this view).
+- `setup.start_again_refused` `setup-finished` after the password shows `setupFinished`;
+  `trading-settings` after the password (the file appeared since the page loaded) shows
+  `tradingSaved`; neither shows `shell.not_ready`'s words.
+- Words:
+
+| key | English | Spanish |
+| --- | --- | --- |
 | `heldKept` | It holds {kept} items that Waitron never deletes. | Tiene {kept} elementos que Waitron nunca borra. |
 | `heldKeptOne` | It holds 1 item that Waitron never deletes. | Tiene 1 elemento que Waitron nunca borra. |
 | `heldInvoices` | {records} of them are invoices; AEAT accepted {accepted}. | {records} son facturas; la AEAT aceptó {accepted}. |
 | `heldInvoiceOne` | 1 of them is an invoice; AEAT accepted {accepted}. | 1 es una factura; la AEAT aceptó {accepted}. |
 | `heldFault` | An unfinished setup should hold none of these, so this is a fault in Waitron. Start again would delete them, so it is not offered. Reconnect keeps everything as it is. | Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. Empezar de nuevo los borraría, así que no se ofrece. Reconectar lo deja todo como está. |
-| `tradingSaved` | This setup already saved the settings the box trades with. Start again would delete a setup that is ready to trade, so it is not offered here. Enter your setup password to finish it. | Esta configuración ya guardó los ajustes con los que vende el equipo. Empezar de nuevo borraría una configuración lista para vender, así que no se ofrece aquí. Introduce tu contraseña de configuración para terminarla. |
+| `tradingSaved` | This setup already saved the settings the box trades with. Start again would delete a setup that is ready to trade, so it is not offered here. Enter your setup password to see what is left to do. | Esta configuración ya guardó los ajustes con los que vende el equipo. Empezar de nuevo borraría una configuración lista para vender, así que no se ofrece aquí. Introduce tu contraseña de configuración para ver qué falta. |
 | `setupFinished` | This setup already finished. Start again would delete a finished setup, so it is not offered. Reconnect to check the saved result. | Esta configuración ya terminó. Empezar de nuevo borraría una configuración terminada, así que no se ofrece. Reconecta para comprobar el resultado guardado. |
 
-  `heldInvoices`/`heldInvoiceOne` show only when `records > 0`, after `heldKept`/`heldKeptOne`.
-  `tradingSaved`'s last sentence names the password field: the test asserts `resume-password` is on
-  screen in that view; where the inspection says `password: "uncheckable"` the sentence is left
-  off. Worked example (counts from Task 0): "The setup database already holds N saved items. None
-  of them is an invoice, so no invoice was sent to AEAT. Start again deletes them with this
-  attempt. You will enter this setup's details again." then today's "A recovery from backup started
-  on … and did not finish. Start again deletes it." and "Deletes this attempt. This box will not
-  use its invoice series names again."
-- `startUnavailableOccupied` stays, shown only for a database that holds records with no stopped
-  recovery.
-- Failing tests first (both locales): (a) the test at `setup-app-resolution.test.ts:1940-1960`
-  changes (see "Tests whose checks change"); (b) after the password the held lines appear in order,
-  `heldRowsOne`/`heldNoInvoicesOne` for `rows: 1`; (c) `kept: 2, records: 1, accepted: 0` shows
-  `heldKept`, `heldInvoiceOne`, `heldFault`, no `retire-confirmed`, no `confirm-start-again`,
-  Cancel enabled, `reconnect-first` present; (d) `trading.env` present → Start again disabled with
-  `tradingSaved` and `resume-password` present; (e) `setup-finished` answer → `setupFinished`, not
-  `shell.not_ready`'s words; (f) still refused: a database that holds records with no stopped
-  recovery keeps Start again disabled with `startUnavailableOccupied`.
-- a11y: axe over the held confirmation, the kept refusal and `tradingSaved`, light and dark (the
-  pattern of `setup-app-missing-database.a11y.test.ts`).
-- Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app-resolution.test.ts src/setup-app-held-database.a11y.test.ts`.
+  `heldKept`/`heldKeptOne` show when `kept > 0` (with `kept: 0, records: 1`, the defence case, the
+  page shows `heldInvoiceOne`/`heldInvoices` alone, then `heldFault`); `heldInvoices`/`heldInvoiceOne`
+  show only when `records > 0`. `tradingSaved` says "see what is left to do", not "finish it",
+  because a `complete` attempt also has `trading.env` (rule 3).
+- Failing tests first (both locales): (a) `kept: 2, records: 1, accepted: 0` shows `heldKept`,
+  `heldInvoiceOne`, `heldFault`, no `retire-confirmed`, no `confirm-start-again`, Cancel enabled,
+  `reconnect-first` present; (b) `kept: 0, records: 1` shows `heldInvoiceOne` and `heldFault`;
+  (c) `trading.env` present beside a stopped recovery → Start again disabled, `tradingSaved`,
+  `resume-password` present; (d) the `setup-finished` answer → `setupFinished`; (e) the
+  `trading-settings` answer after the password → `tradingSaved`.
+- a11y: axe over the kept refusal, `tradingSaved` and `setupFinished`, light and dark.
+- Run: `pnpm --filter @waitron/setup exec vitest run src/setup-app-held-refusals.test.ts src/setup-app-held-database.a11y.test.ts`.
 
 ### Task 9: The guides
 
@@ -543,3 +657,32 @@ Each finding's evidence was re-read before folding; none was declined.
   M3 words: "no invoice was sent", Spanish "elementos" not "registros", the count comes from
   Task 0, `reconnect-first` asserted on screen. M4 `_litestream_*` excluded, a missing fiscal table
   refuses, grep widened to `databasePresent(`.
+
+## Review round 3 (2026-10-28) — what changed
+
+Each finding's evidence was re-read before folding.
+
+- I-1 the history reader writes → confirmed (`hour-recovery-state.ts:15-19` → `withTransaction`,
+  `tenancy.ts:30-41`). Folded with one change: the proposed "call `readHourHistory` over a plain
+  `execute` target" does not work as written, because `readHourHistory` builds its reads with
+  Drizzle's query builder on a `Transaction` (`hour-history-reader.ts:49-62`). Task 1b splits it
+  into reads plus a pure row-to-source function, and the new `startAgainHistory` seat (Task 1a)
+  reads the same tables with plain statements; it is used on both read paths, so there is one
+  reader. `drizzleNodeSqlite` is no longer mentioned.
+- I-2 defence in depth → `kept > 0 || records > 0` refuses in the summary's page view and in Start
+  again; Task 5 test 3 lists the invoice table as deletable and still refuses; Task 1b pins the
+  list with `toEqual`; Task 4a no longer requires `records ≤ kept`.
+- I-3 (a) append-only tables from `manifestSets()` plus the database's own append-only triggers,
+  never `host.modules`; Task 3 tests a disabled module's table. (b) Probe 3 run now (command and
+  output under "Fiscal check"): a recovery opens, prepares and stops beside a setup database that
+  holds rows, with the attempt at `claimed`. The past-activation order is not shown (the store
+  refuses a shortcut status change); Task 2 opens with probes of both orders and a stop rule.
+- M-1 the read happens inside the existing venue exclusion and coordinator turn, with the WAL and
+  `-journal` checked in the same turn. M-2 `trading.env` is checked before `complete`;
+  `tradingSaved` no longer says "finish it"; `setupFinished` is a defence view; tests for both.
+  M-3 composition refusal has its own code and registry entry; `module.ts:1675` described as where
+  `appendOnlyTables` is built. M-4 `setup-first-fiscal-api.ts` in Task 4b's files. M-5 contract
+  says whole tables, and names still reach the floor. M-6 the `projectHourHistory` output is
+  labelled the reviewer's; Task 0 prints `node.db`'s tables for a `committed` attempt. M-7 the
+  full-disk case is its own task (5b); the page is split (8a confirmation, 8b refusals) with their
+  own a11y cases; the helper's test is under `apps/server/src/`.
