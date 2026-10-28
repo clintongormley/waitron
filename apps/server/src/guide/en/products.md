@@ -271,7 +271,7 @@ change:
 
 Customer-facing names and descriptions show a field for each content language. Choose or remove an
 image as you would in the product editor. A dish with variants is charged at each variant's own
-price and VAT class, so correct those on its variants; correcting the dish never changes them. A
+price and VAT class, so correct those on its variants, which its form lists with their price and VAT class; correcting the dish never changes them. A
 change to an extra, an options list's choice or a list's name is made everywhere that list appears
 in this menu. A product sold both as a dish and as an extra is corrected in each place separately. A
 section shown inside an included menu's folder keeps any name or picture that folder sets for it,

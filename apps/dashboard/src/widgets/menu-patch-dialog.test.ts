@@ -594,6 +594,7 @@ it(`fits a dish's variants and their values in the form at 390 px`, async () => 
     const el = await mount(stubApi({ getLiveMenu: vi.fn(async () => live(3, document)) }));
     await pick(el, "Lemonade");
     const formBox = form(el).getBoundingClientRect();
+    expect(form(el).querySelectorAll('[data-test="variant"]')).toHaveLength(2);
     for (const row of form(el).querySelectorAll('[data-test="variant"]')) {
       const box = row.getBoundingClientRect();
       expect(box.right).toBeLessThanOrEqual(formBox.right + 0.5);
@@ -3007,7 +3008,7 @@ it("keeps marking a field whose failing language is removed while another of its
   expect(refusalsIn(el)).toBe("Correct the fields marked on Soup to continue.");
 });
 
-it("judges a field forgotten while failing its own check against the version shown when it is next edited", async () => {
+it("judges a field whose failing language was removed against the version shown when it is next edited", async () => {
   const drinksNamed = (es: string) => {
     const document = lunch();
     const drinks = document.root.members[1] as Extract<

@@ -284,7 +284,7 @@ opciones**. Elige un elemento para ver lo que puedes cambiar:
 
 Los nombres para el cliente y las descripciones muestran un campo por cada idioma del contenido.
 Elige o quita una imagen igual que en el editor de productos. Un plato con variantes se cobra al
-precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes; corregir el
+precio y con la clase de IVA de cada variante, así que corrígelos en sus variantes, que su formulario muestra con su precio y su clase de IVA; corregir el
 plato nunca las cambia. Un cambio en un extra, en una opción o en el nombre de una lista se hace en
 todos los sitios de esta carta donde aparece esa lista. Un producto que se vende como plato y como
 extra se corrige en cada sitio por separado. Una sección que aparece dentro de la carpeta
