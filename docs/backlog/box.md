@@ -74,9 +74,9 @@ It reuses A1127's rules for which backups may be deleted, changes what A1127 sli
 full-disk page's button are for, and fixes a measured gap: a backup to a folder on the box's own disk
 needs about three copies of the database at its peak while its space check counts two, so with room
 for between two and three the copy into the folder fails `ENOSPC` with nothing stored
-(`~/waitron-campaign/a1167-measure/`). Nothing is built until the owner answers its four questions
+(`~/waitron-campaign/a1167-measure/`). The owner answered its four questions on 2026-10-28
 (who is told of automatic deletions; whether a refused backup is emailed; A1127 slice 3's dialog; the
-full-disk page's button).
+full-disk page's button; `~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
 
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 

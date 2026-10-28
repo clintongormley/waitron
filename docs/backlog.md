@@ -4759,7 +4759,8 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   backups (never the newest, never one from before the last restore) and tells an administrator; a
   backup that still has no room is refused before it copies anything and a manager is told. Also closes
   the measured gap where a backup to a folder on the box's own disk passes its space check and then
-  fills the disk. Designed, waiting for the owner's four answers.
+  fills the disk. Designed; the owner answered its four questions on 2026-10-28
+  (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
   [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
 
 - **Backup destination failures log no elapsed time or operation phase.**
@@ -4786,7 +4787,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
   (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
   (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
-  recover, summary and start-again routes (A1127); every other route still answers
+  recover, summary and start-again routes and its inspection read (A1127); every other route still answers
   `server.internal`, because adding it to `diskFullIn` changes every route's answer.
 
 - **The recovery page served at once on a full disk does not notice freed space by itself.** It

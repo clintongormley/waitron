@@ -2934,7 +2934,7 @@ code (`errcode & 0xff`) is 10 or 14, or an `ENOSPC`. `classifyStartFailure` uses
 `provisioning.database_unreachable` or `unknown` into `storage.disk_full`; a known `AppError` keeps
 its own code. The start's write-back of its unchanged count uses it to decide whether to serve the
 recovery page at once (`countWritable`, `apps/server/src/node-entry.ts`). The repair page's recover,
-summary and start-again routes and its inspection read use it too (`diskFullOr`, `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
+summary and start-again routes and its inspection read use it too (`diskFullOr`, and the inspection's own catch, in `apps/server/src/setup-first-fiscal-api.ts`). Why 16 MiB: every
 full-disk failure measured happened with at most 48 KiB free on HFS+, tmpfs and ext4 (F6, F11, F14)
 and with about 1.2 MB reported free on APFS (F1, F2, F5), and a missing folder raises 14 with room
 to spare, so the clean-up floor of 256 MiB cannot be the test.
@@ -2946,7 +2946,8 @@ its own code.
 
 `ENOSPC` is deliberately not in `diskFullIn` (`@waitron/shared`): that would change what every
 route answers. `fullDiskFailure` names it a full disk at start, and on the repair page's recover,
-summary and start-again routes and its inspection read (A1127, `diskFullOr` in `apps/server/src/setup-first-fiscal-api.ts`);
+summary and start-again routes and its inspection read (A1127, `diskFullOr` and the inspection's own catch in
+`apps/server/src/setup-first-fiscal-api.ts`);
 every other route behind `createErrorBoundary` whose failure is the system's `ENOSPC` still answers
 `server.internal` (backlog).
 
@@ -3320,7 +3321,7 @@ three paths leaves it. While it exists the till stop holds, across restarts (own
 `noteFullAtStart` notes the stop when `spareReleased` answers true, and `full()` keeps it while the
 marker exists, whatever the free space ([A full disk stops the till's writes](#a-full-disk-stops-the-tills-writes)).
 `spareReleased` answers true for a marker it cannot read (`storage.spare_marker_unread`, at start, at
-each free-space watch reading and Free press, and at each `full()` call while the stop holds). The marker is deleted only by a top-up that leaves the spare
+each free-space watch reading and Free press, and at each `full()` call that, while the stop holds, reads 16 MiB or more free). The marker is deleted only by a top-up that leaves the spare
 whole, or, with room, when a link or folder stands at the spare's path, which the box can never
 write through and an operator with no terminal could never remove.
 
