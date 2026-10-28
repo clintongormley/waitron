@@ -4069,14 +4069,6 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   (found in A757 slice 7's review, 2026-10-19).**
   [Detail](backlog/dashboard.md#a905-the-department-dialog-can-take-back-another-managers-older-copy-of-the-venue-after-a-save-found-in-a757-slice-7s-review-2026-10-19)
 
-- **A1170. The Venue screen's Business, Venue and Business-day cards have no Retry for a failed
-  read (found in A1169's review, 2026-10-28).** All three are drawn by
-  `apps/dashboard/src/screens/venue-details-panel.ts`, which shows a failed read's message above
-  them with no button to read again, unlike the Privacy and Defaults cards. After a save, or after
-  the legal-name or business-day dialog answers, the follow-up read is tried up to four more times,
-  waiting 2, 4, 8 and 16 seconds between tries (A1169); once those tries are spent, a reviewer's
-  browser probe found no button that reads again.
-
 - **A1168. The Appearance screen throws away a theme list read that answers after a change it
   applied (left open by A1133, found by reading, not run, 2026-10-28).**
   `apps/dashboard/src/screens/appearance-screen.ts`'s `#writes` counter drops every `listThemes`
