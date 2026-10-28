@@ -4475,6 +4475,9 @@ _Formerly entries spread across the old sections, C125 among them; part of A9._ 
 - **Spanish calls the manager role «gerente» in the guide and README, and «Encargado» on screen.**
   [Detail](backlog/languages.md#spanish-calls-the-manager-role-gerente-in-the-guide-and-readme-and-encargado-on-screen)
 
+- **The image library calls an archived variant an "Archived product".**
+  [Detail](backlog/languages.md#the-image-library-calls-an-archived-variant-an-archived-product)
+
 - **The dashboard's locale lookup reads inherited properties.**
   [Detail](backlog/languages.md#the-dashboards-locale-lookup-reads-inherited-properties)
 

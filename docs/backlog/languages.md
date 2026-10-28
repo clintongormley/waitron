@@ -49,6 +49,15 @@ caller admits those locales is unverified.
 
 **Next:** check own locale keys, test the English fallback and trace the callers.
 
+## The image library calls an archived variant an "Archived product"
+
+`packages/media/src/dashboard/image-library.ts` (`#usage`) labels every inactive product or variant
+use `image.archived_product` ("Archived product", "Producto archivado"). A variant use is inactive
+when the variant or its product is archived (`packages/media/src/images.ts`, the `variant` branch of
+`usage`), so an archived variant of a product that is not archived is said to be an archived product. The
+label predates A886, which only renamed it. Decide whether a variant gets its own label ("Archived
+variant", "Variante archivada") and, if so, update the content-and-images guides in both languages.
+
 ## The adjustment-reason and venue delete windows still use older wording
 
 The A1014 retrospective review of A831 (#1974) found two other windows outside A831's prep-station
@@ -88,7 +97,13 @@ among them «PIN de gerente») say «gerente». Pick one word and use it everywh
   decision 2026-09-29; C55 #858, C56 #901). Account and row-action menus keep “menú”.
   `apps/till/src/i18n/strings.test.ts` fails if a Spanish string in the till's catalogue says
   “menú”; the till's error-code messages and allergen names (`apps/till/src/i18n/codes.ts`,
-  `apps/till/src/i18n/allergen-names.ts`) are not scanned.
+  `apps/till/src/i18n/allergen-names.ts`) are not scanned. `apps/dashboard/src/i18n/t.test.ts`
+  fails if a Spanish string in the dashboard's `strings.ts` says “menú”, except `nav.account_menu`
+  and `appearance.colour.surface-raised`, and checks one code message (`product.on_live_menu`), not
+  the rest of `codes.ts`, `alert-messages.ts` or `domain.ts`;
+  `packages/venue-service/src/dashboard/strings.test.ts` fails if a Spanish string in venue-service's
+  dashboard catalogue does; its starter content (`packages/venue-service/src/starter-content.ts`) is
+  not scanned. Other modules' catalogues are not scanned.
 
 - **An overdue order is «Con retraso» on every Spanish screen, never «atrasado»** (owner decision
   2026-10-28, A1138). The dashboard overview, the till's pass count, the station fields and the
