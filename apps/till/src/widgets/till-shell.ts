@@ -516,6 +516,8 @@ export class TillShell extends LitElement {
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
     this.#watchedStrip = undefined;
+    if (this.#overflowFrame !== undefined) cancelAnimationFrame(this.#overflowFrame);
+    this.#overflowFrame = undefined;
     this.#counterObserver?.disconnect();
     this.#counterTargets.clear();
     this.#run += 1;
@@ -540,6 +542,7 @@ export class TillShell extends LitElement {
   #logoRetry?: ReturnType<typeof setTimeout>;
   #observer?: ResizeObserver;
   #stripObserver?: ResizeObserver;
+  #overflowFrame?: number;
   #counterObserver?: ResizeObserver;
   #counterTargets = new Set<Element>();
   #watchedStrip?: Element;
@@ -614,7 +617,10 @@ export class TillShell extends LitElement {
     this.#retryHiddenLogo();
     if (changed.has("barTables")) {
       void this.#revealSelectedTable();
-      void this.#settled().then(() => this.#markOverflow());
+      void this.#settled().then(() => {
+        this.#sizeFade();
+        this.#markOverflow();
+      });
     }
   }
 
@@ -635,39 +641,52 @@ export class TillShell extends LitElement {
     );
     if (!button) return;
     const strip = button.parentElement!;
-    // Stop short of a faded end wherever another button lies beyond it, so that one is the faint one.
-    const fade = this.#sizeFade(strip);
-    const before = button.previousElementSibling ? fade : 0;
-    const after = button.nextElementSibling ? fade : 0;
+    const fade = this.#sizeFade();
     const rtl = getComputedStyle(strip).direction === "rtl";
     const box = button.getBoundingClientRect();
     const view = strip.getBoundingClientRect();
-    const toLeft = box.left - view.left - (rtl ? after : before);
-    const toRight = box.right - view.right + (rtl ? before : after);
-    if (toLeft < 0) strip.scrollLeft += toLeft;
-    else if (toRight > 0) strip.scrollLeft += toRight;
+    // A button wider than the strip shows its start, so its name reads from the beginning.
+    if (box.width > view.width) {
+      strip.scrollLeft += rtl ? box.right - view.right : box.left - view.left;
+    } else {
+      // Stop short of a faded end wherever another button lies beyond it, so that one is the faint one.
+      const before = button.previousElementSibling ? fade : 0;
+      const after = button.nextElementSibling ? fade : 0;
+      const toLeft = box.left - view.left - (rtl ? after : before);
+      const toRight = box.right - view.right + (rtl ? before : after);
+      if (rtl ? toRight > 0 : toLeft < 0) strip.scrollLeft += rtl ? toRight : toLeft;
+      else if (rtl ? toLeft < 0 : toRight > 0) strip.scrollLeft += rtl ? toLeft : toRight;
+    }
     this.#markOverflow();
   }
 
-  /** The fade is never wider than half the room beside the widest button, so a button revealed
-   * between two fades is never faded itself. */
-  #sizeFade(strip: HTMLElement): number {
-    const widest = Math.max(...[...strip.children].map((b) => b.getBoundingClientRect().width));
-    const room = strip.getBoundingClientRect().width - widest;
+  /** Never wider than half the room beside the selected table's button, so the reveal can place
+   * that button clear of both fades; full width while no table's button is selected. */
+  #sizeFade(): number {
+    const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
+    if (!strip) return 0;
     const full = parseFloat(getComputedStyle(strip).getPropertyValue("--wt-space-6")) * FADE_SPACES;
+    const selected = strip.querySelector('[aria-selected="true"]');
+    const room = selected
+      ? strip.getBoundingClientRect().width - selected.getBoundingClientRect().width
+      : Infinity;
     const fade = Math.max(0, Math.min(full, room / 2));
     strip.style.setProperty("--fade-width", `${fade}px`);
     return fade;
   }
 
-  readonly #onBarTablesScroll = () => this.#markOverflow();
+  readonly #onBarTablesScroll = () => {
+    this.#overflowFrame ??= requestAnimationFrame(() => {
+      this.#overflowFrame = undefined;
+      this.#markOverflow();
+    });
+  };
 
   /** Marks which ends of the table buttons' strip hide a button, which fades that end. Scroll
    * offsets are negative right to left, so the distance from the start is their size. */
   #markOverflow(): void {
     const strip = this.renderRoot.querySelector<HTMLElement>(".head .bar-tables");
     if (!strip) return;
-    this.#sizeFade(strip);
     const fromStart = Math.abs(strip.scrollLeft);
     const start = fromStart >= 1;
     const end = strip.scrollWidth - strip.clientWidth - fromStart >= 1;
@@ -738,6 +757,7 @@ export class TillShell extends LitElement {
     this.#stripObserver ??= new ResizeObserver(() => {
       this.#revealedBar = undefined;
       void this.#revealSelectedTable();
+      this.#sizeFade();
       this.#markOverflow();
     });
     if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);

@@ -5486,7 +5486,8 @@ place, and for as long as the save has failed. Floor and the buttons start strai
 mark, so Floor does not move as buttons come and go (A1122). When the buttons do not fit, Floor stays
 put and only the buttons scroll sideways, in a `role="none"` box inside the tab list; an end that
 hides a button fades, as `wt-tabs`'s strip does, and the selected button is scrolled clear of the
-fade (A1121). Order has no tab on a handheld.
+fade, or, when it is wider than the strip, scrolled to show its start, with no fade (A1121). Order
+has no tab on a handheld.
 
 Above phone width the bar fits itself, and only two things ever leave it: the brand mark first, then
 the name, which moves into More with its clock actions. The brand mark (the venue's logo,
