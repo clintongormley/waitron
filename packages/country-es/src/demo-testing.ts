@@ -37,6 +37,16 @@ export const VALENCIA_DEMO_TEXT = {
 } as const;
 
 export const GALICIA_DEMO_TEXT = {
+  provinces: ["Coruña, A", "Lugo", "Ourense", "Pontevedra"],
+  provinceAliases: [
+    "Coruña, A",
+    "A Coruña",
+    "La Coruña",
+    "Lugo",
+    "Ourense",
+    "Orense",
+    "Pontevedra",
+  ],
   restaurantDepartment: "Restaurante e bar",
   deliDepartment: "Charcutaría",
   upstairsBar: "Bar de arriba",
