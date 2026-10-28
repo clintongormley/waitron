@@ -1767,8 +1767,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Kitchen cards: look points seen in A366 slice 5's look pass, and on its base `4f61b4ab9`
   too** — the overdue badge runs the card's full width; an empty status line leaves a double gap;
-  a held dish shows its own Done, and cards grow tall; Spanish shows "1 atrasados", a plural
-  after one; and at 390 px the cards are of uneven widths. Left open by A366 slice 5 Part A.
+  a held dish shows its own Done, and cards grow tall; and at 390 px the cards are of uneven
+  widths. Left open by A366 slice 5 Part A.
 
 - **A1139 — A kitchen card in Ready keeps ageing (2026-10-27; open, owner question).**
   Should a Ready card stop ageing, age from when it became Ready, or is it enough that a cook can
