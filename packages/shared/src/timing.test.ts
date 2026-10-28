@@ -18,6 +18,11 @@ describe("classifyBand", () => {
   it("overdue just under forgotten", () => expect(at(14.99)).toBe("overdue"));
   it("forgotten exactly at the forgotten threshold", () => expect(at(15)).toBe("forgotten"));
   it("clamps a future queuedAt to fresh", () => expect(classifyBand(60_000, 0, T)).toBe("fresh"));
+  it("measures from queuedAt when the clock does not start at 0", () => {
+    const queuedAt = Date.UTC(2026, 9, 28, 12, 0);
+    expect(classifyBand(queuedAt, queuedAt + 4.99 * 60_000, T)).toBe("fresh");
+    expect(classifyBand(queuedAt, queuedAt + 5 * 60_000, T)).toBe("warm");
+  });
 });
 
 describe("worstBand", () => {
