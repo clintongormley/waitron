@@ -3125,6 +3125,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   until this is decided. The venue logo follows the same path, so such a till keeps an old logo too
   (A841 slice 8b).
 
+- **`wt-slider`'s step marks run from the left in a right-to-left page.** Each mark is placed with
+  a physical `left` (`packages/ui/src/components/wt-slider.ts`), so right to left the mark for
+  `min` sits at the left end while the thumb at `min` sits at the right. Measured on cd506f69c
+  (A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
+  app sets right to left yet.
+
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
   to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
   the side menu open the form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits

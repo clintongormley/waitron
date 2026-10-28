@@ -124,6 +124,5 @@
   --wt-focus-ring: 2px solid var(--wt-color-focus);
   --wt-focus-offset: 2px;
 
-  /* The SELECTED-state ring, distinct from focus: the marker on a chosen item. */
   --wt-selected-ring: 2px solid var(--wt-color-primary);
 }
