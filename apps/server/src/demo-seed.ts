@@ -7,7 +7,6 @@ import { readDemoSeedSelection } from "../scripts/demo-seed/data-set.js";
 /** Public Demo starts with one month of deterministic practice sales and the full sample restaurant. */
 export const INSTALLED_DEMO_SALES_DAYS = 30;
 
-/** The staff language of an installed demo: Spanish when the person setting it up uses Spanish. */
 export function demoSeedLocale(venue: VenueRequest): SeedLocale {
   return venue.admin.locale?.toLowerCase().startsWith("es") === true ? "es" : "en";
 }

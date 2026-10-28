@@ -511,6 +511,16 @@ printed the activation marker. Its cause remains unknown and is recorded in the
 [CI backlog](../../backlog/ci.md#recovery-activation-child-exits-before-the-process-death-point);
 a local single-case pass is not a repair claim. Retain the original assertions.
 
+### Cut 3 installed-demo qualification — 2026-10-28
+
+Include `src/demo-seed.db.test.ts` in the server checks for regional cuts. Its
+Barcelona case now expects Catalan staff names even when the administrator uses
+Spanish, as the regional plain-name override specifies. It finds the inherited
+salad by its unchanged English customer text and requires the stored name
+`Amanida`; the Catalan content-default assertion and Madrid fiscal case remain
+unchanged. Removing the override in an installed disposable checkout produces
+`Ensalada` and fails that assertion; restoring it passes both cases.
+
 
 ### Cut 3 local qualification and review — 2026-10-28
 
