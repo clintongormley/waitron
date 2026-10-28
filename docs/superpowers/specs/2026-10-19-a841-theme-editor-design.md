@@ -2768,6 +2768,21 @@ permission-gated write (CLAUDE.md's risk triggers).
   when no warning of either kind would be left, and the Fix all line counts colours and text sizes.
 - **No Undo line under a text fix** (lane A ruling 2026-10-27, slice 11 plan D14): the stepper shows
   the new number in place and Cancel undoes it; the "fixed from · Undo" line stays for colours.
+- **Advanced's rows follow the sections' grouping** (lane A ruling 2026-10-28, slice 12 plan R2):
+  inside each section the rows come in the order section 5a lists them, so Links and accent text
+  sits with the text colours, + and − buttons with the buttons and Focus ring last among the
+  fields. Advanced's own closed line and the saved card keep the token order. Not taken: the flat
+  list's token order.
+- **A section counts its own hand-set values' warnings** (lane A ruling 2026-10-28, slice 12 plan
+  R4): a colour warning counts in the section of the colour set by hand it names, every text
+  warning in Text, and the brand colour's own warning in none, so the five counts add up to
+  Advanced's.
+- **Revealing a value opens its section and leaves the others** (lane A ruling 2026-10-28, slice 12
+  plan R10): Pick a different colour for dark screens opens Advanced at Buttons; the other four
+  stay as the manager left them.
+- **Nothing remembers which sections are open** (lane A ruling 2026-10-28, slice 12 plan R11): the
+  sections start closed with each edit session and keep their state only until the editor closes.
+  Not taken: remembering open sections, which section 5a rules out.
 
 ## 17. Risks
 
