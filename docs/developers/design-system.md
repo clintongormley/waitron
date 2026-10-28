@@ -5454,9 +5454,19 @@ carry their counts. Waiting draws attention while nonempty and stops when empty;
 removes the animation. The Help switch, the operator and More remain reachable while the strip scrolls. Selecting
 Parked or Waiting changes the Counter menu-side view while keeping its basket. Returning to
 Counter restores the menu. An order already in the basket is excluded from the Parked view and count.
+While a venue logo is in use and has loaded, it is drawn first in the bar (`wt-venue-logo`,
+`size="bar"`, alt the legal name, no fallback) while every strip control fits beside it; otherwise
+the box stays in the page, out of the row and hidden, so it keeps its image and its retry. Nothing
+on the strip changes size or leaves it for the logo; the strip's controls shift right by the logo's
+width while it shows. The bar measures again when its width, its controls, the language or the text
+size change, and holds the logo steady while the zone menu is open. Accepted limit: when the logo's
+address changes while it shows (a new logo, or Light/Dark switching on a theme with a dark image),
+the new image is 0 px wide until it loads, so the logo leaves the row and the strip shifts back, then
+forward once it loads. Cases: `apps/till/src/widgets/till-shell.counter-logo.test.ts`.
 
 On a till, More permanently holds Find a bill, My schedule, Profile when there is a profile choice,
-Language, Settings and Log out. Settings holds Equipment and Zones on this device. Kitchen appears
+Language, Settings and Log out, then, while a venue logo is in use and has not failed, a rule and
+`wt-powered-by` with `login.powered_by` (A1096), last even when Testing shows. Settings holds Equipment and Zones on this device. Kitchen appears
 only under Testing on Demo or Preparation installs with the existing kitchen permission. Live tills
 keep Kitchen off their navigation; kitchen displays retain their own fixed primary screen. Find a
 bill opens Bills and Transactions. Its Back returns to Counter without replacing the basket; a

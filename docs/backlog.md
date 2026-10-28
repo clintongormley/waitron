@@ -3080,92 +3080,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   waiters work on the same table. W101 supplies transfer-specific updates. Spec the wider
   subscription model when it matters.
 
-- **A841. A theme editor (owner, 2026-10-17).** Lets the owner change how Waitron looks by setting
-  the `--wt-*` CSS variables it already reads, and upload the venue's own logo (owner, 2026-10-20),
-  which takes Waitron's place in the dashboard banner and the till's top bar, with "Powered by
-  Waitron" under both sign-in forms, and prints on receipts and A4 invoices where no department
-  receipt logo applies; a text-size slider and text set by hand under Advanced, which is folded into
-  sections (owner, Q4, 2026-10-20); and saved custom themes, one in use everywhere at a time, each
-  with a light and a dark version that the Theme setting (Light / Dark / Follow device, keeping its
-  name) switches between (owner, 2026-10-20). Design, **final**:
-  [2026-10-19-a841-theme-editor-design.md](superpowers/specs/2026-10-19-a841-theme-editor-design.md).
-  All eight questions and the extra one are answered (Q8 revised the same morning; section 19). The
-  build is 14 slices, only slice 2 adding a migration (design section 16). Slice 1 landed
-  2026-10-21 (#1927): the theme derivation, the contrast rules shared with `colors.test.ts`, the
-  sweeps and the token-list guard, in `@waitron/ui-core/theme`. Slice 2 landed
-  2026-10-21 (#1932): custom themes stored in `custom_themes` (`tenant_themes` retired), their
-  routes, the theme in use served at `/api/theme`, the till's `themeHash`, and configuration copies
-  at format 6. Slice 3 landed 2026-10-21 (#1940): the theme in use reaches the screens — the dashboard and
-  the till apply the browser's stored copy at start and fetch `/api/theme` without waiting on it;
-  an open dashboard follows through a passive live read of `custom_themes`, and a signed-in till
-  through its `themeHash` once per poll. Slice 4 landed 2026-10-21 (#1945): text painted in the brand colour
-  reads `--wt-color-primary-text`, and a root guard (`scripts/primary-coloured-text.test.ts`) refuses
-  `color: var(--wt-color-primary)` outside a list of icons and spinners. Slice 5 landed 2026-10-21 (#1947): Settings →
-  Appearance shows the theme in use, and a manager edits the brand colour, background and corners in
-  place with a Light and Dark preview, warnings with one-press fixes, Fix all and a Hard to read
-  dialog before saving anyway. Slice 13 landed 2026-10-22 (#1959): the Themes card lists Waitron's theme and the venue's own; a
-  manager adds, copies, renames, deletes and switches themes, edits any of them, and names a draft
-  with Save as new theme…; Edit works while Waitron's theme is in use, so a new venue makes its first
-  theme from the screen. The create button reads "Add theme", not the design's "New theme", by the
-  house Wording rule (`design-system.md`). Slice
-  6 landed 2026-10-23 (#2021): Advanced, in the Look card's editor, lists the 22 colours with a Light and a Dark
-  value each, set by hand with a picker or a code, put back one at a time or all at once, with
-  warnings and fixes under the rows; Pick a different colour for dark screens gives the dark version
-  its own button colour. Slice 7 landed 2026-10-24 (#2029): a theme's document names a venue logo — a
-  library image and an optional one for dark screens — checked on save and on import; the image
-  library counts it as a use and refuses to delete it; `/api/theme` serves the images' addresses,
-  and its hash, the till's `themeHash` and the dashboard's live read follow a reframed or replaced
-  image; every save that sets or changes its light image, and every library reframe or source
-  replacement of that image, draws its printed dots (`printedLogo`), which slice 9 prints. A cash register's bar shows no logo until slice 14. Slice 8a
-  landed 2026-10-24 (#2035): the Look card's Logo field (a main image and an optional
-  one for dark screens, picked from the image library), the preview's banner strip, the saved card's
-  Logo row, Use Waitron's look removing the logo, and the image library naming the use "Logo of
-  theme {name}" with a link to the Appearance page. Slice 8b landed 2026-10-24 (#2042): the venue's
-  logo replaces Waitron's in the dashboard banner, a handheld's bar and the till and handheld
-  sign-in, each image following the screen's Theme setting and dark screens with one image drawing
-  it on a white plate (`--wt-color-logo-plate`); "Powered by Waitron" under both sign-in forms while
-  a logo is set; with no stored copy, the logo's place stays empty until the first answer or its 5-second limit, and a picture that cannot be
-  loaded falls back to Waitron's mark (the banner's lockup, the bar's word, nothing on the till
-  sign-in) and is tried again every minute. An optional
-  key missing from a stored or copied theme document reads as its empty value (`logo` `null`, and
-  for slices 10 and 11 `textScale` 100 and `text` `{}`), with no configuration format change.
-  Slice 10a landed 2026-10-24 (#2045): a theme has a text size, 100% to 130% in 5% steps, set with a
-  slider on the Look card that shows the four sizes it gives and a till button and bill line in the
-  preview; every screen draws it, while the equipment label, the recovery sheet and Google's sign-in
-  button keep Waitron's sizes. Slice 10b landed 2026-10-25 (#2048): on the tills, product button and
-  bill line names break words of eight letters or more with a hyphen in the venue's default content
-  language (shorter words stay whole, so a short word that fits a line is never split), and layout
-  cases at 130% hold the counter, the floor, a kitchen queue, the dashboard's shell and the Look
-  card. The Look card's preview hyphenates its sample name the same way. Names in a language
-  Chromium does not hyphenate, English among them, still break inside a long word with no hyphen.
-  Slice 9a landed 2026-10-25 (#2050): the logo of the theme in use prints on receipts and A4
-  invoices of every department with no receipt logo of its own and of a sale with no department, a
-  department's own logo still first; a department whose receipt settings cannot be trusted prints
-  no logo; the till's ticket view and a department's Receipts preview follow the same rule.
-  Slice 9b landed 2026-10-27 (#2119): the Look card shows how the logo prints, and says when it
-  prints blank.
-  Slice 11a landed 2026-10-27 (#2134): a theme stores a typeface, text sizes and weights set by hand,
-  checked on save and import; the dashboard, the tills and the setup screens draw them, while the equipment label and
-  the recovery sheet keep Waitron's type, Google's sign-in button keeps Google's, and the server's
-  own pages, such as the help guide, take no theme; a size drawn under 12 px is counted as hard
-  to read, and every bold, heading and table header that sets no weight of its own draws the theme's Bold weight — headings on the
-  dashboard, the tills and the setup screens now draw 600, not the browser's 700.
-  Slice 11b landed 2026-10-27 (#2140): Advanced on the Look card sets the typeface, the four sizes
-  and the three weights by hand, warns when text is too small and notes when it is larger than the
-  tills are checked at, each with a fix; the saved card lists the text set by hand.
-  Slice 12 landed 2026-10-28 (#2167): Advanced is folded into five sections — Page and surfaces, Text
-  colours and links, Buttons, Fields and focus, and Text — each closed when the editor opens and
-  saying what in it is set by hand and how many of those are hard to read; a section
-  holding an error opens itself; Pick a different colour for dark screens opens Buttons.
-  Next: 14 (with A1096's last part, below).
-
-- **A1096's last part: "Powered by Waitron" at the foot of a cash register's ☰ menu, with or after
-  A841 slice 14 (owner, 2026-10-25).** While a venue logo is in use, the signed-in dashboard banner
-  and a handheld's ☰ menu show the sign-in screens' "Powered by" line (A1096). A cash register's ☰
-  menu gains the same line, under Log out, once its bar draws the logo (slice 14); until then its
-  bar draws no logo and no word. Mock-up: `t2-till-menu-light.png` and `-dark` in
-  [mockups/a1096-powered-by/](backlog/mockups/a1096-powered-by/). Test it as the handheld's is
-  tested: shown exactly while a logo is in use, English and Spanish, both themes, an axe check.
+- **On a cash register's bar, the keyboard focus ring of the first strip control is cut off on
+  its left, top and bottom.** Seen in A841 slice 14's look check on a busy English bar at 1280 × 800
+  with no venue logo: "Counter: Barra" with focus shows its ring only down its right side. The
+  control sits inside two sideways-scrolling boxes, the tab list (`.tabs`) and the strip
+  (`.till-strip`), both `overflow-x: auto` in `apps/till/src/widgets/till-shell.ts`; which of them
+  cuts the ring was not tested. Both predate slice 14.
 
 - **The Look card's "How it prints" draws the 80 mm picture only (A841 slice 9, D5 of
   [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).** A logo that prints blank at

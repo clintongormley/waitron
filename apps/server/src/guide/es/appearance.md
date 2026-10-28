@@ -165,6 +165,11 @@ El logotipo del tema en uso se ve en estos lugares:
 - **La barra superior de un terminal de camarero**, en lugar de la palabra «Waitron». Es
   lo primero que la barra deja fuera cuando le falta sitio, y una pantalla estrecha, como la de un
   teléfono, lo deja fuera del todo.
+- **La barra superior de una caja registradora**, en primer lugar, antes de las pestañas
+  **Mostrador** y **Sala**, mientras todo lo de la barra cabe a su lado. Cuando la barra se llena,
+  por ejemplo en una pantalla estrecha con **Pedidos aparcados**, **En espera**, **Traspasos** y
+  **Pase** a la vista, el logotipo se aparta; nada más de la barra se oculta ni se hace más
+  pequeño. Vuelve en cuanto hay sitio otra vez.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
   del nombre del dispositivo y de la lista de nombres.
 - **«Con la tecnología de Waitron»**, que se ve mientras hay un logotipo: bajo el formulario de
@@ -172,26 +177,24 @@ El logotipo del tema en uso se ve en estos lugares:
   botones del final (en una pantalla estrecha, como la de un teléfono, tras la razón social, en la
   segunda línea de la franja, o debajo de ella si no caben en la misma línea); al pie de la pantalla
   de inicio de sesión de una caja registradora o de un terminal de camarero; y al pie del menú
-  **Más** (☰) de un terminal de camarero, bajo **Salir**.
+  **Más** (☰) de una caja registradora o de un terminal de camarero, bajo **Salir**.
 - **Un ticket que se muestra en la pantalla de una caja registradora o de un terminal de
   camarero**, encima del nombre del local. Ahí también tiene prioridad el logotipo de ticket propio
   del departamento, y siempre se ve el logotipo principal, nunca la versión para pantallas oscuras.
 
-La barra superior de una caja registradora todavía no muestra ningún logotipo.
+Salvo un ticket, cada pantalla muestra la imagen clara o la oscura según su propio ajuste de
+**Tema**. Una pantalla oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el
+logotipo principal sobre una placa blanca.
 
-Cada una de las demás pantallas muestra la imagen clara o la oscura según su propio ajuste de
-**Tema**. Una pantalla
-oscura, cuando el tema no tiene versión para pantallas oscuras, muestra el logotipo principal sobre
-una placa blanca.
-
-Las demás pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan
+Las pantallas muestran un logotipo nuevo, o dejan de mostrar el que se quitó, cuando adoptan
 un cambio de colores, como describe «Guarda un tema», más abajo.
 
-Cuando una de las demás pantallas no puede cargar la imagen, la franja superior del panel muestra
-el logotipo de Waitron, la barra de un terminal de camarero muestra la palabra «Waitron» y la
-pantalla de inicio de sesión de una caja registradora o de un terminal de camarero no muestra ningún
-logotipo, sin dejar un hueco donde iría. No se ve la línea «Con la tecnología de». La pantalla vuelve
-a intentar cargar la imagen cada minuto y la muestra en cuanto carga.
+Cuando una pantalla no puede cargar la imagen, la franja superior del panel muestra el logotipo de
+Waitron, la barra de un terminal de camarero muestra la palabra «Waitron», la barra de una caja
+registradora no muestra nada en su lugar y la pantalla de inicio de sesión de una caja registradora
+o de un terminal de camarero no muestra ningún logotipo, sin dejar un hueco donde iría. No se ve la
+línea «Con la tecnología de». La pantalla vuelve a intentar cargar la imagen cada minuto y la
+muestra en cuanto carga.
 
 ## En los tickets y las facturas {#logo-receipts}
 
