@@ -992,6 +992,7 @@ jobs:
             --exclude src/testing/s3-test-server.test.ts \
             --exclude src/start-full-disk.e2e.test.ts \
             --exclude src/start-again-full-disk.e2e.test.ts \
+            --exclude src/start-from-spare.e2e.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
@@ -1086,6 +1087,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/full-disk-start-again"
           sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-start-again"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-start-again"
+          mkdir -p "$RUNNER_TEMP/full-disk-from-spare"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-from-spare"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-from-spare"
 
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
@@ -1096,6 +1100,7 @@ jobs:
           TMPDIR: /dev/shm
           WAITRON_FULL_DISK_DIR: ${{ runner.temp }}/full-disk
           WAITRON_FULL_DISK_DIR_START_AGAIN: ${{ runner.temp }}/full-disk-start-again
+          WAITRON_FULL_DISK_DIR_FROM_SPARE: ${{ runner.temp }}/full-disk-from-spare
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
@@ -1107,6 +1112,7 @@ jobs:
             src/testing/s3-test-server.test.ts \
             src/start-full-disk.e2e.test.ts \
             src/start-again-full-disk.e2e.test.ts \
+            src/start-from-spare.e2e.test.ts \
             --outputFile=.vitest-reports/blob-stream.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
