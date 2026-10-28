@@ -1267,8 +1267,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   file could store 0, a negative number or 999; only the department save refuses them. Left open
   by A756 PR 4's review (#2020).
 
-- **A1083. The department delete preview says "Removes 1 floor plan sets."**
-  [Detail](backlog/service-periods.md#a1083-the-department-delete-preview-says-removes-1-floor-plan-sets)
+- **A1174. The station delete preview says "Remove 1 normal routing rules."** The
+  `prep.delete_station_*` lines with `{count}` (`unsent_lines`, `draft_lines`, `routing_cells`,
+  `routing_periods`, `daily_states`) in `packages/venue-service/src/dashboard/strings.ts`, filled
+  by `stationDeleteCopy` (`station-delete-copy.ts`), have one plural wording, so a count of 1
+  reads wrongly. Same fix as A1083: a `_one` wording in English and Spanish. Left open by A1083.
 
 - **The departments list's "Also edit" column is empty on every row** (left by #1858, 2026-10-18):
   A504 (#1857) removed the zones' Floor plan link and #1858 the departments' Receipt link, so the
