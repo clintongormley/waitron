@@ -686,29 +686,14 @@ it("re-registers through provisionNode with the matching key and frozen hour", a
   expect(await rows()).toEqual(after);
 });
 
-it("a re-registration with the clock behind the start-again note is refused, not given a repeated name", async () => {
+it("a promotion with the clock behind the start-again note is refused, not given a repeated name", async () => {
   const stateDir = join(root, "state");
-  const s = createNodeOperationPreparation({
-    stateDir,
-    venueDir: join(root, "venue"),
-    db: suite.db,
-    node: primary,
-    modules: ALL_MODULES.filter((module) => module.name === binding.module),
-    credentialKeyRing: TOTP_KEY_RING,
-    coordinator: createFirstSetupCoordinator(),
-    environment: {},
-  });
+  const s = await service();
+  await admit(s);
   const floorMs = Date.now() + 10 * 60_000;
   await raiseStartAgainNote(stateDir, { floorMs, lastName: "0CNQT", module: binding.module });
-  const recoveryKey = await mintBreakGlassKey(suite.db, primary.nodeId);
-  const recovery = {
-    ...binding,
-    action: "re-register",
-    eventId: "re-registration",
-    sourceId: "surviving-recovery",
-    targetNodeId: primary.nodeId,
-  };
-  const auth = { breakGlass: recoveryKey.secret };
+  const recovery = binding;
+  const auth = { breakGlass: key.secret };
   await compare(s, auth, recovery);
   const before = await rows();
   await expect(
