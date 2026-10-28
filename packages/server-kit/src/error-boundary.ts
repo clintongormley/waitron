@@ -14,7 +14,8 @@ declare module "hono" {
 
 /**
  *  - A full disk in the cause chain (`diskFullIn`) → `{ error: { code: "storage.disk_full",
- *    params: {} } }` at the status `status` assigns it, or 507, logged at `error`.
+ *    params } }` at the status `status` assigns it, or 507, logged at `error`; `params` is the
+ *    thrown `AppError("storage.disk_full")`'s own, and `{}` for any other full disk.
  *  - Any other `AppError` → `{ error: { code, params } }` at the status `status` assigns the code,
  *    or 400 when the map omits it, logged at `warn` — a mapped 5xx included. Its log-only `reason`, if
  *    any, goes to the log as `logReason` and never into the answer.
@@ -33,8 +34,9 @@ export function createErrorBoundary(
       const requestId = c.get("requestId");
       if (diskFullIn(cause)) {
         log("error", "storage.disk_full", { requestId });
+        const params = isAppError(cause) && cause.code === "storage.disk_full" ? cause.params : {};
         return c.json(
-          { error: { code: "storage.disk_full", params: {} } },
+          { error: { code: "storage.disk_full", params } },
           status["storage.disk_full"] ?? 507,
         );
       }

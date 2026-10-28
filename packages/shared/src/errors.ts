@@ -56,8 +56,9 @@ export interface ErrorParams {
    * mis-send.
    */
   "management.request_invalid": { field: string };
-  /** The box's disk is full, so a write was refused. */
-  "storage.disk_full": Record<string, never>;
+  /** The box's disk is full, so a write was refused. `restartDeletesLogs`, where the server can
+   *  tell, says whether restarting the box deletes old logs to make room. */
+  "storage.disk_full": { restartDeletesLogs?: boolean };
 }
 
 export type ErrorCode = keyof ErrorParams;

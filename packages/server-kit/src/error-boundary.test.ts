@@ -221,6 +221,19 @@ describe("createErrorBoundary (the shared error boundary till-api and management
       ]);
     });
 
+    it("an AppError storage.disk_full keeps its own params", async () => {
+      const lines: Line[] = [];
+      const res = await respond(
+        {},
+        new AppError("storage.disk_full", { restartDeletesLogs: false }),
+        lines,
+      );
+      expect(res.status).toBe(507);
+      expect(await res.json()).toEqual({
+        error: { code: "storage.disk_full", params: { restartDeletesLogs: false } },
+      });
+    });
+
     it("answers the same when a wrapper carries it", async () => {
       const lines: Line[] = [];
       const res = await respond(
