@@ -444,3 +444,15 @@ test("a resolve answer is dropped once a newer search began or the field left th
     cleanup();
   }
 });
+
+test("the line under the field is drawn, in the muted text colour", async () => {
+  const el = await mountLookup();
+  host.style.setProperty("--wt-color-text-muted", "rgb(16, 17, 18)");
+  el.message = "That address is in another country.";
+  await el.updateComplete;
+  const line = el.shadowRoot!.querySelector<HTMLElement>('[role="status"]')!;
+  const box = line.getBoundingClientRect();
+  expect(box.height).toBeGreaterThan(8);
+  expect(box.width).toBeGreaterThan(100);
+  expect(getComputedStyle(line).color).toBe("rgb(16, 17, 18)");
+});

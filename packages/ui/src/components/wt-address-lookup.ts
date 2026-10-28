@@ -93,9 +93,14 @@ export class WtAddressLookup extends LitElement {
         outline-offset: calc(-1 * var(--wt-focus-offset));
       }
 
-      .secondary {
+      .secondary,
+      .status {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
+      }
+
+      .status {
+        margin: var(--wt-space-1) 0 0;
       }
     `,
   ];
@@ -296,7 +301,7 @@ export class WtAddressLookup extends LitElement {
             </li>`,
         )}
       </ul>
-      ${line ? html`<p id=${this.statusId} class="hint" role="status">${line}</p>` : nothing}
+      ${line ? html`<p id=${this.statusId} class="status" role="status">${line}</p>` : nothing}
     `;
   }
 }
