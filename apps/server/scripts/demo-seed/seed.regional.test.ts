@@ -7,6 +7,7 @@ import {
   readContentLanguages,
   buildMenuDocument,
   listAvailableProducts,
+  listMenuOffers,
   listTranslationGapReport,
 } from "@waitron/catalogue";
 import * as selections from "./data-set.js";
@@ -33,6 +34,8 @@ const expected = JSON.parse(
   sausage: { staff: string; kitchen: string; customer: Record<string, string> };
   wine: string;
   drinks: string;
+  menus: { restaurant: string; lunch: string };
+  products: { staff: string; price: string; vatClass: string }[];
 };
 const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
@@ -96,6 +99,22 @@ for (const [province, postalCode, invoiceLocale] of [
       const doc = await withTransaction(suite.db, (tx) => buildMenuDocument(tx, drinks.id));
       expect(JSON.stringify(doc)).toContain(expected.wine);
       expect(JSON.stringify(doc)).not.toContain(expected.sausage.staff);
+      for (const name of [expected.menus.restaurant, expected.menus.lunch]) {
+        const menu = menus.find((row) => row.name === name)!;
+        expect(menu, name).toBeDefined();
+        const offers = await withTransaction(suite.db, (tx) => listMenuOffers(tx, [menu.id]));
+        expect(offers.find((offer) => offer.name === expected.wine)).toMatchObject({
+          unitPrice: "4.50",
+          vatClass: "general",
+        });
+        if (name === expected.menus.restaurant)
+          for (const product of expected.products)
+            expect(
+              offers.find((offer) => offer.name === product.staff),
+              product.staff,
+            ).toMatchObject({ unitPrice: product.price, vatClass: product.vatClass });
+      }
+
       for (const row of rows) expect(row.image).toMatch(/^[0-9a-f]{64}\.webp$/);
       const manager = suite.db.all<{ pin_hash: string; password_hash: string | null }>(
         sql`select pin_hash,password_hash from persons where email='manager@demo.waitron.local'`,
@@ -113,13 +132,22 @@ for (const [province, postalCode, invoiceLocale] of [
       const root = await mkdtemp(join(tmpdir(), "a972-media-"));
       try {
         await mkdir(join(root, selection.dataSet.mediaDataSet));
-        await cp(
-          demoMediaPath(selection.dataSet.mediaDataSet, food.image, undefined),
-          join(root, selection.dataSet.mediaDataSet, food.image),
+        const basenames = [
+          selection.dataSet.menus.restaurant,
+          selection.dataSet.menus.deli,
+          selection.dataSet.menus.lunch,
+        ].flatMap((menu) =>
+          menu.categories.flatMap((category) => category.products.map((product) => product.image)),
         );
-        expect(
-          await readFile(demoMediaPath(selection.dataSet.mediaDataSet, food.image, root)),
-        ).toEqual(source);
+        for (const basename of basenames) {
+          const original = demoMediaPath(selection.dataSet.mediaDataSet, basename, undefined);
+          const sourceBytes = await readFile(original);
+          await cp(original, join(root, selection.dataSet.mediaDataSet, basename));
+          expect(
+            await readFile(demoMediaPath(selection.dataSet.mediaDataSet, basename, root)),
+            basename,
+          ).toEqual(sourceBytes);
+        }
       } finally {
         await rm(root, { recursive: true });
       }
