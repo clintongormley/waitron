@@ -206,7 +206,7 @@ products.
 
 To remove the photograph itself, choose **Delete** in its **⋮** menu and confirm. If any product,
 product variant or section still uses it, deletion is blocked. You see links to those products,
-including archived ones, which the list marks **(Disabled product)**, and to those sections, a
+including archived ones, which the list marks **(Archived product)**, and to those sections, a
 section shown by its internal name. Remove the photograph from each editable record before trying
 deletion again. An archived product opens
 read-only details and cannot have its picture removed through the product editor, so a picture

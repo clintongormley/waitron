@@ -485,7 +485,7 @@ export class VariantTable extends LitElement {
       ${
         visible.length
           ? nothing
-          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_disabled")}</p>`
+          : html`<p class="notice" data-test="no-variants">${t("editor.variants_all_archived")}</p>`
       }
       ${
         this.openBlocked && visible.some(({ row }) => row.variant.id !== undefined)

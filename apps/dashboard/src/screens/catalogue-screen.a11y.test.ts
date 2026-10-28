@@ -338,7 +338,7 @@ describe.each(["light", "dark"] as const)("archive confirmation a11y (%s)", (the
               await flush(el);
               const message = await formMessageOf(modal.querySelector("wt-form-actions")!);
               expect(message?.textContent).toContain(
-                locale === "en" ? "Menus: Dinner, Lunch Menu." : "Menús: Dinner, Lunch Menu.",
+                locale === "en" ? "Menus: Dinner, Lunch Menu." : "Cartas: Dinner, Lunch Menu.",
               );
             }
             expect(native.getBoundingClientRect().right).toBeLessThanOrEqual(width);

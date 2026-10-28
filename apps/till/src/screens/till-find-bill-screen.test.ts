@@ -573,6 +573,16 @@ it("names a filter chip by its drawn text, then what tapping it does", async () 
     .element(page.elementLocator(chip.shadowRoot!.querySelector("button")!))
     .toHaveAccessibleName(`${drawn}, Remove State filter`);
 });
+it("in English the state filter calls an order set aside on the till Parked", async () => {
+  const { el } = await mount();
+  const grid = await ready(el);
+  grid.chooseFilter("state", ["held"]);
+  await vi.waitFor(() =>
+    expect(grid.querySelector('[data-chip="state"]')?.textContent?.replace("×", "").trim()).toBe(
+      "State: Parked",
+    ),
+  );
+});
 it("removing a bill's state chip keeps its zone filter and the resulting query does not repeat", async () => {
   const { el, fetcher } = await mount();
   await ready(el);

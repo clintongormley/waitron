@@ -882,7 +882,7 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   },
   "product.on_live_menu": {
     en: "It is on a live or scheduled menu. Take it off the menu and publish, then archive it.",
-    es: "Está en un menú publicado o programado. Quítalo del menú y publica; después archívalo.",
+    es: "Está en una carta publicada o programada. Quítalo de la carta y publica; después archívalo.",
   },
   "product.name_taken": {
     en: "Another active product or variant already has this name.",

@@ -1196,7 +1196,7 @@ describe("cellPeriodLines", () => {
         ]),
         targetText,
       )(drinks, null);
-      expect(lines.lines[0]!.flagText).toBe("No está en los menús de Lunch, Dinner");
+      expect(lines.lines[0]!.flagText).toBe("No está en las cartas de Lunch, Dinner");
     });
 
     it("gives a line inherited from that cell no mark", () => {

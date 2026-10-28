@@ -1284,9 +1284,9 @@ it("confirms the image asked about last when an earlier usage lookup fails late"
 });
 
 it.each([
-  ["en-GB", "Old toast (Disabled product)"],
-  ["es-ES", `Old toast (${ES["image.disabled_product"]})`],
-])("in %s, marks a disabled product among an image's blocking uses", async (locale, marked) => {
+  ["en-GB", "Old toast (Archived product)"],
+  ["es-ES", `Old toast (${ES["image.archived_product"]})`],
+])("in %s, marks an archived product among an image's blocking uses", async (locale, marked) => {
   setLocale(locale);
   const client = api();
   client.getImage.mockResolvedValue({
@@ -1823,7 +1823,7 @@ it("lists every place the image is used under a heading, each linked to the plac
   await vi.waitFor(() => expect(usesShown()).toHaveLength(5));
   expect(usesShown()).toEqual([
     ["Toast", "/manage/catalogue/product/toast"],
-    ["Old toast (Disabled product)", "/manage/catalogue/product/old"],
+    ["Old toast (Archived product)", "/manage/catalogue/product/old"],
     ["Large toast", "/manage/catalogue/product/large"],
     ["Drinks (internal)", "/manage/menus/menu/drinks-menu/view/structure"],
     ["Lunch Menu (Published menu)", "/manage/menus/menu/lunch"],
