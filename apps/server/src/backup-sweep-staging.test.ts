@@ -1,4 +1,14 @@
-import { mkdir, mkdtemp, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readdir,
+  realpath,
+  rm,
+  stat,
+  symlink,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
@@ -6,7 +16,10 @@ import type { Database } from "@waitron/db";
 import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import { runOnce } from "./backup-sweep.js";
 import { venueStagingEstimate } from "./backup-supervisor.js";
-import { parseBackupArchiveKey } from "./backup-keys.js";
+import { backupArchiveKey, parseBackupArchiveKey } from "./backup-keys.js";
+import type { BackupOutcomeHolder } from "./alert-sources.js";
+import type { DeletableArchive } from "./backup-room.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
@@ -368,4 +381,295 @@ it("estimates from the venue database file alone, not its write-ahead file, coun
   await writeFile(join(venueDir, `${VENUE_FILE}${WAL_SUFFIX}`), Buffer.alloc(50));
   await writeFile(join(venueDir, "node.db"), Buffer.alloc(7000));
   expect(await venueStagingEstimate(venueDir)).toBe(300);
+});
+
+const days = (n: number) => new Date(stamp.getTime() - n * 86_400_000);
+
+/** Archives in a fresh folder `a`, each `bytes` long (sparse, so a large one costs no disk). */
+async function seeded(f: Awaited<ReturnType<typeof fixture>>, archives: [Date, number][]) {
+  const dir = join(f.root, "a");
+  await mkdir(dir, { recursive: true });
+  const keys: string[] = [];
+  for (const [at, bytes] of archives) {
+    const key = backupArchiveKey(at);
+    await writeFile(join(dir, key), "");
+    await truncate(join(dir, key), bytes);
+    keys.push(key);
+  }
+  return { dir, keys, sizes: new Map(keys.map((k, i) => [join(dir, k), archives[i]![1]])) };
+}
+
+/** A filesystem reporting `base` bytes free plus the size of each listed file that is gone. */
+function rising(base: number, sizes: Map<string, number>) {
+  return vi.fn(async () => {
+    let free = base;
+    for (const [path, bytes] of sizes)
+      if (
+        !(await stat(path).then(
+          () => true,
+          () => false,
+        ))
+      )
+        free += bytes;
+    return { bavail: free, frsize: 1 };
+  });
+}
+
+const left = async (dir: string) => (await readdir(dir)).sort();
+
+it("deletes the oldest backup before copying when that makes the room, then stores and prunes as today", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = { ...deps(f, [backend]), retain: 2 };
+  await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 1000,
+    statfs: rising(2800, s.sizes),
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: async () => days(10),
+  });
+  expect(d.log).toHaveBeenCalledWith("info", "backup.archive_deleted", {
+    destination: "a",
+    key: s.keys[0],
+    bytes: 500,
+    reason: "backup_room",
+  });
+  expect(backend.puts).toBe(1);
+  const kept = await left(s.dir);
+  expect(kept).toHaveLength(2);
+  expect(kept).toContain(s.keys[2]);
+  expect(kept).not.toContain(s.keys[0]);
+  expect(kept).not.toContain(s.keys[1]);
+});
+
+it("refuses a run whose need even every deletable backup cannot meet, deleting nothing and copying nothing", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = deps(f, [backend]);
+  const onArchivesDeleted = vi.fn(async () => {});
+  await expect(
+    runOnce({
+      ...d,
+      stagingEstimateBytes: async () => 1000,
+      statfs: rising(2000, s.sizes),
+      spaceFloorBytes: 10,
+      spaceAimBytes: 100,
+      installationStartedAt: async () => days(10),
+      onArchivesDeleted,
+    }),
+  ).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 3010, availableBytes: 2000 },
+  });
+  expect(await left(s.dir)).toEqual([...s.keys].sort());
+  expect(d.archive).not.toHaveBeenCalled();
+  expect(backend.puts).toBe(0);
+  expect(onArchivesDeleted).not.toHaveBeenCalled();
+});
+
+it("an archive from before the current installation is never deleted, so the run is refused", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(1), 500],
+  ]);
+  const d = deps(f, [new Watched("a", s.dir)]);
+  await expect(
+    runOnce({
+      ...d,
+      stagingEstimateBytes: async () => 1000,
+      statfs: rising(2800, s.sizes),
+      spaceFloorBytes: 10,
+      spaceAimBytes: 100,
+      installationStartedAt: async () => days(2),
+    }),
+  ).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 3010, availableBytes: 2800 },
+  });
+  expect(await left(s.dir)).toEqual([...s.keys].sort());
+  expect(d.archive).not.toHaveBeenCalled();
+});
+
+it("without installationStartedAt the run deletes nothing", async () => {
+  for (const installationStartedAt of [undefined, async () => null]) {
+    const f = await fixture();
+    const s = await seeded(f, [
+      [days(3), 500],
+      [days(2), 500],
+      [days(1), 500],
+    ]);
+    const d = deps(f, [new Watched("a", s.dir)]);
+    await expect(
+      runOnce({
+        ...d,
+        stagingEstimateBytes: async () => 1000,
+        statfs: rising(2800, s.sizes),
+        spaceFloorBytes: 10,
+        spaceAimBytes: 100,
+        installationStartedAt,
+      }),
+    ).rejects.toMatchObject({ code: "backup.staging_space_low" });
+    expect(await left(s.dir)).toEqual([...s.keys].sort());
+  }
+});
+
+it("an installation start that cannot be read deletes nothing, is logged, and the room check still runs", async () => {
+  const unreadable = vi.fn(async (): Promise<Date | null> => {
+    throw Object.assign(new Error("busy"), { code: "EIO" });
+  });
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = { ...deps(f, [backend]), retain: 5 };
+  const options = {
+    stagingEstimateBytes: async () => 1000,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: unreadable,
+  };
+  // Over the floor but under the aim: a readable start would have deleted toward the aim.
+  await runOnce({ ...d, ...options, statfs: rising(3050, s.sizes) });
+  expect(backend.puts).toBe(1);
+  expect(await left(s.dir)).toEqual(expect.arrayContaining(s.keys));
+  expect(d.log).toHaveBeenCalledWith("warn", "backup.installation_start_unreadable", {
+    errorCode: "unknown",
+    errno: "EIO",
+  });
+  expect(d.log).not.toHaveBeenCalledWith("info", "backup.archive_deleted", expect.anything());
+  await expect(runOnce({ ...d, ...options, statfs: rising(2800, s.sizes) })).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 3010, availableBytes: 2800 },
+  });
+  expect(backend.puts).toBe(1);
+  expect(await left(s.dir)).toEqual(expect.arrayContaining(s.keys));
+  expect(unreadable).toHaveBeenCalledTimes(2);
+});
+
+it("the aim defaults to SPACE_LOW_BYTES", async () => {
+  const f = await fixture();
+  // Free space meets the floor exactly; the first deletion leaves the need plus SPACE_LOW_BYTES
+  // short by one byte, the second reaches it, and the third is not needed.
+  const s = await seeded(f, [
+    [days(4), SPACE_LOW_BYTES - 11],
+    [days(3), 100],
+    [days(2), 100],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = { ...deps(f, [backend]), retain: 4 };
+  await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 1000,
+    statfs: rising(3010, s.sizes),
+    spaceFloorBytes: 10,
+    installationStartedAt: async () => days(10),
+  });
+  const kept = await left(s.dir);
+  expect(kept).not.toContain(s.keys[0]);
+  expect(kept).not.toContain(s.keys[1]);
+  expect(kept).toEqual(expect.arrayContaining([s.keys[2], s.keys[3]]));
+  expect(backend.puts).toBe(1);
+});
+
+it("calls onArchivesDeleted once with what the first check deleted and the run's time", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 200],
+    [days(2), 200],
+    [days(1), 500],
+  ]);
+  const onArchivesDeleted = vi.fn<
+    (deleted: readonly DeletableArchive[], at: Date) => Promise<void>
+  >(async () => {});
+  await runOnce({
+    ...deps(f, [new Watched("a", s.dir)]),
+    stagingEstimateBytes: async () => 1000,
+    statfs: rising(2800, s.sizes),
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: async () => days(10),
+    onArchivesDeleted,
+  });
+  expect(onArchivesDeleted).toHaveBeenCalledOnce();
+  const [deleted, at] = onArchivesDeleted.mock.calls[0]!;
+  expect(deleted.map((a) => a.key)).toEqual([s.keys[0], s.keys[1]]);
+  expect(deleted[0]).toMatchObject({ destination: "a", bytes: 200 });
+  expect(at).toEqual(stamp);
+});
+
+it("refused after deleting still raises the alert", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const outcomes: BackupOutcomeHolder = { failed: new Map() };
+  const stoppedWhenReported: unknown[] = [];
+  const onArchivesDeleted = vi.fn(async () => {
+    stoppedWhenReported.push(outcomes.runStopped);
+  });
+  const d = deps(f, [new Watched("a", s.dir)]);
+  // Deleting frees nothing here (a hard link, say), so the sum's promise is not kept.
+  await expect(
+    runOnce({
+      ...d,
+      outcomes,
+      stagingEstimateBytes: async () => 1000,
+      statfs: freeSpace(2800),
+      spaceFloorBytes: 10,
+      spaceAimBytes: 100,
+      installationStartedAt: async () => days(10),
+      onArchivesDeleted,
+    }),
+  ).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 3010, availableBytes: 2800 },
+  });
+  expect(onArchivesDeleted).toHaveBeenCalledOnce();
+  expect(stoppedWhenReported).toEqual([undefined]);
+  expect(outcomes.runStopped).toMatchObject({ code: "backup.staging_space_low" });
+  expect(d.archive).not.toHaveBeenCalled();
+});
+
+it("a failing onArchivesDeleted is logged with its code and the run goes on", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = deps(f, [backend]);
+  await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 1000,
+    statfs: rising(2800, s.sizes),
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: async () => days(10),
+    onArchivesDeleted: async () => {
+      throw Object.assign(new Error("locked"), { code: "EBUSY" });
+    },
+  });
+  expect(d.log).toHaveBeenCalledWith("warn", "backup.archives_deleted_alert_failed", {
+    errorCode: "unknown",
+    errno: "EBUSY",
+  });
+  expect(backend.puts).toBe(1);
 });

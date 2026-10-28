@@ -24,7 +24,12 @@ import {
   parseBackupArchiveKey,
 } from "./backup-keys.js";
 import { withDestinationCall } from "./backup-destination-call.js";
-import { foldersOnDisk, makeRoom, type BackupFolder } from "./backup-room.js";
+import {
+  foldersOnDisk,
+  makeRoom,
+  type BackupFolder,
+  type DeletableArchive,
+} from "./backup-room.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { SPACE_LOW_BYTES } from "./free-space-watch.js";
 import { START_FREE_SPACE_FLOOR } from "./start-space.js";
@@ -106,6 +111,12 @@ export interface BackupSweepDeps {
   spaceFloorBytes?: number;
   /** Free space a tick makes room toward beyond its need; defaults to `SPACE_LOW_BYTES`. */
   spaceAimBytes?: number;
+  /** When the current installation began; an archive taken at or before it is never deleted to
+   * make room. Absent, null or throwing: nothing is deleted. */
+  installationStartedAt?: () => Promise<Date | null>;
+  /** Told what a run deleted to make room, before the run goes on or is refused; `at` is the run's
+   * time. Its failure is logged and never changes the run's outcome. */
+  onArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   /** DI for tests; which disk a folder is on. */
   deviceOf?: DeviceOf;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
@@ -146,6 +157,21 @@ async function localFoldersOnDisk(
   }
 }
 
+async function readInstallationStart(
+  deps: Pick<BackupSweepDeps, "installationStartedAt" | "log">,
+): Promise<Date | null> {
+  if (!deps.installationStartedAt) return null;
+  try {
+    return await deps.installationStartedAt();
+  } catch (err) {
+    deps.log("warn", "backup.installation_start_unreadable", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+    return null;
+  }
+}
+
 /**
  * One backup. A failure to build the manifest or collect state throws before the database copy, and
  * no partial archive is ever put to a destination.
@@ -161,6 +187,17 @@ export async function runOnce(
   let dumped = false;
   let encryptedDir: string | undefined;
   const budget = new ArchiveReadBudget();
+  const reportDeleted = async (deleted: readonly DeletableArchive[]) => {
+    if (!deps.onArchivesDeleted) return;
+    try {
+      await deps.onArchivesDeleted(deleted, stamp);
+    } catch (err) {
+      deps.log("warn", "backup.archives_deleted_alert_failed", {
+        errorCode: codeOf(err),
+        errno: errnoOf(err),
+      });
+    }
+  };
   try {
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
@@ -186,6 +223,7 @@ export async function runOnce(
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
     if (deps.stagingEstimateBytes) {
+      const installationStartedAt = await readInstallationStart(deps);
       const estimate = await deps.stagingEstimateBytes();
       const { folders, copies } = await localFoldersOnDisk(deps);
       await makeRoom({
@@ -195,10 +233,10 @@ export async function runOnce(
         stagingDir: deps.stagingDir,
         statfs: deps.statfs,
         folders,
-        installationStartedAt: null,
+        installationStartedAt,
         signal: deps.signal,
         log: deps.log,
-        onDeleted: async () => {},
+        onDeleted: reportDeleted,
       });
     }
     await deps.archive(staged);
