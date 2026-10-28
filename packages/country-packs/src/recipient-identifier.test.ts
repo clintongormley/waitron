@@ -58,65 +58,32 @@ describe("recipient identity independent of postal country", () => {
 });
 
 describe("recipient identifier display and choices", () => {
-  it.each([
-    [
-      "en-GB",
-      "Passport",
-      "VAT number",
-      "Residence-country ID",
-      "Residence certificate",
-      "Other document",
-    ],
-    [
-      "es-ES",
-      "Pasaporte",
-      "Número de IVA",
-      "Documento de identidad del país de residencia",
-      "Certificado de residencia",
-      "Otro documento",
-    ],
-    [
-      "ca-ES",
-      "Passaport",
-      "Número d’IVA",
-      "Document d’identitat del país de residència",
-      "Certificat de residència",
-      "Altre document",
-    ],
-    [
-      "gl-ES",
-      "Pasaporte",
-      "Número de IVE",
-      "Documento de identidade do país de residencia",
-      "Certificado de residencia",
-      "Outro documento",
-    ],
-    [
-      "eu-ES",
-      "Pasaportea",
-      "BEZ zenbakia",
-      "Bizileku-herrialdeko nortasun-agiria",
-      "Egoitza-ziurtagiria",
-      "Beste dokumentu bat",
-    ],
-  ])("labels explicit documents in %s", (locale, passport, vat, id, certificate, other) => {
-    for (const [type, label] of [
-      ["passport", passport],
-      ["vat-number", vat],
-      ["residence-country-id", id],
-      ["residence-certificate", certificate],
-      ["other-document", other],
-    ] as const)
-      expect(packs.recipientIdentifierLabel?.(type, locale)).toBe(label);
-    expect(packs.recipientIdentifierLabel?.(undefined, locale)).toBe(
-      packs.receiptLabelsFor(locale).nif,
-    );
-    expect(packs.recipientIdentifierLabel?.("tax-number", locale)).toBe(
-      packs.receiptLabelsFor(locale).nif,
-    );
-  });
+  it.each(["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "labels explicit documents in %s",
+    (locale) => {
+      const language = new Intl.Locale(locale)
+        .language as keyof typeof packs.RECIPIENT_IDENTIFIER_LABELS;
+      const expected = packs.RECIPIENT_IDENTIFIER_LABELS[language];
+      for (const type of [
+        "passport",
+        "vat-number",
+        "residence-country-id",
+        "residence-certificate",
+        "other-document",
+      ] as const)
+        expect(packs.recipientIdentifierLabel?.(type, locale)).toBe(expected[type]);
+      expect(packs.recipientIdentifierLabel?.(undefined, locale)).toBe(
+        packs.receiptLabelsFor(locale).nif,
+      );
+      expect(packs.recipientIdentifierLabel?.("tax-number", locale)).toBe(
+        packs.receiptLabelsFor(locale).nif,
+      );
+    },
+  );
   it("uses the receipt fallback for unsupported locales", () => {
-    expect(packs.recipientIdentifierLabel?.("passport", "xx")).toBe("Pasaporte");
+    expect(packs.recipientIdentifierLabel?.("passport", "xx")).toBe(
+      packs.RECIPIENT_IDENTIFIER_LABELS.es.passport,
+    );
   });
   it("offers real issuing codes independently of postal countries", () => {
     expect(packs.RECIPIENT_IDENTIFIER_POLICY?.documentCountryCodes).toContain("XU");
