@@ -63,9 +63,11 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import {
   createOpenOrder,
+  insertTabRound,
   listExpoQueue,
   listStationQueue,
   parkOrder,
+  priceTabRound,
   splitUnitsWithinOrder,
   splitLinesWithinOrder,
   type TillSaleDeps,
@@ -78,6 +80,7 @@ import {
   fireGroup,
   fireHeldLine,
   listOrderGroups,
+  placeGroups,
   readCurrentOrders,
   moveLinesToGroup,
   splitHeldLineIntoUnits,
@@ -297,6 +300,39 @@ async function submit(
   );
 }
 
+/** Places each group's lines as one row per input line, the shape a line of several dishes keeps. */
+async function submitGrouped(
+  v: Venue,
+  s: { partyId: string; tabId: string },
+  groups: { lines: GroupLine[]; release: GroupRelease }[],
+) {
+  return inTx(async (tx) => {
+    const placed = [];
+    for (const group of groups) {
+      const round = await priceTabRound(tx, v.cfg, s.tabId, group.lines, "checked");
+      const rows = await insertTabRound(
+        tx,
+        v.cfg,
+        round,
+        round.rows.map((row) => ({ ...row, creditedTo: ALEX })),
+      );
+      const answer = await placeGroups(tx, v.cfg, s.partyId, {
+        operatorId: ALEX,
+        billId: s.tabId,
+        groups: [
+          {
+            release: group.release,
+            lines: [],
+            existingLineIds: rows.filter((row) => row.parentLineId == null).map((row) => row.id),
+          },
+        ],
+      });
+      placed.push(...answer.groups);
+    }
+    return { groups: placed };
+  });
+}
+
 async function fire(v: Venue, partyId: string, groupId: string, opts: CommandOptions = {}) {
   const command = await args(partyId, opts);
   return inTx((tx) => fireGroup(tx, v.cfg, partyId, groupId, command));
@@ -447,14 +483,16 @@ interface SpecExample extends Seated {
  * Spec §3's example, submitted as a waiter would: fire the drinks, fire the cold starters, hold the
  * warm starters, then hold the mains and the desserts as two groups in one submission.
  */
-async function specExample(v: Venue): Promise<SpecExample> {
+async function specExample(v: Venue, shape?: "grouped"): Promise<SpecExample> {
   const seat = await seated(v);
+  const place = (groups: Parameters<typeof submitGrouped>[2]) =>
+    shape === "grouped" ? submitGrouped(v, seat, groups) : submit(v, seat.partyId, groups);
   const one = async (release: GroupRelease, lines: GroupLine[]) =>
-    (await submit(v, seat.partyId, [{ release, lines }])).groups[0]!.id;
+    (await place([{ release, lines }])).groups[0]!.id;
   const drinks = await one("fire", [line(v, "beer", "2"), line(v, "water")]);
   const cold = await one("fire", [line(v, "cold", "4")]);
   const warm = await one("hold", [line(v, "warm", "4")]);
-  const later = await submit(v, seat.partyId, [
+  const later = await place([
     { release: "hold", lines: [line(v, "steak", "2"), line(v, "fish")] },
     { release: "hold", lines: [line(v, "flan", "2")] },
   ]);
@@ -1198,7 +1236,7 @@ describe("editing held groups", () => {
 
   it("moves part of two lines of one bill in one request, splitting each into a numbered row of the target", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     const [flan] = await linesIn(s.partyId, s.desserts);
 
@@ -1231,7 +1269,7 @@ describe("editing held groups", () => {
   it("moves part of a line on each of two bills in one request, splitting each on its own bill", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const { groups } = await submit(v, s.partyId, [
+    const { groups } = await submitGrouped(v, s, [
       { release: "hold", lines: [line(v, "water", "3"), line(v, "steak", "2")] },
     ]);
     const groupId = groups[0]!.id;
@@ -1288,7 +1326,7 @@ describe("editing held groups", () => {
 
   it("split part of a held line into its own group: two rows in that group, quantities summing to the original", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
     const events = (await eventsOf(s.partyId)).length;
@@ -2506,7 +2544,7 @@ describe("a group split across bills of its party", () => {
 
   it("splits part of a held-group line onto a check as two held rows of the group, and fires both", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
 
     const checkId = await splitToCheck(v, s, [{ lineNo: steak!.lineNo, quantity: "1" }]);
@@ -3096,7 +3134,7 @@ describe("edits inside groups (D19)", () => {
 
   it("moves the party on for part of a line voided", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     const revision = await revisionOf(s.partyId);
 
@@ -3605,7 +3643,7 @@ describe("A773 no dispatch state — group readiness", () => {
       const v = await setupVenue();
       const s = await seated(v);
       const group = (
-        await submit(v, s.partyId, [
+        await submitGrouped(v, s, [
           {
             release: "fire",
             lines: [line(v, "steak"), line(v, "fish", "2")],
@@ -4877,7 +4915,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints +1 and -1 for a held Steak's quantity raised and lowered by an edit", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const header = await head(v, s);
       const steak = await lineOf(s, s.mains, "steak", v);
 
@@ -4928,7 +4966,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints a HOLD cancellation for the part of a held line voided, and for a void that empties its group", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const header = await head(v, s);
       const steak = await lineOf(s, s.mains, "steak", v);
       const flan = await lineOf(s, s.desserts, "flan", v);
@@ -5502,7 +5540,7 @@ describe("splitting a held line into units", () => {
   it("refuses a dish with extras and an extra by itself without writing", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const answer = await submit(v, s.partyId, [
+    const answer = await submitGrouped(v, s, [
       {
         release: "hold",
         lines: [
@@ -5535,9 +5573,7 @@ describe("splitting a held line into units", () => {
     async (quantity) => {
       const v = await setupVenue();
       const s = await seated(v);
-      await submit(v, s.partyId, [
-        { release: "hold", lines: [line(v, "steak", String(quantity))] },
-      ]);
+      await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", String(quantity))] }]);
       const [source] = await linesOf(s.partyId);
       const command = await args(s.partyId);
       let yielded = false;
@@ -5610,7 +5646,7 @@ describe("splitting a held line into units", () => {
   it("a concurrent reader sees the unsplit committed line until the entire split commits", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "64")] }]);
+    await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "64")] }]);
     const [source] = await linesOf(s.partyId);
     const command = await args(s.partyId);
     let copied!: () => void;
@@ -5673,7 +5709,7 @@ describe("splitting a held line into units", () => {
   it("the original partial splitter makes one row, retaining the other four units", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "5")] }]);
+    await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "5")] }]);
     const [source] = await linesOf(s.partyId);
     const result = await inTx((tx) =>
       splitLinesWithinOrder(tx, v.cfg, s.tabId, [{ lineNo: source!.lineNo, quantity: "1" }]),
@@ -5686,7 +5722,7 @@ describe("splitting a held line into units", () => {
   it("keeps the total served quantity while dividing the stored rows", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "7")] }]);
+    await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "7")] }]);
     const [source] = await linesOf(s.partyId);
     await db
       .update(workingOrderLines)
@@ -5712,7 +5748,7 @@ describe("splitting a held line into units", () => {
 });
 
 describe("Fire now on one held dish", () => {
-  async function fixture(printHeld: boolean) {
+  async function fixture(printHeld: boolean, shape?: "grouped") {
     const v = await setupVenue();
     const extraStation = await seedKitchenStation(db, {
       locationId: v.cfg.locationId,
@@ -5734,7 +5770,9 @@ describe("Fire now on one held dish", () => {
       });
     });
     const s = await seated(v);
-    const result = await submit(v, s.partyId, [
+    const place = (groups: Parameters<typeof submitGrouped>[2]) =>
+      shape === "grouped" ? submitGrouped(v, s, groups) : submit(v, s.partyId, groups);
+    const result = await place([
       {
         release: "hold",
         lines: [
@@ -5947,7 +5985,7 @@ describe("Fire now on one held dish", () => {
   });
 
   it("fires only the active remainder of a partly cancelled dish", async () => {
-    const { v, s, steak, extra } = await fixture(true);
+    const { v, s, steak, extra } = await fixture(true, "grouped");
     await db.insert(lineServiceCancellations).values({
       lineId: steak.id,
       quantity: 1000,
