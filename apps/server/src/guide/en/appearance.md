@@ -153,7 +153,7 @@ The logo of the theme in use shows in these places:
 - **A cash register's top bar**, first, before the **Counter** and **Floor** tabs, while everything
   on the bar fits beside it. When the bar fills, for example on a narrow screen with **Parked
   orders**, **Waiting**, **Transfers** and **Pass** all showing, the logo steps aside; nothing else
-  on the bar is hidden or made smaller. It comes back when there is room again.
+  on the bar is hidden or made smaller to make room for it. It comes back when there is room again.
 - **The sign-in screen of a cash register or handheld**, above the device's name and the list of
   names.
 - **"Powered by Waitron"**, which shows while a logo is set: under the dashboard's sign-in form; in

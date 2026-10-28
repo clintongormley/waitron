@@ -5458,7 +5458,7 @@ While a venue logo is in use and has loaded, it is drawn first in the bar (`wt-v
 `size="bar"`, alt the legal name, no fallback) while every strip control fits beside it; otherwise
 the box stays in the page, out of the row and hidden, so it keeps its image and its retry. Nothing
 on the strip changes size or leaves it for the logo; the strip's controls shift right by the logo's
-width while it shows. The bar measures again when its width, its controls, the language or the text
+width and the bar's gap while it shows. The bar measures again when its width, its controls, the language or the text
 size change, and holds the logo steady while the zone menu is open. Accepted limit: when the logo's
 address changes while it shows (a new logo, or Light/Dark switching on a theme with a dark image),
 the new image is 0 px wide until it loads, so the logo leaves the row and the strip shifts back, then

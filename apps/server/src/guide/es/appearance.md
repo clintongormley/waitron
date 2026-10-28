@@ -169,7 +169,7 @@ El logotipo del tema en uso se ve en estos lugares:
   **Mostrador** y **Sala**, mientras todo lo de la barra cabe a su lado. Cuando la barra se llena,
   por ejemplo en una pantalla estrecha con **Pedidos aparcados**, **En espera**, **Traspasos** y
   **Pase** a la vista, el logotipo se aparta; nada más de la barra se oculta ni se hace más
-  pequeño. Vuelve en cuanto hay sitio otra vez.
+  pequeño para hacerle sitio. Vuelve en cuanto hay sitio otra vez.
 - **La pantalla de inicio de sesión de una caja registradora o de un terminal de camarero**, encima
   del nombre del dispositivo y de la lista de nombres.
 - **«Con la tecnología de Waitron»**, que se ve mientras hay un logotipo: bajo el formulario de

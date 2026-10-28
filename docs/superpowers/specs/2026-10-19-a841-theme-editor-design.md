@@ -1489,7 +1489,9 @@ handhelds and the sign-in screen alone.
 (2026-10-28, slice 14: built. The counter keeps one loaded logo box in the page and hides it without
 room, rather than stepping and re-creating it as the handheld does, because a new box is 0 px wide
 until its image loads and the counter's counts change through service; plan
-`docs/superpowers/plans/2026-10-28-a841-14-till-bar-logo.md`, R1.)
+`docs/superpowers/plans/2026-10-28-a841-14-till-bar-logo.md`, R1. While it shows, the strip's
+controls shift right by the logo's width and the bar's gap; none changes size, scrolls or moves into
+a menu for it, which is how the plan reads "moves" (R8).)
 
 **"Powered by Waitron"** (owner, Q6 A). Shown only while a venue logo is in use: with none, the
 banner and the bar keep Waitron's own and nothing is added. Exactly where:
@@ -1519,7 +1521,7 @@ banner and the bar keep Waitron's own and nothing is added. Exactly where:
 
 (2026-10-25, A1096: the owner added the line to the signed-in dashboard banner and the foot of a
 handheld's ☰ menu; a cash register's ☰ menu gains it with slice 14 — see `docs/backlog.md`,
-"A1096's last part".) (2026-10-28: built with slice 14.)
+"A1096's last part".) (2026-10-28: built with slice 14; that backlog entry is deleted.)
 
 **Light and dark** (my call). One image is required; a second, for dark screens, is optional. With
 both, each screen draws its version's image, the Theme setting deciding as it does for colours

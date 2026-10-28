@@ -3081,11 +3081,21 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   subscription model when it matters.
 
 - **On a cash register's bar, the keyboard focus ring of the first strip control is cut off on
-  its left, top and bottom.** Seen in A841 slice 14's look check on a busy English bar at 1280 × 800
-  with no venue logo: "Counter: Barra" with focus shows its ring only down its right side. The
+  its left, top and bottom (found by A841 slice 14's look check, #PR).** Seen on a busy English bar
+  at 1280 × 800 with no venue logo: the Counter zone control ("Counter: Barra" in the look check; the shared `BUSY_COUNTER` fixture
+  now names the zone "Bar") with focus shows its ring only down its right side. The
   control sits inside two sideways-scrolling boxes, the tab list (`.tabs`) and the strip
   (`.till-strip`), both `overflow-x: auto` in `apps/till/src/widgets/till-shell.ts`; which of them
   cuts the ring was not tested. Both predate slice 14.
+
+- **A handheld's bar may start watching its size again after it has left the page (found by A841
+  slice 14's review, #PR).** Read, not tested: `updated()` in `apps/till/src/widgets/till-shell.ts`
+  calls `#observe()` for a handheld, and `disconnectedCallback()` clears its observer, so a render
+  queued just before the shell is removed would make a new observer on the detached shell. Slice 14
+  found and fixed the same shape on a cash register's bar, where a case reproduced it ("a render
+  queued before the counter leaves the page does not observe it again" in
+  `till-shell.counter-logo.test.ts`); `#observe()` and the lines in `disconnectedCallback()` that clear its observer are unchanged since
+  before slice 14.
 
 - **The Look card's "How it prints" draws the 80 mm picture only (A841 slice 9, D5 of
   [the plan](superpowers/plans/2026-10-25-a841-9-logo-receipts.md)).** A logo that prints blank at
