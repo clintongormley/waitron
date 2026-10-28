@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from "vitest";
-import { userEvent } from "vitest/browser";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
 import { cleanup, host, mount, mountInShadowRoot } from "../test-helpers.js";
 import type { WtSlider } from "./wt-slider.js";
 import "./wt-slider.js";
@@ -319,10 +319,208 @@ test("without a hint or a format it draws as before", async () => {
   expect([el.format(6), el.valueText, el.hint]).toEqual(["6", null, ""]);
 });
 
-test("the range paints from the primary token", async () => {
-  const el = await mountSlider();
-  host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
-  expect(getComputedStyle(inputOf(el)).accentColor).toBe("rgb(16, 17, 18)");
+/** The page as drawn: the colour at a viewport point, read from one screenshot. */
+async function screenshot(): Promise<(x: number, y: number) => string> {
+  const scale = window.frameElement?.parentElement?.getAttribute("data-scale");
+  if (Number(scale) !== 1) {
+    throw new Error(
+      `screenshot needs the test frame at one screenshot pixel per CSS pixel, and Vitest has it scaled by ${scale}; make the viewport fit the page.`,
+    );
+  }
+  const image = new Image();
+  image.src = `data:image/png;base64,${await page.screenshot({ save: false })}`;
+  await image.decode();
+  const canvas = document.createElement("canvas");
+  canvas.width = image.naturalWidth;
+  canvas.height = image.naturalHeight;
+  const context = canvas.getContext("2d")!;
+  context.drawImage(image, 0, 0);
+  return (x, y) => {
+    const [r, g, b] = context.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+}
+
+/** Vitest shrinks the test frame to fit Playwright's page; a 560px-tall viewport leaves it whole. */
+function fitFrameToPage(): void {
+  let restore: [number, number];
+  beforeEach(async () => {
+    restore = [innerWidth, innerHeight];
+    await page.viewport(innerWidth, Math.min(innerHeight, 560));
+    await vi.waitFor(() => expect(innerHeight).toBeLessThanOrEqual(560));
+  });
+  afterEach(() => page.viewport(...restore));
+}
+
+async function pixelAt(x: number, y: number): Promise<string> {
+  return (await screenshot())(x, y);
+}
+
+// Given an accent colour, Chromium picks a native range's unfilled track from that colour's
+// lightness alone: near-white under a dark one, dark grey under a light one, in either theme.
+describe.each([
+  ["light", "rgb(16, 40, 120)"],
+  ["light", "rgb(160, 230, 190)"],
+  ["dark", "rgb(16, 40, 120)"],
+  ["dark", "rgb(160, 230, 190)"],
+] as const)("the range's track (%s theme, primary %s)", (theme, primary) => {
+  fitFrameToPage();
+
+  async function mountPainted(
+    value: number,
+  ): Promise<{ el: WtSlider; at: (share: number) => Promise<string> }> {
+    const el = await mountSlider();
+    host.setAttribute("data-theme", theme);
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    host.style.setProperty("--wt-color-primary", primary);
+    host.style.setProperty("--wt-color-track", "rgb(90, 20, 20)");
+    el.value = value;
+    await el.updateComplete;
+    const box = inputOf(el).getBoundingClientRect();
+    return { el, at: (share) => pixelAt(box.left + box.width * share, box.top + box.height / 2) };
+  }
+
+  test("the part past the thumb paints from the track token", async () => {
+    const { at } = await mountPainted(6);
+    expect(await at(0.85)).toBe("rgb(90, 20, 20)");
+  });
+
+  test("the part before the thumb, and the thumb, paint from the primary token", async () => {
+    const { at } = await mountPainted(6);
+    expect(await at(0.2)).toBe(primary);
+    expect(await at(0.5)).toBe(primary);
+  });
+
+  test("the filled part follows the value", async () => {
+    const { el, at } = await mountPainted(2);
+    expect(await at(0.2)).toBe("rgb(90, 20, 20)");
+    el.value = 10;
+    await el.updateComplete;
+    expect(await at(0.85)).toBe(primary);
+  });
+
+  test("the thumb is drawn at the thumb-size token", async () => {
+    const { el } = await mountPainted(2);
+    const box = inputOf(el).getBoundingClientRect();
+    const belowTrack = () => pixelAt(box.left + 20, box.top + box.height / 2 + 6);
+    const background = await pixelAt(box.left + 20, box.top + 2);
+    expect(await belowTrack()).toBe(background);
+    host.style.setProperty("--wt-slider-thumb-size", "32px");
+    expect(await belowTrack()).toBe(primary);
+  });
+
+  test("a range with no travel still draws its track", async () => {
+    const { el, at } = await mountPainted(10);
+    el.min = 10;
+    await el.updateComplete;
+    expect(await at(0.85)).toBe("rgb(90, 20, 20)");
+  });
+});
+
+describe("where the fill ends", () => {
+  fitFrameToPage();
+  const PRIMARY = "rgb(16, 40, 120)";
+  const TRACK = "rgb(90, 20, 20)";
+
+  async function mountDrawn(attributes: string) {
+    const el = (await mount(`<wt-slider label="Columns" ${attributes}></wt-slider>`)) as WtSlider;
+    host.style.width = "300px";
+    host.style.setProperty("--wt-field-max-width", "300px");
+    host.style.setProperty("--wt-color-primary", PRIMARY);
+    host.style.setProperty("--wt-color-track", TRACK);
+    await el.updateComplete;
+    const box = inputOf(el).getBoundingClientRect();
+    const half = parseFloat(getComputedStyle(el).getPropertyValue("--wt-slider-thumb-size")) / 2;
+    const middle = box.top + box.height / 2;
+    /** The thumb's centre, `share` of the way along its travel from the start edge. */
+    const thumbAt = (share: number, rtl = false) => {
+      const fromLeft = half + share * (box.width - 2 * half);
+      return rtl ? box.right - fromLeft : box.left + fromLeft;
+    };
+    return { el, box, half, middle, thumbAt };
+  }
+
+  test.each([
+    ["value 4 to the step's 5", 'min="2" max="10" step="3" value="4"', 3 / 8],
+    ["value 10 down to the step's 8", 'min="2" max="10" step="3" value="10"', 6 / 8],
+  ])(
+    "on a value off the step, the fill ends under the thumb the range drew (%s)",
+    async (_, attributes, share) => {
+      const { el, half, middle, thumbAt } = await mountDrawn(attributes);
+      const centre = thumbAt(share);
+      const at = await screenshot();
+      expect(at(centre - half - 2, middle)).toBe(PRIMARY);
+      expect(at(centre + half + 2, middle)).toBe(TRACK);
+      expect(inputOf(el).valueAsNumber).toBe(2 + share * 8);
+    },
+  );
+
+  test("a value off the step set later, and a dragged one, move the fill with the thumb", async () => {
+    const { el, half, middle, thumbAt } = await mountDrawn('min="2" max="10" step="3" value="2"');
+    el.value = 10;
+    await el.updateComplete;
+    let at = await screenshot();
+    expect(at(thumbAt(6 / 8) + half + 2, middle)).toBe(TRACK);
+
+    const input = inputOf(el);
+    input.value = "5";
+    input.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
+    await el.updateComplete;
+    at = await screenshot();
+    expect(at(thumbAt(3 / 8) - half - 2, middle)).toBe(PRIMARY);
+    expect(at(thumbAt(3 / 8) + half + 2, middle)).toBe(TRACK);
+  });
+
+  // The thumb hides the track within half a thumb of its centre, so the fill's end shows only
+  // above the thumb, on a track taller than it.
+  test.each([
+    ["near min", 3, 1 / 8],
+    ["near max", 9, 7 / 8],
+  ])("the fill ends at the thumb's centre %s", async (_, value, share) => {
+    const { el, thumbAt } = await mountDrawn(`min="2" max="10" value="${value}"`);
+    host.style.setProperty("--wt-space-1", "24px");
+    const box = inputOf(el).getBoundingClientRect();
+    const aboveThumb = box.top + box.height / 2 - 10;
+    const centre = thumbAt(share);
+    const at = await screenshot();
+    expect(at(centre - 3, aboveThumb)).toBe(PRIMARY);
+    expect(at(centre + 3, aboveThumb)).toBe(TRACK);
+  });
+
+  test("right to left, the fill runs from the right-hand end to the thumb", async () => {
+    const { el, half, middle, thumbAt } = await mountDrawn('min="2" max="10" value="3"');
+    host.setAttribute("dir", "rtl");
+    await el.updateComplete;
+    const centre = thumbAt(1 / 8, true);
+    const belowTrack = middle + half / 2;
+    const at = await screenshot();
+    expect(at(centre, belowTrack)).toBe(PRIMARY);
+    expect(at(thumbAt(1 / 8), belowTrack)).not.toBe(PRIMARY);
+    expect(at(centre + half + 2, middle)).toBe(PRIMARY);
+    expect(at(centre - half - 2, middle)).toBe(TRACK);
+  });
+
+  test.each([
+    ["min", "left", 2],
+    ["max", "right", 10],
+  ] as const)(
+    "at %s the thumb's centre sits half the thumb-size token in from the %s end",
+    async (_, end, value) => {
+      const { box, half, middle } = await mountDrawn(`min="2" max="10" value="${value}"`);
+      // Below the track, where only the thumb paints.
+      const row = middle + half / 2;
+      const at = await screenshot();
+      const painted: number[] = [];
+      for (let x = Math.floor(box.left); x < box.right; x++) {
+        if (at(x, row) === PRIMARY) painted.push(x);
+      }
+      expect(painted.length).toBeGreaterThan(0);
+      const centre = (painted[0]! + painted.at(-1)! + 1) / 2;
+      const inset = end === "left" ? centre - box.left : box.right - centre;
+      expect(Math.abs(inset - half)).toBeLessThanOrEqual(0.5);
+    },
+  );
 });
 
 test("the field max-width token bounds the slider's width", async () => {
@@ -466,14 +664,12 @@ test("disabled continuous sliders refuse keyboard and track changes", async () =
 });
 
 describe.each(["light", "dark"] as const)("continuous slider tokens (%s)", (theme) => {
-  test("keeps its accent and focus styles during input", async () => {
+  test("keeps its focus style during input", async () => {
     const el = await mountSlider("continuous");
     host.setAttribute("data-theme", theme);
-    host.style.setProperty("--wt-color-primary", "rgb(16, 17, 18)");
     const input = inputOf(el);
     el.focus();
     await userEvent.keyboard("{ArrowRight}");
-    expect(getComputedStyle(input).accentColor).toBe("rgb(16, 17, 18)");
     expect(getComputedStyle(input).outlineStyle).toBe("solid");
     expect(parseFloat(getComputedStyle(input).outlineWidth)).toBeGreaterThan(0);
     expect(el.shadowRoot!.activeElement).toBe(input);

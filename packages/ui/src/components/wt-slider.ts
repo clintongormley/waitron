@@ -53,12 +53,61 @@ export class WtSlider extends LitElement {
         font-weight: var(--wt-font-weight-bold);
         font-variant-numeric: tabular-nums;
       }
+      /* Drawn from tokens, never the native track: given an accent colour, Chromium shades the
+         unfilled track by that colour's lightness alone, whatever the theme. */
       input {
+        appearance: none;
         width: 100%;
         min-width: var(--wt-tap-min);
         min-height: var(--wt-tap-min);
         margin: 0;
-        accent-color: var(--wt-color-primary);
+        background: transparent;
+        --wt-slider-fill: 0;
+        --wt-slider-filled-to: calc(
+          var(--wt-slider-thumb-size) / 2 + var(--wt-slider-fill) *
+            (100% - var(--wt-slider-thumb-size))
+        );
+        --wt-slider-towards: to right;
+      }
+      input:dir(rtl) {
+        --wt-slider-towards: to left;
+      }
+      /* Separate rules, never one selector list: Chromium drops a whole list that names
+         ::-moz-range-track. */
+      input::-webkit-slider-runnable-track {
+        height: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: linear-gradient(
+          var(--wt-slider-towards),
+          var(--wt-color-primary) var(--wt-slider-filled-to),
+          var(--wt-color-track) var(--wt-slider-filled-to)
+        );
+      }
+      input::-moz-range-track {
+        height: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-track);
+      }
+      input::-moz-range-progress {
+        height: var(--wt-space-1);
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
+      }
+      input::-webkit-slider-thumb {
+        appearance: none;
+        width: var(--wt-slider-thumb-size);
+        height: var(--wt-slider-thumb-size);
+        margin-top: calc((var(--wt-space-1) - var(--wt-slider-thumb-size)) / 2);
+        border: none;
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
+      }
+      input::-moz-range-thumb {
+        width: var(--wt-slider-thumb-size);
+        height: var(--wt-slider-thumb-size);
+        border: none;
+        border-radius: var(--wt-radius-full);
+        background: var(--wt-color-primary);
       }
       input:focus-visible {
         outline: var(--wt-focus-ring);
@@ -135,6 +184,13 @@ export class WtSlider extends LitElement {
     const count = Math.floor(span / this.step) + 1;
     if (count > MAX_MARKS) return [];
     return Array.from({ length: count }, (_, i) => (i * this.step) / span);
+  }
+
+  /** The fill follows the range's own value, which it has clamped and snapped to its step. */
+  override updated(): void {
+    const input = this.renderRoot.querySelector("input")!;
+    const share = (input.valueAsNumber - this.min) / (this.max - this.min);
+    input.style.setProperty("--wt-slider-fill", String(share));
   }
 
   override render() {

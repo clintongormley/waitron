@@ -166,6 +166,64 @@ it.each(["light", "dark"] as const)(
   },
 );
 
+/** Moves keyboard focus onto the Custom square from the swatch before it, as a Tab press does. */
+async function tabToCustom(el: ColorFieldHost): Promise<HTMLInputElement> {
+  const swatches = el.shadowRoot!.querySelectorAll<HTMLButtonElement>(".swatch");
+  swatches[swatches.length - 1]!.focus();
+  await userEvent.tab();
+  const input = el.shadowRoot!.querySelector<HTMLInputElement>('.custom input[type="color"]')!;
+  expect(el.shadowRoot!.activeElement).toBe(input);
+  expect(input.matches(":focus-visible")).toBe(true);
+  return input;
+}
+
+it.each(["light", "dark"] as const)(
+  "shows the focus ring on the Custom square while a custom colour is chosen, and keeps its selected ring (%s)",
+  async (theme) => {
+    const { el } = await mount("#123456", theme);
+    el.style.setProperty("--wt-focus-ring", "3px solid rgb(1, 2, 3)");
+    const input = await tabToCustom(el);
+    const style = getComputedStyle(input);
+    expect([style.outlineWidth, style.outlineColor]).toEqual(["3px", "rgb(1, 2, 3)"]);
+    el.style.removeProperty("--wt-focus-ring");
+    const { row, column, ringColor } = await customSquarePixels(el.shadowRoot!);
+    expect([row[0], row[1], column[0], column[1]]).toEqual(Array(4).fill(ringColor));
+  },
+);
+
+it.each([
+  ["a palette colour", CATEGORY_PALETTE[1], CATEGORY_PALETTE[0], false],
+  ["no colour", null, CATEGORY_PALETTE[0], true],
+] as const)(
+  "shows the focus ring on the chosen swatch while %s is chosen",
+  async (_, color, neighbour, backwards) => {
+    const { el } = await mount(color);
+    el.style.setProperty("--wt-focus-ring", "3px solid rgb(1, 2, 3)");
+    el.style.setProperty("--wt-selected-ring", "2px solid rgb(4, 5, 6)");
+    const chosen = el.shadowRoot!.querySelector<HTMLButtonElement>('[aria-checked="true"]')!;
+    el.shadowRoot!.querySelector<HTMLButtonElement>(`[data-color="${neighbour}"]`)!.focus();
+    await userEvent.tab({ shift: backwards });
+    expect(el.shadowRoot!.activeElement).toBe(chosen);
+    expect(chosen.matches(":focus-visible")).toBe(true);
+    const style = getComputedStyle(chosen);
+    expect([style.outlineWidth, style.outlineColor]).toEqual(["3px", "rgb(1, 2, 3)"]);
+    expect([style.borderTopWidth, style.borderTopColor]).toEqual(["2px", "rgb(4, 5, 6)"]);
+  },
+);
+
+it("choosing an option neither moves nor resizes it", async () => {
+  const { el } = await mount("#123456");
+  const options = () =>
+    [...el.shadowRoot!.querySelectorAll<HTMLElement>('.swatch, .custom input[type="color"]')].map(
+      (option) => option.getBoundingClientRect().toJSON() as DOMRect,
+    );
+  const unchosen = options();
+  for (const value of ["", CATEGORY_PALETTE[0]]) {
+    await click(el, value);
+    expect(options()).toEqual(unchosen);
+  }
+});
+
 it.each([
   ["a palette colour", CATEGORY_PALETTE[0], "light"],
   ["no colour", null, "light"],

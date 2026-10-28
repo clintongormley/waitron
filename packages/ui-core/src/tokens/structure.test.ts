@@ -216,7 +216,7 @@ test("a stepper's buttons are 24px wide, WCAG 2.2's level AA minimum target", ()
   expect(token(el, "--wt-stepper-button-width")).toBe("24px");
 });
 
-test("a slider's thumb size is 16px, twice the 8px inset of Chromium's range thumb centre", () => {
+test("a slider's thumb size is 16px", () => {
   const el = mount();
   expect(token(el, "--wt-slider-thumb-size")).toBe("16px");
 });

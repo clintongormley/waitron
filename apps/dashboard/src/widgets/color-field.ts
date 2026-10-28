@@ -50,9 +50,9 @@ export const colorFieldStyles = css`
     border-radius: var(--wt-radius-sm);
     cursor: pointer;
   }
+  /* A border, not an outline: the outline is the focus ring, which a chosen item must still show. */
   .swatch.on {
-    outline: var(--wt-selected-ring);
-    outline-offset: var(--wt-selected-ring-offset);
+    border: var(--wt-selected-ring);
   }
   .swatch.none {
     display: inline-grid;
@@ -67,6 +67,11 @@ export const colorFieldStyles = css`
     color: var(--wt-color-text);
     font-size: var(--wt-font-size-sm);
     text-align: start;
+  }
+  /* The selected ring is a border 1px wider than the plain one: the padding gives it back, so
+     choosing this size-to-fit button does not resize it. */
+  .swatch.none.on {
+    padding: calc(var(--wt-space-1) - 1px) calc(var(--wt-space-2) - 1px);
   }
   .swatch.none > :not(.chip) {
     grid-column: 1 / -1;
@@ -101,8 +106,7 @@ export const colorFieldStyles = css`
     cursor: pointer;
   }
   .custom input[type="color"].on {
-    outline: var(--wt-selected-ring);
-    outline-offset: var(--wt-selected-ring-offset);
+    border: var(--wt-selected-ring);
   }
   /* Separate rules, never one selector list: Chromium drops a whole list that names
      ::-moz-color-swatch. */
