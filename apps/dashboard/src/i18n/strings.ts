@@ -3469,7 +3469,7 @@ export const en = {
     "Free deletes only files the box no longer needs: crash reports older than a week, log files older than the two newest, and what a backup that was cut off left behind. Sales, settings and your backups are never touched.",
   "box_status.free_help_guide": "More about freeing space",
   "box_status.fillers":
-    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds; this cannot free a full disk now. Leave without changes to stop. Keep your database, recovery keys and saved backups.",
+    "Choose how many archives to keep on Backups. Older archives are removed only after a new backup succeeds, or before a backup that is short of room; this cannot free a full disk now. Leave without changes to stop. Keep your database, recovery keys and saved backups.",
   "box_status.checks_unavailable":
     "Some checks could not be made, so this page may not show every problem.",
   "box_status.other_alerts": "{count} other alerts",
@@ -7025,7 +7025,7 @@ export const es: Record<StringKey, string> = {
     "Liberar solo borra archivos que el equipo ya no necesita: informes de fallos de hace más de una semana, registros de actividad anteriores a los dos más recientes y lo que dejó una copia de seguridad interrumpida. Nunca toca las ventas, los ajustes ni tus copias.",
   "box_status.free_help_guide": "Más sobre liberar espacio",
   "box_status.fillers":
-    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
+    "Elige cuántas copias conservar en Copias de seguridad. Las antiguas solo se borran después de guardar una nueva, o antes de una copia si falta sitio; esto no libera espacio de inmediato en un disco lleno. Sal sin hacer cambios para parar. Conserva la base de datos, las claves de recuperación y las copias guardadas.",
   "box_status.checks_unavailable":
     "Algunas comprobaciones no se han podido hacer, así que esta página puede no mostrar todos los problemas.",
   "box_status.other_alerts": "{count} avisos más",

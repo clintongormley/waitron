@@ -832,9 +832,9 @@ action this page provides.
 _2026-10-28, A1167 slice 1: the staging-space words above were replaced by the owner's «Backup
 not made: …» sentence, and the Box status guide's "older archives are removed only after a new
 backup succeeds" sentence by one saying a backup run can delete its oldest backups on the disk to
-make room. The Box status page's own footer (`apps/dashboard/src/i18n/strings.ts`, pinned by
-`apps/dashboard/src/screens/box-status-screen.test.ts`) still says "Older archives are removed only
-after a new backup succeeds", which is no longer the whole story._
+make room. The Box status page's own footer (`box_status.fillers` in
+`apps/dashboard/src/i18n/strings.ts`) now says older archives are removed only after a new backup
+succeeds "or before a backup that is short of room", in both languages._
 
 **Still open: space beyond the supported cleanup.** When no reclaimable files remain and a new
 backup cannot fit, there is no supported in-app disk-recovery workflow. Add an authenticated
