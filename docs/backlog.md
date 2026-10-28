@@ -512,6 +512,11 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
+- **A1127 slice 3: a red bar on every dashboard page while the full-disk stop holds.** The owner
+  kept the bar when A1167's answers dropped slice 3's dialog and Box status button; its words now
+  say what the box already deleted. Build with or after A1167. Left open by A1127.
+  [Detail](backlog/setup.md#a1127-slice-3-a-red-bar-on-every-dashboard-page-while-the-full-disk-stop-holds)
+
 - **Other full-disk words still send the person elsewhere or end with the short reinstall
   sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
   Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the
