@@ -448,6 +448,12 @@ Designed 2026-10-28, waiting for the owner's answers to its five questions befor
 [mockups/a1127-full-boot](mockups/a1127-full-boot/README.md). It also settles the repair page's two
 wording gaps below.
 
+The owner answered all five on 2026-10-28 (~06:57 and ~08:20) and approved building slices 2–3; the
+full-disk page gains a no-sign-in button to delete old backups, as its own slice. A1167's design
+([backups make room for themselves](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
+Q3 and Q4) asks whether slice 3's dialog and that button are still wanted once the box deletes old
+backups by itself.
+
 ## A resume can use the room the spare file gave
 
 After the repair host deletes the spare beside a stopped recovery, a resume of that recovery could

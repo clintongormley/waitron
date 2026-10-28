@@ -63,6 +63,21 @@ Three parts:
   one-step choice, a bucket of the owner's as the other), and how loudly a box with no copy, or a
   stale one, says so.
 
+## A1167. Backups make room for themselves
+
+**Owner, 2026-10-28 ~08:35:** "our backup policy needs to delete old backups automatically when we're
+running out of disk space, plus alert the administrator, plus refuse to do a backup if there still
+isn't enough space, and alert the manager."
+
+Design: [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md).
+It reuses A1127's rules for which backups may be deleted, changes what A1127 slice 3's dialog and the
+full-disk page's button are for, and fixes a measured gap: a backup to a folder on the box's own disk
+needs about three copies of the database at its peak while its space check counts two, so with room
+for between two and three the copy into the folder fails `ENOSPC` with nothing stored
+(`~/waitron-campaign/a1167-measure/`). Nothing is built until the owner answers its four questions
+(who is told of automatic deletions; whether a refused backup is emailed; A1127 slice 3's dialog; the
+full-disk page's button).
+
 ## Automatic upgrades that can be undone until the first order
 
 **A950 design proposal, 2026-10-27; no approval or build.** The

@@ -509,8 +509,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
 - **On a full disk, boot fully from the spare file, then prompt to delete old backups.** The
-  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Designed,
-  waiting for the owner's five answers. Left open by A1127.
+  owner's answer to A1127 Q1; today's explain-only full-disk page becomes the fallback. Designed and
+  answered; slices 2–3 approved, slice 3 and the full-disk page's button open to A1167's Q3–Q4. Left
+  open by A1127.
   [Detail](backlog/setup.md#on-a-full-disk-boot-fully-from-the-spare-file-then-prompt-to-delete-old-backups)
 
 - **A resume can use the room the spare file gave.** Accepted limits of A1127's release beside a
@@ -4757,6 +4758,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
   [Audit](backlog/self-service-refusals.md#backup-settings).
+
+- **A1167: backups make room for themselves.** When the disk runs short the box deletes its oldest
+  backups (never the newest, never one from before the last restore) and tells an administrator; a
+  backup that still has no room is refused before it copies anything and a manager is told. Also closes
+  the measured gap where a backup to a folder on the box's own disk passes its space check and then
+  fills the disk. Designed, waiting for the owner's four answers.
+  [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
 
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real
