@@ -2416,7 +2416,7 @@ export const es: Record<StringKey, string> = {
   "station.view_stacked": "Por estación",
   "station.min": "min",
   "order.was_numbers": "(antes {numbers})",
-  "station.overdue_count": "atrasados",
+  "station.overdue_count": "con retraso",
   "station.to_make": "{n} platos por hacer",
   "station.to_make_one": "1 plato por hacer",
   "station.late": "{n} con retraso",

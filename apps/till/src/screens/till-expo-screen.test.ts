@@ -2040,6 +2040,26 @@ describe("till-expo-screen", () => {
     expect(badge.textContent).toContain(t("station.overdue_count"));
   });
 
+  it("the pass-wide count calls overdue orders «con retraso» in Spanish", async () => {
+    const previousLocale = currentLocale();
+    setLocale("es-ES");
+    try {
+      const now = Date.parse("2026-08-17T10:16:00.000Z");
+      const el = await mount({
+        api: stubApi([
+          bandOrder("wo-d", 24, "ti-d", "2026-08-17T10:00:00.000Z"),
+          bandOrder("wo-e", 25, "ti-e", "2026-08-17T10:01:00.000Z"),
+        ]),
+        now,
+      });
+      expect(el.shadowRoot!.querySelector(".overdue-count")!.textContent!.trim()).toBe(
+        "2 con retraso",
+      );
+    } finally {
+      setLocale(previousLocale);
+    }
+  });
+
   it("shows no pass-wide count badge when nothing has escalated to overdue", async () => {
     const now = Date.parse("2026-08-17T10:01:00.000Z"); // 1 min → fresh
     const el = await mount({
