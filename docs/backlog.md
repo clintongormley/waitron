@@ -6083,6 +6083,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   trigger labels and accented-search examples remain.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
+  Dashboard hardware save-state, equipment-label and page-printer panel suites use English
+  sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

@@ -497,6 +497,8 @@ until A977).
   trigger labels and accented-search examples remain.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
+  Dashboard hardware save-state, equipment-label and page-printer panel suites use English
+  sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
