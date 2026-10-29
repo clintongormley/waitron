@@ -1,4 +1,4 @@
-import { lstat } from "node:fs/promises";
+import { lstat, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isVenueHolderFresh, type VenueHolder, type VenueLock } from "@waitron/db";
 import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/provisioning";
@@ -16,7 +16,11 @@ import {
   type BackupFolder,
   type DeletableArchive,
 } from "./backup-room.js";
-import { readBackupRoomNote, type BackupRoomNote } from "./backup-room-note.js";
+import {
+  readBackupRoomNote,
+  type BackupRoomNote,
+  type VenueDbIdentity,
+} from "./backup-room-note.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
@@ -107,7 +111,8 @@ async function checks(
   });
   if ("skipped" in read) return read;
   const { note } = read;
-  // Either request replaces venue.db, after which these backups are from before the installation.
+  // Either waiting request replaces or removes venue.db, after which these backups would be from
+  // before the box's next installation.
   if (await present(join(deps.stateDir, RESTORE_REQUEST_FILE)))
     return { skipped: "restore_waiting" };
   if (await present(join(deps.stateDir, RESET_REQUEST_FILE))) return { skipped: "reset_waiting" };
@@ -169,7 +174,7 @@ async function deleteToFloor(
       outOfReach: "floor",
       onDeleted: async (deleted) => {
         deletedAny = true;
-        await writeRecord(deps, deleted);
+        await writeRecord(deps, note, deleted);
       },
     });
   } catch (error) {
@@ -182,31 +187,103 @@ async function deleteToFloor(
   }
 }
 
+/** What the start deleted, and the `venue.db` it deleted for. */
+interface StartDeletedRecord {
+  version: 1;
+  at: string;
+  venueDb: VenueDbIdentity;
+  deleted: StoredArchive[];
+}
+
+type StoredArchive = Omit<DeletableArchive, "takenAt"> & { takenAt: string };
+
+const recordPath = (stateDir: string) => join(stateDir, BACKUP_ROOM_START_DELETED_FILE);
+
+/**
+ * Writes the record for the note's `venue.db`. A readable record an earlier start left for the
+ * same `venue.db` keeps its entries and the earlier of the two times; any other is replaced.
+ */
 async function writeRecord(
   deps: StartBackupRoomDeps,
+  note: BackupRoomNote,
   deleted: readonly DeletableArchive[],
 ): Promise<void> {
-  const record = {
+  const now = deps.now().toISOString();
+  const earlier = await readRecord(deps.stateDir);
+  const kept = earlier !== null && sameVenueDb(earlier.venueDb, note.venueDb) ? earlier : null;
+  const entries = [...(kept?.deleted ?? [])];
+  for (const { destination, dir, key, bytes, takenAt } of deleted)
+    if (!entries.some((each) => each.destination === destination && each.key === key))
+      entries.push({ destination, dir, key, bytes, takenAt: takenAt.toISOString() });
+  const record: StartDeletedRecord = {
     version: 1,
-    at: deps.now().toISOString(),
+    at: kept !== null && Date.parse(kept.at) < Date.parse(now) ? kept.at : now,
+    venueDb: note.venueDb,
+    deleted: entries,
+  };
+  try {
+    await writeFileAtomic(recordPath(deps.stateDir), JSON.stringify(record), 0o600);
+  } catch (error) {
+    deps.log("warn", "backup.start_room_record_failed", { errno: errnoOf(error) });
+  }
+}
+
+const sameVenueDb = (a: VenueDbIdentity, b: VenueDbIdentity) =>
+  a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
+
+/** The record, or null when there is none or it is not one this step writes. */
+async function readRecord(stateDir: string): Promise<StartDeletedRecord | null> {
+  let value: unknown;
+  try {
+    value = JSON.parse(await readFile(recordPath(stateDir), "utf8"));
+  } catch {
+    return null;
+  }
+  if (!isRecord(value) || value.version !== 1 || !isTime(value.at)) return null;
+  const { venueDb, deleted } = value;
+  if (!isRecord(venueDb) || ![venueDb.dev, venueDb.ino, venueDb.birthtimeNs].every(isDigits))
+    return null;
+  if (!Array.isArray(deleted) || !deleted.every(isStoredArchive)) return null;
+  return {
+    version: 1,
+    at: value.at,
+    venueDb: {
+      dev: venueDb.dev as string,
+      ino: venueDb.ino as string,
+      birthtimeNs: venueDb.birthtimeNs as string,
+    },
     deleted: deleted.map(({ destination, dir, key, bytes, takenAt }) => ({
       destination,
       dir,
       key,
       bytes,
-      takenAt: takenAt.toISOString(),
+      takenAt,
     })),
   };
-  try {
-    await writeFileAtomic(
-      join(deps.stateDir, BACKUP_ROOM_START_DELETED_FILE),
-      JSON.stringify(record),
-      0o600,
-    );
-  } catch (error) {
-    deps.log("warn", "backup.start_room_record_failed", { errno: errnoOf(error) });
-  }
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const isText = (value: unknown): value is string => typeof value === "string" && value !== "";
+
+const isDigits = (value: unknown): value is string =>
+  typeof value === "string" && /^\d+$/.test(value);
+
+/** Only the spelling `toISOString` writes. */
+const isTime = (value: unknown): value is string =>
+  typeof value === "string" &&
+  !Number.isNaN(Date.parse(value)) &&
+  new Date(value).toISOString() === value;
+
+const isStoredArchive = (value: unknown): value is StoredArchive =>
+  isRecord(value) &&
+  isText(value.destination) &&
+  isText(value.dir) &&
+  isText(value.key) &&
+  Number.isSafeInteger(value.bytes) &&
+  (value.bytes as number) >= 0 &&
+  isTime(value.takenAt);
 
 async function present(path: string): Promise<boolean> {
   try {

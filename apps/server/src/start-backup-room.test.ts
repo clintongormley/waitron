@@ -123,17 +123,44 @@ const codes = (log: ReturnType<typeof vi.fn>) => log.mock.calls.map((call) => ca
 const skipped = (log: ReturnType<typeof vi.fn>) =>
   log.mock.calls.filter((call) => call[1] === "backup.start_room_skipped").map((call) => call[2]);
 
-async function readRecord(): Promise<{ at: Date; deleted: DeletableArchive[] }> {
+type VenueDb = { dev: string; ino: string; birthtimeNs: string };
+
+async function readRecord(): Promise<{ at: Date; venueDb: VenueDb; deleted: DeletableArchive[] }> {
   const raw = JSON.parse(
     await readFile(join(stateDir, BACKUP_ROOM_START_DELETED_FILE), "utf8"),
   ) as {
     at: string;
+    venueDb: VenueDb;
     deleted: (Omit<DeletableArchive, "takenAt"> & { takenAt: string })[];
   };
   return {
     at: new Date(raw.at),
+    venueDb: raw.venueDb,
     deleted: raw.deleted.map((a) => ({ ...a, takenAt: new Date(a.takenAt) })),
   };
+}
+
+/** venue.db's identity as the note holds it. */
+async function venueDbNow(): Promise<VenueDb> {
+  const info = await lstat(join(venueDir, "venue.db"), { bigint: true });
+  return {
+    dev: info.dev.toString(),
+    ino: info.ino.toString(),
+    birthtimeNs: info.birthtimeNs.toString(),
+  };
+}
+
+/** A record an earlier start left, as the step writes one. */
+async function earlierRecord(at: Date, venueDb: VenueDb, deleted: DeletableArchive[]) {
+  await writeFile(
+    join(stateDir, BACKUP_ROOM_START_DELETED_FILE),
+    JSON.stringify({
+      version: 1,
+      at: at.toISOString(),
+      venueDb,
+      deleted: deleted.map((a) => ({ ...a, takenAt: a.takenAt.toISOString() })),
+    }),
+  );
 }
 
 describe("deleteOldBackupsAtStart", () => {
@@ -156,6 +183,7 @@ describe("deleteOldBackupsAtStart", () => {
     });
     expect(await readRecord()).toEqual({
       at: NOW,
+      venueDb: await venueDbNow(),
       deleted: [{ destination: "usb", dir: usb, key: oldest, bytes: 15 * MIB, takenAt: days(1) }],
     });
     expect(skipped(log)).toEqual([]);
@@ -466,6 +494,111 @@ describe("deleteOldBackupsAtStart", () => {
     });
     expect(skipped(log)).toEqual([]);
     expect((await readRecord()).deleted.map((a) => a.key)).toEqual([oldest]);
+  });
+
+  describe("a record an earlier start left", () => {
+    const EARLIER = new Date("2026-10-29T11:00:00.000Z");
+    const gone = (key: string, takenAt: Date): DeletableArchive => ({
+      destination: "usb",
+      dir: usb,
+      key,
+      bytes: 5 * MIB,
+      takenAt,
+    });
+
+    it("for the same venue.db is added to, without duplicates, keeping the earlier time", async () => {
+      await note();
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const before = gone(backupArchiveKey(days(0.5)), days(0.5));
+      // The same destination and key as the archive this start deletes.
+      const again = { ...gone(oldest, days(1)), bytes: 15 * MIB };
+      await earlierRecord(EARLIER, await venueDbNow(), [before, again]);
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readRecord()).toEqual({
+        at: EARLIER,
+        venueDb: await venueDbNow(),
+        deleted: [before, again],
+      });
+    });
+
+    it("for the same venue.db keeps the earlier of the two times", async () => {
+      await note();
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const later = new Date(NOW.getTime() + 60_000);
+      await earlierRecord(later, await venueDbNow(), []);
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      const record = await readRecord();
+      expect(record.at).toEqual(NOW);
+      expect(record.deleted.map((a) => a.key)).toEqual([oldest]);
+    });
+
+    it("for another venue.db is replaced", async () => {
+      await note();
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const other = { ...(await venueDbNow()), ino: "1" };
+      await earlierRecord(EARLIER, other, [gone(backupArchiveKey(days(0.5)), days(0.5))]);
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readRecord()).toEqual({
+        at: NOW,
+        venueDb: await venueDbNow(),
+        deleted: [{ destination: "usb", dir: usb, key: oldest, bytes: 15 * MIB, takenAt: days(1) }],
+      });
+    });
+
+    type Stored = Record<string, unknown> & { deleted: Record<string, unknown>[] };
+    const entry = (over: Record<string, unknown>) => (record: Stored) => ({
+      ...record,
+      deleted: [{ ...record.deleted[0], ...over }],
+    });
+    it.each<[string, (record: Stored) => unknown]>([
+      ["not JSON", () => "{"],
+      ["another version", (record) => ({ ...record, version: 2 })],
+      ["with no venue.db identity", (record) => ({ ...record, venueDb: undefined })],
+      [
+        "with a venue.db file number that is not digits",
+        (r) => ({ ...r, venueDb: { ...(r.venueDb as object), ino: "x" } }),
+      ],
+      ["with no list of deletions", (record) => ({ ...record, deleted: {} })],
+      ["with a deletion of negative size", entry({ bytes: -1 })],
+      [
+        "with a deletion whose time is not written by toISOString",
+        entry({ takenAt: "2026-10-01" }),
+      ],
+    ])("that is %s is replaced", async (_label, spoil) => {
+      await note();
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const valid: Stored = {
+        version: 1,
+        at: EARLIER.toISOString(),
+        venueDb: await venueDbNow(),
+        deleted: [{ ...gone("k", days(0.5)), takenAt: days(0.5).toISOString() }],
+      };
+      const spoilt = spoil(valid);
+      await writeFile(
+        join(stateDir, BACKUP_ROOM_START_DELETED_FILE),
+        typeof spoilt === "string" ? spoilt : JSON.stringify(spoilt),
+      );
+      const { deps } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      const record = await readRecord();
+      expect(record.at).toEqual(NOW);
+      expect(record.deleted.map((a) => a.key)).toEqual([oldest]);
+    });
   });
 
   it("a record that cannot be written is logged and the deletions stand", async () => {
