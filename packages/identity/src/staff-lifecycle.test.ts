@@ -901,7 +901,9 @@ async function seedSignInDetails(personId: string, email: string): Promise<void>
     encryptedSecret: "enrolment",
     expiresAt: "2099-01-01T00:00:00.000Z",
   });
-  await suite.db.insert(webauthnChallenges).values({ personId, challenge: "challenge" });
+  await suite.db
+    .insert(webauthnChallenges)
+    .values({ personId, challenge: "challenge", purpose: "registration" });
 }
 
 async function signInDetailsOf(personId: string): Promise<unknown> {

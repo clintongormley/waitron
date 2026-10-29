@@ -30,7 +30,8 @@ declare module "@waitron/shared" {
     /** `min` is the policy, never the password. */
     "password.too_short": { min: number };
     /** Every password login refusal, whatever the cause, and a wrong current password on a profile
-     * change. This package's login refusals carry the cause in the log-only `reason`. */
+     * change or a fresh sign-in. This package's login refusals carry the cause in the log-only
+     * `reason`. */
     "password.invalid": Record<string, never>;
     /** Also thrown for a malformed token. */
     "totp.invalid": Record<string, never>;
@@ -69,8 +70,9 @@ declare module "@waitron/shared" {
     "account_action.invalid": Record<string, never>;
     /** Neither the session's operator nor any supplied override holds the required permission. */
     "authorization.not_permitted": { permission: string };
-    /** A passkey sign-in whose response has no string id or whose credential id has no row, or removing
-     * one of the signed-in person's own passkeys by an id not found among them. */
+    /** A passkey sign-in whose response has no string id or whose credential id has no row, a check
+     * of the signed-in person's own passkey when they hold none, or removing one of their passkeys
+     * by an id not found among them. */
     "passkey.not_registered": Record<string, never>;
     "passkey.verification_failed": Record<string, never>;
     /** The challenge was not returned within `CHALLENGE_TTL_MS`. */

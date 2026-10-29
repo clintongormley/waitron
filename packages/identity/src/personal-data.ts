@@ -122,7 +122,12 @@ export const IDENTITY_PERSONAL_DATA: ModulePersonalData = {
     const passkeySetups = await tx
       .select({ startedAt: webauthnChallenges.createdAt })
       .from(webauthnChallenges)
-      .where(eq(webauthnChallenges.personId, personId))
+      .where(
+        and(
+          eq(webauthnChallenges.personId, personId),
+          eq(webauthnChallenges.purpose, "registration"),
+        ),
+      )
       .orderBy(asc(webauthnChallenges.createdAt), asc(webauthnChallenges.id));
 
     const googleLinkSetups = await tx

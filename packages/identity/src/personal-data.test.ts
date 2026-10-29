@@ -66,7 +66,11 @@ async function seedFull(
     actionTokens: ["invitation", "reset", "change"].map((p) => hash64(s(`action-token-${p}`))),
     actionCodes: ["invitation", "reset", "change"].map((p) => hash64(s(`action-code-${p}`))),
     enrollmentCiphertexts: [s("enrollment-ciphertext-one"), s("enrollment-ciphertext-two")],
-    challenges: [s("passkey-challenge-one"), s("passkey-challenge-two")],
+    challenges: [
+      s("passkey-challenge-one"),
+      s("passkey-challenge-two"),
+      s("passkey-check-challenge"),
+    ],
     stateHashes: [hash64(s("google-state-one")), hash64(s("google-state-two"))],
     nonces: [s("google-nonce-one"), s("google-nonce-two")],
     verifiers: [s("google-verifier-one"), s("google-verifier-two")],
@@ -229,9 +233,11 @@ async function seedFull(
       expiresAt: t(31),
     },
   ]);
+  // The third is a fresh sign-in check of a passkey the person already holds, not a setup.
   await db.insert(webauthnChallenges).values([
-    { personId, challenge: secrets.challenges[1]!, createdAt: t(37) },
-    { personId, challenge: secrets.challenges[0]!, createdAt: t(32) },
+    { personId, challenge: secrets.challenges[1]!, createdAt: t(37), purpose: "registration" },
+    { personId, challenge: secrets.challenges[0]!, createdAt: t(32), purpose: "registration" },
+    { personId, challenge: secrets.challenges[2]!, createdAt: t(39), purpose: "check" },
   ]);
   await db.insert(googleOidcStates).values(
     [1, 0].map((i) => ({
@@ -283,7 +289,9 @@ async function seedFull(
 async function seedSignInsWithNoPerson(db: Database): Promise<string[]> {
   const challenge = "nobody-sign-in-challenge-secret";
   const stateHash = hash64("nobody-google-state");
-  await db.insert(webauthnChallenges).values({ personId: null, challenge, createdAt: at(2024, 1) });
+  await db
+    .insert(webauthnChallenges)
+    .values({ personId: null, challenge, createdAt: at(2024, 1), purpose: "login" });
   await db.insert(googleOidcStates).values({
     personId: null,
     mode: "login",

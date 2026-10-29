@@ -147,6 +147,7 @@ describe("passkey registration", () => {
     );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.personId).toBe(personId);
+    expect(stored[0]!.purpose).toBe("registration");
 
     const done = await finish(token, begun.challengeHandle);
     expect(done.credentialId).toBe("cred-abc");
@@ -485,6 +486,7 @@ describe("passkey authentication", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chalRow!.personId).toBeNull();
+    expect(chalRow!.purpose).toBe("login");
 
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     expect(session.personId).toBe(personId);
@@ -858,6 +860,7 @@ describe("checking the signed-in person's own passkey", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(row!.personId).toBe(personId);
+    expect(row!.purpose).toBe("check");
     expect(row!.challenge).toBe(begun.options.challenge);
     expect(begun.options.allowCredentials?.map((c) => c.id)).toEqual(["cred-mine"]);
     expect(begun.options.userVerification).toBe("required");
@@ -1051,27 +1054,20 @@ describe("checking the signed-in person's own passkey", () => {
     ).toBe("totp.invalid");
   });
 
-  // The challenge table has no purpose column, so a registration challenge of the same person is
-  // indistinguishable from a check challenge. This pins that limit and what still stands behind it.
-  it("accepts the same person's registration challenge, still needing their own passkey and code", async () => {
+  it("refuses the same person's registration challenge, without verifying it", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
-    const other = await openManagementSession(suite.db, "admin");
     await seedCredential(personId, "cred-mine", 0);
-    await seedCredential(other.personId, "cred-theirs", 0);
     await enrolTotp(personId);
     mockVerifyAuth.mockResolvedValue(authVerified(1));
 
-    const theirsUnder = await begin(token);
-    expect(await codeOf(() => check(token, theirsUnder.challengeHandle, "cred-theirs"))).toBe(
-      "passkey.verification_failed",
-    );
-    const noCode = await begin(token);
-    expect(await codeOf(() => check(token, noCode.challengeHandle, "cred-mine"))).toBe(
-      "totp.invalid",
-    );
     const registration = await begin(token);
-    await check(token, registration.challengeHandle, "cred-mine", {
-      totp: generateSync({ secret }),
-    });
+    expect(
+      await codeOf(() =>
+        check(token, registration.challengeHandle, "cred-mine", {
+          totp: generateSync({ secret }),
+        }),
+      ),
+    ).toBe("passkey.verification_failed");
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 });

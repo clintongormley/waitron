@@ -67,7 +67,7 @@ const CLASSIFIED: Record<string, { readonly in: string[]; readonly out: string[]
   },
   webauthn_challenges: {
     in: ["created_at"],
-    out: ["id", "person_id", "challenge"],
+    out: ["id", "person_id", "challenge", "purpose"],
   },
   google_oidc_states: {
     in: ["expires_at"],

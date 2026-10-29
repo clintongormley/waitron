@@ -791,7 +791,7 @@ describe("a fresh sign-in by the signed-in person", () => {
 
   it("leaves the other account changes needing an authenticator code: a recovery code does not stand in", async () => {
     const f = await enrolled();
-    // Credentials has no recoveryCode field; sent anyway, as a request body could.
+    // Credentials has no recoveryCode field; sent anyway.
     const withRecovery = {
       ...f,
       currentPassword: "correct horse",

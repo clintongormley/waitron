@@ -19,7 +19,11 @@ import type { TotpKeyRing } from "./mfa.js";
 import { requireEnrolledCode } from "./profile.js";
 import { passkeyProviderName } from "./passkey-providers.js";
 import { persons } from "./schema/persons.js";
-import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
+import {
+  webauthnChallenges,
+  webauthnCredentials,
+  type challengePurpose,
+} from "./schema/webauthn.js";
 import {
   resolveManagementSession,
   startManagementSession,
@@ -27,15 +31,18 @@ import {
 } from "./management-session.js";
 
 /**
- * Passkey (WebAuthn) registration and discoverable login. A passkey is always enrolled against the
- * person behind the management session, never a client-supplied id. The server only ever holds the
- * credential's public key, so there is no secret to hash. A credential id with no row answers
- * `passkey.not_registered`, so the browser can be told to forget it; that says only whether that
- * credential id has a row. A row whose owner is not active answers `passkey.verification_failed`,
- * so this public endpoint does not expose an account's state.
+ * Passkey (WebAuthn) registration, discoverable login, and the signed-in person's check of their own
+ * passkey. A challenge is accepted only by the ceremony that issued it. A passkey is always enrolled
+ * against the person behind the management session, never a client-supplied id. The server only ever
+ * holds the credential's public key, so there is no secret to hash. At login, a credential id with
+ * no row answers `passkey.not_registered`, so the browser can be told to forget it; that says only
+ * whether that credential id has a row. A row whose owner is not active answers
+ * `passkey.verification_failed`, so the public login does not expose an account's state.
  */
 
 export const CHALLENGE_TTL_MS = 5 * 60 * 1000;
+
+type ChallengePurpose = (typeof challengePurpose.enumValues)[number];
 
 /**
  * EdDSA (-8), ES256 (-7), RS256 (-257), given to both halves of registration so what the
@@ -74,24 +81,35 @@ function parseTransports(stored: string | null): string[] | undefined {
  * DELETE the challenge and return it in one statement, so once a finish has committed, another on the
  * same handle matches zero rows. A throw later in the finish rolls the caller's transaction back and
  * undoes this DELETE, so a failed or expired ceremony leaves the challenge to lapse by its TTL.
+ *
+ * Only a challenge issued for `purpose`, and to `personId` when one is given, matches; any other
+ * answers as an unknown handle does.
  */
 async function consumeChallenge(
   tx: Transaction,
   challengeHandle: string,
-): Promise<{ challenge: string; personId: string | null }> {
+  expected: { purpose: ChallengePurpose; personId?: string },
+): Promise<string> {
   const [challenge] = await tx
     .delete(webauthnChallenges)
-    .where(eq(webauthnChallenges.id, challengeHandle))
+    .where(
+      and(
+        eq(webauthnChallenges.id, challengeHandle),
+        eq(webauthnChallenges.purpose, expected.purpose),
+        expected.personId === undefined
+          ? undefined
+          : eq(webauthnChallenges.personId, expected.personId),
+      ),
+    )
     .returning({
       challenge: webauthnChallenges.challenge,
-      personId: webauthnChallenges.personId,
       createdAt: webauthnChallenges.createdAt,
     });
   if (challenge === undefined) throw new AppError("passkey.verification_failed", {});
   if (Date.now() - Date.parse(challenge.createdAt) > CHALLENGE_TTL_MS) {
     throw new AppError("passkey.challenge_expired", {});
   }
-  return { challenge: challenge.challenge, personId: challenge.personId };
+  return challenge.challenge;
 }
 
 /** WebAuthn's `user.name` is what a password manager lists the passkey under; the dashboard signs
@@ -158,7 +176,7 @@ export async function beginPasskeyRegistration(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ personId, challenge: options.challenge })
+    .values({ personId, challenge: options.challenge, purpose: "registration" })
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -182,7 +200,10 @@ export async function finishPasskeyRegistration(
     throw new AppError("profile.invalid", { field: "passkeyName" });
   }
   const name = typeof input.name === "string" ? input.name.trim() || null : null;
-  const { challenge: expectedChallenge } = await consumeChallenge(tx, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, {
+    purpose: "registration",
+    personId,
+  });
   // The library throws a GENERIC `Error` on a malformed or mismatched response, which would otherwise
   // become an opaque `server.internal` 500.
   let verification: Awaited<ReturnType<typeof verifyRegistrationResponse>>;
@@ -237,7 +258,7 @@ export async function beginPasskeyAuthentication(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ challenge: options.challenge })
+    .values({ challenge: options.challenge, purpose: "login" })
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -251,7 +272,7 @@ export async function finishPasskeyAuthentication(
     origin: string;
   },
 ): Promise<ManagementSession> {
-  const { challenge: expectedChallenge } = await consumeChallenge(tx, input.challengeHandle);
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, { purpose: "login" });
   // The credential id is untrusted request input: typed `string`, but at runtime it may be missing or
   // non-string. A non-string names no credential.
   if (typeof input.response?.id !== "string") throw new AppError("passkey.not_registered", {});
@@ -334,7 +355,7 @@ export async function beginOwnPasskeyCheck(
   });
   const [row] = await tx
     .insert(webauthnChallenges)
-    .values({ personId, challenge: options.challenge })
+    .values({ personId, challenge: options.challenge, purpose: "check" })
     .returning({ id: webauthnChallenges.id });
   return { challengeHandle: row!.id, options };
 }
@@ -357,9 +378,10 @@ export async function verifyOwnPasskey(
   },
 ): Promise<void> {
   const { personId } = await resolveManagementSession(tx, input.managementSessionId);
-  const consumed = await consumeChallenge(tx, input.challengeHandle);
-  // A sign-in challenge names no person, and one issued to another session's person is not ours.
-  if (consumed.personId !== personId) throw new AppError("passkey.verification_failed", {});
+  const expectedChallenge = await consumeChallenge(tx, input.challengeHandle, {
+    purpose: "check",
+    personId,
+  });
   if (input.response == null) throw new AppError("passkey.verification_failed", {});
 
   const [cred] = await tx
@@ -382,7 +404,7 @@ export async function verifyOwnPasskey(
   try {
     verification = await verifyAuthenticationResponse({
       response: input.response,
-      expectedChallenge: consumed.challenge,
+      expectedChallenge,
       expectedOrigin: input.origin,
       expectedRPID: input.rpId,
       requireUserVerification: true,

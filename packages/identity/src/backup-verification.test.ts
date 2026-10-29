@@ -130,7 +130,7 @@ beforeEach(async () => {
     });
     await suite.db
       .insert(schema.webauthnChallenges)
-      .values({ id: person, personId: null, challenge: "AQID", createdAt: old });
+      .values({ id: person, personId: null, challenge: "AQID", createdAt: old, purpose: "login" });
     await suite.db.insert(schema.googleOidcStates).values({
       id: person,
       personId: null,

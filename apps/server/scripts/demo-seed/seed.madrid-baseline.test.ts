@@ -127,6 +127,13 @@ for (const locale of ["en", "es"] as const) {
           ...columns.map((name) => ({ name, type: "TEXT", notnull: 0, dflt_value: null, pk: 0 })),
         );
       }
+      expected[phase].tables.webauthn_challenges!.columns.push({
+        name: "purpose",
+        type: "TEXT",
+        notnull: 1,
+        dflt_value: null,
+        pk: 0,
+      });
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {

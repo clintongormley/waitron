@@ -1,5 +1,15 @@
-import { foreignKey, index, unique } from "drizzle-orm/sqlite-core";
-import { bigCount, id, label, newId, nowIso, table, tsString } from "@waitron/db";
+import { check, foreignKey, index, unique } from "drizzle-orm/sqlite-core";
+import {
+  bigCount,
+  enumCheck,
+  enumType,
+  id,
+  label,
+  newId,
+  nowIso,
+  table,
+  tsString,
+} from "@waitron/db";
 import { persons } from "./persons.js";
 
 /**
@@ -42,13 +52,24 @@ export const webauthnCredentials = table(
 );
 
 /**
+ * The ceremony that issued a challenge, and the only one that accepts it: enrolling a passkey, the
+ * public sign-in, or a signed-in person's check of their own passkey.
+ */
+export const challengePurpose = enumType(["registration", "login", "check"]);
+
+/**
  * Consumed by `consumeChallenge` (`../passkey.ts`). An expired challenge is refused at consume time
  * by the `CHALLENGE_TTL_MS` check, not swept: there is no sweep job.
  */
-export const webauthnChallenges = table("webauthn_challenges", {
-  id: id("id").primaryKey().$defaultFn(newId),
-  /** null for a login (discoverable) ceremony, where the person is not yet known. */
-  personId: id("person_id"),
-  challenge: label("challenge").notNull(),
-  createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
-});
+export const webauthnChallenges = table(
+  "webauthn_challenges",
+  {
+    id: id("id").primaryKey().$defaultFn(newId),
+    /** null for a login (discoverable) ceremony, where the person is not yet known. */
+    personId: id("person_id"),
+    challenge: label("challenge").notNull(),
+    createdAt: tsString("created_at").notNull().$defaultFn(nowIso),
+    purpose: challengePurpose("purpose").notNull(),
+  },
+  (t) => [check("webauthn_challenges_purpose_ck", enumCheck(t.purpose))],
+);

@@ -61,7 +61,7 @@ async function seedFixture(db: Database): Promise<{ personId: string; handle: st
     .values({ personId, credentialId: CREDENTIAL_ID, publicKey: PUBLIC_KEY, counter: 0 });
   const [challenge] = await db
     .insert(webauthnChallenges)
-    .values({ personId: null, challenge: "chal-concurrency" })
+    .values({ personId: null, challenge: "chal-concurrency", purpose: "login" })
     .returning({ id: webauthnChallenges.id });
   return { personId, handle: challenge!.id };
 }

@@ -52,8 +52,8 @@ interface Credentials {
 /**
  * Checks `personId`'s current password. Opens no transaction, so a caller holding none leaves the
  * write lock free while the key is derived, and writes nothing. Pass the result to the change inside
- * the transaction, which trusts it only for the person its own session names; the authenticator
- * code is still checked there.
+ * the transaction, which trusts it only for the person its own session names; any code the person's
+ * authenticator setup needs is checked there.
  */
 export async function checkOwnPassword(
   db: Database,
@@ -123,7 +123,7 @@ async function verifyCurrent(
   credentials: Credentials,
 ): Promise<void> {
   await checkCurrentPassword(person, credentials);
-  // No recovery code here: these changes keep needing the authenticator itself.
+  // No recovery code here: these changes need the authenticator itself.
   await requireEnrolledCode(tx, person, { totp: credentials.totp }, credentials.keyRing);
 }
 

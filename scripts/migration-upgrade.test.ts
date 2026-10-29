@@ -420,6 +420,16 @@ const RESETS: Record<string, { refused: readonly string[] } | { lost: readonly s
   },
   // Rebuilds `drawer_opens` without copying its rows.
   "core/0012_printer_calibration": { lost: ["drawer_opens"] },
+  // Drops every passkey challenge, so the next step can add the required `purpose`.
+  "identity/0008_webauthn_challenges_clear": { lost: ["webauthn_challenges"] },
+  // 0009 and 0010 are refused only for a challenge written after 0008 emptied the table. The three
+  // shipped in one change, so a venue's upgrade runs them back to back.
+  "identity/0009_webauthn_challenge_purpose": {
+    refused: ["ALTER TABLE `webauthn_challenges` ADD `purpose`", "Cannot add a NOT NULL column"],
+  },
+  "identity/0010_webauthn_challenge_purpose_check": {
+    refused: ["CHECK constraint failed: webauthn_challenges_purpose_ck"],
+  },
   // Rebuilds `working_order_lines` with `vat_class` required; a copied row's is null.
   "core/0026_line_vat_class": {
     refused: ["NOT NULL constraint failed: __new_working_order_lines.vat_class"],
