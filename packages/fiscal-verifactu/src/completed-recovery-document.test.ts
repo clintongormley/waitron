@@ -1,15 +1,21 @@
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   deployment,
   invoiceSeries,
+  tenants,
   locations,
   stampDeployment,
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { FISCAL_RECOVERY_DOCUMENT } from "./completed-recovery-document.js";
+import {
+  FISCAL_RECOVERY_DOCUMENT,
+  FISCAL_RECOVERY_PACK_PAGE,
+} from "./completed-recovery-document.js";
+import { recoveryDocumentBytes } from "./recovery-document.js";
+import { serverKeyPage } from "./server-key-page.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { seedTenants, TENANT_A } from "../test/fixtures.js";
 import { seedFixtureSif } from "../test/sif-fixture.js";
@@ -209,4 +215,122 @@ it("unrelated and duplicate history do not refuse the sheet", async () => {
   } finally {
     await task.destroy();
   }
+});
+
+describe("the pack's server-key page seat", () => {
+  const evidence = {
+    "hour-history": { reference: "prepared-hours", complete: true, records: [row] },
+  };
+  const keyInForce = { nodeId: node.nodeId, name: "2026-09-02 · OLD" };
+  const newKey = { name: nodeKey.name, secret: nodeKey.secret };
+  const scope = {
+    kind: "waitron-recovery-document" as const,
+    version: 1 as const,
+    scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" as const },
+    taxpayerName: "Waitron SL",
+    venueName: "Local principal",
+    createdAt: "2026-10-18T12:00:00.000Z",
+  };
+  function page(
+    options: {
+      locale?: "en" | "es";
+      newKey?: typeof newKey;
+      keyInForce?: typeof keyInForce;
+      evidence?: Record<string, unknown>;
+    } = {},
+  ) {
+    return withTransaction(suite.db, (tx) =>
+      FISCAL_RECOVERY_PACK_PAGE(tx, node, {
+        keyInForce: options.keyInForce ?? keyInForce,
+        ...(options.newKey ? { newKey: options.newKey } : {}),
+        createdAt: "2026-10-18T12:00:00.000Z",
+        locale: options.locale ?? "en",
+        evidence: options.evidence ?? evidence,
+      }),
+    );
+  }
+
+  it.each(["en", "es"] as const)(
+    "with a new key (%s) draws that key and returns its key file, changing no fiscal state",
+    async (locale) => {
+      const before = await snapshot();
+      const result = await page({ locale, newKey });
+      const keyFile = { ...scope, nodeKey };
+      expect(result.page).toEqual(serverKeyPage(keyFile, { locale, timeZone: "Europe/Madrid" }));
+      expect(result.keyFile).toEqual(keyFile);
+      expect(recoveryDocumentBytes(result.keyFile as typeof keyFile)).toEqual(
+        recoveryDocumentBytes(keyFile),
+      );
+      expect(await snapshot()).toEqual(before);
+    },
+  );
+
+  it("without a new key describes the key in force and returns no key file", async () => {
+    const result = await page();
+    expect(result).toEqual({
+      page: serverKeyPage(
+        { ...scope, nodeKey: keyInForce },
+        { locale: "en", timeZone: "Europe/Madrid" },
+      ),
+    });
+    expect(result.page).not.toHaveProperty("secret");
+  });
+
+  it("draws in the saved venue's time zone", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Atlantic/Canary" })
+      .where(eq(locations.id, node.locationId));
+    const result = await page({ newKey });
+    expect(result.page.rows.at(-1)).toEqual({
+      label: "Created",
+      value: "18 October 2026, 13:00 WEST",
+    });
+  });
+
+  const refusals: [string, () => Promise<unknown>][] = [
+    ["damaged history", async () => ({ evidence: { "hour-history": null } })],
+    [
+      "contradicting history",
+      async () => ({
+        evidence: {
+          "hour-history": {
+            reference: "prepared-hours",
+            complete: true,
+            records: [{ ...row, identity: "wrong" }],
+          },
+        },
+      }),
+    ],
+    [
+      "a missing environment stamp",
+      async () => {
+        await suite.db.delete(deployment);
+        return {};
+      },
+    ],
+    [
+      "a taxpayer whose NIF is not the invoice system's",
+      async () => {
+        await suite.db.update(tenants).set({ taxId: "B12345674" });
+        return {};
+      },
+    ],
+    [
+      "a key held for another node",
+      async () => ({ keyInForce: { ...keyInForce, nodeId: TENANT_A.nodeId2 } }),
+    ],
+  ];
+  for (const withNewKey of [false, true])
+    it.each(refusals)(
+      `refuses %s as the document seat does (new key: ${withNewKey}), with the seat's own code`,
+      async (_name, arrange) => {
+        const options = (await arrange()) as Parameters<typeof page>[0];
+        const before = await snapshot();
+        await expect(page({ ...options, ...(withNewKey ? { newKey } : {}) })).rejects.toMatchObject(
+          { code: "sif.allocation_invalid", params: { reason: "history_invalid" } },
+        );
+        expect(await snapshot()).toEqual(before);
+      },
+    );
 });

@@ -15,6 +15,7 @@
     "@waitron/db": "workspace:*",
     "@waitron/fiscal": "workspace:*",
     "@waitron/migrations": "workspace:*",
+    "@waitron/recovery-pack": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/store": "workspace:*",
