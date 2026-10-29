@@ -63,6 +63,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  PORTIONS_AT_ONCE,
   seriesId as brandSeriesId,
   workingOrderId as brandWorkingOrderId,
   jobOrigin,
@@ -101,6 +102,16 @@ import {
   watchedDerivationCount,
 } from "./testing/watched-scrypt.js";
 import { fixturePasswordHash, fixturePinHash } from "./testing/known-secret-hashes.js";
+
+/** `quantity` of one offer as request lines of at most {@link PORTIONS_AT_ONCE}, the most
+ * `refuseTooManyPortions` lets one line expand into. */
+function linesOf(menuItemId: string, quantity: string): { menuItemId: string; quantity: string }[] {
+  const lines = [];
+  for (let left = Number(quantity); left > 0; left -= PORTIONS_AT_ONCE) {
+    lines.push({ menuItemId, quantity: String(Math.min(left, PORTIONS_AT_ONCE)) });
+  }
+  return lines;
+}
 
 vi.mock("node:crypto", async (importOriginal) =>
   (await import("./testing/watched-scrypt.js")).watchedCrypto(await importOriginal()),
@@ -2322,7 +2333,7 @@ describe("payment slip persisted capture facts", () => {
         headers: { "content-type": "application/json", cookie: `${cookie}; ${deviceCookie}` },
         body: JSON.stringify({
           workingOrderId: id,
-          lines: [{ menuItemId: each.menuItemId, quantity: "1000" }],
+          lines: linesOf(each.menuItemId, "1000"),
           tender: { method: "card", amount: "1500.00" },
         }),
       });

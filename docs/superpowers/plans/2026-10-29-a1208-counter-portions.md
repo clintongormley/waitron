@@ -822,7 +822,11 @@ the lines and revision, clears `dirty`, keeps `persisted`, the id and `loadGener
   tables, and leave the unit rule as slice 1 made it**; a venue selling by the millilitre switches the
   unit to Measure, which makes each pour one measured portion. Alternatives: a higher counter limit
   (each portion is a stored row); the till starting a new line past 99, which files two rows where
-  today files one and can move a cent of VAT, so it needs its own fiscal comparison; or treating
+  today files one and can move a cent of VAT, so it needs its own fiscal comparison (measured at
+  Task 3's review: the 1000-coffee walk-up in `till-api.receipt.test.ts`, sent as eleven lines of at
+  most 99, files 11 rows where one line filed 1, and its VAT is 260.30 on a base of 1239.70 where one
+  line filed 260.33 on 1239.67; the total, 1500.00, is the same — so any venue that splits a big
+  order by hand under the cap files that way too); or treating
   any unit with an abbreviation like `ml`/`g` as measured, which is a catalogue rule change beyond
   this item.
 - **Q2 — a fourth check in the protected file.** `till-api.fiscal-sale-paths.test.ts`' Mode T case

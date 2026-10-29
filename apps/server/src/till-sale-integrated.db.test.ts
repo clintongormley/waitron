@@ -42,6 +42,7 @@ import {
   decimal,
   locationId as brandLocationId,
   nodeId as brandNodeId,
+  PORTIONS_AT_ONCE,
   rawCentsToDecimal,
   saleId as brandSaleId,
   seriesId as brandSeriesId,
@@ -92,6 +93,16 @@ import {
   deviceRequestCfg,
   orderDeviceOrigin,
 } from "./testing/session-device.js";
+
+/** `quantity` of one offer as request lines of at most {@link PORTIONS_AT_ONCE}, the most
+ * `refuseTooManyPortions` lets one line expand into. */
+function linesOf(menuItemId: string, quantity: string): { menuItemId: string; quantity: string }[] {
+  const lines = [];
+  for (let left = Number(quantity); left > 0; left -= PORTIONS_AT_ONCE) {
+    lines.push({ menuItemId, quantity: String(Math.min(left, PORTIONS_AT_ONCE)) });
+  }
+  return lines;
+}
 
 // The integrated (split-transaction) card-pay orchestration, end to end on one venue: P1 commits a
 // walk-up before `collect`, because the provider's payment row has a foreign key to
@@ -604,7 +615,7 @@ describe("walk-up invoice preparation", () => {
       const id = randomUUID();
       const limited = { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") };
       await withTransaction(suite.db, async (tx) => {
-        await createOpenOrder(tx, limited, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+        await createOpenOrder(tx, limited, id, linesOf(cafe.menuItemId, quantity), null, {
           zoneId: cafe.zoneId,
           invoiceChoice: {
             invoiceType: "F1",
@@ -786,7 +797,7 @@ describe("walk-up invoice preparation", () => {
         tx,
         { ...cfg, simplifiedInvoiceLimit: decimal("3000.00") },
         id,
-        [{ menuItemId: cafe.menuItemId, quantity: "2000" }],
+        linesOf(cafe.menuItemId, "2000"),
         null,
         {
           zoneId: cafe.zoneId,
@@ -1430,7 +1441,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
     // Payment refs are unique per provider across the database.
     const externalRef = `pi_lost_${randomUUID()}`;
     await withTransaction(suite.db, async (tx) => {
-      await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+      await createOpenOrder(tx, cfg, id, linesOf(cafe.menuItemId, quantity), null, {
         zoneId: cafe.zoneId,
       });
       await insertCapturedPayment(tx, {
@@ -1460,7 +1471,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
       );
       const id = randomUUID();
       await withTransaction(suite.db, async (tx) => {
-        await createOpenOrder(tx, cfg, id, [{ menuItemId: cafe.menuItemId, quantity }], null, {
+        await createOpenOrder(tx, cfg, id, linesOf(cafe.menuItemId, quantity), null, {
           zoneId: cafe.zoneId,
           invoiceChoice: {
             invoiceType: "F1",

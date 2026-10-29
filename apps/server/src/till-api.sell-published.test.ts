@@ -694,18 +694,18 @@ describe("a unit's measure switch reaches the till at the next publish", () => {
     const sell = () =>
       send(v, "POST", "/api/sales", {
         zoneId: v.zoneId,
-        lines: [
-          {
-            menuItemId: v.lemonade.offerId,
-            quantity: "250",
-            extras: [
-              {
-                listId: v.extraLemon.listId,
-                picks: [{ productId: v.extraLemon.productId, quantity: 1 }],
-              },
-            ],
-          },
-        ],
+        // 250 ml as three lines: a unit without the Measure switch sells whole portions, at most
+        // 99 of one dish in one line.
+        lines: ["99", "99", "52"].map((quantity) => ({
+          menuItemId: v.lemonade.offerId,
+          quantity,
+          extras: [
+            {
+              listId: v.extraLemon.listId,
+              picks: [{ productId: v.extraLemon.productId, quantity: 1 }],
+            },
+          ],
+        })),
         tender: { method: "cash", amount: "1000.00" },
       });
 
