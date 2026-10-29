@@ -89,7 +89,8 @@ function input(overrides: Partial<RenderPackInput> = {}): RenderPackInput {
   };
 }
 
-async function rendered(bytes: Uint8Array, scale = 0) {
+/** Each page's text; with a `scale`, the QR code of each page in `scanned` (0-based), or of all. */
+async function rendered(bytes: Uint8Array, scale = 0, scanned?: readonly number[]) {
   const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
   const pdf = await loading.promise;
   try {
@@ -102,7 +103,7 @@ async function rendered(bytes: Uint8Array, scale = 0) {
         .join(" ")
         .replace(/\s+/g, " ");
       let qr: string | null = null;
-      if (scale > 0) {
+      if (scale > 0 && (scanned?.includes(n - 1) ?? true)) {
         const viewport = page.getViewport({ scale });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         const context = canvas.getContext("2d");
@@ -398,7 +399,7 @@ describe("the server-key page says where the key is", () => {
 
 describe("the secrets on the pages", () => {
   it("draws each code as text and as a QR code that reads back as the same text", async () => {
-    const pages = await rendered(await renderRecoveryPack(input()), 3);
+    const pages = await rendered(await renderRecoveryPack(input()), 3, [0, 1, 2]);
     expect(squash(pages[1]!.text)).toContain(bucketCode);
     expect(pages[1]!.qr).toBe(bucketCode);
     expect(squash(pages[2]!.text)).toContain(archiveCode);
@@ -422,7 +423,7 @@ describe("the secrets on the pages", () => {
     };
     const bytes = await renderRecoveryPack(input({ parts: [page], file: { ...file, backupKey } }));
     expect((await readRecoveryPackPdf(bytes)).backupKey).toBe(backupKey);
-    const pages = await rendered(bytes, 3);
+    const pages = await rendered(bytes, 3, [1]);
     expect(pages[1]!.qr).toBe(backupKey);
     expect(pages[1]!.text).toContain(backupKey.replaceAll(" ", "\u02fd"));
     expect(pages[1]!.text).toContain(PACK_WORDS.en.spaceMark);
@@ -465,7 +466,7 @@ describe("the secrets on the pages", () => {
         notes: [],
       },
     };
-    const pages = await rendered(await renderRecoveryPack(input({ parts: [page] })), 3);
+    const pages = await rendered(await renderRecoveryPack(input({ parts: [page] })), 3, [1]);
     expect(pages[1]!.qr).toBe(grouped);
     expect(pages[1]!.text).toContain(grouped);
     expect(pages[1]!.text).not.toContain("\u02fd");
