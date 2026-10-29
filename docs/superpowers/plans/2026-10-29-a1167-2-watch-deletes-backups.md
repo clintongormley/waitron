@@ -25,22 +25,22 @@ to set the checklist aside).
 
 1. **When old backups cannot reach 2.5 GiB, the watch deletes every one §1 allows.** Design §2 says
    so for the watch ("When they cannot, it deletes every one §1 allows and the warning comes on as
-   today"); §1's "never deletes toward a goal it cannot reach" is about a goal whose failure means
-   the deletions bought nothing (§3's refused run, "Decisions": "would lose restore points for
-   nothing"). The watch's deletions are never for nothing: each one is room the tills sell into
-   (CLAUDE.md §5's full-disk stop; the house rule "losing a little data is accepted, being unable to
-   trade is not"). §1's parenthesis says the same: "§2's watch still works toward its own, smaller
-   goal". `makeRoom` gains an `outOfReach` option: `"floor"` (the run, today's behaviour) or
+   today"), and the design's "Decisions" ties §1's "never deletes toward a goal it cannot reach"
+   to a run ("A run that cannot happen deletes nothing … the watch's 2.5 GiB goal still applies").
+   A dated line in design §1 now says so. `makeRoom` gains an `outOfReach` option: `"floor"` (the run, today's behaviour) or
    `"aim"` (keep deleting toward the aim, which then deletes every deletable archive). The watch
    passes `neededBytes: 0, floorBytes: 0`, so it is never refused.
 2. **"The box's disk" for the watch is the disk holding the venue folder**, the folder the watch
-   reads (`boot.ts`, `startFreeSpaceWatch({ dir: config.venueDir, … })`), as design §1 says. A backup
+   reads (`boot.ts`, `startFreeSpaceWatch({ dir: config.venueDir, … })`), as design §1 says; a
+   backup folder the operator moved to another disk is never deleted from. A backup
    folder counts as on it by `foldersOnDisk(backends, venueDir)` (slice 1's device comparison). On a
    box the venue, state and backups volumes share one disk (design, "What happens today").
 3. **"Where backups still run" is `BackupSupervisor.current().enabled`** (settings loaded and
    switched on, a recovery key, the primary, the venue opened: `backup-supervisor.ts`, `reload()` sets
    `#db` only then). A disabled, keyless, standby or mirror box deletes nothing (design §1, last
-   paragraph). The destinations come from the same `current()` reading, local folders only.
+   paragraph). "Running" means a run is scheduled, not that the last one succeeded. A supervisor
+   that could not open the venue reads as off, so the watch deletes nothing there (not measured on
+   a nearly full disk). The destinations come from the same `current()` reading, local folders only.
 4. **The deletion runs before the spare file is written back**, in the same reading, so a box that
    started on its spare (A1127 slice 2, #2206) deletes, writes the spare back and lifts the stop in
    one reading with nobody signed in (design "Slices → Slice 2"). The 2.5 GiB goal is read before the
@@ -62,6 +62,21 @@ to set the checklist aside).
 9. **`makeRoom`'s `stagingDir` option is renamed `dir`** (the folder whose disk is read), because the
    watch passes the venue folder. `foldersOnDisk`'s second parameter is renamed the same way. No
    behaviour changes for the run.
+
+## Plan review (2026-10-29, `~/waitron-campaign-b/a1167-2-plan-review.md`): 0 Critical, 6 Important, 7 Minor
+
+Folded while building: a sweep case pins the run's floor fallback (nothing caught `outOfReach:
+"aim"` in the run); the step re-reads the folders and checks for a stop once it holds the turn; a
+step ended by the watch stopping is not logged; the started-on-the-spare case uses the real
+full-disk state and spare writer, with a control without the step (replacing Task 3's case (d),
+which passed without the step); a case for a run waiting for the turn; the step takes the watch's
+`statfs` test hook; Task 5's doc list grew (the watch's description and the staging-turn section
+in conventions-data.md, the turn's file comment, the guides' email line); ruling 1 now rests on
+§2 and "Decisions", with a dated line in the design. The boot test cannot model "backups set up
+but not running" (an environment backup folder without a key refuses to start), so it checks the
+step reads the supervisor's live status through `runningLocalBackends`, whose own cases cover
+"not running". Left as stated limits: a reading under 2 GiB with a folder on the disk reads the
+installation start (a write-lock turn, no drain) every minute.
 
 ## Rules for every task
 

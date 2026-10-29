@@ -79,10 +79,14 @@ before each backup run copies anything, it deletes its oldest deletable backups 
 holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
 managers and administrators. How it works and its limits: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
 
+Slice 2 landed (plan
+[2026-10-29-a1167-2-watch-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md)):
+every free-space reading under 2 GiB first deletes the oldest deletable backups toward 2.5 GiB, or
+every one it may when they cannot reach it, while backups run and no backup run holds the staging
+turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
+
 Still open:
 
-- **Slice 2: the free-space watch deletes old backups** when a reading is under 2 GiB, up to
-  2.5 GiB, while no backup run holds the staging turn (design §2 and "Slices").
 - **The start deletes old backups by itself** in place of the full-disk page's button (Q4 A),
   measured first, and only if the installation's start can be read without opening the venue
   database (design Q4).
