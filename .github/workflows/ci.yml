@@ -877,6 +877,9 @@ jobs:
   # must name both this job and the matrix it depends on.
   test-heavy-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-heavy]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-latest
@@ -917,17 +920,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      # `merge-multiple` flattens db-blob-1/2/3 (each one file) into packages/db/.vitest-reports, where
-      # `test:merge`'s `vitest --merge-reports .vitest-reports` reads them.
       - id: download
         name: Download the db coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'db-blob-*' 'packages/db/.vitest-reports' 3
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: db-blob-*
-          path: packages/db/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -936,12 +935,10 @@ jobs:
 
       - name: Download the db coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'db-blob-*' 'packages/db/.vitest-reports' 3
         timeout-minutes: 1
-        with:
-          pattern: db-blob-*
-          path: packages/db/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the db coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/db" test:merge
@@ -1247,7 +1244,7 @@ jobs:
 
       - id: download
         name: Download the server coverage blobs
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
         timeout-minutes: 1
         continue-on-error: true
         env:
@@ -1260,7 +1257,7 @@ jobs:
 
       - name: Download the server coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
         timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1377,6 +1374,9 @@ jobs:
 
   test-fiscal-verifactu-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-fiscal-verifactu]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
     runs-on: ubuntu-latest
@@ -1419,13 +1419,11 @@ jobs:
 
       - id: download
         name: Download the fiscal-verifactu coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'fiscal-verifactu-blob-*' 'packages/fiscal-verifactu/.vitest-reports' 4
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: fiscal-verifactu-blob-*
-          path: packages/fiscal-verifactu/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -1434,12 +1432,10 @@ jobs:
 
       - name: Download the fiscal-verifactu coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'fiscal-verifactu-blob-*' 'packages/fiscal-verifactu/.vitest-reports' 4
         timeout-minutes: 1
-        with:
-          pattern: fiscal-verifactu-blob-*
-          path: packages/fiscal-verifactu/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the fiscal-verifactu coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/fiscal-verifactu" test:merge
@@ -1657,6 +1653,9 @@ jobs:
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-till-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-till]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
     runs-on: ubuntu-latest
@@ -1699,13 +1698,11 @@ jobs:
 
       - id: download
         name: Download the till coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'till-blob-*' 'apps/till/.vitest-reports' 7
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: till-blob-*
-          path: apps/till/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -1714,12 +1711,10 @@ jobs:
 
       - name: Download the till coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'till-blob-*' 'apps/till/.vitest-reports' 7
         timeout-minutes: 1
-        with:
-          pattern: till-blob-*
-          path: apps/till/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the till coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/till" test:merge
@@ -1830,6 +1825,9 @@ jobs:
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-dashboard-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-dashboard]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
     runs-on: ubuntu-latest
@@ -1872,13 +1870,11 @@ jobs:
 
       - id: download
         name: Download the dashboard coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 4
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: dashboard-blob-*
-          path: apps/dashboard/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -1887,12 +1883,10 @@ jobs:
 
       - name: Download the dashboard coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'dashboard-blob-*' 'apps/dashboard/.vitest-reports' 4
         timeout-minutes: 1
-        with:
-          pattern: dashboard-blob-*
-          path: apps/dashboard/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the dashboard coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/dashboard" test:merge
@@ -2126,6 +2120,9 @@ jobs:
   # package's thresholds on the total. `--merge-reports` runs no test, so no browser is installed.
   test-venue-service-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-venue-service]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
     runs-on: ubuntu-latest
@@ -2168,13 +2165,11 @@ jobs:
 
       - id: download
         name: Download the venue-service coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'venue-service-blob-*' 'packages/venue-service/.vitest-reports' 4
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: venue-service-blob-*
-          path: packages/venue-service/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -2183,12 +2178,10 @@ jobs:
 
       - name: Download the venue-service coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'venue-service-blob-*' 'packages/venue-service/.vitest-reports' 4
         timeout-minutes: 1
-        with:
-          pattern: venue-service-blob-*
-          path: packages/venue-service/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the venue-service coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/venue-service" test:merge
@@ -2681,6 +2674,9 @@ jobs:
 
   test-provisioning-merge:
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     needs: [changes, test-provisioning]
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true'
     runs-on: ubuntu-latest
@@ -2723,13 +2719,11 @@ jobs:
 
       - id: download
         name: Download the provisioning coverage blobs
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'provisioning-blob-*' 'packages/provisioning/.vitest-reports' 6
         timeout-minutes: 1
         continue-on-error: true
-        with:
-          pattern: provisioning-blob-*
-          path: packages/provisioning/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Clear the partial artifact download
         if: steps.download.outcome == 'failure'
@@ -2738,12 +2732,10 @@ jobs:
 
       - name: Download the provisioning coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        uses: actions/download-artifact@v8
+        run: node scripts/download-coverage-blobs.mjs 'provisioning-blob-*' 'packages/provisioning/.vitest-reports' 6
         timeout-minutes: 1
-        with:
-          pattern: provisioning-blob-*
-          path: packages/provisioning/.vitest-reports
-          merge-multiple: true
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Merge the provisioning coverage blobs and enforce thresholds
         run: pnpm --filter "@waitron/provisioning" test:merge

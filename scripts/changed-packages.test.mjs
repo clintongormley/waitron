@@ -254,12 +254,20 @@ describe("scopeForPaths", () => {
       });
     });
 
-    it("selects the server whose coverage merge downloads reports with the root helper", () => {
+    it("selects every member whose coverage merge downloads reports with the root helper", () => {
       expect(
         scopeForPaths(["scripts/download-coverage-blobs.mjs"], workspace(consumers)),
       ).toMatchObject({
         kind: "packages",
-        packages: ["@waitron/server"],
+        packages: [
+          "@waitron/dashboard",
+          "@waitron/db",
+          "@waitron/fiscal-verifactu",
+          "@waitron/provisioning",
+          "@waitron/server",
+          "@waitron/till",
+          "@waitron/venue-service",
+        ],
         root: true,
       });
     });
@@ -784,9 +792,10 @@ describe("the CLI", () => {
     );
   });
 
-  it("selects the real server coverage download consumer", () => {
+  it("selects the real coverage download consumers", () => {
     expect(run("scripts/download-coverage-blobs.mjs\n").stdout).toBe(
-      "code=true\nscope=packages\npackages=@waitron/server\nroot=true\ndeploy=false\n",
+      "code=true\nscope=packages\npackages=@waitron/dashboard @waitron/db @waitron/fiscal-verifactu @waitron/provisioning @waitron/server @waitron/till @waitron/venue-service\n" +
+        "root=true\ndeploy=false\n",
     );
   });
 

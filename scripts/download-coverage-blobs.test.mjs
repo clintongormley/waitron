@@ -58,6 +58,7 @@ async function fixture(mode = "healthy") {
         if (mode === "bad-digest") artifact.digest = "sha256:" + "0".repeat(64);
         if (mode === "missing-digest") delete artifact.digest;
         if (mode === "duplicate") entries.push(artifact);
+        if (mode === "extra-report") entries.push({ ...artifact, id: 3, name: "server-blob-2" });
         if (mode === "rerun-old-first") entries.push({ ...artifact, id: 2, digest: newerDigest });
         if (mode === "rerun-new-first")
           entries.unshift({ ...artifact, id: 2, digest: newerDigest });
@@ -90,6 +91,7 @@ async function fixture(mode = "healthy") {
   const base = `http://127.0.0.1:${server.address().port}`;
   const directory = mkdtempSync(join(scratch, "reports-"));
   const options = {
+    expected: 1,
     repository: "waitron/restaurant",
     runId: "42",
     pattern: "server-blob-*",
@@ -229,6 +231,50 @@ describe("coverage artifact downloads", () => {
     }
   });
 
+  it.each([
+    ["a partial listing", "healthy", 2, "Expected 2 coverage reports, found 1"],
+    ["an extra report", "extra-report", 1, "Expected 1 coverage reports, found 2"],
+  ])("refuses %s before requesting any archive", async (_label, mode, expected, message) => {
+    const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");
+    const rig = await fixture(mode);
+    try {
+      await expect(downloadCoverageBlobs({ ...rig.options, expected })).rejects.toThrow(
+        new Error(message),
+      );
+      expect(rig.requests.filter(({ path }) => path.endsWith("/zip"))).toEqual([]);
+      expect(readdirSync(rig.directory)).toEqual([]);
+    } finally {
+      await rig.close();
+    }
+  });
+
+  it("accepts the expected count as the command line's string", async () => {
+    const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");
+    const rig = await fixture();
+    try {
+      await downloadCoverageBlobs({ ...rig.options, expected: "1" });
+      expect(readFileSync(join(rig.directory, "blob-1.json"), "utf8")).toBe('{"coverage":1}\n');
+    } finally {
+      await rig.close();
+    }
+  });
+
+  it.each([undefined, 0, -1, 1.5, "abc", "01"])(
+    "refuses an invalid expected count (%s) before any request",
+    async (expected) => {
+      const { downloadCoverageBlobs } = await import("./download-coverage-blobs.mjs");
+      const rig = await fixture();
+      try {
+        await expect(downloadCoverageBlobs({ ...rig.options, expected })).rejects.toThrow(
+          new Error("Invalid coverage download inputs"),
+        );
+        expect(rig.requests).toEqual([]);
+      } finally {
+        await rig.close();
+      }
+    },
+  );
+
   it.each([{ repository: "../restaurant" }, { runId: "../42" }, { token: "" }, { pattern: "*" }])(
     "refuses invalid request inputs %s",
     async (changes) => {
@@ -248,7 +294,12 @@ describe("coverage artifact downloads", () => {
     try {
       const child = spawn(
         process.execPath,
-        [join(import.meta.dirname, "download-coverage-blobs.mjs"), "server-blob-*", rig.directory],
+        [
+          join(import.meta.dirname, "download-coverage-blobs.mjs"),
+          "server-blob-*",
+          rig.directory,
+          "1",
+        ],
         {
           env: {
             ...process.env,
@@ -277,6 +328,40 @@ describe("coverage artifact downloads", () => {
     }
   });
 
+  it("the command reads the expected count from its third argument", async () => {
+    const rig = await fixture();
+    const originalArgv = process.argv;
+    const originalExit = process.exitCode;
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      process.argv = [
+        process.execPath,
+        join(import.meta.dirname, "download-coverage-blobs.mjs"),
+        "server-blob-*",
+        rig.directory,
+        "2",
+      ];
+      vi.stubEnv("GITHUB_REPOSITORY", "waitron/restaurant");
+      vi.stubEnv("GITHUB_RUN_ID", "42");
+      vi.stubEnv("GH_TOKEN", "probe-token");
+      vi.stubEnv("GITHUB_API_URL", rig.options.apiUrl);
+      vi.resetModules();
+      await import("./download-coverage-blobs.mjs");
+      await vi.waitFor(() =>
+        expect(errors).toHaveBeenCalledWith("Expected 2 coverage reports, found 1"),
+      );
+      expect(process.exitCode).toBe(1);
+      expect(readdirSync(rig.directory)).toEqual([]);
+    } finally {
+      process.argv = originalArgv;
+      process.exitCode = originalExit;
+      vi.unstubAllEnvs();
+      errors.mockRestore();
+      vi.resetModules();
+      await rig.close();
+    }
+  });
+
   it.each(["healthy", "blob-failure"])(
     "the command maps the workflow environment to its %s result",
     async (mode) => {
@@ -290,6 +375,7 @@ describe("coverage artifact downloads", () => {
           join(import.meta.dirname, "download-coverage-blobs.mjs"),
           "server-blob-*",
           rig.directory,
+          "1",
         ];
         vi.stubEnv("GITHUB_REPOSITORY", "waitron/restaurant");
         vi.stubEnv("GITHUB_RUN_ID", "42");

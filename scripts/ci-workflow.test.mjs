@@ -280,6 +280,18 @@ function artifactUploadStep(body) {
 }
 
 /** The blob artifact's base name from the download action or coverage helper. */
+function jobPermissions(body) {
+  const permissionsAt = body.findIndex((line) => /^ {4}permissions:\s*$/.test(line));
+  if (permissionsAt === -1) return null;
+  const granted = [];
+  for (const line of body.slice(permissionsAt + 1)) {
+    if (line.trim() === "" || line.trim().startsWith("#")) continue;
+    if (!/^ {6}\S/.test(line)) break;
+    granted.push(line.trim());
+  }
+  return granted;
+}
+
 function artifactDownloadBase(body) {
   const helper = body.find((candidate) =>
     candidate.includes("run: node scripts/download-coverage-blobs.mjs"),
@@ -1365,16 +1377,7 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     }
     expect(lines.filter((line) => /^\s*JOBS_API_\w+\s*:/.test(line))).toEqual([]);
 
-    const body = job("ci").body;
-    const permissionsAt = body.findIndex((line) => /^ {4}permissions:\s*$/.test(line));
-    expect(permissionsAt).toBeGreaterThan(-1);
-    const granted = [];
-    for (const line of body.slice(permissionsAt + 1)) {
-      if (line.trim() === "" || line.trim().startsWith("#")) continue;
-      if (!/^ {6}\S/.test(line)) break;
-      granted.push(line.trim());
-    }
-    expect(granted).toEqual(["actions: read"]);
+    expect(jobPermissions(job("ci").body)).toEqual(["actions: read"]);
   });
 
   it(
@@ -3805,10 +3808,10 @@ function isArtifactDownload(step) {
 function artifactDownloadInputs(step) {
   if (step?.uses?.startsWith("actions/download-artifact@")) return step.with;
   const match =
-    /^node scripts\/download-coverage-blobs\.mjs '([a-z][a-z-]+-blob-\*)' '([\w./-]+)'$/.exec(
+    /^node scripts\/download-coverage-blobs\.mjs '([a-z][a-z-]+-blob-\*)' '([\w./-]+)' ([1-9]\d*)$/.exec(
       step?.command?.trim() ?? "",
     );
-  return match ? { pattern: match[1], path: match[2] } : {};
+  return match ? { pattern: match[1], path: match[2], expected: Number(match[3]) } : {};
 }
 
 function downloadAttempts(text) {
@@ -3887,7 +3890,7 @@ describe("the workflows' artifact downloads", () => {
     step
       .replace(
         "uses: actions/download-artifact@v8",
-        "run: node scripts/download-coverage-blobs.mjs 'service-blob-*' 'packages/service/.vitest-reports'",
+        "run: node scripts/download-coverage-blobs.mjs 'service-blob-*' 'packages/service/.vitest-reports' 4",
       )
       .replace(
         / {8}with:\n(?: {10}.*\n)+/,
@@ -3920,16 +3923,72 @@ describe("the workflows' artifact downloads", () => {
       "unsafe output path",
       (text) => text.replaceAll("packages/service/.vitest-reports", "../reports"),
     ],
+    ["different retry count", (text) => text.replace(".vitest-reports' 4", ".vitest-reports' 3")],
+    ["no expected count", (text) => text.replaceAll(".vitest-reports' 4", ".vitest-reports'")],
   ])("refuses the coverage helper with %s", (_label, change) => {
     const found = downloadAttempts(workflow(change(helper(first) + clear + helper(second))));
     expect(found.length).toBeGreaterThan(0);
     expect(found.every(({ bounded }) => bounded)).toBe(false);
   });
 
-  it("gives the server's REST download read access to artifacts and the checked-out code", () => {
-    const body = job("test-server-merge").body.join("\n");
-    expect(body).toContain("    permissions:\n      contents: read\n      actions: read");
+  it("gives every coverage helper's REST download read access to artifacts and the checked-out code", () => {
+    const helperJobs = jobs.filter(({ body }) =>
+      workflowSteps(body.join("\n")).some((step) =>
+        step.command.includes("scripts/download-coverage-blobs.mjs"),
+      ),
+    );
+    expect(helperJobs.map(({ id }) => id)).toContain("test-server-merge");
     expect(artifactDownloadBase(job("test-server-merge").body)).toBe("server-blob");
+    expect(
+      helperJobs
+        .map(({ id, body }) => ({ id, granted: jobPermissions(body)?.toSorted() }))
+        .filter(({ granted }) => JSON.stringify(granted) !== '["actions: read","contents: read"]'),
+    ).toEqual([]);
+  });
+
+  it("downloads no coverage blob in ci.yml with the download action", () => {
+    const blobDownloads = jobs.flatMap(({ id, body }) =>
+      workflowSteps(body.join("\n"))
+        .filter(isArtifactDownload)
+        .map((step) => ({ job: id, step, pattern: artifactDownloadInputs(step).pattern ?? "" }))
+        .filter(({ pattern }) => /-blob-\*$/.test(pattern)),
+    );
+    expect(blobDownloads.length).toBeGreaterThan(0);
+    expect(
+      blobDownloads
+        .filter(({ step }) => step.uses?.startsWith("actions/download-artifact@"))
+        .map(({ job: id, pattern }) => `${id}: ${pattern}`),
+      "download coverage blobs with scripts/download-coverage-blobs.mjs, as test-server-merge does",
+    ).toEqual([]);
+  });
+
+  const helperMerges = mergeJobs.flatMap(({ id, body }) => {
+    const downloads = workflowSteps(body.join("\n"))
+      .filter((step) => step.command.includes("scripts/download-coverage-blobs.mjs"))
+      .map(artifactDownloadInputs);
+    return downloads.length === 0 ? [] : [{ id, body, downloads }];
+  });
+
+  it("finds merge jobs that download with the coverage helper", () => {
+    expect(helperMerges.map(({ id }) => id)).toContain("test-server-merge");
+  });
+
+  it("expects as many reports as the merge job's needed jobs upload", () => {
+    const uploaded = (base, needed) => {
+      const { body } = job(needed);
+      const shards = artifactUploadBase(body) === base ? (matrixShards(body)?.length ?? 0) : 0;
+      const stream = body.some((line) => line.trim() === `name: ${base}-stream`) ? 1 : 0;
+      return shards + stream;
+    };
+    const found = helperMerges.flatMap(({ id, body, downloads }) =>
+      downloads.map(({ pattern, expected }) => {
+        const base = pattern?.slice(0, -2);
+        const total = allNeedsOf(body).reduce((sum, needed) => sum + uploaded(base, needed), 0);
+        return { job: id, expected, uploaded: total };
+      }),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter(({ expected, uploaded }) => expected !== uploaded)).toEqual([]);
   });
 
   it("ignores commented downloads", () => {
