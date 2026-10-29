@@ -2972,7 +2972,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (`positionTooltip`, `packages/ui/src/components/wt-help-tooltip.ts`): on a phone, it covers the
   Order screen's bar.
 
-- **A1208. The Served toast covers the Order screen's Fire / Send all buttons.** Measured
+- **A1211. The Served toast covers the Order screen's Fire / Send all buttons.** Measured
   2026-10-29 in A1125's review (the probe was not kept); left open by A1125, #2238. At 1024×768 it
   covers the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like
   the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
