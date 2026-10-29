@@ -234,7 +234,6 @@ export function parseCertificateDiagnosisResult(raw: unknown): CertificateDiagno
   if (
     !utc(raw.startedAt) ||
     !utc(raw.completedAt) ||
-    Date.parse(raw.completedAt) < Date.parse(raw.startedAt) ||
     typeof raw.durationMs !== "number" ||
     !Number.isFinite(raw.durationMs) ||
     raw.durationMs < 0

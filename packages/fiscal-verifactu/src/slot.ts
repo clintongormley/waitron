@@ -11,6 +11,7 @@ import { certificateAlerts } from "./certificate-alerts.js";
 import { claimReminder, reportReminder } from "./certificate-reminders.js";
 import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
+import { makeCertificateDiagnosisChild } from "./certificate-diagnosis-child.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { readOutbox } from "./outbox.js";
 import { currentSif } from "./registro-sif.js";
@@ -110,6 +111,7 @@ export const FISCAL_SLOT: FiscalContribution = {
     validate: validateVenueFiscalFields,
   },
   certificate: {
+    diagnoseInChild: makeCertificateDiagnosisChild(),
     // The spread gives the card's interface the index signature the seat's opaque JSON needs.
     read: async (deps, now) => ({ ...(await readCertificateCard(deps, now)) }),
     install: installCertificate,

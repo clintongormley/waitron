@@ -218,6 +218,11 @@ describe("certificate diagnosis evidence", () => {
     expect(parseCertificateDiagnosisResult(raw)).toEqual(raw);
   });
 
+  it("keeps observed wall-clock times when the clock moves back during an attempt", () => {
+    const raw = { ...result, completedAt: "2026-10-29T09:59:59.000Z", durationMs: 500 };
+    expect(parseCertificateDiagnosisResult(raw)).toEqual(raw);
+  });
+
   it.each([
     "local-finding",
     "local-ready",
@@ -304,7 +309,6 @@ describe("certificate diagnosis evidence", () => {
     { ...result, startedAt: "2026-10-29" },
     { ...result, startedAt: "invalid" },
     { ...result, completedAt: "2026-10-29T11:00:00+01:00" },
-    { ...result, completedAt: "2026-10-28T10:00:00.000Z" },
     { ...result, durationMs: -1 },
     { ...result, durationMs: Infinity },
     { ...result, durationMs: NaN },
