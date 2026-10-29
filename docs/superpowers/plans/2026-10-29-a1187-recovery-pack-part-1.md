@@ -379,6 +379,10 @@ under the task.
    the design's alternative (attach only the key file, print the codes); PR A then shrinks to Tasks
    2-4, 6-7 without the attachment in the fiscal reader.
 
+**Result (2026-10-29): go.** Only "refuses hostile carrier: duplicate name" fails when every one-file
+check is removed; once two names are accepted, a PDF carrying both is stopped by the one-file rule
+alone, so Task 5's both-files case is required. Receipts in PR A's description.
+
 ### Task 2 — the package and the attached file's format
 
 **Files:** `packages/recovery-pack/` (new: `package.json`, `tsconfig.json`, `vitest.config.ts`,
