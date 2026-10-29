@@ -872,6 +872,15 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
         flex: 0 1 auto;
         min-width: 0;
+        position: sticky;
+        bottom: 0;
+        z-index: 2;
+        padding-block: var(--wt-space-2);
+        background: var(--wt-color-bg);
+      }
+
+      .side-by-side .draft-bar {
+        background: var(--wt-color-surface);
       }
 
       .draft-actions,
