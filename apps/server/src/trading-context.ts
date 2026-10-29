@@ -15,6 +15,7 @@ export interface RequestEffects {
 
 export interface TradingContext
   extends NodeConfig, TillAppSettings, FiscalRuntimeContext, RequestEffects {
+  /** Fiscal values and hashes must not depend on this flag. */
   practiceMode?: boolean;
 }
 
