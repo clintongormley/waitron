@@ -2945,17 +2945,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
 
-- **A1183. The arrow keys do not move between a handheld bar's tabs.** Floor and the table buttons
-  are `role="tab"` in one tab list, but `apps/till/src/widgets/till-shell.ts` handles no key for
-  them, so only Tab reaches each one; a tab list is expected to take Left and Right (as `wt-tabs`
-  does). Raised by #2216's review (A1121), which left it: the file had no key handling before.
-
-- **A1184. A handheld bar's fade is not re-sized when the selected table button changes width at the
-  same strip width.** Since #2216 the fade beside the table buttons is sized from the selected
-  button, but the shell watches only the strip's box for size, not the button (`wt-tabs` watches
-  both). The one trigger found is a text-size change while the screen is open. Raised by #2216's
-  review re-read, left as is.
-
 - **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
   tab.** Seen in A797 slice 3's LOOK, 2026-10-26: the tab reads "Terrac". I believe this predates
   the slice (not run on main).

@@ -179,6 +179,10 @@ estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuan
 de los que caben, **Sala** se queda en su sitio y los botones de las mesas se deslizan de lado junto
 a él; un borde difuminado indica que hay más por ese lado.
 
+Con un teclado, Tab lleva al botón seleccionado. Las flechas izquierda y derecha abren la pestaña
+anterior o siguiente, pasando de **Sala** a tus mesas y volviendo al principio al llegar al final.
+Inicio abre **Sala** y Fin abre la última mesa.
+
 Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
 Todo lo demás está en **Más** (☰): tu nombre y las acciones de fichaje cuando no caben en la barra,
 lo que en un móvil ocurre siempre, las pantallas que permite tu perfil, **Ajustes** (**Zonas en este

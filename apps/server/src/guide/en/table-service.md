@@ -172,6 +172,9 @@ table you are at, and at any other table when the Floor next updates its tables.
 more buttons than fit, **Floor** stays where it is and the table buttons slide sideways beside it;
 a faded edge shows there are more that way.
 
+With a keyboard, Tab reaches the selected button. Left and Right open the previous or next tab,
+wrapping between **Floor** and your tables. Home opens **Floor** and End opens the last table.
+
 Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
 in **More** (☰): your name and clock actions when the bar has no room for them, which on a phone is
 always, the screens your profile allows, **Settings** (**Zones on this device**, **Equipment**,
