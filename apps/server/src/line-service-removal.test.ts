@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
@@ -256,7 +257,9 @@ describe("off-bill cancellation beside charged service cancellation", () => {
       const newJobs = after.jobs.filter((job) => !before.jobs.some((old) => old.id === job.id));
       expect(newJobs).toHaveLength(1);
       const printed = printedLines(newJobs[0]!.payload).join("\n");
-      expect(printed).toContain(release === "hold" ? "CANCEL" : "VOID");
+      expect(printed).toContain(
+        `*** ${kitchenTicketWords("es-ES")[release === "hold" ? "holdCancelled" : "void"]} ***`,
+      );
       expect(printed).toContain("PIZZA");
       await expect(
         inTx(venue, async (tx) =>

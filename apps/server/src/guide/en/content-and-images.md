@@ -123,6 +123,11 @@ site.
 Requesting the original receipt again keeps its existing print job. To print another sheet after
 it has completed, choose **Reprint** at the till; the copy carries the same invoice number and a duplicate mark.
 
+Kitchen tickets and collection-number slips also use your default content language for their
+headings. Spanish prints Spanish; other defaults use English. New paper and kitchen reprints
+follow a default change immediately, while a resend keeps the original bytes. Recorded dish names,
+notes and allergy instructions keep their own text. See [kitchen paper](kitchen-service.md#paper-language).
+
 ## Add a photograph once {#upload}
 
 For several photos, open **Image library** and drop them anywhere on the page, or select

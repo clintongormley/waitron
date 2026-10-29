@@ -423,25 +423,15 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **A964 — point 3(3), and the first of point 2.** Kitchen tickets
-  (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
-  the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than
-  `WAITRON_TILL_LOCALE` (`apps/server/src/till-config.ts:83`; setup never writes it,
-  `trading-config.ts:33–41`). Trace every reader of that setting before changing it — the card slip's
-  dates and money read it too. The [implementation plan](../superpowers/plans/2026-10-22-a964-kitchen-language.md)
-  selects the saved default content language for frame words, with English fallback; recorded names,
-  snapshot units and card-slip formatting keep their separate inputs. Implementation remains open,
-  subject to A773-2's printing reservations (A807/A808 landed 2026-10-27). A966–A968 depend on the implementation,
-  not the plan's publication.
 - **A966 — point 2: emails.** `account-email.ts:38–72, 125` and `attendance-email.ts:18–22, 46, 49`
-  move into `apps/server/src/i18n/`. No visible change. After A964.
+  move into `apps/server/src/i18n/`. No visible change.
 - **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame
   (`attendance-export-pdf.ts:29–160`) and the category sales report (`category-sales-page.ts:48–65`);
   then the printer test and ruler pages (`printer-test-page.ts:26–29`, `test-page.ts:21–25`). No
-  visible change. After A964.
+  visible change.
 - **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
   `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
-  start, so its strings must load without the database. No visible change. After A964.
+  start, so its strings must load without the database. No visible change.
 - **A971 — point 5: Spain's pack provides English.** Check every word `country-es` shows on a screen:
   holiday names (`data/es-2026.ts`, one `name` per row, verbatim from the BOE and compared by a
   test), the area label «Lleida, fuera del territorio de Arán» (Waitron's wording), and the notices

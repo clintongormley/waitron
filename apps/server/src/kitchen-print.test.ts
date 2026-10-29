@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { fireTableKitchenOrder } from "./testing/kitchen-table-order.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { floorTodayTables } from "@waitron/db";
@@ -218,7 +219,9 @@ describe("paper for a move to another station", () => {
       );
       if (!printerOff) {
         const lines = printedLines(result.jobs[0]!.payload);
-        expect(lines[0]).toBe(held ? "*** HOLD CANCELLED ***" : "*** PASADO A GRILL ***");
+        expect(lines[0]).toBe(
+          held ? "*** HOLD CANCELLED ***" : `*** ${kitchenTicketWords("en").movedTo} GRILL ***`,
+        );
         if (held) expect(lines).toContain("GROUP 2");
         expect(lines).toContain("1.000 x Steak");
       }
@@ -260,7 +263,9 @@ describe("paper for a move to another station", () => {
     });
     expect(result.jobs).toHaveLength(1);
     expect(result.jobs[0]!.printerId).toBe(result.printerId);
-    expect(printedLines(result.jobs[0]!.payload)).toContain("Viene de Bar");
+    expect(printedLines(result.jobs[0]!.payload)).toContain(
+      `${kitchenTicketWords("en").fromStation} Bar`,
+    );
     expect(result.links).toMatchObject([
       { printJobId: result.jobs[0]!.id, stationId: result.stationId },
     ]);
@@ -402,18 +407,24 @@ describe("show the rest of the order", () => {
     });
     const firstAt = (id: string) =>
       printedLines(result.first.find((job) => job.printerId === id)!.payload);
-    expect(firstAt(result.grillPrinter).join(" ")).toContain("También en este pedido");
+    expect(firstAt(result.grillPrinter).join(" ")).toContain(kitchenTicketWords("en").alsoOnOrder);
     expect(firstAt(result.grillPrinter)).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
-    expect(firstAt(result.fryerPrinter).join(" ")).not.toContain("También en este pedido");
-    expect(firstAt(result.passPrinter).join(" ")).not.toContain("También en este pedido");
+    expect(firstAt(result.fryerPrinter).join(" ")).not.toContain(
+      kitchenTicketWords("en").alsoOnOrder,
+    );
+    expect(firstAt(result.passPrinter).join(" ")).not.toContain(
+      kitchenTicketWords("en").alsoOnOrder,
+    );
     expect(result.later.some((job) => job.printerId === result.grillPrinter)).toBe(false);
     const grillReprint = printedLines(
       result.reprinted.find((job) => job.printerId === result.grillPrinter)!.payload,
     );
     expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Chips — Fryer`);
     expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Salad — Cold`);
-    expect(grillReprint).toContain(`${thousandthsToDecimal(1000)} x Dessert — Pastry (en espera)`);
-    expect(grillReprint.join(" ").match(/También en este pedido/g)).toHaveLength(1);
+    expect(grillReprint).toContain(
+      `${thousandthsToDecimal(1000)} x Dessert — Pastry ${kitchenTicketWords("en").onHold}`,
+    );
+    expect(grillReprint.join(" ").match(/Also on this order/g)).toHaveLength(1);
     expect(grillReprint.filter((entry) => entry.includes("Chips — Fryer"))).toHaveLength(1);
     expect(grillReprint.join(" ")).not.toContain("Water");
     for (const jobs of [result.served, result.away]) {
@@ -1564,7 +1575,7 @@ describe("dish extras on kitchen tickets", () => {
     );
     expect(paper(printers.grill)).toContain("1.000 x BURG");
     expect(paper(printers.grill)).toContain("+ Cheese");
-    expect(paper(printers.grill)).toContain("> con CHIPS de Fryer");
+    expect(paper(printers.grill)).toContain("> with CHIPS from Fryer");
     expect(paper(printers.grill)).not.toContain("+ Chips");
     expect(paper(printers.fryer)).toContain("1.000 x CHIPS");
     expect(
@@ -1572,9 +1583,9 @@ describe("dish extras on kitchen tickets", () => {
         line.includes("x CHIPS"),
       ),
     ).toHaveLength(1);
-    expect(paper(printers.fryer)).toContain("> para BURG en Grill");
-    expect(paper(printers.pass)).toContain("> con CHIPS de Fryer");
-    expect(paper(printers.pass)).toContain("> para BURG en Grill");
+    expect(paper(printers.fryer)).toContain("> for BURG at Grill");
+    expect(paper(printers.pass)).toContain("> with CHIPS from Fryer");
+    expect(paper(printers.pass)).toContain("> for BURG at Grill");
     expect(
       printedLines(jobs.find((job) => job.printerId === printers.pass)!.payload).filter((line) =>
         line.includes("x CHIPS"),
@@ -1606,9 +1617,9 @@ describe("dish extras on kitchen tickets", () => {
 
     const paper = (printerId: string) =>
       decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(paper(printers.grill)).toContain("CHIPS 0.150 kg de Fryer");
+    expect(paper(printers.grill)).toContain("CHIPS 0.150 kg from Fryer");
     expect(paper(printers.fryer)).toContain("0.150 kg x CHIPS");
-    expect(paper(printers.fryer)).toContain("para BURG en Grill");
+    expect(paper(printers.fryer)).toContain("for BURG at Grill");
   });
 
   it("keeps an unclaimed cheese as a modifier without a Fryer job", async () => {
@@ -1643,7 +1654,7 @@ describe("dish extras on kitchen tickets", () => {
     });
     expect(jobs.some((job) => job.printerId === printers.grill)).toBe(false);
     expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
-      "> para AGUA, sin preparación",
+      "> for AGUA, no preparation",
     );
   });
 
@@ -1665,8 +1676,8 @@ describe("dish extras on kitchen tickets", () => {
       return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
     });
     const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
-    expect(grill).toContain("> con CHIPS de Fryer");
-    expect(grill).toContain("> con CHIPS de Kitchen");
+    expect(grill).toContain("> with CHIPS from Fryer");
+    expect(grill).toContain("> with CHIPS from Kitchen");
     expect(
       printedLines(jobs.find((job) => job.printerId === printers.grill)!.payload).filter((line) =>
         line.includes("x BURG"),
@@ -1703,10 +1714,10 @@ describe("dish extras on kitchen tickets", () => {
       return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
     });
     expect(decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload)).toContain(
-      "> con CHIPS de Fryer",
+      "> with CHIPS from Fryer",
     );
     expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
-      "> para BURG en Grill",
+      "> for BURG at Grill",
     );
   });
 
@@ -1736,7 +1747,7 @@ describe("dish extras on kitchen tickets", () => {
     const grill = decodeTicket(jobs.find((job) => job.printerId === printers.grill)!.payload);
     const fryer = decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload);
     expect(grill).toContain("*** HOLD ***");
-    expect(grill).toContain("> con CHIPS de Fryer");
+    expect(grill).toContain("> with CHIPS from Fryer");
     expect(grill).not.toContain("+ Chips");
     expect(fryer).toContain("*** HOLD ***");
     expect(
@@ -1744,7 +1755,7 @@ describe("dish extras on kitchen tickets", () => {
         line.includes("x CHIPS"),
       ),
     ).toHaveLength(1);
-    expect(fryer).toContain("> para BURG en Grill");
+    expect(fryer).toContain("> for BURG at Grill");
   });
 
   it("keeps two extras no cell decides on their dish's one kitchen record", async () => {
@@ -2114,8 +2125,12 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
 
     const reprinted = (await jobsAt(kitchen.printerId!)).slice(1);
     expect(reprinted).toHaveLength(1);
-    expect(reprinted[0]![0]).toMatch(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
-    expect(reprinted[0]![1]).toBe("*** HOLD ***");
+    expect(reprinted[0]![0]).toMatch(
+      new RegExp(
+        `^\\*\\*\\* ${kitchenTicketWords("es").reprint.replace("{time}", "\\d\\d:\\d\\d")} \\*\\*\\*$`,
+      ),
+    );
+    expect(reprinted[0]![1]).toBe(`*** ${kitchenTicketWords("es").hold} ***`);
     expect(reprinted[0]).toContain("1.000 x BURG");
     expect(await jobsAt(bar.printerId!)).toEqual([]);
     expect(
@@ -2586,7 +2601,11 @@ describe("the party's name on a kitchen ticket", () => {
     const tickets = await ticketsSince(printer, before);
     expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
       [
-        expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/),
+        expect.stringMatching(
+          new RegExp(
+            `^\\*\\*\\* ${kitchenTicketWords("es").reprint.replace("{time}", "\\d\\d:\\d\\d")} \\*\\*\\*$`,
+          ),
+        ),
         "Cocina",
         "Mesa 72",
         `Pedido ${orderNumber} · Luis`,

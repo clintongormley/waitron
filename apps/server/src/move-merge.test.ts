@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -646,9 +647,9 @@ describe("a MOVED slip per order per station", () => {
     expect(slips).toHaveLength(1);
     expect(slips[0]!.slice(6)).toEqual([
       "1.000 x BURG",
-      "GROUP 1",
+      `${kitchenTicketWords("es").group} 1`,
       "1.000 x BURG",
-      "GROUP 2",
+      `${kitchenTicketWords("es").group} 2`,
       "1.000 x PAELLA",
       "",
     ]);
@@ -1056,8 +1057,8 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 111", "Mesa 112", [
         "1.000 x BURG",
-        "HOLD",
-        "GROUP 2",
+        kitchenTicketWords("es").hold,
+        `${kitchenTicketWords("es").group} 2`,
         "1.000 x PAELLA",
       ]),
     ]);
@@ -1108,8 +1109,8 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 
     expect(await slipsSince(kitchen, before.kitchen)).toEqual([
       movedSlip("Kitchen", `Pedido ${numbers.get(tabId)}`, "Mesa 121", "Mesa 122", [
-        "HOLD",
-        "GROUP 1",
+        kitchenTicketWords("es").hold,
+        `${kitchenTicketWords("es").group} 1`,
         "1.000 x BURG",
       ]),
     ]);
@@ -1157,11 +1158,11 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
 
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip("Grill", `Pedido ${numbers.get(tabId)}`, "Mesa 118", "Mesa 119", [
-        "HOLD",
-        "GROUP 1",
+        kitchenTicketWords("es").hold,
+        `${kitchenTicketWords("es").group} 1`,
         "1.000 x PAELLA",
         "1.000 x BURG",
-        "GROUP 2",
+        `${kitchenTicketWords("es").group} 2`,
         "1.000 x PAELLA",
       ]),
     ]);
@@ -1207,7 +1208,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 115",
         "Mesa 115",
-        ["HOLD", "GROUP 2", "1.000 x PAELLA"],
+        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1.000 x PAELLA"],
       ),
     ]);
     expect(byDish(await noticesOf([second]))).toEqual([["PAELLA", second, "Mesa 115"]]);
@@ -1248,7 +1249,7 @@ describe("held dishes the kitchen has on a HOLD ticket are on the MOVED slip (ru
         `Pedido ${numbers.get(tabId)} -> ${numbers.get(second)}`,
         "Mesa 117",
         "Mesa 117",
-        ["HOLD", "GROUP 2", "1.000 x PAELLA"],
+        [kitchenTicketWords("es").hold, `${kitchenTicketWords("es").group} 2`, "1.000 x PAELLA"],
       ),
     ]);
     expect(byDish(await noticesOf([second]))).toEqual([
@@ -1309,8 +1310,8 @@ describe("a MOVED slip lays out each line by the ticket grouping and never adds 
         "1.000 x BURG",
         "1.000 x BURG",
         "1.000 x BURG",
-        "HOLD",
-        "GROUP 2",
+        kitchenTicketWords("es").hold,
+        `${kitchenTicketWords("es").group} 2`,
         "1.000 x PAELLA",
         "1.000 x PAELLA",
       ]),

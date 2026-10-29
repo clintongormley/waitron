@@ -14,7 +14,8 @@ import { PRINTER_DELETED, canResendPrintJob, enqueuePrintJob, esc } from "@waitr
 import type { EscSetting, PrintConfig } from "@waitron/printing";
 import { profileAllows, readPrinterEquipment, readPrinterRoles } from "@waitron/layouts";
 import type { ProfilePrinterRole } from "@waitron/layouts";
-import { receiptLabelsFor } from "@waitron/country-packs";
+import { readKitchenLanguage } from "./kitchen-language.js";
+import { formatOrderNumberSlip } from "./order-number-slip.js";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { resolveReceiptTrim } from "@waitron/shared";
 import type { Origin } from "@waitron/shared";
@@ -292,16 +293,8 @@ export async function enqueueCollectionTicket(
   if (policy.collectionNumber !== "numbered") return;
   const printer = await printers("receipt");
   if (printer === undefined) return;
-  const builder = esc(printer);
-  const bytes = builder
-    .init()
-    .printArea(builder.grid.widthDots)
-    .align("center")
-    // English receipt resources do not change the collection caption's Spanish fallback.
-    .line(receiptLabelsFor(cfg.locale === "en-GB" ? "es-ES" : cfg.locale).order)
-    .line(String(orderNumber))
-    .feedAndCut()
-    .bytes();
+  const language = await readKitchenLanguage(tx);
+  const bytes = formatOrderNumberSlip({ orderNumber, language }, printer);
   await enqueuePrintJob(tx, printConfig(cfg), printer.id, bytes, "document");
 }
 

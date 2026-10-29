@@ -1775,6 +1775,20 @@ src/widgets/product-list.test.ts -t 'shows inherited allergen badges'` failed th
 `italic` instead of `normal` before the selector correction. The assertion lives in
 `apps/dashboard/src/widgets/product-list.test.ts`, under **A668 effective allergen cells**.
 
+## Kitchen paper reads its language at render time
+
+Kitchen frames and collection-number captions use `readKitchenLanguage(tx)`, reading the saved
+content default in the rendering transaction. Spanish base languages select Spanish, and other
+defaults or no saved setting select English. The three common kitchen rendering roots read once
+before their item and printer loops; whole-portion corrections share the language and items read
+for notice folding. The collection path reads after its policy and printer gates.
+They need no browser refresh or server restart. A language save enqueues nothing.
+
+New reprints use current frame words and the matching frozen allergy translation while keeping
+recorded names and instructions. Outbox resends reuse the saved payload. Unit-map selection keeps
+`cfg.locale`; card-slip words, dates and amounts use the saved sale's receipt language. Boundary
+checks live in `kitchen-print.language.test.ts` and `kitchen-language.boundaries.test.ts`.
+
 ## What an open till keeps current
 
 A signed-in till keeps two things it has read, and asks `/api/menu-state` every 15 seconds

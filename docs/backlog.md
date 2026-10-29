@@ -6010,7 +6010,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 
 - **A913's fix items: general code English only (owner's answers, 2026-10-20).** The audit
   ([english-only-audit.md](backlog/english-only-audit.md)) and the owner's answers became the
-  items below. A964 comes first: it changes what a venue sees. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  items below. The remaining wording extractions follow the kitchen catalogues. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 
 - **Full-invoice locality/province commas.** Align the till's structured address checks and
@@ -6022,21 +6022,15 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
   treating them as postal countries. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A964. Kitchen tickets and the order-number slip follow the venue's language, from
-  `apps/server/src/i18n/`.** Build from the [implementation plan](superpowers/plans/2026-10-22-a964-kitchen-language.md),
-  using the saved default content language. Recheck A773-2's printing reservations before
-  implementation; A807/A808 have landed (see the plan's BUILD gate). [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
-
 - **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
-  emails). No visible change. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  emails). No visible change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A967. The server's printed reports and test pages move into `apps/server/src/i18n/`**
   (working-time PDF frame, category sales, printer test and ruler pages), in two pull requests.
-  After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A968. The guide's frame and the recovery page move into `apps/server/src/i18n/`.** The recovery
-  page must still load without the database. After A964. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+  page must still load without the database. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 
 - **Spanish text in a server test venue, for A913's English-only audit.**

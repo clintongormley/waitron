@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
@@ -221,10 +222,10 @@ describe("splitting a dish with split-off extras", () => {
       .get(venue.printers.fryer)!
       .slice(before.get(venue.printers.fryer)!.length);
     expect(grillSlips).toHaveLength(1);
-    expect(grillSlips[0]).toContain("*** MOVIDO ***");
+    expect(grillSlips[0]).toContain(`*** ${kitchenTicketWords("en").moved} ***`);
     expect(grillSlips[0]).toContain("BURG");
     expect(fryerSlips).toHaveLength(1);
-    expect(fryerSlips[0]).toContain("*** MOVIDO ***");
+    expect(fryerSlips[0]).toContain(`*** ${kitchenTicketWords("en").moved} ***`);
     expect(fryerSlips[0]).toContain("CHIPS");
     const moved = await withTransaction(db, (tx) =>
       tx

@@ -61,6 +61,7 @@ describe("the user guides", () => {
         "after-period",
         "request-cooking",
         "delete-prep-station",
+        "paper-language",
       ]);
     },
   );

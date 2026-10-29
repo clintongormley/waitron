@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -277,7 +278,7 @@ describe("saved kitchen note corrections", () => {
       orderNoteChange: { before: null, after: "Bring together" },
     });
     const jobs = await v.db.select().from(printJobs);
-    expect(printedLines(jobs.at(-1)!.payload)).toContain("GROUP 1");
+    expect(printedLines(jobs.at(-1)!.payload)).toContain(`${kitchenTicketWords("es").group} 1`);
   });
 
   it("a changed order note corrects held paper only at a station recorded for the group, and every station's screen is told", async () => {
@@ -322,7 +323,7 @@ describe("saved kitchen note corrections", () => {
 
     const kitchenSlips = (await jobsAt(stations.kitchen.printerId!)).slice(1);
     expect(kitchenSlips).toHaveLength(1);
-    expect(kitchenSlips[0]).toContain("GROUP 1");
+    expect(kitchenSlips[0]).toContain(`${kitchenTicketWords("es").group} 1`);
     expect(kitchenSlips[0]).toContain("Para cocina: Bring together");
     expect(await jobsAt(stations.bar.printerId!)).toEqual([]);
     const noticeAt = async (id: string) =>

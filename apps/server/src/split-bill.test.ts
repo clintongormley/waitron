@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { sendLines, updateOrderLine } from "./testing/order-writer-fixture.js";
 // The domain outcomes of un-joining a table and settling a tab, single-threaded.
@@ -938,11 +939,11 @@ async function orderNumberOf(orderId: string): Promise<number> {
 /** A MOVED slip's printed lines, its time matched by shape. */
 function movedSlip(from: string, to: string, orderNumber: string, item: string): unknown[] {
   return [
-    "*** MOVIDO ***",
+    `*** ${kitchenTicketWords("en").moved} ***`,
     "Cocina",
-    `Pedido ${orderNumber}`,
-    `De: ${from}`,
-    `A:  ${to}`,
+    `${kitchenTicketWords("en").order} ${orderNumber}`,
+    `${kitchenTicketWords("en").fromPlace}${from}`,
+    `${kitchenTicketWords("en").toPlace}${to}`,
     expect.stringMatching(/^\d\d:\d\d$/),
     item,
     "",

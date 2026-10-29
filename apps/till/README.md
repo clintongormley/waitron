@@ -131,11 +131,17 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 
 ### Box identity and till settings
 
-| Variable              | Required | Default | What it is                                                                                                                                                                                                                                                                                                                                           |
-| --------------------- | -------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `WAITRON_NODE_ID`     | yes      | —       | The identity of this box in the venue.                                                                                                                                                                                                                                                                                                               |
-| `WAITRON_TILL_LOCALE` | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
-| `WAITRON_TILL_TIPS`   | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
+| Variable              | Required | Default | What it is                                                                                                                                                                                                                                                                                                |
+| --------------------- | -------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WAITRON_NODE_ID`     | yes      | —       | The identity of this box in the venue.                                                                                                                                                                                                                                                                    |
+| `WAITRON_TILL_LOCALE` | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
+| `WAITRON_TILL_TIPS`   | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                         |
+
+Kitchen-ticket frames and collection-number captions read the saved default content language at
+each new render: Spanish selects Spanish, every other default or missing setting selects English.
+Kitchen reprints use the current frame and recorded names and bilingual allergy instructions;
+resending an existing job keeps its bytes. Snapshot-unit selection still reads the formatter locale.
+Card slips use the saved sale's receipt language for words, dates and money.
 
 You do not supply a location setting. Ordinary trading reads the location from the configured
 node in the database. An adopted spare serves its pending status before looking for its own node row.

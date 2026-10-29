@@ -122,6 +122,12 @@ Pedir de nuevo el ticket original conserva el trabajo de impresión existente. P
 hoja cuando haya terminado, elige **Reimprimir** en la caja; la copia lleva el mismo número de factura y la
 marca de duplicado.
 
+Los tickets de cocina y los comprobantes del número de recogida también usan tu idioma del
+contenido predeterminado en sus cabeceras. Con español salen en español; con otros idiomas, en
+inglés. El papel nuevo y las reimpresiones de cocina siguen el cambio al momento; un reenvío
+conserva los bytes originales. Los nombres de platos, las notas y las instrucciones sobre alergias
+conservan su texto registrado. Consulta [el papel de cocina](kitchen-service.md#paper-language).
+
 ## Sube una fotografía una sola vez {#upload}
 
 Para varias fotos, abre la **Biblioteca de imágenes** y suéltalas en cualquier parte de la página, o

@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { kitchenPresentationName } from "@waitron/catalogue";
 import { describe, expect, it } from "vitest";
 
@@ -748,10 +749,10 @@ describe("formatMovedSlip", () => {
     expect(lines.slice(5)).toEqual([
       "13:24",
       "1.000 x BURG",
-      "HOLD",
-      "GROUP 2",
+      kitchenTicketWords("es").hold,
+      `${kitchenTicketWords("es").group} 2`,
       "1.000 x STEAK",
-      "GROUP 3",
+      `${kitchenTicketWords("es").group} 3`,
       "2.000 x FLAN",
       "  * sin nata",
       "",
@@ -1406,7 +1407,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
 
   it.each([
     [false, "*** CAMBIADO ***"],
-    [true, "*** HOLD CAMBIADO ***"],
+    [true, `*** ${kitchenTicketWords("es").holdChanged} ***`],
   ])(
     "prints its words in Spanish for a server whose language is Spanish (held: %s)",
     (held, head) => {

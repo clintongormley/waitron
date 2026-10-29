@@ -247,3 +247,17 @@ pestaña **Servicio** del panel.
 Elige **Eliminar** en el menú de la estación. La ventana muestra **Comprobando qué cambia…**
 mientras consulta las consecuencias. Revisa **Trabajo que finaliza** y **Configuración que se
 elimina** cuando aparezcan esas secciones, y decide si quieres eliminar la estación.
+
+## Elige el idioma del papel de cocina {#paper-language}
+
+Para cambiar las palabras fijas de los tickets de cocina y los comprobantes del número de recogida,
+cambia el idioma predeterminado en **Ajustes**, **Idiomas del contenido**. Con español como
+predeterminado, las cabeceras salen en español; con otros idiomas, salen en inglés hasta que esté
+disponible su traducción de cocina. Sin un idioma del contenido guardado, el papel sale en inglés.
+El panel y los recibos tienen sus propias opciones de idioma.
+
+El siguiente ticket, corrección o reimpresión de cocina usa el predeterminado guardado al momento.
+Cambiarlo no imprime nada por sí solo. Reenviar un trabajo fallido conserva su papel original.
+Los nombres de platos y mesas y tus notas siguen como se registraron. Una reimpresión conserva las
+instrucciones originales sobre alergias y elige su texto guardado en inglés o español para que
+coincida con las cabeceras.

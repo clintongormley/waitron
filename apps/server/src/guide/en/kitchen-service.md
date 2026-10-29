@@ -220,3 +220,15 @@ kitchen** on its **Service** tab in the dashboard.
 Choose **Delete** from the station's row menu. The window shows **Checking what changes…**
 while it reads the impact. Review **Work that ends** and **Settings that are removed**
 when those sections appear, then decide whether to delete the station.
+
+## Choose the language on kitchen paper {#paper-language}
+
+To change the fixed words on kitchen tickets and collection-number slips, change the default
+under **Settings**, then **Content languages**. A Spanish default prints Spanish headings; other
+defaults use English until their kitchen wording is available. With no saved content language,
+kitchen paper uses English. Your dashboard language and receipt language have their own choices.
+
+The next new ticket, correction or kitchen reprint uses the saved default immediately. Changing
+the default prints nothing by itself. Resending a failed job sends its original paper unchanged.
+Dish names, table names and your notes stay as recorded. A reprint keeps the original allergy
+instructions and selects their recorded English or Spanish wording to match its headings.
