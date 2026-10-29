@@ -19,7 +19,7 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
   });
   test("collapsed", async () => {
     await mountThemed(
-      '<wt-disclosure heading="Cocina" summary="2 opciones"><p>cuerpo</p></wt-disclosure>',
+      '<wt-disclosure heading="Kitchen" summary="2 options"><p>body</p></wt-disclosure>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -27,7 +27,7 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
 
   test("open", async () => {
     await mountThemed(
-      '<wt-disclosure heading="Cocina" summary="2 opciones" open><p>cuerpo</p></wt-disclosure>',
+      '<wt-disclosure heading="Kitchen" summary="2 options" open><p>body</p></wt-disclosure>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -35,7 +35,7 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
 
   test("has-error", async () => {
     await mountThemed(
-      '<wt-disclosure heading="Cocina" summary="Revisa este campo" has-error><p>cuerpo</p></wt-disclosure>',
+      '<wt-disclosure heading="Kitchen" summary="Check this field" has-error><p>body</p></wt-disclosure>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -43,12 +43,12 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
 
   test("collapsed, with named summary fields", async () => {
     const el = (await mountThemed(
-      '<wt-disclosure heading="Cocina"><p>cuerpo</p></wt-disclosure>',
+      '<wt-disclosure heading="Kitchen"><p>body</p></wt-disclosure>',
       theme,
     )) as WtDisclosure;
     el.summaryFields = [
-      { label: "Pantalla", value: "Barra" },
-      { label: "Orden", value: "Entrantes" },
+      { label: "Display", value: "Counter" },
+      { label: "Course", value: "Starters" },
     ];
     await el.updateComplete;
     // Without this the scan could pass on a header that drew no field names.
@@ -58,7 +58,7 @@ describe.each(["light", "dark"] as const)("wt-disclosure a11y (%s theme)", (them
 
   test("collapsed, with summary rows", async () => {
     const el = (await mountThemed(
-      '<wt-disclosure heading="Descriptores"><p>cuerpo</p></wt-disclosure>',
+      '<wt-disclosure heading="Descriptors"><p>body</p></wt-disclosure>',
       theme,
     )) as WtDisclosure;
     el.summaryRows = [
