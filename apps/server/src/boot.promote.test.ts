@@ -30,6 +30,7 @@ import type { Endorsement, SignedMembershipDocument } from "@waitron/membership"
 import { seedPendingEnvios } from "@waitron/fiscal-verifactu/test/drain-fixtures.js";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+import { withCapturedStdout } from "./testing/boot-harness.js";
 import { establishNodeIdentity } from "./node-identity.js";
 import { ALL_MODULES } from "./modules.js";
 import { generateStandbyIdentity } from "./reserved-identity.js";
@@ -637,21 +638,6 @@ describe("a mirror's promote and the backup room note", () => {
     });
   }, 60_000);
 });
-
-/** `boot.ts` logs to `process.stdout.write`; every chunk is still forwarded to the real writer. */
-async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promise<T> {
-  const original = process.stdout.write.bind(process.stdout);
-  const lines: string[] = [];
-  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
-    lines.push(...String(chunk).split("\n").filter(Boolean));
-    return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
-  }) as typeof process.stdout.write;
-  try {
-    return await fn(lines);
-  } finally {
-    process.stdout.write = original;
-  }
-}
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();

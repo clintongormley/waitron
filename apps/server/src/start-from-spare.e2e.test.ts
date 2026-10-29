@@ -349,6 +349,7 @@ describe("a box started from its spare file", () => {
     expect(existsSync(join(box.stateDir, BACKUP_ROOM_START_DELETED_FILE))).toBe(false);
     expect(statSync(spareIn(box)).size).toBe(MiB);
     expect(existsSync(markerIn(box))).toBe(false);
+    expect(started.events()).not.toContain("storage.spare_released");
   });
 
   it("…but once venue.db has been replaced since the note, it deletes none and gives up the spare", async (ctx) => {
