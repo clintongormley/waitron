@@ -694,9 +694,10 @@ of its picks, earlier abandoned attempts of the same setup, the database a resto
 backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was
 before, so a promotion waits up to 150 seconds and a setup or restore's first choice is refused
 with "You can carry on from …" (Q3); the refusal has its own reason, `minute_in_use`, and words
-not yet approved (Q4); after a restore of a backup whose invoices are later than the box's time,
-payments stop until a clock confirmation, as for any clock behind the last sale (Q5); a later name
-held only in a database a restore replaces is forgotten (Q6); a box whose clock went back behind
+not yet approved (Q4); after a restore of a backup whose invoices are more than a minute later than the box's time,
+payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
+more than a minute behind the last sale (Q5); a later name held only in a database a restore
+replaces is not in the database the restore places (Q6); a box whose clock went back behind
 its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
 longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
 minute in the past; and, until the flag (A1207 Part 2, the owner's Q1) is built, no alert names a

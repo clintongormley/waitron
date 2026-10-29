@@ -82,7 +82,7 @@ restore's hooks, not the restore route and the restart after it) and, when they 
 minute later, the box then takes no payments until its clock catches up or is confirmed, as
 whenever the box's clock reads more than a minute earlier than its last sale. On a box that sends records to the tax agency, the box asks the agency for its time about
 once a minute, and an answer that agrees lifts the stop (`apps/server/src/guide/en/box-status.md`,
-"When payments stop because of the clock"; read, not run here). Once it is lifted, the alert
+"When payments stop because of the clock"; read, not run here). Once a confirmation lifts it, the alert
 `clock.records_misdated` lists how many sales are dated later than the real time and their first
 and last time (`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest
 invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists

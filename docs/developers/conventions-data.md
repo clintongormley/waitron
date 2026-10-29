@@ -3779,8 +3779,8 @@ seconds of the box"). A minute a name in the history it can read already holds i
 restore's first choice is then refused with the time it can carry on from
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at the settle
 target in the surviving database"), and one that already recorded a wait moves to the next free
-minute when that starts within 150 seconds (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
-%s, in use, at %s waits for the next free minute"; the refusal beyond 150 seconds is tested for a promotion only, the same file's "waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead"). A later name, the backup's newest record and its creation
+minute when that starts within 150 seconds, and is otherwise refused with that time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
+%s, in use, at %s waits for the next free minute"; a refusal past 150 seconds is tested for a promotion and for a restore's first choice, D1 above, but not after a recorded wait: the same file's "waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead"). A later name, the backup's newest record and its creation
 time no longer refuse or move the minute (the same file's "selected although a later name is
 known" cases; `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although
 the backup's newest record and creation time are later"; owner, 2026-10-29, A1207). The minute is
@@ -5121,8 +5121,8 @@ against the database being written (`packages/fiscal-verifactu/src/allocation.ts
 refuses reuse after the original SIF and every original series are retired").
 
 What this accepts. A restore of a backup whose invoices are dated after the box's time completes
-(the case below runs the restore's hooks, not the restore route and the restart after it), and the
-box then takes no money, when they are more than a minute later, until its clock catches up or a clock confirmation covers it, as for any clock more than a minute behind the
+(the case below runs the restore's hooks, not the restore route and the restart after it), and, when those
+invoices are more than a minute later, the box then takes no money until its clock catches up or a clock confirmation covers it, as for any clock more than a minute behind the
 latest record; once a confirmation covers it, `clock.records_misdated` lists how many sales are dated later than the
 real time and their first and last time (`apps/server/src/hour-recovery-host.test.ts`, "a restore
 below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop,
