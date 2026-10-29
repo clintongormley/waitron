@@ -53,6 +53,7 @@ export interface BillingDisplay {
 export type BillingRefusal = AppError & { retryAfterMs?: number };
 
 const SIGNED_BODY = JSON.stringify({ version: 1 });
+// Contract: "limits the complete response read to eight seconds/16,384 bytes".
 const REPLY_BYTES = 16_384;
 
 function unavailable(): never {

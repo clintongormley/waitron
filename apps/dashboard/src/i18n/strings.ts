@@ -381,7 +381,8 @@ export const en = {
   "cloud.billing_state_active": "Active",
   "cloud.billing_state_payment_failing": "Payment failing",
   "cloud.billing_state_lapsed": "Lapsed",
-  "cloud.billing_unavailable": "Your plan's details are not available right now.",
+  "cloud.billing_unavailable":
+    "Your plan's details are not available right now. This page tries again on its own.",
   "cloud.billing_prices_unpublished": "Prices are not published yet.",
   "cloud.billing_free": "Free",
   "cloud.billing_monthly": "{price} a month + {vat} VAT",
@@ -4028,7 +4029,8 @@ export const es: Record<StringKey, string> = {
   "cloud.billing_state_active": "Activo",
   "cloud.billing_state_payment_failing": "Pago fallido",
   "cloud.billing_state_lapsed": "Caducado",
-  "cloud.billing_unavailable": "Los detalles de tu plan no están disponibles ahora mismo.",
+  "cloud.billing_unavailable":
+    "Los detalles de tu plan no están disponibles ahora mismo. Esta página lo vuelve a intentar por sí sola.",
   "cloud.billing_prices_unpublished": "Los precios aún no se han publicado.",
   "cloud.billing_free": "Gratis",
   "cloud.billing_monthly": "{price} al mes + {vat} de IVA",

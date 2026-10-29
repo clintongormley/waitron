@@ -1655,7 +1655,7 @@ export interface CloudConnectionStatus {
   };
   /** Configured Cloud origin + `/signup`, while the venue is not connected. */
   signupUrl?: string;
-  /** Configured Cloud origin + `/account`, once connected. */
+  /** Configured Cloud origin + `/account`, while connected and Cloud access has not been stopped. */
   accountUrl?: string;
 }
 
