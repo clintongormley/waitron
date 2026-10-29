@@ -1,5 +1,11 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 process checkpoint: the branch now includes isolated process supervision
+and a built entry. Local tests exercise both certificate kinds, one selected query,
+held response bodies and held cleanup. Parent authorization, material binding, the
+route and the screen remain unbuilt; complete coverage and runtime qualification
+remain open. Persistent repair remains open._
+
 _2026-10-29 implementation update: the owner's 08:07 instruction approves the
 reviewed read-only build. Contracts and the local query adapter are on
 `feat/a1089-certificate-diagnosis`; process supervision, authorization, the route
