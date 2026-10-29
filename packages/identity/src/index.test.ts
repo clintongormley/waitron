@@ -83,7 +83,7 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
  * `person_id` is nullable (a discoverable-login ceremony has no known person yet) and has no key to
  * `persons`, so nothing refuses a row naming a missing person.
  */
-describe("webauthn_challenges constraint declarations", () => {
+describe("webauthn_challenges constraint declarations (forces the lazy extraConfig callback)", () => {
   it("declares its primary key, its purpose check, and no foreign keys or indexes", () => {
     const config = getTableConfig(api.webauthnChallenges);
 

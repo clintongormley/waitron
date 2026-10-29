@@ -21,7 +21,6 @@ export interface FreshSignInDeps {
 
 type Codes = { totp?: string; recoveryCode?: string };
 
-/** An absent field stays absent; a present one that is not text is refused, naming it. */
 function optionalText(body: Record<string, unknown>, field: string): string | undefined {
   const value = body[field];
   if (value === undefined) return undefined;
