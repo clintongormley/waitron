@@ -43,7 +43,7 @@ function time(...values: (Date | string | null | undefined)[]): number | null {
 
 type Moment = Date | string | null;
 
-/** The rows `hourHistorySource` judges, whether a query builder or plain reads fetched them. */
+/** The rows `hourHistorySource` judges. */
 export interface HourHistoryRows {
   readonly tenant: boolean;
   readonly series: readonly {

@@ -1,7 +1,7 @@
-import { lstat } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { readStartAgainMarker } from "@waitron/provisioning";
+import { START_AGAIN_CONFIRMATIONS_DIR, readStartAgainMarker } from "@waitron/provisioning";
 
 type Roots = { stateDir: string; venueDir: string };
 
@@ -36,9 +36,20 @@ export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
   expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
 }
 
-/** For a refused Start again: no marker. */
+async function confirmations(stateDir: string): Promise<string[] | null> {
+  try {
+    return (await readdir(join(stateDir, START_AGAIN_CONFIRMATIONS_DIR))).sort();
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+/** For a refused Start again: no marker, and the confirmation folder's entries as they were. */
 export async function startAgainUnchanged(roots: Roots): Promise<() => Promise<void>> {
+  const before = await confirmations(roots.stateDir);
   return async () => {
     expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
+    expect(await confirmations(roots.stateDir)).toEqual(before);
   };
 }

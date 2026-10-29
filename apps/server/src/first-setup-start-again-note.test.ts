@@ -273,6 +273,7 @@ it("two Start again requests at once delete the attempt once", async () => {
     await bothArrived;
     return exclusion(run);
   });
+  vi.mocked(writeStartAgainMarker).mockClear();
   const results = await Promise.allSettled([
     actions.startAgainFirstSetup(startRequest),
     actions.startAgainFirstSetup(startRequest),
@@ -281,6 +282,8 @@ it("two Start again requests at once delete the attempt once", async () => {
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
   const refusal = results.find((result) => result.status === "rejected");
   expect(refusal?.reason).toMatchObject({ code: "setup.attempt_conflict" });
+  expect(vi.mocked(writeStartAgainMarker)).toHaveBeenCalledTimes(1);
+  await expectAttemptGone(f);
 });
 
 it("Start again writes no start-again note", async () => {
@@ -391,6 +394,13 @@ async function attemptFiles(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]
     ].map((path) => readFile(path)),
   );
 }
+
+it("the summary refuses an owner who has not recovered the attempt", async () => {
+  const { f, actions, ids } = await missingDatabase();
+  await expect(actions.startAgainSummary({ ...ids, owner: f.ownerAttempt })).rejects.toMatchObject({
+    code: "setup.owner_required",
+  });
+});
 
 it("a missing database: Start again without the confirmation is refused, and nothing changes", async () => {
   const { f, actions, request } = await missingDatabase();
