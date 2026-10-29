@@ -23,7 +23,7 @@ import {
 } from "./testing/bill-action-fixture.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { fireGroup } from "./order-groups.js";
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { refundBillPayment } from "./bill-refunds.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -1063,18 +1063,19 @@ describe("sent work moved between a party's bills at two of its tables", () => {
   async function atTwoTables(label: string, burgers: string, watched: "main" | "second") {
     const { partyId, tabId: main } = await seat(v, await v.table(label));
     await inTx(v, (tx) =>
-      placeGroups(tx, v.cfg, partyId, {
-        groups: [
-          {
-            lines: [
-              { menuItemId: v.item("Burger"), quantity: burgers },
-              { menuItemId: v.item("Vino"), quantity: "1" },
-            ],
-            release: "fire",
-          },
-        ],
-        operatorId: OPERATOR,
-      }),
+      placeGroupedRound(
+        tx,
+        v.cfg,
+        { partyId, tabId: main },
+        {
+          lines: [
+            { menuItemId: v.item("Burger"), quantity: burgers },
+            { menuItemId: v.item("Vino"), quantity: "1" },
+          ],
+          release: "fire",
+        },
+        OPERATOR,
+      ),
     );
     const second = await splitOff(partyId, main, [2]);
     const printerId = await printerFor(watched === "main" ? main : second);
