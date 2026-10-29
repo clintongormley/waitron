@@ -754,8 +754,8 @@ Left open:
   in the way.
 - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
   transferring items and moving part of a dish to another group still refuse a partial move
-  of a counter order's line of several dishes with extras (`tab.transfer_modifier_line`). A
-  table's dishes are each one portion and move with their own extras.
+  of a line with extras (`tab.transfer_modifier_line`): a counter order's line of several
+  dishes, or part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
@@ -1448,7 +1448,7 @@ venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.
 decides "whole units" with `soldByTheUnit`, which does not read `measure`
 (`apps/till/src/screens/till-table-order-screen.ts:214-215`,
 `apps/till/src/widgets/product-name.ts:85-88`), so it adds 330 for a 330 ml dish. Fix: the
-`takesExtras` rule (`apps/server/src/working-order.ts:457-459`) in all three.
+`takesExtras` rule (`apps/server/src/working-order.ts:486-488`) in all three.
 
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 

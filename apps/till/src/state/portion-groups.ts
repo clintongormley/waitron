@@ -139,8 +139,8 @@ type KitchenDish = Pick<
 >;
 
 /**
- * What makes two kitchen items the same portion: everything the screen draws for the dish (extras
- * compared as a set), its state and whether it is held, plus `shown` — whatever else the caller
+ * What makes two kitchen items the same portion: everything the screen draws for the dish and each
+ * extra's amount (extras compared as a set), its state and whether it is held, plus `shown` — whatever else the caller
  * draws or acts on, such as its bill or its station. Null unless the item is a whole portion: a count of
  * one in a unit with no decimals and no unit shown, and not an extra made for a dish elsewhere.
  */

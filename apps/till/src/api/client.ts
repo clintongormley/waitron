@@ -1496,7 +1496,7 @@ export interface QueueModifier {
   descriptions: Record<string, string>;
   /** How many of a counted extra each dish has, as `QueueCrossRef.perDish` counts it. */
   perDish?: number;
-  /** A measured extra's amount on each dish, in its unit; not drawn. */
+  /** A measured extra's amount on each dish, in its unit. */
   amount?: string;
   /** The extra's OWN allergens, shown beside the dish's own — never folded. Absent/null when it
    *  declares none. */

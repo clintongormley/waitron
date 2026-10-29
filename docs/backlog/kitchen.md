@@ -252,7 +252,7 @@ Seen, 2026-10-25, on the
 demo printer in A789 slice 3's look: `2.000 x CROQ JAMON` and `1.000 x GAMBAS AJILLO`. The slice
 did not cause it. The ticket's quantity comes from `thousandthsToDecimal`
 (`apps/server/src/kitchen-ticket.ts:133`, `:153`; `apps/server/src/kitchen-print.ts:87`; the pass
-board's items read it the same way, `readPassBoard`, `apps/server/src/working-order.ts:8084`), and
+board's items read it the same way, `readPassBoard`, `apps/server/src/working-order.ts:8356`), and
 tests pin it (`apps/server/src/order-groups.test.ts:543`,
 `apps/server/src/line-cancel.test.ts:1148`), so it has been chosen or tolerated since #750
 (2026-09-27). **Next action:** decide with the owner whether a whole-number quantity prints as

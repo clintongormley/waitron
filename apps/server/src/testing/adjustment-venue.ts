@@ -736,7 +736,7 @@ export async function todayLine(
     if (!products.includes(row.productId!)) products.push(row.productId!);
     productsOf.set(cohort, products);
   }
-  // The today's line each dish row folds into: its cohort and the facts a split sets apart.
+  // The grouped line each dish row folds into: its cohort and the facts a split sets apart.
   const setOf = (dish: (typeof rows)[number]) =>
     JSON.stringify([
       dish.cohortId,
@@ -749,7 +749,7 @@ export async function todayLine(
   const opened = new Map<string, Map<string | null, string[]>>();
   const inPlace = new Map<number, string[]>();
   const appended: string[][] = [];
-  // Rows a cohort placed beyond today's one line per dish and per extra product.
+  // Rows a cohort placed beyond one grouped line per dish and per extra product.
   let folded = 0;
   for (const row of rows) {
     const dish = byId.get(row.parentLineId ?? row.id)!;

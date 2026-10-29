@@ -1658,7 +1658,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
 
 - **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
-  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:681-685`);
+  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:703-707`);
   ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
 
 - **A1066. Four server test files mark a HOLD ticket printed without recording a station.**

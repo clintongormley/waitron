@@ -366,7 +366,7 @@ it before the reader is asked. A793's slice 1. Full review (money).
 
 (found by A793's
 design, read). A capture that differs from bill plus till tip is written as bill plus till tip
-(`apps/server/src/till-sale.ts:1570`, and `:1879` for an order already placed); only the recovery
+(`apps/server/src/till-sale.ts:1647`, and `:1974` for an order already placed); only the recovery
 path reads the captured amount and calls the excess a tip. The only cause found is a reader whose
 own tip screen was switched on outside Waitron; other causes were not checked. Next: compare the captured amount at capture time, as the bill payment loop does
 (`payment.bill_capture_mismatch`).

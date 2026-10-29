@@ -637,7 +637,7 @@ async function standInRow(
   }
 
   const dishes = members.sort((a, b) => a.lineNo - b.lineNo);
-  // Product and extras list too: one product can come from two lists at one price.
+  // One product can come from two lists at one price.
   const extraOrder = (row: Row) =>
     canonical([
       row.productId,
