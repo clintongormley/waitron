@@ -1850,8 +1850,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   server.** The server checks a Spanish recipient's joined address by splitting it on commas
   (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
   locality is refused as `address`, while the till's own check (`recipientAddressErrors`) passes
-  it. Found by reading those two functions in the A1171 part 3 plan review; the address search
-  writes a comma-free province, but a provider's locality could still hold one.
+  it (run 2026-10-29 in a throwaway till test: "Centro, Madrid" gave no till error and failed the
+  server's check; "Madrid" passed both). The address search writes a comma-free province, but a
+  provider's locality could still hold one. Left open by A1171 part 3.
 
 - **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
   accepted a counter bill from another location into an answered party. The new allergy move
