@@ -67,7 +67,10 @@ and a consumer of a cross-repository wire contract. No migration, no fiscal file
   public key), every caller gets that read's settled outcome — success or error — without a new
   request; an in-flight read is shared. After a 429 the next read waits for
   `max(60 s, Retry-After)` (seconds form only; a missing or unreadable hint means 60 s; capped at one
-  hour). A different saved registration starts fresh.
+  hour). A different saved registration starts fresh. 2026-10-30 (A1185 review): the minute counts
+  from when the read went to Cloud (from when it started if the lease could not be renewed); a read
+  under way is shared until it settles; after a 429 the next read waits until the later of 60 s
+  after sending and `Retry-After` after the refusal arrived, capped at an hour.
 - D2 The lease comes from the existing `leaseState` (renews only when fewer than ten minutes are
   left, as translation does). An unpublished price list never triggers a renewal by itself.
 - D3 The local route is `GET /management-api/cloud/billing`, `system.manage`, passive (an automatic
@@ -164,7 +167,8 @@ Shown only when connected and not revoked, under the service rows:
   prueba / Último día pagado) with the last included day (C6), and for a historical paid period of
   another level, the level named after the date;
 - billing unavailable or an error: "Your plan's details are not available right now." (and the
-  Spanish), values cleared (C8);
+  Spanish), values cleared (C8); 2026-10-30: the message now adds "This page tries again on its
+  own." / «Esta página lo vuelve a intentar por sí sola.»;
 - prices published: Registered "Free"; Connected "€30.00 a month + 21% VAT"; Hosted "€90.00 per 30
   days, charged by the day + 21% VAT" — currency and percentage formatted with `Intl` in the screen
   language; prices unavailable: "Prices are not published yet.";
@@ -184,7 +188,9 @@ trial, a lapsed reply, and the unavailable state; save under
 
 - Delete the A1185 backlog entry; add short entries for what stays open: prices before connecting
   (owner's public-price question) and the production billing calendar (owner's question), if the
-  backlog does not already hold them.
+  backlog does not already hold them. 2026-10-30: the calendar entry was not kept; the contract
+  makes the calendar Cloud's to supply ("Production composition must supply its agreed calendar
+  before enabling the adapter"), and the box reads each reply's `calendarTimeZone`.
 - Record the consumer's source pin and results for Cloud's contract section ("record its actual
   source pin and results here when supplied") in lane G's questions.md after landing — not in this
   repository.

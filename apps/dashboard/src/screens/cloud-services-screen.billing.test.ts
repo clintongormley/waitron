@@ -196,7 +196,9 @@ it("says the plan is not available when Cloud has no billing state yet, and stil
   );
   const { el } = await open(api);
   await expect.poll(() => rows(el).length).toBe(3);
-  expect(section(el)!.textContent).toContain("Your plan's details are not available right now.");
+  expect(section(el)!.textContent).toContain(
+    "Your plan's details are not available right now. This page tries again on its own.",
+  );
   expect(rows(el).map(([label]) => label)).toEqual(["Registered", "Connected", "Hosted"]);
 });
 

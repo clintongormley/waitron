@@ -562,7 +562,8 @@ put to Cloud's builders as a question:
 
 1. **Facts for the box** (§1): whether the emergency start is open, the emergency address, the hosted
    daily price — in the billing section Cloud billing design §5 already adds (the section A1185 also
-   waits for).
+   waits for). 2026-10-30: that section has landed as "Venue billing display, version 1", and
+   A1185 reads it.
 2. **The code on request** (§2): an answer to the box, authenticated as the installation, holding the
    current code **and the date it was issued**. The box shows it and does not keep it.
 3. **Where the code page lives, and the emergency address** (§4): the person's Waitron password never

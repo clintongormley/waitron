@@ -174,8 +174,7 @@ function readPrices(v: unknown, today: string): BillingPrices {
   return v as unknown as BillingPrices;
 }
 
-// Contract: "A request proof allows 60 seconds of clock difference", so Cloud's clock is within a
-// minute of the box's for any read it answered.
+// Contract: "A request proof allows 60 seconds of clock difference".
 const CLOCK_DIFFERENCE_MS = 60_000;
 
 /** Checks a reply against the closed version-1 shape and the saved registration it must name;
