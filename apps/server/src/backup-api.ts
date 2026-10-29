@@ -41,6 +41,7 @@ import {
   type BackupSchedule,
 } from "./backup-config.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
+import { recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -338,19 +339,15 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // is the held key.
   const statusBody = async () => {
     const env = await deps.readBoxEnv();
-    const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
-    const loadedKey = deps.supervisor.current().recoveryKey;
-    const { held, key } = fileKey.held
-      ? fileKey
-      : { held: loadedKey !== undefined, key: loadedKey };
+    const key = await recoveryKeyFacts(env, () => deps.supervisor.current().recoveryKey);
     return {
       ...projectStatus(await deps.supervisor.status()),
       venueId: deps.venueId,
-      ...(fileKey.key === undefined
+      ...(key.fileKey === undefined
         ? {}
-        : { keyFingerprint: keyFingerprint(fileKey.key), keyRotatedAt: loadKeyRotatedAt(env) }),
-      recoveryKeySet: held,
-      recoveryKeyTooShort: held && key === undefined,
+        : { keyFingerprint: keyFingerprint(key.fileKey), keyRotatedAt: loadKeyRotatedAt(env) }),
+      recoveryKeySet: key.held,
+      recoveryKeyTooShort: key.tooShort,
       stream: deps.readStream(),
     };
   };

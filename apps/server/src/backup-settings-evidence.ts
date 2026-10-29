@@ -1,4 +1,5 @@
 import { hasCode, isAppError } from "@waitron/shared";
+import { loadRecoveryKey, readHeldKey } from "./backup-config.js";
 import "./errors.js";
 
 /** Every `reason` `parseArchiveSettings` and its helpers throw; `settingsInvalid` takes only these. */
@@ -83,4 +84,23 @@ export function attachRecordMeta(error: unknown, meta: ArchiveRecordMeta | null)
 export function recordMetaOf(error: unknown): ArchiveRecordMeta | null {
   if (typeof error !== "object" || error === null) return null;
   return (error as { [RECORD_META]?: ArchiveRecordMeta })[RECORD_META] ?? null;
+}
+
+/** What the box holds of its recovery key. `fileKey` is the box env's key when usable there. */
+export interface RecoveryKeyFacts {
+  held: boolean;
+  tooShort: boolean;
+  fileKey: string | undefined;
+}
+
+/** With no key in the box env, the key the supervisor loaded counts as held. */
+export async function recoveryKeyFacts(
+  env: Record<string, string | undefined>,
+  loadedKey: () => string | undefined,
+): Promise<RecoveryKeyFacts> {
+  const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
+  const { held, key } = fileKey.held
+    ? fileKey
+    : { held: loadedKey() !== undefined, key: loadedKey() };
+  return { held, tooShort: held && key === undefined, fileKey: fileKey.key };
 }
