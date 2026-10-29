@@ -87,9 +87,44 @@ function contents(spec: PDFDict): Uint8Array {
   if (unicodeStream && unicodeStream !== stream) refuse("carrier");
   const size = stream.dict.lookupMaybe(PDFName.of("Params"), PDFDict)?.get(PDFName.of("Size"));
   if (size && Number(size.toString()) > MAX_PACK_FILE) refuse("size");
-  const bytes = decodePDFRawStream(stream).decode();
+  const bytes = boundedDecode(stream).getBytes(MAX_PACK_FILE + 1);
   if (bytes.length > MAX_PACK_FILE) refuse("size");
   return bytes;
+}
+
+/** All the decoding stages together may hold about this much; see {@link boundedDecode}. */
+const DECODE_BUDGET = 16 * MAX_PACK_FILE;
+
+type Stage = {
+  buffer: Uint8Array;
+  ensureBuffer: (requested: number) => Uint8Array;
+  stream?: unknown;
+};
+
+/**
+ * pdf-lib's decoders (pinned at 1.17.1) stop between Deflate blocks once `getBytes` has enough,
+ * but finish a block once begun, and one block can inflate to gigabytes. Every stage grows its
+ * buffer only through `ensureBuffer`, and holds the stage it reads from in `stream`, so refusing
+ * growth past a shared budget bounds the whole chain.
+ */
+function boundedDecode(raw: PDFRawStream) {
+  const decoder = decodePDFRawStream(raw);
+  const stages: Stage[] = [];
+  for (
+    let stage = decoder as unknown as Partial<Stage>;
+    typeof stage?.ensureBuffer === "function";
+    stage = stage.stream as Partial<Stage>
+  )
+    stages.push(stage as Stage);
+  for (const stage of stages) {
+    const grow = stage.ensureBuffer.bind(stage);
+    stage.ensureBuffer = (requested) => {
+      const held = stages.reduce((n, s) => n + s.buffer.byteLength, 0);
+      if (held - stage.buffer.byteLength + requested > DECODE_BUDGET) refuse("size");
+      return grow(requested);
+    };
+  }
+  return decoder;
 }
 
 async function digest(bytes: Uint8Array): Promise<string> {
