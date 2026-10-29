@@ -1,5 +1,5 @@
 import type { Database } from "@waitron/db";
-import { readNodeLocation } from "./till-config.js";
+import { readNodeLocation } from "./node-config.js";
 import { AppError } from "@waitron/shared";
 import type { FirstSetupStore } from "@waitron/provisioning";
 import { assertOtherSetupAllowed } from "@waitron/provisioning";
@@ -23,16 +23,16 @@ export async function reconcileFirstSetupBeforeMode(
       result.venue === null ||
       !("nodeId" in result.venue) ||
       !("locationId" in result.venue) ||
-      config.till === undefined ||
-      config.till.nodeId !== result.venue.nodeId ||
-      (await readNodeLocation(db, config.till.nodeId)) !== result.venue.locationId
+      config.node === undefined ||
+      config.node.nodeId !== result.venue.nodeId ||
+      (await readNodeLocation(db, config.node.nodeId)) !== result.venue.locationId
     )
       throw new AppError("setup.attempt_uncertain", {});
     return;
   }
   if (["activation-started", "committed", "publication", "complete"].includes(pair.state.status)) {
-    config.till = undefined;
+    config.node = undefined;
     return;
   }
-  if (config.till !== undefined) assertOtherSetupAllowed(pair.state);
+  if (config.node !== undefined) assertOtherSetupAllowed(pair.state);
 }

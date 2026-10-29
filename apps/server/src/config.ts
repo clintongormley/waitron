@@ -5,8 +5,9 @@ import { AppError } from "@waitron/shared";
 import { DEFAULTS } from "@waitron/scheduler";
 import { resolveLitestreamBin } from "@waitron/stream/litestream.js";
 import { parseBoxAddresses } from "./box-reach.js";
-import { tryLoadTillConfig } from "./till-config.js";
-import type { TillIdentityConfig } from "./till-config.js";
+import { tryLoadNodeIdentity } from "./node-config.js";
+import type { NodeIdentityConfig } from "./node-config.js";
+import { loadTillAppSettings, type TillAppSettings } from "./till-config.js";
 import { isUnset } from "./env-value.js";
 import type { OnboardingIntent } from "./trading-config.js";
 import "./errors.js";
@@ -84,7 +85,8 @@ export interface ServerConfig {
   logMaxFiles: number;
   /** Operator-supplied PEM files, both or neither; they override the box leaf under `stateDir`. */
   tls?: { certFile: string; keyFile: string };
-  till?: TillIdentityConfig;
+  node?: NodeIdentityConfig;
+  tillApp: TillAppSettings;
   /** The WebAuthn Relying Party ID: a bare domain, no scheme or port. A passkey is only offered
    * back on the RP ID it was registered under. Defaults to `localhost`; REQUIRED in production. */
   managementRpId: string;
@@ -521,7 +523,8 @@ export function loadConfig(
     logMaxBytes: positiveInt(env, "WAITRON_LOG_MAX_BYTES", DEFAULT_LOG_MAX_BYTES),
     logMaxFiles: positiveInt(env, "WAITRON_LOG_MAX_FILES", DEFAULT_LOG_MAX_FILES),
     ...(tls === undefined ? {} : { tls }),
-    till: tryLoadTillConfig(env),
+    node: tryLoadNodeIdentity(env),
+    tillApp: loadTillAppSettings(env),
     managementRpId,
     managementOrigin,
     ...(hasGoogleId && hasGoogleSecret

@@ -15,8 +15,8 @@ const ROOT = "/opt/waitron/drizzle";
 // A distinct protected state root exposes accidental migrations-root or cwd fallback.
 const STATE_ROOT = "/opt/waitron/state";
 
-const EXPECTED_TILL = {
-  nodeId: TILL_ENV.WAITRON_NODE_ID,
+const EXPECTED_NODE = { nodeId: TILL_ENV.WAITRON_NODE_ID };
+const EXPECTED_TILL_APP = {
   locale: "es-ES",
   invoiceLocales: ["es-ES"],
   // No card fields: `toEqual` fails if one is materialised.
@@ -56,7 +56,8 @@ describe("loadConfig", () => {
       logMaxBytes: 10_000_000,
       logMaxFiles: 5,
       // `tls` is absent from the object, not present-but-undefined.
-      till: EXPECTED_TILL,
+      node: EXPECTED_NODE,
+      tillApp: EXPECTED_TILL_APP,
       managementRpId: "localhost",
       managementOrigin: "http://localhost:5191",
       advertisedOrigin: "http://localhost:5191",
@@ -98,18 +99,17 @@ describe("loadConfig", () => {
     expect(() => cfg({ ...MIN_ENV, WAITRON_HTTP_LANDING_PORT: "notaport" })).toThrow();
   });
 
-  it("populates config.till from the node identity environment settings", () => {
+  it("populates config.node from the node identity environment settings", () => {
     const config = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
-    expect(config.till).toEqual(EXPECTED_TILL);
+    expect(config.node).toEqual(EXPECTED_NODE);
   });
 
-  // Setup mode: an unprovisioned box has no till identity, and loading does not throw.
-  it("leaves config.till undefined when both identity settings are absent, else populates it", () => {
+  it("leaves config.node undefined when node identity is absent, else populates it", () => {
     const setup = loadConfig({}, ROOT, STATE_ROOT);
-    expect(setup.till).toBeUndefined();
+    expect(setup.node).toBeUndefined();
 
     const provisioned = loadConfig(MIN_ENV, ROOT, STATE_ROOT);
-    expect(provisioned.till).toEqual(EXPECTED_TILL);
+    expect(provisioned.node).toEqual(EXPECTED_NODE);
   });
 
   it("surfaces config.tls when BOTH cert and key files are set", () => {

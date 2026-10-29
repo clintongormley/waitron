@@ -17,7 +17,7 @@ import { createLogger } from "./logger.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { clearTradingEnv } from "./trading-config.js";
-import { tryLoadTillConfig } from "./till-config.js";
+import { tryLoadNodeIdentity } from "./node-config.js";
 import "./errors.js";
 
 type Env = NodeJS.ProcessEnv;
@@ -54,19 +54,19 @@ export async function runRejoin(deps: {
     return 1;
   };
 
-  let till: ReturnType<typeof tryLoadTillConfig>;
+  let node: ReturnType<typeof tryLoadNodeIdentity>;
   try {
-    till = tryLoadTillConfig(deps.env);
+    node = tryLoadNodeIdentity(deps.env);
   } catch (err) {
     return reportCode((err as AppError).code);
   }
-  if (till === undefined) {
+  if (node === undefined) {
     deps.out(
       "WAITRON_NODE_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
     );
     return 1;
   }
-  const cfg = till;
+  const cfg = node;
 
   // Validated, not kept: an unreadable or wrong `WAITRON_ENV` must refuse before the wipe, even though
   // nothing on this path now needs the value itself.

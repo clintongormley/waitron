@@ -13,7 +13,7 @@ export interface MirrorConnection {
   boxHostname: string;
   boxCaPem: string;
   // The nodeId of the PRIMARY this mirror was adopted from — its ORIGIN, distinct from this node's
-  // OWN identity (`config.till.nodeId`). See the schema doc on `origin_node_id`.
+  // OWN identity (`config.node.nodeId`). See the schema doc on `origin_node_id`.
   originNodeId: string;
 }
 

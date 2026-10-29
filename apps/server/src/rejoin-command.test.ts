@@ -116,7 +116,7 @@ describe("waitron-rejoin rejoin", () => {
   it("reports a malformed node by code and returns 1", async () => {
     const { code, out } = await run({ WAITRON_NODE_ID: "bad" });
     expect(code).toBe(1);
-    expect(out.join("\n")).toContain("server.till_config_invalid");
+    expect(out.join("\n")).toContain("server.node_config_invalid");
   });
 
   it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {

@@ -1,4 +1,4 @@
-import { readNodeLocation } from "./till-config.js";
+import { readNodeLocation } from "./node-config.js";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";

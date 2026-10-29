@@ -46,7 +46,8 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
-import { loadTillConfig, readNodeLocation } from "./till-config.js";
+import { loadTillAppSettings } from "./till-config.js";
+import { loadNodeIdentity, readNodeLocation } from "./node-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -571,8 +572,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       expect(deviceRows.rows[0]!.n).toBe(0);
 
       const cfg: TillConfig = {
-        ...loadTillConfig(trading),
-        locationId: (await readNodeLocation(venue.store.venue, loadTillConfig(trading).nodeId))!,
+        ...loadNodeIdentity(trading),
+        ...loadTillAppSettings(trading),
+        locationId: (await readNodeLocation(venue.store.venue, loadNodeIdentity(trading).nodeId))!,
         simplifiedInvoiceLimit: null,
       };
       const [profile] = await venue.store.venue

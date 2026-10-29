@@ -5,7 +5,7 @@ import { seedTenant } from "@waitron/db/testing/seed.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { nodeId as brandNodeId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
-import { readFilingModule } from "./till-config.js";
+import { readFilingModule } from "./node-config.js";
 
 const suite = useVenueDb({
   resetPerTest: false,

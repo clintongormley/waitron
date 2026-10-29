@@ -287,9 +287,9 @@ describe("devSetup against a real venue directory", () => {
     expect(config.environment).toBe("preproduction");
     expect(config.httpPort).toBe(8080);
     expect(config.venueDir).toBe(venueDir);
-    expect(config.till).toBeDefined();
-    expect(config.till).not.toHaveProperty("seriesId");
-    expect(config.till).not.toHaveProperty("locationId");
+    expect(config.node).toBeDefined();
+    expect(config.node).not.toHaveProperty("seriesId");
+    expect(config.node).not.toHaveProperty("locationId");
     const ring = loadKeyRing(written);
     expect(ring.current.key).toHaveLength(32);
     expect(ring.current.version).toBe(1);
