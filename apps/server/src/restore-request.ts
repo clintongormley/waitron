@@ -63,7 +63,9 @@ const KEY = "restore-request.key";
 const STREAM_DB = "restore-request.db";
 const STREAM_ENTRIES = "restore-request.entries";
 const STREAM_PLACEMENT = "restore-request.placement.db";
-const MARKER = "restore-request.json";
+/** The staged restore request the next start carries out. */
+export const RESTORE_REQUEST_FILE = "restore-request.json";
+const MARKER = RESTORE_REQUEST_FILE;
 const SETUP_OPERATION = "setup-operation.json";
 const NODE_KEY = "restore-request.node-key";
 const MAX_NODE_KEY_BYTES = 4096;

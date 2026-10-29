@@ -11,7 +11,9 @@ import { writeFileAtomic } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 
-const MARKER = "reset-request.json";
+/** The staged reset request the next start carries out. */
+export const RESET_REQUEST_FILE = "reset-request.json";
+const MARKER = RESET_REQUEST_FILE;
 
 export interface StagedResetDeps {
   stateDir: string;

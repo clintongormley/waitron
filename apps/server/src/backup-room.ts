@@ -191,7 +191,7 @@ export interface MakeRoomOptions {
   signal: AbortSignal;
   log: Logger;
   /** Logged with each deletion. */
-  reason: "backup_room" | "space_low";
+  reason: "backup_room" | "space_low" | "start_room";
   /** What to delete toward when free space plus every deletable archive falls short of the aim:
    * the floor (a backup run), or the aim anyway, which deletes every deletable archive (the
    * free-space watch, whose every deletion is room the tills can use). */
