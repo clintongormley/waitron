@@ -23,12 +23,11 @@ import {
 } from "./backup-room-note.js";
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
-import type { Statfs } from "./free-bytes.js";
+import { freeBytes, type Statfs } from "./free-bytes.js";
 import { failedAtFolderSync, writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { RESET_REQUEST_FILE } from "./reset-request.js";
 import { RESTORE_REQUEST_FILE } from "./restore-request.js";
-import { lowestFreeBytes } from "./start-space.js";
 
 export interface StartBackupRoomDeps {
   stateDir: string;
@@ -54,13 +53,14 @@ export interface StartBackupRoomDeps {
 const NEVER_ABORTED = new AbortController().signal;
 
 /**
- * Under {@link FULL_DISK_BYTES} free, deletes old backups by §1's rules (design A1167) without
- * opening the venue database, trusting the installation start the backup room note holds. With no
- * note it returns before taking the venue lock or loading the box env. Each refusal is logged once
+ * Under {@link FULL_DISK_BYTES} free on the venue folder's disk, the one deleting frees, deletes
+ * old backups by §1's rules (design A1167) without opening the venue database, trusting the
+ * installation start the backup room note holds. With no note it returns before taking the venue
+ * lock or loading the box env. Each refusal is logged once
  * `backup.start_room_skipped` with its `reason`. Nothing is thrown.
  */
 export async function deleteOldBackupsAtStart(deps: StartBackupRoomDeps): Promise<void> {
-  const free = await lowestFreeBytes([deps.stateDir, deps.venueDir], deps.statfs);
+  const free = await freeBytes(deps.venueDir, deps.statfs);
   if (free === null || free >= FULL_DISK_BYTES) return;
   if (!(await present(join(deps.stateDir, BACKUP_ROOM_NOTE_FILE)))) return;
   const skip = (reason: string) => deps.log("warn", "backup.start_room_skipped", { reason });

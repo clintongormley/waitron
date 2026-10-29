@@ -3342,8 +3342,8 @@ copy needs. Within the server, three paths delete it, all through `releaseSpare`
 **Old backups go before the spare.** Just before the start's release, `runEntry` calls
 `deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`, called at
 `apps/server/src/node-entry.ts:375`, the release at `:389`), except at a backup recovery's repair
-or selected stage. It does anything only under `FULL_DISK_BYTES` (16 MiB) free and only with a
-backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
+or selected stage. It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
+folder's disk, the one its deletions free, and only with a backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
 deletes old backups toward the start's floor (256 MiB) when the deletable ones reach it, otherwise
 toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
 release then reads free space again, so a step that made room releases nothing.
@@ -4694,7 +4694,8 @@ meanwhile leaves no note.
 - `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files.
 
 **What the start checks** (`deleteOldBackupsAtStart`, `apps/server/src/start-backup-room.ts`).
-Nothing at all at 16 MiB free or more, or with no note file (so no lock and no env read). Then it
+Nothing at all at 16 MiB free or more on the venue folder's disk (a full state folder on another
+disk is not one deleting could help), or with no note file (so no lock and no env read). Then it
 takes the venue lock, or, when that fails other than in use, goes on without it unless the holder
 file is fresh. It deletes nothing unless the note is a regular file of at most 64 KiB that parses,
 names the box env's node id, and matches `venue.db`'s device number, file number and birth time; no

@@ -79,7 +79,8 @@ is its watch-side caller. This branch is rebased on it.
    (`apps/server/src/node-entry.ts`) after `freeSpaceAtStart` and before `releaseSpareToStart`, only
    when `backupEntry.kind` is neither `repair` nor `selected` and the lowest free space of the state
    and venue folders is under `FULL_DISK_BYTES` (the only region where `releaseSpareToStart` can
-   release). `runEntry` has not loaded the box env at that point, so the step loads it itself:
+   release). (2026-10-29, review: the step reads the venue folder's free space alone, because `makeRoom`
+   frees only that disk; a full state folder on another disk deleted backups to no effect.) `runEntry` has not loaded the box env at that point, so the step loads it itself:
    `merged = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir)` (`EntryDeps.loadBoxEnv` is required,
    `node-entry.ts:102`), loaded after step 1, so a start with no note never reads the env files. Order:
    1. If no note file exists, return (cheap first check, so a box without a note never takes the

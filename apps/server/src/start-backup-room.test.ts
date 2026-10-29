@@ -283,6 +283,24 @@ describe("deleteOldBackupsAtStart", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("does nothing when only the state folder's disk is full: deleting frees only the venue folder's", async () => {
+    await note();
+    await archive(usb, days(1), 200);
+    await archive(usb, days(2), 15);
+    const statfs = vi.fn(async (path: string) => ({
+      bavail: path === stateDir ? 0 : 100 * MIB,
+      frsize: 1,
+    }));
+    const { deps, log, lockVenue, loadBoxEnv } = setup({ statfs });
+
+    await deleteOldBackupsAtStart(deps);
+
+    expect((await readdir(usb)).length).toBe(2);
+    expect(lockVenue).not.toHaveBeenCalled();
+    expect(loadBoxEnv).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+  });
+
   it("does nothing when free space cannot be read", async () => {
     await note();
     await archive(usb, days(1), 15);
