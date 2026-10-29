@@ -288,12 +288,22 @@ const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
   ["no failure recorded", { now: READABLE, failures: [] }, false],
   [
     "a clean load after the last failure",
-    { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z" },
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z", latestLoadFailed: false },
     false,
   ],
   [
     "a failure after the last clean load",
-    { now: READABLE, lastCleanLoadAt: "2026-10-29T09:30:00.000Z" },
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T09:30:00.000Z", latestLoadFailed: true },
+    true,
+  ],
+  [
+    "a clean load after the last failure, stamped before it by a clock that moved back",
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T09:30:00.000Z", latestLoadFailed: false },
+    false,
+  ],
+  [
+    "a failure after the last clean load, stamped before it by a clock that moved back",
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z", latestLoadFailed: true },
     true,
   ],
   [

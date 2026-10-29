@@ -1513,7 +1513,7 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
 describe("BackupSupervisor keeps each settings load failure's safe facts", () => {
   type Load = Awaited<ReturnType<BackupSupervisorDeps["buildConfig"]>>;
 
-  function supervisorLoading(next: () => Promise<Load>) {
+  function supervisorLoading(next: () => Promise<Load>, at?: () => Date) {
     let clock = Date.parse("2026-10-29T10:00:00.000Z");
     const logs: { level: string; event: string; fields: unknown }[] = [];
     const sup = new BackupSupervisor({
@@ -1527,7 +1527,7 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
       jitterSeed: "seed",
       readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
       log: (level, event, fields) => logs.push({ level, event, fields }),
-      now: () => new Date((clock += 1000)),
+      now: at ?? (() => new Date((clock += 1000))),
     });
     return { sup, logs };
   }
@@ -1540,7 +1540,11 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
 
   it("starts with no failures and no clean load", () => {
     const { sup } = supervisorLoading(async () => undefined);
-    expect(sup.loadHistory()).toEqual({ failures: [], lastCleanLoadAt: null });
+    expect(sup.loadHistory()).toEqual({
+      failures: [],
+      lastCleanLoadAt: null,
+      latestLoadFailed: false,
+    });
   });
 
   it("keeps the five newest failures, newest first, timed by its clock", async () => {
@@ -1599,8 +1603,40 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
     expect(sup.loadHistory()).toEqual({
       failures: [expect.objectContaining({ detail: { keyVersion: 1 } })],
       lastCleanLoadAt: "2026-10-29T10:00:02.000Z",
+      latestLoadFailed: false,
     });
     expect(sup.current().loadErrorCode).toBeNull();
+  });
+
+  it("says whether the latest load failed by the order of the loads, not by their times", async () => {
+    let load: Load = failure(1);
+    const times = [
+      "2026-10-29T10:30:00.000Z",
+      "2026-10-29T09:00:00.000Z",
+      "2026-10-29T08:00:00.000Z",
+    ];
+    const { sup } = supervisorLoading(
+      async () => load,
+      () => new Date(times.shift()!),
+    );
+    await sup.reload();
+    expect(sup.loadHistory().latestLoadFailed).toBe(true);
+
+    load = undefined;
+    await sup.reload();
+    expect(sup.loadHistory()).toMatchObject({
+      failures: [{ at: "2026-10-29T10:30:00.000Z" }],
+      lastCleanLoadAt: "2026-10-29T09:00:00.000Z",
+      latestLoadFailed: false,
+    });
+
+    load = failure(2);
+    await sup.reload();
+    expect(sup.loadHistory()).toMatchObject({
+      failures: [{ at: "2026-10-29T08:00:00.000Z" }, { at: "2026-10-29T10:30:00.000Z" }],
+      lastCleanLoadAt: "2026-10-29T09:00:00.000Z",
+      latestLoadFailed: true,
+    });
   });
 
   it("answers a copy the caller cannot change the history through", async () => {
@@ -1631,6 +1667,10 @@ describe("BackupSupervisor keeps each settings load failure's safe facts", () =>
     await sup.stop();
     release();
     await reloading;
-    expect(sup.loadHistory()).toEqual({ failures: [], lastCleanLoadAt: null });
+    expect(sup.loadHistory()).toEqual({
+      failures: [],
+      lastCleanLoadAt: null,
+      latestLoadFailed: false,
+    });
   });
 });

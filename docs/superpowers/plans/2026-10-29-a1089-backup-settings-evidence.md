@@ -92,7 +92,7 @@ new code is needed (none expected).
    call `supervisor.status()` or `readStream()`. The status route's answers stay byte-identical
    (its existing cases pass unedited).
 2. `readSettingsEvidence(deps)` answers:
-   `{ readAt, managedByEnvironment, failures, lastCleanLoadAt, record: null | { keyVersion,
+   `{ readAt, managedByEnvironment, failures, lastCleanLoadAt, latestLoadFailed, record: null | { keyVersion,
    writtenAt, digest }, rewrittenSinceLastFailure, boxKeyNumbers: { current, previous? }, now:
    { state: "absent" } | { state: "unreadable", code, detail } | { state: "readable",
    destinations: EvidenceDestination[] }, recoveryKey: { held, tooShort, fingerprint? } }`.

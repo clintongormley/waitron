@@ -119,6 +119,9 @@ type SweepRecords = Map<string, SweepRecord>;
 export interface BackupLoadHistory {
   failures: Readonly<LoadFailure>[];
   lastCleanLoadAt: string | null;
+  /** Whether the latest load this history records failed, by the order of the loads, not their
+   * times. */
+  latestLoadFailed: boolean;
 }
 
 const KEPT_LOAD_FAILURES = 5;
@@ -403,7 +406,11 @@ export class BackupSupervisor {
 
   /** A copy: its entries are frozen and the list is new on every call. */
   loadHistory(): BackupLoadHistory {
-    return { failures: [...this.#loadFailures], lastCleanLoadAt: this.#lastCleanLoadAt };
+    return {
+      failures: [...this.#loadFailures],
+      lastCleanLoadAt: this.#lastCleanLoadAt,
+      latestLoadFailed: this.#loadErrorCode !== null,
+    };
   }
 
   /** `current()` plus the async per-destination freshness read and the derived `archiveUnderCurrentKey`. */

@@ -291,6 +291,7 @@ describe("GET /api/backup/settings-evidence", () => {
         },
       ],
       lastCleanLoadAt: null,
+      latestLoadFailed: true,
       record: { keyVersion: 1, writtenAt: meta!.writtenAt, digest: meta!.digest },
       rewrittenSinceLastFailure: false,
       boxKeyNumbers: { current: 3, previous: 2 },
@@ -441,6 +442,7 @@ describe("GET /api/backup/settings-evidence", () => {
     expect(body).toMatchObject({
       failures: [],
       lastCleanLoadAt: "2026-10-29T09:00:00.000Z",
+      latestLoadFailed: false,
       rewrittenSinceLastFailure: false,
       now: { state: "readable", destinations: [{ kind: "folder", dir: folder, look: "folder" }] },
       recoveryKey: { held: true, tooShort: false, fingerprint: keyFingerprint(KEY_1) },

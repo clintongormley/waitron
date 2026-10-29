@@ -145,6 +145,7 @@ export interface SettingsEvidence {
   managedByEnvironment: boolean;
   failures: Readonly<LoadFailure>[];
   lastCleanLoadAt: string | null;
+  latestLoadFailed: boolean;
   record: ArchiveRecordMeta | null;
   /** The record now is not the one the newest failure read. */
   rewrittenSinceLastFailure: boolean;
@@ -218,7 +219,7 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
   // Taken before the record is read, so a record written meanwhile is newer than the history's
   // newest failure, never older.
   const loaded = deps.current();
-  const { failures, lastCleanLoadAt } = deps.loadHistory();
+  const { failures, lastCleanLoadAt, latestLoadFailed } = deps.loadHistory();
   let record: ArchiveRecordMeta | null;
   let settings: ArchiveSettings | null = null;
   let unreadable: RecordNow | undefined;
@@ -251,6 +252,7 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
     managedByEnvironment: loaded.managedByEnvironment,
     failures,
     lastCleanLoadAt,
+    latestLoadFailed,
     record,
     rewrittenSinceLastFailure:
       newest !== undefined && (record?.digest ?? null) !== newest.recordDigest,

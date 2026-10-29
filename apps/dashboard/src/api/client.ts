@@ -1982,6 +1982,9 @@ export interface BackupSettingsEvidence {
   /** Newest first. */
   failures: BackupLoadFailure[];
   lastCleanLoadAt: string | null;
+  /** By the order the box recorded its loads in, not by comparing `lastCleanLoadAt` with a
+   * failure's `at`: the box clock can move backwards. */
+  latestLoadFailed: boolean;
   record: { keyVersion: number; writtenAt: string; digest: string } | null;
   /** Also true when the record that failed has been deleted since (`record` is null). */
   rewrittenSinceLastFailure: boolean;

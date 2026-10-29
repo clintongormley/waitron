@@ -57,14 +57,6 @@ const NAMED_CAUSES = new Set([
 // fails the same way until the variable itself is changed.
 const EVERY_LOAD = new Set(["server.config_invalid"]);
 
-function failedSinceCleanLoad(e: BackupSettingsEvidence): boolean {
-  const newest = e.failures[0];
-  return (
-    newest !== undefined &&
-    (e.lastCleanLoadAt === null || Date.parse(newest.at) > Date.parse(e.lastCleanLoadAt))
-  );
-}
-
 const when = (iso: string) => new Date(iso).toLocaleString(currentLocale());
 
 function cause(
@@ -368,8 +360,9 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         e.now.state === "readable" &&
         usableKey &&
         !e.managedByEnvironment &&
-        failedSinceCleanLoad(e) &&
-        !EVERY_LOAD.has(e.failures[0]!.code)
+        e.latestLoadFailed &&
+        e.failures[0] !== undefined &&
+        !EVERY_LOAD.has(e.failures[0].code)
           ? html`<p data-test="reads-now">${t("backup_evidence.reads_now")}</p>`
           : nothing
       }

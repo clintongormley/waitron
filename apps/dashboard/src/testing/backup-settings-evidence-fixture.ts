@@ -25,6 +25,7 @@ export function evidence(overrides: Partial<BackupSettingsEvidence> = {}): Backu
     managedByEnvironment: false,
     failures: [failure()],
     lastCleanLoadAt: null,
+    latestLoadFailed: true,
     record: { keyVersion: 2, writtenAt: "2026-10-29T09:00:00.000Z", digest: "digest-a" },
     rewrittenSinceLastFailure: false,
     boxKeyNumbers: { current: 2 },

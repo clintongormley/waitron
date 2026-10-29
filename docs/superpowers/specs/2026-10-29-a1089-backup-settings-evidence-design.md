@@ -161,6 +161,8 @@ panel: the dashboard already returns to its sign-in screen for those
   dropped. `recordDigest` (`credentialRevision`'s value) and `recordWrittenAt` are read in the SAME
   transaction as the failing read, so they describe the record that failed, or are `null` when there
   was none. A clean load does not clear the list; it adds the time of the last clean load.
+  `latestLoadFailed` says whether the latest load the supervisor recorded failed, by the order
+  of the loads: the box clock can move backwards, so the times are never compared to decide it.
 - **The log line** `backup.archive_settings_unusable` gains the same `detail`.
 - **New read route** `GET /api/backup/settings-evidence`, `system.manage`, authorised exactly as
   `GET /api/backup/status` is (the session's last-seen time is stamped, as for any action a person
