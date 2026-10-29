@@ -1735,7 +1735,7 @@ export const en = {
   "backup_evidence.cause.decrypt_failed":
     "The saved settings carry this box's key number {n}, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which.",
   "backup_evidence.cause.decrypt_failed_plain":
-    "The saved settings carry a key number this box holds, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which.",
+    "The settings it read carried a key number this box held, but the box's key of that number did not open them. Either that key was replaced, or that record was changed or came from another box; Waitron cannot tell which.",
   "backup_evidence.cause.malformed":
     "The saved record opened but its contents are not backup settings.",
   "backup_evidence.cause.settings_invalid":
@@ -5369,7 +5369,7 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.cause.decrypt_failed":
     "Los ajustes guardados llevan la clave número {n} de esta caja, pero la clave de ese número que tiene esta caja no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otra caja; Waitron no puede saber cuál.",
   "backup_evidence.cause.decrypt_failed_plain":
-    "Los ajustes guardados llevan un número de clave que esta caja tiene, pero la clave de ese número que tiene esta caja no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otra caja; Waitron no puede saber cuál.",
+    "Los ajustes que leyó llevaban un número de clave que esta caja tenía, pero la clave de ese número que tenía la caja no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otra caja; Waitron no puede saber cuál.",
   "backup_evidence.cause.malformed":
     "El registro guardado se abrió, pero su contenido no son ajustes de copias de seguridad.",
   "backup_evidence.cause.settings_invalid":
