@@ -10,25 +10,8 @@ import {
   type EscSetting,
 } from "@waitron/printing";
 import type { SupportedLocale } from "@waitron/shared";
+import { CALIBRATION_PAGE_WORDS } from "./i18n/test-page.js";
 import { qrModules } from "./qr-matrix.js";
-
-interface Captions {
-  widthQuestion: string;
-  qrQuestion: string;
-}
-
-const CAPTIONS: Readonly<Record<SupportedLocale, Captions>> = {
-  "es-ES": {
-    widthQuestion: "¿Cuál es el último número de la regla que se ve entero?",
-    qrQuestion:
-      "Mida con una regla el cuadrado negro del QR. Ignore el borde blanco. ¿Mide más cerca de 40 mm o de 45 mm? No hace falta escanear el código.",
-  },
-  "en-GB": {
-    widthQuestion: "Which is the last number on the ruler that you can see in full?",
-    qrQuestion:
-      "Measure the black square of the QR with a ruler. Ignore the white border. Is it closer to 40 mm or 45 mm? No need to scan the code.",
-  },
-};
 
 /** The narrowest paper's setting: every caption is drawn to it, so it fits any roll. */
 const CAPTION_SETTING: EscSetting = { paperWidth: "58mm", resolution: "180dpi" };
@@ -88,7 +71,7 @@ function rulerRows(): Uint8Array {
 const RULER_ROWS = rulerRows();
 
 export function formatTestPage({ locale }: { locale: SupportedLocale }): Uint8Array {
-  const c = CAPTIONS[locale];
+  const c = CALIBRATION_PAGE_WORDS[locale];
   const { columns } = textGrid(CAPTION_SETTING.paperWidth, CAPTION_SETTING.resolution);
   const b = esc(CAPTION_SETTING).init().printArea(RULER_WIDTH);
   const caption = (text: string): void => {
