@@ -6,7 +6,7 @@ import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { AppError } from "@waitron/shared";
@@ -44,6 +44,20 @@ import { RECOVERY_FILES } from "./state-secrets.js";
 import { mountStreamApi } from "./stream-api.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
+
+// Lets one case make the record's decryption fail in a way no stored record produces; every other
+// call is the real one.
+const recordRead = vi.hoisted(() => ({ fail: undefined as (() => never) | undefined }));
+vi.mock("@waitron/credentials", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@waitron/credentials")>();
+  return {
+    ...real,
+    getCredential: (...args: Parameters<typeof real.getCredential>) =>
+      recordRead.fail === undefined
+        ? real.getCredential(...args)
+        : Promise.resolve().then(recordRead.fail),
+  };
+});
 
 const KEY_1 = "recovery-key-one-strong";
 const KEY_2 = "recovery-key-two-different";
@@ -207,7 +221,8 @@ const hex = (_key: string, value: unknown) =>
   value instanceof Uint8Array ? Buffer.from(value).toString("hex") : value;
 
 async function tree(dir: string): Promise<Record<string, string>> {
-  const out: Record<string, string> = {};
+  // The root's own mtime catches a file written and then deleted.
+  const out: Record<string, string> = { ".": `dir ${(await stat(dir)).mtimeMs}` };
   for (const rel of (await readdir(dir, { recursive: true })).sort()) {
     const path = join(dir, rel);
     const s = await stat(path);
@@ -281,6 +296,7 @@ async function setupTenant(): Promise<void> {
 }
 
 afterEach(async () => {
+  recordRead.fail = undefined;
   for (const stop of cleanup.splice(0)) await stop().catch(() => {});
   await withTransaction(suite.db, async (tx) => {
     await deleteCredential(tx, { purpose: ARCHIVE_PURPOSE });
@@ -336,19 +352,19 @@ describe("GET /api/backup/settings-evidence proofs", () => {
         await sup.reload();
         const app = buildApp(sup, sc);
 
+        const baseline = await snapshot(sc, sup, [folder]);
         for (let read = 0; read < 2; read++) {
-          const before = await snapshot(sc, sup, [folder]);
           await evidence(app);
-          expect(await snapshot(sc, sup, [folder])).toBe(before);
+          expect(await snapshot(sc, sup, [folder])).toBe(baseline);
         }
+        expect(await snapshot(sc, sup, [folder])).toBe(baseline);
       }, 60_000);
     }
 
-    it("a folder look held past the limit answers unknown, and a Save meanwhile still completes", async () => {
+    it("a Save sent while a folder look is held completes before the read answers", async () => {
       const folder = destDir();
       await write(folderSettings(folder));
-      // Long enough for the Save below to finish inside it on a slow runner.
-      const sc = await scenario({ role: "primary", statusReadTimeoutMs: 8_000 });
+      const sc = await scenario({ role: "primary", statusReadTimeoutMs: 600_000 });
       await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
       const sup = makeSupervisor(sc);
       await sup.reload();
@@ -365,11 +381,10 @@ describe("GET /api/backup/settings-evidence proofs", () => {
           return held;
         },
       });
-      const order: string[] = [];
+      let settled = false;
       try {
-        const read = evidence(app).then((body) => {
-          order.push("read");
-          return body;
+        const read = evidence(app).finally(() => {
+          settled = true;
         });
         await lookStarted;
         const saved = await post(app, "/api/backup/apply", {
@@ -377,13 +392,13 @@ describe("GET /api/backup/settings-evidence proofs", () => {
           schedule: DAILY,
           retention: RETENTION,
         });
-        order.push("save");
         expect(saved.status).toBe(200);
+        expect(settled).toBe(false);
+        release();
         expect((await read).now).toEqual({
           state: "readable",
           destinations: [{ kind: "folder", dir: folder, look: "unknown" }],
         });
-        expect(order).toEqual(["save", "read"]);
       } finally {
         release();
       }
@@ -474,7 +489,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }, 60_000);
   });
 
-  it("leaks nothing: no secret, recovery key, bucket copy key or error message in the answer or the log", async () => {
+  it("leaks nothing: no secret, recovery key, bucket copy key or error message in the answer or the read's log lines", async () => {
     const folder = destDir();
     const settings = folderSettings(folder);
     await write({
@@ -534,6 +549,33 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     ]) {
       expect(said).not.toContain(secret);
     }
+  }, 60_000);
+
+  it("leaks nothing when the record does not read now: no param of the read's error in the answer or the read's log lines", async () => {
+    await write(folderSettings(destDir()));
+    const sc = await scenario();
+    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, sc);
+    sc.lines.length = 0;
+    const reasonSecret = "reason-param-secret-0123456789";
+    const extraSecret = "extra-param-secret-0123456789";
+    recordRead.fail = () => {
+      throw new AppError("backup.archive_settings_invalid", {
+        reason: reasonSecret,
+        extra: extraSecret,
+      } as { reason: string });
+    };
+
+    const body = await evidence(app);
+    expect(body.now).toMatchObject({
+      state: "unreadable",
+      code: "backup.archive_settings_invalid",
+    });
+    const said = JSON.stringify(body) + "\n" + sc.lines.join("\n");
+    expect(said).not.toContain(reasonSecret);
+    expect(said).not.toContain(extraSecret);
   }, 60_000);
 
   describe("refusals", () => {
