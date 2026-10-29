@@ -133,3 +133,15 @@ shared section IDs. No mockups or rendered UI qualification are claimed for this
 **A, recommended:** authorise a PLAN for read-only evidence inspection first; persistent repair stays OPEN.
 **B:** design the complete recovery/decision path before any build. This is substantial module/server/UI/auth
 integration, not a small wording repair. Both choices authorise planning only; building needs separate approval.
+
+## 2026-10-29: evidence-first decision and implementation plan
+
+The owner chose A at 01:58: plan read-only inspection of saved evidence first, leaving
+persistent repair open. The later 08:07 instruction authorises this read-only build after
+a fresh plan review, without another approval question. It permits sign-in, Read again
+and Stop; it authorises no certificate, setting, key, filing, fiscal-record or backup change.
+
+Follow the [integrity evidence implementation plan](../plans/2026-10-29-a1089-fiscal-integrity-evidence.md).
+The proposal above records the earlier scope question; these dated decisions supersede
+its pending-approval wording. Publishing this plan does not implement or qualify the screen.
+Persistent recovery, whole-chain auditing and fiscal decisions remain open.
