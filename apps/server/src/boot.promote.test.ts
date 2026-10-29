@@ -566,7 +566,92 @@ describe("a mirror's promote and the backup room note", () => {
       await rm(venueDir, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("restarts once and logs the failure when the note cannot be deleted after promoting", async () => {
+    const [venueDir, db] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db);
+    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-after-"));
+    const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+
+    await withCapturedStdout(async (lines) => {
+      const server = await startServer({
+        ...KEY_ENV,
+        ...TICK_ENV,
+        WAITRON_TILL_NODE_ID: seed.nodeId,
+        WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+        WAITRON_VENUE_DIR: venueDir,
+        WAITRON_HTTP_PORT: String(port),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_STATE_DIR: stateDir,
+      }).catch(async (err: unknown) => {
+        await rm(stateDir, { recursive: true, force: true });
+        await rm(venueDir, { recursive: true, force: true });
+        throw err;
+      });
+
+      const killSpy = vi.spyOn(process, "kill").mockImplementation(() => true);
+      try {
+        const request = seed.fixture.request("promote");
+        const promote = () =>
+          server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, (context, consume) => {
+            // Something at the note's path that no unlink removes, appearing once promotion began.
+            mkdirSync(note);
+            return withPromotionModuleOperation(
+              {
+                db: context.db,
+                nodeId: seed.nodeId,
+                credentialKeyRing: TOTP_KEY_RING,
+                modules: ALL_MODULES,
+              },
+              { binding: request.binding, input: request.input },
+              { breakGlass: secret },
+              (runner) => runner(context, consume),
+            );
+          });
+
+        expect((await promote()).alreadyPrimary).toBe(false);
+        expect(await readDeploymentMode(db, seed.nodeId)).toBe("primary");
+        await delay(50);
+        expect(killSpy.mock.calls).toEqual([[process.pid, "SIGTERM"]]);
+        const failures = lines
+          .filter((line) => line.startsWith("{"))
+          .map((line) => JSON.parse(line) as { event: string; errno?: unknown })
+          .filter((entry) => entry.event === "backup.room_note_delete_failed");
+        expect(failures).toEqual([
+          expect.objectContaining({ errno: expect.stringMatching(/^(EISDIR|EPERM)$/) }),
+        ]);
+      } finally {
+        await server.close();
+        // A promotion that went through schedules its restart signal on a later tick.
+        await delay(50);
+        killSpy.mockRestore();
+        vi.unstubAllEnvs();
+        await rm(stateDir, { recursive: true, force: true });
+        await rm(venueDir, { recursive: true, force: true });
+      }
+    });
+  }, 60_000);
 });
+
+/** `boot.ts` logs to `process.stdout.write`; every chunk is still forwarded to the real writer. */
+async function withCapturedStdout<T>(fn: (lines: string[]) => Promise<T>): Promise<T> {
+  const original = process.stdout.write.bind(process.stdout);
+  const lines: string[] = [];
+  process.stdout.write = ((chunk: unknown, ...rest: unknown[]) => {
+    lines.push(...String(chunk).split("\n").filter(Boolean));
+    return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
+  }) as typeof process.stdout.write;
+  try {
+    return await fn(lines);
+  } finally {
+    process.stdout.write = original;
+  }
+}
 
 vi.mock("./modules.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./modules.js")>();

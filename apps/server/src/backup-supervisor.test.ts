@@ -7,6 +7,7 @@ import {
   readFile,
   readdir,
   realpath,
+  rename,
   rm,
   stat,
   truncate,
@@ -1419,4 +1420,69 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     await reloading;
     expect(existsSync(notePath(stateDir))).toBe(false);
   });
+
+  it("a stop() while the note's folders are being judged writes no note at all", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const reached = new Promise<void>((r) => (entered = r));
+    const renames: string[] = [];
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir, {
+      deviceOf: async (path) => {
+        entered();
+        await released;
+        return (await stat(path)).dev;
+      },
+      renameNote: async (from, to) => {
+        renames.push(to);
+        await rename(from, to);
+      },
+    });
+    const reloading = sup.reload();
+    await reached;
+    await sup.stop();
+    release();
+    await reloading;
+    expect(renames).toEqual([]);
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  }, 60_000);
+
+  it("a stop() while the note is being written deletes it once written", async () => {
+    let renamed = false;
+    let release!: () => void;
+    let entered!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const reached = new Promise<void>((r) => (entered = r));
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir, {
+      renameNote: async (from, to) => {
+        entered();
+        await released;
+        await rename(from, to);
+        renamed = true;
+      },
+    });
+    const reloading = sup.reload();
+    await reached;
+    await sup.stop();
+    release();
+    await reloading;
+    expect(renamed).toBe(true);
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  }, 60_000);
 });

@@ -161,6 +161,8 @@ export interface BackupSupervisorDeps {
   nodeId?: string;
   /** DI for tests; decides which folders the note names as on the venue's disk. */
   deviceOf?: DeviceOf;
+  /** DI for tests; moves the written note into place. */
+  renameNote?: (from: string, to: string) => Promise<void>;
 }
 
 /** The size of the venue database file, without its write-ahead file; a missing file counts as
@@ -204,7 +206,8 @@ export class BackupSupervisor {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
-      // Every reload clears it first, so a reload that throws or leaves backups off leaves none.
+      // Every reload clears it first, so a reload that throws or leaves backups off leaves none
+      // unless the deletion itself fails, which is logged.
       await this.#deleteNote();
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
@@ -328,6 +331,7 @@ export class BackupSupervisor {
       folders,
       now: () => this.#now(),
       log: this.#deps.log,
+      rename: this.#deps.renameNote,
     });
     if (this.#stopped) await this.#deleteNote();
   }

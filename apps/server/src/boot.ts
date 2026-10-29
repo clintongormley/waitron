@@ -2725,9 +2725,7 @@ async function bootServer(
     nodeId: till.nodeId,
   };
 
-  // The note vouches for the installation start before promotion; a start that trusted it would
-  // judge this installation's backups by the old one. A note that cannot be deleted refuses the
-  // promotion, or, once promoted, the restart.
+  // A note that cannot be deleted refuses the promotion.
   const deleteNoteForPromotion = async (): Promise<void> => {
     try {
       await deleteBackupRoomNote(config.stateDir);
@@ -2762,10 +2760,19 @@ async function bootServer(
       attestation,
     );
     if (!result.alreadyPrimary) {
-      // A backup reload during the promotion may have written the note again.
-      await deleteNoteForPromotion();
-      // On the NEXT tick, so the in-process caller's result is returned first.
-      setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+      try {
+        // A backup reload during the promotion may have written the note again. Once stopped, a
+        // reload still running deletes any note it writes after this, or logs why it could not
+        // (`BackupSupervisor`'s `#writeNote`). A re-run would answer already primary and never
+        // restart, so a failed deletion here is logged and the restart goes ahead.
+        await backupSupervisor.stop();
+        await deleteBackupRoomNote(config.stateDir).catch((error: unknown) =>
+          log("error", "backup.room_note_delete_failed", { errno: errnoOf(error) ?? null }),
+        );
+      } finally {
+        // On the NEXT tick, so the in-process caller's result is returned first.
+        setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
+      }
     }
     return result;
   };

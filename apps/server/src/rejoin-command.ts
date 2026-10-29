@@ -11,6 +11,7 @@ import { AppError, isAppError } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { DEFAULT_STATE_ROOT } from "./boot.js";
 import { deploymentEnvironment, resolveConfigDir } from "./config.js";
+import { deleteBackupRoomNote } from "./backup-room-note.js";
 import { wipeVenueDatabases } from "./db-wipe.js";
 import { createLogger } from "./logger.js";
 import { rejoinAsSecondary, type RejoinDeps, type RejoinResult } from "./rejoin.js";
@@ -130,6 +131,8 @@ export async function runRejoin(deps: {
           closed = true;
         }),
       wipeDatabase: async () => {
+        // Before the marker goes, so a note that cannot be deleted leaves the marker in place.
+        await deleteBackupRoomNote(stateDir);
         await rm(join(stateDir, REBUILD_MARKER), { force: true });
         await wipeVenueDatabases(venueDir, stateDir);
         await migrate(venueDir);
