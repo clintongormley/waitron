@@ -297,7 +297,7 @@ it("hands local names to real module selection, refusing the minute one holds an
   });
   await expect(recoverySelectPastWaits(clock, service, { onBox: false })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   clock.set(Date.parse("2026-10-16T15:20:00Z"));
   expect(await recoverySelectPastWaits(clock, service, { onBox: false })).toMatchObject({

@@ -339,7 +339,7 @@ it("refuses a fresh recovery of the older backup whose settle wait would land on
   vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
+    params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
   });
   expect(await f.snapshot()).toEqual(committed);
   expect(committed.records).toEqual(f.original);

@@ -267,7 +267,7 @@ it("refuses a settle-target minute a surviving host already names, beside an old
   await withOperationAuthority(binding, operator, async (authority) => {
     await expect(
       f.preparation.select({ binding, authority, comparisonId: "comparison" }),
-    ).rejects.toMatchObject(refusal("minute_not_later"));
+    ).rejects.toMatchObject(refusal("minute_in_use"));
   });
   expect(f.state.history).toEqual([]);
 });

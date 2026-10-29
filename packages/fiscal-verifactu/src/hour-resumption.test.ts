@@ -230,7 +230,9 @@ it.each(["known-own-hour", "clock-rollback"])(
           },
         ],
       };
-    await expect(f.resume(selected.input)).rejects.toMatchObject(refused("minute_not_later"));
+    await expect(f.resume(selected.input)).rejects.toMatchObject(
+      refused(change === "clock-rollback" ? "minute_not_later" : "minute_in_use"),
+    );
     expect(f.history).toHaveLength(2);
   },
 );

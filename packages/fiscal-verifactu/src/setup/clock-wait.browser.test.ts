@@ -43,6 +43,33 @@ it.each([
   expect(target.textContent).toContain("A later minute is in use.");
 });
 
+it.each([
+  [Date.parse("2026-10-18T20:04:00Z"), " You can carry on from 20:04."],
+  [LAST_DATE_MS + 60_000, ""],
+])("a minute in use, allowed from %d, has its own words", (allowedFromMs, carryOn) => {
+  const read = clockProblem({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_in_use", allowedFromMs },
+  });
+  expect(read).toEqual(carryOn === "" ? { kind: "in-use" } : { kind: "in-use", allowedFromMs });
+  const target = document.createElement("div");
+  render(
+    renderClockProblem(
+      read,
+      { ...clockWaitStrings.en, secondClockDo: "", secondClockEnds: "", differDo: "" },
+      undefined,
+      "en",
+      "UTC",
+    ),
+    target,
+  );
+  expect(
+    target.querySelector("[data-test=minute-in-use]")?.textContent?.replace(/\s+/g, " ").trim(),
+  ).toBe(
+    `The series cannot be made yet: this box's records already hold a series for that minute.${carryOn}`,
+  );
+});
+
 it("builds each language, zone and style's formatter once", () => {
   const minute = { hour: "2-digit", minute: "2-digit", hourCycle: "h23" } as const;
   const first = dateTimeFormat("es", "Atlantic/Canary", minute);

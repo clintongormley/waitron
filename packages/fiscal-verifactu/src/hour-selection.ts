@@ -405,12 +405,11 @@ export function createHourSelection(options: {
         ],
       });
       if (history.contradictions.length > 0) return refuse("history_invalid");
-      if (
-        intent !== undefined &&
-        (history.usedMinutes.includes(decodeMinuteIdentity(intent.identity)) ||
-          now < Date.parse(intent.issuedAt))
-      )
-        return refuse("minute_not_later");
+      if (intent !== undefined) {
+        if (history.usedMinutes.includes(decodeMinuteIdentity(intent.identity)))
+          return refuse("minute_in_use");
+        if (now < Date.parse(intent.issuedAt)) return refuse("minute_not_later");
+      }
       const write = async (entry: Entry) => {
         authorize();
         await state.replace(
@@ -455,7 +454,7 @@ export function createHourSelection(options: {
       while (used.has((targetMs - EPOCH_MS) / MINUTE_MS)) targetMs += MINUTE_MS;
       if (targetMs >= END_MS) return refuse("minute_not_later");
       if (targetMs - now > WAIT_BOUND_MS && targetMs !== settleTarget)
-        return refuse("minute_not_later", targetMs);
+        return refuse("minute_in_use", targetMs);
       const waiting = (wait: Wait) => {
         const timerKey = JSON.stringify([fingerprint(wait), wait.targetMs]);
         const monotonic = options.monotonicNow();

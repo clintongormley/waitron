@@ -292,7 +292,7 @@ it("the hosted selector refuses a minute another node's revoked identity already
   const f = await fixture();
   await expect(selectThroughHost(f)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
 });
 

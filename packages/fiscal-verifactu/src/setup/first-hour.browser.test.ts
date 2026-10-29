@@ -520,6 +520,38 @@ it("a later minute in use names its time and does not count down", async () => {
     vi.useRealTimers();
   }
 });
+it("a minute in use names its time and does not count down", async () => {
+  const allowedFromMs = Date.parse("2026-10-18T20:04:00Z");
+  const { el, calls } = await mount({
+    select: async () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: { reason: "minute_in_use", allowedFromMs },
+      };
+    },
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(
+        el
+          .shadowRoot!.querySelector("[data-test=minute-in-use]")
+          ?.textContent?.replace(/\s+/g, " ")
+          .trim(),
+      ).toBe(
+        "The series cannot be made yet: this box's records already hold a series for that minute. You can carry on from 22:04.",
+      ),
+    );
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    vi.advanceTimersByTime(60_000);
+    await el.updateComplete;
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("ignores a late selection after the public context is replaced", async () => {
   let release!: (value: unknown) => void;
   const { el, calls, parent } = await mount({

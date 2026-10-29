@@ -90,7 +90,7 @@ it("retains the selected hour after a real hook transaction rolls back", async (
   vi.setSystemTime(new Date("2026-10-16T12:40:00Z"));
   await expect(f.nextEvent()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:43:00Z") },
+    params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-16T12:43:00Z") },
   });
   expect(f.journal()).toBe(retained);
 });

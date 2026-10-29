@@ -344,7 +344,7 @@ describe("refused", () => {
       ],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({
-      refused: "minute_not_later",
+      refused: "minute_in_use",
       allowedFromMs: "2026-10-23T19:03:00.000Z",
     });
   });
@@ -357,7 +357,7 @@ describe("refused", () => {
       records: [row("surviving-venue/live/invoice_series/2", "series", SPARE, SETTLED, null)],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({
-      refused: "minute_not_later",
+      refused: "minute_in_use",
       allowedFromMs: "2026-10-23T19:03:00.000Z",
     });
   });
@@ -379,7 +379,7 @@ describe("refused", () => {
       ],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({
-      refused: "minute_not_later",
+      refused: "minute_in_use",
       allowedFromMs: "2026-10-23T17:03:00.000Z",
     });
   });

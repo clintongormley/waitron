@@ -444,7 +444,7 @@ for (const kind of ["archive", "stream"] as const)
       vi.setSystemTime(new Date("2026-10-16T12:38:00Z"));
       await expect(f.nextEvent()).rejects.toMatchObject({
         code: "sif.allocation_invalid",
-        params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
+        params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-16T12:41:00Z") },
       });
       expect(f.journal()).toBe(journal);
       await f.freshStage();

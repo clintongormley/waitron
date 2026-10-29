@@ -487,7 +487,7 @@ it("preparation re-reads a name at its own minute before the real writer can run
       },
     ],
   };
-  await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("minute_not_later"));
+  await expect(f.activate(selected.input)).rejects.toMatchObject(refuse("minute_in_use"));
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
   expect(f.revisions).toHaveLength(2);
 });

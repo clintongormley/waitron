@@ -228,7 +228,7 @@ it("a pick is refused when a record naming its own minute appears after it", asy
     ...f.facts,
     history: [{ reference: "venue", complete: true, records: [historyRow("0CNNW")] }],
   };
-  await expect(f.run()).rejects.toMatchObject(refusal("minute_not_later"));
+  await expect(f.run()).rejects.toMatchObject(refusal("minute_in_use"));
 });
 const used = (...identities: string[]) =>
   identities.map((identity) => historyRow(identity, { reference: `used/${identity}` }));
@@ -239,7 +239,7 @@ it("a promotion whose current minute and the next two are in use is refused from
     history: [{ reference: "venue", complete: true, records: used("0CNNW", "0CNNX", "0CNNY") }],
   };
   await expect(f.run()).rejects.toMatchObject({
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
+    params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
   });
   expect(f.writes).toEqual([]);
 });
@@ -250,7 +250,7 @@ it("a setup whose settle-target minute is in use is refused from the minute afte
     history: [{ reference: "venue", complete: true, records: used("0CNNY") }],
   };
   await expect(f.run(setup)).rejects.toMatchObject({
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
+    params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
   });
   expect(f.writes).toEqual([]);
 });
@@ -797,7 +797,7 @@ it("waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms 
   withHistory(g, used);
   g.at(at("2026-10-23T19:55:30Z") - 1, 0);
   await expect(g.run()).rejects.toMatchObject({
-    params: { reason: "minute_not_later", allowedFromMs: at("2026-10-23T19:58:00Z") },
+    params: { reason: "minute_in_use", allowedFromMs: at("2026-10-23T19:58:00Z") },
   });
   expect(g.writes).toEqual([]);
 });

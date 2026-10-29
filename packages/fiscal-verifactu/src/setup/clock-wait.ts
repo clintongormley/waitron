@@ -4,7 +4,9 @@ import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait
 
 /** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
 export type ClockProblem =
-  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
+  | { kind: "second-clock" }
+  | { kind: "disagreement" }
+  | { kind: "later" | "in-use"; allowedFromMs?: number };
 
 export interface ClockWords {
   whyWait: string;
@@ -18,6 +20,7 @@ export interface ClockWords {
   differ: string;
   differDo: string;
   later: string;
+  inUse: string;
   laterFrom: (time: string) => string;
   laterFromDay: (date: string, time: string) => string;
 }
@@ -45,6 +48,8 @@ export const clockWaitStrings = {
     whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
+    inUse:
+      "The series cannot be made yet: this box's records already hold a series for that minute.",
     laterFrom: (time: string) => `You can carry on from ${time}.`,
     laterFromDay: (date: string, time: string) => `You can carry on from ${date}, ${time}.`,
   },
@@ -59,6 +64,8 @@ export const clockWaitStrings = {
     differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
+    inUse:
+      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para ese minuto.",
     laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
     laterFromDay: (date: string, time: string) =>
       `Podrás seguir a partir del ${date} a las ${time}.`,
@@ -117,9 +124,9 @@ export function clockProblem(error: unknown): ClockProblem | undefined {
   const { reason, allowedFromMs } = error.params;
   if (reason === "second_clock_missing") return { kind: "second-clock" };
   if (reason === "clock_disagreement") return { kind: "disagreement" };
-  if (reason === "minute_not_later")
+  if (reason === "minute_not_later" || reason === "minute_in_use")
     return {
-      kind: "later",
+      kind: reason === "minute_in_use" ? "in-use" : "later",
       ...(instantMs(allowedFromMs) ? { allowedFromMs } : {}),
     };
   return undefined;
@@ -272,7 +279,7 @@ export function renderClockProblem(
       <p>${words.differ}</p>
       <p>${words.differDo}</p>
     </section>`;
-  if (problem?.kind === "later") {
+  if (problem?.kind === "later" || problem?.kind === "in-use") {
     const from = problem.allowedFromMs;
     let carryOn: string | undefined;
     if (from !== undefined) {
@@ -289,8 +296,13 @@ export function renderClockProblem(
             )
           : words.laterFrom(time);
     }
-    return html`<p role="status" data-test="minute-not-later">
-      ${words.later}${carryOn === undefined ? nothing : html` ${carryOn}`}
+    return html`<p
+      role="status"
+      data-test=${problem.kind === "later" ? "minute-not-later" : "minute-in-use"}
+    >
+      ${problem.kind === "later" ? words.later : words.inUse}${
+        carryOn === undefined ? nothing : html` ${carryOn}`
+      }
     </p>`;
   }
   return nothing;

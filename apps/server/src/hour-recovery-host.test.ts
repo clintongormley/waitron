@@ -200,7 +200,7 @@ it("refuses the settle-target minute a surviving host already names", async () =
   await f.compare();
   await expect(f.select()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
@@ -273,7 +273,7 @@ it("adds the selected copy's opaque public names to surviving host evidence", as
     service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
@@ -415,7 +415,7 @@ it("admits recovery from the real validated archive preview with its public spen
     service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   clock.set(Date.parse("2026-10-16T14:40:00Z"));
   const outcome = (await recoverySelectPastWaits(clock, service, { onBox: true })) as {
