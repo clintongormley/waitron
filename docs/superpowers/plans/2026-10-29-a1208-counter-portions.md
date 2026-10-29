@@ -765,7 +765,12 @@ the lines and revision, clears `dirty`, keeps `persisted`, the id and `loadGener
 
 - [ ] Copy the dump test into `apps/server/src/`, run it on the branch with
       `A1208_DUMP=~/waitron-campaign-c/a1208-compare/after.json`, delete the copy.
-- [ ] `diff <(jq -S 'del(.scenarios["8"])' before.json) <(jq -S 'del(.scenarios["8"])' after.json)`:
+- [ ] (Done 2026-10-29: the dump's keys are `s01-walkup-cash` … `s13-recovery`, so this command
+      compares everything, and three shape differences show by design — invoice numbers after
+      scenario 8's extra sale, line order on a split or discounted bill, and refund values per
+      stored line. `~/waitron-campaign-c/a1208-compare/scripts/normalise.py` takes those out;
+      the normalised dumps match, and three one-sided controls each show. Q7 below.)
+      `diff <(jq -S 'del(.scenarios["8"])' before.json) <(jq -S 'del(.scenarios["8"])' after.json)`:
       expect no output. A failing comparison prints each differing field as a `diff` pair, for example
       `<       "base": "2.48",` / `>       "base": "2.47",` under a sale's line, or a refund value
       `<     "refund": { "quantity": "1", "gross": "3.00" }` / `>     "refund": null` for scenario 11
@@ -840,6 +845,14 @@ the lines and revision, clears `dirty`, keeps `persisted`, the id and `loadGener
   ("ud") printed `2.000 ud x Pan` in the `separate` mode; on portions it prints the line twice, as a
   table's does if Task 6b confirms it. **Default: match tables.**
 - **Q4 — the guides' Spanish** (slice 1 D22): shipped only with approval at land.
+- **Q7 — line order on a split or discounted counter bill.** Measured at Task 10: when a counter
+  order of 3 × agua and 0.300 kg jamón has one agua and the jamón split onto a new bill, that bill's
+  invoice lists the agua first and the jamón second; before this change it listed the jamón first.
+  A 10% discount on a row of 3 croquetas with an agua after it files "2 × Croqueta 6.00, Croqueta
+  2.99, Agua 2.00"; before, it filed "2 × Croqueta 6.00, Agua 2.00, Croqueta 2.99". Every
+  row's name, quantity, price and VAT, the totals and the filed record are the same; only the order
+  of the lines on the invoice differs. **Default: accept** — the bill now follows the order the
+  dishes were taken in, as a table's has since slice 1.
 - **Q6 — Cancel on an extra of a grouped counter row.** On a retrieved 3 × pizza with olives the
   olives offer Comp (all three) but no Cancel, because the server cancels an extra on its own only
   from its own line (slice 1). Before this item the counter's one line of 3 offered it. **Default:
