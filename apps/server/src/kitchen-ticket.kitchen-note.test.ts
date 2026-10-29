@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { describe, expect, it } from "vitest";
 import type { EscSetting } from "@waitron/printing";
 import {
@@ -232,7 +233,13 @@ describe.each([
             locale,
             after,
           ),
-        ).toEqual([...top, "GROUP 3", "2 x Burger", "  * No onions", ""]);
+        ).toEqual([
+          ...top,
+          `${kitchenTicketWords(locale).group} 3`,
+          "2 x Burger",
+          "  * No onions",
+          "",
+        ]);
       },
     );
 
