@@ -5618,9 +5618,11 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   "copy the migrations, cut the journal, migrate to there" setup is also repeated across the
   `*-upgrade.test.ts` files with no shared helper.
 
-- **Audit the other coverage download actions for retained refused responses.**
-  The server helper closes this response; other merge jobs still use the action exercised by
-  the A1132 open-body probe. [Detail](backlog/ci.md#coverage-download-actions-and-refused-response-bodies).
+- **`mutation.yml`'s three report downloads still use `actions/download-artifact`** (left open by
+  A1216). The ui-core, ui and db score jobs fetch `mutation-report-*-shard-*` directories, which
+  `scripts/download-coverage-blobs.mjs` cannot read: it handles only one-file artifacts. They run
+  nightly and on manual dispatch only; their download times have not been measured. See
+  [the download receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
 
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).

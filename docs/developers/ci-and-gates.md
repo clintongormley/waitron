@@ -770,8 +770,10 @@ GitHub's words, _"a GitHub App installation access token"_
 GitHub Apps" (https://docs.github.com/en/rest/authentication/permissions-required-for-github-apps),
 under 'Repository permissions for "Actions"', has the row
 `` | `GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs` | read | UAT, IAT | ✗ | ``,
-where IAT is that page's "installation access token". So the `ci` job alone holds `actions: read`,
-the permission GitHub lists for that endpoint; a run without it was not tried.
+where IAT is that page's "installation access token". So the `ci` job holds `actions: read` and
+nothing else, the permission GitHub lists for that endpoint; a run without it was not tried. In
+`ci.yml`, `changes` and every coverage merge job also hold `actions: read`, each beside
+`contents: read`.
 
 The first step makes one exception to "skipped passes" (A452): when `changes` reports
 `code == "true"` and a coverage merge job's own gate `"true"`, that merge job ending `skipped`
@@ -3448,16 +3450,27 @@ the job. A healthy first attempt skips both extra steps. The jobs keep their fiv
 The job's deadline remains an outer limit; stalls in other steps can consume the time available
 for recovery. Merge commands, shard-count checks and coverage thresholds stay in place.
 
-The server merge uses `scripts/download-coverage-blobs.mjs`. It lists the current run's artifacts
-through GitHub's REST API, keeps the highest-id copy of each name, checks the archive digest and extracts each expected report with the
-host's `unzip`. The job grants `actions: read` alongside `contents: read`; the token goes only to
-the API requests, not to the storage URL. A refused response's body is cancelled before the helper
-throws. Its server consumer entry in `ROOT_SCOPE_CONSUMERS` selects the server jobs when this helper
-changes; the consumer guard recognises `test:merge` jobs as well as test shards. Other download sites still use `actions/download-artifact`.
+Every coverage merge job in `ci.yml` downloads with `scripts/download-coverage-blobs.mjs`, given
+the number of reports its shards upload: the shard matrix size, plus one for the server's stream
+job. The helper lists the current run's artifacts through GitHub's REST API, keeps the highest-id
+copy of each name, refuses when the number of reports differs from that count before downloading
+anything, checks each archive's digest and extracts each report with the host's `unzip`. Each of
+those jobs grants `actions: read` alongside `contents: read`; the token goes only to the API
+requests, not to the storage URL. A refused response's body is cancelled before the helper throws.
+The helper's entry in `ROOT_SCOPE_CONSUMERS` names every package whose merge job runs it, so a
+change to the helper selects those packages' jobs; the consumer guard recognises `test:merge` jobs
+as well as test shards.
+
+Only `mutation.yml`'s three report downloads still use `actions/download-artifact`. That is a scope
+decision: those artifacts are directories of several files, and the helper reads only artifacts
+holding one file.
 
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never execute a workflow. They check the action and helper forms, matching
-inputs and authentication, cleanup limit and a job budget larger than both attempts plus cleanup.
+inputs and authentication, cleanup limit and a job budget larger than both attempts plus cleanup;
+that no `ci.yml` download of a `-blob-*` pattern uses the action; that every job running the helper
+grants `actions: read` and `contents: read`; and that each helper call's report count equals what
+its needed jobs upload.
 They recognise literal action names, step fields and the helper's quoted command arguments, not
 composite actions, external reusable workflows, YAML anchors or alternative shell commands.
 A matching cleanup string does not prove that it ran or removed a file.
@@ -3485,12 +3498,40 @@ natural failure exit; deleting cancellation did not break that exit check on Nod
 from the failed run verified and extracted all 17 archives in 25.32 seconds on the development
 Mac; that is not a measurement of a GitHub-hosted runner.
 
+On 29 October 2026, pull request #2245's run `40939360740`, job `123685605032`
+(`test-till-merge`), showed the same signature in both attempts of the action. In the first, six
+of the seven till archives verified by 19:37:19.47 and the seventh at 19:37:24.30. In the second,
+five verified by 19:38:19.43 and two at 19:38:24.35. Each attempt printed
+"Download artifact has finished successfully" and then stayed alive until its one-minute limit. A
+five-second gap matches the retry delay the local probe measured after a refused response whose
+body stayed open; the runner's socket state was not captured, so the cause is still an inference.
+A healthy till download in run `40940255011`, job `123691374072`, verified all seven archives
+within 0.07 seconds with no five-second gap. Both logs print the same `DEP0005` `Buffer()`
+deprecation warning, so the warning does not tell the two apart; the gap does. `@v8` resolved to
+v8.0.2, the bundle the local probe ran, and no newer release existed on 29 October 2026.
+
+Over the last 60 completed main CI runs before that date, 27 ran all seven coverage merge jobs.
+In those 27, the action's first attempt hit its one-minute limit three times (run `40910679143`'s
+venue-service and provisioning merges, run `40811624914`'s dashboard merge), and the second attempt
+succeeded each time. The helper's 27 server first attempts took 7 to 13 seconds, and none needed a
+second attempt. That is why every coverage merge now uses the helper.
+
+The helper spends one REST request listing artifacts and one per report it downloads, so one run
+with all seven merge jobs makes 56 requests. GitHub's rate-limit page says "The rate limit for
+`GITHUB_TOKEN` is 1,000 requests per hour per repository". Summing the merge jobs that ran in the
+three busiest hours of 27–29 October 2026 gives 168, at least 380 and at least 304 requests: "at
+least" because GitHub answered 502 for some runs' job lists. The busiest of those hours would use
+about 40% of that limit. A listing GitHub refuses makes the helper fail with an error, and its count
+check refuses a short listing, so either way the merge job fails rather than merging part of the
+reports.
+
 External provenance for this path:
 
 | Source | Source's words | What this establishes |
 | --- | --- | --- |
 | [Pinned v8 download source](https://github.com/actions/download-artifact/blob/9000827ccba6bdab643e8b6fd33ac0654aef8333/src/download-artifact.ts) | “Download artifact has finished successfully” | The final message follows awaited downloads and digest checks. `merge-multiple` selects their output directory; there is no later extraction phase in this function. |
 | [GitHub artifact REST API](https://docs.github.com/en/rest/actions/artifacts#download-an-artifact) | “Actions” repository permissions (read); “302” | The REST path uses read access and returns a storage redirect. |
+| [GitHub REST rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api), fetched 2026-10-29 | “The rate limit for `GITHUB_TOKEN` is 1,000 requests per hour per repository.” | The helper's requests share one hourly budget per repository. |
 
 
 ## Every artifact upload is bounded
