@@ -1,5 +1,12 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 HTTP checkpoint: Tasks 1–5 now include the optional diagnostic route
+and a runner owned by boot. Local tests exercise no-touch authorization, filtered
+error details, both material kinds, expiry and revocation, plus real HTTP socket
+disconnects during child opening, response reading and cleanup. Permission
+continuation, the screen, complete coverage and whole-flow qualification remain
+open. Persistent repair remains open; earlier checkpoints retain their state._
+
 _2026-10-29 parent checkpoint: Tasks 1–4 now include authorization before and after
 work, selected-material binding, expiry cancellation and stale-result refusal. Local
 tests compare every table and the writer's change count after actual child exit;
