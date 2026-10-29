@@ -1,11 +1,12 @@
 import { cp, mkdtemp, rm } from "node:fs/promises";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { isAppError } from "@waitron/shared";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import {
   captureError,
   locations,
@@ -484,6 +485,85 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       killSpy.mockRestore();
       vi.unstubAllEnvs();
       await rm(stateDir, { recursive: true, force: true });
+    }
+  }, 60_000);
+});
+
+describe("a mirror's promote and the backup room note", () => {
+  it("is refused while the note cannot be deleted, and deletes it before promoting and before the restart", async () => {
+    const [venueDir, db] = await migratedVenue();
+    const seed = await seedMirrorIdentity(db);
+    const secret = await mintBreakGlassSecret(db, seed.nodeId);
+    const port = await freePort();
+    const stateDir = await mkdtemp(join(tmpdir(), "waitron-promote-note-state-"));
+    const note = join(stateDir, BACKUP_ROOM_NOTE_FILE);
+    writeFileSync(join(stateDir, "modules.json"), FISCAL_NONE_OFF);
+    const allocationEnv = await writeAllocationInput(stateDir, seed.fixture, "promote");
+    for (const [key, value] of Object.entries(allocationEnv)) vi.stubEnv(key, value);
+
+    const server = await startServer({
+      ...KEY_ENV,
+      ...TICK_ENV,
+      WAITRON_TILL_NODE_ID: seed.nodeId,
+      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      WAITRON_VENUE_DIR: venueDir,
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_STATE_DIR: stateDir,
+    }).catch(async (err: unknown) => {
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
+      throw err;
+    });
+
+    const noteAtRestart: boolean[] = [];
+    const killSpy = vi.spyOn(process, "kill").mockImplementation(() => {
+      noteAtRestart.push(existsSync(note));
+      return true;
+    });
+    try {
+      const request = seed.fixture.request("promote");
+      let noteDuringPromotion: boolean | undefined;
+      const promote = () =>
+        server.promoteMirrorToPrimary!({ oldNodeNeutralised: true }, (context, consume) => {
+          noteDuringPromotion = existsSync(note);
+          // A backup reload while the promotion runs could write a note again.
+          if (!noteDuringPromotion) writeFileSync(note, "{}");
+          return withPromotionModuleOperation(
+            {
+              db: context.db,
+              nodeId: seed.nodeId,
+              credentialKeyRing: TOTP_KEY_RING,
+              modules: ALL_MODULES,
+            },
+            { binding: request.binding, input: request.input },
+            { breakGlass: secret },
+            (runner) => runner(context, consume),
+          );
+        });
+
+      mkdirSync(note);
+      await expect(promote()).rejects.toMatchObject({
+        code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+      });
+      expect(noteDuringPromotion).toBeUndefined();
+      expect(await readDeploymentMode(db, seed.nodeId)).toBe("mirror");
+      rmSync(note, { recursive: true });
+
+      writeFileSync(note, "{}");
+      expect((await promote()).alreadyPrimary).toBe(false);
+      expect(noteDuringPromotion).toBe(false);
+      await delay(50);
+      expect(killSpy).toHaveBeenCalledWith(process.pid, "SIGTERM");
+      expect(noteAtRestart).toEqual([false]);
+    } finally {
+      await server.close();
+      // A promotion that went through schedules its restart signal on a later tick.
+      await delay(50);
+      killSpy.mockRestore();
+      vi.unstubAllEnvs();
+      await rm(stateDir, { recursive: true, force: true });
+      await rm(venueDir, { recursive: true, force: true });
     }
   }, 60_000);
 });

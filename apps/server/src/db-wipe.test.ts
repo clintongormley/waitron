@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openVenueDatabase, type VenueDatabase } from "@waitron/db";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { VENUE_HOLDER_FILE, VENUE_LOCK_FILE } from "@waitron/store";
 import { wipeVenueDatabases } from "./db-wipe.js";
 
@@ -17,16 +18,19 @@ const WIPED = [
 ] as const;
 
 let venueDir: string;
+let stateDir: string;
 let open: VenueDatabase | undefined;
 
 beforeEach(async () => {
   venueDir = await mkdtemp(join(tmpdir(), "waitron-wipe-"));
+  stateDir = await mkdtemp(join(tmpdir(), "waitron-wipe-state-"));
 });
 
 afterEach(async () => {
   if (open !== undefined) await open.close().catch(() => {});
   open = undefined;
   await rm(venueDir, { recursive: true, force: true });
+  await rm(stateDir, { recursive: true, force: true });
 });
 
 async function exists(name: string): Promise<boolean> {
@@ -57,7 +61,7 @@ describe("wipeVenueDatabases", () => {
     expect((await stat(join(venueDir, "venue.db-wal"))).size).toBeGreaterThan(0);
     expect((await stat(join(venueDir, "node.db-wal"))).size).toBeGreaterThan(0);
 
-    await wipeVenueDatabases(venueDir);
+    await wipeVenueDatabases(venueDir, stateDir);
 
     for (const name of WIPED) expect(await exists(name), `after the wipe: ${name}`).toBe(false);
   });
@@ -65,7 +69,7 @@ describe("wipeVenueDatabases", () => {
   it("leaves nothing but the lock's own files in a folder that never migrated", async () => {
     open = await venueWithBothFilesWritten();
 
-    await wipeVenueDatabases(venueDir);
+    await wipeVenueDatabases(venueDir, stateDir);
 
     // The held lock keeps a rollback journal beside it; none of them holds data.
     const lockFiles = [VENUE_LOCK_FILE, `${VENUE_LOCK_FILE}-journal`, VENUE_HOLDER_FILE];
@@ -75,7 +79,7 @@ describe("wipeVenueDatabases", () => {
   it("leaves the venue file with nothing in it — a row committed only to the sidecar is gone", async () => {
     open = await venueWithBothFilesWritten();
 
-    await wipeVenueDatabases(venueDir);
+    await wipeVenueDatabases(venueDir, stateDir);
     await open.close();
     open = undefined;
 
@@ -93,7 +97,7 @@ describe("wipeVenueDatabases", () => {
     const ltx = join(venueDir, ".venue.db-litestream", "ltx", "0");
     await mkdir(ltx, { recursive: true });
     await writeFile(join(ltx, "0000000000000001-0000000000000001.ltx"), "from the wiped database");
-    await wipeVenueDatabases(venueDir);
+    await wipeVenueDatabases(venueDir, stateDir);
     expect(await exists(".venue.db-litestream")).toBe(false);
   });
 
@@ -101,13 +105,37 @@ describe("wipeVenueDatabases", () => {
     open = await venueWithBothFilesWritten();
     await writeFile(join(venueDir, "migrations.lock"), "");
 
-    await wipeVenueDatabases(venueDir);
+    await wipeVenueDatabases(venueDir, stateDir);
 
     expect(await exists("migrations.lock")).toBe(true);
   });
 
   it("succeeds on a venue directory that holds nothing, and on one that is not there", async () => {
-    await expect(wipeVenueDatabases(venueDir)).resolves.toBeUndefined();
-    await expect(wipeVenueDatabases(join(venueDir, "never-created"))).resolves.toBeUndefined();
+    await expect(wipeVenueDatabases(venueDir, stateDir)).resolves.toBeUndefined();
+    await expect(
+      wipeVenueDatabases(join(venueDir, "never-created"), stateDir),
+    ).resolves.toBeUndefined();
+  });
+
+  it("deletes the backup room note", async () => {
+    open = await venueWithBothFilesWritten();
+    await writeFile(join(stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
+
+    await wipeVenueDatabases(venueDir, stateDir);
+
+    await expect(stat(join(stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("stops before touching venue.db when the note cannot be deleted", async () => {
+    open = await venueWithBothFilesWritten();
+    await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+
+    await expect(wipeVenueDatabases(venueDir, stateDir)).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+
+    for (const name of WIPED) expect(await exists(name), `kept: ${name}`).toBe(true);
   });
 });

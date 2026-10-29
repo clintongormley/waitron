@@ -136,6 +136,7 @@ describe("a restored venue keeps its fiscal ledger immutable", () => {
       await restoreDatabase({
         databasePath: archivePath,
         venueDir,
+        stateDir: join(scratch, "state"),
         log: () => {},
       });
 

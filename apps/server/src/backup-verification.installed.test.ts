@@ -1,8 +1,10 @@
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
 import { ALL_MODULES } from "@waitron/composition";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { openBackupQuery, type BackupQuery } from "@waitron/store";
 import { verifyBackupArtifact } from "./backup-verification-entry.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
@@ -65,6 +67,23 @@ it("accepting control preserves every captured row through every real owner", as
   expect(f.entries.find((e) => e.name.endsWith("hour-history.json"))).toBeDefined();
 });
 
+it("placement deletes the note in its scratch state folder, never the box's own", async () => {
+  const f = await suite.create();
+  const boxNote = join(f.stateDir, BACKUP_ROOM_NOTE_FILE);
+  await writeFile(boxNote, "{}");
+  const place = placement.placeBackupData;
+  let scratchNoteLeft: boolean | undefined;
+  vi.spyOn(placement, "placeBackupData").mockImplementation(async (...args) => {
+    expect(args[1].stateDir.startsWith(f.deps.scratchRoot)).toBe(true);
+    const scratchNote = join(args[1].stateDir, BACKUP_ROOM_NOTE_FILE);
+    await writeFile(scratchNote, "{}");
+    await place(...args);
+    scratchNoteLeft = existsSync(scratchNote);
+  });
+  expect((await verify(f)).status).toBe("passed");
+  expect(scratchNoteLeft).toBe(false);
+  expect(await readFile(boxNote, "utf8")).toBe("{}");
+});
 it("complete coverage refuses a shipped owner without semantics", async () => {
   const f = await suite.create();
   f.deps.modules = ALL_MODULES.map((m) =>

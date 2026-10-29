@@ -235,6 +235,7 @@ import { validateArtifact } from "./restore.js";
 import { RESTORE_STAGING_DIR } from "./restore-staging-dirs.js";
 import { previewRecoveryArchive, previewRecoveryStream } from "./recovery-backup-preview.js";
 import { errnoOf } from "./errno.js";
+import { deleteBackupRoomNote } from "./backup-room-note.js";
 import {
   clearStagedConfigurationImport,
   readStagedConfigurationImport,
@@ -2724,12 +2725,25 @@ async function bootServer(
     nodeId: till.nodeId,
   };
 
+  // The note vouches for the installation start before promotion; a start that trusted it would
+  // judge this installation's backups by the old one. A note that cannot be deleted refuses the
+  // promotion, or, once promoted, the restart.
+  const deleteNoteForPromotion = async (): Promise<void> => {
+    try {
+      await deleteBackupRoomNote(config.stateDir);
+    } catch (error) {
+      log("error", "backup.room_note_delete_failed", { errno: errnoOf(error) ?? null });
+      throw error;
+    }
+  };
+
   // Shared by the in-process `StartedServer.promoteMirrorToPrimary` and the endpoint's `promoteRun`.
   // An already-primary re-run is a no-op that skips the restart.
   const promoteMirrorRun = async (
     attestation: FenceAttestation,
     withModuleOperations?: PromotionOperationRunner,
   ): Promise<MirrorPromotionResult> => {
+    await deleteNoteForPromotion();
     const result = await promoteMirrorToPrimary(
       {
         ...promoteDeps,
@@ -2748,6 +2762,8 @@ async function bootServer(
       attestation,
     );
     if (!result.alreadyPrimary) {
+      // A backup reload during the promotion may have written the note again.
+      await deleteNoteForPromotion();
       // On the NEXT tick, so the in-process caller's result is returned first.
       setTimeout(() => process.kill(process.pid, "SIGTERM"), 0);
     }

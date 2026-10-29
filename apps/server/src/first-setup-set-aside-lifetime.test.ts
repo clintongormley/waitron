@@ -254,6 +254,7 @@ it("lifetime: a restore placement leaves the moved files, and a backup naming on
   await restoreDatabase({
     databasePath: join(staged, "venue.db"),
     venueDir: roots.venueDir,
+    stateDir: roots.stateDir,
     log: () => {},
   });
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("restored venue database");

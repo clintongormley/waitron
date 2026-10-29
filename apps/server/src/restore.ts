@@ -70,6 +70,7 @@ import { assertSafeEntryName } from "./restore-entry-guard.js";
 import type { BundleFiles } from "./recovery-bundle.js";
 import { REBUILD_MARKER, type RebuildSource } from "./rebuild-first-start.js";
 import { unpackBundleToDir } from "./state-secrets.js";
+import { deleteBackupRoomNote } from "./backup-room-note.js";
 import "./errors.js";
 import { currentBackupVerificationTarget } from "./backup-verification-target.js";
 import {
@@ -291,6 +292,8 @@ async function validateEntryMetadata(
  */
 async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps): Promise<void> {
   const { log } = deps;
+  // Before the identity is set aside, so a refusal here leaves it where it was.
+  await deleteBackupRoomNote(deps.stateDir);
   if (deps.resumeOperation !== undefined) {
     const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
@@ -303,6 +306,7 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     await restoreDatabase({
       databasePath: validated.databasePath,
       venueDir: deps.venueDir,
+      stateDir: deps.stateDir,
       log,
     });
   }
@@ -474,10 +478,13 @@ async function restoreOwned(
 export async function restoreDatabase(args: {
   databasePath: string;
   venueDir: string;
+  /** The venue's own state folder, whose backup room note vouches for the `venue.db` replaced. */
+  stateDir: string;
   log: Logger;
   /** Tests inject failures here; production passes nothing. */
   fs?: PlacementFs;
 }): Promise<string> {
+  await deleteBackupRoomNote(args.stateDir);
   const fs: PlacementFs = args.fs ?? { rename, rm, rmdir };
   // The restore may be the first thing that ever writes here. An existing directory's permissions
   // belong to the operator and are not changed by mkdir.

@@ -17,6 +17,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { restoreDatabase } from "./restore.js";
 
 const roots: string[] = [];
@@ -33,7 +34,9 @@ async function fixture() {
   for (const suffix of ["", "-wal", "-shm"])
     await writeFile(join(venueDir, `venue.db${suffix}`), `OLD${suffix}`);
   await writeFile(join(venueDir, "venue.db.incoming"), "STALE");
-  return { root, venueDir, source, target: join(venueDir, "venue.db") };
+  const stateDir = join(root, "state");
+  await mkdir(stateDir);
+  return { root, venueDir, stateDir, source, target: join(venueDir, "venue.db") };
 }
 const ioError = (code: string) => Object.assign(new Error(code), { code });
 async function oldIntact(venueDir: string) {
@@ -43,7 +46,7 @@ async function oldIntact(venueDir: string) {
 
 describe("restoreDatabase consumes a database file", () => {
   it("places a sparse file over 2 GiB without buffering it, preserves its edges and restricts its mode", async () => {
-    const { source, target, venueDir } = await fixture();
+    const { source, target, venueDir, stateDir } = await fixture();
     const size = 2 ** 31 + 4096;
     await truncate(source, size);
     const fd = await open(source, "r+");
@@ -55,7 +58,7 @@ describe("restoreDatabase consumes a database file", () => {
     await chmod(source, 0o644);
     const before = await stat(source);
     const log = vi.fn();
-    expect(await restoreDatabase({ databasePath: source, venueDir, log })).toBe(target);
+    expect(await restoreDatabase({ databasePath: source, venueDir, stateDir, log })).toBe(target);
     const placed = await stat(target);
     expect(placed.size).toBe(size);
     expect(placed.ino).toBe(before.ino);
@@ -78,7 +81,7 @@ describe("restoreDatabase consumes a database file", () => {
   });
 
   it("copies only on EXDEV and retains the source for its owner to clean", async () => {
-    const { source, target, venueDir } = await fixture();
+    const { source, target, venueDir, stateDir } = await fixture();
     const fs = {
       rm,
       rmdir,
@@ -87,7 +90,7 @@ describe("restoreDatabase consumes a database file", () => {
         await rename(from, to);
       },
     };
-    await restoreDatabase({ databasePath: source, venueDir, log: () => {}, fs });
+    await restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {}, fs });
     expect(await readFile(target, "utf8")).toBe("NEW-DATABASE");
     expect(await readFile(source, "utf8")).toBe("NEW-DATABASE");
     expect((await stat(target)).mode & 0o777).toBe(0o600);
@@ -96,7 +99,7 @@ describe("restoreDatabase consumes a database file", () => {
   it.each(["rename", "copy", "source-mode", "incoming-mode"] as const)(
     "a %s failure keeps the old set and removes partial incoming",
     async (step) => {
-      const { source, target, venueDir } = await fixture();
+      const { source, target, venueDir, stateDir } = await fixture();
       const fs = {
         rm,
         rmdir,
@@ -123,7 +126,7 @@ describe("restoreDatabase consumes a database file", () => {
         },
       };
       await expect(
-        restoreDatabase({ databasePath: source, venueDir, log: () => {}, fs }),
+        restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {}, fs }),
       ).rejects.toMatchObject({
         code: {
           rename: "EACCES",
@@ -139,11 +142,12 @@ describe("restoreDatabase consumes a database file", () => {
   );
 
   it("puts the old sidecar set back when final placement fails", async () => {
-    const { source, target, venueDir } = await fixture();
+    const { source, target, venueDir, stateDir } = await fixture();
     await expect(
       restoreDatabase({
         databasePath: source,
         venueDir,
+        stateDir,
         log: () => {},
         fs: {
           rm,
@@ -170,14 +174,14 @@ describe("restoreDatabase consumes a database file", () => {
     "venue.lock",
     "migrations.lock",
   ])("refuses a source alias to %s before clearing incoming", async (name) => {
-    const { root, source, target, venueDir } = await fixture();
+    const { root, source, target, venueDir, stateDir } = await fixture();
     const protectedPath = join(venueDir, name);
     if (!["venue.db", "venue.db.incoming", "venue.db-wal", "venue.db-shm"].includes(name))
       await writeFile(protectedPath, "KEEP");
     await rm(source);
     await link(protectedPath, source);
     await expect(
-      restoreDatabase({ databasePath: source, venueDir, log: () => {} }),
+      restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} }),
     ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
     await oldIntact(venueDir);
     expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
@@ -186,20 +190,20 @@ describe("restoreDatabase consumes a database file", () => {
     const alias = join(root, "venue-alias");
     await symlink(venueDir, alias);
     await expect(
-      restoreDatabase({ databasePath: join(alias, name), venueDir, log: () => {} }),
+      restoreDatabase({ databasePath: join(alias, name), venueDir, stateDir, log: () => {} }),
     ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
   });
 
   it.each([".venue.db-litestream", ".venue.db-replaced-probe"])(
     "refuses a source under %s before its cleanup",
     async (folder) => {
-      const { source, target, venueDir } = await fixture();
+      const { source, target, venueDir, stateDir } = await fixture();
       const directory = join(venueDir, folder);
       await mkdir(directory);
       const databasePath = join(directory, "copy.db");
       await copyFile(source, databasePath);
       await expect(
-        restoreDatabase({ databasePath, venueDir, log: () => {} }),
+        restoreDatabase({ databasePath, venueDir, stateDir, log: () => {} }),
       ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
       await oldIntact(venueDir);
       expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
@@ -208,12 +212,12 @@ describe("restoreDatabase consumes a database file", () => {
   );
 
   it("refuses a multiply linked source without changing either link or the old set", async () => {
-    const { root, source, target, venueDir } = await fixture();
+    const { root, source, target, venueDir, stateDir } = await fixture();
     const retained = join(root, "retained.db");
     await chmod(source, 0o644);
     await link(source, retained);
     await expect(
-      restoreDatabase({ databasePath: source, venueDir, log: () => {} }),
+      restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} }),
     ).rejects.toMatchObject({ code: "restore.unsafe_entry_path" });
     await oldIntact(venueDir);
     expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
@@ -226,12 +230,12 @@ describe("restoreDatabase consumes a database file", () => {
   it.each(["symlink", "directory", "missing"])(
     "refuses a %s source with the old set and incoming intact",
     async (kind) => {
-      const { source, target, venueDir } = await fixture();
+      const { source, target, venueDir, stateDir } = await fixture();
       await rm(source);
       if (kind === "symlink") await symlink(target, source);
       if (kind === "directory") await mkdir(source);
       await expect(
-        restoreDatabase({ databasePath: source, venueDir, log: () => {} }),
+        restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} }),
       ).rejects.toMatchObject({
         code: "restore.unsafe_entry_path",
       });
@@ -239,4 +243,24 @@ describe("restoreDatabase consumes a database file", () => {
       expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
     },
   );
+
+  it("deletes the backup room note", async () => {
+    const { source, venueDir, stateDir } = await fixture();
+    await writeFile(join(stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
+    await restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} });
+    await expect(stat(join(stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("stops before touching the old set when the note cannot be deleted", async () => {
+    const { source, target, venueDir, stateDir } = await fixture();
+    await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+    await expect(
+      restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} }),
+    ).rejects.toMatchObject({ code: expect.stringMatching(/^(EISDIR|EPERM)$/) });
+    await oldIntact(venueDir);
+    expect(await readFile(`${target}.incoming`, "utf8")).toBe("STALE");
+    expect(await readFile(source, "utf8")).toBe("NEW-DATABASE");
+  });
 });

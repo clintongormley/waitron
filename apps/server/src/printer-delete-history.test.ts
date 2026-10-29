@@ -167,6 +167,7 @@ describe("a deleted printer's history in a full archive", () => {
       await restoreDatabase({
         databasePath: join(scratch, "venue.dump"),
         venueDir,
+        stateDir: join(scratch, "state"),
         log: () => {},
       });
       const restored = await openVenueDatabase(venueDir);

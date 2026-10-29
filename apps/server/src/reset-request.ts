@@ -101,7 +101,7 @@ export async function runStagedReset(
       deps.log("warn", "setup.reset_discarded", { reason });
       return false;
     }
-    await wipeVenueDatabases(deps.venueDir);
+    await wipeVenueDatabases(deps.venueDir, deps.stateDir);
     for (const file of [PENDING_ADOPTION_FILE, "modules.json", "setup-operation.json"]) {
       await rm(join(deps.stateDir, file), { force: true });
     }
