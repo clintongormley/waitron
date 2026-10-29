@@ -30,7 +30,6 @@ const dishes = Array.from({ length: 12 }, (_, n) => ({
   name: `Dish ${n}`,
 }));
 
-/** Twenty dishes already sent, in one fired group. */
 const longSent = current({
   reminder: null,
   groups: [
@@ -232,6 +231,7 @@ describe("till-table-order-screen: the unsent order's action bar under the shell
       const { screen, area, overlay } = await inShell(height);
       if (width === 390) {
         screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+        await screen.updateComplete;
         await linesRendered(screen);
       }
       const sendAll = screen.shadowRoot!.querySelector<HTMLElement>(

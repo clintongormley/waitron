@@ -1055,7 +1055,7 @@ export class TillTableOrderScreen extends LitElement {
       /* A draft being sent takes no edit until the answer comes back; the status line says why.
          The order's wrapper draws no box, so its parts are faded one by one, and the bar's contents
          rather than the bar so the lines it covers do not show through it. */
-      .round-control[inert]:not([data-round-controls]),
+      .round-control[inert],
       [data-round-controls][inert] .round-bar > :not(.draft-bar),
       [data-round-controls][inert] .draft-bar > * {
         opacity: var(--wt-opacity-disabled);
@@ -3162,7 +3162,7 @@ export class TillTableOrderScreen extends LitElement {
             </p>`
           : nothing
       }
-      <div class="round-control" data-round-controls ?inert=${draft.sending}>
+      <div data-round-controls ?inert=${draft.sending}>
         <div class="round-bar">
           ${keyed(
             this.orderId,
