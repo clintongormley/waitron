@@ -3398,6 +3398,57 @@ describe("till-app: a partly paid order at the counter", () => {
     await press(el, "[data-pay-confirm]");
   }
 
+  it("lists the dish a saved raise added among the items Pay offers (A1208)", async () => {
+    const cana = {
+      id: "cana",
+      menuItemId: "offer-cana",
+      catalogueId: "cat-default",
+      name: "Caña",
+      pricingUnit: "each" as const,
+      unitPrice: "2.50",
+      vatClass: "general",
+      category: null,
+      allergens: null,
+    };
+    const stored = (ids: string[]) => ({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Ana",
+      revision: ids.length,
+      lines: ids.map((id) => ({
+        workingOrderLineId: id,
+        menuItemId: "offer-cana",
+        quantity: "1.000",
+        product: cana,
+      })),
+    });
+    const listed = (ids: string[]) => ({
+      revision: ids.length,
+      lines: ids.map((id, index) =>
+        line({ id, lineNo: index + 1, name: "Caña", unitPriceGross: "2.50", portion: true }),
+      ),
+    });
+    const el = await retrieved({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(stored(["l1", "l2", "l3"]))
+        .mockResolvedValue(stored(["l1", "l2", "l3", "l4"])),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce(listed(["l1", "l2", "l3"]))
+        .mockResolvedValue(listed(["l1", "l2", "l3", "l4"])),
+      updateWorkingOrder: vi.fn().mockResolvedValue({ revision: 4 }),
+    });
+    const c = counter(el);
+    // The bill holds money, so each portion is its own row.
+    expect(c.store.lines.map((row) => row.quantity)).toEqual(["1", "1", "1"]);
+    c.store.setLineQuantity(2, "2");
+    emit(c, "counter-bill-pay", { amount: "70.00" });
+    await flush(el);
+    expect(dialog(el)!.lines.map((row) => row.lineNo)).toEqual([1, 2, 3, 4]);
+  });
+
   it("offers to take the rest as a bill payment in place of the single payment, and files the invoice when it is paid", async () => {
     const takeBillPayment = vi
       .fn()

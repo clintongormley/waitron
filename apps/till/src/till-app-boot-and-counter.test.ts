@@ -6913,4 +6913,136 @@ describe("A1208 a retrieved counter order's portions", () => {
       ["Café", "3"],
     ]);
   });
+
+  describe("after a save that keeps the basket", () => {
+    const four = ["l1", "l2", "l3", "l4"];
+    /** The first reads answer three portions; every later one the four the save left stored. */
+    const reads = (later: () => Promise<unknown> = async () => undefined) => ({
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(held())
+        .mockImplementation(async () => {
+          await later();
+          return {
+            ...held(5),
+            lines: four.map((id) => ({
+              workingOrderLineId: id,
+              menuItemId: cafeOffer,
+              quantity: "1.000",
+            })),
+          };
+        }),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValueOnce({ revision: 4, lines: ids.map((id, i) => listedLine(id, i + 1)) })
+        .mockResolvedValue({ revision: 5, lines: four.map((id, i) => listedLine(id, i + 1)) }),
+    });
+    const lastSent = (update: ReturnType<typeof vi.fn>) =>
+      (
+        update.mock.calls.at(-1)![1] as {
+          lines: { workingOrderLineId?: string; quantity: string }[];
+        }
+      ).lines.map((line) => [line.workingOrderLineId, line.quantity]);
+    const refusedPay = (el: TillApp, c: TillCounterScreen) => {
+      emit(c, "confirm-payment", { method: "cash", amount: "10" });
+      return flush(el);
+    };
+
+    it("names every stored portion in the next save, the ones the first save added included", async () => {
+      const { el, c, updateWorkingOrder } = await retrieved({
+        ...reads(),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      });
+      c.store.setLineQuantity(0, "4");
+      await refusedPay(el, c);
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+      expect(c.store.lines.map((line) => line.quantity)).toEqual(["4"]);
+
+      c.store.setLineQuantity(0, "5");
+      emit(c, "park-order", { label: "Later" });
+      await flush(el);
+      expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+      expect(updateWorkingOrder.mock.calls[1]![1]).toMatchObject({ revision: 5 });
+      expect(lastSent(updateWorkingOrder)).toEqual([
+        ["l1", "1"],
+        ["l2", "1"],
+        ["l3", "1"],
+        ["l4", "2"],
+      ]);
+    });
+
+    it("holds the basket when the order cannot be read back, and saves nothing more from it", async () => {
+      const recordSale = vi.fn();
+      const { el, c, updateWorkingOrder } = await retrieved({
+        retrieveWorkingOrder: vi
+          .fn()
+          .mockResolvedValueOnce(held())
+          .mockRejectedValue(new TypeError("Failed to fetch")),
+        recordSale,
+      });
+      c.store.setLineQuantity(0, "4");
+      await refusedPay(el, c);
+      expect(banner(el)!.textContent).toBe(t("held.reread_failed"));
+      expect(recordSale).not.toHaveBeenCalled();
+      expect(c.store.editsLocked).toBe(true);
+
+      emit(c, "park-order", { label: "Later" });
+      await flush(el);
+      expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    });
+
+    it("takes the order unfolded and goes on when only its lines cannot be read back", async () => {
+      const recordSale = vi.fn().mockRejectedValue({ code: "sale.refused" });
+      const { el, c } = await retrieved({
+        ...reads(),
+        getTabLines: vi
+          .fn()
+          .mockResolvedValueOnce({ revision: 4, lines: ids.map((id, i) => listedLine(id, i + 1)) })
+          .mockRejectedValue(new TypeError("Failed to fetch")),
+        recordSale,
+      });
+      c.store.setLineQuantity(0, "4");
+      await refusedPay(el, c);
+      expect(recordSale).toHaveBeenCalledOnce();
+      expect(c.store.editsLocked).toBe(false);
+      expect(c.store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual(
+        four.map((id) => [id, "1"]),
+      );
+    });
+
+    it("reads nothing back after a save that only left a portion out", async () => {
+      const retrieveWorkingOrder = vi.fn().mockResolvedValue(held());
+      // Unlisted lines are not folded, so each portion is its own row.
+      const { el, c, updateWorkingOrder } = await retrieved({
+        retrieveWorkingOrder,
+        getTabLines: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      });
+      expect(c.store.lines.map((line) => line.quantity)).toEqual(["1", "1", "1"]);
+      c.store.removeLine(2);
+      await refusedPay(el, c);
+      expect(lastSent(updateWorkingOrder)).toEqual([
+        ["l1", "1"],
+        ["l2", "1"],
+      ]);
+      expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
+    });
+
+    it("keeps an edit locked out while the order is read back", async () => {
+      let answer!: () => void;
+      const { el, c } = await retrieved({
+        ...reads(() => new Promise<void>((resolve) => (answer = resolve))),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      });
+      c.store.setLineQuantity(0, "4");
+      const paying = refusedPay(el, c);
+      await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+      expect(c.store.editsLocked).toBe(true);
+      answer();
+      await paying;
+      await flush(el);
+      expect(c.store.editsLocked).toBe(false);
+      expect(c.store.lines.map((line) => line.portionLineIds)).toEqual([four]);
+    });
+  });
 });

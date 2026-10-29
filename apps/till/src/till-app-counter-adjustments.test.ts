@@ -1189,7 +1189,8 @@ describe("till-app: comping a stored counter order", () => {
       .fn()
       .mockResolvedValueOnce({ revision: 5 })
       .mockRejectedValue({ code: "working_order.not_open" });
-    const el = await placeCounter({ placeOrder, updateWorkingOrder });
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({ sends: true, deadEnds: [], stations: [] });
+    const el = await placeCounter({ placeOrder, updateWorkingOrder, askSaleDeadEnds });
     const store = counter(el).store;
     store.addProduct(store.lines[1]!.product, "1");
     emit(counter(el), "place-order");
@@ -1204,7 +1205,10 @@ describe("till-app: comping a stored counter order", () => {
     emit(counter(el), "place-order");
     await flush(el);
 
-    expect(updateWorkingOrder).toHaveBeenCalledTimes(2);
+    // The first save's read-back left the basket as stored, so there is nothing to save again; the
+    // dead-end check, which a replay skips, shows the third Place is a fresh attempt.
+    expect(updateWorkingOrder).toHaveBeenCalledOnce();
+    expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
     expect(placeOrder).toHaveBeenCalledTimes(3);
     expect(counter(el).stage).toBe("collect");
   });
