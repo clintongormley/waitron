@@ -246,25 +246,29 @@ describe("A669 candidate sets", () => {
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.tabId));
-    const parent = stored.find((line) => line.parentLineId === null)!;
+    // The dish ×2 is two portions, each its own line with its own extras (A803).
+    const parents = stored
+      .filter((line) => line.parentLineId === null)
+      .sort((a, b) => a.lineNo - b.lineNo);
+    expect(parents).toHaveLength(2);
     const child = stored.find((line) => line.parentLineId !== null)!;
     const result = await view(p.partyId);
-    expect(result.dishes).toEqual([
-      {
+    expect(result.dishes).toEqual(
+      parents.map((parent) => ({
         line: { kind: "working", id: parent.id },
         billId: p.tabId,
         name: `${n.parent.name} (Large)`,
-        quantity: "2.000",
+        quantity: "1.000",
         allergens: { gluten: { kinds: ["wheat"] } },
         extras: [
-          { name: n.egg.name, quantity: "2.000", allergens: { eggs: {} } },
-          { name: n.unknown.name, quantity: "2.000", allergens: null },
-          { name: n.empty.name, quantity: "2.000", allergens: {} },
+          { name: n.egg.name, quantity: "1.000", allergens: { eggs: {} } },
+          { name: n.unknown.name, quantity: "1.000", allergens: null },
+          { name: n.empty.name, quantity: "1.000", allergens: {} },
         ],
         sentAt: null,
         offeredBefore: true,
-      },
-    ]);
+      })),
+    );
     await expect(
       view(p.partyId, { kind: "lines", orderId: p.tabId, lineNos: [child.lineNo] }),
     ).rejects.toMatchObject({ code: "allergy.invalid" });

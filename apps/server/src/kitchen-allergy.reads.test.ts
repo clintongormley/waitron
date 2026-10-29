@@ -108,7 +108,8 @@ async function sent(
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, party.tabId));
-  expect(tickets).toHaveLength(extras === undefined ? 2 : 3);
+  // The unticked Burger ×2 is two portions, each with its own ticket item.
+  expect(tickets).toHaveLength(extras === undefined ? 3 : 4);
   return { ...party, tickets };
 }
 
@@ -258,6 +259,7 @@ describe("A669 reads", () => {
         expect(station[0]!.items.map((item) => Reflect.get(item, "allergy"))).toEqual([
           original,
           null,
+          null,
         ]);
       } finally {
         ALLERGEN_NAMES.milk.en = oldName;
@@ -268,7 +270,11 @@ describe("A669 reads", () => {
   it("does not expose a block for held work with no HOLD paper", async () => {
     await sent("hold");
     const station = await inTx(v, (tx) => listStationQueue(tx, stationId));
-    expect(station[0]!.items.map((item) => Reflect.get(item, "allergy"))).toEqual([null, null]);
+    expect(station[0]!.items.map((item) => Reflect.get(item, "allergy"))).toEqual([
+      null,
+      null,
+      null,
+    ]);
   });
 
   it("keeps narrowed and empty scopes free of another station's allergy", async () => {

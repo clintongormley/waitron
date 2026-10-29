@@ -1153,11 +1153,12 @@ describe("readCurrentOrders (spec §4)", () => {
         },
       });
       expect(read).toMatchObject({
-        quantity: "2.000",
+        quantity: "1.000",
         servedQuantity: "0.000",
-        netAmount: "44.00",
+        netAmount: "22.00",
         released: true,
       });
+      expect(sent.lineIds).toHaveLength(2);
     },
   );
 
@@ -1282,9 +1283,11 @@ describe("readCurrentOrders (spec §4)", () => {
       line(v, "croquetas", "3"),
       line(v, "water"),
     ]);
-    const [croqLine] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
+    const [splitPortion, croqLine, untouched] = (await linesByName(s.partyId))
+      .filter((l) => l.name === "croquetas")
+      .sort((a, b) => a.lineNo - b.lineNo);
     const { billId: checkId } = await inTx(async (tx) =>
-      splitBill(tx, v.cfg, s.tabId, [{ lineNo: croqLine!.lineNo, quantity: "1" }], {
+      splitBill(tx, v.cfg, s.tabId, [{ lineNo: splitPortion!.lineNo, quantity: "1" }], {
         expectedPartyRevision: await revisionOf(s.partyId),
         operatorId: MIA,
       }),
@@ -1338,19 +1341,33 @@ describe("readCurrentOrders (spec §4)", () => {
           sentBy: null,
           rows: [
             row({
-              netAmount: "16.00",
+              netAmount: "8.00",
               lineId: croqLine!.id,
               billStatus: "settled",
               workingOrderId: s.tabId,
               lineNo: croqLine!.lineNo,
               name: "croquetas",
-              quantity: "2.000",
               servedQuantity: "1.000",
+              servedAt: expect.any(String),
               kitchen: {
                 state: "queued",
                 firedAt: expect.any(String),
                 stationId: expect.any(String),
                 movable: false,
+              },
+            }),
+            row({
+              netAmount: "8.00",
+              lineId: untouched!.id,
+              billStatus: "settled",
+              workingOrderId: s.tabId,
+              lineNo: untouched!.lineNo,
+              name: "croquetas",
+              kitchen: {
+                state: "queued",
+                firedAt: expect.any(String),
+                stationId: expect.any(String),
+                movable: true,
               },
             }),
             row({
@@ -1469,12 +1486,20 @@ describe("readCurrentOrders (spec §4)", () => {
 
     const read = await currentOrders(s.partyId);
 
-    expect(read.groups[0]!.rows[0]).toMatchObject({
-      quantity: "2.000",
-      servedQuantity: "2.000",
-      servedAt: expect.any(String),
-      released: true,
-    });
+    expect(read.groups[0]!.rows).toMatchObject([
+      {
+        quantity: "1.000",
+        servedQuantity: "1.000",
+        servedAt: expect.any(String),
+        released: true,
+      },
+      {
+        quantity: "1.000",
+        servedQuantity: "1.000",
+        servedAt: expect.any(String),
+        released: true,
+      },
+    ]);
     expect(read.groups[1]).toMatchObject({ id: mains.id, state: "fired" });
     expect(read.groups[1]!.rows[0]).toMatchObject({
       lineId: steak.id,
@@ -1882,23 +1907,24 @@ describe("Sent panel read facts (A773)", () => {
     await inTx(async (tx) => {
       await tx
         .update(workingOrderLines)
-        .set({ unitPriceGross: 1999, lineTotal: 3998 })
+        .set({ unitPriceGross: 1999, lineTotal: 1999 })
         .where(eq(workingOrderLines.id, parent.id));
       await tx
         .update(workingOrderLines)
-        .set({ unitPriceGross: 1, lineTotal: 2 })
+        .set({ unitPriceGross: 1, lineTotal: 1 })
         .where(eq(workingOrderLines.id, extra.id));
     });
     const before = await snapshot(s.partyId);
     const read = await currentOrders(s.partyId);
     expect(read.groups[0]!.rows[0]).toMatchObject({
       billStatus: "open",
-      netAmount: "40.00",
+      lineId: parent.id,
+      netAmount: "20.00",
       extras: [
         {
           lineId: extra.id,
-          quantity: "2.000",
-          netAmount: "0.02",
+          quantity: "1.000",
+          netAmount: "0.01",
           unitPriceGross: "0.01",
           priceQuantity: "1.000",
         },

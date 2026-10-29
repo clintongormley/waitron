@@ -493,7 +493,8 @@ describe("table + tab routes", () => {
     // The tab's revision rides with its lines: the round counted one, and a served mark, which is
     // not a write to the bill, none.
     expect(revision).toBe(1);
-    expect(lines).toHaveLength(2);
+    // The second dish ×2 is two portions, each its own line (A803).
+    expect(lines).toHaveLength(3);
     // Seeded product is 1.50; the locked gross unit rides back verbatim, and the quantity at the
     // three places `thousandthsToDecimal` renders.
     expect(lines[0]).toMatchObject({
@@ -503,7 +504,8 @@ describe("table + tab routes", () => {
       unitPriceGross: "1.50",
     });
     expect(lines[0]!.servedAt).not.toBeNull();
-    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "2.000", servedAt: null });
+    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "1.000", servedAt: null });
+    expect(lines[2]).toMatchObject({ lineNo: 3, quantity: "1.000", servedAt: null });
   });
 
   it("the tab-lines read carries no venue switch", async () => {

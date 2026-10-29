@@ -466,12 +466,18 @@ for (const action of ["cancel", "comp", "discount_percent"] as const)
     expect(after).toEqual({ ...current, draftRevision: current.draftRevision! + 1 });
     const drafts = await inTx(venue, (tx) => readDrafts(tx, venue.cfg, p.partyId));
     const draft = drafts.find((d) => d.id === current.draftId)!;
-    expect(draft.lines).toHaveLength(action === "comp" ? 2 : 1);
-    expect(draft.lines[0]).toMatchObject({
-      sourceLineId: p.parent.id,
-      quantity: action === "discount_percent" ? "3.000" : "2.000",
-      source: { netAmount: action === "discount_percent" ? "32.40" : "24.00" },
+    const portion = (index: number, netAmount: string) => ({
+      sourceLineId: p.row.lineIds![index],
+      quantity: "1.000",
+      source: { netAmount },
     });
+    expect(draft.lines).toMatchObject(
+      action === "cancel"
+        ? [portion(0, "12.00"), portion(1, "12.00")]
+        : action === "comp"
+          ? [portion(0, "12.00"), portion(1, "12.00"), portion(2, "0.00")]
+          : [portion(0, "10.80"), portion(1, "10.80"), portion(2, "10.80")],
+    );
   });
 
 it("the last owned-source removal closes its draft and releases only that bill", async () => {

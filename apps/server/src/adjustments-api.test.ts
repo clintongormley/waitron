@@ -914,6 +914,7 @@ describe("a cancel's preview", () => {
     const { billId } = await billWith(venue, [{ name: "Steak", quantity: "2" }]);
     const steak = await todayLine(venue, billId, 1);
     const { lineId } = steak;
+    const before = await rowsOf(venue, billId);
 
     const preview = await post(
       billId,
@@ -928,7 +929,9 @@ describe("a cancel's preview", () => {
       lines: [{ lineId, lineNo: 1, reduction: "25.00", rows: [] }],
     });
     expect(await recordedOn(billId)).toEqual([]);
-    expect((await rowsOf(venue, billId))[0]).toMatchObject({ quantity: "2.000" });
+    // Steak ×2 is two portions, each its own row (A803); neither is touched.
+    expect((await rowsOf(venue, billId))[0]).toMatchObject({ quantity: "1.000" });
+    expect(await rowsOf(venue, billId)).toEqual(before);
   });
 
   it("previews a cancel of 1 of Pizza ×2 with olives as exactly what the applied cancel takes off the bill", async () => {
@@ -1308,8 +1311,9 @@ describe("what the till reads", () => {
       { name: "Burger", unitPriceGross: "0.00", listUnitPriceGross: "12.00" },
       // The part of the Steak not comped kept its price, and still names the price it had.
       { name: "Steak", unitPriceGross: "25.00", listUnitPriceGross: "25.00" },
-      { name: "Bread", unitPriceGross: "2.50" },
+      // Each steak is its own portion line (A803), so the comped one stays before the Bread.
       { name: "Steak", unitPriceGross: "0.00", listUnitPriceGross: "25.00" },
+      { name: "Bread", unitPriceGross: "2.50" },
     ]);
   });
 

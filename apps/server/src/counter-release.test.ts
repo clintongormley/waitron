@@ -109,7 +109,7 @@ describe("A773 counter release", () => {
   it("keeps a table's explicit held group held", async () => {
     const v = await setupPartyVenue(suite.db);
     const party = await seatWithNoAllergies(v, await v.table("Held table"));
-    await inTx(v, (tx) =>
+    const placed = await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, party.partyId, {
         billId: party.tabId,
         operatorId: OPERATOR,
@@ -122,9 +122,14 @@ describe("A773 counter release", () => {
     const items = await inTx(v, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
     );
-    expect(items).toHaveLength(2);
-    expect(items.find(({ quantity }) => quantity === 1000)!.firedAt).not.toBeNull();
-    expect(items.find(({ quantity }) => quantity === 2000)!.firedAt).toBeNull();
+    // The held Burger ×2 is two portions, each its own line and ticket item (A803).
+    const [fired, held] = placed.groups.map((group) => group.lineIds);
+    expect(held).toHaveLength(2);
+    expect(items).toHaveLength(3);
+    const firedAt = (lineId: string) =>
+      items.find(({ workingOrderLineId }) => workingOrderLineId === lineId)!.firedAt;
+    expect(firedAt(fired![0]!)).not.toBeNull();
+    expect(held!.map(firedAt)).toEqual([null, null]);
   });
 
   it("ignores a table holding flag on a counter release", async () => {

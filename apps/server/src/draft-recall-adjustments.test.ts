@@ -113,6 +113,7 @@ async function setup(release: "hold" | "fire" = "hold", shape?: "grouped") {
     ...p,
     line: line!,
     extra: extra!,
+    rows: await rowsOf(venue, p.billId),
     row,
     extraRow: await todayLine(venue, p.billId, 2),
     draft: (answer!.json as unknown as { draft: Draft }).draft,
@@ -176,21 +177,13 @@ describe("adjusting an owned recalled family", () => {
     const draft = await draftOn(p.partyId, p.draft.id);
     const answer = await post(p.billId, { action: "cancel", ...p.row, quantity: "1" });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+    const pizza = { unitPriceGross: "8.10", listUnitPriceGross: "9.00", lineTotal: "8.10" };
+    const olives = { unitPriceGross: "1.35", listUnitPriceGross: "1.50", lineTotal: "2.70" };
     expect(await rowsOf(venue, p.billId)).toEqual([
-      {
-        ...p.line,
-        quantity: "2.000",
-        unitPriceGross: "8.10",
-        listUnitPriceGross: "9.00",
-        lineTotal: "16.20",
-      },
-      {
-        ...p.extra,
-        quantity: "4.000",
-        unitPriceGross: "1.35",
-        listUnitPriceGross: "1.50",
-        lineTotal: "5.40",
-      },
+      { ...p.rows[0], ...pizza },
+      { ...p.rows[1], ...olives },
+      { ...p.rows[2], ...pizza },
+      { ...p.rows[3], ...olives },
       expect.objectContaining({ name: "Water", unitPriceGross: "1.80", lineTotal: "1.80" }),
     ]);
     const after = await frozen();
@@ -211,7 +204,10 @@ describe("adjusting an owned recalled family", () => {
     ]);
     expect(await draftOn(p.partyId, p.draft.id)).toMatchObject({
       revision: draft.revision + 1,
-      lines: [{ sourceLineId: p.line.id, quantity: "2.000", source: { netAmount: "21.60" } }],
+      lines: [
+        { sourceLineId: p.row.lineIds![0], quantity: "1.000", source: { netAmount: "10.80" } },
+        { sourceLineId: p.row.lineIds![1], quantity: "1.000", source: { netAmount: "10.80" } },
+      ],
     });
   });
 
@@ -242,7 +238,10 @@ describe("adjusting an owned recalled family", () => {
     expect(await draftOn(p.partyId, p.draft.id)).toMatchObject({
       ownerId: venue.managerId,
       revision: p.draft.revision + 2,
-      lines: [{ id: p.draft.lines[0]!.id, sourceLineId: p.line.id, quantity: "2.000" }],
+      lines: [
+        { id: p.draft.lines[0]!.id, sourceLineId: p.row.lineIds![0], quantity: "1.000" },
+        { id: p.draft.lines[1]!.id, sourceLineId: p.row.lineIds![1], quantity: "1.000" },
+      ],
     });
   });
 
@@ -320,7 +319,11 @@ describe("adjusting an owned recalled family", () => {
     const read = await draftOn(p.partyId, draft.id);
     expect(read.revision).toBe(draft.revision + 1);
     expect(read.lines).toMatchObject([
-      { sourceLineId: p.line.id, quantity: "3.000", source: { netAmount: "32.40" } },
+      ...p.row.lineIds!.map((sourceLineId) => ({
+        sourceLineId,
+        quantity: "1.000",
+        source: { netAmount: "10.80" },
+      })),
       { sourceLineId: water.id, quantity: "1.000", source: { netAmount: "1.80" } },
     ]);
     expect(
@@ -353,7 +356,7 @@ describe("adjusting an owned recalled family", () => {
     const answer = await post(p.billId, { action: "comp", lineId: water.id }, venue.cookie.manager);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await draftOn(p.partyId, p.draft.id)).toEqual(afterTakeover);
-    expect((await rowsOf(venue, p.billId))[2]).toMatchObject({
+    expect((await rowsOf(venue, p.billId)).find((row) => row.id === water.id)).toMatchObject({
       id: water.id,
       unitPriceGross: "0.00",
       lineTotal: "0.00",
@@ -457,23 +460,27 @@ describe("adjusting an owned recalled family", () => {
       const answer = await post(p.billId, body);
       expect(answer.status, JSON.stringify(answer.json)).toBe(200);
       expect(await rowsOf(venue, p.billId)).toEqual([
-        { ...p.line, quantity: "2.000", lineTotal: "18.00" },
-        { ...p.extra, quantity: "4.000", lineTotal: "6.00" },
+        ...p.rows.slice(0, 4),
         expect.objectContaining({ name: "Water", quantity: "1.000", lineTotal: "2.00" }),
       ]);
       const reduced = await rowsOf(venue, p.billId);
       const read = await draftOn(p.partyId, p.draft.id);
       expect(read.revision).toBe(p.draft.revision + 1);
-      expect(read.lines).toMatchObject([
-        {
-          id: p.draft.lines[0]!.id,
-          sourceLineId: p.line.id,
-          quantity: "2.000",
-          source: { netAmount: "24.00", extras: [{ id: p.extra.id, quantity: "4.000" }] },
-        },
-      ]);
+      expect(read.lines).toMatchObject(
+        [0, 1].map((n) => ({
+          id: p.draft.lines[n]!.id,
+          sourceLineId: p.row.lineIds![n],
+          quantity: "1.000",
+          source: {
+            netAmount: "12.00",
+            extras: [{ id: p.rows[2 * n + 1]!.id, quantity: "2.000" }],
+          },
+        })),
+      );
       const after = await frozen();
-      expect(after.sources).toEqual(before.sources);
+      expect(after.sources).toEqual(
+        before.sources.filter((source) => source.sourceLineId !== p.row.lineIds![2]),
+      );
       expect(after.items).toEqual(before.items);
       expect(after.jobs).toEqual(before.jobs);
       expect(after.notices).toEqual(before.notices);

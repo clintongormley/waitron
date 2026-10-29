@@ -330,23 +330,30 @@ it("saved draft keeps and submits its deleted course", async () => {
     .select()
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, v.tabId));
+  // Each of the two steaks is its own portion with its own sauce (A803).
   expect(rows.map((x) => [x.productId, x.courseId, x.quantity])).toEqual([
-    [v.dish.id, v.late.id, 2000],
-    [v.sauce.id, null, 2000],
+    [v.dish.id, v.late.id, 1000],
+    [v.sauce.id, null, 1000],
+    [v.dish.id, v.late.id, 1000],
+    [v.sauce.id, null, 1000],
   ]);
   const items = await v.queue();
+  const late = { id: v.late.id, name: "Recorded mains", displayOrder: 7 };
   expect(items.map((x) => [x.name, x.course, x.firedAt])).toEqual([
-    ["K-STEAK", { id: v.late.id, name: "Recorded mains", displayOrder: 7 }, null],
+    ["K-STEAK", late, null],
+    ["K-STEAK", late, null],
   ]);
-  expect(items[0]!.modifiers).toEqual([
-    { descriptions: { "es-ES": "Staff sauce" }, addAllergens: null, suitableFor: [] },
-  ]);
+  for (const item of items)
+    expect(item.modifiers).toEqual([
+      { descriptions: { "es-ES": "Staff sauce" }, addAllergens: null, suitableFor: [] },
+    ]);
   const tickets = await v.db
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, v.tabId));
   expect(tickets.map((row) => [row.courseId, row.quantity, row.firedAt])).toEqual([
-    [v.late.id, 2000, null],
+    [v.late.id, 1000, null],
+    [v.late.id, 1000, null],
   ]);
 });
 it("held deleted course fires with its original name and sequence", async () => {
@@ -393,16 +400,25 @@ it("quantity-only open-order edit retains deleted course without repricing saved
     quantity: "2",
   });
   expect(res.status).toBe(200);
-  const [after] = await v.db
+  // A sent portion is not raised: the rise is a second portion at the saved price (A803 D30).
+  const after = await v.db
     .select()
     .from(workingOrderLines)
-    .where(eq(workingOrderLines.id, before!.id));
-  expect(after).toEqual({ ...before, quantity: 2000, lineTotal: 2400 });
-  expect((await v.queue())[0]!.course).toEqual({
-    id: v.late.id,
-    name: "Recorded mains",
-    displayOrder: 7,
+    .where(eq(workingOrderLines.workingOrderId, v.tabId))
+    .orderBy(workingOrderLines.lineNo);
+  expect(after[0]).toEqual(before);
+  expect(after).toHaveLength(2);
+  expect(after[1]).toMatchObject({
+    productId: before!.productId,
+    courseId: v.late.id,
+    quantity: 1000,
+    unitPriceGross: before!.unitPriceGross,
+    lineTotal: 1200,
   });
+  const queued = await v.queue();
+  expect(queued).toHaveLength(2);
+  for (const item of queued)
+    expect(item.course).toEqual({ id: v.late.id, name: "Recorded mains", displayOrder: 7 });
 });
 for (const mode of ["new draft", "new basket", "new line"] as const)
   it(`${mode} cannot choose deleted course`, async () => {

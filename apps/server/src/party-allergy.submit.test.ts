@@ -285,13 +285,26 @@ describe("A669 atomic submit", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.tabId))
       .orderBy(workingOrderLines.lineNo);
-    expect(rows.map((r) => r.quantity)).toEqual([2000, 3000, 4000]);
-    expect(saved.ticks).toHaveLength(2);
-    expect(saved.ticks.find((t) => t.guestId === saved.guests[0]!.id)!.workingLineId).toBe(
-      rows[2]!.id,
+    // Each portion is its own line (A803): 2, 3 and 4 burgers are rows 0–1, 2–4 and 5–8, and a
+    // tick on a line reaches every portion of it.
+    expect(rows.map((r) => r.quantity)).toEqual(Array(9).fill(1000));
+    const ticked = (guest: number) =>
+      saved.ticks
+        .filter((t) => t.guestId === saved.guests[guest]!.id)
+        .map((t) => t.workingLineId)
+        .sort();
+    expect(saved.ticks).toHaveLength(7);
+    expect(ticked(0)).toEqual(
+      rows
+        .slice(5, 9)
+        .map((r) => r.id)
+        .sort(),
     );
-    expect(saved.ticks.find((t) => t.guestId === saved.guests[1]!.id)!.workingLineId).toBe(
-      rows[1]!.id,
+    expect(ticked(1)).toEqual(
+      rows
+        .slice(2, 5)
+        .map((r) => r.id)
+        .sort(),
     );
   });
 
@@ -663,15 +676,19 @@ describe("A669 atomic submit", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, p.tabId))
       .orderBy(workingOrderLines.lineNo);
+    // The soup ×2 is two portions, rows 2 and 3, and the tick on it reaches both (A803).
     expect(rows.map((r) => [r.quantity, r.parentLineId === null])).toEqual([
       [1000, true],
       [1000, false],
-      [2000, true],
+      [1000, true],
+      [1000, true],
     ]);
     const saved = await snapshot(p);
-    expect(saved.ticks).toEqual([
-      { guestId: saved.guests[1]!.id, draftLineId: null, workingLineId: rows[2]!.id },
-    ]);
+    expect(saved.ticks.sort((a, b) => a.workingLineId!.localeCompare(b.workingLineId!))).toEqual(
+      [rows[2]!.id, rows[3]!.id]
+        .sort()
+        .map((id) => ({ guestId: saved.guests[1]!.id, draftLineId: null, workingLineId: id })),
+    );
   });
 
   it.each([

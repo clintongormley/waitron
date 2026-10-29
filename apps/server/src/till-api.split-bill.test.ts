@@ -444,7 +444,8 @@ describe("POST /api/bills/:id/merge of a seated party's check back into its tab"
 
     expect(res.status).toBe(204);
     expect(await quantitiesOn(checkId)).toEqual([]);
-    expect(await quantitiesOn(tabId)).toEqual(["2000", "1000"]);
+    // The three coffees are three portions, each its own line, on whichever bill (A803).
+    expect(await quantitiesOn(tabId)).toEqual(["1000", "1000", "1000"]);
     expect(before).toMatchObject({ state: "open", members: [{ leftAt: null }] });
     expect(await partyOf(partyId)).toEqual(before);
   });

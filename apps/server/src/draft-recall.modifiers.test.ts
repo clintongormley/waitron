@@ -829,10 +829,14 @@ describe("mixed New order persistence through authenticated requests", () => {
       expect(
         stored.filter((line) => line.id === p.parent.id || line.parentLineId === p.parent.id),
       ).toEqual(before.lines);
+      // The fresh Caña ×2 is sent as two portions, each its own line (A803).
       expect(
         stored.filter((line) => line.id !== p.parent.id && line.parentLineId !== p.parent.id),
-      ).toMatchObject([{ name: "Caña", quantity: 2000, lineTotal: 600 }]);
-      expect(stored).toHaveLength(3);
+      ).toMatchObject([
+        { name: "Caña", quantity: 1000, lineTotal: 300 },
+        { name: "Caña", quantity: 1000, lineTotal: 300 },
+      ]);
+      expect(stored).toHaveLength(4);
       const afterSend = await frozen(p);
       expect(afterSend.adjustments).toEqual(before.adjustments);
       expect(afterSend.sources).toEqual(afterSave.sources);

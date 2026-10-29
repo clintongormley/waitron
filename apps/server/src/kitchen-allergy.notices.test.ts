@@ -39,7 +39,7 @@ import { recallToDraft } from "./draft-recall.js";
 import { submitGroups } from "./order-groups.js";
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { registerPortions } from "./order-portions.js";
+import { readWholePortionLines } from "./order-portions.js";
 import { moveDishesToStation } from "./station-move.js";
 import {
   OPERATOR,
@@ -165,6 +165,14 @@ async function sent(
   return { ...p, tableId, ticket: ticket!, guest: snap.guests[0]! };
 }
 type Sent = Awaited<ReturnType<typeof sent>>;
+// Burger ×3 is three portions; acting on "the dish" names all of them.
+async function dishLines(p: Sent) {
+  const lines = await v.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, p.tabId));
+  return lines.filter((line) => line.parentLineId === null).sort((a, b) => a.lineNo - b.lineNo);
+}
 async function request(path: string, body: unknown, method = "POST") {
   const response = await app.request(path, {
     method,
@@ -202,7 +210,7 @@ describe("A669 notices", () => {
       await v.db
         .update(ticketItems)
         .set({ state, awayAt: new Date().toISOString() })
-        .where(eq(ticketItems.id, p.ticket.id));
+        .where(eq(ticketItems.workingOrderId, p.tabId));
       await edit(p, patch(p, { who: "Corrected guest", note: "Separate tools" }));
       const block = { ...original, who: "Corrected guest", note: "Separate tools" };
       expect(
@@ -233,12 +241,14 @@ describe("A669 notices", () => {
     "%s delivers a removal using the deleted assignment",
     async (mode) => {
       const p = await sent();
+      const lines = await dishLines(p);
       const allergy: AllergyPatch =
         mode === "untick"
           ? {
-              ticks: [
-                { line: { kind: "working", id: p.ticket.workingOrderLineId }, guestIndex: null },
-              ],
+              ticks: lines.map((line) => ({
+                line: { kind: "working" as const, id: line.id },
+                guestIndex: null,
+              })),
             }
           : { party: { answer: mode === "none" ? "none" : "allergies", guests: [] }, ticks: [] };
       await edit(p, allergy);
@@ -266,7 +276,10 @@ describe("A669 notices", () => {
     const p = await sent();
     await edit(p, {
       party: { answer: "allergies", guests: [guest] },
-      ticks: [{ line: { kind: "working", id: p.ticket.workingOrderLineId }, guestIndex: 0 }],
+      ticks: (await dishLines(p)).map((line) => ({
+        line: { kind: "working" as const, id: line.id },
+        guestIndex: 0,
+      })),
     });
     expect(await notices()).toEqual([]);
     expect(await copies(p)).toEqual({ originalBlock: original, currentBlock: original });
@@ -291,19 +304,22 @@ describe("A669 notices", () => {
     "%s work produces no correction",
     async (kind) => {
       const p = await sent(kind === "unprinted-hold" ? "hold" : "fire");
+      const lines = await dishLines(p);
       if (kind === "served")
         await v.db
           .update(workingOrderLines)
-          .set({ servedQuantity: 3000 })
-          .where(eq(workingOrderLines.id, p.ticket.workingOrderLineId));
+          .set({ servedQuantity: 1000 })
+          .where(eq(workingOrderLines.workingOrderId, p.tabId));
       if (kind === "cancelled")
-        await v.db.insert(lineServiceCancellations).values({
-          lineId: p.ticket.workingOrderLineId,
-          quantity: 3000,
-          actorId: OPERATOR,
-          wasStarted: false,
-          cancelledAt: new Date().toISOString(),
-        });
+        await v.db.insert(lineServiceCancellations).values(
+          lines.map((line) => ({
+            lineId: line.id,
+            quantity: 1000,
+            actorId: OPERATOR,
+            wasStarted: false,
+            cancelledAt: new Date().toISOString(),
+          })),
+        );
       if (kind === "collected")
         await v.db
           .update(workingOrders)
@@ -318,7 +334,7 @@ describe("A669 notices", () => {
         await v.db
           .update(ticketItems)
           .set({ madeHere: true })
-          .where(eq(ticketItems.id, p.ticket.id));
+          .where(eq(ticketItems.workingOrderId, p.tabId));
       if (kind === "closed") {
         const response = await app.request(`/api/parties/${p.partyId}/allergy`, {
           method: "PUT",
@@ -399,7 +415,9 @@ describe("A669 notices", () => {
         .select()
         .from(ticketItems)
         .where(eq(ticketItems.workingOrderId, p.tabId));
-      expect(tickets).toHaveLength(2);
+      // Fire builds today's grouped line (dish + side); hold sends three portions, each with its
+      // own side.
+      expect(tickets).toHaveLength(release === "fire" ? 2 : 6);
       const side = tickets.find((item) => item.stationId === extra.station.id)!;
       expect(side).toBeDefined();
       if (release === "fire") {
@@ -447,15 +465,17 @@ describe("A669 notices", () => {
   it("a recalled source receives no allergy correction or printer job", async () => {
     await printer();
     const p = await sent();
-    const revision = await revisionOf(v, p.partyId);
-    await inTx(v, async (tx) =>
-      recallToDraft(tx, v.cfg, p.partyId, p.ticket.workingOrderLineId, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: revision,
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      }),
-    );
+    for (const line of await dishLines(p)) {
+      const revision = await revisionOf(v, p.partyId);
+      await inTx(v, async (tx) =>
+        recallToDraft(tx, v.cfg, p.partyId, line.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revision,
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        }),
+      );
+    }
     const jobs = await v.db.select().from(printJobs);
     await edit(p, patch(p, { note: "Fresh tools" }));
     expect((await notices()).filter((row) => row.kind.startsWith("allergy_"))).toEqual([]);
@@ -732,27 +752,43 @@ describe("A669 notices", () => {
 });
 
 describe("A803 portions", () => {
-  /** Two one-Burger dish lines sent and ticked for the guest; with `bound`, two portions of one
-   * cohort, as a sent "2 × Burger" is stored. */
+  /** "2 × Burger" sent and ticked for the guest: with `bound`, as a sent table order stores it
+   * (two portions); otherwise as two unbound one-Burger lines, the grouped shape. */
   async function sentTwo(bound: boolean) {
     const tableId = await v.table(`Portions ${randomUUID().slice(0, 8)}`);
     const p = await seat(v, tableId);
-    const burger = { menuItemId: v.item("Burger"), quantity: "1", note: "Dish note" };
+    const burger = { menuItemId: v.item("Burger"), note: "Dish note" };
+    const allergy = (count: number): AllergyPatch => ({
+      party: { answer: "allergies", guests: [guest] },
+      ticks: Array.from({ length: count }, (_, lineIndex) => ({
+        line: { kind: "submitted" as const, groupIndex: 0, lineIndex },
+        guestIndex: 0,
+      })),
+    });
     await inTx(v, async (tx) =>
-      submitGroups(tx, v.cfg, p.partyId, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: p.revision,
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-        groups: [{ release: "fire", lines: [burger, burger] }],
-        allergy: {
-          party: { answer: "allergies", guests: [guest] },
-          ticks: [0, 1].map((lineIndex) => ({
-            line: { kind: "submitted" as const, groupIndex: 0, lineIndex },
-            guestIndex: 0,
-          })),
-        },
-      }),
+      bound
+        ? submitGroups(tx, v.cfg, p.partyId, {
+            submissionId: randomUUID(),
+            expectedPartyRevision: p.revision,
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, p.tabId),
+            groups: [{ release: "fire", lines: [{ ...burger, quantity: "2" }] }],
+            allergy: allergy(1),
+          })
+        : placeGroupedRound(
+            tx,
+            v.cfg,
+            p,
+            {
+              release: "fire",
+              lines: [
+                { ...burger, quantity: "1" },
+                { ...burger, quantity: "1" },
+              ],
+            },
+            OPERATOR,
+            allergy(2),
+          ),
     );
     const lines = await v.db
       .select({ id: workingOrderLines.id })
@@ -760,21 +796,14 @@ describe("A803 portions", () => {
       .where(eq(workingOrderLines.workingOrderId, p.tabId))
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
-    if (bound) {
-      const cohort = randomUUID();
+    expect(
       await inTx(v, (tx) =>
-        registerPortions(
+        readWholePortionLines(
           tx,
-          lines.map((line, i) => ({
-            portionId: randomUUID(),
-            lineId: line.id,
-            ordinal: i + 1,
-            pricingCohortId: cohort,
-            measured: false,
-          })),
+          lines.map((line) => line.id),
         ),
-      );
-    }
+      ),
+    ).toEqual(new Set(bound ? lines.map((line) => line.id) : []));
     const snap = await inTx(v, (tx) => VENUE_SERVICE.readPartyAllergy(tx, p.partyId));
     const [ticket] = await v.db
       .select()

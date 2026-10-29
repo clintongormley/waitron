@@ -71,10 +71,12 @@ export async function kitchenFixture(db: Database) {
       },
     }),
   );
-  const [ticket] = await db
+  // Burger ×3 is three portions, each with its own ticket item; `ticket` is the first.
+  const tickets = await db
     .select()
     .from(ticketItems)
     .where(eq(ticketItems.workingOrderId, party.tabId));
+  const ticket = tickets[0];
   await inTx(v, async (tx) => {
     const printer = await createPrinter(tx, v.cfg, {
       name: "Atomic printer",
@@ -100,7 +102,16 @@ export async function kitchenFixture(db: Database) {
     },
     () => {},
   );
-  return { v, party, tableId, ticket: ticket!, app, token, cookie: `${SESSION_COOKIE}=${token}` };
+  return {
+    v,
+    party,
+    tableId,
+    ticket: ticket!,
+    tickets,
+    app,
+    token,
+    cookie: `${SESSION_COOKIE}=${token}`,
+  };
 }
 export type KitchenFixture = Awaited<ReturnType<typeof kitchenFixture>>;
 export interface KitchenCommand {

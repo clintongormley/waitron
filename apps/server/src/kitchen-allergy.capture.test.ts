@@ -46,7 +46,7 @@ import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
-import { registerPortions } from "./order-portions.js";
+import { readPortionBindings } from "./order-portions.js";
 import { ALLERGEN_NAMES, ALLERGEN_KIND_NAMES } from "./i18n/kitchen-allergy.js";
 import { republishMenus } from "./testing/publish-menu.js";
 import { routeProductTo } from "./testing/zone-offers.js";
@@ -965,16 +965,9 @@ describe("A669 capture", () => {
     await inTx(v, (tx) => submitGroups(tx, v.cfg, p.partyId, ask));
     const row = copies(p.tabId)[0]!;
     expect(row.frozen).toBeNull();
-    await inTx(v, (tx) =>
-      registerPortions(tx, [
-        {
-          portionId: randomUUID(),
-          lineId: row.lineId,
-          ordinal: 1,
-          pricingCohortId: randomUUID(),
-          measured: false,
-        },
-      ]),
+    // The send bound the dish to its portion.
+    expect((await inTx(v, (tx) => readPortionBindings(tx, [row.lineId]))).has(row.lineId)).toBe(
+      true,
     );
     await printer();
     const { enqueueHoldCorrections } = await import("./kitchen-print.js");

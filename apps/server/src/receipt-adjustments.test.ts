@@ -791,8 +791,9 @@ describe("receiptLines", () => {
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
-    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows, and the
-    // second is numbered after the Bread. The amount prints the share it took: 1.00 of 9.99.
+    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows. Each
+    // croqueta is its own portion line (A803), so the second row keeps its place before the Bread.
+    // The amount prints the share it took: 1.00 of 9.99.
     const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Bread" }]);
     await adjust(billId, {
       ...(await todayLine(venue, billId, 1)),
@@ -824,8 +825,8 @@ describe("receiptLines", () => {
     expect(printed.slice(start, rule)).toEqual([
       at80("2  Croquetas de jamón", "6,66"),
       at80("  Descuento 10,01%", "-1,00"),
-      at80("1  Pan de pueblo", "2,50"),
       at80("1  Croquetas de jamón", "3,33"),
+      at80("1  Pan de pueblo", "2,50"),
     ]);
   });
 

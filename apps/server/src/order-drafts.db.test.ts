@@ -11,7 +11,7 @@ import { AppError, decimal } from "@waitron/shared";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
 import { deleteCourse } from "./course-delete.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import {
   kitchenCourses,
@@ -22,7 +22,9 @@ import {
   orderDrafts,
   orderGroups,
   serviceCommands,
+  orderPortions,
   ticketItems,
+  workingLinePortions,
   parties,
   withTransaction,
   workingOrderLines,
@@ -2730,9 +2732,13 @@ describe("submitting a draft: takeover and credit (D5, spec §2)", () => {
 
     const groupId = result.groups[0]!.id;
     expect(result).toMatchObject({ tabId, revision: await partyRevision(partyId), draft: null });
+    // The two beers are sent as two portions, each its own line (A803).
     expect(
       (await tabLines(partyId)).map((row) => [row.productId, row.quantity, row.creditedTo]),
-    ).toEqual([[v.productId.beer, 2000, SAM]]);
+    ).toEqual([
+      [v.productId.beer, 1000, SAM],
+      [v.productId.beer, 1000, SAM],
+    ]);
     expect(
       await db
         .select({ id: orderGroups.id, submittedBy: orderGroups.submittedBy })
@@ -5530,6 +5536,30 @@ describe("source-backed draft foundations", () => {
 });
 
 describe("send-time fresh combining", () => {
+  /** The party's dish lines in line order, each cohort named by the order it first appears in. */
+  async function linesWithCohort(partyId: string) {
+    const rows = await db
+      .select({
+        quantity: workingOrderLines.quantity,
+        groupId: workingOrderLines.groupId,
+        cohortId: orderPortions.cohortId,
+      })
+      .from(workingOrderLines)
+      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+      .innerJoin(
+        workingLinePortions,
+        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
+      )
+      .innerJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+      .where(eq(workingOrders.partyId, partyId))
+      .orderBy(asc(workingOrderLines.lineNo));
+    const names = new Map<string, string>();
+    return rows.map(({ cohortId, ...row }) => {
+      if (!names.has(cohortId)) names.set(cohortId, "abcdefgh"[names.size]!);
+      return { ...row, cohort: names.get(cohortId)! };
+    });
+  }
+
   it("combines whole split lines per chosen destination, ignoring old slots and noMerge", async () => {
     const v = await setupVenue();
     const { partyId } = await seated(v);
@@ -5543,13 +5573,16 @@ describe("send-time fresh combining", () => {
       { lineIds: lineIds(draft).slice(0, 2), release: "fire" },
       { lineIds: lineIds(draft).slice(2), release: "hold" },
     ]);
-    expect(
-      (await tabLines(partyId)).map(({ quantity, groupId }) => ({ quantity, groupId })),
-    ).toEqual([
-      { quantity: 3000, groupId: sent.groups[0]!.id },
-      { quantity: 2000, groupId: sent.groups[1]!.id },
+    // Each destination's beers combine into one cohort, stored one line per portion (A803).
+    const [fired, held] = sent.groups.map((group) => group.id);
+    expect(await linesWithCohort(partyId)).toEqual([
+      { quantity: 1000, groupId: fired, cohort: "a" },
+      { quantity: 1000, groupId: fired, cohort: "a" },
+      { quantity: 1000, groupId: fired, cohort: "a" },
+      { quantity: 1000, groupId: held, cohort: "b" },
+      { quantity: 1000, groupId: held, cohort: "b" },
     ]);
-    expect(await db.select().from(ticketItems)).toHaveLength(2);
+    expect(await db.select().from(ticketItems)).toHaveLength(5);
     expect(sent.draft).toBeNull();
   });
 
@@ -5587,7 +5620,14 @@ describe("send-time fresh combining", () => {
     );
     await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
     const rows = await db.select().from(workingOrderLines).orderBy(workingOrderLines.lineNo);
-    expect(rows.map((line) => line.quantity)).toEqual([1000, 1000, 2000]);
+    // The two unticked beers combine into one cohort of two portions (A803).
+    expect(rows.map((line) => line.quantity)).toEqual([1000, 1000, 1000, 1000]);
+    expect((await linesWithCohort(partyId)).map((line) => line.cohort)).toEqual([
+      "a",
+      "b",
+      "c",
+      "c",
+    ]);
     expect((await inTx((tx) => readPartyAllergy(tx, partyId))).ticks).toEqual(
       expect.arrayContaining([
         { guestId: allergy.guests[0]!.id, draftLineId: null, workingLineId: rows[0]!.id },
@@ -5729,5 +5769,250 @@ describe("A803: weighed and measured adds never merge", () => {
     await submit(v, partyId, saved, ALEX, [{ lineIds: lineIds(saved), release: "fire" }]);
 
     expect((await tabLines(partyId)).map((line) => line.quantity)).toEqual([200000, 200000]);
+  });
+});
+
+describe("A803 portions: a sent table order stores one line per portion", () => {
+  const sauce = (v: Venue) => [
+    { listId: v.sauceListId, picks: [{ productId: v.productId.sauce, quantity: 1 }] },
+  ];
+
+  /** Each dish line on the party's bills with the portion it holds, in line order. */
+  async function boundDishes(partyId: string) {
+    return db
+      .select({
+        id: workingOrderLines.id,
+        productId: workingOrderLines.productId,
+        quantity: workingOrderLines.quantity,
+        portionId: workingLinePortions.portionId,
+        cohortId: orderPortions.cohortId,
+        ordinal: orderPortions.ordinal,
+        measured: orderPortions.measured,
+      })
+      .from(workingOrderLines)
+      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+      .leftJoin(
+        workingLinePortions,
+        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
+      )
+      .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+      .where(and(eq(workingOrders.partyId, partyId), isNull(workingOrderLines.parentLineId)))
+      .orderBy(asc(workingOrderLines.lineNo));
+  }
+
+  async function allergyGuests(partyId: string, names: string[]) {
+    return inTx(async (tx) =>
+      savePartyAllergy(
+        tx,
+        partyId,
+        await partyRevision(partyId),
+        {
+          answer: "allergies",
+          guests: names.map((who) => ({ who, allergens: { milk: {} } })),
+        },
+        ALEX,
+      ),
+    );
+  }
+
+  it("A803 portions: submitting 2 × burger with cheese writes two portions, each with its own cheese and ticket item", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], extras: sauce(v), quantity: "2" }),
+    ]);
+
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+
+    const dishes = await boundDishes(partyId);
+    expect(dishes.map((d) => [d.productId, d.quantity, d.ordinal, d.measured])).toEqual([
+      [v.productId.burger, 1000, 1, false],
+      [v.productId.burger, 1000, 2, false],
+    ]);
+    expect(new Set(dishes.map((d) => d.portionId)).size).toBe(2);
+    expect(dishes[0]!.cohortId).toBe(dishes[1]!.cohortId);
+    const extras = (await db.select().from(workingOrderLines)).filter(
+      (line) => line.parentLineId !== null,
+    );
+    expect(
+      extras
+        .map((e) => [e.productId, e.quantity, e.parentLineId])
+        .sort((a, b) => String(a[2]).localeCompare(String(b[2]))),
+    ).toEqual(
+      dishes
+        .map((d) => [v.productId.sauce, 1000, d.id])
+        .sort((a, b) => String(a[2]).localeCompare(String(b[2]))),
+    );
+    const tickets = await db
+      .select({ lineId: ticketItems.workingOrderLineId })
+      .from(ticketItems)
+      .where(
+        inArray(
+          ticketItems.workingOrderLineId,
+          dishes.map((d) => d.id),
+        ),
+      );
+    expect(tickets.map((t) => t.lineId).sort()).toEqual(dishes.map((d) => d.id).sort());
+  });
+
+  it("A803 portions: a draft's allergy tick reaches every portion", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], quantity: "2" }),
+      item(v, "fish"),
+    ]);
+    const state = await allergyGuests(partyId, ["Window seat"]);
+    await inTx((tx) =>
+      setAllergyLineTicks(tx, partyId, [
+        { guestId: state.guests[0]!.id, draftLineId: draft.lines[0]!.id },
+      ]),
+    );
+
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+
+    const burgers = (await boundDishes(partyId)).filter((d) => d.productId === v.productId.burger);
+    expect(burgers).toHaveLength(2);
+    const ticks = (await inTx((tx) => readPartyAllergy(tx, partyId))).ticks;
+    expect(ticks.map((t) => [t.guestId, t.draftLineId, t.workingLineId]).sort()).toEqual(
+      burgers.map((b) => [state.guests[0]!.id, null, b.id]).sort(),
+    );
+  });
+
+  it("A803 portions: a direct send of 2 × burger and a ticked salad ticks the salad only, and a tick on the burger line reaches both portions", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+
+    await inTx(async (tx) =>
+      submitGroups(tx, v.cfg, partyId, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(partyId),
+        operatorId: ALEX,
+        groups: [
+          {
+            release: "fire",
+            lines: [
+              { menuItemId: v.offer("burger"), quantity: "2", options: [v.rare] },
+              { menuItemId: v.offer("fish"), quantity: "1" },
+            ],
+          },
+        ],
+        allergy: {
+          party: {
+            answer: "allergies",
+            guests: [
+              { who: "Salad guest", allergens: { milk: {} }, note: null },
+              { who: "Burger guest", allergens: { eggs: {} }, note: null },
+            ],
+          },
+          ticks: [
+            { line: { kind: "submitted", groupIndex: 0, lineIndex: 1 }, guestIndex: 0 },
+            { line: { kind: "submitted", groupIndex: 0, lineIndex: 0 }, guestIndex: 1 },
+          ],
+        },
+      }),
+    );
+
+    const dishes = await boundDishes(partyId);
+    const burgers = dishes.filter((d) => d.productId === v.productId.burger);
+    const fish = dishes.filter((d) => d.productId === v.productId.fish);
+    expect([burgers.length, fish.length]).toEqual([2, 1]);
+    const state = await inTx((tx) => readPartyAllergy(tx, partyId));
+    const guestOf = (who: string) => state.guests.find((g) => g.who === who)!.id;
+    expect(state.ticks.map((t) => [t.guestId, t.workingLineId]).sort()).toEqual(
+      [
+        [guestOf("Salad guest"), fish[0]!.id],
+        ...burgers.map((b) => [guestOf("Burger guest"), b.id]),
+      ].sort(),
+    );
+  });
+
+  it("A803 portions: two 200 ml adds submit as two portions", async () => {
+    const v = await setupVenue();
+    await inTx(async (tx) => {
+      const ml = await createUnit(
+        tx,
+        {
+          staffName: "Millilitre",
+          staffAbbreviation: "ml",
+          name: { en: "Millilitre" },
+          abbreviation: { en: "ml" },
+          precision: 0,
+          measure: true,
+        },
+        LOCALE,
+      );
+      await assignProductUnit(tx, v.productId.fish, ml.id);
+      await publishWorkingMenu(tx, v.menuId);
+    });
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "fish", { quantity: "200" }),
+      item(v, "fish", { quantity: "200" }),
+    ]);
+
+    await submit(v, partyId, draft, ALEX, [{ lineIds: lineIds(draft), release: "fire" }]);
+
+    const dishes = await boundDishes(partyId);
+    expect(dishes.map((d) => [d.quantity, d.ordinal, d.measured])).toEqual([
+      [200000, 1, true],
+      [200000, 1, true],
+    ]);
+    expect(dishes[0]!.cohortId).not.toBe(dishes[1]!.cohortId);
+  });
+
+  it("A803 portions: a replayed submit writes no second portion", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], quantity: "2" }),
+    ]);
+    const submissionId = randomUUID();
+    const partyRev = await partyRevision(partyId);
+    const groups = [{ lineIds: lineIds(draft), release: "fire" as const }];
+    const sameSend = {
+      submissionId,
+      partyRevision: partyRev,
+      expectedEdit: await expectedDraftEditForTest(db, draft),
+    };
+    const first = await submit(v, partyId, draft, ALEX, groups, sameSend);
+    const portions = await db.select().from(orderPortions);
+    const bindings = await db.select().from(workingLinePortions);
+
+    const replay = await submit(v, partyId, draft, ALEX, groups, sameSend);
+
+    expect(replay).toEqual(first);
+    expect(portions).toHaveLength(2);
+    expect(await db.select().from(orderPortions)).toEqual(portions);
+    expect(await db.select().from(workingLinePortions)).toEqual(bindings);
+  });
+
+  it("A803 portions: two racing submits of one draft write one set", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const draft = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], quantity: "2" }),
+    ]);
+    const groups = [{ lineIds: lineIds(draft), release: "fire" as const }];
+    const partyRev = await partyRevision(partyId);
+    const expectedEdit = await expectedDraftEditForTest(db, draft);
+    // Both sends hold the same observation before either begins, as two tills tapping Send at once.
+    let open!: () => void;
+    const barrier = new Promise<void>((resolve) => (open = resolve));
+    const send = async () => {
+      await barrier;
+      return submit(v, partyId, draft, ALEX, groups, { partyRevision: partyRev, expectedEdit });
+    };
+    const racing = Promise.allSettled([send(), send()]);
+    open();
+    const outcomes = await racing;
+
+    expect(outcomes.map((o) => o.status).sort()).toEqual(["fulfilled", "rejected"]);
+    expect(outcomes.find((o) => o.status === "rejected")).toMatchObject({
+      reason: { code: "draft.out_of_date" },
+    });
+    expect(await db.select().from(orderPortions)).toHaveLength(2);
+    expect(await db.select().from(workingLinePortions)).toHaveLength(2);
+    expect((await boundDishes(partyId)).map((d) => d.ordinal)).toEqual([1, 2]);
   });
 });

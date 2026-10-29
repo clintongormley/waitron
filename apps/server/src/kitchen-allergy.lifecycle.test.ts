@@ -122,6 +122,14 @@ async function sent(
   return { ...p, ticket: ticket! };
 }
 type Sent = Awaited<ReturnType<typeof sent>>;
+// Burger ×3 is three portions; acting on "the dish" names all of them.
+async function portionLines(p: Sent) {
+  const lines = await v.db
+    .select()
+    .from(workingOrderLines)
+    .where(eq(workingOrderLines.workingOrderId, p.tabId));
+  return lines.sort((a, b) => a.lineNo - b.lineNo);
+}
 async function edit(p: Sent, remove = false) {
   await inTx(v, async (tx) => {
     const view = await readPartyAllergyView(tx, v.cfg, p.partyId);
@@ -158,8 +166,9 @@ async function copies(p: Sent) {
   return tickets.map((ticket) => ({ ticket, copy: rows.get(ticket.id) }));
 }
 async function resend(p: Sent) {
+  const lineNos = (await portionLines(p)).map((line) => line.lineNo);
   await inTx(v, async (tx) =>
-    sendLines(tx, v.cfg, p.tabId, [1], {
+    sendLines(tx, v.cfg, p.tabId, lineNos, {
       operatorId: OPERATOR,
       expectedEdit: await readBillEditState(tx, p.tabId),
     }),
@@ -215,8 +224,9 @@ describe("A669 lifecycle", () => {
     "legacy recall preserves the original and sends its current correction on resend (remove %s)",
     async (remove) => {
       const p = await sent();
+      const lineNos = (await portionLines(p)).map((line) => line.lineNo);
       await inTx(v, async (tx) =>
-        recallLines(tx, v.cfg, p.tabId, [1], {
+        recallLines(tx, v.cfg, p.tabId, lineNos, {
           operatorId: OPERATOR,
           expectedEdit: await readBillEditState(tx, p.tabId),
         }),
@@ -227,9 +237,12 @@ describe("A669 lifecycle", () => {
       ).toEqual([]);
       const before = await v.db.select().from(printJobs);
       await resend(p);
-      expect((await copies(p)).map((row) => row.copy)).toEqual([
-        { originalBlock: original, currentBlock: remove ? null : current },
-      ]);
+      expect((await copies(p)).map((row) => row.copy)).toEqual(
+        Array.from({ length: 3 }, () => ({
+          originalBlock: original,
+          currentBlock: remove ? null : current,
+        })),
+      );
       expect(
         (await notices(stationId))
           .filter((notice) => notice.kind.startsWith("allergy_"))
@@ -249,6 +262,7 @@ describe("A669 lifecycle", () => {
     const destination = await inTx(v, (tx) =>
       createStation(tx, v.cfg, { name: "Unchanged destination" }),
     );
+    const lineIds = (await portionLines(p)).map((line) => line.id);
     await inTx(v, (tx) =>
       moveDishesToStation(
         tx,
@@ -256,7 +270,7 @@ describe("A669 lifecycle", () => {
         p.tabId,
         {
           submissionId: randomUUID(),
-          lineIds: [p.ticket.workingOrderLineId],
+          lineIds,
           stationId: destination.id,
         },
         { kind: "kitchen", deviceId: null, personId: OPERATOR },
@@ -285,15 +299,18 @@ describe("A669 lifecycle", () => {
       const destination = await inTx(v, (tx) => createStation(tx, v.cfg, { name: "New cook" }));
       const request = {
         submissionId: randomUUID(),
-        lineIds: [p.ticket.workingOrderLineId],
+        lineIds: (await portionLines(p)).map((line) => line.id),
         stationId: destination.id,
       };
       const actor = { kind: "kitchen" as const, deviceId: null, personId: OPERATOR };
       const before = await v.db.select().from(printJobs);
       await inTx(v, (tx) => moveDishesToStation(tx, v.cfg, p.tabId, request, actor));
-      expect((await copies(p)).map((row) => row.copy)).toEqual([
-        { originalBlock: original, currentBlock: remove ? null : current },
-      ]);
+      expect((await copies(p)).map((row) => row.copy)).toEqual(
+        Array.from({ length: 3 }, () => ({
+          originalBlock: original,
+          currentBlock: remove ? null : current,
+        })),
+      );
       expect(
         (await notices(destination.id)).map(({ kind, allergyBlock }) => ({ kind, allergyBlock })),
       ).toEqual([
@@ -342,9 +359,9 @@ describe("A669 lifecycle", () => {
           operatorId: OPERATOR,
         }),
       );
-      expect((await copies(p)).map((row) => row.copy)).toEqual([
-        { originalBlock: original, currentBlock: current },
-      ]);
+      expect((await copies(p)).map((row) => row.copy)).toEqual(
+        Array.from({ length: 3 }, () => ({ originalBlock: original, currentBlock: current })),
+      );
       expect(
         (await notices(destination))
           .filter((row) => row.kind.startsWith("allergy_"))
@@ -440,7 +457,7 @@ describe("A669 lifecycle", () => {
     const mergeCommand = await commandFor(v, p.partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, p.tabId, split.billId, mergeCommand));
     expect((await copies(p)).map((row) => row.copy)).toEqual(
-      Array.from({ length: 2 }, () => ({ originalBlock: original, currentBlock: current })),
+      Array.from({ length: 3 }, () => ({ originalBlock: original, currentBlock: current })),
     );
     const lines = await v.db
       .select()
@@ -462,9 +479,9 @@ describe("A669 lifecycle", () => {
     );
     const leaving = { ...p, partyId: target.partyId, tabId: split.billId };
     await edit(leaving);
-    expect((await copies(p)).map((row) => row.copy)).toEqual([
-      { originalBlock: original, currentBlock: original },
-    ]);
+    expect((await copies(p)).map((row) => row.copy)).toEqual(
+      Array.from({ length: 2 }, () => ({ originalBlock: original, currentBlock: original })),
+    );
     expect((await copies(leaving)).map((row) => row.copy)).toEqual([
       { originalBlock: original, currentBlock: current },
     ]);
@@ -480,21 +497,24 @@ describe("A669 lifecycle", () => {
     const before = await notices(stationId);
     await inTx(v, (tx) => reprintOrderTickets(tx, v.cfg, p.tabId));
     expect(await notices(stationId)).toEqual(before);
-    expect((await copies(p)).map((row) => row.copy)).toEqual([
-      { originalBlock: original, currentBlock: current },
-    ]);
+    expect((await copies(p)).map((row) => row.copy)).toEqual(
+      Array.from({ length: 3 }, () => ({ originalBlock: original, currentBlock: current })),
+    );
   });
   it("recall to draft creates a fresh original on resend and preserves old print payloads", async () => {
     const p = await sent();
-    const revision = await revisionOf(v, p.partyId);
-    const result = await inTx(v, async (tx) =>
-      recallToDraft(tx, v.cfg, p.partyId, p.ticket.workingOrderLineId, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: revision,
-        operatorId: OPERATOR,
-        expectedEdit: await readBillEditState(tx, p.tabId),
-      }),
-    );
+    let result: Awaited<ReturnType<typeof recallToDraft>> | undefined;
+    for (const line of await portionLines(p)) {
+      const revision = await revisionOf(v, p.partyId);
+      result = await inTx(v, async (tx) =>
+        recallToDraft(tx, v.cfg, p.partyId, line.id, {
+          submissionId: randomUUID(),
+          expectedPartyRevision: revision,
+          operatorId: OPERATOR,
+          expectedEdit: await readBillEditState(tx, p.tabId),
+        }),
+      );
+    }
     await edit(p);
     expect(
       (await notices(stationId)).filter((notice) => notice.kind.startsWith("allergy_")),
@@ -502,19 +522,19 @@ describe("A669 lifecycle", () => {
     const before = await v.db.select().from(printJobs);
     const nextRevision = await revisionOf(v, p.partyId);
     await inTx(v, async (tx) =>
-      submitDraft(tx, v.cfg, p.partyId, result.draft.id, {
+      submitDraft(tx, v.cfg, p.partyId, result!.draft.id, {
         submissionId: randomUUID(),
         expectedPartyRevision: nextRevision,
         operatorId: OPERATOR,
         expectedEdit: await readBillEditState(tx, p.tabId),
-        draftRevision: result.draft.revision,
-        groups: [{ release: "fire", lineIds: result.draft.lines.map((line) => line.id) }],
+        draftRevision: result!.draft.revision,
+        groups: [{ release: "fire", lineIds: result!.draft.lines.map((line) => line.id) }],
       }),
     );
     const rows = await copies(p);
-    expect(rows.map((row) => row.copy)).toEqual([
-      { originalBlock: current, currentBlock: current },
-    ]);
+    expect(rows.map((row) => row.copy)).toEqual(
+      Array.from({ length: 3 }, () => ({ originalBlock: current, currentBlock: current })),
+    );
     expect(rows[0]!.ticket.id).not.toBe(p.ticket.id);
     expect((await v.db.select().from(printJobs)).slice(0, before.length)).toEqual(before);
   });

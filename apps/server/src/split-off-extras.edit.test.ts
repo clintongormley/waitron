@@ -362,6 +362,89 @@ describe("editing split-off extras", () => {
     });
   });
 
+  it("A803 portions: raising a sent held burger with chips adds a portion with its own chips", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "burger", "1", 2)], release: "hold" }],
+      });
+      await edit(tx, venue, 1, { quantity: "2" });
+      const { lines, items } = await state(tx, venue.party.tabId);
+      const dishes = lines.filter((row) => row.parentLineId === null);
+      expect(dishes.map((row) => row.quantity)).toEqual([1000, 1000]);
+      expect(
+        dishes.map((dish) =>
+          lines.filter((row) => row.parentLineId === dish.id).map((row) => row.quantity),
+        ),
+      ).toEqual([[2000], [2000]]);
+      expect(
+        items
+          .filter((item) => item.stationId === venue.stations.fryer)
+          .map((item) => item.quantity),
+      ).toEqual([2000, 2000]);
+      expect((await slips(tx, venue.printers.grill)).at(-1)).toContain("HOLD CHANGED");
+      expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("+2");
+    });
+  });
+
+  it("A803 portions: raising a sent held burger with a routed and an inline extra adds a portion", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      const burger = {
+        ...line(venue, "burger"),
+        extras: [
+          {
+            listId: venue.lists.burger,
+            picks: [
+              { productId: venue.products.chips, quantity: 1 },
+              { productId: venue.products.cheese, quantity: 1 },
+            ],
+          },
+        ],
+      };
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger], release: "hold" }],
+      });
+      await edit(tx, venue, 1, { quantity: "2" });
+      const items = (await state(tx, venue.party.tabId)).items;
+      expect(
+        items
+          .filter((item) => item.stationId === venue.stations.fryer)
+          .map((item) => item.quantity),
+      ).toEqual([1000, 1000]);
+      expect(items).toHaveLength(4);
+    });
+  });
+
+  it("A803 portions: raising a sent held water with chips adds a portion and no dish record", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
+      });
+      const before = (await slips(tx, venue.printers.fryer)).length;
+      await edit(tx, venue, 1, { quantity: "2" });
+      const { lines, items } = await state(tx, venue.party.tabId);
+      expect(lines.filter((row) => row.parentLineId === null).map((row) => row.quantity)).toEqual([
+        1000, 1000,
+      ]);
+      expect(items.map((item) => [item.stationId, item.quantity])).toEqual([
+        [venue.stations.fryer, 2000],
+        [venue.stations.fryer, 2000],
+      ]);
+      const after = await slips(tx, venue.printers.fryer);
+      expect(after).toHaveLength(before + 1);
+      expect(after.at(-1)).toContain("+2");
+      expect(await slips(tx, venue.printers.grill)).toEqual([]);
+    });
+  });
+
   it("refuses changing a burger when its chips have started", async () => {
     const venue = await setupSplitExtrasVenue();
     const id = venue.party.tabId;
