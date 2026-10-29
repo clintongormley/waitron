@@ -173,7 +173,7 @@ describe("configuration", () => {
     expect([...SELF]).toEqual(["english-only.ts", "no-regime-vocabulary.test.ts"]);
   });
 
-  it("excludes the dashboard i18n translation catalogues by exact suffix, and nothing wider", () => {
+  it("excludes the translation catalogues by exact suffix, and nothing wider", () => {
     // A module's `src/dashboard/strings.ts` holds `{ en, es }` UI copy: its `es` values are
     // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down).
     expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts", "i18n/pack-words.ts"]);
@@ -211,7 +211,7 @@ describe("configuration", () => {
   });
 
   it("still scans a Spanish identifier in a non-catalogue dashboard file (the exclusion keeps its teeth)", () => {
-    // The exclusion is by PATH, not content: only `dashboard/strings.ts` is dropped.
+    // The exclusion is by PATH, not content: only the listed catalogue suffixes are dropped.
     const isCatalogue = (relative: string) =>
       I18N_CATALOGUES.some((suffix) => relative.endsWith(suffix));
     expect(isCatalogue("dashboard/strings.ts")).toBe(true);

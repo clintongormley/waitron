@@ -25,7 +25,7 @@ import {
   recoveryDocumentBytes,
 } from "./recovery-document.js";
 GlobalWorkerOptions.workerSrc = workerUrl;
-/** The one attached file a recovery PDF may carry: today's key file, or a recovery pack's file. */
+/** The one attached file a recovery PDF may carry: the key file, or a recovery pack's file. */
 const ATTACHMENT_LIMITS: ReadonlyMap<string, number> = new Map([
   [RECOVERY_ATTACHMENT, MAX_RECOVERY_ATTACHMENT],
   [PACK_ATTACHMENT, MAX_PACK_FILE],

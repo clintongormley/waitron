@@ -889,7 +889,7 @@ describe("waitron-restore restore --from-archive <recovery pack PDF>", () => {
     expect(await run(f)).toEqual({
       code: 1,
       out: [
-        "restore failed: the recovery pack holds no archive code — this box kept no backup archive in a bucket when the pack was made; give a pack made after archives were set up, or the archive recovery pack file",
+        "restore failed: the recovery pack holds no archive code — the box that made the pack kept no backup archive in a bucket then; give a pack made after archives were set up, or the archive recovery pack file",
       ],
     });
     expect(f.storeCalls).toEqual([]);

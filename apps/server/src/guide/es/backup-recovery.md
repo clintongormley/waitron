@@ -80,10 +80,11 @@ configuración inicial nueva.
 
 Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.
 Para un archivo, selecciónalo e introduce su clave. Para una copia del bucket, elige tu paquete de
-recuperación o el archivo del kit de recuperación, o pega el kit. El equipo lee el código de la copia
-del bucket del archivo adjunto dentro del PDF, no de la página impresa. Si el paquete se hizo antes
-de que el equipo tuviera copia en el bucket, el PDF no es un paquete de recuperación de Waitron o el
-paquete se modificó después de hacerse, la página lo dice bajo el campo y conserva lo que había.
+recuperación o el archivo del kit de recuperación, o pega el kit. La página lee el código de la copia
+del bucket del archivo adjunto dentro del PDF, no del texto impreso, y solo envía ese código. Si el
+paquete se hizo antes de que el equipo tuviera copia en el bucket, el PDF no es un paquete de
+recuperación de Waitron o el archivo adjunto del paquete está dañado o se modificó después de
+hacerse, la página lo dice bajo el campo y conserva lo que había.
 Para Cloud, pide la aprobación, apruébala en Cloud y compruébala aquí. La recuperación de Cloud
 requiere un servicio compatible; esta opción no habilita la recuperación de Cloud en producción.
 
@@ -94,7 +95,9 @@ y preproducción.
 ## Identifícate ante la copia elegida {#proof}
 
 Introduce la clave agrupada de la hoja que conservaste para esta copia, o elige su PDF de
-recuperación guardado. Una hoja nueva con una clave de sustitución puede no abrir una copia anterior.
+recuperación guardado o un paquete de recuperación que tenga la clave del servidor. Si el paquete no
+tiene la clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o
+el nombre de la clave que hay que buscar. Una hoja nueva con una clave de sustitución puede no abrir una copia anterior.
 
 Confirma que la caja anterior seguirá desconectada y que eres la única persona recuperando este
 contribuyente. Elige **Abrir copia**. Solo después de aceptar la clave, la página muestra el

@@ -296,7 +296,11 @@ describe("SetupRestoreBucketScreen", () => {
       () => recoveryPackPdf(null),
       "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
     ],
-    ["a PDF that is not a pack", plainPdf, "This PDF is not a Waitron recovery pack."],
+    [
+      "a PDF that is not a pack",
+      plainPdf,
+      "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the code.",
+    ],
     [
       "a pack whose attached file was changed",
       async () => damaged(await recoveryPackPdf(BUCKET_CODE)),

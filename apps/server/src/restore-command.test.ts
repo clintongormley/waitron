@@ -1105,7 +1105,7 @@ describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
     expect({ code, out }).toEqual({
       code: 1,
       out: [
-        "restore failed: the recovery pack holds no bucket copy code — this box had no bucket copy when the pack was made; give a pack made after the bucket copy was set up, or the recovery kit file",
+        "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
       ],
     });
   });

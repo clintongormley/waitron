@@ -532,8 +532,9 @@ command against it treat that entrypoint differently:
   rules for where the file sits. The command reads the bucket copy code from the file attached
   inside the PDF, never from its printed text, where a long code wraps. It restores nothing and
   prints one line when the pack holds no bucket copy code (the box had no bucket copy when the pack
-  was made), when the PDF is not a Waitron recovery pack, or when the pack is damaged or was changed
-  after it was made.
+  was made), when the PDF is not a Waitron recovery pack, or when the file attached inside the pack
+  is damaged or was changed after it was made. The PDF holds every code in the pack, the server's
+  recovery key among them: keep it as private as the kit file.
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected

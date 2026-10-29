@@ -96,8 +96,9 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 /**
  * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
  * <kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive <pack-file>
- * --archive-key <name>` downloads one archive and restores it as the first form does. The
- * recovery key comes from `WAITRON_BACKUP_RECOVERY_KEY`, the kit file or the pack file, never
+ * --archive-key <name>` downloads one archive and restores it as the first form does; either file
+ * may instead be the venue's recovery pack PDF. The recovery key comes from
+ * `WAITRON_BACKUP_RECOVERY_KEY`, the kit file, the archive pack file or the recovery pack PDF, never
  * argv: an argv element leaks into `ps`.
  *
  * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
@@ -522,9 +523,9 @@ type Source = { text: string } | { refused: string };
 
 const NO_CODE: Record<"bucketCode" | "archiveCode", string> = {
   bucketCode:
-    "restore failed: the recovery pack holds no bucket copy code — this box had no bucket copy when the pack was made; give a pack made after the bucket copy was set up, or the recovery kit file",
+    "restore failed: the recovery pack holds no bucket copy code — the box that made the pack had no bucket copy then; give a pack made after the bucket copy was set up, or the recovery kit file",
   archiveCode:
-    "restore failed: the recovery pack holds no archive code — this box kept no backup archive in a bucket when the pack was made; give a pack made after archives were set up, or the archive recovery pack file",
+    "restore failed: the recovery pack holds no archive code — the box that made the pack kept no backup archive in a bucket then; give a pack made after archives were set up, or the archive recovery pack file",
 };
 
 /**
