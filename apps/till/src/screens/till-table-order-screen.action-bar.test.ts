@@ -151,7 +151,7 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     expectInside(el.shadowRoot!.querySelector('[data-draft-action="send-all"]')!, host);
   });
 
-  it("shuts and fades the order, the bar included, while a round is being sent", async () => {
+  it("shuts and fades the menu and the order, the bar included, while a round is being sent", async () => {
     const { el } = await orderedInWindow(
       1024,
       768,
@@ -168,12 +168,15 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
         .shadowRoot!.querySelector<HTMLElement>("wt-button.remove")!
         .shadowRoot!.querySelector<HTMLElement>("button")!;
     const faded = () =>
-      [basket, root.querySelector(".draft-actions")!, root.querySelector("[data-draft-move]")!].map(
-        drawnFaded,
-      );
+      [
+        root.querySelector("till-menu-browser")!,
+        basket,
+        root.querySelector(".draft-actions")!,
+        root.querySelector("[data-draft-move]")!,
+      ].map(drawnFaded);
     remove().focus();
     expect(remove().getRootNode()).toHaveProperty("activeElement", remove());
-    expect(faded()).toEqual([false, false, false]);
+    expect(faded()).toEqual([false, false, false, false]);
     remove().blur();
 
     el.draftStore!.sending = true;
@@ -182,7 +185,7 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     remove().focus();
 
     expect(remove().getRootNode()).toHaveProperty("activeElement", null);
-    expect(faded()).toEqual([true, true, true]);
+    expect(faded()).toEqual([true, true, true, true]);
   });
 });
 
