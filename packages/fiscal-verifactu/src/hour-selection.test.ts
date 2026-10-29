@@ -1,6 +1,7 @@
 import { expect, it } from "vitest";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { compareHourClocks, type HourClockObservation } from "./hour-clock.js";
+import { decodeMinuteIdentity } from "./hour-identity.js";
 import {
   createHourSelection,
   type HourSelectionFacts,
@@ -753,6 +754,38 @@ it("restore waits until a minute start 90 to 150 seconds after its check", async
   f.at(at("2026-10-24T09:02:00Z"), 116_000);
   expect(await f.run(restore)).toMatchObject({ status: "selected", identity: "0D0RY" });
 });
+it.each([setup, restore])(
+  "a $action that has forgotten an earlier attempt's name still names a later minute when each clock was within 30 seconds",
+  async (base) => {
+    const selectPastWait = async (
+      f: ReturnType<typeof fixture>,
+      trueMs: number,
+      boxErrorMs: number,
+    ) => {
+      f.at(trueMs + boxErrorMs, 0, trueMs);
+      const waited = (await f.run(base)) as {
+        status: string;
+        targetMs: number;
+        remainingMs: number;
+      };
+      expect(waited.status).toBe("waiting");
+      f.at(waited.targetMs, waited.remainingMs, waited.targetMs - boxErrorMs);
+      const selected = (await f.run(base)) as {
+        status: string;
+        identity: string;
+        issuedAt: string;
+      };
+      expect(selected.status).toBe("selected");
+      return selected;
+    };
+    const first = await selectPastWait(fixture(), at("2026-10-24T09:00:04Z"), 30_000);
+    const firstTrueMs = Date.parse(first.issuedAt) - 30_000;
+    const second = await selectPastWait(fixture(), firstTrueMs + 1_000, -30_000);
+    expect(decodeMinuteIdentity(second.identity)).toBeGreaterThan(
+      decodeMinuteIdentity(first.identity),
+    );
+  },
+);
 it.each([
   ["2026-10-24T09:00:00.000Z", "2026-10-24T09:02:00Z", 120_000],
   ["2026-10-24T09:00:30.000Z", "2026-10-24T09:03:00Z", 150_000],
