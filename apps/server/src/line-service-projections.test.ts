@@ -56,7 +56,10 @@ useVenueDb({
 });
 
 async function fixture(cancelled: number, release: "fire" | "hold" = "fire", served = 0) {
-  const order = await billWith(venue, [{ name: "Pizza", quantity: "3", olives: 2 }], { release });
+  const order = await billWith(venue, [{ name: "Pizza", quantity: "3", olives: 2 }], {
+    release,
+    shape: "grouped",
+  });
   return inTx(venue, async (tx) => {
     const family = await tx
       .select()

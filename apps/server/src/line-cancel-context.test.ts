@@ -68,7 +68,7 @@ async function fixture(release: "fire" | "hold" = "fire", coffee = false) {
   const order = await billWith(
     venue,
     coffee ? [{ name: "Coffee", quantity: "3" }] : [{ name: "Pizza", quantity: "3", olives: 2 }],
-    { release },
+    { release, shape: "grouped" },
   );
   return inTx(venue, async (tx) => {
     const rows = await tx
