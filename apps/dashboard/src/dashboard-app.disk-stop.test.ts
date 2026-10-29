@@ -6,9 +6,10 @@ import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
-import type { DashboardApi, DiskStopResponse, PersonSummary } from "./api/client.js";
+import { DashboardApi, type DiskStopResponse, type PersonSummary } from "./api/client.js";
 import { diag } from "./diagnostics.js";
 import { setLocale } from "./i18n/t.js";
+import { createSessionSignals } from "./session-signals.js";
 
 const people: PersonSummary[] = [
   {
@@ -526,6 +527,36 @@ describe("the full-disk bar's button", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("a refusal from a read still in flight when Sign in as a manager signs out keeps Box status as the destination", async () => {
+    let finish!: (response: Response) => void;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(stopped), { status: 200 }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finish = resolve)));
+    const signals = createSessionSignals();
+    const real = new DashboardApi("", fetchImpl, signals.reportError, signals.reportActivity);
+    const { api, liveData } = shellApi(
+      vi.fn(() => real.background.getDiskStop()),
+      { getMe: vi.fn().mockResolvedValue(me("supervisor", [])) },
+    );
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await expect.poll(() => diskBar(el)).not.toBeNull();
+    liveData.invalidate([{ type: "incidents", id: "x" }]);
+    await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
+    await diskBar(el)!.updateComplete;
+    await pressButton(el);
+    await expect.poll(() => login(el)).not.toBeNull();
+    expect(location.pathname).toBe("/manage/box-status");
+    finish(
+      new Response(JSON.stringify({ error: { code: "management_session.required" } }), {
+        status: 401,
+      }),
+    );
+    await flush(el);
+    await flush(el);
+    expect(location.pathname).toBe("/manage/box-status");
   });
 
   it("asks before Sign in as a manager signs out over unsaved changes", async () => {

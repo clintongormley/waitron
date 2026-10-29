@@ -63,7 +63,8 @@ import { es } from "./i18n/strings.js";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
-import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
+import { DashboardApi, type AlertView, type PersonSummary } from "./api/client.js";
+import { createSessionSignals } from "./session-signals.js";
 import type { WtInput } from "@waitron/ui";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
@@ -4732,6 +4733,26 @@ describe("dashboard URL navigation", () => {
     await flush(el);
     expect(login(el)).not.toBeNull();
   });
+
+  it("keeps a protected destination behind login when the real client reports the signed-out probe", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const signals = createSessionSignals();
+    const refusal = (code: string, status: number) =>
+      new Response(JSON.stringify({ error: { code } }), { status });
+    const api = new DashboardApi(
+      "",
+      async (path) =>
+        String(path).endsWith("/session/me")
+          ? refusal("management_session.required", 401)
+          : refusal("connection.failed", 503),
+      signals.reportError,
+      signals.reportActivity,
+    );
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await expect.poll(() => login(el)).not.toBeNull();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/staff");
+  });
 });
 
 /**
@@ -6491,6 +6512,35 @@ describe("dashboard-app: session signals", () => {
     expect(overview(el)).toBeNull();
     expect(notice(el)).toBe(codeMessage("node.reset"));
   });
+
+  it("shows the reset notice when the box was reset while signed out", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    sessionInvalid("node.reset");
+    await flush(el);
+    expect(notice(el)).toBe(codeMessage("node.reset"));
+  });
+
+  it.each(["management_session.expired", "person.suspended"])(
+    "keeps the sign-in page's notice and address when %s arrives while signed out",
+    async (code) => {
+      history.replaceState(null, "", "/manage/staff");
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+        }),
+      });
+      await flush(el);
+      expect(login(el)).not.toBeNull();
+      sessionInvalid(code);
+      await flush(el);
+      expect(notice(el)).toBeNull();
+      expect(location.pathname).toBe("/manage/staff");
+    },
+  );
 
   it.each(["management_session.required", "management_session.expired", "person.suspended"])(
     "keeps the reset notice when %s arrives after it",

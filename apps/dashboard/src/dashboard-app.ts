@@ -1002,6 +1002,8 @@ export class DashboardApp extends LitElement {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
+    // Signed out already: a late refusal must not rewrite the address or the sign-in notice.
+    if (this.sessionRole === undefined && code !== "node.reset") return;
     if (
       code === "management_session.expired" ||
       code === "management_session.required" ||
