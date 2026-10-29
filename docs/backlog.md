@@ -191,10 +191,11 @@ under `docs/backlog/`.
   failure.
   The owner approved the reviewed read-only evidence build on 2026-10-29. The
   [implementation plan](superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
-  has contracts, a local query adapter and isolated process supervision on
-  `feat/a1089-certificate-diagnosis`. Parent authorization and material binding,
-  the route and the screen remain unbuilt. Complete coverage and runtime qualification
-  remain open.
+  has contracts, a local query adapter, isolated process supervision and parent
+  authorization/material binding on `feat/a1089-certificate-diagnosis`. Local tests
+  compare persistent rows and write counts after the isolated child exits, and exercise
+  sales and installation while a query waits. The route and screen remain unbuilt;
+  complete coverage and runtime qualification remain open.
   Persistent connection/configuration and external-refusal repair remain open.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 

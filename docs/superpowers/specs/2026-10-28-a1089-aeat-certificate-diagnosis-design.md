@@ -1,5 +1,12 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 parent checkpoint: Tasks 1–4 now include authorization before and after
+work, selected-material binding, expiry cancellation and stale-result refusal. Local
+tests compare every table and the writer's change count after actual child exit;
+separate held-query cases exercise sale and installation completion. The route,
+screen, complete coverage and whole-flow qualification remain open, as does
+persistent repair. Earlier checkpoints below retain their publication state._
+
 _2026-10-29 process checkpoint: the branch now includes isolated process supervision
 and a built entry. Local tests exercise both certificate kinds, one selected query,
 held response bodies and held cleanup. Parent authorization, material binding, the
