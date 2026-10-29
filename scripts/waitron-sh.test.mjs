@@ -1583,16 +1583,6 @@ describe("waitron.sh reset", () => {
     expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_state\b/);
   });
 
-  it("reset --all removes the state volume, note included", () => {
-    const sb = sandbox();
-    installedBox(sb);
-    const r = run(sb, ["reset", "--all", "--yes"]);
-    expect(r.status).toBe(0);
-    const calls = readFileSync(sb.log, "utf8");
-    expect(calls).toMatch(/docker volume rm .*waitron_state\b/);
-    expect(calls).not.toMatch(/! -name first-setup-start-again\.json/);
-  });
-
   it("refuses on a production box (trading.env signal) and removes no volume", () => {
     const sb = sandbox({ tradingEnv: "WAITRON_ENV=production" });
     installedBox(sb);

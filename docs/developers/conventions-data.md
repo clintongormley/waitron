@@ -5079,12 +5079,12 @@ unverifiable under the other environment.
 identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
-every name in the history it can read: a restored or surviving database
+every name in the history it can read: the module's own record of the names it has chosen, a restored or surviving database
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
 the surviving database") and a backup's newest record or creation time
 (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"). That later-than-history
-check is the one A1206 leaves unchanged: the owner retired it on 2026-10-29 (~10:52), and A1207
-replaces it with "refuse only if this minute's name already exists". A setup or restore waits
+check is still enforced; A1206 leaves it unchanged. The owner retired it on 2026-10-29 (~10:52), and
+A1207, not yet built, will replace it with "refuse only if this minute's name already exists". A setup or restore waits
 90 to 150 seconds first (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits
 until a minute start 90 to 150 seconds after its check"); a promotion does not
 (`packages/fiscal-verifactu/src/hour-selection.ts`, `settles` is setup and restore only).
@@ -5103,7 +5103,9 @@ and the next setup or restore targets a minute more than 90 seconds after its ow
 two attempts whose boxes are each within 30 seconds of the true time cannot share a name
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a $action that has forgotten an earlier
 attempt's name still names a later minute when each clock was within 30 seconds"). The accepted
-limit: if both clocks are wrong by the same amount, a repeated name is possible. A promotion has
+limit: if a box and the machine that confirms its clock are both wrong by the same amount, the check
+passes, and that setup can repeat an earlier attempt's name once its clock is more than about 90
+seconds behind the earlier attempt's. A promotion has
 no wait, so it relies on coming long enough after a Start again (up to 120 seconds with each box
 30 seconds off); that is reasoning about how long joining as a standby takes, not measured.
 

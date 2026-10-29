@@ -665,15 +665,17 @@ and restore's 90–150 second wait. A1206 leaves the existing "strictly later th
 history the box can still read" check as it was; the owner retired it at ~10:52 the same day ("If
 later invoices exist then they are wrong, we should flag them up … but it doesn't stop us from
 issuing the correct series based on the current minute, just as long as that minute series doesn't
-exist in the database already"), and A1207 replaces it. The start-again
+exist in the database already"); it stays enforced until A1207 replaces it. The start-again
 note, its floor, A1098's Move floor, A1099's damaged-name-record floor and A1131's counting of a
 held setup database's names are gone. A leftover note file is ignored; a plain `waitron.sh reset`
 deletes it. The trade-off the owner accepts: a name an abandoned attempt used is forgotten once
 Start again deletes the attempt, even one AEAT may already have seen. The 90-second wait keeps a
 later setup or restore from repeating it while each box's clock is within 30 seconds of the true
 time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a $action that has forgotten an
-earlier attempt's name still names a later minute when each clock was within 30 seconds"); if both
-clocks are wrong by the same amount, a repeated name is possible. A promotion has no wait
+earlier attempt's name still names a later minute when each clock was within 30 seconds"); if a box
+and the machine that confirms its clock are both wrong by the same amount, the check passes, and
+that setup can repeat an earlier attempt's name once its clock is more than about 90 seconds behind
+the earlier attempt's. A promotion has no wait
 (`settles` in `packages/fiscal-verifactu/src/hour-selection.ts` is setup and restore only), so it
 is safe only if it comes long enough after a Start again, up to 120 seconds with each box 30
 seconds off; that a promotion comes that late is reasoning about how long joining as a standby

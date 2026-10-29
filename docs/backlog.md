@@ -479,6 +479,15 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   completion invitation without building A250. **Build remains open**; Cloud's qualified
   trial journey is prerequisite G1 in the plan.
 
+- **A1207. A new installation name needs only that its minute is not already in the database (owner,
+  2026-10-29 ~10:52).** "If later invoices exist then they are wrong, we should flag them up to be
+  dealt with (how?) but it doesn't stop us from issuing the correct series based on the current
+  minute, just as long as that minute series doesn't exist in the database already." Setup, restore
+  and promotion still refuse a minute not strictly later than every name they can read, and a
+  restore still starts no earlier than the backup's newest record or creation time; both go. A later
+  name or record found is flagged to an administrator (how is for the owner to approve before it is
+  built), never a refusal. Plan first.
+
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
 

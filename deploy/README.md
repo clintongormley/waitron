@@ -400,9 +400,10 @@ a branch install pinned an image there, the box comes back on that same image. O
 volumes is wiped, and that includes the venue's databases, because they live in the `state` volume.
 
 A reset during an unfinished first setup forgets the series name that setup chose, as Start again
-does; the box's clock check still guards it (outside the preproduction throwaway, a new name is the
-current UTC minute, taken only after a clock on another machine agrees with the box's within 30
-seconds).
+does; the clock check and setup's 90–150 second wait still guard it (outside the preproduction
+throwaway, a new name is the current UTC minute, taken only after a clock on another machine agrees
+with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
+by the same amount.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
