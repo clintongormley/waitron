@@ -1,3 +1,5 @@
+**Execution authority, 29 October 2026:** the owner subsequently approved the [implementation plan](../../../superpowers/plans/2026-10-29-a950-automatic-upgrades.md), option A. The older pending-plan statements below record publication status; build only eligible cuts and retain every prerequisite and qualification gate.
+
 <a id="a950-checking-an-update-and-returning-to-the-previous-version"></a>
 
 # A950: checking a clean restart before rollback closes

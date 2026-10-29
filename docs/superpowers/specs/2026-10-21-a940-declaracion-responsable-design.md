@@ -1,3 +1,5 @@
+> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. Build only eligible cuts; fiscal and qualification boundaries remain.
+
 # A940 — The software's declaración responsable, inside the app and outside it
 
 > **A950 pointer, 29 October 2026:** the current update design is in the

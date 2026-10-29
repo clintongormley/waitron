@@ -1,3 +1,5 @@
+> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. The newer/unknown/damaged-floor and fiscal boundaries remain.
+
 # A1042: "Start again" keeps one small note, not an archive — implementation plan
 
 > **A950 pointer, 29 October 2026:** use the [approved A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md)

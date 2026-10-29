@@ -4864,9 +4864,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades with rollback until a clean, running restart (A950)**: required before go-live; [design approved 29 October](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), [plan awaiting owner approval](superpowers/plans/2026-10-29-a950-automatic-upgrades.md), no build authority.
+- **Automatic upgrades with rollback until a clean, running restart (A950)**: required before go-live; [design approved 29 October](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), [plan approved 29 October](superpowers/plans/2026-10-29-a950-automatic-upgrades.md), build eligible cuts in separate pull requests.
   Every venue starts automatic-on with an editable **03:00–05:00 local** window. Both manual and automatic application wait for this close episode's actual reports and primary backup, 10 quiet minutes and strictly more than 17 minutes before reopening. Clean restart, database and local running checks close rollback before normal work resumes.
-  Build and all runtime qualification remain **UNVERIFIED / NOT RUN**, including close/report receipts, B3, A799, account-free Cloud hold and A947 stream/spare integration.
+  Cut 1 adds isolated settings, dated-window and bounded-discovery libraries with injected verifier/hold boundaries. No installed updater or timer calls them. The remaining cuts and all real runtime qualification stay open, including close/report receipts, B3, A799, account-free Cloud hold and A947 stream/spare integration.
   [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)

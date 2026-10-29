@@ -1,3 +1,5 @@
+**Execution authority, 29 October 2026:** the owner subsequently approved the complete implementation plan (option A), one eligible cut per pull request. This supersedes the pending-plan statements below; every prerequisite and real qualification gate remains. See the [plan](../plans/2026-10-29-a950-automatic-upgrades.md).
+
 <a id="a950-automatic-app-upgrades-with-a-recoverable-trial"></a>
 
 # A950: automatic app upgrades with rollback until a clean, running restart
