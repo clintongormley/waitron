@@ -190,8 +190,10 @@ migration, no route; the filled values go through the dialog's existing checks
 One street line (`streetAddress`, field name `address`), postcode, locality, a free-text province,
 and the recipient's country chosen in a combobox BELOW those fields (Spain by default; any
 `RECIPIENT_COUNTRY_CODES` country). A Spanish address needs a valid postcode and a province; other
-countries need neither. A server refusal names a field (`refusalField`: `address`, `postalCode`,
-…) and the dialog sends `invoice-recipient-edit` when that field is edited, so its host clears the
+countries need neither. The server refuses any address problem as `address`
+(`apps/server/src/invoice-selection.ts:52,59`), and for a Spanish one checks the joined text by
+splitting it on commas (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`); the
+dialog sends `invoice-recipient-edit` when the refused field is edited, so its host clears the
 mark.
 
 ### Decisions
@@ -200,26 +202,35 @@ mark.
    changed, so the search stays hidden and the dialog looks and works as now.
 2. **The search sits directly above the street field**, after the customer name, and asks in the
    dialog's chosen country (`country-code` follows `countryCode`; the field already drops a search
-   on its way when the country changes).
+   on its way when the country changes). The country is picked below the fields, so the search's
+   label names it: "Find the customer's address (Spain)". With no country chosen the search is
+   hidden.
 3. **A choice fills street, postcode, locality and province.** The street is every line joined with
-   ", " (the dialog has one street line). The province is the name of the area the chosen
-   country's pack (`getCountryPack`: Spain or the UK) finds for the address's area code, else for
-   its postcode when the pack's postcode check accepts it; when neither finds one (a country with no
-   pack, or no match) the province is left as it is, as setup does. The country is not changed.
+   ", " (the dialog has one street line, so a typed floor or unit is replaced — a departure from
+   parts 1–2, which keep line 2). The province is the area the chosen country's pack
+   (`getCountryPack`: Spain or the UK) finds for the address's area code, else for its postcode
+   when the pack's postcode check accepts it, written by its first name without a comma ("Illes
+   Balears" for "Balears, Illes": the plan review ran the server's check on the four comma names
+   and each failed); when neither finds one (a country with no pack, such as France, or the UK,
+   whose pack lists no areas) the province is EMPTIED — a departure from setup, which keeps it —
+   because the dialog's country can change without clearing it, so a kept one could belong to
+   another country. The area code wins a disagreement with the postcode and, unlike setup, nothing
+   marks the two as disagreeing: the dialog's checks do not compare them. The country is not
+   changed.
 4. **An address in another country than the chosen one fills nothing**, and the search's own line
    says "That address is not in {country}. Choose another or type it below." (the setup wording),
    naming the chosen country in the screen language. Choosing another country or a valid address
    clears the line.
 5. **A choice marks the draft changed** (Save choice becomes actionable) and saves nothing; it
-   counts as an edit of each field it fills for the server refusal mark (`invoice-recipient-edit`
-   for the refused field when it is one of `address`, `postalCode`, `locality`, `province`).
+   counts as an edit of the address for the server refusal mark (`invoice-recipient-edit` with
+   `address` when that is the refused field).
 6. **A late answer lands nowhere:** editing the street, postcode, locality or province cancels a
    search on its way (`cancelSearch()`), as does pressing Save choice when it sends; a choice that
    arrives after the dialog closed is ignored.
 7. **Enter on an active suggestion chooses it and does not press Save choice** — the search gets no
    `submitOnEnter`.
 8. **Strings** (en/es) in `apps/till/src/i18n/strings.ts`: `invoice.address_lookup.label` ("Find
-   the customer's address"), `.placeholder`, `.no_results`, `.unavailable`, `.other_country` — the
+   the customer's address ({country})"), `.placeholder`, `.no_results`, `.unavailable`, `.other_country` — the
    setup app's wording with "customer" where it helps.
 
 ### Task (one, written inline, test first)
@@ -241,3 +252,8 @@ search on its way (spy on `cancelSearch`); Enter on an open suggestion does not 
 src/widgets/invoice-recipient-dialog` and `pnpm exec vitest run scripts/address-lookup-forms.test.ts`.
 
 LOOK: the dialog with a fake provider and an open list, en/es, light/dark, 1280 and 390 px.
+
+Plan review (fresh context, 2026-10-29): 1 Critical (comma province names refused by the server), 3
+Important (refused-field claim, a province surviving a country change, Escape inside the dialog),
+5 Minor — folded above; a locality holding a comma, refused the same way whether typed or found,
+went to the backlog.

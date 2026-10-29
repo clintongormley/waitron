@@ -17,7 +17,11 @@ import type {
   LeaveCoordinator,
   LeaveReason,
 } from "@waitron/ui";
-import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
+import {
+  findAdministrativeArea,
+  findAdministrativeAreaByPostalCode,
+  type AdministrativeArea,
+} from "@waitron/country";
 import {
   countryNameFor,
   getCountryPack,
@@ -63,13 +67,19 @@ interface RecipientDraft {
   email: string;
 }
 
-/** The fields a chosen address fills, by the name a server refusal gives each. */
-const SEARCH_FILLS = {
-  streetAddress: "address",
-  postalCode: "postalCode",
-  locality: "locality",
-  province: "province",
-} as const satisfies Partial<Record<keyof RecipientDraft, string>>;
+/** The fields a chosen address fills; a server refusal names any of them `address`. */
+const SEARCH_FILLS: ReadonlySet<string> = new Set([
+  "streetAddress",
+  "postalCode",
+  "locality",
+  "province",
+]);
+
+/** The server splits a Spanish address on commas (`completeSpanishPostalAddress`), so a name such
+ * as "Balears, Illes" is written by its first comma-free name. */
+function provinceName(area: AdministrativeArea): string {
+  return [area.name, ...(area.aliases ?? [])].find((name) => !name.includes(",")) ?? area.name;
+}
 
 @customElement("till-invoice-recipient-dialog")
 export class TillInvoiceRecipientDialog extends LitElement {
@@ -389,7 +399,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     if (field === "identifierType")
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
-    if (field in SEARCH_FILLS) this.#cancelAddressSearch();
+    if (SEARCH_FILLS.has(field)) this.#cancelAddressSearch();
     if (field === "countryCode") this.foreignAddressCountry = undefined;
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
@@ -425,9 +435,9 @@ export class TillInvoiceRecipientDialog extends LitElement {
     this.streetAddress = address.lines.join(", ");
     this.postalCode = address.postalCode;
     this.locality = address.locality;
-    if (area !== undefined) this.province = area.name;
+    this.province = area === undefined ? "" : provinceName(area);
     this.#scope?.changed();
-    for (const refused of Object.values(SEARCH_FILLS)) this.#edited(refused);
+    this.#edited("address");
   }
 
   #chooseDelivery(event: CustomEvent<{ value: string }>): void {
@@ -565,9 +575,11 @@ export class TillInvoiceRecipientDialog extends LitElement {
         ></wt-input>
         <wt-address-lookup
           name="address-search"
-          .provider=${this.addressProvider}
+          .provider=${this.countryCode === "" ? undefined : this.addressProvider}
           country-code=${this.countryCode}
-          label=${t("invoice.address_lookup.label")}
+          label=${t("invoice.address_lookup.label").replace("{country}", () =>
+            countryNameFor(this.countryCode, currentLocale()),
+          )}
           placeholder=${t("invoice.address_lookup.placeholder")}
           no-results-label=${t("invoice.address_lookup.no_results")}
           unavailable-label=${t("invoice.address_lookup.unavailable")}

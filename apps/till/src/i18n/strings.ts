@@ -427,7 +427,7 @@ export const en = {
   "invoice.tax_id_invalid": "Enter a valid Spanish tax ID.",
   "invoice.legal_name": "Customer legal name",
   "invoice.name_required": "Enter the customer's complete legal name.",
-  "invoice.address_lookup.label": "Find the customer's address",
+  "invoice.address_lookup.label": "Find the customer's address ({country})",
   "invoice.address_lookup.placeholder": "Start typing the street and number",
   "invoice.address_lookup.no_results": "No address found. Type it below.",
   "invoice.address_lookup.unavailable":
@@ -2228,7 +2228,7 @@ export const es: Record<StringKey, string> = {
   "invoice.tax_id_invalid": "Introduce un identificador fiscal español válido.",
   "invoice.legal_name": "Nombre o razón social del cliente",
   "invoice.name_required": "Introduce el nombre o razón social completos del cliente.",
-  "invoice.address_lookup.label": "Buscar la dirección del cliente",
+  "invoice.address_lookup.label": "Buscar la dirección del cliente ({country})",
   "invoice.address_lookup.placeholder": "Empieza a escribir la calle y el número",
   "invoice.address_lookup.no_results": "No se ha encontrado la dirección. Escríbela abajo.",
   "invoice.address_lookup.unavailable":

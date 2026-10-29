@@ -1846,6 +1846,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
+- **A Spanish invoice recipient's locality or province holding a comma is refused only at the
+  server.** The server checks a Spanish recipient's joined address by splitting it on commas
+  (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
+  locality is refused as `address`, while the till's own check (`recipientAddressErrors`) passes
+  it. Found by reading those two functions in the A1171 part 3 plan review; the address search
+  writes a comma-free province, but a provider's locality could still hold one.
+
 - **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
   accepted a counter bill from another location into an answered party. The new allergy move
   command checks the source location; the legacy request still needs its own fix and regression.

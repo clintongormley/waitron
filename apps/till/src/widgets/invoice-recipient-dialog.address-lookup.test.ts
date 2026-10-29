@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
@@ -108,6 +109,31 @@ describe("the invoice recipient dialog's address search", () => {
     expect(lookup(el)!.getBoundingClientRect().height).toBe(0);
   });
 
+  it("names the chosen country in its label", async () => {
+    const el = await mountDialog();
+    expect(lookup(el)!.label).toBe("Find the customer's address (Spain)");
+    await chooseCountry(el, "FR");
+    expect(lookup(el)!.label).toBe("Find the customer's address (France)");
+  });
+
+  it("Escape closes an open list and leaves the dialog open", async () => {
+    const el = await mountDialog();
+    let cancelled = false;
+    el.addEventListener("invoice-recipient-cancel", () => (cancelled = true));
+    const search = lookup(el)!;
+    search.delay = 0;
+    search.shadowRoot!.querySelector("input")!.focus();
+    await userEvent.keyboard("Calle Mayor");
+    await vi.waitFor(() =>
+      expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(1),
+    );
+    await userEvent.keyboard("{Escape}");
+    await flush(el);
+    expect(search.shadowRoot!.querySelectorAll('[role="option"]')).toHaveLength(0);
+    expect(cancelled).toBe(false);
+    expect(q(el, "wt-dialog")!.shadowRoot!.querySelector("dialog")!.open).toBe(true);
+  });
+
   it("sits directly above the street field and asks in the chosen country", async () => {
     const el = await mountDialog();
     const search = lookup(el)!;
@@ -159,10 +185,32 @@ describe("the invoice recipient dialog's address search", () => {
     expect(value(el, "address")).toBe("Calle Mayor 1, 3º B");
   });
 
-  it("keeps the typed province when the country has no areas to match", async () => {
+  it.each([
+    ["07", "07001", "Palma", "Illes Balears"],
+    ["15", "15001", "A Coruña", "A Coruña"],
+    ["26", "26001", "Logroño", "La Rioja"],
+    ["35", "35001", "Las Palmas de Gran Canaria", "Las Palmas"],
+  ])(
+    "fills area %s with a name the server's address check accepts",
+    async (code, postalCode, locality, province) => {
+      const el = await mountDialog();
+      const saved = confirmed(el);
+      await fill(el, "taxId", "12345678Z");
+      await fill(el, "legalName", "Ana García");
+      await choose(el, { ...MADRID, administrativeAreaCode: code, postalCode, locality });
+      expect(value(el, "province")).toBe(province);
+      save(el).click();
+      await el.updateComplete;
+      expect(getCountryPack("ES")!.postalAddress!.isComplete(saved[0]!.recipient.address)).toBe(
+        true,
+      );
+    },
+  );
+
+  it("empties the province when Waitron knows no area for the address", async () => {
     const el = await mountDialog();
+    await fill(el, "province", "Madrid");
     await chooseCountry(el, "FR");
-    await fill(el, "province", "Île-de-France");
     await choose(el, {
       lines: ["2 Rue de Rivoli"],
       locality: "Paris",
@@ -172,7 +220,7 @@ describe("the invoice recipient dialog's address search", () => {
     });
     expect(value(el, "address")).toBe("2 Rue de Rivoli");
     expect(value(el, "postalCode")).toBe("75001");
-    expect(value(el, "province")).toBe("Île-de-France");
+    expect(value(el, "province")).toBe("");
     expect(value(el, "countryCode")).toBe("FR");
   });
 
@@ -199,7 +247,7 @@ describe("the invoice recipient dialog's address search", () => {
   it("says so in Spanish", async () => {
     setLocale("es-ES");
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe("Buscar la dirección del cliente");
+    expect(lookup(el)!.label).toBe("Buscar la dirección del cliente (España)");
     await choose(el, { ...MADRID, countryCode: "PT" });
     expect(lookup(el)!.message).toBe(
       "Esa dirección no está en España. Elige otra o escríbela abajo.",
@@ -213,21 +261,18 @@ describe("the invoice recipient dialog's address search", () => {
     expect(save(el).disabled).toBe(false);
   });
 
-  it.each(["address", "postalCode", "locality", "province"])(
-    "counts as an edit of a refused %s field",
-    async (field) => {
-      const el = await mountDialog();
-      el.refusal = "Check this field";
-      el.refusalField = field;
-      await el.updateComplete;
-      const edits: string[] = [];
-      el.addEventListener("invoice-recipient-edit", (event) =>
-        edits.push((event as CustomEvent<{ field: string }>).detail.field),
-      );
-      await choose(el, MADRID);
-      expect(edits).toEqual([field]);
-    },
-  );
+  it("counts as an edit of a refused address", async () => {
+    const el = await mountDialog();
+    el.refusal = "Check the address";
+    el.refusalField = "address";
+    await el.updateComplete;
+    const edits: string[] = [];
+    el.addEventListener("invoice-recipient-edit", (event) =>
+      edits.push((event as CustomEvent<{ field: string }>).detail.field),
+    );
+    await choose(el, MADRID);
+    expect(edits).toEqual(["address"]);
+  });
 
   it("does not count as an edit of a refused field it does not fill", async () => {
     const el = await mountDialog();
