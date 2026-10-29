@@ -5936,6 +5936,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   summaries and body text; deliberate EN/ES summary examples remain. Printing layout and printer
   samples use English, with the layout samples retaining their character counts and word boundaries.
   Database kitchen-course, station and station-printer suites use English sample names.
+  Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

@@ -61,8 +61,8 @@ describe("floor plan tables", () => {
         { id: LOCATION, name: "Loc A", invoiceLocales: ["es"], operationDescription: "Hostelería" },
       ]);
     await db.insert(floorZones).values([
-      { id: ZONE, locationId: LOCATION, name: "Comedor" },
-      { id: OTHER_ZONE, locationId: LOCATION, name: "Terraza" },
+      { id: ZONE, locationId: LOCATION, name: "Dining room" },
+      { id: OTHER_ZONE, locationId: LOCATION, name: "Terrace" },
     ]);
     await db.insert(floorPlanSets).values({ id: SET, locationId: LOCATION });
     await db
@@ -936,7 +936,7 @@ describe("floor plan tables", () => {
     const zone = await inTx(async (tx) => {
       const [row] = await tx
         .insert(floorZones)
-        .values({ locationId: LOCATION, name: "Barra" })
+        .values({ locationId: LOCATION, name: "Bar" })
         .returning({ id: floorZones.id });
       return row!.id;
     });

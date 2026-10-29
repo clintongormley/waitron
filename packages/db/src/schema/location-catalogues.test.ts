@@ -49,7 +49,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
   }
 
   it("maps every column through the Drizzle export and detaches by DELETE … RETURNING", async () => {
-    const catalogue = await seedCatalogue("Menú de tarde");
+    const catalogue = await seedCatalogue("Evening menu");
     await seedMembership(LOCATION_A, catalogue);
     const [row] = await inTx((tx) =>
       tx.select().from(locationCatalogues).where(eq(locationCatalogues.catalogueId, catalogue)),
@@ -72,7 +72,7 @@ describe("location_catalogues schema (multi-menu accessibility map — PK + FKs)
   });
 
   it("the primary key rejects a duplicate (location_id, catalogue_id) membership", async () => {
-    const catalogue = await seedCatalogue("Carta de vinos");
+    const catalogue = await seedCatalogue("Wine list");
     await seedMembership(LOCATION_A, catalogue);
     const e = await captureError(() => seedMembership(LOCATION_A, catalogue));
     // A primary-key collision has its own result code, which is why the class is a list.

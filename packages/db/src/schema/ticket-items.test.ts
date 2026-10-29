@@ -50,7 +50,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
       .insert(products)
       .values({
         catalogueId: catA!.id,
-        name: "Café solo",
+        name: "Black coffee",
         pricingUnit: "each",
         unitPrice: 100,
         vatClass: "general",
@@ -59,7 +59,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     productA = prodA!.id;
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId: LOCATION_A, name: "Cocina", isDefault: true })
+      .values({ locationId: LOCATION_A, name: "Kitchen", isDefault: true })
       .returning({ id: kitchenStations.id });
     stationA = station!.id;
   });
@@ -90,7 +90,7 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
         workingOrderId: orderId,
         lineNo: 1,
         productId: product,
-        name: "Café solo",
+        name: "Black coffee",
         descriptions: DESCRIPTIONS_A,
         quantity: 1000,
         unitPriceGross: 110,
@@ -212,12 +212,12 @@ describe("ticket_items schema (columns + per-line unique + cascade)", () => {
     const { orderId, lineId } = await seedOrderLine(nodeA, productA);
     const id = await seedTicket(nodeA, orderId, lineId, stationA);
     await inTx((tx) =>
-      tx.update(ticketItems).set({ note: "sin sal" }).where(eq(ticketItems.id, id)),
+      tx.update(ticketItems).set({ note: "no salt" }).where(eq(ticketItems.id, id)),
     );
     const [row] = await inTx((tx) =>
       tx.select({ note: ticketItems.note }).from(ticketItems).where(eq(ticketItems.id, id)),
     );
-    expect(row!.note).toBe("sin sal");
+    expect(row!.note).toBe("no salt");
   });
 
   it("records the quantity fired, and leaves it unset where an insert does not state it", async () => {
