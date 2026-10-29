@@ -20,6 +20,16 @@ import {
 } from "./testing/madrid-renamed-columns.js";
 
 const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "guest_count" } };
+/** Tables added after the capture; the seed writes no row to them. */
+const ADDED_TABLES = [
+  "adjustment_lines",
+  "order_portion_events",
+  "order_portions",
+  "sale_line_portions",
+  "working_line_portions",
+];
+const byName = <T>(tables: Record<string, T>) =>
+  Object.fromEntries(Object.entries(tables).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 afterEach(() => vi.useRealTimers());
 for (const locale of ["en", "es"] as const) {
@@ -97,7 +107,18 @@ for (const locale of ["en", "es"] as const) {
     expected.before = madridWithRenamedColumns(expected.before, RENAMED_COLUMNS);
     expected.provisioned = madridWithRenamedColumns(expected.provisioned, RENAMED_COLUMNS);
     expected.seeded = madridWithRenamedColumns(expected.seeded, RENAMED_COLUMNS);
+    const phases = structuredClone(manifest.phases[locale]!);
     for (const phase of ["before", "provisioned", "seeded"] as const) {
+      for (const name of ADDED_TABLES) {
+        const added = canonical[phase].tables[name];
+        expect(added, `${phase}/${name}`).toBeDefined();
+        expect(Object.keys(added!.rows), `${phase}/${name} rows`).toEqual([]);
+        expect(expected[phase].tables[name], `${phase}/${name} in the capture`).toBeUndefined();
+        expected[phase].tables[name] = structuredClone(added!);
+        phases[phase]![name] = 0;
+      }
+      expected[phase].tables = byName(expected[phase].tables);
+      phases[phase] = byName(phases[phase]!);
       for (const [name, columns] of [
         ["sales", ["counterparty_identifier_type", "counterparty_identifier_country_code"]],
         ["working_orders", ["recipient_identifier_type", "recipient_identifier_country_code"]],
@@ -107,12 +128,10 @@ for (const locale of ["en", "es"] as const) {
         );
       }
       expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(expected[phase].tables));
-      expect(Object.keys(canonical[phase].tables)).toEqual(
-        Object.keys(manifest.phases[locale]![phase]!),
-      );
+      expect(Object.keys(canonical[phase].tables)).toEqual(Object.keys(phases[phase]!));
       for (const [name, actual] of Object.entries(canonical[phase].tables)) {
         expect(Object.keys(actual.rows).length, `${phase}/${name} row count`).toBe(
-          manifest.phases[locale]![phase]![name],
+          phases[phase]![name],
         );
         expect(actual, `${phase}/${name}`).toEqual(expected[phase].tables[name]);
       }
