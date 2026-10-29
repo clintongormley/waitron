@@ -33,7 +33,7 @@ function failure(overrides: Partial<BackupLoadFailure> = {}): BackupLoadFailure 
   return {
     at: "2026-10-29T10:00:00.000Z",
     code: "credentials.decrypt_failed",
-    detail: { keyVersion: 2 },
+    detail: null,
     recordDigest: "digest-a",
     recordWrittenAt: "2026-10-29T09:00:00.000Z",
     ...overrides,
@@ -48,7 +48,7 @@ function evidence(overrides: Partial<BackupSettingsEvidence> = {}): BackupSettin
     record: { keyVersion: 2, writtenAt: "2026-10-29T09:00:00.000Z", digest: "digest-a" },
     rewrittenSinceLastFailure: false,
     boxKeyNumbers: { current: 2 },
-    now: { state: "unreadable", code: "credentials.decrypt_failed", detail: { keyVersion: 2 } },
+    now: { state: "unreadable", code: "credentials.decrypt_failed", detail: null },
     recoveryKey: { held: true, tooShort: false, fingerprint: "ABCD1234" },
     ...overrides,
   };
@@ -79,7 +79,7 @@ const button = (el: HTMLElement, name: string) => q(el, `[data-test=${name}]`) a
 
 const CAUSES: {
   name: string;
-  failure: Pick<BackupLoadFailure, "code" | "detail">;
+  failure: Pick<BackupLoadFailure, "code" | "detail"> & Partial<BackupLoadFailure>;
   boxKeyNumbers?: BackupSettingsEvidence["boxKeyNumbers"];
   expected: (c: Catalogue) => string;
 }[] = [
@@ -98,8 +98,13 @@ const CAUSES: {
   },
   {
     name: "a key that does not open the record",
-    failure: { code: "credentials.decrypt_failed", detail: { keyVersion: 4 } },
-    expected: (c) => words(c, "backup_evidence.cause.decrypt_failed", { n: "4" }),
+    failure: { code: "credentials.decrypt_failed", detail: null, recordDigest: "digest-a" },
+    expected: (c) => words(c, "backup_evidence.cause.decrypt_failed", { n: "2" }),
+  },
+  {
+    name: "a key that does not open a record since rewritten",
+    failure: { code: "credentials.decrypt_failed", detail: null, recordDigest: "digest-old" },
+    expected: (c) => words(c, "backup_evidence.cause.decrypt_failed_plain"),
   },
   {
     name: "a malformed payload",
@@ -289,14 +294,41 @@ const READABLE: BackupSettingsEvidence["now"] = {
   state: "readable",
   destinations: [{ kind: "folder", dir: "/mnt/usb", look: "folder" }],
 };
-for (const [name, overrides, shown] of [
+it("words a record that does not open now with the saved record's key number", async () => {
+  const el = await mount(
+    apiAnswering(async () =>
+      evidence({
+        record: { keyVersion: 5, writtenAt: "2026-10-29T09:00:00.000Z", digest: "digest-z" },
+        boxKeyNumbers: { current: 5 },
+      }),
+    ),
+  );
+  await expect.poll(() => text(q(el, "[data-test=now-cause]"))).not.toBe("");
+  expect(text(q(el, "[data-test=now-cause]"))).toBe(
+    words(en, "backup_evidence.cause.decrypt_failed", { n: "5" }),
+  );
+});
+
+const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
   ["a readable record and a usable key", { now: READABLE }, true],
   ["a short key", { now: READABLE, recoveryKey: { held: true, tooShort: true } }, false],
   ["no key", { now: READABLE, recoveryKey: { held: false, tooShort: false } }, false],
   ["settings from the environment", { now: READABLE, managedByEnvironment: true }, false],
   ["an unreadable record", {}, false],
   ["no record", { now: { state: "absent" }, record: null }, false],
-] as const)
+  ["no failure recorded", { now: READABLE, failures: [] }, false],
+  [
+    "a clean load after the last failure",
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z" },
+    false,
+  ],
+  [
+    "a failure after the last clean load",
+    { now: READABLE, lastCleanLoadAt: "2026-10-29T09:30:00.000Z" },
+    true,
+  ],
+];
+for (const [name, overrides, shown] of READS_NOW_CASES)
   it(`${shown ? "says" : "does not say"} the settings read correctly now with ${name}`, async () => {
     const el = await mount(apiAnswering(async () => evidence(overrides)));
     await expect.poll(() => text(q(el, "[data-test=record-now]"))).not.toBe("");
@@ -382,6 +414,8 @@ it("a refused read shows why, offers administrator sign-in and Stop, and shows n
   expect(button(el, "evidence-read-again")).toBeNull();
   expect(q(el, "[data-test=record-now]")).toBeNull();
   expect(qa(el, "[data-test=failure]")).toEqual([]);
+  const closes: Event[] = [];
+  el.addEventListener("evidence-close", (event) => closes.push(event));
   const raised: Event[] = [];
   const listen = (event: Event) => raised.push(event);
   document.addEventListener("admin-sign-in", listen);
@@ -393,6 +427,8 @@ it("a refused read shows why, offers administrator sign-in and Stop, and shows n
   }
   expect(raised[0]!.bubbles).toBe(true);
   expect(raised[0]!.composed).toBe(true);
+  await expect.poll(() => el.open).toBe(false);
+  expect(closes).toHaveLength(1);
 });
 
 it("a failed read says the facts could not be read and keeps Read again and Stop", async () => {
@@ -424,4 +460,18 @@ it("says what Turn on backups, Read again and Stop each do", async () => {
       { read_again: en["backup_evidence.read_again"], stop: en["backup_evidence.stop"] },
     )}`,
   );
+});
+
+it("a failed Read again clears the facts it had drawn", async () => {
+  const el = await mount(
+    apiAnswering(
+      async () => evidence(),
+      () => Promise.reject({ code: "server.internal", status: 500 }),
+    ),
+  );
+  await expect.poll(() => qa(el, "[data-test=failure]").length).toBe(1);
+  button(el, "evidence-read-again")!.click();
+  await expect.poll(() => text(q(el, "[data-test=evidence-failed]"))).not.toBe("");
+  expect(q(el, "[data-test=record-now]")).toBeNull();
+  expect(qa(el, "[data-test=failure]")).toEqual([]);
 });

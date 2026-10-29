@@ -1734,6 +1734,8 @@ export const en = {
     "The saved settings were locked with key number {n}. This box holds key numbers {m} and {p}, so it cannot open them.",
   "backup_evidence.cause.decrypt_failed":
     "The saved settings carry this box's key number {n}, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which.",
+  "backup_evidence.cause.decrypt_failed_plain":
+    "The saved settings carry a key number this box holds, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which.",
   "backup_evidence.cause.malformed":
     "The saved record opened but its contents are not backup settings.",
   "backup_evidence.cause.settings_invalid":
@@ -5352,7 +5354,7 @@ export const es: Record<StringKey, string> = {
   "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
   "backup.status.load_failed":
     "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
-  "backup_evidence.heading": "Lo que ha registrado el equipo",
+  "backup_evidence.heading": "Lo que ha registrado la caja",
   "backup_evidence.happened": "Qué ha pasado",
   "backup_evidence.no_failures":
     "No consta ninguna lectura fallida de los ajustes guardados desde que se inició la caja.",
@@ -5366,10 +5368,12 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se cerraron con la clave número {n}. Esta caja tiene las claves número {m} y {p}, así que no puede abrirlos.",
   "backup_evidence.cause.decrypt_failed":
     "Los ajustes guardados llevan la clave número {n} de esta caja, pero la clave de ese número que tiene esta caja no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otra caja; Waitron no puede saber cuál.",
+  "backup_evidence.cause.decrypt_failed_plain":
+    "Los ajustes guardados llevan un número de clave que esta caja tiene, pero la clave de ese número que tiene esta caja no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otra caja; Waitron no puede saber cuál.",
   "backup_evidence.cause.malformed":
     "El registro guardado se abrió, pero su contenido no son ajustes de copias de seguridad.",
   "backup_evidence.cause.settings_invalid":
-    "Los ajustes guardados se abrieron, pero no se pudo usar esta parte: {part}.",
+    "Los ajustes guardados se abrieron, pero esta parte no se pudo usar: {part}.",
   "backup_evidence.cause.recovery_key_missing":
     "Los ajustes guardados se leen bien, pero esta caja no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
   "backup_evidence.cause.recovery_key_too_short":
@@ -5378,20 +5382,20 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se leen bien, pero el ajuste propio de esta caja {variable} no es un número entero mayor que cero.",
   "backup_evidence.cause.unknown":
     "La caja no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
-  "backup_evidence.part.not_json": "formato",
-  "backup_evidence.part.fields": "campos",
-  "backup_evidence.part.revision": "revisión",
-  "backup_evidence.part.enabled": "activadas o desactivadas",
-  "backup_evidence.part.destinations": "lista de destinos",
-  "backup_evidence.part.destination": "destino",
-  "backup_evidence.part.bucket": "bucket",
-  "backup_evidence.part.duplicate_id": "destinos (dos tienen el mismo identificador)",
-  "backup_evidence.part.duplicate_dir": "carpetas (dos son la misma carpeta)",
-  "backup_evidence.part.buckets": "buckets",
-  "backup_evidence.part.retention": "conservación",
-  "backup_evidence.part.destinationTimeoutMs": "tiempo límite por destino",
-  "backup_evidence.part.schedule": "programación",
-  "backup_evidence.part.contents": "contenido",
+  "backup_evidence.part.not_json": "el formato",
+  "backup_evidence.part.fields": "los campos",
+  "backup_evidence.part.revision": "la revisión",
+  "backup_evidence.part.enabled": "el ajuste de activación",
+  "backup_evidence.part.destinations": "la lista de destinos",
+  "backup_evidence.part.destination": "un destino",
+  "backup_evidence.part.bucket": "el bucket",
+  "backup_evidence.part.duplicate_id": "los destinos (dos tienen el mismo identificador)",
+  "backup_evidence.part.duplicate_dir": "las carpetas (dos son la misma carpeta)",
+  "backup_evidence.part.buckets": "los buckets",
+  "backup_evidence.part.retention": "la conservación",
+  "backup_evidence.part.destinationTimeoutMs": "el tiempo límite por destino",
+  "backup_evidence.part.schedule": "la programación",
+  "backup_evidence.part.contents": "el contenido",
   "backup_evidence.now_heading": "El registro guardado ahora",
   "backup_evidence.rewritten":
     "Los ajustes guardados se reescribieron después del último fallo, así que los datos de abajo describen el registro nuevo, no el que falló.",

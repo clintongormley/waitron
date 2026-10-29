@@ -39,7 +39,6 @@ const LOOKS: Readonly<Record<string, StringKey>> = {
   unknown: "backup_evidence.look.unknown",
 };
 
-/** Codes whose failing record's written time the panel adds beside the cause. */
 const SHOWS_WRITTEN_TIME = new Set([
   "credentials.decrypt_failed",
   "credentials.malformed_payload",
@@ -54,12 +53,21 @@ const NAMED_CAUSES = new Set([
   ...SHOWS_WRITTEN_TIME,
 ]);
 
+function failedSinceCleanLoad(e: BackupSettingsEvidence): boolean {
+  const newest = e.failures[0];
+  return (
+    newest !== undefined &&
+    (e.lastCleanLoadAt === null || Date.parse(newest.at) > Date.parse(e.lastCleanLoadAt))
+  );
+}
+
 const when = (iso: string) => new Date(iso).toLocaleString(currentLocale());
 
 function cause(
   code: string,
   detail: BackupLoadFailureDetail | null,
   keys: BackupSettingsEvidence["boxKeyNumbers"],
+  recordKeyVersion: number | null,
 ): string {
   const keyVersion = detail && "keyVersion" in detail ? String(detail.keyVersion) : null;
   switch (code) {
@@ -76,8 +84,9 @@ function cause(
             p: String(keys.previous),
           });
     case "credentials.decrypt_failed":
-      if (keyVersion === null) break;
-      return fill("backup_evidence.cause.decrypt_failed", { n: keyVersion });
+      return recordKeyVersion === null
+        ? t("backup_evidence.cause.decrypt_failed_plain")
+        : fill("backup_evidence.cause.decrypt_failed", { n: String(recordKeyVersion) });
     case "credentials.malformed_payload":
     case "server.credential_unusable":
       return t("backup_evidence.cause.malformed");
@@ -237,7 +246,14 @@ export class BackupSettingsEvidenceDialog extends LitElement {
       (SHOWS_WRITTEN_TIME.has(item.code) || !NAMED_CAUSES.has(item.code));
     return html`<li data-test="failure">
       <time datetime=${item.at}>${when(item.at)}</time>
-      <p data-test="failure-cause">${cause(item.code, item.detail, e.boxKeyNumbers)}</p>
+      <p data-test="failure-cause">
+        ${cause(
+          item.code,
+          item.detail,
+          e.boxKeyNumbers,
+          e.record && item.recordDigest === e.record.digest ? e.record.keyVersion : null,
+        )}
+      </p>
       ${
         written
           ? html`<p class="note" data-test="failure-written">
@@ -326,7 +342,9 @@ export class BackupSettingsEvidenceDialog extends LitElement {
                 ${e.now.destinations.map((destination) => this.#destination(destination))}
               </ul>`
             : e.now.state === "unreadable"
-              ? html`<p data-test="now-cause">${cause(e.now.code, e.now.detail, keys)}</p>
+              ? html`<p data-test="now-cause">
+                    ${cause(e.now.code, e.now.detail, keys, e.record?.keyVersion ?? null)}
+                  </p>
                   <p>${t("backup_evidence.cannot_tell")}</p>`
               : nothing
       }
@@ -343,7 +361,10 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         }
       </p>
       ${
-        e.now.state === "readable" && usableKey && !e.managedByEnvironment
+        e.now.state === "readable" &&
+        usableKey &&
+        !e.managedByEnvironment &&
+        failedSinceCleanLoad(e)
           ? html`<p data-test="reads-now">${t("backup_evidence.reads_now")}</p>`
           : nothing
       }
