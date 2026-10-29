@@ -19,13 +19,13 @@ describe("validateReceiptConfig", () => {
   });
 
   it("accepts a footerMessage", () => {
-    expect(validateReceiptConfig({ footerMessage: "Gracias por su visita" })).toEqual({
-      footerMessage: "Gracias por su visita",
+    expect(validateReceiptConfig({ footerMessage: "Thanks for visiting" })).toEqual({
+      footerMessage: "Thanks for visiting",
     });
   });
 
   it("accepts a headerSubtitle and a footerMessage together", () => {
-    const input = { headerSubtitle: "Calle Mayor 1", footerMessage: "Hasta pronto" };
+    const input = { headerSubtitle: "1 High Street", footerMessage: "See you soon" };
     expect(validateReceiptConfig(input)).toEqual(input);
   });
 

@@ -48,7 +48,7 @@ function inTx<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
 async function seedLocation(name: string): Promise<LocationId> {
   const [row] = await suite.db
     .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hostelería" })
+    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   return brandLocationId(row!.id);
 }

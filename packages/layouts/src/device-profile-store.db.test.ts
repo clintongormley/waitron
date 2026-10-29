@@ -73,7 +73,7 @@ async function purgeProfiles(): Promise<void> {
 async function seedBoundDevice(profileId: string, active = true): Promise<string> {
   const [location] = await suite.db
     .insert(locations)
-    .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+    .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   const [device] = await suite.db
     .insert(devices)
@@ -537,7 +537,7 @@ describe("device-profile store against a real migrated database", () => {
     const session = await seedSession("manager");
     const [location] = await suite.db
       .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
     const [printer] = await suite.db
       .insert(printers)
@@ -637,7 +637,7 @@ describe("device-profile store against a real migrated database", () => {
     const session = await seedSession("manager");
     const [location] = await suite.db
       .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
     const [p1, p2] = await suite.db
       .insert(printers)
@@ -704,7 +704,7 @@ describe("device-profile store against a real migrated database", () => {
     const session = await seedSession("manager");
     const [location] = await suite.db
       .insert(locations)
-      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hostelería" })
+      .values({ name: "Loc", invoiceLocales: ["es"], operationDescription: "Hospitality" })
       .returning({ id: locations.id });
     const [bar] = await suite.db
       .insert(printers)
