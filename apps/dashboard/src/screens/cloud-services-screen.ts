@@ -131,8 +131,9 @@ export class CloudServicesScreen extends LitElement {
     super.disconnectedCallback();
   }
   protected override willUpdate() {
-    // Watched once while billing applies: `watch` would replace the slot and read again.
-    if (readsBilling(this.status) === this.#billingWatched) return;
+    // Watched once while billing applies: `watch` would replace the slot and read again. A
+    // detached screen's last update must not start a watch nobody releases.
+    if (!this.isConnected || readsBilling(this.status) === this.#billingWatched) return;
     if (this.#billingWatched) {
       this.#stopBilling();
       return;

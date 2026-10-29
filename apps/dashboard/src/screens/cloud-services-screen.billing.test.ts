@@ -333,3 +333,68 @@ it("takes the plan away once Cloud access is stopped", async () => {
   el.shadowRoot!.querySelector<HTMLElement>("#confirm-stop")!.click();
   await expect.poll(() => section(el)).toBeNull();
 });
+
+it("stops reading the plan when the screen is left, and reads it once again when it comes back", async () => {
+  const { api, calls } = screenApi(Response.json(connected()), Response.json(answer()));
+  const { el, host } = await open(api);
+  await expect.poll(() => rows(el).length).toBe(6);
+  el.remove();
+  await new Promise((r) => setTimeout(r, 100));
+  api.liveData.refresh();
+  await new Promise((r) => setTimeout(r, 100));
+  expect(calls.filter(isBilling)).toHaveLength(1);
+  host.append(el);
+  await expect.poll(() => calls.filter(isBilling).length).toBe(2);
+  await expect.poll(() => rows(el).length).toBe(6);
+  api.liveData.refresh();
+  await expect.poll(() => calls.filter(isBilling).length).toBe(3);
+  await new Promise((r) => setTimeout(r, 100));
+  expect(calls.filter(isBilling)).toHaveLength(3);
+});
+
+it("shows the plan again when a read succeeds after a failure", async () => {
+  let fail = true;
+  const { api } = screenApi(Response.json(connected()), () =>
+    fail
+      ? Response.json({ error: { code: "cloud.unavailable", params: {} } }, { status: 503 })
+      : Response.json(answer()),
+  );
+  const { el } = await open(api);
+  await expect
+    .poll(() => section(el)?.textContent)
+    .toContain("Your plan's details are not available right now.");
+  fail = false;
+  api.liveData.refresh();
+  await expect.poll(() => rows(el).length).toBe(6);
+  expect(section(el)!.textContent).not.toContain("not available");
+});
+
+it("forgets the plan when access stops, so a later connection never shows the old one", async () => {
+  let revoked = false;
+  let gate: Promise<void> = Promise.resolve();
+  const status = () =>
+    Response.json(
+      revoked
+        ? connected({ installation: { ...connected().installation, state: "revoked" } })
+        : connected(),
+    );
+  const { api } = screenApi(status, async () => {
+    await gate;
+    return Response.json(answer());
+  });
+  const { el } = await open(api);
+  await expect.poll(() => rows(el).length).toBe(6);
+  revoked = true;
+  api.liveData.refresh();
+  await expect.poll(() => section(el)).toBeNull();
+  let release = () => {};
+  gate = new Promise<void>((r) => {
+    release = r;
+  });
+  revoked = false;
+  api.liveData.refresh();
+  await expect.poll(() => section(el)).not.toBeNull();
+  expect(rows(el)).toEqual([]);
+  release();
+  await expect.poll(() => rows(el).length).toBe(6);
+});

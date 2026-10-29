@@ -467,7 +467,7 @@ for (const locale of ["en", "es"] as const)
     expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
   });
 
-it("ages a displayed observation without extending the login or requesting Cloud", async () => {
+it("ages a displayed observation without extending the login or reading the status again", async () => {
   setLocale("en");
   const calls: string[] = [];
   const api = new DashboardApi("", async (url) => {
