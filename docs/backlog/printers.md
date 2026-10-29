@@ -14,6 +14,11 @@ Why it is needed: the print agent is the one piece that must stay on the venue's
 the primary is in the cloud (cloud-compatibility rule 5 in [the backlog](../backlog.md)). A venue
 with no box needs something else on its premises to run it.
 
+Owner, 2026-10-29: the app is the device agent — "it is the android app really, which runs
+locally and hosts the print agent (et al)". It is the Waitron-owned outbound agent the hosted
+design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
+started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
+
 Open, for the brainstorm: what else the app provides; which printers and connections it must
 reach (network, USB, Bluetooth); whether it is a dedicated device or a till that also prints; and
 how it compares with printers that fetch jobs from the cloud themselves
