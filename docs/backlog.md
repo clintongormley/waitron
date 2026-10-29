@@ -5335,6 +5335,8 @@ Not in any track until the standalone primary is done.
   holding `node.promote`, signing in with password and authenticator code, makes A1018's
   declaration that the box is off, and only if the Cloud owner agreed in advance.
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
+  Design proposed 2026-10-29, waiting for the owner's answer; nothing is built:
+  [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
   `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
