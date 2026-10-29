@@ -23,7 +23,7 @@ import {
   setupPartyVenue,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { combineParties } from "./testing/table-action-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { billWith, provisionAdjustmentVenue } from "./testing/adjustment-venue.js";
@@ -124,15 +124,18 @@ async function boards(
   }));
 }
 
-async function tableWork(quantity = "1") {
+async function tableWork(quantity = "1", shape?: "grouped") {
   const v = await setupPartyVenue(suite.db);
   const party = await seatWithNoAllergies(v, await v.table("Lifetime table"));
+  const group = { lines: [{ menuItemId: v.item("Burger"), quantity }], release: "fire" as const };
   await inTx(v, (tx) =>
-    placeGroups(tx, v.cfg, party.partyId, {
-      billId: party.tabId,
-      operatorId: OPERATOR,
-      groups: [{ lines: [{ menuItemId: v.item("Burger"), quantity }], release: "fire" }],
-    }),
+    shape === "grouped"
+      ? placeGroupedRound(tx, v.cfg, party, group, OPERATOR)
+      : placeGroups(tx, v.cfg, party.partyId, {
+          billId: party.tabId,
+          operatorId: OPERATOR,
+          groups: [group],
+        }),
   );
   const [item] = await inTx(v, (tx) =>
     tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
@@ -167,7 +170,7 @@ describe("A773 lifetime", () => {
   });
 
   it("shows only the remaining quantity, restores it on Undo and keeps the original ready time", async () => {
-    const { v, party, item } = await tableWork("2");
+    const { v, party, item } = await tableWork("2", "grouped");
     await pay(v, party.tabId, "24.00");
     const ticketBefore = await inTx(
       v,
@@ -295,7 +298,9 @@ describe("A773 lifetime", () => {
 
   it("subtracts serving after service cancellation without cancelling the same quantity twice", async () => {
     const v = await provisionAdjustmentVenue(suite.db);
-    const order = await billWith(v, [{ name: "Pizza", quantity: "3", olives: 2 }]);
+    const order = await billWith(v, [{ name: "Pizza", quantity: "3", olives: 2 }], {
+      shape: "grouped",
+    });
     await payWorkingOrder({ db: v.db, backend: v.backend, clock: v.clock }, v.cfg, {
       id: order.billId,
       tender: { method: "cash", amount: "36.00" },

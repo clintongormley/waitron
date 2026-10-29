@@ -39,7 +39,7 @@ import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { fireGroup, readCurrentOrders } from "./order-groups.js";
-import { submitGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import {
@@ -2613,22 +2613,14 @@ describe("moveDishesToStation", () => {
   it("copies the manual station choice onto a held unit split to another check", async () => {
     const tableId = await venue.table(`S-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    const revision = (
-      await inTx(venue, (tx) =>
-        tx
-          .select({ revision: workingOrders.revision })
-          .from(workingOrders)
-          .where(eq(workingOrders.id, tabId)),
-      )
-    )[0]!.revision;
     const submitted = await inTx(venue, (tx) =>
-      submitGroups(tx, venue.cfg, partyId, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: revision,
-        operatorId: OPERATOR,
-        billId: tabId,
-        groups: [{ lines: [{ menuItemId: venue.item("Burger"), quantity: "2" }], release: "hold" }],
-      }),
+      placeGroupedRound(
+        tx,
+        venue.cfg,
+        { partyId, tabId },
+        { lines: [{ menuItemId: venue.item("Burger"), quantity: "2" }], release: "hold" },
+        OPERATOR,
+      ),
     );
     const [item] = await inTx(venue, (tx) =>
       tx
@@ -2673,17 +2665,14 @@ describe("moveDishesToStation", () => {
   it("keeps the latest mover when splitting a dish, independent of an unordered read", async () => {
     const tableId = await venue.table(`Move-${randomUUID().slice(0, 8)}`);
     const { partyId, tabId } = await seat(venue, tableId);
-    const [order] = await inTx(venue, (tx) =>
-      tx.select().from(workingOrders).where(eq(workingOrders.id, tabId)),
-    );
     const submitted = await inTx(venue, (tx) =>
-      submitGroups(tx, venue.cfg, partyId, {
-        submissionId: randomUUID(),
-        expectedPartyRevision: order!.revision,
-        operatorId: OPERATOR,
-        billId: tabId,
-        groups: [{ lines: [{ menuItemId: venue.item("Burger"), quantity: "2" }], release: "hold" }],
-      }),
+      placeGroupedRound(
+        tx,
+        venue.cfg,
+        { partyId, tabId },
+        { lines: [{ menuItemId: venue.item("Burger"), quantity: "2" }], release: "hold" },
+        OPERATOR,
+      ),
     );
     const lineId = submitted.groups[0]!.lineIds[0]!;
     for (const stationId of [grill, bar])

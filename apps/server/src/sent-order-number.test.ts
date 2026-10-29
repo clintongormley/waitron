@@ -11,7 +11,7 @@ import { createStation } from "./kitchen.js";
 import { setMadeHereStations } from "./made-here.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import {
   OPERATOR,
   billRow,
@@ -80,38 +80,39 @@ useVenueDb({
 
 type Dish = { name: string; quantity?: string; cheese?: number };
 
-/** Sends the dishes to `billId` as one group, fired or held; held groups print no HOLD ticket. */
+/**
+ * Sends the dishes to `billId` as one group, fired or held; held groups print no HOLD ticket.
+ * With `shape: "grouped"` each dish is one stored line of its count.
+ */
 async function send(
   partyId: string,
   billId: string,
   dishes: Dish[],
   release: "fire" | "hold",
   cfg = v.cfg,
+  shape?: "grouped",
 ) {
+  const group = {
+    lines: dishes.map((d) => ({
+      menuItemId: offers.offerFor(v.productId(d.name)),
+      quantity: d.quantity ?? "1",
+      ...(d.cheese === undefined
+        ? {}
+        : {
+            extras: [
+              {
+                listId: cheese.listId,
+                picks: [{ productId: cheese.productId, quantity: d.cheese }],
+              },
+            ],
+          }),
+    })),
+    release,
+  };
   await inTx(v, (tx) =>
-    placeGroups(tx, cfg, partyId, {
-      groups: [
-        {
-          lines: dishes.map((d) => ({
-            menuItemId: offers.offerFor(v.productId(d.name)),
-            quantity: d.quantity ?? "1",
-            ...(d.cheese === undefined
-              ? {}
-              : {
-                  extras: [
-                    {
-                      listId: cheese.listId,
-                      picks: [{ productId: cheese.productId, quantity: d.cheese }],
-                    },
-                  ],
-                }),
-          })),
-          release,
-        },
-      ],
-      operatorId: OPERATOR,
-      billId,
-    }),
+    shape === "grouped"
+      ? placeGroupedRound(tx, cfg, { partyId, tabId: billId }, group, OPERATOR)
+      : placeGroups(tx, cfg, partyId, { groups: [group], operatorId: OPERATOR, billId }),
   );
 }
 
@@ -225,7 +226,7 @@ describe("the order number a moved dish was sent under", () => {
   it("is recorded on the part of a sent line transferred, not on the part kept", async () => {
     const { partyId, bills } = await party("Mesa sent 2", 2);
     const [b27, b28] = bills as [string, string];
-    await send(partyId, b28, [{ name: "Burger", quantity: "3" }], "fire");
+    await send(partyId, b28, [{ name: "Burger", quantity: "3" }], "fire", v.cfg, "grouped");
     const n28 = await numberOf(b28);
 
     await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Burger"), quantity: "1" }]);
@@ -237,7 +238,7 @@ describe("the order number a moved dish was sent under", () => {
   it("keeps the first number when part of an already moved dish moves on", async () => {
     const { partyId, bills } = await party("Mesa sent 3", 3);
     const [b26, b27, b28] = bills as [string, string, string];
-    await send(partyId, b28, [{ name: "Burger", quantity: "2" }], "fire");
+    await send(partyId, b28, [{ name: "Burger", quantity: "2" }], "fire", v.cfg, "grouped");
     const n28 = await numberOf(b28);
     await merge(partyId, b27, b28);
 
@@ -250,7 +251,14 @@ describe("the order number a moved dish was sent under", () => {
   it("is recorded on the dishes a split puts on a new bill, whole lines and parts", async () => {
     const { partyId, bills } = await party("Mesa sent 4", 1);
     const [b28] = bills as [string];
-    await send(partyId, b28, [{ name: "Burger" }, { name: "Paella", quantity: "2" }], "fire");
+    await send(
+      partyId,
+      b28,
+      [{ name: "Burger" }, { name: "Paella", quantity: "2" }],
+      "fire",
+      v.cfg,
+      "grouped",
+    );
     const n28 = await numberOf(b28);
     const command = await commandFor(v, partyId);
 
@@ -274,7 +282,14 @@ describe("the order number a moved dish was sent under", () => {
   it("is not recorded on a held dish whose HOLD ticket never printed", async () => {
     const { partyId, bills } = await party("Mesa sent 5", 3);
     const [b26, b27, b28] = bills as [string, string, string];
-    await send(partyId, b28, [{ name: "Flan" }, { name: "Tarta", quantity: "2" }], "hold");
+    await send(
+      partyId,
+      b28,
+      [{ name: "Flan" }, { name: "Tarta", quantity: "2" }],
+      "hold",
+      v.cfg,
+      "grouped",
+    );
 
     await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Tarta"), quantity: "1" }]);
     await merge(partyId, b26, b28);
@@ -289,7 +304,14 @@ describe("the order number a moved dish was sent under", () => {
   it("is recorded on a held dish whose HOLD ticket printed", async () => {
     const { partyId, bills } = await party("Mesa sent 6", 3);
     const [b26, b27, b28] = bills as [string, string, string];
-    await send(partyId, b28, [{ name: "Flan" }, { name: "Tarta", quantity: "2" }], "hold");
+    await send(
+      partyId,
+      b28,
+      [{ name: "Flan" }, { name: "Tarta", quantity: "2" }],
+      "hold",
+      v.cfg,
+      "grouped",
+    );
     holdTicketPrinted(b28);
     const n28 = await numberOf(b28);
 
@@ -307,7 +329,7 @@ describe("the order number a moved dish was sent under", () => {
     const { bills } = await party("Mesa sent 7", 1);
     const [b28] = bills as [string];
     const partyId = (await billRow(v, b28)).partyId!;
-    await send(partyId, b28, [{ name: "Burger", quantity: "2" }], "fire");
+    await send(partyId, b28, [{ name: "Burger", quantity: "2" }], "fire", v.cfg, "grouped");
 
     await inTx(v, (tx) =>
       splitLinesWithinOrder(tx, v.cfg, b28, [{ lineNo: lineOf(b28, "Burger"), quantity: "1" }]),
@@ -323,7 +345,14 @@ describe("the order number a moved dish was sent under", () => {
   it("is recorded on a moved dish's extras too", async () => {
     const { partyId, bills } = await party("Mesa sent 8", 3);
     const [b26, b27, b28] = bills as [string, string, string];
-    await send(partyId, b28, [{ name: "Caña", quantity: "2", cheese: 1 }], "fire");
+    await send(
+      partyId,
+      b28,
+      [{ name: "Caña", quantity: "2", cheese: 1 }],
+      "fire",
+      v.cfg,
+      "grouped",
+    );
     await send(partyId, b27, [{ name: "Caña", cheese: 1 }], "fire");
     const n27 = await numberOf(b27);
     const n28 = await numberOf(b28);
@@ -359,7 +388,7 @@ describe("the order number a moved dish was sent under", () => {
   it("is not recorded on the part of a made-here line transferred", async () => {
     const { partyId, bills } = await party("Mesa sent 11", 2);
     const [b27, b28] = bills as [string, string];
-    await send(partyId, b28, [{ name: "Vino", quantity: "2" }], "fire", madeHereCfg);
+    await send(partyId, b28, [{ name: "Vino", quantity: "2" }], "fire", madeHereCfg, "grouped");
 
     await transfer(partyId, b28, b27, [{ lineNo: lineOf(b28, "Vino"), quantity: "1" }]);
 
