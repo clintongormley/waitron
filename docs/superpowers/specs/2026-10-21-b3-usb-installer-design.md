@@ -1,3 +1,5 @@
+> **Later A950 authority, 29 October 2026:** the owner approved its [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md), option A. The earlier pending-plan note below is superseded. B3 host, hardware and trust prerequisites remain.
+
 # B3 — The bootable USB installer
 
 > **A950 pointer, 29 October 2026:** the [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md)

@@ -1,3 +1,5 @@
+**Execution authority, 29 October 2026:** the owner approved option A: build each eligible cut in its own pull request, respecting every named prerequisite and existing experiment, fiscal and hardware boundary. This supersedes the planning-only approval statements below. Cut 1 supplies pure policy libraries; application and real-platform qualification remain separate.
+
 # A950 Automatic Upgrades Implementation Plan
 
 > **For agentic workers:** After owner approval of this plan and build authority, use superpowers:executing-plans and work inline, task by task. Read superpowers:test-driven-development before writing implementation or tests. Steps use checkbox (`- [ ]`) syntax. Execute eligible cuts inline and preserve every prerequisite gate.

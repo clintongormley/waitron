@@ -67,7 +67,7 @@ Three parts:
 
 ## Automatic upgrades with rollback until a clean, running restart
 
-**A950 design approved, 2026-10-29; plan awaiting owner approval, no build authority.**
+**A950 design and implementation plan approved, 2026-10-29; build eligible cuts separately.**
 The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
 owner's 28 October answer: rollback closes automatically only after a successful restart of
 the new version, a confirmed clean database upgrade and confirmation that the system is running
@@ -137,13 +137,14 @@ rewrite is proposed. Bind the overlay against the released helpers and both cand
 The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
 A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualification has run;
-A799 historical qualification, B3 hardware/trust holds and separate build authority remain gates.
+A799 historical qualification and B3 hardware/trust holds remain gates; owner option A supplies build authority for eligible cuts.
 The [mockup brief and EN/ES copy](mockups/a950-automatic-upgrades/README.md) retain the existing
 validation/restoration/completion views and add eight rendered and visually inspected window-settings
 views. The [sliced implementation plan](../superpowers/plans/2026-10-29-a950-automatic-upgrades.md)
-awaits owner approval before any build. Remaining work includes the production close/report receipt
+has owner approval (option A). Cut 1 adds isolated settings, dated-window and bounded-discovery libraries. Their verifier and hold boundaries have no production adapter; no installed updater or timer calls them. Remaining work includes the production close/report receipt
 producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
 qualification, A799 historical evidence, and released A947 stream/spare/membership interfaces.
+Host binding also needs diagnostics for missing Temporal, canonical zone handling and an explicit policy for an already-installed candidate.
 Application stays disabled until its exact release and platform pass every required gate.
 All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
 
