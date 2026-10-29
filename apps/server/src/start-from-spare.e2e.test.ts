@@ -3,7 +3,16 @@
 // is reported SKIPPED; with CI=true or WAITRON_REQUIRE_FULL_DISK=1 it FAILS instead (testing-guide.md,
 // "The full-disk start tests run on a small filesystem"). Its own filesystem: two files filling one
 // at once can fail each other.
-import { existsSync, mkdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +22,9 @@ import { openVenueDatabase } from "@waitron/db";
 import type { Alert } from "@waitron/module";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
+import { mintRecoveryKey } from "./backup-config.js";
+import { backupArchiveKey } from "./backup-keys.js";
+import { writeBackupRoomNote } from "./backup-room-note.js";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import type { StartServerSeams } from "./boot.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -143,7 +155,11 @@ async function start(box: Box, spareBytes: number, seams: StartServerSeams = {})
   };
   onTestFinished(close);
   const events = () => log.mock.calls.map(([, event]) => event as string);
-  return { up: () => server !== undefined, serveRecovery, events, close };
+  const logged = (event: string) =>
+    log.mock.calls
+      .filter(([, each]) => each === event)
+      .map(([, , params]) => params as Record<string, unknown>);
+  return { up: () => server !== undefined, serveRecovery, events, logged, close };
 }
 
 const url = (box: Box, path: string) =>
@@ -270,5 +286,79 @@ describe("a box started from its spare file", () => {
     );
     expect(await probe(box)).toEqual({ status: 401, code: "session.required" });
     await started.close();
+  });
+
+  /**
+   * A dashboard-managed box (its recovery key only in backup.env, no sealed settings, so the booted
+   * server runs no backups) with a backup folder on the full disk: the oldest archive is 17 MiB, the
+   * next 2 MiB, the newest 256 KiB and never deletable. Filled to leave 6 MiB (under
+   * SPARE_SPACE_BYTES, so a start that deletes nothing releases the spare, and enough to boot with
+   * the 1 MiB spare released), the start deletes toward the floor, the 1 MiB spare plus
+   * FULL_DISK_BYTES = 17 MiB: the oldest alone brings free space to about 23 MiB, so it is the one
+   * deletion, and the spare stays.
+   */
+  async function boxWithBackups(small: SmallDisk, name: string) {
+    const box = await placeBox(small, name);
+    await (await start(box, MiB)).close();
+    expect(statSync(spareIn(box)).size).toBe(MiB);
+    const folder = realpathSync(small.folder(`${name}-backups`));
+    onTestFinished(() => rmSync(folder, { recursive: true, force: true }));
+    writeFileSync(
+      join(box.stateDir, "backup.env"),
+      `WAITRON_BACKUP_RECOVERY_KEY=${mintRecoveryKey()}\n`,
+    );
+    const now = Date.now();
+    const daysAgo = (n: number) => new Date(now - n * 86_400_000);
+    await writeBackupRoomNote({
+      stateDir: box.stateDir,
+      venueDir: join(box.stateDir, "venue"),
+      nodeId: box.baseEnv.WAITRON_TILL_NODE_ID!,
+      installationStartedAt: daysAgo(3),
+      managedByEnvironment: false,
+      folders: [{ destination: "usb", dir: folder }],
+      now: () => new Date(now),
+      log: () => undefined,
+    });
+    const archive = (at: Date, bytes: number) => {
+      const key = backupArchiveKey(at);
+      writeFileSync(join(folder, key), Buffer.alloc(bytes, 7));
+      return key;
+    };
+    const oldest = archive(daysAgo(2), 17 * MiB);
+    archive(daysAgo(1), 2 * MiB);
+    archive(daysAgo(0), 256 * KiB);
+    return { box, oldest };
+  }
+
+  it("a full disk with old backups: the start deletes them before it gives up its spare", async (ctx) => {
+    const small = needDisk(ctx);
+    const { box, oldest } = await boxWithBackups(small, "start-room");
+    small.fill(6 * MiB);
+    expect(small.free()).toBeLessThan(SPARE_SPACE_BYTES);
+
+    const started = await start(box, MiB);
+    expect(
+      started.logged("backup.archive_deleted").filter(({ reason }) => reason === "start_room"),
+    ).toEqual([{ destination: "usb", key: oldest, bytes: 17 * MiB, reason: "start_room" }]);
+    expect(statSync(spareIn(box)).size).toBe(MiB);
+    expect(existsSync(markerIn(box))).toBe(false);
+  });
+
+  it("…but once venue.db has been replaced since the note, it deletes none and gives up the spare", async (ctx) => {
+    const small = needDisk(ctx);
+    const { box } = await boxWithBackups(small, "start-room-replaced");
+    const venueDb = join(box.stateDir, "venue", "venue.db");
+    copyFileSync(venueDb, `${venueDb}.replacement`);
+    renameSync(`${venueDb}.replacement`, venueDb);
+    small.fill(6 * MiB);
+    expect(small.free()).toBeLessThan(SPARE_SPACE_BYTES);
+
+    const started = await start(box, MiB);
+    expect(started.logged("backup.start_room_skipped")).toEqual([{ reason: "identity_mismatch" }]);
+    expect(
+      started.logged("backup.archive_deleted").filter(({ reason }) => reason === "start_room"),
+    ).toEqual([]);
+    expect(existsSync(spareIn(box))).toBe(false);
+    expect(statSync(markerIn(box)).isFile()).toBe(true);
   });
 });
