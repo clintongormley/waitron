@@ -175,6 +175,69 @@ describe("lowSpaceBackupDeletion", () => {
     expect(f.paths.map(gone)).toEqual([true, true, false, false]);
   });
 
+  it("deletes nothing while a backup run waits for the staging turn", async () => {
+    const f = await fixture();
+    const d = disk(f.paths, GIB);
+    const staging = createStagingTurn();
+    const { deps: args } = deps(f, d.statfs, { staging });
+    let release!: () => void;
+    const holding = staging.ifNoBackup(() => new Promise<void>((resolve) => (release = resolve)));
+    const run = staging.runBackup(async () => {});
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+
+    await lowSpaceBackupDeletion(args)(signal());
+    expect(f.paths.some(gone)).toBe(false);
+
+    release();
+    await Promise.all([holding, run]);
+  });
+
+  it("reads which folders backups run to once it holds the turn, so a change while it waited is followed", async () => {
+    const f = await fixture();
+    const d = disk(f.paths, GIB);
+    const staging = createStagingTurn();
+    let backends: { id: string; localDir?: string }[] = [{ id: "local", localDir: f.dir }];
+    const { deps: args, installationStartedAt } = deps(f, d.statfs, {
+      staging,
+      backends: () => backends,
+    });
+    let release!: () => void;
+    const holding = staging.ifNoBackup(() => new Promise<void>((resolve) => (release = resolve)));
+
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const step = lowSpaceBackupDeletion(args)(signal());
+    // Past its first reading, the step is queued behind the holder.
+    await vi.waitFor(() => expect(d.reads()).toBe(1));
+    await new Promise((resolve) => setImmediate(resolve));
+    backends = [];
+    release();
+    await Promise.all([holding, step]);
+
+    expect(f.paths.some(gone)).toBe(false);
+    expect(installationStartedAt).not.toHaveBeenCalled();
+  });
+
+  it("does nothing once it holds the turn if it was stopped while it waited", async () => {
+    const f = await fixture();
+    const d = disk(f.paths, GIB);
+    const staging = createStagingTurn();
+    const { deps: args, installationStartedAt } = deps(f, d.statfs, { staging });
+    let release!: () => void;
+    const holding = staging.ifNoBackup(() => new Promise<void>((resolve) => (release = resolve)));
+    const controller = new AbortController();
+
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const step = lowSpaceBackupDeletion(args)(controller.signal);
+    await vi.waitFor(() => expect(d.reads()).toBe(1));
+    await new Promise((resolve) => setImmediate(resolve));
+    controller.abort(new Error("stopping"));
+    release();
+    await Promise.all([holding, step]);
+
+    expect(f.paths.some(gone)).toBe(false);
+    expect(installationStartedAt).not.toHaveBeenCalled();
+  });
+
   it("deletes every backup it may when they cannot reach 2.5 GiB, keeping the newest, and throws nothing", async () => {
     // Two deletable 1 GiB backups on an empty disk: 2 GiB falls short of 2.5 GiB.
     const f = await fixture(3);

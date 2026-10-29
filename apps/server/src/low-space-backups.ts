@@ -41,9 +41,12 @@ export function lowSpaceBackupDeletion(
   return async (signal) => {
     const free = await freeBytes(deps.dir, deps.statfs);
     if (free === null || free >= SPACE_LOW_BYTES) return;
-    const backends = deps.backends().filter((b) => b.localDir !== undefined);
-    if (backends.length === 0) return;
+    if (!deps.backends().some((b) => b.localDir !== undefined)) return;
     await deps.staging.ifNoBackup(async () => {
+      // Read again once the turn is held: settings can change, or the watch stop, while it waits.
+      if (signal.aborted) return;
+      const backends = deps.backends().filter((b) => b.localDir !== undefined);
+      if (backends.length === 0) return;
       const { folders } = await foldersOnDisk(backends, deps.dir, deps.deviceOf);
       if (folders.length === 0) return;
       await makeRoom({

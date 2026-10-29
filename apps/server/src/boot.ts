@@ -322,6 +322,7 @@ import {
 } from "./backup-config.js";
 import { readArchiveSettings } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
+import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -2325,6 +2326,16 @@ async function bootServer(
     now,
     log,
     restoreSpare,
+    freeOldBackups: lowSpaceBackupDeletion({
+      dir: config.venueDir,
+      staging: stagingTurn,
+      backends: () => runningLocalBackends(backupSupervisor.current()),
+      installationStartedAt: backupRoom.readInstallationStart,
+      onArchivesDeleted: backupRoom.recordArchivesDeleted,
+      now,
+      log,
+      ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
+    }),
     ...(seams.freeSpaceWatch?.statfs ? { statfs: seams.freeSpaceWatch.statfs } : {}),
   });
   undoOnFailure.push(async () => freeSpaceWatch.stop());

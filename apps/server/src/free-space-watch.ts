@@ -95,6 +95,7 @@ export function startFreeSpaceWatch(deps: {
     try {
       await deps.freeOldBackups?.(stopping.signal);
     } catch (error) {
+      if (stopped) return;
       deps.log("warn", "backup.low_space_delete_failed", {
         errorCode: codeOf(error),
         errno: errnoOf(error) ?? null,

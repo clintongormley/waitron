@@ -1,4 +1,9 @@
+import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import type { Statfs } from "./free-bytes.js";
@@ -11,6 +16,7 @@ import {
   type FreeSpaceState,
 } from "./free-space-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
+import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
@@ -377,26 +383,61 @@ describe("startFreeSpaceWatch", () => {
     expect(control.events("storage.space_low")).toHaveLength(1);
   });
 
-  it("a noted stop lifts in the reading whose deletion made the room", async () => {
-    const calls: string[] = [];
-    const disk = {
-      noted: () => true,
-      full: async () => {
-        calls.push("full");
-        return false;
-      },
-    };
+  it("a box started on its released spare writes it back and lifts the stop in the reading whose deletion made the room", async () => {
+    for (const withStep of [true, false]) {
+      const stateDir = await mkdtemp(join(tmpdir(), "free-space-watch-spare-"));
+      try {
+        await writeFile(join(stateDir, SPARE_SPACE_RELEASED_FILE), "");
+        const free = { value: FULL_DISK_BYTES - 1 };
+        const statfs: Statfs = async () => ({ bavail: free.value, frsize: 1 });
+        const { log } = logSpy();
+        const disk = createDiskFullState({
+          dir: stateDir,
+          now: () => at(0),
+          log,
+          statfs,
+          spareReleased: () => spareReleased(stateDir, log),
+        });
+        disk.noteRefused();
+        const w = watch({
+          disk,
+          statfs,
+          restoreSpare: spareRestorer({
+            stateDir,
+            venueDir: stateDir,
+            bytes: SPARE_SPACE_BYTES,
+            log,
+            statfs,
+          }),
+          ...(withStep
+            ? {
+                freeOldBackups: async () => {
+                  free.value = 3 * GIB;
+                },
+              }
+            : {}),
+        });
+        await w.tick();
+        expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(withStep);
+        expect(existsSync(join(stateDir, SPARE_SPACE_RELEASED_FILE))).toBe(!withStep);
+        expect(disk.noted()).toBe(!withStep);
+      } finally {
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("logs nothing when the deletion step ends because the watch stopped", async () => {
+    let fail!: (error: Error) => void;
     const w = watch({
-      disk,
-      freeOldBackups: async () => {
-        calls.push("delete");
-      },
-      restoreSpare: async () => {
-        calls.push("restore");
-      },
+      freeOldBackups: () => new Promise<void>((_, reject) => (fail = reject)),
     });
-    await w.tick();
-    expect(calls).toEqual(["delete", "restore", "full"]);
+    w.armed[0]!.fn();
+    await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
+    const stopping = w.handle.stop();
+    fail(new Error("stopping"));
+    await stopping;
+    expect(w.events("backup.low_space_delete_failed")).toEqual([]);
   });
 
   it("a deletion step that throws is logged, and the same reading still writes the spare back and records", async () => {
