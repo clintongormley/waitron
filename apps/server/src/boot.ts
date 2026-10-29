@@ -2260,6 +2260,7 @@ async function bootServer(
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
     recordArchivesDeleted: backupRoom.recordArchivesDeleted,
+    nodeId: till.nodeId,
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());

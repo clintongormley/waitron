@@ -6,10 +6,13 @@ import {
   mkdtemp,
   readFile,
   readdir,
+  realpath,
   rm,
+  stat,
   truncate,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -20,6 +23,7 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
@@ -32,7 +36,7 @@ import {
   type BackupSupervisorDeps,
 } from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
-import type { BackupDestination } from "./storage-backend.js";
+import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import { ALL_MODULES } from "./modules.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 import { AppError } from "@waitron/shared";
@@ -1207,4 +1211,212 @@ describe("BackupSupervisor hands each run the room hooks", () => {
     expect(outcomes.runStopped?.code).toBe("backup.staging_space_low");
     expect(await listArchives(dest)).toEqual([oldKey, newestKey].sort());
   }, 60_000);
+});
+
+describe("BackupSupervisor keeps the backup room note in step", () => {
+  const NODE = "node-a";
+  const STARTED = new Date("2026-10-01T08:00:00.000Z");
+  const OTHER_DEVICE = -1;
+
+  const notePath = (stateDir: string) => join(stateDir, BACKUP_ROOM_NOTE_FILE);
+
+  async function stateWithNote(): Promise<string> {
+    const stateDir = await makeStateDir();
+    await writeFile(notePath(stateDir), "an earlier note");
+    return stateDir;
+  }
+
+  const unreachableBucket = (id: string): StorageBackend => {
+    const offline = async (): Promise<never> => {
+      throw new Error("bucket offline");
+    };
+    return {
+      id,
+      put: offline,
+      putFile: offline,
+      getFile: offline,
+      get: offline,
+      list: offline,
+      delete: offline,
+      deleteMany: offline,
+      close: () => {},
+    };
+  };
+
+  function supervisorFor(
+    refs: Refs,
+    stateDir: string,
+    extra: Partial<BackupSupervisorDeps> = {},
+  ): BackupSupervisor {
+    return new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      venueDir: refs.venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir,
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      nodeId: NODE,
+      readInstallationStart: async () => STARTED,
+      ...extra,
+    });
+  }
+
+  it("a primary's reload writes a note naming only the local folders on the venue's disk", async () => {
+    const sameDisk = await realpath(await makeDestDir());
+    const otherDisk = await realpath(await makeDestDir());
+    const config = localFsConfig([sameDisk, otherDisk], STRONG_KEY_1);
+    config.destinations.push({
+      kind: "s3",
+      id: "bucket",
+      venueId: "c0000000-0000-4000-8000-000000000002",
+      bucket: {
+        endpoint: "https://s3.example.test",
+        region: "eu-north-1",
+        bucket: "owner-bucket",
+        prefix: "waitron",
+        accessKeyId: "AKIAVIEW",
+        secretAccessKey: "bucket-secret",
+      },
+    });
+    const refs: Refs = {
+      config,
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: true,
+    };
+    const stateDir = await makeStateDir();
+    const sup = supervisorFor(refs, stateDir, {
+      buildBackend: (dest) =>
+        dest.kind === "s3" ? unreachableBucket(dest.id) : new LocalFsBackend(dest.id, dest.dir),
+      deviceOf: async (path) => (path === otherDisk ? OTHER_DEVICE : (await stat(path)).dev),
+    });
+    try {
+      await sup.reload();
+    } finally {
+      await sup.stop();
+    }
+    const note = JSON.parse(await readFile(notePath(stateDir), "utf8")) as Record<string, unknown>;
+    expect(note).toMatchObject({
+      version: 1,
+      nodeId: NODE,
+      installationStartedAt: STARTED.toISOString(),
+      managedByEnvironment: true,
+      folders: [{ destination: "primary", dir: sameDisk }],
+    });
+  }, 60_000);
+
+  it("a reload as a standby deletes an existing note", async () => {
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "secondary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir);
+    try {
+      await sup.reload();
+    } finally {
+      await sup.stop();
+    }
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  });
+
+  it("a reload with backups switched off deletes an existing note", async () => {
+    const refs: Refs = {
+      config: { ...localFsConfig([await makeDestDir()], STRONG_KEY_1), enabled: false },
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir);
+    try {
+      await sup.reload();
+    } finally {
+      await sup.stop();
+    }
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  });
+
+  it("an installation start that throws leaves no note, and backups still run", async () => {
+    const refs: Refs = {
+      config: localFsConfig([await makeDestDir()], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir, {
+      readInstallationStart: async () => {
+        throw new Error("unreadable");
+      },
+    });
+    try {
+      await sup.reload();
+      expect(sup.current().enabled).toBe(true);
+    } finally {
+      await sup.stop();
+    }
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  }, 60_000);
+
+  it("a reload whose settings read throws leaves no note", async () => {
+    const refs: Refs = {
+      config: undefined,
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir, {
+      buildConfig: async () => {
+        throw new Error("settings unreadable");
+      },
+    });
+    try {
+      await expect(sup.reload()).rejects.toThrow("settings unreadable");
+    } finally {
+      await sup.stop();
+    }
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  });
+
+  it("a stop() while the settings are being read leaves no note", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const reached = new Promise<void>((r) => (entered = r));
+    const dest = await makeDestDir();
+    const refs: Refs = {
+      config: undefined,
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await stateWithNote();
+    const sup = supervisorFor(refs, stateDir, {
+      buildConfig: async () => {
+        entered();
+        await released;
+        return localFsConfig([dest], STRONG_KEY_1);
+      },
+    });
+    const reloading = sup.reload();
+    await reached;
+    await sup.stop();
+    release();
+    await reloading;
+    expect(existsSync(notePath(stateDir))).toBe(false);
+  });
 });

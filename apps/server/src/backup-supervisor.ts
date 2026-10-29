@@ -21,7 +21,8 @@ import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
-import type { DeletableArchive } from "./backup-room.js";
+import { foldersOnDisk, type DeletableArchive } from "./backup-room.js";
+import { deleteBackupRoomNote, writeBackupRoomNote } from "./backup-room-note.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
   readDestinationStatus,
@@ -32,6 +33,8 @@ import { runBackupSweep, type DestinationResult } from "./backup-sweep.js";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import type { BackupDestination, StorageBackend } from "./storage-backend.js";
 import type { DeploymentEnvironment } from "./config.js";
+import type { DeviceOf } from "./disk-usage.js";
+import { errnoOf } from "./errno.js";
 import { realSleep } from "./loop.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { Statfs } from "./free-bytes.js";
@@ -154,6 +157,10 @@ export interface BackupSupervisorDeps {
   recordArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
   /** DI for tests; passed to each run. */
   statfs?: Statfs;
+  /** Named in the backup room note; absent, no note is written. */
+  nodeId?: string;
+  /** DI for tests; decides which folders the note names as on the venue's disk. */
+  deviceOf?: DeviceOf;
 }
 
 /** The size of the venue database file, without its write-ahead file; a missing file counts as
@@ -197,6 +204,8 @@ export class BackupSupervisor {
     if (this.#reloading) throw new AppError("backup.reload_in_progress", {});
     this.#reloading = true;
     try {
+      // Every reload clears it first, so a reload that throws or leaves backups off leaves none.
+      await this.#deleteNote();
       await this.#teardown();
       // A `stop()` may have run while we awaited the teardown, which already left no worker/handle.
       if (this.#stopped) return;
@@ -289,8 +298,45 @@ export class BackupSupervisor {
       this.#worker.catch((err) =>
         this.#deps.log("error", "backup.worker_rejected", { errorCode: codeOf(err) }),
       );
+      await this.#writeNote(this.#backends);
     } finally {
       this.#reloading = false;
+    }
+  }
+
+  /** Leaves no note when the installation start is unknown or a `stop()` lands meanwhile. */
+  async #writeNote(backends: readonly StorageBackend[]): Promise<void> {
+    const { nodeId, readInstallationStart } = this.#deps;
+    if (nodeId === undefined || readInstallationStart === undefined) return;
+    let installationStartedAt: Date | null;
+    let folders;
+    try {
+      installationStartedAt = await readInstallationStart();
+      if (installationStartedAt === null) return;
+      ({ folders } = await foldersOnDisk(backends, this.#deps.venueDir, this.#deps.deviceOf));
+    } catch (err) {
+      this.#deps.log("warn", "backup.room_note_write_failed", { errno: errnoOf(err) ?? null });
+      return;
+    }
+    if (this.#stopped) return;
+    await writeBackupRoomNote({
+      stateDir: this.#deps.stateDir,
+      venueDir: this.#deps.venueDir,
+      nodeId,
+      installationStartedAt,
+      managedByEnvironment: this.#deps.isManagedByEnvironment(),
+      folders,
+      now: () => this.#now(),
+      log: this.#deps.log,
+    });
+    if (this.#stopped) await this.#deleteNote();
+  }
+
+  async #deleteNote(): Promise<void> {
+    try {
+      await deleteBackupRoomNote(this.#deps.stateDir);
+    } catch (err) {
+      this.#deps.log("error", "backup.room_note_delete_failed", { errno: errnoOf(err) ?? null });
     }
   }
 
