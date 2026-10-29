@@ -215,6 +215,10 @@ function evidenceDestinations(
 /** Writes nothing of its own: the record's facts come from one transaction, and each folder is
  * looked at after it. */
 export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<SettingsEvidence> {
+  // Taken before the record is read, so a record written meanwhile is newer than the history's
+  // newest failure, never older.
+  const loaded = deps.current();
+  const { failures, lastCleanLoadAt } = deps.loadHistory();
   let record: ArchiveRecordMeta | null;
   let settings: ArchiveSettings | null = null;
   let unreadable: RecordNow | undefined;
@@ -225,7 +229,6 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
     record = recordMetaOf(error);
     unreadable = { state: "unreadable", code: codeOf(error), detail: safeLoadDetail(error) };
   }
-  const loaded = deps.current();
   const now: RecordNow =
     unreadable ??
     (settings === null
@@ -241,7 +244,6 @@ export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<
   const key = await recoveryKeyFacts(env, () => loaded.recoveryKey);
   const fingerprint =
     key.fileKey === undefined ? loaded.keyFingerprint : keyFingerprint(key.fileKey);
-  const { failures, lastCleanLoadAt } = deps.loadHistory();
   const newest = failures[0];
   const { previous } = deps.ring;
   return {

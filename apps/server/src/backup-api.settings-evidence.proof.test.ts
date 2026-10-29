@@ -405,6 +405,54 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }, 60_000);
   });
 
+  it("a Save whose reload fails while a folder look is held: the record read is not called rewritten after that failure", async () => {
+    const folder = destDir();
+    await write(folderSettings(folder));
+    const before = (await readArchiveSettingsWithMeta(suite.db, RING)).meta!;
+    const sc = await scenario({ role: "primary", statusReadTimeoutMs: 600_000 });
+    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    let looking!: () => void;
+    const lookStarted = new Promise<void>((resolve) => (looking = resolve));
+    let release!: () => void;
+    const held = new Promise<never>((_resolve, reject) => {
+      release = () => reject(Object.assign(new Error("released"), { code: "EIO" }));
+    });
+    held.catch(() => {});
+    const app = buildApp(sup, sc, {
+      statFolder: () => {
+        looking();
+        return held;
+      },
+    });
+    try {
+      const read = evidence(app);
+      await lookStarted;
+      // Read on every load, so the Save's own reload fails on the record it has just written.
+      sc.base = { ...sc.base, WAITRON_BACKUP_STALE_AFTER_MS: "not-a-number" };
+      const saved = await post(app, "/api/backup/apply", {
+        destinations: [{ kind: "local-fs", dir: destDir() }],
+        schedule: DAILY,
+        retention: RETENTION,
+      });
+      expect(saved.status).toBe(200);
+      const after = (await readArchiveSettingsWithMeta(suite.db, RING)).meta!;
+      expect(after.digest).not.toBe(before.digest);
+      expect(sup.loadHistory().failures[0]).toMatchObject({
+        code: "server.config_invalid",
+        recordDigest: after.digest,
+      });
+      release();
+      const body = await read;
+      expect(body.record).toMatchObject({ digest: before.digest });
+      expect(body.rewrittenSinceLastFailure).toBe(false);
+      expect(JSON.stringify(body.failures)).not.toContain(after.digest);
+    } finally {
+      release();
+    }
+  }, 60_000);
+
   describe("after the bucket copy's key write, which paths turn backups on", () => {
     /** An enabled record, no recovery key, then the bucket copy's Save through its real route. */
     async function keyWrittenByBucketCopy() {
