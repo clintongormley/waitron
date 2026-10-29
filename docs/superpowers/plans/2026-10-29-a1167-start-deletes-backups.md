@@ -112,9 +112,10 @@ is its watch-side caller. This branch is rebased on it.
       signal, onDeleted: writes the start-deleted record })`, modelled on `low-space-backups.ts`. A
       `backup.staging_space_low` refusal comes either before any deletion, when free space plus every
       deletable backup falls short of the floor (`backup-room.ts:233-234`; log
-      `backup.start_room_skipped` reason `out_of_reach`), or after deletions, when the fresh reading is
-      still under the floor (`:268-269`; `onDeleted` has already written the start-deleted record, so
-      log `backup.start_room_short` with the free bytes, not `out_of_reach`). Both fall through.
+      `backup.start_room_skipped` reason `out_of_reach`), or after the deletion loop, when the fresh
+      reading is still under the floor (`:268-269`; log `backup.start_room_short` with the free bytes,
+      not `out_of_reach`, whether or not a deletion succeeded — `onDeleted` wrote the start-deleted
+      record only if one did). The error's `afterDeleting` param tells the two apart. Both fall through.
    `releaseSpareToStart` then runs unchanged and re-reads free space, so a step that made room
    releases nothing.
 6. **The alert.** When the step deleted anything, `onDeleted` writes
