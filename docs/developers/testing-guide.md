@@ -2991,10 +2991,6 @@ Cost: A505's row menu stayed open on the real page while every scripted test clo
 
 Cost: A771, the check failed 3 of 7 main runs.
 
-### A check of what an observer's first report does polls for it, never counts frames
-
-Cost: a Floor zone-tab test failed two of #2238's three CI runs (A1124's rest, A1125's branch).
-
 ### A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own case
 
 Cost: a write-queue re-entrancy guard turned every concurrent request in `packages/payments` into a 500.
