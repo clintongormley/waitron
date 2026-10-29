@@ -3132,6 +3132,18 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   until this is decided. The venue logo follows the same path, so such a till keeps an old logo too
   (A841 slice 8b).
 
+- **The floor map draws a neighbouring table's allergy mark over a held table's rings.**
+  `[part="allergy"]` has `z-index: 2` and hangs half outside its table's top-left corner; a table
+  button that is neither held nor focused has no `z-index` and so makes no stacking context of its
+  own, so its mark stacks above a held table (`z-index: 1`) and covers that table's selected ring
+  where the two overlap (`packages/ui/src/components/wt-floor-map.ts`). Found by A1182's review
+  with a scratch browser probe: table `a` held, table `b` touching its right edge with an allergy
+  mark, the pixel 4 px right of `a`'s edge read the danger colour instead of the ring's. A focused
+  table's ring is covered the same way. `isolation: isolate` on each table button would contain the
+  mark, but a scratch probe showed it then lets a table later in the page cover an earlier one's
+  mark where it overhangs; decide which gives way. The design system's floor-map paragraph states
+  the gap.
+
 - **`wt-slider`'s step marks run from the left in a right-to-left page.** Each mark is placed with
   a physical `left` (`packages/ui/src/components/wt-slider.ts`), so right to left the mark for
   `min` sits at the left end while the thumb at `min` sits at the right. Measured on cd506f69c

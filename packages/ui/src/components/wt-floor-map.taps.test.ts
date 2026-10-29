@@ -290,7 +290,7 @@ it("rings a held merge once around its whole box, drawn above a table touching i
   ]);
 });
 
-it("a held single table has no ring on its button", async () => {
+it("a held single table without keyboard focus has no ring on its button", async () => {
   const el = await map([t1]);
   applyTokens(el);
   down(el, 300, 150);

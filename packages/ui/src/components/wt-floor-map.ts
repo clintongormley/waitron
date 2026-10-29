@@ -305,7 +305,8 @@ export class WtFloorMap extends LitElement {
 
       /* With keyboard focus the button's outline is the focus ring, and it goes past the selected ring
          (a merge's moves to ::after): right only while the selected ring is no wider than
-         --wt-focus-offset. */
+         --wt-focus-offset. It comes after the merge's selected-ring rule above, which has the same
+         specificity. */
       [part="table"][data-held]:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(var(--wt-focus-offset) * 2);
@@ -320,8 +321,9 @@ export class WtFloorMap extends LitElement {
         pointer-events: none;
       }
 
-      /* Above every other table, so a moving table is not hidden under the one it is dragged onto
-         and a held merge's ring is not cut by a table touching it. */
+      /* Above every table that is neither held nor focused, so a moving table is not hidden under the
+         one it is dragged onto and a held table's rings are not cut by a table touching it; the allergy
+         mark (z-index 2) of a table that is neither held nor focused still paints over them. */
       [part="table"][data-held] {
         z-index: 1;
       }

@@ -531,7 +531,6 @@ describe("a merge reached by Tab", () => {
 });
 
 describe("a single table reached by Tab", () => {
-  // As wide as each other, as the default tokens are, so neither ring can show past the other's edge.
   const FOCUS = "2px solid rgb(220, 0, 120)";
   const SELECTED = "2px solid rgb(0, 160, 0)";
 

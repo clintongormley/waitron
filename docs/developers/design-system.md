@@ -1116,7 +1116,8 @@ it. A press held 500 ms marks its table `data-held`. Each of its shapes' edges i
 `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a
 1 px `--wt-color-primary` line inside them. `--wt-selected-ring` is drawn `--wt-focus-offset` outside
 a single table's edge, or once around a merge's whole box, and the held table is drawn above every
-table that is neither held nor showing keyboard focus. When the held table, single or merged, also
+table that is neither held nor showing keyboard focus, though the allergy mark of a table that is
+neither held nor showing keyboard focus is still drawn over it where they overlap. When the held table, single or merged, also
 shows keyboard focus, its focus ring moves out to twice `--wt-focus-offset`, outside the selected
 ring; the two stay apart only while the selected ring is no wider than `--wt-focus-offset`. The
 press's release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and
@@ -1132,7 +1133,7 @@ moves, so after the view refits under a still finger the release sends the marke
 wherever the finger now is. A held group with a `fixed` member is not drawn moved: a copy of its
 shapes at half opacity (`part="ghost"`) is drawn where the drag would put it, and while a table
 is marked `data-drop-target` a 1 px `--wt-color-primary` line (`<svg part="drag-link">`) joins the
-group's centre and that table's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn above every other table at half opacity (`data-moving`), so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false, or while the view's scale is 0 (a hidden host the map has refitted), a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
+group's centre and that table's; both go on release, with no animation, and the drop is sent as for any table. Neither takes a pointer, so the target is found through them. A movable group being dragged is drawn at half opacity (`data-moving`), above every table that is neither held nor showing keyboard focus, so the table it is dragged onto, that table's fill and its `data-drop-target` ring show through it. `canDrag` is read on each move: while it is false, or while the view's scale is 0 (a hidden host the map has refitted), a move changes nothing, so a drag that has not moved draws no copy and marks no target, and one that had already moved stays drawn where it last moved (a fixed group keeps its copy), keeps its target, and is still sent as `wt-table-drag-end` on release. A new `tables` that no
 longer has the held table ends the drag, and its release sends nothing; one that keeps it keeps the
 drag. A right-click, a macOS Ctrl+click and the ContextMenu key send `wt-table-details` through
 `contextmenu`, which the map always prevents and ignores while a press is under way; Shift+F10 is
@@ -1148,8 +1149,9 @@ is prevented, pans the target into view by the least distance (a table wider tha
 moved only to close a gap at one edge; within the pan limit, and counting as a pan, so a resize then
 keeps the view) and focuses it with `focus({ preventScroll: true })`, because the map
 cannot scroll and a focus left to scroll moves the page around it instead (the "arrowing to a
-table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above the
-tables beside it, so its ring is not covered. The host has no
+table below the edge…" case in `wt-floor-map.keys.test.ts`). A focused table is drawn above every
+table beside it that is neither held nor focused, though such a table's allergy mark is still drawn
+over its ring where they overlap. The host has no
 `delegatesFocus`, unlike "Adding a primitive" item 4, and clips its overflow (`overflow: clip`)
 rather than hiding it. Probed in headless Chromium 153: a click on empty space in a `delegatesFocus`
 host focused its first button, and with `overflow: hidden` the browser scrolled the host when an
