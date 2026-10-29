@@ -1,3 +1,4 @@
+import { addPortionRound } from "./testing/portion-bill.js";
 import { kitchenNotices } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
@@ -374,3 +375,73 @@ it("A964 venue language leaves no-printer reads and counter notices independent 
     expect(await jobs()).toEqual(beforeJobs);
   }
 });
+
+it.each(["en", "es"] as const)(
+  "A964 portion corrections keep cached cross-references in content %s and fold identical dishes",
+  async (language) => {
+    const v = await setupSplitExtrasVenue();
+    const cfg = { ...v.cfg, locale: "de-DE" };
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
+      await addPortionRound(
+        tx,
+        cfg,
+        v.party.tabId,
+        v.tables.toOfferLines([
+          {
+            productId: v.products.burger,
+            quantity: "2",
+            extras: [
+              { listId: v.lists.burger, picks: [{ productId: v.products.chips, quantity: 1 }] },
+            ],
+          },
+        ]),
+        { fire: true },
+      );
+    });
+    const fired = (await suite.db.select().from(ticketItems)).filter(
+      (item) => item.workingOrderId === v.party.tabId && item.stationId === v.stations.grill,
+    );
+    expect(fired).toHaveLength(2);
+    const before = new Set((await jobs()).map((job) => job.id));
+    const reader = vi.spyOn(kitchenLanguage, "readKitchenLanguage");
+    await withTransaction(suite.db, (tx) =>
+      enqueueCorrectionSlips(
+        tx,
+        cfg,
+        v.party.tabId,
+        fired.map((item) => ({
+          workingOrderLineId: item.workingOrderLineId,
+          stationId: item.stationId!,
+          quantity: 1000,
+          wasStarted: false,
+        })),
+        "VOID",
+      ),
+    );
+    const added = (await jobs()).filter((job) => !before.has(job.id));
+    expect(new Set(added.map((job) => job.printerId))).toEqual(
+      new Set([v.printers.grill, v.printers.pass]),
+    );
+    expect(added).toHaveLength(2);
+    for (const job of added) {
+      const paper = printedLines(job.payload);
+      expect(paper[0]).toBe(`*** ${kitchenTicketWords(language).void} ***`);
+      expect(paper.filter((line) => line.includes("x BURG"))).toEqual(["2.000 x BURG"]);
+      expect(paper).toContain(
+        "  > " +
+          kitchenTicketWords(language)
+            .withRef.replace("{name}", "CHIPS")
+            .replace("{station}", "Fryer"),
+      );
+    }
+    expect(reader).toHaveBeenCalledTimes(1);
+    const notices = await suite.db
+      .select()
+      .from(kitchenNotices)
+      .where(eq(kitchenNotices.workingOrderId, v.party.tabId));
+    expect(
+      notices.filter((notice) => notice.kind === "void").map((notice) => notice.quantity),
+    ).toEqual([2000]);
+  },
+);

@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
@@ -991,7 +992,7 @@ describe("A669 capture", () => {
     expectCopies(p.tabId);
     const [job] = await v.db.select().from(printJobs);
     const slip = printedLines(job!.payload).join("\n");
-    expect(slip).toContain("HOLD CHANGED");
+    expect(slip).toContain(kitchenTicketWords("es").holdChanged);
     expect(slip).toContain(guest.note);
   });
 

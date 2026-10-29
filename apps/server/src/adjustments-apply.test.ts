@@ -1419,7 +1419,9 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       expect((await placeOf(bound.billId, 3)).groupId).toBe(held.groupId);
       const shape = (jobs: string[][]) =>
         jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
-      expect(shape(plainJobs)).toEqual([["*** HOLD CHANGED ***", "+2.000 x BURG"]]);
+      expect(shape(plainJobs)).toEqual([
+        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+2.000 x BURG"],
+      ]);
       expect(shape(boundJobs)).toEqual(shape(plainJobs));
     } finally {
       await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));

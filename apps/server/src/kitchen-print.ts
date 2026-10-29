@@ -1169,10 +1169,10 @@ export async function foldPortionNotices<T extends CorrectionItem>(
     tx,
     items.map((item) => item.workingOrderLineId),
   );
-  const built: TicketItemsByLine =
-    whole.size === 0 ? new Map() : await buildTicketItems(tx, cfg, [...whole], cfg.locale);
-  const read = { whole, built };
-  if (whole.size === 0) return { notices: [...items], read };
+  if (whole.size === 0) return { notices: [...items], read: { whole, built: new Map() } };
+  const language = await readKitchenLanguage(tx);
+  const built = await buildTicketItems(tx, cfg, [...whole], language);
+  const read = { whole, built, language };
   const out: T[] = [];
   const byKey = new Map<string, number>();
   for (const item of items) {
@@ -1204,10 +1204,11 @@ export async function foldPortionNotices<T extends CorrectionItem>(
 type TicketItemsByLine = Awaited<ReturnType<typeof buildTicketItems>>;
 
 /** What {@link foldPortionNotices} read, handed on so the slips that follow do not read it again:
- * the whole-portion lines among the items, and their ticket items. */
+ * the whole-portion lines among the items, their ticket items and the language of their cross-references. */
 export interface PortionRead {
   whole: ReadonlySet<string>;
   built: TicketItemsByLine;
+  language?: KitchenLanguage;
 }
 
 function toNoticeItem(item: CorrectionItem) {
@@ -1276,7 +1277,7 @@ async function printCorrectionSlips(
   }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
-  const language = await readKitchenLanguage(tx);
+  const language = read?.language ?? (await readKitchenLanguage(tx));
   const unread = lineIds.filter((id) => read?.built.has(id) !== true);
   const itemsByLine: TicketItemsByLine = new Map([
     ...(read?.built ?? []),
