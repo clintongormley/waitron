@@ -1525,6 +1525,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
     this.#resizing = undefined;
+    this.#barSizing?.disconnect();
+    this.#barSizing = undefined;
+    this.#sizedBar = undefined;
   }
 
   /** Side by side has no Review view, so one left open is closed rather than kept for a later
