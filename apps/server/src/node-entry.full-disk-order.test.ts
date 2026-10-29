@@ -4,9 +4,39 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { FRESH } from "./recovery-state.js";
+import { SPARE_SPACE_BYTES } from "./spare-space.js";
 import { runEntry } from "./node-entry.js";
 
-const watch = vi.hoisted(() => ({ leftover: "", seen: [] as boolean[], spare: [] as unknown[] }));
+const watch = vi.hoisted(() => ({
+  leftover: "",
+  seen: [] as boolean[],
+  spare: [] as unknown[],
+  spareFile: "",
+  backupEntry: null as unknown,
+  room: [] as { leftover: boolean; spare: boolean; deps: unknown }[],
+}));
+
+vi.mock("./first-setup-backup-entry.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("./first-setup-backup-entry.js")>();
+  return {
+    ...original,
+    resolveFirstSetupBackupEntry: vi.fn(
+      async (...args: Parameters<typeof original.resolveFirstSetupBackupEntry>) =>
+        (watch.backupEntry as Awaited<ReturnType<typeof original.resolveFirstSetupBackupEntry>>) ??
+        original.resolveFirstSetupBackupEntry(...args),
+    ),
+  };
+});
+
+vi.mock("./start-backup-room.js", () => ({
+  deleteOldBackupsAtStart: vi.fn(async (deps: unknown) => {
+    watch.room.push({
+      leftover: existsSync(watch.leftover),
+      spare: existsSync(watch.spareFile),
+      deps,
+    });
+  }),
+}));
 
 vi.mock("./first-setup-entry.js", async (importOriginal) => {
   const original = await importOriginal<typeof import("./first-setup-entry.js")>();
@@ -27,6 +57,9 @@ afterEach(async () => {
   watch.seen = [];
   watch.spare = [];
   watch.leftover = "";
+  watch.spareFile = "";
+  watch.backupEntry = null;
+  watch.room = [];
   await Promise.all(dirs.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
 
@@ -138,5 +171,106 @@ it.each([
         statfs,
       },
     ]);
+  },
+);
+
+function roomEntryDeps(
+  dirs: { stateDir: string; venueDir: string; logDir: string },
+  spare: { spareBytes?: number } = { spareBytes: 4096 },
+) {
+  return {
+    args: [],
+    baseEnv: { WAITRON_TEST_MARK: "base" },
+    ...dirs,
+    assertNotAhead: vi.fn(() => Promise.resolve()),
+    clearReplacedDatabases: vi.fn(() => Promise.resolve()),
+    lockVenue: vi.fn(() => Promise.resolve({ release: () => {} })),
+    readVenueHolder: vi.fn(() => null),
+    loadBoxEnv: vi.fn((base: NodeJS.ProcessEnv) => Promise.resolve({ ...base })),
+    readRecoveryState: vi.fn(() => Promise.resolve(FRESH)),
+    writeRecoveryState: vi.fn(() => Promise.resolve()),
+    withRecoveryLock: <T>(_stateDir: string, body: () => Promise<T>) => body(),
+    startServer: vi.fn(() => Promise.resolve({ close: () => Promise.resolve() })),
+    serveRecovery: vi.fn(() => Promise.resolve()),
+    installShutdownHandlers: vi.fn(),
+    scheduleStayedUp: vi.fn(),
+    log: vi.fn(),
+    statfs: () => Promise.resolve({ bavail: 10, frsize: 1 }),
+    freeSpaceFloor: 1000,
+    ...spare,
+    now: () => new Date("2026-10-29T10:00:00Z"),
+  };
+}
+
+async function roomDirs() {
+  const stateDir = await mkdtemp(join(tmpdir(), "wt-entry-order-state-"));
+  const venueDir = await mkdtemp(join(tmpdir(), "wt-entry-order-venue-"));
+  const logDir = await mkdtemp(join(tmpdir(), "wt-entry-order-"));
+  dirs.push(stateDir, venueDir, logDir);
+  watch.leftover = join(logDir, "waitron.log.2");
+  await writeFile(watch.leftover, "old lines");
+  watch.spareFile = join(stateDir, "spare-space");
+  await writeFile(watch.spareFile, Buffer.alloc(4096, 1));
+  return { stateDir, venueDir, logDir };
+}
+
+it("deletes old backups after the leftovers are deleted and before the spare is released", async () => {
+  const roots = await roomDirs();
+  const deps = roomEntryDeps(roots);
+
+  await runEntry(deps);
+
+  expect(watch.room).toEqual([
+    {
+      leftover: false,
+      spare: true,
+      deps: expect.objectContaining({
+        stateDir: roots.stateDir,
+        venueDir: roots.venueDir,
+        baseEnv: deps.baseEnv,
+        loadBoxEnv: deps.loadBoxEnv,
+        spareBytes: 4096,
+        floor: 1000,
+        statfs: deps.statfs,
+        lockVenue: deps.lockVenue,
+        readVenueHolder: deps.readVenueHolder,
+        now: deps.now,
+        log: deps.log,
+      }),
+    },
+  ]);
+  expect(existsSync(watch.spareFile)).toBe(false);
+});
+
+it("the backup step's spare size defaults to the spare file's", async () => {
+  const roots = await roomDirs();
+  const deps = roomEntryDeps(roots, {});
+
+  await runEntry(deps);
+
+  expect(watch.room).toEqual([
+    expect.objectContaining({
+      deps: expect.objectContaining({ spareBytes: SPARE_SPACE_BYTES }),
+    }),
+  ]);
+});
+
+it.each(["repair", "selected"] as const)(
+  "a start with a %s backup recovery deletes no old backups",
+  async (kind) => {
+    const roots = await roomDirs();
+    const target = await roomDirs();
+    watch.backupEntry =
+      kind === "repair"
+        ? { kind, roots: { stateDir: roots.stateDir, venueDir: roots.venueDir } }
+        : {
+            kind,
+            roots: { stateDir: target.stateDir, venueDir: target.venueDir },
+            run: <T>(body: () => Promise<T>) => body(),
+          };
+
+    await runEntry(roomEntryDeps(roots)).catch(() => {});
+
+    expect(watch.room).toEqual([]);
   },
 );

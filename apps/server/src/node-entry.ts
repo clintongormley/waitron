@@ -66,6 +66,7 @@ import {
   lowestFreeBytes,
 } from "./start-space.js";
 import { resolveFirstSetupEntry } from "./first-setup-entry.js";
+import { deleteOldBackupsAtStart } from "./start-backup-room.js";
 import { resolveFirstSetupBackupEntry } from "./first-setup-backup-entry.js";
 import { maskPersonalData } from "./log-personal-data.js";
 import { redactSecrets } from "./redact-secrets.js";
@@ -368,6 +369,22 @@ export async function runEntry(deps: EntryDeps): Promise<void> {
               ? join(cleanupRoots.stateDir, "logs")
               : (deps.logDir ?? join(deps.stateDir, "logs")),
         });
+
+  // A recovery's folders are not the installation the backup room note describes.
+  if (backupEntry.kind !== "repair" && backupEntry.kind !== "selected")
+    await deleteOldBackupsAtStart({
+      stateDir: deps.stateDir,
+      venueDir: deps.venueDir,
+      baseEnv: deps.baseEnv,
+      loadBoxEnv: deps.loadBoxEnv,
+      spareBytes: deps.spareBytes ?? SPARE_SPACE_BYTES,
+      floor,
+      statfs: deps.statfs,
+      lockVenue: cleanUp.lockVenue,
+      readVenueHolder: cleanUp.readVenueHolder,
+      now,
+      log: deps.log,
+    });
 
   if (backupEntry.kind !== "repair") await releaseSpareToStart(deps, cleanupRoots);
 
