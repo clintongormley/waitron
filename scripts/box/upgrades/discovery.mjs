@@ -5,7 +5,7 @@ import {
   parseVerifiedRelease,
   safeInteger,
 } from "./contracts.mjs";
-import { setTimeout as nextTurn } from "node:timers/promises";
+import { setImmediate as nextImmediate, setTimeout as nextTurn } from "node:timers/promises";
 
 // A timed-out adapter may still own an external operation. Keep the process's
 // discovery slot until it settles, including after returning a deferred result.
@@ -59,8 +59,8 @@ async function bounded(operation, budget, deps, signal, slot) {
   try {
     return { ok: true, value: await Promise.race([work, aborted, timeout]) };
   } catch {
-    // An async adapter can still be unwinding its abort through promise layers.
-    // Yield one timer turn before retaining the slot for unsettled work.
+    // Give check-phase abort cleanup a turn even when a timer is already due.
+    await nextImmediate();
     await nextTurn();
     return { ok: false, settled };
   } finally {
