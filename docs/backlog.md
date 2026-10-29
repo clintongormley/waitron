@@ -467,6 +467,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
+- **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
+  invites the owner to sign up for Cloud and try level 2 (remote access, translation, the
+  rota solver, backups) free for 30 days, with no payment details. Sign-up and payment
+  happen on Cloud's pages. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §4–§5.
+
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
 
@@ -4650,6 +4655,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### The box: backups, upgrades and recovery
 
+- **A1187. One recovery pack (owner, 2026-10-29).** "It should be a single recovery pack. So
+  there's one document that covers everything that they need to know." Merge today's recovery
+  kit, the recovery sheet with the disk key and the archive recovery pack into one document,
+  and add the venue's emergency address and emergency code from Waitron Cloud (A1188).
+  [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
+
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
 
@@ -5276,6 +5287,21 @@ Not in any track until the standalone primary is done.
   The owner approved both Harbour Kitchen handovers and retained defaults on 24 October 2026.
   Exact formats, compatible A947 amendments, separate build authority and physical runtime qualification remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
+
+- **A1185. The Cloud services screen shows the venue's billing level and prices (owner,
+  2026-10-29).** Show the venue's level (registered, connected or hosted), its billing state
+  (trial, active, payment failing, lapsed), the trial or paid period's end date, the other
+  levels and their prices, and a link to the owner's Cloud account, where everything is
+  managed. Display only: the box never switches a service on or off from these values. Needs
+  the billing section Cloud adds to the shared contract. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §5.
+
+- **A1188. A venue manager can start the venue in the cloud when the box has died (owner,
+  2026-10-29).** Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
+  show the emergency link to an administrator when the box disappears. The locked copy Cloud
+  restores after a valid emergency code offers only an administrator sign-in; a manager
+  holding `node.promote`, signing in with password and authenticator code, makes A1018's
+  declaration that the box is off, and only if the Cloud owner agreed in advance.
+  [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches
   `/api/theme` from the page's own address, not through `ServerRouter`; moved to another server, it
