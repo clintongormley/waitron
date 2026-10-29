@@ -1,4 +1,3 @@
-/** Not the calibration ruler page, which is `test-page.ts`. */
 import {
   QR_QUIET_ZONE,
   chooseQrDots,
@@ -11,23 +10,11 @@ import {
   type EscSetting,
 } from "@waitron/printing";
 import type { SupportedLocale } from "@waitron/shared";
+import { PRINTER_TEST_PAGE_WORDS, PRINTER_TEST_SAMPLE_TEXT } from "./i18n/printer-test-page.js";
 import { qrModules } from "./qr-matrix.js";
 
 /** Fixed sample content, never a tax-agency link. */
 export const PRINTER_TEST_PAGE_QR_TEXT = "Waitron test page";
-
-const SAMPLE_TEXT = "Café, jamón, niño · 5 € · ¿Sí? ¡Sí!";
-
-const WORDS: Readonly<Record<SupportedLocale, { title: string; verdict: string }>> = {
-  "en-GB": {
-    title: "Test page",
-    verdict: "If this is centred and readable, this printer is set up correctly.",
-  },
-  "es-ES": {
-    title: "Página de prueba",
-    verdict: "Si esto sale centrado y legible, la impresora está bien configurada.",
-  },
-};
 
 export interface PrinterTestPageInput {
   locale: SupportedLocale;
@@ -44,7 +31,7 @@ export function formatPrinterTestPage({
   now,
   timeZone,
 }: PrinterTestPageInput): Uint8Array {
-  const words = WORDS[locale];
+  const words = PRINTER_TEST_PAGE_WORDS[locale];
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots).align("center");
@@ -62,7 +49,7 @@ export function formatPrinterTestPage({
     ),
   );
   b.line();
-  text(SAMPLE_TEXT);
+  text(PRINTER_TEST_SAMPLE_TEXT);
   b.line();
   b.line(`|${"-".repeat(columns - 2)}|`);
   b.line();
