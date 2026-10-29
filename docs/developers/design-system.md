@@ -3679,7 +3679,8 @@ paints its leading edge and bottom border `--wt-color-danger`; it keeps the defa
 floor plan editor's `notices` slot while that is open. It needs a session, so it never shows
 signed out. Its line says the tills cannot save anything; to a person holding `system.manage` it
 also names old backups the box deleted in the last day and what Box status can free, with **Open
-Box status** (no button on Box status itself). Anyone else gets **Sign in as a manager**, which
+Box status** (no button on Box status itself, so once it has opened Box status it moves keyboard focus
+to the page area rather than leave it on a removed button). Anyone else gets **Sign in as a manager**, which
 signs them out; a manager or administrator who then signs in with a password or passkey lands on
 Box status. The shell reads
 `GET /management-api/disk-stop` passively every 30 seconds and on any `incidents` change. Pinned by

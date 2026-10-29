@@ -372,11 +372,15 @@ describe("the shell's full-disk bar", () => {
 });
 
 describe("the full-disk bar's button", () => {
-  const pressButton = (el: DashboardApp) =>
-    userEvent.click(
-      diskBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
-    );
+  const actionButton = (el: DashboardApp) =>
+    diskBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!;
+  const pressButton = (el: DashboardApp) => userEvent.click(actionButton(el));
   const question = (el: DashboardApp) => el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+  function deepActiveElement(): Element | null {
+    let active = document.activeElement;
+    while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+    return active;
+  }
 
   /** A changed draft on the page now showing, held by the shell's leave coordinator. */
   function pageDraft(el: DashboardApp): void {
@@ -421,6 +425,26 @@ describe("the full-disk bar's button", () => {
     expect(diskBar(el)!.shadowRoot!.querySelector("wt-button")).toBeNull();
   });
 
+  it("moves keyboard focus to the page area when Open Box status takes its own button away", async () => {
+    const { el } = await mountAs("manager", ["system.manage"]);
+    await diskBar(el)!.updateComplete;
+    actionButton(el).focus();
+    expect(deepActiveElement()).toBe(actionButton(el));
+    await userEvent.keyboard("{Enter}");
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("dashboard-box-status-screen"))
+      .not.toBeNull();
+    await el.updateComplete;
+    await diskBar(el)!.updateComplete;
+    expect(diskBar(el)!.shadowRoot!.querySelector("wt-button")).toBeNull();
+    expect(deepActiveElement()).not.toBe(document.body);
+    const main = el.shadowRoot!.querySelector(".main")!;
+    expect(deepActiveElement()).toBe(main);
+    await userEvent.keyboard("{Tab}");
+    expect(deepActiveElement()).not.toBe(main);
+    expect(main.hasAttribute("tabindex")).toBe(false);
+  });
+
   it("asks before Open Box status leaves unsaved changes, and Keep editing stays", async () => {
     const { el } = await mountAs("manager", ["system.manage"]);
     const before = location.pathname;
@@ -432,6 +456,20 @@ describe("the full-disk bar's button", () => {
     await flush(el);
     expect(location.pathname).toBe(before);
     expect(el.shadowRoot!.querySelector("dashboard-box-status-screen")).toBeNull();
+  });
+
+  it("leaves focus where it was when Keep editing keeps the person on the page", async () => {
+    const { el } = await mountAs("manager", ["system.manage"]);
+    await diskBar(el)!.updateComplete;
+    pageDraft(el);
+    actionButton(el).focus();
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => question(el).open).toBe(true);
+    question(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question(el).open).toBe(false);
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("dashboard-box-status-screen")).toBeNull();
+    expect(deepActiveElement()).not.toBe(el.shadowRoot!.querySelector(".main"));
   });
 
   it.each([
@@ -456,6 +494,39 @@ describe("the full-disk bar's button", () => {
       await expect.poll(() => el.shadowRoot!.querySelector(landing)).not.toBeNull();
     },
   );
+
+  it("reads the stop no more after Sign in as a manager, so the sign-in page keeps Box status in the address", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      // Any read after the first answers as an ended session does: the real client signals it.
+      const background = vi
+        .fn()
+        .mockResolvedValueOnce(stopped)
+        .mockImplementation(() => {
+          window.dispatchEvent(
+            new CustomEvent("waitron-session-invalid", {
+              detail: { code: "management_session.required" },
+            }),
+          );
+          return Promise.reject({ code: "management_session.required" });
+        });
+      const { api } = shellApi(background, {
+        getMe: vi.fn().mockResolvedValue(me("supervisor", [])),
+        logout: vi.fn().mockResolvedValue(undefined),
+      });
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+      await expect.poll(() => diskBar(el)).not.toBeNull();
+      await pressButton(el);
+      await expect.poll(() => login(el)).not.toBeNull();
+      expect(location.pathname).toBe("/manage/box-status");
+      vi.advanceTimersByTime(61_000);
+      await flush(el);
+      expect(background).toHaveBeenCalledOnce();
+      expect(location.pathname).toBe("/manage/box-status");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it("asks before Sign in as a manager signs out over unsaved changes", async () => {
     const logout = vi.fn().mockResolvedValue(undefined);

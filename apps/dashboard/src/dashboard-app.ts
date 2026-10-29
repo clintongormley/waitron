@@ -1754,7 +1754,8 @@ export class DashboardApp extends LitElement {
 
   #diskStopBar(slot?: string): TemplateResult | typeof nothing {
     if (this.diskStop?.stopped !== true) return nothing;
-    const canOpenBoxStatus = this.#sessionPermissions.includes("system.manage");
+    const canFree = this.#sessionPermissions.includes("system.manage");
+    const canOpenBoxStatus = this.#canOpenScreen("box-status");
     const actionLabel = !canOpenBoxStatus
       ? t("disk_stop.sign_in_as_manager")
       : this.screen === "box-status"
@@ -1764,10 +1765,12 @@ export class DashboardApp extends LitElement {
       data-test="disk-stop-bar"
       slot=${slot ?? nothing}
       tone="error"
-      message=${diskStopMessage(canOpenBoxStatus ? this.diskStop.deleted : null, canOpenBoxStatus)}
+      message=${diskStopMessage(canFree ? this.diskStop.deleted : null, canOpenBoxStatus)}
       action-label=${actionLabel}
       @wt-banner-action=${() =>
-        canOpenBoxStatus ? this.#selectScreen("box-status") : void this.#onLogout("box-status")}
+        canOpenBoxStatus
+          ? this.#selectScreen("box-status", () => this.#focusMain())
+          : void this.#onLogout("box-status")}
     ></wt-banner>`;
   }
 
@@ -1993,7 +1996,7 @@ export class DashboardApp extends LitElement {
     void navigationGuardFor(window)?.write(url);
   };
 
-  #selectScreen(screen: ScreenId): void {
+  #selectScreen(screen: ScreenId, proceeded?: () => void): void {
     const destination = this.#permittedScreen(screen);
     const navigation =
       destination === "venue-operations"
@@ -2004,8 +2007,18 @@ export class DashboardApp extends LitElement {
         this.#openGroupOf(destination);
         this.drawerOpen = false;
         this.navSearch = "";
+        proceeded?.();
       }
     });
+  }
+
+  /** For a control that its own navigation takes away, which would drop focus to the page. */
+  #focusMain(): void {
+    const main = this.renderRoot.querySelector<HTMLElement>(".main");
+    if (main === null) return;
+    main.tabIndex = -1;
+    main.addEventListener("blur", () => main.removeAttribute("tabindex"), { once: true });
+    main.focus();
   }
 
   /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue
