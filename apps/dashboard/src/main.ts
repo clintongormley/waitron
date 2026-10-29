@@ -9,7 +9,7 @@ import {
 import { createRequest, LiveConnection } from "@waitron/dashboard-kit";
 import { DashboardApi } from "./api/client.js";
 import { diag } from "./diagnostics.js";
-import { createSessionSignals } from "./session-signals.js";
+import { createSessionEpoch, createSessionSignals } from "./session-signals.js";
 import { DASHBOARD_ICONS } from "./icons.js";
 import "./dashboard-app.js";
 import "./screens/attendance-corrections-screen.js";
@@ -31,17 +31,31 @@ registerIcons(DASHBOARD_ICONS);
 installErrorCapture(window, diag);
 
 const app = document.querySelector<HTMLElement>("#app")!;
-const signals = createSessionSignals();
-const api = new DashboardApi("", instrumentedFetch, signals.reportError, signals.reportActivity);
-const liveUpdates = new LiveConnection(api.liveData, { onSessionInvalid: signals.reportError });
+const epoch = createSessionEpoch();
+const sessionGeneration = epoch.current;
+const signals = createSessionSignals({ sessionGeneration });
+const api = new DashboardApi(
+  "",
+  instrumentedFetch,
+  signals.reportError,
+  signals.reportActivity,
+  false,
+  { sessionGeneration },
+);
+const liveUpdates = new LiveConnection(api.liveData, {
+  sessionGeneration,
+  onSessionInvalid: (code, generation) => signals.reportError(code, undefined, generation),
+});
 render(
   html`<dashboard-app
     .api=${api}
+    .sessionEpoch=${epoch}
     .liveUpdates=${liveUpdates}
     .request=${createRequest({
       fetchImpl: instrumentedFetch,
       onError: signals.reportError,
       onSuccess: signals.reportActivity,
+      sessionGeneration,
     })}
   ></dashboard-app>`,
   app,

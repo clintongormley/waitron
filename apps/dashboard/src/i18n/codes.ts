@@ -3,6 +3,10 @@ import { t } from "./t.js";
 
 // Add new codes with BOTH columns.
 const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
+  "connection.cancelled": {
+    en: "The request was stopped. Its result is unavailable.",
+    es: "Se ha parado la solicitud. Su resultado no está disponible.",
+  },
   "fiscal.fingerprint_mismatch": {
     en: "Fingerprint check failed; ask a manager.",
     es: "Ha fallado la comprobación de la huella; avisa a un responsable.",

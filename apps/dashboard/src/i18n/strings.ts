@@ -1,4 +1,13 @@
 export const en = {
+  "permission_sign_in.heading": "Sign in for this action",
+  "permission_sign_in.explanation":
+    "Signing in changes the dashboard account. Choose the source again after signing in; the action will not run automatically.",
+  "permission_sign_in.stop_explanation":
+    "Stop closes this sign-in. A sign-in already submitted can still change the dashboard account; the dashboard will read the actual session afterwards.",
+  "permission_sign_in.stop": "Stop",
+  "permission_sign_in.unresolved":
+    "The dashboard account has not been confirmed. Read the session again before continuing.",
+  "permission_sign_in.read_again": "Read again",
   "attendance_export.heading": "Export working-time record",
   "attendance_export.from": "From",
   "attendance_export.before": "Before",
@@ -3611,6 +3620,15 @@ export type StringKey = keyof typeof en;
 
 // Not Partial: an untranslated key fails typecheck rather than falling through to English.
 export const es: Record<StringKey, string> = {
+  "permission_sign_in.heading": "Identifícate para esta acción",
+  "permission_sign_in.explanation":
+    "Identificarte cambia la cuenta del panel. Vuelve a elegir el origen después de identificarte; la acción no se ejecutará automáticamente.",
+  "permission_sign_in.stop_explanation":
+    "Parar cierra esta identificación. Una identificación ya enviada aún puede cambiar la cuenta del panel; después, el panel consultará la sesión real.",
+  "permission_sign_in.stop": "Parar",
+  "permission_sign_in.unresolved":
+    "No se ha confirmado la cuenta del panel. Vuelve a consultar la sesión antes de continuar.",
+  "permission_sign_in.read_again": "Volver a consultar",
   "attendance_export.heading": "Exportar el registro de jornada",
   "attendance_export.from": "Desde",
   "attendance_export.before": "Antes de",

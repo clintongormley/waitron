@@ -7,7 +7,8 @@ interface EventStream extends EventTarget {
 }
 interface Options {
   open?: (url: string) => EventStream;
-  onSessionInvalid?: (code: string) => void;
+  onSessionInvalid?: (code: string, generation?: number) => void;
+  sessionGeneration?: () => number;
 }
 
 export class LiveConnection {
@@ -18,6 +19,7 @@ export class LiveConnection {
   #unsubscribe?: () => void;
   #retry?: ReturnType<typeof setTimeout>;
   #retryMs = 1000;
+  #generation?: number;
 
   constructor(
     private readonly data: LiveData,
@@ -25,7 +27,16 @@ export class LiveConnection {
   ) {}
 
   start(): void {
-    if (this.#active) return;
+    const generation = this.options.sessionGeneration?.();
+    if (this.#active) {
+      if (generation !== this.#generation) {
+        this.#generation = generation;
+        this.#close();
+        this.#schedule();
+      }
+      return;
+    }
+    this.#generation = generation;
     this.#active = true;
     this.#unsubscribe = this.data.subscribeToInterests(() => this.#schedule());
     this.#schedule();
@@ -63,10 +74,16 @@ export class LiveConnection {
         this.options.open ?? ((url: string) => new EventSource(url, { withCredentials: true }));
       const stream = open(`/management-api/events?resources=${encodeURIComponent(key)}`);
       this.#stream = stream;
+      const generation = this.#generation;
       let refreshed = false;
-      const listen = (name: string, action: (event: Event) => void): void => {
+      const listen = (name: string, action: (event: Event) => void, allowStale = false): void => {
         stream.addEventListener(name, (event) => {
-          if (this.#active && this.#stream === stream) action(event);
+          if (
+            this.#active &&
+            this.#stream === stream &&
+            (allowStale || generation === this.options.sessionGeneration?.())
+          )
+            action(event);
         });
       };
       listen("open", () => {
@@ -116,16 +133,23 @@ export class LiveConnection {
           this.data.refresh();
         }
       });
-      listen("session-invalid", (event) => {
-        try {
-          const parsed = JSON.parse((event as MessageEvent<string>).data) as { code?: unknown };
-          if (typeof parsed.code !== "string") return;
-          this.stop();
-          this.options.onSessionInvalid?.(parsed.code);
-        } catch {
-          this.data.refresh();
-        }
-      });
+      listen(
+        "session-invalid",
+        (event) => {
+          try {
+            const parsed = JSON.parse((event as MessageEvent<string>).data) as { code?: unknown };
+            if (typeof parsed.code !== "string") return;
+            if (parsed.code !== "node.reset" && generation !== this.options.sessionGeneration?.())
+              return;
+            this.stop();
+            if (generation === undefined) this.options.onSessionInvalid?.(parsed.code);
+            else this.options.onSessionInvalid?.(parsed.code, generation);
+          } catch {
+            if (generation === this.options.sessionGeneration?.()) this.data.refresh();
+          }
+        },
+        true,
+      );
     });
   }
 }

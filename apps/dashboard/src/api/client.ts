@@ -43,6 +43,7 @@ import {
   type DashboardRequest,
   type DownloadedFile,
   type FetchLike,
+  type RequestOptions,
 } from "@waitron/dashboard-kit";
 import type {
   Product,
@@ -2360,11 +2361,18 @@ export class DashboardApi {
     return this.#menuRevision.value;
   }
   #background?: DashboardApi;
-  #onError?: (code: string, status?: number) => void;
+  #onError?: (code: string, status?: number, generation?: number) => void;
 
   get background(): DashboardApi {
     if (this.#background) return this.#background;
-    this.#background = new DashboardApi(this.#baseUrl, this.#fetch, this.#onError, undefined, true);
+    this.#background = new DashboardApi(
+      this.#baseUrl,
+      this.#fetch,
+      this.#onError,
+      undefined,
+      true,
+      this.options,
+    );
     this.#background.#menuRevision = this.#menuRevision;
     return this.#background;
   }
@@ -2382,9 +2390,10 @@ export class DashboardApi {
   constructor(
     baseUrl = "",
     fetchImpl: FetchLike = fetch,
-    onError?: (code: string, status?: number) => void,
-    onSuccess?: (path: string) => void,
+    onError?: (code: string, status?: number, generation?: number) => void,
+    onSuccess?: (path: string, generation?: number) => void,
     passive = false,
+    private readonly options: { sessionGeneration?: () => number } = {},
   ) {
     this.#baseUrl = baseUrl;
     this.#fetch = fetchImpl;
@@ -2421,6 +2430,7 @@ export class DashboardApi {
       onError,
       onSuccess,
       passive,
+      sessionGeneration: options.sessionGeneration,
     });
   }
 
@@ -4109,7 +4119,7 @@ export class DashboardApi {
   // The server takes the acting person from the session, never from the request
   // (`apps/server/src/me-api.ts`).
 
-  getMe(): Promise<{
+  getMe(options?: RequestOptions): Promise<{
     personId: string;
     role: PersonRole;
     email: string | null;
@@ -4136,7 +4146,7 @@ export class DashboardApi {
       onboardingIntent?: "demo" | "prepare" | "live";
       sessionExpiresInSeconds?: number;
       sessionIdleTimeoutSeconds?: number;
-    }>("/management-api/session/me", "GET");
+    }>("/management-api/session/me", "GET", undefined, options);
   }
 
   putLocale(code: string): Promise<void> {

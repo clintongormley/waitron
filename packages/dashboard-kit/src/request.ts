@@ -15,13 +15,16 @@ export interface DownloadedFile {
 /**
  * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download;
  * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name. A refusal is
- * decoded exactly as without either. `timeLimitMs` replaces `READ_TIME_LIMIT_MS` for one GET other
- * than a file download.
+ * decoded exactly as without either. Explicit deadlines apply to any method; ordinary reads
+ * retain their default deadline. Cancellation bounds both fetch and response-body waits.
  */
 export interface RequestOptions {
   passive?: boolean;
   as?: "blob" | "file";
   timeLimitMs?: number;
+  signal?: AbortSignal;
+  sessionErrors?: "caller";
+  activity?: "none";
 }
 
 // Only the exact form the server writes; a name holding a quote or a backslash is not read.
@@ -42,29 +45,15 @@ export type DashboardRequest = <T>(
   options?: RequestOptions,
 ) => Promise<T>;
 
-/**
- * Build the dashboard's request primitive: `credentials: "include"` on every call (the session
- * cookie); a JSON `body` is JSON-encoded under a `content-type: application/json` header; a
- * `FormData` body is passed through AS-IS with NO `content-type`, so the browser sets
- * `multipart/form-data` and its boundary itself; a GET/DELETE with no body carries neither. A non-2xx
- * becomes a rejected `{ code, status }` read from the server's `{ error: { code } }` envelope, falling
- * back to `server.internal` when the body is missing, non-JSON or names no code — so callers branch
- * on a stable domain code, never an HTTP status, while `status` (the answered response's HTTP status)
- * rides along for the rare caller that needs it. Without `as`, a 2xx with an EMPTY body
- * resolves to `undefined`, keyed off the empty body, not the status. A GET other than a file download
- * is aborted after its time limit and fails as `connection.timed_out`, while a fetch that fails on
- * its own fails as `connection.failed`; it is aborted rather than only abandoned, so it does not keep
- * holding one of the browser's connections to the box. `onError` hears each non-2xx answer's code
- * with its HTTP status, and a failed or timed-out connection's code alone. This primitive does NOT
- * redirect on 401 — it only decodes and throws the code.
- */
+/** Race fetch and body waits as well as aborting their transport: either may ignore its signal. */
 export function createRequest(
   opts: {
     baseUrl?: string;
     fetchImpl?: FetchLike;
-    onError?: (code: string, status?: number) => void;
-    onSuccess?: (path: string) => void;
+    onError?: (code: string, status?: number, generation?: number) => void;
+    onSuccess?: (path: string, generation?: number) => void;
     passive?: boolean;
+    sessionGeneration?: () => number;
   } = {},
 ): DashboardRequest {
   const baseUrl = opts.baseUrl ?? "";
@@ -75,6 +64,22 @@ export function createRequest(
     body?: unknown,
     options?: RequestOptions,
   ): Promise<T> => {
+    const generation = opts.sessionGeneration?.();
+    const current = () => generation === opts.sessionGeneration?.();
+    const reportError = (code: string, status?: number): void => {
+      if (code !== "node.reset" && !current()) return;
+      if (
+        options?.sessionErrors === "caller" &&
+        ["management_session.required", "management_session.expired", "person.suspended"].includes(
+          code,
+        )
+      )
+        return;
+      if (generation === undefined) {
+        if (status === undefined) opts.onError?.(code);
+        else opts.onError?.(code, status);
+      } else opts.onError?.(code, status, generation);
+    };
     const init: RequestInit =
       body === undefined
         ? { method, credentials: "include" }
@@ -92,32 +97,45 @@ export function createRequest(
       headers.set("x-waitron-live", "1");
       init.headers = headers;
     }
-    const fail = (code: "connection.failed" | "connection.timed_out"): { code: string } => {
-      opts.onError?.(code);
+    const fail = (code: string): { code: string } => {
+      reportError(code);
       return { code };
     };
-    const limit = method === "GET" && options?.as === undefined ? new AbortController() : undefined;
+    const deadline =
+      options?.timeLimitMs ??
+      (method === "GET" && options?.as === undefined ? READ_TIME_LIMIT_MS : undefined);
+    const limit =
+      deadline !== undefined || options?.signal !== undefined ? new AbortController() : undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // Raced against every wait below, so a fetch or body that ignores the signal still settles.
-    const timedOut =
+    let stopped: "connection.cancelled" | "connection.timed_out" | undefined;
+    let rejectWait: ((error: Error) => void) | undefined;
+    const interrupted =
       limit === undefined
         ? undefined
         : new Promise<never>((_resolve, reject) => {
-            timer = setTimeout(() => {
-              limit.abort();
-              reject(new Error("read time limit"));
-            }, options?.timeLimitMs ?? READ_TIME_LIMIT_MS);
+            rejectWait = reject;
           });
-    timedOut?.catch(() => undefined);
+    interrupted?.catch(() => undefined);
+    const interrupt = (code: "connection.cancelled" | "connection.timed_out"): void => {
+      if (stopped !== undefined) return;
+      stopped = code;
+      limit?.abort();
+      rejectWait?.(new Error("request interrupted"));
+    };
+    const onAbort = () => interrupt("connection.cancelled");
     const within = <V>(wait: Promise<V>): Promise<V> =>
-      timedOut === undefined ? wait : Promise.race([wait, timedOut]);
+      interrupted === undefined ? wait : Promise.race([wait, interrupted]);
     if (limit !== undefined) init.signal = limit.signal;
     try {
+      options?.signal?.addEventListener("abort", onAbort, { once: true });
+      if (options?.signal?.aborted) throw fail("connection.cancelled");
+      if (deadline !== undefined)
+        timer = setTimeout(() => interrupt("connection.timed_out"), deadline);
       let res: Response;
       try {
         res = await within(fetchImpl(baseUrl + path, init));
       } catch {
-        throw fail(limit?.signal.aborted === true ? "connection.timed_out" : "connection.failed");
+        throw fail(stopped ?? "connection.failed");
       }
       if (!res.ok) {
         // The body is untrusted: a route that is gone answers Hono's own `404 Not Found` as
@@ -126,11 +144,11 @@ export function createRequest(
         // read off it, and `code` is used only when it is a string. Any of these falls back to
         // `server.internal` rather than surfacing a parse error as a fake network outage.
         const parsed: unknown = await within(res.json()).catch(() => undefined);
-        if (limit?.signal.aborted === true) throw fail("connection.timed_out");
+        if (stopped !== undefined) throw fail(stopped);
         const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
         const rawCode = envelope?.code;
         const code = typeof rawCode === "string" ? rawCode : "server.internal";
-        opts.onError?.(code, res.status);
+        reportError(code, res.status);
         // Carry the envelope's `params` through so a caller that needs a code's structured detail can
         // read it. Attached ONLY when present, so a code-only rejection stays a bare `{ code, status }`.
         const rawParams = envelope?.params;
@@ -143,10 +161,14 @@ export function createRequest(
       try {
         read = await within<Blob | string>(options?.as === undefined ? res.text() : res.blob());
       } catch (error) {
-        if (limit?.signal.aborted === true) throw fail("connection.timed_out");
+        if (stopped !== undefined) throw fail(stopped);
         throw error;
       }
-      if (!passive) opts.onSuccess?.(path);
+      if (stopped !== undefined) throw fail(stopped);
+      if (!passive && options?.activity !== "none" && current()) {
+        if (generation === undefined) opts.onSuccess?.(path);
+        else opts.onSuccess?.(path, generation);
+      }
       if (typeof read !== "string") {
         if (options?.as !== "file") return read as T;
         const file: DownloadedFile = {
@@ -158,6 +180,7 @@ export function createRequest(
       return (read === "" ? undefined : JSON.parse(read)) as T;
     } finally {
       clearTimeout(timer);
+      options?.signal?.removeEventListener("abort", onAbort);
     }
   };
 }
