@@ -297,7 +297,10 @@ export async function readArchiveSettingsWithMeta(
 }
 
 /** What reading a stored archive record answers when the record itself cannot be read. */
-const UNREADABLE_SETTINGS = new Set(["backup.archive_settings_invalid", ...UNREADABLE_CREDENTIAL]);
+export const UNREADABLE_SETTINGS: ReadonlySet<string> = new Set([
+  "backup.archive_settings_invalid",
+  ...UNREADABLE_CREDENTIAL,
+]);
 
 /** The stored archive settings, or the code that says the stored record cannot be read. */
 export async function readHeldArchiveSettings(

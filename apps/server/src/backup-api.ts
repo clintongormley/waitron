@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { KeyRing } from "@waitron/credentials";
@@ -41,7 +42,7 @@ import {
   type BackupSchedule,
 } from "./backup-config.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
-import { recoveryKeyFacts } from "./backup-settings-evidence.js";
+import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -81,6 +82,8 @@ export interface BackupApiDeps {
   /** Builds the backend Save tests an archive bucket through. */
   buildBackend?: (dest: BackupDestination) => StorageBackend;
   archiveProbeTimeoutMs?: number;
+  /** How the settings evidence looks at a saved folder; `stat` by default. */
+  statFolder?: (dir: string) => Promise<{ isDirectory(): boolean }>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -364,6 +367,26 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       return c.json(await statusBody());
+    }),
+  );
+
+  // Like status, no backup turn: it reads, so it never waits behind a Save or holds one up.
+  app.get("/api/backup/settings-evidence", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      const { supervisor } = deps;
+      return c.json(
+        await readSettingsEvidence({
+          db: deps.db,
+          ring: deps.ring,
+          current: () => supervisor.current(),
+          loadHistory: () => supervisor.loadHistory(),
+          readBoxEnv: deps.readBoxEnv,
+          now: () => supervisor.now(),
+          statFolder: deps.statFolder ?? stat,
+          lookTimeoutMs: supervisor.statusReadTimeoutMs,
+        }),
+      );
     }),
   );
 

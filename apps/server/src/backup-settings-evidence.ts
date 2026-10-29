@@ -1,5 +1,20 @@
+import type { KeyRing } from "@waitron/credentials";
+import type { Database } from "@waitron/db";
+import { codeOf } from "@waitron/server-kit";
 import { hasCode, isAppError } from "@waitron/shared";
+import {
+  UNREADABLE_SETTINGS,
+  archiveNamespace,
+  readArchiveSettingsWithMeta,
+  type ArchiveSettings,
+} from "./archive-settings.js";
 import { loadRecoveryKey, readHeldKey } from "./backup-config.js";
+import {
+  keyFingerprint,
+  type BackupLoadHistory,
+  type BackupRuntimeStatus,
+} from "./backup-supervisor.js";
+import { errnoOf } from "./errno.js";
 import "./errors.js";
 
 /** Every `reason` `parseArchiveSettings` and its helpers throw; `settingsInvalid` takes only these. */
@@ -103,4 +118,148 @@ export async function recoveryKeyFacts(
     ? fileKey
     : { held: loadedKey() !== undefined, key: loadedKey() };
   return { held, tooShort: held && key === undefined, fileKey: fileKey.key };
+}
+
+export type FolderLook = "folder" | "missing" | "not_a_folder" | "unknown";
+
+/** Where a saved destination is; never a bucket's secret. */
+export type EvidenceDestination =
+  | { kind: "folder"; dir: string; look: FolderLook }
+  | {
+      kind: "bucket";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      accessKeyId: string;
+      archiveFolder: string;
+    };
+
+export type RecordNow =
+  | { state: "absent" }
+  | { state: "unreadable"; code: string; detail: LoadFailureDetail | null }
+  | { state: "readable"; destinations: EvidenceDestination[] };
+
+/** The answer of `GET /api/backup/settings-evidence`. */
+export interface SettingsEvidence {
+  readAt: string;
+  managedByEnvironment: boolean;
+  failures: Readonly<LoadFailure>[];
+  lastCleanLoadAt: string | null;
+  record: ArchiveRecordMeta | null;
+  /** The record now is not the one the newest failure read. */
+  rewrittenSinceLastFailure: boolean;
+  boxKeyNumbers: { current: number; previous?: number };
+  now: RecordNow;
+  recoveryKey: { held: boolean; tooShort: boolean; fingerprint?: string };
+}
+
+export interface SettingsEvidenceDeps {
+  db: Database;
+  ring: KeyRing;
+  current: () => BackupRuntimeStatus;
+  loadHistory: () => BackupLoadHistory;
+  readBoxEnv: () => Promise<Record<string, string | undefined>>;
+  now: () => Date;
+  statFolder: (dir: string) => Promise<{ isDirectory(): boolean }>;
+  /** How long a folder look may take before it answers `unknown`. */
+  lookTimeoutMs: number;
+}
+
+async function lookAt(
+  dir: string,
+  statFolder: SettingsEvidenceDeps["statFolder"],
+  timeoutMs: number,
+): Promise<FolderLook> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<FolderLook>((resolve) => {
+    timer = setTimeout(() => resolve("unknown"), timeoutMs);
+  });
+  const look = Promise.resolve()
+    .then(() => statFolder(dir))
+    .then(
+      (stats): FolderLook => (stats.isDirectory() ? "folder" : "not_a_folder"),
+      (error: unknown): FolderLook => (errnoOf(error) === "ENOENT" ? "missing" : "unknown"),
+    );
+  try {
+    return await Promise.race([look, limit]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function evidenceDestinations(
+  settings: ArchiveSettings,
+  deps: SettingsEvidenceDeps,
+): Promise<EvidenceDestination[]> {
+  return Promise.all(
+    settings.destinations.map(async (d): Promise<EvidenceDestination> => {
+      if (d.kind === "local-fs") {
+        return {
+          kind: "folder",
+          dir: d.dir,
+          look: await lookAt(d.dir, deps.statFolder, deps.lookTimeoutMs),
+        };
+      }
+      return {
+        kind: "bucket",
+        endpoint: d.bucket.endpoint ?? null,
+        region: d.bucket.region,
+        bucket: d.bucket.bucket,
+        accessKeyId: d.bucket.accessKeyId,
+        archiveFolder: archiveNamespace(d.bucket.prefix, d.venueId),
+      };
+    }),
+  );
+}
+
+/** Reads only: the record's facts come from one transaction, and each folder is looked at after it. */
+export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<SettingsEvidence> {
+  let record: ArchiveRecordMeta | null;
+  let settings: ArchiveSettings | null = null;
+  let unreadable: RecordNow | undefined;
+  try {
+    ({ meta: record, settings } = await readArchiveSettingsWithMeta(deps.db, deps.ring));
+  } catch (error) {
+    if (!isAppError(error) || !UNREADABLE_SETTINGS.has(error.code)) throw error;
+    record = recordMetaOf(error);
+    unreadable = { state: "unreadable", code: codeOf(error), detail: safeLoadDetail(error) };
+  }
+  const loaded = deps.current();
+  const now: RecordNow =
+    unreadable ??
+    (settings === null
+      ? { state: "absent" }
+      : {
+          state: "readable",
+          // A record the environment overrides is not in effect, so none of its places are shown.
+          destinations: loaded.managedByEnvironment
+            ? []
+            : await evidenceDestinations(settings, deps),
+        });
+  const env = await deps.readBoxEnv();
+  const key = await recoveryKeyFacts(env, () => loaded.recoveryKey);
+  const fingerprint =
+    key.fileKey === undefined ? loaded.keyFingerprint : keyFingerprint(key.fileKey);
+  const { failures, lastCleanLoadAt } = deps.loadHistory();
+  const newest = failures[0];
+  const { previous } = deps.ring;
+  return {
+    readAt: deps.now().toISOString(),
+    managedByEnvironment: loaded.managedByEnvironment,
+    failures,
+    lastCleanLoadAt,
+    record,
+    rewrittenSinceLastFailure:
+      newest !== undefined && (record?.digest ?? null) !== newest.recordDigest,
+    boxKeyNumbers: {
+      current: deps.ring.current.version,
+      ...(previous === undefined ? {} : { previous: previous.version }),
+    },
+    now,
+    recoveryKey: {
+      held: key.held,
+      tooShort: key.tooShort,
+      ...(fingerprint === undefined ? {} : { fingerprint }),
+    },
+  };
 }

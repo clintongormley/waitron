@@ -26,6 +26,7 @@ import { foldersOnDisk, type DeletableArchive } from "./backup-room.js";
 import { deleteBackupRoomNote, writeBackupRoomNote } from "./backup-room-note.js";
 import type { ScheduleClock } from "./backup-schedule.js";
 import {
+  STATUS_READ_TIMEOUT_MS,
   readDestinationStatus,
   unreadDestination,
   type DestinationStatus,
@@ -388,6 +389,16 @@ export class BackupSupervisor {
       keyRotatedAt: cfg?.keyRotatedAt,
       recoveryKey: cfg?.recoveryKey,
     };
+  }
+
+  /** The limit each status read of a destination answers by. */
+  get statusReadTimeoutMs(): number {
+    return this.#deps.statusReadTimeoutMs ?? STATUS_READ_TIMEOUT_MS;
+  }
+
+  /** The clock the kept load failures are timed by. */
+  now(): Date {
+    return this.#now();
   }
 
   /** A copy: its entries are frozen and the list is new on every call. */
