@@ -176,14 +176,10 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **Retire the historical allocation formats from `fiscal-verifactu`.** Signed paper, Cloud
-  receipts and emergency names are still read by historical code: the activation check
-  (`allocation-envelope.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical
-  setup contribution (`initial-setup.ts`), which also reads the now-undocumented settings
-  `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_TRUST_FINGERPRINT` and
-  `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY`. Removing them changes activation and several tests'
-  assertions, so it is its own fiscal change for the owner to land. Left by A1189, which removed
-  only the server's unused registry client.
+- **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
+  reads signed paper, Cloud receipts and emergency names, and three Cloud settings no doc names.
+  Removing it changes activation, so it is its own fiscal change for the owner to land.
+  [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
 - **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
   open by A1154 (#2172), which removed the till-registration command and kept the fiscal identity on

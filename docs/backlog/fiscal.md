@@ -417,8 +417,7 @@ corrective-record resolution, filing investigation, outside evidence and fencing
 old-backup/new-hardware operational exercise remain queued.
 
 **2026-10-29 (owner):** the Cloud allocation registry is dropped — "We no longer have the
-reservations because we use the time-based codes instead." Waitron's unused client and report
-journal were removed by A1189.
+reservations because we use the time-based codes instead."
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
@@ -1062,6 +1061,22 @@ a sale's operation date writes none without a customer tax identity
 `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
 needs a huella-invariance re-run across all three.
 Fiscal: each behind its own review, owner sign-off at land.
+
+## Retire the historical allocation formats from `fiscal-verifactu`
+
+Signed paper, Cloud receipts and emergency names are still read by historical code: the activation
+check (`packages/fiscal-verifactu/src/allocation-envelope.ts`, its Cloud branch importing
+`cloud-evidence.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical setup
+contribution (`initial-setup.ts`, spread into production by `hour-configuration.ts`). The settings
+`WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_FINGERPRINT` and
+`WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` are read by `allocation-configuration.ts`,
+`initial-setup.ts` (the trust file and receipt folder) and `initial-cloud-setup.ts` (the
+fingerprint); no document names them since the Cloud allocation guide was deleted. Removing the
+formats changes activation and the remaining assertions of several tests (among them
+`hour-configuration.test.ts`, `backup-verification-history.test.ts`,
+`paper-register-history.test.ts`, and the server's `retired-first-setup-routes.test.ts` and
+`hour-restore-retired-inputs.test.ts`), so it is its own fiscal change for the owner to land. Left
+by A1189 (2026-10-29), which removed only the server's unused registry client.
 
 ## Rename the `hour-*` names to minute names
 

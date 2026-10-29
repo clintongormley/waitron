@@ -88,7 +88,7 @@ uses it.
   also read on the live path (`hour-history-reader.ts`, `allocation.ts:96-101`). Neither is
   Cloud's registry.
 - **Three settings piece 2 reads, now undocumented.** `WAITRON_FISCAL_CLOUD_TRUST_FILE`,
-  `WAITRON_FISCAL_CLOUD_TRUST_FINGERPRINT` and `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` were
+  `WAITRON_FISCAL_CLOUD_FINGERPRINT` and `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` were
   documented only in the guide Task 2 deletes; piece 2 still reads them
   (`initial-setup.ts:376,381`, `allocation-configuration.ts:62,128-131`,
   `initial-cloud-setup.ts:185-186`) and nothing under `deploy/` sets them. They go with piece 2
@@ -319,7 +319,7 @@ Prefer deleting to rewording (CLAUDE.md §1); every new sentence is a claim and 
     receipts and emergency names are still read by historical code: the activation check
     (`allocation-envelope.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical
     setup contribution (`initial-setup.ts`), which also reads the now-undocumented settings
-    `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `_TRUST_FINGERPRINT` and `_RECEIPT_DIRECTORY`. Removing
+    `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `_FINGERPRINT` and `_RECEIPT_DIRECTORY`. Removing
     them changes activation and several tests' assertions, so it is its own fiscal change for the
     owner to land. Left by A1189."
 - [ ] `docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md:298`: append to the
