@@ -1,30 +1,16 @@
-import { DatabaseSync, type SQLInputValue } from "node:sqlite";
-import { describe, expect, it, onTestFinished, vi } from "vitest";
-import { eq, sql, type SQLWrapper } from "drizzle-orm";
-import { SQLiteSyncDialect } from "drizzle-orm/sqlite-core";
-import {
-  deployment,
-  invoiceSeries,
-  readDeploymentEnvironment,
-  withTransaction,
-  type Database,
-} from "@waitron/db";
+import { describe, expect, it } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { recordSale } from "@waitron/core";
-import { withOperationAuthority, type ModuleOperationHost } from "@waitron/module";
-import { locationId, seriesId } from "@waitron/shared";
+import type { ModuleOperationHost } from "@waitron/module";
 import { TEST_MIGRATIONS } from "../test/migrations.js";
-import { seedTenants, seedTenantWithSif, TENANT_A } from "../test/fixtures.js";
+import { seedTenantWithSif } from "../test/fixtures.js";
 import { fakeClient, saleInput, staticResolver, steadyClock } from "../test/write-path-fixtures.js";
 import { VerifactuBackend } from "./backend.js";
-import { withHourAdmission } from "./allocation-envelope.js";
-import { withCollectedModuleAllocation } from "./allocation-operation.js";
 import { FISCAL_INITIAL_SETUP } from "./hour-configuration.js";
-import { readHourHistory } from "./hour-history-reader.js";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
-import { fiscalReservations } from "./schema/reservations.js";
-import { registroSif } from "./schema/sif.js";
 import { FISCAL_START_AGAIN_DELETABLE } from "./start-again-holdings.js";
 
 const configured = FISCAL_INITIAL_SETUP.configure!({} as ModuleOperationHost);
@@ -32,27 +18,6 @@ const contributions = [
   ["the unconfigured contribution", FISCAL_INITIAL_SETUP],
   ["the configured contribution", configured],
 ] as const;
-
-function readOnly(db: Database): { target: Pick<Database, "execute">; close(): void } {
-  const [main] = db.all<{ file: string }>(
-    sql`select file from pragma_database_list where name = 'main'`,
-  );
-  const connection = new DatabaseSync(main!.file, { readOnly: true });
-  const dialect = new SQLiteSyncDialect();
-  return {
-    target: {
-      execute<Row extends Record<string, unknown>>(query: SQLWrapper) {
-        const compiled = dialect.sqlToQuery(query.getSQL());
-        return {
-          rows: connection
-            .prepare(compiled.sql)
-            .all(...(compiled.params as SQLInputValue[])) as Row[],
-        };
-      },
-    } as Pick<Database, "execute">,
-    close: () => connection.close(),
-  };
-}
 
 describe("startAgainHoldings", () => {
   const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
@@ -120,165 +85,6 @@ describe("startAgainHoldings on a database missing the fiscal tables", () => {
       /no such table: registros_facturacion/,
     );
   });
-});
-
-describe("startAgainHistory", () => {
-  const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
-  const bases = [
-    { code: "A", purpose: "standard" },
-    { code: "FF", purpose: "full" },
-    { code: "R", purpose: "rectificative" },
-  ];
-
-  async function activate(identity: string, issuedAt: string): Promise<void> {
-    const binding = {
-      module: "fiscal-verifactu",
-      action: "setup",
-      eventId: identity,
-      sourceId: `attempt/${identity}`,
-      targetNodeId: TENANT_A.nodeId,
-    } as const;
-    const input = {
-      allocation: {
-        version: 1,
-        allocationId: `hour/${identity}`,
-        taxpayerNif: "89890001K",
-        softwareId: "W1",
-        environment: "preproduction",
-        installationIdentity: identity,
-        series: bases.map((b) => ({ ...b, code: `${b.code}-${identity}` })),
-        source: "hour",
-        reservationEvidence: null,
-        issuedAt,
-      },
-      approval: {
-        version: 1,
-        eventId: identity,
-        operatorId: "administrator",
-        sourceId: binding.sourceId,
-        targetNodeId: TENANT_A.nodeId,
-        oldMachineOffline: false,
-        oldMachineAbsent: true,
-        noParallelRecovery: true,
-        confirmedAt: issuedAt,
-        incidentEvidence: `owned/${identity}`,
-      },
-    };
-    await withOperationAuthority(binding, "administrator", (authority) => {
-      const operation = { binding, authority, input };
-      return withHourAdmission(
-        operation,
-        { requiredBases: bases, priorActivation: "none" },
-        (evidence) =>
-          withCollectedModuleAllocation(
-            operation,
-            async (request) => ({ ...request, evidence }),
-            (write) =>
-              withTransaction(suite.db, (tx) =>
-                write(tx, { nodeId: TENANT_A.nodeId, locationId: locationId(TENANT_A.locationId) }),
-              ),
-          ),
-      );
-    });
-  }
-
-  async function transactionSource() {
-    const environment = await readDeploymentEnvironment(suite.db);
-    return withTransaction(suite.db, (tx) => readHourHistory(tx, environment));
-  }
-
-  it.each(contributions)(
-    "reads over a read-only connection the source readHourHistory reads, in %s",
-    async (_, seat) => {
-      vi.useFakeTimers({ toFake: ["Date"] });
-      vi.setSystemTime(new Date("2026-10-16T11:40:00.000Z"));
-      onTestFinished(() => {
-        vi.useRealTimers();
-      });
-      await seedTenants(suite.db);
-      await suite.db.insert(deployment).values({ id: 1, environment: "preproduction" });
-      await activate("0CNNW", "2026-10-16T11:40:00.000Z");
-      const clock = {
-        ...steadyClock,
-        now: () => ({ ...steadyClock.now(), instant: new Date("2026-10-22T20:15:00Z") }),
-      };
-      const backend = new VerifactuBackend({
-        deploymentEnvironment: "preproduction",
-        clock,
-        db: suite.db,
-        resolveClient: staticResolver(fakeClient),
-      });
-      const [standard] = await suite.db
-        .select()
-        .from(invoiceSeries)
-        .where(eq(invoiceSeries.code, "A-0CNNW"));
-      await withTransaction(suite.db, (tx) =>
-        recordSale(
-          tx,
-          backend,
-          saleInput({ nodeId: TENANT_A.nodeId, seriesId: seriesId(standard!.id), clock }),
-        ),
-      );
-      await suite.db
-        .update(invoiceSeries)
-        .set({ retiredAt: new Date("2026-10-16T12:30:00Z") })
-        .where(eq(invoiceSeries.code, "FF-0CNNW"));
-      await suite.db
-        .update(registroSif)
-        .set({ revocadoEn: new Date("2026-10-16T12:30:00Z") })
-        .where(eq(registroSif.numeroInstalacion, "0CNNW"));
-      await suite.db.insert(fiscalReservations).values({
-        eventKey: "dormant",
-        allocationKey: "reserved",
-        nodeId: TENANT_A.nodeId2,
-        sourceNodeId: TENANT_A.nodeId,
-        taxpayerNif: "89890001K",
-        softwareId: "OTHER",
-        environment: "preproduction",
-        installationIdentity: "0CNPG",
-        evidence: { public: "retained" },
-        bases: [{ code: "different", purpose: "standard" }],
-        establishedAt: new Date("2026-10-16T12:00:00Z"),
-      });
-
-      const expected = await transactionSource();
-      expect(expected.complete).toBe(true);
-      const references = expected.records.map((row) => (row as { reference: string }).reference);
-      for (const table of [
-        "registro_sif/",
-        "invoice_series/",
-        "fiscal_allocations/",
-        "fiscal_reservations/",
-      ])
-        expect(references.some((reference) => reference.startsWith(table))).toBe(true);
-      expect(expected.records).toContainEqual(
-        expect.objectContaining({
-          kind: "activation",
-          recordedAtMs: Date.parse("2026-10-16T12:30:00Z"),
-        }),
-      );
-      const connection = readOnly(suite.db);
-      try {
-        expect(await seat.startAgainHistory!(connection.target)).toEqual([expected]);
-      } finally {
-        connection.close();
-      }
-    },
-  );
-
-  it.each(contributions)(
-    "reads an empty database as an empty complete source in %s",
-    async (_, seat) => {
-      const connection = readOnly(suite.db);
-      try {
-        expect(await seat.startAgainHistory!(connection.target)).toEqual([
-          { reference: "venue", complete: true, records: [] },
-        ]);
-      } finally {
-        connection.close();
-      }
-    },
-  );
 });
 
 it("lists exactly the append-only table the fiscal activation writes as deletable", () => {

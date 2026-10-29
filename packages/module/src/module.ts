@@ -1627,9 +1627,8 @@ export interface WaitronModule {
    * `ledger`/`state` one: `scripts/two-file-foreign-keys.test.ts`. */
   readonly classification?: readonly ClassifiedTable[];
   /** Whole append-only tables (every row in them may go) that this module's own first-setup
-   * activation writes, which Start again may delete with an unfinished setup. Their names still
-   * reach the floor through `startAgainHistory`; listing a table here never hides it from the
-   * floor. Each must be declared append-only in this module's own `classification`. */
+   * activation writes, which Start again may delete with an unfinished setup. Each must be
+   * declared append-only in this module's own `classification`. */
   readonly startAgainDeletable?: readonly string[];
   readonly changes?: readonly ChangeSource[];
   readonly cards?: unknown;

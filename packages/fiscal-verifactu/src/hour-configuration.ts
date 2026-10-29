@@ -5,13 +5,13 @@ import type {
   ModuleOperationHost,
   ModuleOperationPreparation,
 } from "@waitron/module";
-import { createHourInitialSetup, hourStartAgainFloor } from "./initial-hour-setup.js";
+import { createHourInitialSetup } from "./initial-hour-setup.js";
 import { FISCAL_INITIAL_SETUP as historicalInitialSetup } from "./initial-setup.js";
 import { hostedHourPreparation } from "./hour-preparation.js";
 import { createHourDormantPreparation, isHourDormantInput } from "./hour-dormant-standby.js";
 import { hostedHourRecovery } from "./hosted-hour-recovery.js";
 import { readHourRecoveryHistory, readHourRecoveryState } from "./hour-recovery-state.js";
-import { startAgainHistory, startAgainHoldings } from "./start-again-holdings.js";
+import { startAgainHoldings } from "./start-again-holdings.js";
 
 function snapshot(input: unknown): unknown {
   try {
@@ -85,9 +85,7 @@ export const FISCAL_INITIAL_SETUP: InitialSetupContribution = {
   enrol: unconfiguredSetup,
   confirmation: unconfiguredSetup,
   documentConfirmation: unconfiguredSetup,
-  startAgainFloor: hourStartAgainFloor(historicalInitialSetup.retainedAssignments!),
   startAgainHoldings,
-  startAgainHistory,
   configure(host) {
     return createHourInitialSetup(host, historicalInitialSetup);
   },
