@@ -516,6 +516,7 @@ export class TillShell extends LitElement {
     this.#stripObserver?.disconnect();
     this.#stripObserver = undefined;
     this.#watchedStrip = undefined;
+    this.#watchedTable = undefined;
     if (this.#overflowFrame !== undefined) cancelAnimationFrame(this.#overflowFrame);
     this.#overflowFrame = undefined;
     this.#counterObserver?.disconnect();
@@ -546,6 +547,7 @@ export class TillShell extends LitElement {
   #counterObserver?: ResizeObserver;
   #counterTargets = new Set<Element>();
   #watchedStrip?: Element;
+  #watchedTable?: Element;
   #watchedPopup?: Element;
   #watchedZonePopup?: Element;
   #shownName = false;
@@ -753,16 +755,25 @@ export class TillShell extends LitElement {
    * runs again then; a redraw at the same width leaves a person's own scroll alone. */
   #observeStrip(): void {
     const strip = this.renderRoot.querySelector(".head .bar-tables") ?? undefined;
-    if (strip === this.#watchedStrip) return;
-    this.#stripObserver ??= new ResizeObserver(() => {
-      this.#revealedBar = undefined;
-      void this.#revealSelectedTable();
+    this.#stripObserver ??= new ResizeObserver((entries) => {
+      if (entries.some((entry) => entry.target === this.#watchedStrip)) {
+        this.#revealedBar = undefined;
+        void this.#revealSelectedTable();
+      }
       this.#sizeFade();
       this.#markOverflow();
     });
-    if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
-    if (strip) this.#stripObserver.observe(strip);
-    this.#watchedStrip = strip;
+    if (strip !== this.#watchedStrip) {
+      if (this.#watchedStrip) this.#stripObserver.unobserve(this.#watchedStrip);
+      if (strip) this.#stripObserver.observe(strip);
+      this.#watchedStrip = strip;
+    }
+    const table = strip?.querySelector('[aria-selected="true"]') ?? undefined;
+    if (table !== this.#watchedTable) {
+      if (this.#watchedTable) this.#stripObserver.unobserve(this.#watchedTable);
+      if (table) this.#stripObserver.observe(table, { box: "border-box" });
+      this.#watchedTable = table;
+    }
   }
 
   /** The strip itself is not observed: its width is what the logo changes. Only targets new since
@@ -1264,11 +1275,40 @@ export class TillShell extends LitElement {
       role="tab"
       data-bar-table=${table.tableId}
       aria-selected=${table.current ? "true" : "false"}
+      tabindex=${table.current ? 0 : -1}
       aria-label=${table.unsent ? t("shell.table_unsent").replace("{table}", () => table.name) : nothing}
       @click=${() => this.#emit("open-bar-table", { tableId: table.tableId, held: table.held })}
     >
       ${table.unsent ? html`<wt-icon name="floor-unsent" aria-hidden="true"></wt-icon>` : nothing}${table.name}
     </button>`;
+  }
+
+  #onTabsKeydown(event: KeyboardEvent): void {
+    const list = event.currentTarget as HTMLElement;
+    if (list.getAttribute("role") !== "tablist") return;
+    const tabs = [...list.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const index = tabs.findIndex((tab) => event.composedPath().includes(tab));
+    if (index < 0) return;
+    let next: number;
+    switch (event.key) {
+      case "ArrowLeft":
+        next = (index + tabs.length - 1) % tabs.length;
+        break;
+      case "ArrowRight":
+        next = (index + 1) % tabs.length;
+        break;
+      case "Home":
+        next = 0;
+        break;
+      case "End":
+        next = tabs.length - 1;
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    tabs[next]!.focus({ preventScroll: true });
+    tabs[next]!.click();
   }
 
   #primaryTabs(
@@ -1279,7 +1319,11 @@ export class TillShell extends LitElement {
   ): TemplateResult {
     const tables = this.formFactor === "till" ? [] : this.barTables;
     const tableOnScreen = tables.some((table) => table.current);
-    return html` <nav class="tabs" role=${counterMenu ? nothing : "tablist"}>
+    return html` <nav
+      class="tabs"
+      role=${counterMenu ? nothing : "tablist"}
+      @keydown=${this.#onTabsKeydown}
+    >
       ${screens.map((screen) =>
         screen === "counter" && this.counterZones.length > 1
           ? html`<wt-row-actions
@@ -1311,6 +1355,7 @@ export class TillShell extends LitElement {
                 class="tab"
                 role=${counterMenu ? nothing : "tab"}
                 aria-selected=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? "true" : "false"}
+                tabindex=${counterMenu ? nothing : screen === activeScreen && !tableOnScreen ? 0 : -1}
                 aria-pressed=${counterMenu ? (screen === activeScreen ? "true" : "false") : nothing}
                 @click=${() => this.#emit("screen-select", { screen })}
               >

@@ -5480,13 +5480,17 @@ with the `.tab` look: the map's ✎ (`floor-unsent`) and the table's short name,
 "{table} unsent" / «{table} sin enviar» while it shows ✎. An open party gets one button however many
 of its bills hold an open New order of this person's with lines; a party that is not open gets none;
 a table in a zone the device does not show keeps its button. The table on screen is the selected
-tab, with or without ✎, and Floor is selected when no button is. A table left for another table
+tab, with or without ✎, and Floor is selected when no button is. Only the selected tab is in the
+Tab sequence. Left and Right select the previous or next tab, wrapping at the ends; Home selects
+Floor and End selects the last table. A table left for another table
 keeps its ✎ while its save is out, then until a floor read started after the save answered takes its
 place, and for as long as the save has failed. Floor and the buttons start straight after the brand
 mark, so Floor does not move as buttons come and go (A1122). When the buttons do not fit, Floor stays
 put and only the buttons scroll sideways, in a `role="none"` box inside the tab list; an end that
 hides a button fades, as `wt-tabs`'s strip does, and the selected button is scrolled clear of the
-fade, or, when it is wider than the strip, scrolled to show its start, with no fade (A1121). Order
+fade, or, when it is wider than the strip, scrolled to show its start, with no fade (A1121). The
+fade also re-sizes when the selected button changes width; that change leaves a hand-scrolled
+strip where you put it. Order
 has no tab on a handheld.
 
 Above phone width the bar fits itself, and only two things ever leave it: the brand mark first, then

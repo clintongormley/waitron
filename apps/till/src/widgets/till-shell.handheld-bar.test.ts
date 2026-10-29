@@ -284,3 +284,35 @@ describe("a handheld's More on a short phone", () => {
     });
   }
 });
+
+it("re-sizes the fade when the selected button's text grows and shrinks, without scrolling the strip", async () => {
+  await atViewport(390, 844, async () => {
+    const { el } = await mountWidget<TillShell>("till-shell", {
+      formFactor: "phone-portrait",
+      activeScreen: "order",
+      operatorName: "Ana",
+      barTables: tablesOf(10, "t5"),
+    });
+    const strip = scrollerOf(el);
+    const selected = el.shadowRoot!.querySelector<HTMLElement>('[data-bar-table="t5"]')!;
+    const width = strip.getBoundingClientRect().width;
+    const height = strip.getBoundingClientRect().height;
+    selected.style.height = `${selected.getBoundingClientRect().height}px`;
+    await vi.waitFor(() => expect(fadeOf(strip)).toBeGreaterThan(0));
+    const fullFade = fadeOf(strip);
+    await frame();
+    await frame();
+    strip.scrollLeft = 0;
+    await frame();
+    const fontSize = parseFloat(getComputedStyle(selected).fontSize);
+    selected.style.fontSize = `${fontSize * 16}px`;
+    expect(selected.getBoundingClientRect().width).toBeGreaterThan(width);
+    expect(strip.getBoundingClientRect().width).toBe(width);
+    expect(strip.getBoundingClientRect().height).toBe(height);
+    await vi.waitFor(() => expect(fadeOf(strip)).toBe(0));
+    expect(strip.scrollLeft).toBe(0);
+    selected.style.removeProperty("font-size");
+    await vi.waitFor(() => expect(fadeOf(strip)).toBe(fullFade));
+    expect(strip.scrollLeft).toBe(0);
+  });
+});
