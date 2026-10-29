@@ -52,15 +52,15 @@ test("renders the table label", async () => {
 });
 
 test("names the party seated there under the table's label, and nothing for a table with none", async () => {
-  const named = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
+  const named = await mountToken(table({ state: "open-tab", partyName: "Ann" }));
   const unnamed = await mountToken(table({ state: "open-tab" }));
-  expect(named.shadowRoot!.querySelector("[data-party-name]")?.textContent?.trim()).toBe("Ana");
+  expect(named.shadowRoot!.querySelector("[data-party-name]")?.textContent?.trim()).toBe("Ann");
   expect(unnamed.shadowRoot!.querySelector("[data-party-name]")).toBeNull();
 });
 
 test("a party's name wider than the token stays on one line, cut short with an ellipsis", async () => {
-  const short = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
-  const el = await mountToken(table({ state: "open-tab", partyName: "Terraza 10, 11" }));
+  const short = await mountToken(table({ state: "open-tab", partyName: "Ann" }));
+  const el = await mountToken(table({ state: "open-tab", partyName: "Terrace 10, 11" }));
   short.style.width = "80px";
   el.style.width = "80px";
   const oneLine = short.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;
@@ -71,11 +71,11 @@ test("a party's name wider than the token stays on one line, cut short with an e
   expect(getComputedStyle(name).textOverflow).toBe("ellipsis");
   expect(getComputedStyle(name).overflow).toBe("hidden");
   expect(card.scrollWidth).toBeLessThanOrEqual(card.clientWidth);
-  expect(name.textContent).toBe("Terraza 10, 11");
+  expect(name.textContent).toBe("Terrace 10, 11");
 });
 
 test("the party's name paints from the small-font and bold-weight tokens", async () => {
-  const el = await mountToken(table({ state: "open-tab", partyName: "Ana" }));
+  const el = await mountToken(table({ state: "open-tab", partyName: "Ann" }));
   host.style.setProperty("--wt-font-size-sm", "11px");
   host.style.setProperty("--wt-font-weight-bold", "300");
   const name = el.shadowRoot!.querySelector<HTMLElement>("[data-party-name]")!;

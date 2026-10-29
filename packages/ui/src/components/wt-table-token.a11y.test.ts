@@ -193,7 +193,7 @@ describe.each(["light", "dark"] as const)("wt-table-token a11y (%s theme)", (the
   });
 
   test("a token naming the party seated there is accessible", async () => {
-    await mountToken(tableData({ state: "open-tab", tabTotal: "12.00", partyName: "Ana" }), theme);
+    await mountToken(tableData({ state: "open-tab", tabTotal: "12.00", partyName: "Ann" }), theme);
     await expectNoA11yViolations(host);
   });
 

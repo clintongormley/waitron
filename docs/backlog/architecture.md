@@ -507,6 +507,7 @@ until A977).
   Database zone and party-label suites use English sample zone, group and guest names.
   UI-core input and textarea samples use English label and note text; phone-label checks
   retain their 120-character inputs and existing bounds.
+  UI floor-model, table-token and floor-map suites use English sample zone and party names.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
