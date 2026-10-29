@@ -1,0 +1,38 @@
+export const ACCOUNT_EMAIL_WORDS = {
+  en: {
+    invitationSubject: "Set up your Waitron account",
+    resetSubject: "Reset your Waitron password",
+    emailChangeSubject: "Confirm your new Waitron email",
+    hello: (name: string) => `Hello ${name},`,
+    useLink: "Use this link to",
+    invitationAction: "set up your account",
+    resetAction: "reset your password",
+    invitationLink: "Set up your account",
+    resetLink: "Reset your password",
+    emailChangeAction: "confirm your new email address",
+    emailChangeLink: "Open your Waitron profile",
+    expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
+    emailChangeCode: (code: string, expiry: string) =>
+      `Enter ${code} in your Waitron profile. This code expires at ${expiry}.`,
+    ignore: "If you did not expect this email, you can ignore it.",
+    privacy: "Privacy notice",
+  },
+  es: {
+    invitationSubject: "Configura tu cuenta de Waitron",
+    resetSubject: "Restablece tu contraseña de Waitron",
+    emailChangeSubject: "Confirma tu nuevo correo de Waitron",
+    hello: (name: string) => `Hola ${name},`,
+    useLink: "Usa este enlace para",
+    invitationAction: "configurar tu cuenta",
+    resetAction: "restablecer tu contraseña",
+    invitationLink: "Configura tu cuenta",
+    resetLink: "Restablece tu contraseña",
+    emailChangeAction: "confirmar tu nueva dirección de correo",
+    emailChangeLink: "Abre tu perfil de Waitron",
+    expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
+    emailChangeCode: (code: string, expiry: string) =>
+      `Introduce ${code} en tu perfil de Waitron. Este código caduca el ${expiry}.`,
+    ignore: "Si no esperabas este correo, puedes ignorarlo.",
+    privacy: "Aviso de privacidad",
+  },
+} as const;

@@ -6022,9 +6022,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   `QU`, `XB`, `XG`, `XN` and `XU` as bare codes. Add sourced English/Spanish labels without
   treating them as postal countries. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A966. The server's emails move into `apps/server/src/i18n/`** (account and missed-clocking
-  emails). No visible change. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
-
 - **A967. The server's printed reports and test pages move into `apps/server/src/i18n/`**
   (working-time PDF frame, category sales, printer test and ruler pages), in two pull requests.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)

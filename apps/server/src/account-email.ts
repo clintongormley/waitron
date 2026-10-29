@@ -1,3 +1,4 @@
+import { ACCOUNT_EMAIL_WORDS } from "./i18n/account-email.js";
 import { sendSmtpMessage, type SmtpConnection, type SmtpTransport } from "./smtp-send.js";
 import type { SmtpTestCode } from "./smtp-failure.js";
 import type { AccountActionPurpose } from "@waitron/identity";
@@ -34,43 +35,6 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#39;");
 }
 
-const COPY = {
-  en: {
-    invitationSubject: "Set up your Waitron account",
-    resetSubject: "Reset your Waitron password",
-    emailChangeSubject: "Confirm your new Waitron email",
-    hello: (name: string) => `Hello ${name},`,
-    invitationAction: "set up your account",
-    resetAction: "reset your password",
-    invitationLink: "Set up your account",
-    resetLink: "Reset your password",
-    emailChangeAction: "confirm your new email address",
-    emailChangeLink: "Open your Waitron profile",
-    expires: (expiry: string) => `This single-use link expires at ${expiry}.`,
-    emailChangeCode: (code: string, expiry: string) =>
-      `Enter ${code} in your Waitron profile. This code expires at ${expiry}.`,
-    ignore: "If you did not expect this email, you can ignore it.",
-    privacy: "Privacy notice",
-  },
-  es: {
-    invitationSubject: "Configura tu cuenta de Waitron",
-    resetSubject: "Restablece tu contraseña de Waitron",
-    emailChangeSubject: "Confirma tu nuevo correo de Waitron",
-    hello: (name: string) => `Hola ${name},`,
-    invitationAction: "configurar tu cuenta",
-    resetAction: "restablecer tu contraseña",
-    invitationLink: "Configura tu cuenta",
-    resetLink: "Restablece tu contraseña",
-    emailChangeAction: "confirmar tu nueva dirección de correo",
-    emailChangeLink: "Abre tu perfil de Waitron",
-    expires: (expiry: string) => `Este enlace de un solo uso caduca el ${expiry}.`,
-    emailChangeCode: (code: string, expiry: string) =>
-      `Introduce ${code} en tu perfil de Waitron. Este código caduca el ${expiry}.`,
-    ignore: "Si no esperabas este correo, puedes ignorarlo.",
-    privacy: "Aviso de privacidad",
-  },
-} as const;
-
 export function createAccountEmailSender(
   config: {
     url: string;
@@ -82,7 +46,7 @@ export function createAccountEmailSender(
   options: { timeoutMs?: number; ca?: string } = {},
 ): AccountEmailSender {
   return async (message) => {
-    const copy = message.locale.startsWith("es") ? COPY.es : COPY.en;
+    const copy = message.locale.startsWith("es") ? ACCOUNT_EMAIL_WORDS.es : ACCOUNT_EMAIL_WORDS.en;
     const subject =
       message.purpose === "invitation"
         ? copy.invitationSubject
@@ -101,7 +65,6 @@ export function createAccountEmailSender(
         : message.purpose === "password_reset"
           ? copy.resetLink
           : copy.emailChangeLink;
-    // Use the deployment location's zone and the recipient's language, including daylight saving.
     const expiry = new Intl.DateTimeFormat(message.locale, {
       year: "numeric",
       month: "short",
@@ -127,7 +90,7 @@ export function createAccountEmailSender(
     const text = [
       copy.hello(message.displayName),
       "",
-      `${message.locale.startsWith("es") ? "Usa este enlace para" : "Use this link to"} ${action}:`,
+      `${copy.useLink} ${action}:`,
       message.actionUrl,
       ...(codeCopy === undefined ? [] : ["", codeCopy]),
       "",
