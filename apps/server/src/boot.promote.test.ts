@@ -69,10 +69,9 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+  WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -117,7 +116,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Barra",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -126,12 +125,12 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(nodes)
     .values({
-      id: TILL_ENV.WAITRON_TILL_NODE_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_ENV.WAITRON_NODE_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Promote node",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: db, ring: PROMOTE_RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, ring: PROMOTE_RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
 /** Migrated here, not by boot, because the identity rows have to exist before boot reads them. */
@@ -157,9 +156,9 @@ beforeAll(async () => {
   await seedTillIdentity(appDb);
 
   await stampDeployment(appDb, "production");
-  await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
-  expect(await readDeploymentMode(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
-  expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("secondary");
+  await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
+  expect(await readDeploymentMode(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
+  expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
 }, 180_000);
 
 afterAll(async () => {
@@ -192,8 +191,8 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      locationId: TILL_LOCATION_ID,
+      nodeId: TILL_ENV.WAITRON_NODE_ID,
       nif: "90111111H",
     },
   });
@@ -240,7 +239,7 @@ const TICK_ENV = {
 describe("historical promote: local secondary → primary, live", () => {
   it("does not file as a secondary, then files on the next tick after a live promote — tills answer throughout", async () => {
     // A prior test may have flipped the shared directory's singleton_role to 'primary'.
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -270,7 +269,7 @@ describe("historical promote: local secondary → primary, live", () => {
 
       const result = await server.promoteLocalSecondaryToPrimary!({ oldNodeNeutralised: true });
       expect(result).toEqual({ alreadyPrimary: false });
-      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
+      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
 
       // Phase B — now the singleton. Poll on `incidencia`, set as the LAST step of a failed attempt,
       // not `intentos`, set at claim while estado is still 'enviando'.
@@ -291,7 +290,7 @@ describe("historical promote: local secondary → primary, live", () => {
   }, 60_000);
 
   it("refuses an unattested promote and keeps filing off", async () => {
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "secondary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "secondary");
     const seeded = await seedFiscalWork();
     const { registroIds } = seeded;
     const port = await freePort();
@@ -311,7 +310,7 @@ describe("historical promote: local secondary → primary, live", () => {
       );
       expect(isAppError(error) && error.code).toBe("promotion.fence_not_attested");
 
-      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("secondary");
+      expect(await readSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
       expect(await readEnvio(registroIds[0]!)).toEqual({
         estado: "pendiente",
         intentos: 0,
@@ -323,9 +322,6 @@ describe("historical promote: local secondary → primary, live", () => {
     }
   }, 60_000);
 });
-
-// A booted mirror's promote flips mode and singleton_role to primary, rewrites `trading.env` with
-// the cloud's own reserved standard series id, and schedules a restart.
 
 const MIRROR_LOCATION_ID = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const MIRROR_ORIGIN_NODE_ID = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
@@ -413,9 +409,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_NODE_ID: seed.nodeId,
-
-      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      WAITRON_NODE_ID: seed.nodeId,
       WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -479,7 +473,7 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       const persisted = parseEnvFile(readFileSync(join(stateDir, "trading.env"), "utf8"));
       expect(persisted).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
       expect(await readStandardSeriesId(mirrorDb, seed.nodeId)).toBe(activeSeriesId);
-      expect(persisted.WAITRON_TILL_NODE_ID).toBe(seed.nodeId);
+      expect(persisted.WAITRON_NODE_ID).toBe(seed.nodeId);
       expect(persisted.WAITRON_ENV).toBe("production");
     } finally {
       await server.close();
@@ -505,8 +499,7 @@ describe("a mirror's promote and the backup room note", () => {
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_NODE_ID: seed.nodeId,
-      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      WAITRON_NODE_ID: seed.nodeId,
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -583,8 +576,7 @@ describe("a mirror's promote and the backup room note", () => {
       const server = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_NODE_ID: seed.nodeId,
-        WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+        WAITRON_NODE_ID: seed.nodeId,
         WAITRON_VENUE_DIR: venueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,

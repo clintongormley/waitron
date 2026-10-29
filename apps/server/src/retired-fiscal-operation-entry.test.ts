@@ -107,9 +107,7 @@ it.each(["archive", "stream"] as const)(
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_TILL_NODE_ID=${node.nodeId}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
       },
     ];
     const artifact = encryptArtifact(

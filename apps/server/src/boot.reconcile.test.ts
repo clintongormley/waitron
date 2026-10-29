@@ -48,10 +48,9 @@ const { startServer, startConfiguredServer, httpPort } = ephemeralServerFixture(
 // `startServer`, so the two never want the write lock at once.
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+  WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
 const PEER_NODE = "66666666-6666-4666-8666-666666666666";
 const PEER_KEY = generateNodeKeyPair();
@@ -94,7 +93,7 @@ async function seed(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Loc",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -103,8 +102,8 @@ async function seed(db: Database): Promise<void> {
   await db
     .insert(nodes)
     .values({
-      id: TILL_ENV.WAITRON_TILL_NODE_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_ENV.WAITRON_NODE_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Box",
     })
     .onConflictDoNothing();
@@ -113,7 +112,7 @@ async function seed(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: PEER_NODE,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Cloud",
       publicKey: PEER_KEY.publicKey,
     })
@@ -122,7 +121,7 @@ async function seed(db: Database): Promise<void> {
     .insert(invoiceSeries)
     .values({
       id: SEEDED_SERIES_ID,
-      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      nodeId: TILL_ENV.WAITRON_NODE_ID,
       code: "A",
     })
     .onConflictDoNothing();
@@ -133,10 +132,10 @@ async function seedHeldChart(db: Database, term: number): Promise<void> {
   await writeNodeMembership(
     db,
     signedMembershipDoc(term, {
-      signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      signerNodeId: TILL_ENV.WAITRON_NODE_ID,
       nodes: [
         {
-          nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          nodeId: TILL_ENV.WAITRON_NODE_ID,
           contactUrl: "https://box",
           standing: "serving-primary",
         },
@@ -153,7 +152,7 @@ function peerFencingChart(term: number) {
     keyPair: PEER_KEY,
     nodes: [
       { nodeId: PEER_NODE, contactUrl: "https://cloud", standing: "serving-primary" },
-      { nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "https://box", standing: "sell-only" },
+      { nodeId: TILL_ENV.WAITRON_NODE_ID, contactUrl: "https://box", standing: "sell-only" },
     ],
   });
 }
@@ -215,7 +214,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("a reachable peer holding a higher-term fencing chart sends the returned box read-only — it cannot sell", async () => {
     await seedHeldChart(supersededDb, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(supersededDb, TILL_ENV.WAITRON_TILL_NODE_ID, {
+    await writeMirrorConfig(supersededDb, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -245,9 +244,7 @@ describe("returned-box membership reconciliation at boot", () => {
       // Persisted and demoted, not merely a per-request gate.
       const held = await readNodeMembership(supersededDb);
       expect(held?.body.term).toBe(2);
-      expect(await readSingletonRole(supersededDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe(
-        "secondary",
-      );
+      expect(await readSingletonRole(supersededDb, TILL_ENV.WAITRON_NODE_ID)).toBe("secondary");
     } finally {
       await server.close();
       await peer.stop();
@@ -264,11 +261,11 @@ describe("returned-box membership reconciliation at boot", () => {
     // This node can sign, so a first start that ran would move the term.
     await establishNodeIdentity(
       { ownerDb: db, ring: loadKeyRing(KEY_ENV) },
-      TILL_ENV.WAITRON_TILL_NODE_ID,
+      TILL_ENV.WAITRON_NODE_ID,
     );
     await seedHeldChart(db, 1);
     const peer = await startPeer(peerFencingChart(2));
-    await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+    await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: peer.url,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -332,10 +329,10 @@ describe("returned-box membership reconciliation at boot", () => {
       await writeNodeMembership(
         db,
         signedMembershipDoc(1, {
-          signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          signerNodeId: TILL_ENV.WAITRON_NODE_ID,
           nodes: [
             {
-              nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+              nodeId: TILL_ENV.WAITRON_NODE_ID,
               contactUrl: "https://box",
               standing: "serving-primary",
             },
@@ -344,7 +341,7 @@ describe("returned-box membership reconciliation at boot", () => {
         }),
       );
       const peer = await startPeer(peerFencingChart(2));
-      await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+      await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
         relayUrl: peer.url,
         boxHostname: "box.local",
         boxCaPem: BOX_CA_PEM,
@@ -381,7 +378,7 @@ describe("returned-box membership reconciliation at boot", () => {
 
       expect(acceptingSales).toBe(true);
       expect((await readNodeMembership(db))?.body.term).toBe(1);
-      expect(await readSingletonRole(db, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
+      expect(await readSingletonRole(db, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
       const refused = lines
         .map((line) => JSON.parse(line) as Record<string, unknown>)
         .filter((entry) => entry["event"] === "node.membership_refused_on_boot");
@@ -401,7 +398,7 @@ describe("returned-box membership reconciliation at boot", () => {
   it("an UNREACHABLE peer leaves the returned box PRIMARY — it proceeds and accepts sales (prove-by-deletion)", async () => {
     await seedHeldChart(proceedsDb, 1);
     const [deadPort, port] = await freePorts(2);
-    await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_TILL_NODE_ID, {
+    await writeMirrorConfig(proceedsDb, TILL_ENV.WAITRON_NODE_ID, {
       relayUrl: `http://127.0.0.1:${deadPort}/`,
       boxHostname: "box.local",
       boxCaPem: BOX_CA_PEM,
@@ -419,13 +416,13 @@ describe("returned-box membership reconciliation at boot", () => {
       const node = await fetch(`${base}/api/node`);
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
         acceptingSales: true,
       });
 
       const held = await readNodeMembership(proceedsDb);
       expect(held?.body.term).toBe(1);
-      expect(await readSingletonRole(proceedsDb, TILL_ENV.WAITRON_TILL_NODE_ID)).toBe("primary");
+      expect(await readSingletonRole(proceedsDb, TILL_ENV.WAITRON_NODE_ID)).toBe("primary");
     } finally {
       await server.close();
     }

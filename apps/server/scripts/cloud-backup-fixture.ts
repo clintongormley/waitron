@@ -123,7 +123,7 @@ if (request.command === "capture") {
         JSON.stringify({
           networkDenied,
           manifest: checked.manifest,
-          sourceNodeId: identity.WAITRON_TILL_NODE_ID,
+          sourceNodeId: identity.WAITRON_NODE_ID,
           venueName: venue[0]!.name,
           entries: checked.secretEntries.map((entry) => entry.name),
         }),
@@ -143,7 +143,7 @@ if (request.command === "capture") {
     const trading = checked.secretEntries.find((entry) => entry.name === "secrets/trading.env");
     assert(trading);
     assert.equal(
-      parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_TILL_NODE_ID,
+      parseEnvFile(Buffer.from(trading.bytes).toString()).WAITRON_NODE_ID,
       request.sourceNodeId,
     );
     assert(

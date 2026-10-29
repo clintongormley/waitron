@@ -372,7 +372,7 @@ it("shares the recovery password throttle with the retained password-only endpoi
 });
 it("does not repair a supposedly preactivation pair alongside trading configuration", async () => {
   const f = await fixture();
-  await writeFile(join(f.stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=synthetic\n");
+  await writeFile(join(f.stateDir, "trading.env"), "WAITRON_NODE_ID=synthetic\n");
   const inspected = await f.service.inspectFirstSetupResolution();
   expect(inspected.repairEligible).toBe(false);
   expect(inspected.artifacts).toContainEqual(

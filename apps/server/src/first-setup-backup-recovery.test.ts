@@ -295,10 +295,7 @@ it("valid backup proof discloses only that backup while preserving a different l
     .insert(nodes)
     .values({ id: localNode, locationId: node.locationId, name: "Retained private node" });
   await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
-  await writeFile(
-    join(f.roots.stateDir, "trading.env"),
-    `WAITRON_TILL_NODE_ID=${localNode}\nWAITRON_TILL_LOCATION_ID=${node.locationId}\n`,
-  );
+  await writeFile(join(f.roots.stateDir, "trading.env"), `WAITRON_NODE_ID=${localNode}\n`);
   const before = await readFile(join(f.roots.venueDir, "venue.db"));
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   f.request.observation = {

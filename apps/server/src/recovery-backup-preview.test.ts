@@ -77,7 +77,7 @@ beforeEach(async () => {
       { name: "db.dump", bytes: await readFile(database) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(`WAITRON_TILL_NODE_ID=${NODE}\nWAITRON_TILL_LOCATION_ID=${LOCATION}\n`),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },

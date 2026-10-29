@@ -103,9 +103,7 @@ const ENTRIES: ArchiveEntry[] = [
     name: "secrets/trading.env",
     bytes: Buffer.from(
       formatEnvFile({
-        WAITRON_TILL_NODE_ID: T.nodeId,
-
-        WAITRON_TILL_LOCATION_ID: T.locationId,
+        WAITRON_NODE_ID: T.nodeId,
         WAITRON_ENV: "preproduction",
       }),
     ),
@@ -1017,7 +1015,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     const venueDir = await fresh("waitron-stream-venue-");
     await writeFile(join(venueDir, "venue.db"), "the box's own database");
     const deps = await prepareDeps(await bucket(), { checkIntegrity: async () => ["corrupt"] });
-    await writeFile(join(deps.stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=someone-else\n");
+    await writeFile(join(deps.stateDir, "trading.env"), "WAITRON_NODE_ID=someone-else\n");
     await expect(
       restoreFromStream({
         ...deps,
@@ -1030,7 +1028,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
     ).rejects.toMatchObject({ code: "restore.stream_integrity_failed" });
     expect(await readFile(join(venueDir, "venue.db"), "utf8")).toBe("the box's own database");
     expect(await readFile(join(deps.stateDir, "trading.env"), "utf8")).toBe(
-      "WAITRON_TILL_NODE_ID=someone-else\n",
+      "WAITRON_NODE_ID=someone-else\n",
     );
     expect(await readdir(deps.stateDir)).toEqual(["trading.env"]);
   });

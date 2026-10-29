@@ -16,10 +16,6 @@ import {
 } from "./dev-setup.js";
 import type { DevSetupOptions } from "./dev-setup.js";
 
-/**
- * No `WAITRON_TILL_*_ID`: their absence is what selects setup mode (`tryLoadTillConfig` returns
- * undefined). Setup boot generates its own key ring in the state directory.
- */
 export interface SetupEnv {
   WAITRON_VENUE_DIR: string;
   WAITRON_ENV: string;

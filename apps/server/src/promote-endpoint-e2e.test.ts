@@ -325,9 +325,7 @@ function mirrorEnv(
   return {
     ...KEY_ENV,
     ...TICK_ENV,
-    WAITRON_TILL_NODE_ID: nodeId,
-
-    WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+    WAITRON_NODE_ID: nodeId,
     WAITRON_VENUE_DIR: dir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -428,9 +426,7 @@ describe("historical promote endpoint e2e — the whole arc over HTTP", () => {
       primary = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_NODE_ID: persisted.WAITRON_TILL_NODE_ID!,
-
-        WAITRON_TILL_LOCATION_ID: persisted.WAITRON_TILL_LOCATION_ID!,
+        WAITRON_NODE_ID: persisted.WAITRON_NODE_ID!,
         WAITRON_VENUE_DIR: venueDir.main,
         WAITRON_HTTP_PORT: String(primaryPort),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,

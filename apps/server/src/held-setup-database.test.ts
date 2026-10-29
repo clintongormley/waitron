@@ -65,7 +65,7 @@ it("status complete and saved trading settings are reached through real steps", 
   const f = await heldSetup({ status: "complete", tradingSettings: true });
   expect((await f.host.store.read())?.status).toBe("complete");
   expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(
-    "WAITRON_TILL_NODE_ID=",
+    "WAITRON_NODE_ID=",
   );
   expect((await f.service.liveness())?.state).toBe("stopped");
 });
@@ -74,7 +74,7 @@ it("status committed with saved trading settings: publication wrote them, then f
   const f = await heldSetup({ tradingSettings: true });
   expect((await f.host.store.read())?.status).toBe("committed");
   expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toContain(
-    "WAITRON_TILL_NODE_ID=",
+    "WAITRON_NODE_ID=",
   );
   expect((await f.service.liveness())?.state).toBe("stopped");
 });

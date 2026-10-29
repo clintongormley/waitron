@@ -2,20 +2,14 @@ import { describe, expect, it } from "vitest";
 import { isAppError } from "@waitron/shared";
 import { loadTillConfig, tryLoadTillConfig } from "./till-config.js";
 
-// Distinct per field so a mis-wired mapping (e.g. locationId reading the series variable) fails the
-// happy-path assertion rather than passing by coincidence — every id is the SAME shape but a
-// DIFFERENT value. Version/variant nibbles are irrelevant: the brand only checks 8-4-4-4-12 hex.
 const NODE = "33333333-3333-4333-8333-333333333333";
 const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base = {
-  WAITRON_TILL_NODE_ID: NODE,
-  WAITRON_TILL_LOCATION_ID: LOCATION,
+  WAITRON_NODE_ID: NODE,
 };
 
-/** The env-var name each id is sourced from — the same list `loadTillConfig` walks. Table-driven so
- * every id gets the missing and invalid cases without a copy of each per variable. */
-const ID_VARS = ["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"] as const;
+const ID_VARS = ["WAITRON_NODE_ID"] as const;
 
 function codeOf(error: unknown): string {
   return isAppError(error) ? error.code : `not an AppError: ${String(error)}`;
@@ -33,10 +27,10 @@ function captureThrow(fn: () => unknown): unknown {
 }
 
 describe("loadTillConfig", () => {
-  it("boots from node and location without a cached series", () => {
+  it("boots from the node without a location or cached series", () => {
     const identity = { ...base };
     const loaded = tryLoadTillConfig(identity);
-    expect(loaded).toMatchObject({ nodeId: NODE, locationId: LOCATION });
+    expect(loaded).toMatchObject({ nodeId: NODE });
     expect(loaded).not.toHaveProperty("seriesId");
   });
 
@@ -46,13 +40,12 @@ describe("loadTillConfig", () => {
     expect(loaded.nodeId).toBe(NODE);
   });
 
-  it("brands the two ids from their env vars and defaults locale to es-ES", () => {
+  it("brands the node id from its env var and defaults locale to es-ES", () => {
     const config = loadTillConfig(base);
     // toEqual, not toMatchObject: it also asserts nothing extra — no `cardProvider`/`stripeReaderId`/
     // `sumupReaderId` key at all.
     expect(config).toEqual({
       nodeId: NODE,
-      locationId: LOCATION,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,
@@ -150,7 +143,16 @@ describe("loadTillConfig", () => {
 });
 
 describe("tryLoadTillConfig", () => {
-  it("returns undefined when NONE of the two ids are set (setup mode)", () => {
+  it("ignores retired identity keys instead of booting with the wrong box identity", () => {
+    const retired = {
+      [["WAITRON", "TILL", "NODE", "ID"].join("_")]: LOCATION,
+      [["WAITRON", "TILL", "LOCATION", "ID"].join("_")]: NODE,
+    };
+    expect(tryLoadTillConfig(retired)).toBeUndefined();
+    expect(tryLoadTillConfig({ ...retired, ...base })).toEqual(loadTillConfig(base));
+  });
+
+  it("returns undefined when the node id is unset (setup mode)", () => {
     // An unprovisioned box has no venue: that is SETUP MODE, not a misconfiguration.
     expect(tryLoadTillConfig({})).toBeUndefined();
   });
@@ -159,17 +161,16 @@ describe("tryLoadTillConfig", () => {
     expect(tryLoadTillConfig({ WAITRON_TILL_SERIES_ID: "stale" })).toBeUndefined();
   });
 
-  it("treats both present-but-empty (VAR=) as none set → undefined", () => {
+  it("treats the node id present-but-empty (VAR=) as none set → undefined", () => {
     const allEmpty = Object.fromEntries(ID_VARS.map((v) => [v, ""]));
     expect(tryLoadTillConfig(allEmpty)).toBeUndefined();
   });
 
-  it("loads the full config when BOTH are set (the same shape loadTillConfig returns)", () => {
+  it("loads the full config when the node is set (the same shape loadTillConfig returns)", () => {
     // Spot-checks nothing: `toEqual` the whole object, so a wrapper that dropped or reshaped a field
     // relative to `loadTillConfig` (the delegate) would fail here, not slip through on one field.
     expect(tryLoadTillConfig(base)).toEqual({
       nodeId: NODE,
-      locationId: LOCATION,
       locale: "es-ES",
       invoiceLocales: ["es-ES"],
       tipsEnabled: false,
@@ -182,31 +183,9 @@ describe("tryLoadTillConfig", () => {
     ).toBeUndefined();
   });
 
-  describe.each(ID_VARS)("with only %s missing (a partial set)", (missing) => {
-    it("throws server.config_invalid { variable, reason: 'till_config_partial' }", () => {
-      // Some-but-not-all set is a HALF-CONFIGURED server, never a setup box. Only the variable NAME
-      // travels, never a value.
-      const error = captureThrow(() => tryLoadTillConfig({ ...base, [missing]: undefined }));
-      expect(codeOf(error)).toBe("server.config_invalid");
-      expect(isAppError(error) && error.params).toEqual({
-        variable: missing,
-        reason: "till_config_partial",
-      });
-    });
-  });
-
-  it("names the missing node when the location is present", () => {
-    // NODE is absent while LOCATION is present.
-    const error = captureThrow(() =>
-      tryLoadTillConfig({
-        ...base,
-        WAITRON_TILL_NODE_ID: undefined,
-      }),
-    );
-    expect(codeOf(error)).toBe("server.config_invalid");
-    expect(isAppError(error) && error.params).toEqual({
-      variable: "WAITRON_TILL_NODE_ID",
-      reason: "till_config_partial",
-    });
+  it("refuses a malformed node instead of silently entering setup", () => {
+    const error = captureThrow(() => tryLoadTillConfig({ WAITRON_NODE_ID: "nope" }));
+    expect(codeOf(error)).toBe("server.till_config_invalid");
+    expect(isAppError(error) && error.params).toEqual({ key: "WAITRON_NODE_ID" });
   });
 });

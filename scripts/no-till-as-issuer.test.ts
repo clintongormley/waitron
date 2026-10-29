@@ -21,7 +21,10 @@ const retiredNames = [
   ["provision", "till"].join("-"),
   ["provision", "Till"].join(""),
 ];
-const oldSettings = ["SERIES", "TILL"].map((part) => `WAITRON_TILL_${part}_ID`);
+const oldSettings = [
+  ...["SERIES", "TILL", "NODE", "LOCATION"].map((part) => `WAITRON_TILL_${part}_ID`),
+  ["WAITRON", "LOCATION", "ID"].join("_"),
+];
 
 it("retired operation entry points stay absent", () => {
   expect(scanTree(root)).toEqual([]);
@@ -36,10 +39,7 @@ it.each([...retiredNames, action, ...oldSettings])("rejects the retired spelling
 it("accepts cash-register devices, current identity settings, comments and strings in fiscal code", () => {
   for (const [file, source] of [
     ["apps/till/src/device.ts", 'const till = { formFactor: "till" };'],
-    [
-      "apps/server/src/config.ts",
-      "const value = process.env.WAITRON_TILL_NODE_ID ?? process.env.WAITRON_TILL_LOCATION_ID;",
-    ],
+    ["apps/server/src/config.ts", "const value = process.env.WAITRON_NODE_ID;"],
     ["packages/fiscal/src/receipt.ts", '// a till device\nconst node = "till";'],
   ])
     expect(inspectSource(file!, source!)).toEqual([]);
@@ -192,3 +192,14 @@ it("rejects private fiscal identifiers", () => {
     "packages/fiscal/src/private.ts: fiscal identifier #till",
   ]);
 });
+
+it.each(["NODE", "LOCATION"])(
+  "rejects the retired %s identity setting even in legacy negative-test files",
+  (part) => {
+    const value = `WAITRON_TILL_${part}_ID`;
+    for (const path of ["apps/server/src/config.ts", "apps/server/src/till-config.test.ts"])
+      expect(inspectSource(path, `const value = "${value}";`)).toEqual([
+        `${path}: retired ${value}`,
+      ]);
+  },
+);

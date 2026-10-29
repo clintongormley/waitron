@@ -53,10 +53,9 @@ const db = {} as Record<VenueName, Database>;
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const MIRROR_STAFF_ID = "66666666-6666-4666-8666-666666666666";
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+  WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
 
 // Disables `fiscal-none` so a mirror boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -78,7 +77,7 @@ const KEY_ENV = {
 // Unreachable on purpose: nothing on these boots dials the relay.
 const MIRROR_RELAY_URL = "http://127.0.0.1:1/";
 const MIRROR_BOX_HOSTNAME = "mirror-box.local";
-// The primary's node id, distinct from the mirror's own `WAITRON_TILL_NODE_ID`.
+// The primary's node id, distinct from the mirror's own `WAITRON_NODE_ID`.
 const MIRROR_ORIGIN_NODE = "77777777-7777-4777-8777-777777777777";
 const BOX_CA_PEM = mintSelfSignedServerCert({
   hostnames: [MIRROR_BOX_HOSTNAME],
@@ -97,7 +96,7 @@ async function seedIdentity(admin: Database): Promise<void> {
   await admin
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Loc",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -106,8 +105,8 @@ async function seedIdentity(admin: Database): Promise<void> {
   await admin
     .insert(nodes)
     .values({
-      id: TILL_ENV.WAITRON_TILL_NODE_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_ENV.WAITRON_NODE_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Node",
     })
     .onConflictDoNothing();
@@ -115,7 +114,7 @@ async function seedIdentity(admin: Database): Promise<void> {
     .insert(invoiceSeries)
     .values({
       id: SEEDED_SERIES_ID,
-      nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+      nodeId: TILL_ENV.WAITRON_NODE_ID,
       code: "A",
     })
     .onConflictDoNothing();
@@ -145,16 +144,16 @@ beforeAll(async () => {
     .values({ id: MIRROR_STAFF_ID, displayName: "Marta", role: "staff" });
   // The primary directory writes no `node_roles` row: `readDeploymentAxes` reads it as 'primary'.
   await stampDeployment(db.mirror, "preproduction");
-  await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
+  await setDeploymentMode(db.mirror, TILL_ENV.WAITRON_NODE_ID, "mirror");
   await stampDeployment(db.primary, "preproduction");
   await stampDeployment(db.noConfig, "preproduction");
-  await setDeploymentMode(db.noConfig, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
+  await setDeploymentMode(db.noConfig, TILL_ENV.WAITRON_NODE_ID, "mirror");
   // Adoption-pending: stamped and mode 'mirror', but deliberately NOT seeded with the till identity.
   await stampDeployment(db.adopting, "preproduction");
-  await setDeploymentMode(db.adopting, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
+  await setDeploymentMode(db.adopting, TILL_ENV.WAITRON_NODE_ID, "mirror");
 
   // `noConfig` deliberately gets none.
-  await writeMirrorConfig(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID, {
+  await writeMirrorConfig(db.mirror, TILL_ENV.WAITRON_NODE_ID, {
     relayUrl: MIRROR_RELAY_URL,
     boxHostname: MIRROR_BOX_HOSTNAME,
     boxCaPem: BOX_CA_PEM,
@@ -285,8 +284,8 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     // A pending envío this node must NOT submit.
     const seeded = await seedFiscalRegistro(db.mirror, {
       ids: {
-        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        locationId: TILL_LOCATION_ID,
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
         seriesId: SEEDED_SERIES_ID,
       },
       reuseExistingParents: true,
@@ -331,7 +330,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       );
 
     // The role `setDeploymentMode('mirror')` set, not one invented for the test.
-    const role = await readSingletonRole(db.mirror, TILL_ENV.WAITRON_TILL_NODE_ID);
+    const role = await readSingletonRole(db.mirror, TILL_ENV.WAITRON_NODE_ID);
     expect(role).toBe("secondary");
 
     // An hour ahead, so the seeded envío is unambiguously due for the primary control below.
@@ -396,7 +395,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
       const probe = await fetch(`${base}/api/node`);
       expect(probe.status).toBe(200);
       expect(await probe.json()).toMatchObject({
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
         acceptingSales: true,
       });
     } finally {
@@ -516,7 +515,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({
-        locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+        locationId: TILL_LOCATION_ID,
         standby: {
           nodeId: "88888888-8888-4888-8888-888888888888",
           publicKey: "pub",

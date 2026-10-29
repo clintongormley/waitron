@@ -269,8 +269,7 @@ for (const [fiscal, box] of Object.entries(boxes)) {
             WAITRON_HTTP_PORT: String(port),
             WAITRON_STATE_DIR: scratch,
             WAITRON_VENUE_DIR: dirname(database),
-            WAITRON_TILL_NODE_ID: venue.nodeId,
-            WAITRON_TILL_LOCATION_ID: venue.locationId,
+            WAITRON_NODE_ID: venue.nodeId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });

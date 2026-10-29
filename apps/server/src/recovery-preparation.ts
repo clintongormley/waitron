@@ -28,7 +28,7 @@ import { dirname, join } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import {
-  readArtifactIdentity,
+  readArtifactNode,
   validateArtifact,
   validateDatabaseEntries,
   type ValidatedArtifact,
@@ -307,7 +307,7 @@ export function createInteractiveRecoveryPreparation(options: {
       const run = async (currentHold: FirstSetupHold) => {
         const preview = staged?.preview ?? (await readRecoveryCopyPreview(copy, sourceId, options));
         const selected = { ...preview, activationSourceId: copy.sourceId };
-        const { node } = readArtifactIdentity(copy.secretEntries);
+        const node = await readArtifactNode(copy);
         if (
           input.binding.targetNodeId !== node.nodeId ||
           selected.fiscalSelection?.module !== input.binding.module

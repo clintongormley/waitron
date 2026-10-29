@@ -5,7 +5,7 @@ import { readRecoveryCopyPreview } from "./recovery-backup-preview.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import type { RecoveryOperationInput } from "./recovery-module-operation.js";
 import {
-  readArtifactIdentity,
+  readArtifactNode,
   type RestoreOperationRunner,
   type ValidatedArtifact,
 } from "./restore.js";
@@ -53,7 +53,7 @@ export async function createRecoveryEntryRunner(options: {
   const { operation, copy, context } = options;
   const preview = await readRecoveryCopyPreview(copy, context.selectedSourceId, options);
   const selected = { ...preview, activationSourceId: copy.sourceId };
-  const { node } = readArtifactIdentity(copy.secretEntries);
+  const node = await readArtifactNode(copy);
   const service = createSelectedRecoveryPreparation({
     stateDir: options.stateDir,
     venueDir: options.venueDir,

@@ -338,7 +338,7 @@ it.each([false, true])(
       modules: { "fiscal-verifactu": true, "fiscal-none": false },
     });
     const trading = await readFile(join(stateDir, "trading.env"), "utf8");
-    expect(trading).toContain(`WAITRON_TILL_NODE_ID=${state.frozen.nodeId}\n`);
+    expect(trading).toContain(`WAITRON_NODE_ID=${state.frozen.nodeId}\n`);
     expect(trading).toContain("WAITRON_ENV=preproduction\n");
     expect(trading).toContain("WAITRON_ONBOARDING_INTENT=live\n");
     const stored = await openVenueDatabase(target);

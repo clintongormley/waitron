@@ -54,7 +54,7 @@ const privatePem = forge.pki.privateKeyToPem;
 function entries(): ArchiveEntry[] {
   return Object.entries({
     "secrets.env": `WAITRON_CREDENTIALS_KEY=${key}\nWAITRON_CREDENTIALS_KEY_VERSION=2\n`,
-    "trading.env": `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
+    "trading.env": `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ENV=preproduction\nWAITRON_ACCOUNT_KEY=${account}\n`,
     "tls/ca.crt": pem(ca),
     "tls/ca.key": privatePem(caKeys.privateKey),
     "tls/server.crt": pem(leaf),
@@ -176,30 +176,23 @@ describe("private host recovery material", () => {
       expect(await verifyBackupStateSecrets(entries(), source, new Date(at))).toEqual(unavailable);
     },
   );
-  it.each(["WAITRON_TILL_NODE_ID", "WAITRON_TILL_LOCATION_ID"])(
-    "binds captured %s to the source",
-    async (name) => {
-      const input = entries();
-      const item = input.find((e) => e.name === "secrets/trading.env")!;
-      item.bytes = Buffer.from(
-        Buffer.from(item.bytes)
-          .toString()
-          .replace(new RegExp(`${name}=.*`), `${name}=30000000-0000-4000-8000-000000000003`),
-      );
-      expect(await verifyBackupStateSecrets(input, source, now)).toEqual({
-        status: "invalid",
-        reason: "binding_mismatch",
-      });
-    },
-  );
+  it.each(["WAITRON_NODE_ID"])("binds captured %s to the source", async (name) => {
+    const input = entries();
+    const item = input.find((e) => e.name === "secrets/trading.env")!;
+    item.bytes = Buffer.from(
+      Buffer.from(item.bytes)
+        .toString()
+        .replace(new RegExp(`${name}=.*`), `${name}=30000000-0000-4000-8000-000000000003`),
+    );
+    expect(await verifyBackupStateSecrets(input, source, now)).toEqual({
+      status: "invalid",
+      reason: "binding_mismatch",
+    });
+  });
   it("requires valid captured account-key encoding", async () => {
     expect(
       await verifyBackupStateSecrets(
-        set(
-          entries(),
-          "trading.env",
-          `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\nWAITRON_ACCOUNT_KEY=bad`,
-        ),
+        set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\nWAITRON_ACCOUNT_KEY=bad`),
         source,
         now,
       ),
@@ -279,7 +272,7 @@ describe("private host recovery material", () => {
     const wrong = set(
       entries(),
       "trading.env",
-      "WAITRON_TILL_NODE_ID=30000000-0000-4000-8000-000000000003\nWAITRON_TILL_LOCATION_ID=40000000-0000-4000-8000-000000000004\n",
+      "WAITRON_NODE_ID=30000000-0000-4000-8000-000000000003\n",
     );
     expect(await verifyBackupStateSecrets(entries(), source, now, await seal(wrong))).toEqual({
       status: "invalid",
@@ -348,11 +341,7 @@ describe("actual private key placement", () => {
   );
   it("refuses an account key present only in backup.env", async () => {
     const input = set(
-      set(
-        entries(),
-        "trading.env",
-        `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
-      ),
+      set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`),
       "backup.env",
       `WAITRON_ACCOUNT_KEY=${account}\n`,
     );
@@ -362,11 +351,7 @@ describe("actual private key placement", () => {
     expect(await verifyBackupKeyPlacement(input, dir)).toBe("unsupported");
   });
   it("accepts the real derived account key when neither layout has an override", async () => {
-    const input = set(
-      entries(),
-      "trading.env",
-      `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
-    );
+    const input = set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`);
     expect(await verifyBackupKeyPlacement(input, await place(input))).toBe("passed");
   });
   it.each(["WAITRON_CREDENTIALS_KEY_PREVIOUS", "WAITRON_CREDENTIALS_KEY_PREVIOUS_VERSION"])(
@@ -531,11 +516,7 @@ it("checks the server issuer name as well as its signature", async () => {
   ).toEqual(invalid);
 });
 it("accepts an equal derived account key redundantly supplied by backup.env", async () => {
-  const input = set(
-    entries(),
-    "trading.env",
-    `WAITRON_TILL_NODE_ID=${source.nodeId}\nWAITRON_TILL_LOCATION_ID=${source.locationId}\n`,
-  );
+  const input = set(entries(), "trading.env", `WAITRON_NODE_ID=${source.nodeId}\n`);
   const dir = await place(input);
   const derived = resolveAccountKey(
     await loadBoxEnv({}, dir),

@@ -115,8 +115,7 @@ async function placeBox(small: SmallDisk, name: string): Promise<Box> {
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
       WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
-      WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
-      WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
+      WAITRON_NODE_ID: venue.cfg.nodeId,
       WAITRON_MIGRATIONS_DIR: migrationsRoot!,
       WAITRON_ENV: "preproduction",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example",
@@ -316,7 +315,7 @@ describe("a box started from its spare file", () => {
     await writeBackupRoomNote({
       stateDir: box.stateDir,
       venueDir: join(box.stateDir, "venue"),
-      nodeId: box.baseEnv.WAITRON_TILL_NODE_ID!,
+      nodeId: box.baseEnv.WAITRON_NODE_ID!,
       installationStartedAt: daysAgo(3),
       managedByEnvironment: false,
       folders: [{ destination: "usb", dir: folder, configuredDir: folder }],

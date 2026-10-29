@@ -1,3 +1,4 @@
+import { locationId as brandLocationId } from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { observedWholePaymentBody } from "./testing/whole-payment-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -120,9 +121,9 @@ async function venue(db: Database): Promise<Venue> {
   );
   const cfg = await deviceRequestCfg(db, {
     ...loadTillConfig({
-      WAITRON_TILL_NODE_ID: allocated.nodeId,
-      WAITRON_TILL_LOCATION_ID: allocated.locationId,
+      WAITRON_NODE_ID: allocated.nodeId,
     }),
+    locationId: brandLocationId(allocated.locationId),
     simplifiedInvoiceLimit: null,
   });
   const {

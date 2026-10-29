@@ -26,14 +26,11 @@ const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 const VENUE_DIR = join(STATE_DIR, "venue");
 
 const NODE = "33333333-3333-4333-8333-333333333333";
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base: Record<string, string | undefined> = {
   WAITRON_STATE_DIR: STATE_DIR,
   WAITRON_VENUE_DIR: VENUE_DIR,
-  WAITRON_TILL_NODE_ID: NODE,
-
-  WAITRON_TILL_LOCATION_ID: LOCATION,
+  WAITRON_NODE_ID: NODE,
 };
 
 type OpenedVenue = { db: Database; close(): Promise<void> };
@@ -106,20 +103,20 @@ describe("waitron-rejoin rejoin", () => {
     expect(opened).toEqual([join(STATE_DIR, "venue")]);
   });
 
-  it("refuses when the WAITRON_TILL_*_ID are absent (unprovisioned box)", async () => {
+  it("refuses when the box identity settings are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
-      WAITRON_TILL_NODE_ID: undefined,
-
-      WAITRON_TILL_LOCATION_ID: undefined,
+      WAITRON_NODE_ID: undefined,
     });
     expect(code).toBe(1);
-    expect(out.join("\n")).toMatch(/WAITRON_TILL/);
+    expect(out).toEqual([
+      "WAITRON_NODE_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
+    ]);
   });
 
-  it("reports a partial till config by code (server.config_invalid) and returns 1", async () => {
-    const { code, out } = await run({ WAITRON_TILL_NODE_ID: undefined });
+  it("reports a malformed node by code and returns 1", async () => {
+    const { code, out } = await run({ WAITRON_NODE_ID: "bad" });
     expect(code).toBe(1);
-    expect(out.join("\n")).toContain("server.config_invalid");
+    expect(out.join("\n")).toContain("server.till_config_invalid");
   });
 
   it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {
@@ -159,7 +156,7 @@ describe("waitron-rejoin rejoin", () => {
       live.venue.run(sql`create table venue_marker (v text)`);
       live.node.run(sql`create table node_marker (v text)`);
       await live.close();
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
 
       const migrated: string[] = [];
       const rejoin = async (d: RejoinDeps): Promise<RejoinResult> => {
@@ -390,7 +387,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
           }),
         );
         await seeded.close();
-        await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+        await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
         if (source !== undefined) {
           await writeFile(join(stateDir, REBUILD_MARKER), JSON.stringify({ version: 1, source }));
         }
@@ -476,7 +473,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await seeded.close();
       }
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
       await mkdir(join(stateDir, REBUILD_MARKER));
       await writeFile(join(stateDir, REBUILD_MARKER, "retained"), "keep");
       const out: string[] = [];
@@ -494,9 +491,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await reopened.close();
       }
-      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
-        "WAITRON_TILL_NODE_ID=old\n",
-      );
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
       expect(await readFile(join(stateDir, REBUILD_MARKER, "retained"), "utf8")).toBe("keep");
     } finally {
       await rm(stateDir, { recursive: true, force: true });
@@ -522,7 +517,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await seeded.close();
       }
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
       await writeFile(join(stateDir, REBUILD_MARKER), marker);
       // Something at the note's path that no unlink removes.
       await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
@@ -542,9 +537,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await reopened.close();
       }
-      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
-        "WAITRON_TILL_NODE_ID=old\n",
-      );
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

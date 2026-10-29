@@ -5,9 +5,7 @@
 // own `drizzle/`), so this assembles them with copy-migrations and points `WAITRON_MIGRATIONS_DIR`
 // at the result.
 //
-// A setup-mode box writes `<stateDir>/trading.env` on provision and restarts; sourcing it is what
-// carries the `WAITRON_TILL_*_ID` into the next boot. `--env-file` errors on a missing path, so the
-// state-dir files are added only when they exist.
+// `--env-file` errors on a missing path, so the state-dir files are added only when they exist.
 import { existsSync, readFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";

@@ -39,7 +39,12 @@ import {
   type BackupRepairSourceDeps,
 } from "./first-setup-backup-source.js";
 import type { RecoveryBackupPreview } from "./recovery-backup-preview.js";
-import { readArtifactIdentity, writeValidated, restoreFromArtifact } from "./restore.js";
+import {
+  readArtifactNode,
+  resolveArtifactNode,
+  writeValidated,
+  restoreFromArtifact,
+} from "./restore.js";
 import {
   readCloudRecoveryState,
   readSnapshotRecoveryBinding,
@@ -127,7 +132,7 @@ async function fingerprint(selected: Selected): Promise<string> {
   return hash.digest("hex");
 }
 async function verifier(selected: Selected): Promise<string | null> {
-  const { node } = readArtifactIdentity(selected.copy.secretEntries);
+  const node = await readArtifactNode(selected.copy);
   const db = await openVenueDatabase(dirname(selected.copy.databasePath));
   try {
     return await readBreakGlassVerifier(db.venue, node.nodeId);
@@ -648,13 +653,13 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
     }
     return buildPreparation(entry);
   };
-  const buildPreparation = (entry: Entry) => {
+  const buildPreparation = async (entry: Entry) => {
     const module = options.host.modules.find(
       (module) => module.name === entry.session.binding.module,
     );
     if (module?.operations?.readRecoveryState === undefined)
       throw new AppError("module.operation_invalid", { module: entry.session.binding.module });
-    const { node } = readArtifactIdentity(entry.selected.copy.secretEntries);
+    const node = await readArtifactNode(entry.selected.copy);
     entry.preparation = createSelectedRecoveryPreparation({
       ...entry.record!.target.target,
       coordinator: options.host.coordinator,
@@ -878,7 +883,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               backup: selected.copy.manifest.environment,
               target: options.environment,
             });
-          const { node } = readArtifactIdentity(selected.copy.secretEntries);
+          const node = await readArtifactNode(selected.copy);
           if (
             before.record !== undefined &&
             (selected.sourceId !== before.record.sourceId ||
@@ -1070,7 +1075,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
               stagingDir: join(scratch, "staging"),
             },
           );
-          const { node } = readArtifactIdentity(selected.copy.secretEntries);
+          const node = await readArtifactNode(selected.copy);
           const assertCommitted = options.modules.find(
             (module) => module.name === before.record.binding.module,
           )?.backup?.assertRestoreCommitted;
@@ -1188,7 +1193,7 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
             active = entry;
             recent = entry;
             await admitCloud(entry);
-            buildPreparation(entry);
+            await buildPreparation(entry);
             await recheck(entry);
             refresh(entry);
             touch(entry);
@@ -1339,10 +1344,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
                   entry.session.preview.nodeRecoveryKeyName
               )
                 conflict();
-              await withTransaction(current.venue, (tx) =>
+              await withTransaction(current.venue, async (tx) =>
                 assertCommitted(
                   tx,
-                  readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                  await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
                   entry.session.binding,
                 ),
               );
@@ -1406,10 +1411,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
                     }
                     const db = await openVenueDatabase(target.venueDir);
                     try {
-                      await withTransaction(db.venue, (tx) =>
+                      await withTransaction(db.venue, async (tx) =>
                         assertCommitted(
                           tx,
-                          readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                          await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
                           entry.session.binding,
                         ),
                       );
@@ -1430,10 +1435,10 @@ export function createFirstSetupBackupRecovery(options: BackupRepairOptions) {
           }
           const placed = await openVenueDatabase(target.venueDir);
           try {
-            await withTransaction(placed.venue, (tx) =>
+            await withTransaction(placed.venue, async (tx) =>
               assertCommitted(
                 tx,
-                readArtifactIdentity(entry.selected.copy.secretEntries).node,
+                await resolveArtifactNode(tx, entry.selected.copy.secretEntries),
                 entry.session.binding,
               ),
             );

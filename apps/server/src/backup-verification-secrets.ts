@@ -76,8 +76,7 @@ export async function verifyBackupStateSecrets(
   }
   try {
     const { node } = readArtifactIdentity(entries);
-    if (node.nodeId !== source.nodeId || node.locationId !== source.locationId)
-      return { status: "invalid", reason: "binding_mismatch" };
+    if (node.nodeId !== source.nodeId) return { status: "invalid", reason: "binding_mismatch" };
   } catch (error) {
     if (!isAppError(error)) throw error;
     return INVALID;

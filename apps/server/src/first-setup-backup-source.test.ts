@@ -62,7 +62,7 @@ beforeEach(async () => {
     },
     {
       name: "secrets/trading.env",
-      bytes: Buffer.from(`WAITRON_TILL_NODE_ID=${NODE}\nWAITRON_TILL_LOCATION_ID=${LOCATION}\n`),
+      bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
     },
     { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
     { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
@@ -455,9 +455,7 @@ it("passes only the selected copy's original node identity across asynchronous p
     key.secret,
     deps(),
   );
-  env.bytes.set(
-    Buffer.from(`WAITRON_TILL_NODE_ID=${other}\nWAITRON_TILL_LOCATION_ID=${LOCATION}\n`),
-  );
+  env.bytes.set(Buffer.from(`WAITRON_NODE_ID=${other}\n`));
   try {
     expect((await pending).nodeId).toBe(NODE);
   } finally {

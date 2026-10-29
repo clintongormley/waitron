@@ -394,9 +394,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
     await writeFile(
       join(stateDir, "trading.env"),
       formatEnvFile({
-        WAITRON_TILL_NODE_ID: box.nodeId,
-
-        WAITRON_TILL_LOCATION_ID: box.locationId,
+        WAITRON_NODE_ID: box.nodeId,
         WAITRON_ENV: "preproduction",
       }),
     );

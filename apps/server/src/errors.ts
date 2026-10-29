@@ -119,13 +119,13 @@ declare module "@waitron/shared" {
       otherValue?: number;
     };
     /**
-     * A required `WAITRON_TILL_*` environment variable is unset (absent, or the empty string). `key`
+     * A required node identity environment variable is unset (absent, or the empty string). `key`
      * is the variable NAME and is the only field: the value is never echoed, so a secret pasted into
      * the wrong variable cannot land in an error's params.
      */
     "server.till_config_missing": { key: string };
     /**
-     * A `WAITRON_TILL_*` value is present but a branded-id constructor rejected it. `key` names the
+     * The node identity is malformed or has no location in the venue database. `key` names the
      * variable and is the only field; the rejected value is not carried, for the reason
      * `server.till_config_missing` gives.
      */
@@ -1462,7 +1462,7 @@ declare module "@waitron/shared" {
      */
     "restore.unexpected_entry": { name: string };
     /** The artifact's `secrets/trading.env` is absent or lacks one of the identity keys the restore
-     * hooks need (`WAITRON_TILL_NODE_ID`/`WAITRON_TILL_LOCATION_ID`; an empty value is
+     * hooks need (`WAITRON_NODE_ID`; an empty value is
      * missing). Validation refuses with the target intact, before identity set-aside or database
      * restore. `missing` is the fixed key or file name. */
     "restore.identity_incomplete": { missing: string };

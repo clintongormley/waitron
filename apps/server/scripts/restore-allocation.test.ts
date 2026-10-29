@@ -228,7 +228,7 @@ it.each(["archive", "bucket"])(
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(`WAITRON_TILL_NODE_ID=${NODE}\nWAITRON_TILL_LOCATION_ID=${LOCATION}\n`),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
       },
     ];
     const kit = {

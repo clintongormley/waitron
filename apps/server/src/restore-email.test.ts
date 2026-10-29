@@ -48,8 +48,7 @@ const SMTP = {
   from: "invoices@example.test",
 };
 const identity = formatEnvFile({
-  WAITRON_TILL_NODE_ID: T.nodeId,
-  WAITRON_TILL_LOCATION_ID: T.locationId,
+  WAITRON_NODE_ID: T.nodeId,
   WAITRON_ENV: "production",
 });
 const suite = useVenueDb({
@@ -317,7 +316,7 @@ describe.each(paths)("invoice email after %s", (path) => {
       );
       expect(restoredRing.current.key.equals(Buffer.from(KEY, "base64"))).toBe(true);
       const restoredIdentity = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
-      expect(restoredIdentity.WAITRON_TILL_NODE_ID).toBe(T.nodeId);
+      expect(restoredIdentity.WAITRON_NODE_ID).toBe(T.nodeId);
       const opened = await openVenueDatabase(venueDir);
       try {
         expect(

@@ -56,7 +56,7 @@ else if (request.command === "schedule") {
     let point: CloudCapturePoint | undefined;
     const scheduler = createCloudSnapshotWorker({
       stateDir,
-      sourceNodeId: identity.WAITRON_TILL_NODE_ID!,
+      sourceNodeId: identity.WAITRON_NODE_ID!,
       connection: {
         ...client,
         async publishCapture(...args) {

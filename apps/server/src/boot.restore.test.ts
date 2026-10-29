@@ -154,7 +154,7 @@ describe("startServer, against a migrated venue directory", () => {
       now: () => new Date(),
     });
     // The one required file `ensureBoxSecrets` does not write; only its presence matters here.
-    await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=boot-sealed\n");
+    await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=boot-sealed\n");
     const server = await startServer(
       {
         ...KEY_ENV,
@@ -173,7 +173,7 @@ describe("startServer, against a migrated venue directory", () => {
       const rows = await sharedDb
         .select({ sealed: nodeSealedState.sealed })
         .from(nodeSealedState)
-        .where(eq(nodeSealedState.nodeId, TILL_ENV.WAITRON_TILL_NODE_ID));
+        .where(eq(nodeSealedState.nodeId, TILL_ENV.WAITRON_NODE_ID));
       expect(rows).toHaveLength(1);
       const entries = unsealNodeState(rows[0]!.sealed, key);
       expect(entries.map((e) => e.name)).toEqual([
@@ -256,12 +256,8 @@ describe("startServer, against a migrated venue directory", () => {
     const db = venue.store.venue;
     await seedTradingVenue(db);
     const ring = loadKeyRing(KEY_ENV);
-    await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
-    await seedTermZeroMembership(
-      { db, ring },
-      TILL_ENV.WAITRON_TILL_NODE_ID,
-      "https://old-box.example",
-    );
+    await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
+    await seedTermZeroMembership({ db, ring }, TILL_ENV.WAITRON_NODE_ID, "https://old-box.example");
     const port = await freePort();
     const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-"));
     await writeFile(
@@ -301,7 +297,7 @@ describe("startServer, against a migrated venue directory", () => {
       expect(held!.body.term).toBe(1);
       expect(held!.body.nodes).toEqual([
         {
-          nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          nodeId: TILL_ENV.WAITRON_NODE_ID,
           contactUrl: "https://box.example.test",
           standing: "serving-primary",
         },
@@ -323,10 +319,10 @@ describe("startServer, against a migrated venue directory", () => {
       const db = venue.store.venue;
       await seedTradingVenue(db);
       const ring = loadKeyRing(KEY_ENV);
-      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
+      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
       await seedTermZeroMembership(
         { db, ring },
-        TILL_ENV.WAITRON_TILL_NODE_ID,
+        TILL_ENV.WAITRON_NODE_ID,
         "https://old-box.example",
       );
       const held = (await readNodeMembership(db))!;
@@ -409,10 +405,10 @@ describe("startServer, against a migrated venue directory", () => {
       const db = venue.store.venue;
       await seedTradingVenue(db);
       const ring = loadKeyRing(KEY_ENV);
-      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_TILL_NODE_ID);
+      await establishNodeIdentity({ ownerDb: db, ring }, TILL_ENV.WAITRON_NODE_ID);
       await seedTermZeroMembership(
         { db, ring },
-        TILL_ENV.WAITRON_TILL_NODE_ID,
+        TILL_ENV.WAITRON_NODE_ID,
         "https://old-box.example",
       );
       const held = (await readNodeMembership(db))!;
@@ -436,14 +432,14 @@ describe("startServer, against a migrated venue directory", () => {
       // Demoting a fenced node writes its role, and so does making one a mirror: `requireStamp`
       // refuses both on an unstamped database.
       if (document === "fenced" || asMirror) await stampDeployment(db, "preproduction");
-      if (asMirror) await setDeploymentMode(db, TILL_ENV.WAITRON_TILL_NODE_ID, "mirror");
+      if (asMirror) await setDeploymentMode(db, TILL_ENV.WAITRON_NODE_ID, "mirror");
       const [port, deadPeerPort] = await freePorts(2);
       if (withPeer) {
-        await writeMirrorConfig(db, TILL_ENV.WAITRON_TILL_NODE_ID, {
+        await writeMirrorConfig(db, TILL_ENV.WAITRON_NODE_ID, {
           relayUrl: `http://127.0.0.1:${deadPeerPort}`,
           boxHostname: "waitron.local",
           boxCaPem: "unused",
-          originNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+          originNodeId: TILL_ENV.WAITRON_NODE_ID,
         });
       }
       const stateDir = await mkdtemp(join(tmpdir(), "waitron-boot-first-start-damaged-"));
@@ -567,7 +563,7 @@ describe("startServer, against a migrated venue directory", () => {
       const node = await fetch(`https://127.0.0.1:${httpPort()}/api/node`, via);
       expect(node.status).toBe(200);
       expect(await node.json()).toMatchObject({
-        nodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+        nodeId: TILL_ENV.WAITRON_NODE_ID,
         acceptingSales: true,
       });
       const response = await fetch(`https://127.0.0.1:${httpPort()}/management-api/alerts`, {

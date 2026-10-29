@@ -4,7 +4,7 @@ import { id, label, now, table, ts } from "./columns.js";
 
 /**
  * This node's role in the venue, one row per node, keyed by the node's own id
- * (`WAITRON_TILL_NODE_ID`). Every read and write names that id, so a node holding another node's
+ * (`WAITRON_NODE_ID`). Every read and write names that id, so a node holding another node's
  * copy of `venue.db` reads its own row or none; no row reads as a sole primary
  * (`../deployment.ts`). The environment is not here: it belongs to the database and stays on
  * `deployment`.

@@ -25,7 +25,7 @@ it.each(["archive", "stream"] as const)(
       binding: f.binding,
     });
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-      `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
+      `WAITRON_NODE_ID=${TENANT_A.nodeId}`,
     );
     expect((await f.snapshot()).allocations.map((row) => row.installationIdentity)).toEqual([
       "0CNNY",
@@ -122,7 +122,7 @@ it.each(["archive", "stream"] as const)(
       "0CNQT",
     ]);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(
-      `WAITRON_TILL_NODE_ID=${TENANT_A.nodeId}`,
+      `WAITRON_NODE_ID=${TENANT_A.nodeId}`,
     );
   },
 );

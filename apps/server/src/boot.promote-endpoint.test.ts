@@ -88,10 +88,9 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+  WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
 
 // The admin the endpoint authenticates by password in the primary and fenced cases.
@@ -114,11 +113,11 @@ const openStores: VenueDatabase[] = [];
 function selfDoc(standing: "sell-only" | "serving-primary"): SignedMembershipDocument {
   const body: MembershipDocumentBody = {
     term: 5,
-    nodes: [{ nodeId: TILL_ENV.WAITRON_TILL_NODE_ID, contactUrl: "", standing }],
+    nodes: [{ nodeId: TILL_ENV.WAITRON_NODE_ID, contactUrl: "", standing }],
   };
   return {
     body,
-    signerNodeId: TILL_ENV.WAITRON_TILL_NODE_ID,
+    signerNodeId: TILL_ENV.WAITRON_NODE_ID,
     signature: "self-placeholder-sig",
     endorsements: [],
   };
@@ -134,7 +133,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Barra",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -143,8 +142,8 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(nodes)
     .values({
-      id: TILL_ENV.WAITRON_TILL_NODE_ID,
-      locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+      id: TILL_ENV.WAITRON_NODE_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();
@@ -158,7 +157,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
       role: "admin",
     })
     .onConflictDoNothing();
-  await establishNodeIdentity({ ownerDb: db, ring: RING }, TILL_ENV.WAITRON_TILL_NODE_ID);
+  await establishNodeIdentity({ ownerDb: db, ring: RING }, TILL_ENV.WAITRON_NODE_ID);
 }
 
 /** A mirror holding its own dormant identity. */
@@ -300,9 +299,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_NODE_ID: seed.nodeId,
-
-      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      WAITRON_NODE_ID: seed.nodeId,
       WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -333,7 +330,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
   }, 60_000);
 
   it("an unfenced PRIMARY serves the endpoint and returns alreadyPrimary with a valid admin login", async () => {
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("serving-primary"));
     const port = await freePort();
 
@@ -356,7 +353,7 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
 
   it("a FENCED node returns promotion.node_fenced (409), not a lying alreadyPrimary or a 403/404", async () => {
     // A held document marking this node sell-only: boot demotes it and mounts the read-only gate.
-    await setSingletonRole(appDb, TILL_ENV.WAITRON_TILL_NODE_ID, "primary");
+    await setSingletonRole(appDb, TILL_ENV.WAITRON_NODE_ID, "primary");
     await writeNodeMembership(appDb, selfDoc("sell-only"));
     const port = await freePort();
 

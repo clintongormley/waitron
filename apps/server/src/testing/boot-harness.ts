@@ -24,10 +24,9 @@ import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/mig
 // The venue's fiscal identity. Boot's trading branch requires it, so every trading boot carries
 // these through `KEY_ENV`; `seedSharedVenue` seeds the tenant, location and node they name, which boot
 // reads at startup.
+export const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 export const TILL_ENV = {
-  WAITRON_TILL_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_TILL_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
+  WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
 };
 // Resolves the fiscal slot to Veri*Factu: `ALL_MODULES` holds two fiscal-slot members, so the
 // default-on set would refuse `module.fiscal_slot_ambiguous`. A test needing a different set overrides
@@ -56,7 +55,7 @@ export async function seedSharedVenue(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000000K", legalName: "Boot Till SL" });
   await db.insert(locations).values({
-    id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    id: TILL_LOCATION_ID,
     name: "Barra",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
@@ -64,8 +63,8 @@ export async function seedSharedVenue(db: Database): Promise<void> {
   // `startServer` reads `nodes.filing_module` at boot (`readFilingModule`) and cross-checks it
   // against the enabled fiscal module.
   await db.insert(nodes).values({
-    id: TILL_ENV.WAITRON_TILL_NODE_ID,
-    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    id: TILL_ENV.WAITRON_NODE_ID,
+    locationId: TILL_LOCATION_ID,
     name: "Boot Till",
     filingModule: "verifactu",
   });
@@ -334,14 +333,14 @@ export async function seedTradingVenue(db: Database): Promise<void> {
     .insert(tenants)
     .values({ id: 1, country: "ES", taxId: "90000001R", legalName: "Route Wiring SL" });
   await db.insert(locations).values({
-    id: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    id: TILL_LOCATION_ID,
     name: "Barra",
     invoiceLocales: ["es-ES"],
     operationDescription: "Venta en establecimiento",
   });
   await db.insert(nodes).values({
-    id: TILL_ENV.WAITRON_TILL_NODE_ID,
-    locationId: TILL_ENV.WAITRON_TILL_LOCATION_ID,
+    id: TILL_ENV.WAITRON_NODE_ID,
+    locationId: TILL_LOCATION_ID,
     name: "Route Wiring Till",
     filingModule: "verifactu",
   });

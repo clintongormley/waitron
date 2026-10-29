@@ -23,11 +23,11 @@ const cfg: TradingConfig = {
 };
 
 describe("writeTradingEnv", () => {
-  it("persists node and location without a cached invoice series", async () => {
+  it("persists node without a cached invoice series", async () => {
     const env = await readFile(await writeTradingEnv(await newDir(), cfg), "utf8");
     expect(env).not.toContain("WAITRON_TILL_SERIES_ID");
-    expect(env).toContain("WAITRON_TILL_NODE_ID=node-3\n");
-    expect(env).toContain("WAITRON_TILL_LOCATION_ID=location-5\n");
+    expect(env).toContain("WAITRON_NODE_ID=node-3\n");
+    expect(env).not.toContain(["WAITRON", "LOCATION", "ID"].join("_"));
   });
 
   it("returns the <stateDir>/trading.env path it wrote", async () => {
@@ -42,8 +42,7 @@ describe("writeTradingEnv", () => {
     // the venue directory is derived from the state root, not handed forward by setup.
     const env = await readFile(await writeTradingEnv(d, cfg), "utf8");
     expect(env).toBe(
-      "WAITRON_TILL_NODE_ID=node-3\n" +
-        "WAITRON_TILL_LOCATION_ID=location-5\n" +
+      "WAITRON_NODE_ID=node-3\n" +
         "WAITRON_ENV=production\n" +
         "WAITRON_ONBOARDING_INTENT=live\n" +
         "WAITRON_ACCOUNT_KEY=" +
@@ -65,10 +64,7 @@ describe("writeTradingEnv", () => {
     const d = await newDir();
     const env = await readFile(await writeTradingEnv(d, { ...cfg, accountKey: undefined }), "utf8");
     expect(env).toBe(
-      "WAITRON_TILL_NODE_ID=node-3\n" +
-        "WAITRON_TILL_LOCATION_ID=location-5\n" +
-        "WAITRON_ENV=production\n" +
-        "WAITRON_ONBOARDING_INTENT=live\n",
+      "WAITRON_NODE_ID=node-3\n" + "WAITRON_ENV=production\n" + "WAITRON_ONBOARDING_INTENT=live\n",
     );
   });
 
