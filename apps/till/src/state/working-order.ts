@@ -421,6 +421,17 @@ export class WorkingOrderStore {
     this.#revision = revision;
   }
 
+  /** The order as read back after a save of this copy, at `revision`: the same visit of the same
+   * saved order, so {@link loadGeneration} does not move. */
+  adoptSaved(lines: OrderLine[], revision: number): void {
+    this.#revision = revision;
+    this.#lines.length = 0;
+    this.#lines.push(...lines);
+    this.#invalidatePricing();
+    this.#dirty = false;
+    this.emit("changed");
+  }
+
   get #pricedOrder(): Priced {
     if (this.#priced === null) {
       this.#priced = this.#price(

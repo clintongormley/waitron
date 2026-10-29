@@ -1672,3 +1672,40 @@ it("refuses kitchen-note edits while sending or reloading without changing lines
   store.kitchenNote = "Allowed";
   expect(store.kitchenNote).toBe("Allowed");
 });
+
+describe("WorkingOrderStore.adoptSaved (A1208)", () => {
+  it("takes the lines and revision a save led to, as the same visit of the same saved order", () => {
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "wo-1",
+      [{ product: coffee, quantity: "3", workingOrderLineId: "l1" }],
+      "Ana",
+      4,
+    );
+    store.setLineQuantity(0, "4");
+    const generation = store.loadGeneration;
+    let changes = 0;
+    store.subscribe(() => changes++);
+
+    const saved: OrderLine[] = [
+      {
+        product: coffee,
+        quantity: "4",
+        workingOrderLineId: "l1",
+        portionLineIds: ["l1", "l2", "l3", "l4"],
+      },
+    ];
+    store.adoptSaved(saved, 5);
+
+    expect(store.lines).toEqual(saved);
+    expect(store.revision).toBe(5);
+    expect([store.id, store.label, store.persisted, store.dirty]).toEqual([
+      "wo-1",
+      "Ana",
+      true,
+      false,
+    ]);
+    expect(store.loadGeneration).toBe(generation);
+    expect(changes).toBe(1);
+  });
+});
