@@ -330,10 +330,10 @@ development box (`config.devMode`) takes it too (`apps/server/src/setup-api.thro
 "marks Live on a dev box, whose request is stamped preproduction"). Any other Live setup,
 and the terminal's, uses the owned flow: five symbols for the UTC minute, after a second clock on
 another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
-name needs a second clock within 30 seconds of the box"), strictly later than every name in the
-history it can read (`packages/provisioning/src/first-setup-runtime.test.ts`, "the hosted
-selector refuses an older hour than another node's revoked real identity", which covers a name in
-the box's own database only), and after a 90 to 150 second
+name needs a second clock within 30 seconds of the box"), not a minute a name in the history it
+can read already holds (`packages/provisioning/src/first-setup-runtime.test.ts`, "the hosted
+selector refuses a minute another node's revoked identity already uses", which covers a name in
+the box's own database only; a later name does not refuse it, A1207), and after a 90 to 150 second
 wait
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "every setup wait over a minute of box
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question

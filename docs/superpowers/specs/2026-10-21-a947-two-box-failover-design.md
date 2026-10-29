@@ -1,3 +1,5 @@
+> **A1207, 29 October 2026:** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused only when its minute is already in use, and the 'a later minute is already in use' words are replaced ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Q4).
+
 # A947 — Go-live on two local boxes: a spare box that takes over
 
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.

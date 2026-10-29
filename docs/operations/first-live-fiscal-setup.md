@@ -44,15 +44,15 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **A later minute is already in use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
-  with no countdown (`first-hour.browser.test.ts`, "a later minute in use names its time and does
-  not count down").
+- **This box's records already hold a series for that minute**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
+  with no countdown (`first-hour.browser.test.ts`, "a minute in use names its time and does not
+  count down").
 
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
 minute's code is `0D0RY` (`hour-selection.test.ts`, "restore waits until a minute start 90 to 150
 seconds after its check"). Prefixes `A`, `FF` and `R` become `A-0D0RY`, `FF-0D0RY` and `R-0D0RY`.
-A later setup must use a minute later than every name already known to that box. Correct clocks
+Correct clocks
 and surviving history reduce accidental reuse; they cannot discover another box whose activity
 you did not report.
 
@@ -85,8 +85,8 @@ conflicting outcome. Do not delete records to get past a refusal.
 reset counters or require a new name because the clock has advanced. With the venue database
 present, **Start again** is limited to a positively empty, never-activated attempt. It deletes the
 attempt and keeps no record of the invoice series names it chose: a later setup's name is the
-box's current minute, after the clock check and the wait, and later than every name the box can
-still read (`CLAUDE.md` §5). If a Start again is cut off, for example by a power cut, the next start finishes it, or
+box's current minute, after the clock check and the wait, and not a minute a name the box can
+still read already holds (`CLAUDE.md` §5). If a Start again is cut off, for example by a power cut, the next start finishes it, or
 refuses with a page that says what to do. If that page lists files Start again did not create,
 such as a venue copied from a backup, it offers **Keep everything and stop** or **Move these files
 aside and finish Start again**, behind the administrator password you chose during setup. If the

@@ -665,7 +665,7 @@ and restore's 90–150 second wait. A1206 leaves the existing "strictly later th
 history the box can still read" check as it was; the owner retired it at ~10:52 the same day ("If
 later invoices exist then they are wrong, we should flag them up … but it doesn't stop us from
 issuing the correct series based on the current minute, just as long as that minute series doesn't
-exist in the database already"); it stays enforced until A1207 replaces it. The start-again
+exist in the database already"); A1207 replaced it (below). The start-again
 note, its floor, A1098's Move floor, A1099's damaged-name-record floor and A1131's counting of a
 held setup database's names are gone. A leftover note file is ignored; a plain `waitron.sh reset`
 deletes it. The trade-off the owner accepts: a name an abandoned attempt used is forgotten once
@@ -680,6 +680,30 @@ the earlier attempt's. A promotion has no wait
 is safe only if it comes long enough after a Start again, up to 120 seconds with each box 30
 seconds off; that a promotion comes that late is reasoning about how long joining as a standby
 takes, not measured.
+
+**DECIDED (owner, 2026-10-29 ~10:52; A1207): a new installation name needs only that its minute is
+not already in use.** The owner: "If later invoices exist then they are wrong, we should flag them
+up to be dealt with (how?) but it doesn't stop us from issuing the correct series based on the
+current minute, just as long as that minute series doesn't exist in the database already." Setup,
+restore and promotion name the box's current UTC minute after the second clock and (setup and
+restore) the 90–150 second wait, and refuse it only when a name in a history the box reads already
+holds that minute; a later name, a later record, the newest invoice's time and the backup's creation
+time no longer refuse or move it. Built with these defaults, open to the owner (A1207 plan, Q2–Q7):
+"in use" counts every history the choice read before (the database in hand, the module's own record
+of its picks, earlier abandoned attempts of the same setup, the database a restore replaces, the
+backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was
+before, so a promotion waits up to 150 seconds and a setup or restore's first choice is refused
+with "You can carry on from …" (Q3); the refusal has its own reason, `minute_in_use`, and words
+not yet approved (Q4); after a restore of a backup whose invoices are later than the box's time,
+payments stop until a clock confirmation, as for any clock behind the last sale (Q5); a later name
+held only in a database a restore replaces is forgotten (Q6); a box whose clock went back behind
+its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
+longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
+minute in the past; and, until the flag (A1207 Part 2, the owner's Q1) is built, a later name with
+no invoices under it and the series names are reported by nothing, while later invoices are listed
+by `clock.records_misdated` once a clock confirmation lifts the stop
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names its
+minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale").
 
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the

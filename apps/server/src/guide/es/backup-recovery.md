@@ -134,6 +134,10 @@ las condiciones de recuperación y elige **Comparar relojes**. Sigue las instruc
 y esperas; no hay ningún código de instalación que escribir. Elige **Recuperar** cuando se hayan
 elegido las nuevas series.
 
+Si la copia tiene ventas con fecha posterior a la hora del equipo, el equipo deja de cobrar al
+terminar la recuperación hasta que se confirme su hora: consulta
+[Cuando se paran los cobros por la hora](box-status.md#clock-behind).
+
 Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si una comprobación
 lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del intento
 conservado ni edites sus registros de recuperación.
