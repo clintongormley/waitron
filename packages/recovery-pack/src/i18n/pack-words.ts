@@ -29,6 +29,7 @@ type Words = {
   keyOnPack: (number: number, day: string) => string;
   keyOnUnreceivedPack: (number: number, day: string) => string;
   keyOnSheet: (keyName: string, day: string) => string;
+  spaceMark: string;
 };
 
 export const PACK_WORDS: Record<PackLocale, Words> = {
@@ -78,6 +79,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       `The key itself is on recovery pack ${number}, made on ${day}, which never reached a browser. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
     keyOnSheet: (keyName, day) =>
       `The key itself is on the recovery sheet whose key name is ${keyName}, made on ${day}. Keep that sheet.`,
+    spaceMark: "Each \u02fd is a space: type one space for it.",
   },
   es: {
     title: "Paquete de recuperación de Waitron",
@@ -130,5 +132,6 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       `La clave está en el paquete de recuperación ${number}, hecho el ${day}, que nunca llegó a un navegador. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
     keyOnSheet: (keyName, day) =>
       `La clave está en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}. Guarda esa hoja.`,
+    spaceMark: "Cada \u02fd es un espacio: escribe un espacio en su lugar.",
   },
 };

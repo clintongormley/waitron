@@ -387,6 +387,53 @@ describe("the secrets on the pages", () => {
     expect(pages[0]!.qr).toBeNull();
   });
 
+  it.each([
+    ["spaces between words", "correct horse battery staple"],
+    ["a space at each end and two in a row", " correct  horse battery staple "],
+  ])("draws a passphrase with %s so that every space shows", async (_name, backupKey) => {
+    const page: PackPart = {
+      kind: "archives",
+      state: "included",
+      page: {
+        title: "Archives",
+        rows: [],
+        secret: { label: "Backup key", text: backupKey, qr: true },
+        notes: [],
+      },
+    };
+    const bytes = await renderRecoveryPack(input({ parts: [page], file: { ...file, backupKey } }));
+    expect((await readRecoveryPackPdf(bytes)).backupKey).toBe(backupKey);
+    const pages = await rendered(bytes, 3);
+    expect(pages[1]!.qr).toBe(backupKey);
+    expect(pages[1]!.text).toContain(backupKey.replaceAll(" ", "\u02fd"));
+    expect(pages[1]!.text).toContain(PACK_WORDS.en.spaceMark);
+  });
+
+  it("draws other blank characters, and the mark itself, as their code points", async () => {
+    const backupKey = "no\u00a0break\u02fdmark tab\there";
+    const page: PackPart = {
+      kind: "archives",
+      state: "included",
+      page: {
+        title: "Archives",
+        rows: [],
+        secret: { label: "Key", text: backupKey, qr: true },
+        notes: [],
+      },
+    };
+    const bytes = await renderRecoveryPack(input({ parts: [page], file: { ...file, backupKey } }));
+    expect((await readRecoveryPackPdf(bytes)).backupKey).toBe(backupKey);
+    expect((await rendered(bytes))[1]!.text).toContain(
+      "no[U+A0]break[U+2FD]mark\u02fdtab[U+9]here",
+    );
+  });
+
+  it("draws a code with no space without the space mark or its note", async () => {
+    const pages = await rendered(await renderRecoveryPack(input()));
+    expect(pages[1]!.text).not.toContain("\u02fd");
+    expect(pages[1]!.text).not.toContain(PACK_WORDS.en.spaceMark);
+  });
+
   it("draws a page's rows and notes", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     expect(pages[1]!.text).toContain("Bucket copy");

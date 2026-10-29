@@ -84,6 +84,16 @@ describe("the recovery pack's attached file", () => {
     ).toThrow("Recovery pack file refused: size");
   });
 
+  it.each([
+    ["spaces between words", "correct horse battery staple"],
+    ["a leading and a trailing space", " correct horse battery staple "],
+    ["two spaces in a row", "correct  horse"],
+    ["a line break", "abc\ndef"],
+  ])("carries a backup key with %s exactly as it is", (_name, backupKey) => {
+    const bytes = buildRecoveryPackFile({ ...full, backupKey });
+    expect(parseRecoveryPackFile(bytes).backupKey).toBe(backupKey);
+  });
+
   it("refuses a missing key and an extra key", () => {
     const missing: Partial<RecoveryPackFile> = { ...full };
     delete missing.backupKey;
@@ -117,7 +127,6 @@ describe("the recovery pack's attached file", () => {
     ["bucketCode prefix alone", { bucketCode: "WAITRON-RECOVERY-KIT-1:" }],
     ["archiveCode without its prefix", { archiveCode: "WAITRON-RECOVERY-KIT-1:abc" }],
     ["backupKey empty", { backupKey: "" }],
-    ["backupKey with a line break", { backupKey: "abc\ndef" }],
     ["backupKey a number", { backupKey: 7 }],
     ["serverKey an array", { serverKey: [1] }],
     ["serverKey text", { serverKey: "key" }],

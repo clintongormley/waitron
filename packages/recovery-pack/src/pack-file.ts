@@ -36,6 +36,7 @@ export type RecoveryPackFile = {
   madeAt: string;
   bucketCode: string | null;
   archiveCode: string | null;
+  /** Carried exactly as the box holds it: a passphrase's spaces, even at either end, are part of it. */
   backupKey: string | null;
   /** The fiscal module's own key file, carried as it is; its reader checks it. */
   serverKey: Record<string, unknown> | null;
@@ -136,7 +137,7 @@ function checked(value: unknown): RecoveryPackFile {
     !code(value.archiveCode, ARCHIVE_CODE_PREFIX) ||
     !(
       value.backupKey === null ||
-      (label(value.backupKey) && !/\s/.test(value.backupKey as string))
+      (typeof value.backupKey === "string" && value.backupKey !== "")
     ) ||
     !(value.serverKey === null || plainObject(value.serverKey)) ||
     !(value.serverKeyName === null || label(value.serverKeyName)) ||

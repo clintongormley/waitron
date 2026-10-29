@@ -79,6 +79,12 @@ function dates(locale: PackLocale, timeZone: string) {
   };
 }
 
+const SPACE_MARK = "\u02fd";
+
+function codePoint(c: string): string {
+  return `[U+${c.codePointAt(0)!.toString(16).toUpperCase()}]`;
+}
+
 async function digestOf(bytes: Uint8Array): Promise<string> {
   const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", new Uint8Array(bytes)));
   return "sha256-v1:" + Array.from(hash, (n) => n.toString(16).padStart(2, "0")).join("");
@@ -101,11 +107,9 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const fontBytes = await input.loadFont();
   const font = create(fontBytes as never) as Font;
   const safe = (text: string) =>
-    Array.from(text, (c) =>
-      font.hasGlyphForCodePoint(c.codePointAt(0)!)
-        ? c
-        : `[U+${c.codePointAt(0)!.toString(16).toUpperCase()}]`,
-    ).join("");
+    Array.from(text, (c) => (font.hasGlyphForCodePoint(c.codePointAt(0)!) ? c : codePoint(c))).join(
+      "",
+    );
 
   const pageOf = new Map<PackPart, number>();
   for (const part of parts)
@@ -240,6 +244,12 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf.rect(x, y, QR_SIZE, QR_SIZE).lineWidth(0.5).stroke(LINE);
   };
   const secret = (value: NonNullable<RecoveryPackPage["secret"]>) => {
+    // A drawn space cannot be counted, and one at either end cannot be seen; a passphrase may
+    // hold either. The QR code still carries the text itself.
+    const spaced = value.text.includes(" ");
+    const shown = Array.from(value.text, (c) =>
+      c === " " ? SPACE_MARK : c === SPACE_MARK || /\s/.test(c) ? codePoint(c) : c,
+    ).join("");
     const top = pdf.y;
     const textWidth = width() - 24 - QR_SIZE - 16;
     pdf
@@ -250,10 +260,17 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf
       .fillColor("black")
       .fontSize(10)
-      .text(safe(value.text), LEFT + 12, pdf.y, {
+      .text(safe(shown), LEFT + 12, pdf.y, {
         width: textWidth,
         lineGap: 3,
       });
+    if (spaced) {
+      pdf.y += 4;
+      pdf
+        .fillColor(GREY)
+        .fontSize(8)
+        .text(safe(words.spaceMark), LEFT + 12, pdf.y, { width: textWidth });
+    }
     qr(value.text, LEFT + width() - 12 - QR_SIZE, top + 12);
     const bottom = Math.max(pdf.y, top + 12 + QR_SIZE) + 12;
     pdf
