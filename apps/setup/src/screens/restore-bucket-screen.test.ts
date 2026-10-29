@@ -4,6 +4,14 @@ import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
 import type { BucketRestoreRequestDetail } from "../events.js";
 import { SetupRestoreBucketScreen } from "./restore-bucket-screen.js";
+import {
+  BUCKET_CODE,
+  choose,
+  damaged,
+  heldFile,
+  plainPdf,
+  recoveryPackPdf,
+} from "../../test/recovery-pack-pdf.js";
 
 afterEach(cleanupWidgets);
 const q = <T extends HTMLElement>(el: SetupRestoreBucketScreen, selector: string): T | null =>
@@ -263,6 +271,82 @@ describe("SetupRestoreBucketScreen", () => {
         "WAITRON-RECOVERY-KIT-1:fromfile\n",
       ),
     );
+  });
+
+  it("reads the bucket code out of a chosen recovery pack PDF and sends the code, not the PDF", async () => {
+    const { el, host } = await mountWidget<SetupRestoreBucketScreen>(
+      "setup-restore-bucket-screen",
+      {},
+    );
+    choose(q<HTMLInputElement>(el, "[data-test=kit-file]")!, await recoveryPackPdf(BUCKET_CODE));
+    await vi.waitFor(() =>
+      expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(BUCKET_CODE),
+    );
+    tick(el, "[data-test=acknowledge]");
+    await el.updateComplete;
+    const outcome = requested(host);
+    q(el, "[data-test=restore]")!.click();
+    await expect(outcome).resolves.toMatchObject({ kit: BUCKET_CODE });
+    expect(fieldMessages(el)).toEqual([]);
+  });
+
+  it.each([
+    [
+      "a pack made with no bucket copy",
+      () => recoveryPackPdf(null),
+      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+    ],
+    ["a PDF that is not a pack", plainPdf, "This PDF is not a Waitron recovery pack."],
+    [
+      "a pack whose attached file was changed",
+      async () => damaged(await recoveryPackPdf(BUCKET_CODE)),
+      "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
+    ],
+  ])(
+    "says so under the file field for %s and keeps the kit already there",
+    async (_, pdf, said) => {
+      const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+      paste(el, "WAITRON-RECOVERY-KIT-1:kept");
+      const input = q<HTMLInputElement>(el, "[data-test=kit-file]")!;
+      choose(input, await pdf());
+      await vi.waitFor(() => expect(q(el, "#kit-file-error")?.textContent).toBe(said));
+      expect(input.getAttribute("aria-describedby")).toBe("kit-file-error");
+      expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
+        "WAITRON-RECOVERY-KIT-1:kept",
+      );
+      paste(el, "WAITRON-RECOVERY-KIT-1:typed");
+      await el.updateComplete;
+      expect(q(el, "#kit-file-error")).toBeNull();
+    },
+  );
+
+  it("keeps what was typed when a file chosen before it finishes reading later", async () => {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    const late = heldFile("WAITRON-RECOVERY-KIT-1:late");
+    choose(q<HTMLInputElement>(el, "[data-test=kit-file]")!, late.file);
+    paste(el, "WAITRON-RECOVERY-KIT-1:typed");
+    await late.release();
+    await el.updateComplete;
+    expect(q<HTMLTextAreaElement>(el, "[data-test=kit]")!.value).toBe(
+      "WAITRON-RECOVERY-KIT-1:typed",
+    );
+  });
+
+  it("names the field for a pack or a kit, in English and Spanish", async () => {
+    const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {});
+    expect(q(el, "[data-test=kit-file]")!.closest("label")!.textContent).toContain(
+      "Recovery pack or kit file",
+    );
+    setLocale("es-ES");
+    try {
+      el.requestUpdate();
+      await el.updateComplete;
+      expect(q(el, "[data-test=kit-file]")!.closest("label")!.textContent).toContain(
+        "Paquete de recuperación o archivo del kit",
+      );
+    } finally {
+      setLocale("en-GB");
+    }
   });
 
   it("when the old box looks alive, says when it last wrote and requires confirming it is gone", async () => {

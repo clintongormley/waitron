@@ -411,6 +411,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../../packages/recovery-pack
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -430,6 +433,9 @@ importers:
       axe-core:
         specifier: ^4.14.0
         version: 4.14.0
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
       playwright:
         specifier: ^1.64.1
         version: 1.64.1

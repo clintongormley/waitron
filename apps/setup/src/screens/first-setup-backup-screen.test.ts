@@ -18,6 +18,14 @@ import {
   moduleAnswer,
   recoveryEntry,
 } from "../../test/first-setup-backup-browser.js";
+import {
+  BUCKET_CODE,
+  choose,
+  damaged,
+  heldFile,
+  plainPdf,
+  recoveryPackPdf,
+} from "../../test/recovery-pack-pdf.js";
 
 afterEach(() => {
   cleanupWidgets();
@@ -207,6 +215,80 @@ it("does not carry bucket secrets across a source change", async () => {
   await kit.updateComplete;
   expect(kit.shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!.value).toBe("");
   await fill(el, "kit", "other-kit");
+});
+
+async function bucketSource(el: FirstSetupBackupScreen): Promise<void> {
+  q(el, "source").dispatchEvent(new CustomEvent("wt-change", { detail: { value: "bucket" } }));
+  await el.updateComplete;
+}
+function kitValue(el: FirstSetupBackupScreen): string {
+  return q<LitElement>(el, "kit").shadowRoot!.querySelector<HTMLTextAreaElement>("textarea")!.value;
+}
+
+it("fills the kit from a chosen recovery pack PDF's attached file and sends that code", async () => {
+  const { el, calls } = await mount();
+  await bucketSource(el);
+  choose(q<HTMLInputElement>(el, "kit-file"), await recoveryPackPdf(BUCKET_CODE));
+  await expect.poll(() => kitValue(el)).toBe(BUCKET_CODE);
+  await key(el);
+  for (const name of ["offline", "sole"]) await userEvent.click(q<HTMLInputElement>(el, name));
+  await el.updateComplete;
+  await click(el, "prove");
+  await expect
+    .poll(() => calls.find((c) => c.action === "open")?.body)
+    .toMatchObject({
+      source: { kind: "bucket", kit: BUCKET_CODE, environment: "production" },
+    });
+  expect(q(el, "kit-file-error")).toBeNull();
+});
+
+it.each([
+  [
+    "a pack made with no bucket copy",
+    () => recoveryPackPdf(null),
+    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+  ],
+  ["a PDF that is not a pack", plainPdf, "This PDF is not a Waitron recovery pack."],
+  [
+    "a pack whose attached file was changed",
+    async () => damaged(await recoveryPackPdf(BUCKET_CODE)),
+    "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
+  ],
+])("says so under the pack field for %s and keeps the kit already there", async (_, pdf, said) => {
+  const { el } = await mount();
+  await bucketSource(el);
+  await fill(el, "kit", "pasted-kit");
+  const input = q<HTMLInputElement>(el, "kit-file");
+  choose(input, await pdf());
+  await expect.poll(() => q(el, "kit-file-error")?.textContent).toBe(said);
+  expect(input.getAttribute("aria-describedby")).toBe("repair-kit-file-error");
+  expect(input.getAttribute("aria-invalid")).toBe("true");
+  expect(kitValue(el)).toBe("pasted-kit");
+  await fill(el, "kit", "typed-kit");
+  await el.updateComplete;
+  expect(q(el, "kit-file-error")).toBeNull();
+});
+
+it("keeps what was typed when a file chosen before it finishes reading later", async () => {
+  const { el } = await mount();
+  await bucketSource(el);
+  const late = heldFile("WAITRON-RECOVERY-KIT-1:late");
+  choose(q<HTMLInputElement>(el, "kit-file"), late.file);
+  await fill(el, "kit", "typed-kit");
+  await late.release();
+  await el.updateComplete;
+  expect(kitValue(el)).toBe("typed-kit");
+});
+
+it.each([
+  ["en-GB", "Recovery pack or kit file"],
+  ["es-ES", "Paquete de recuperación o archivo del kit"],
+] as const)("labels the pack field in %s", async (locale, label) => {
+  setLocale(locale);
+  const { el } = await mount();
+  await bucketSource(el);
+  const input = q<HTMLInputElement>(el, "kit-file");
+  expect(input.labels![0]!.textContent!.trim()).toBe(label);
 });
 
 it("disables completion after invalid module entry until its fields are corrected", async () => {

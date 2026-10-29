@@ -5,6 +5,16 @@ export const MAX_PACK_FILE = 16 * 1024;
 export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-1:";
 export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
 
+const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
+
+/**
+ * True when the bytes start `%PDF-`; a kit or pack text file never does. Kept here, apart from
+ * the PDF reader, so a screen can sniff a chosen file without loading pdf-lib.
+ */
+export function looksLikePdf(bytes: Uint8Array): boolean {
+  return PDF_MAGIC.every((byte, i) => bytes[i] === byte);
+}
+
 export type RecoveryPackFileRefusal =
   "size" | "encoding" | "shape" | "noncanonical" | "not_a_pack" | "carrier" | "digest";
 

@@ -15,6 +15,7 @@ import {
 import { SetupApi, type ApiError, type RecoveryBackupPreview } from "../api/client.js";
 import type { RecoveryEntryField } from "./recovery-allocation.js";
 import { SetupRecoveryCopy } from "./recovery-copy.js";
+import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { t, format } from "../i18n/t.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { oldBoxQuestion } from "./old-box-question.js";
@@ -91,6 +92,7 @@ export class SetupRestoreBucketScreen extends LitElement {
   @state() private previewField?: "kit" | "environment";
   @state() private previewLiveSince?: string;
   @state() private previewLiveUnknown = false;
+  @state() private packRefusal?: PackFileRefusal;
   #baseline?: BucketForm;
   #scope?: DraftScope<BucketForm>;
   #fileRead = 0;
@@ -120,6 +122,7 @@ export class SetupRestoreBucketScreen extends LitElement {
       equal: (a, b) => a.kit === b.kit && a.environment === b.environment,
       restore: (form) => {
         ++this.#fileRead;
+        this.packRefusal = undefined;
         this.kit = form.kit;
         this.environment = form.environment;
         this.acknowledged = false;
@@ -215,6 +218,7 @@ export class SetupRestoreBucketScreen extends LitElement {
 
   #setKit(kit: string): void {
     ++this.#fileRead;
+    this.packRefusal = undefined;
     this.previewLiveSince = undefined;
     this.previewLiveUnknown = false;
     this.oldBoxGone = false;
@@ -278,8 +282,10 @@ export class SetupRestoreBucketScreen extends LitElement {
     const file = (event.currentTarget as HTMLInputElement).files?.[0];
     const read = ++this.#fileRead;
     if (file === undefined) return;
-    const kit = await file.text();
-    if (this.isConnected && read === this.#fileRead) this.#setKit(kit);
+    const chosen = await bucketCodeFromFile(file);
+    if (!this.isConnected || read !== this.#fileRead) return;
+    if ("refused" in chosen) this.packRefusal = chosen.refused;
+    else this.#setKit(chosen.text);
   }
 
   #renderVenue(): TemplateResult | typeof nothing {
@@ -324,6 +330,8 @@ export class SetupRestoreBucketScreen extends LitElement {
           : refused === "kit"
             ? this.errorMessage
             : undefined;
+    const packError =
+      this.packRefusal === undefined ? undefined : t(`restore_bucket.pack_${this.packRefusal}`);
     const environmentError =
       this.previewField === "environment"
         ? t("restore.preview_environment_error")
@@ -353,9 +361,16 @@ export class SetupRestoreBucketScreen extends LitElement {
           name="recovery-kit-file"
           type="file"
           data-test="kit-file"
+          aria-invalid=${packError === undefined ? "false" : "true"}
+          aria-describedby=${packError === undefined ? nothing : "kit-file-error"}
           @change=${(e: Event) => void this.#readFile(e)}
         />
       </label>
+      ${
+        packError === undefined
+          ? nothing
+          : html`<p class="error" id="kit-file-error">${packError}</p>`
+      }
       <wt-textarea
         class="field"
         label=${t("restore_bucket.kit")}

@@ -9,6 +9,7 @@ import {
   PDFString,
 } from "pdf-lib";
 import {
+  looksLikePdf,
   MAX_PACK_FILE,
   PACK_ATTACHMENT,
   parseRecoveryPackFile,
@@ -21,13 +22,6 @@ export const MAX_PACK_PDF = 8 * 1024 * 1024;
 
 function refuse(reason: RecoveryPackFileRefusal): never {
   throw new RecoveryPackFileError(reason);
-}
-
-const PDF_MAGIC = [0x25, 0x50, 0x44, 0x46, 0x2d];
-
-/** True when the bytes start `%PDF-`; a kit or pack text file never does. */
-export function looksLikePdf(bytes: Uint8Array): boolean {
-  return PDF_MAGIC.every((byte, i) => bytes[i] === byte);
 }
 
 function text(value: unknown): string {

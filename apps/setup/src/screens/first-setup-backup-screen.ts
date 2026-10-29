@@ -19,6 +19,7 @@ import type {
 } from "../api/first-setup-types.js";
 import { FirstSetupBackupSession, keepLease, leaseEnded } from "../first-setup-backup-session.js";
 import { SetupRecoveryAllocation } from "./recovery-allocation.js";
+import { bucketCodeFromFile, type PackFileRefusal } from "../pack-file-input.js";
 import { backupRepairStrings } from "../i18n/backup-repair.js";
 import { LocaleChangeController } from "../i18n/locale-controller.js";
 import { currentLocale } from "../i18n/t.js";
@@ -110,6 +111,7 @@ export class FirstSetupBackupScreen extends LitElement {
   @state() private draft = empty();
   @state() private busy = false;
   @state() private attempted = false;
+  @state() private packRefusal?: PackFileRefusal;
   @state() private resumed = false;
   @state() private allocationInvalid = false;
   @state() private restarting = false;
@@ -119,6 +121,7 @@ export class FirstSetupBackupScreen extends LitElement {
   @state() private cloud?: CloudRecoveryView;
   @state() private ended?: { kind: "stopped" } | { kind: "discarded"; at: string };
   #generation = 0;
+  #kitFileRead = 0;
   #observation?: Pick<FirstSetupInspection, "inspectionId" | "revision" | "ownerGeneration">;
   #scope?: DraftScope<Draft>;
   #session?: FirstSetupBackupSession;
@@ -312,6 +315,15 @@ export class FirstSetupBackupScreen extends LitElement {
       if (this.isConnected && generation === this.#generation) this.busy = false;
     }
   }
+  async #readKitFile(file: File | undefined): Promise<void> {
+    const read = ++this.#kitFileRead;
+    const generation = this.#generation;
+    if (file === undefined) return;
+    const chosen = await bucketCodeFromFile(file);
+    if (!this.isConnected || read !== this.#kitFileRead || generation !== this.#generation) return;
+    if ("refused" in chosen) this.packRefusal = chosen.refused;
+    else this.#edit("kit", chosen.text);
+  }
   #edit<K extends keyof Draft>(field: K, value: Draft[K]): void {
     if (this.busy || this.restarting) return;
     if (["source", "environment", "module"].includes(field)) {
@@ -330,6 +342,8 @@ export class FirstSetupBackupScreen extends LitElement {
       this.attempted = false;
       if (authenticated) void this.#readStatus();
     } else this.draft = { ...this.draft, [field]: value };
+    if (field === "kit") ++this.#kitFileRead;
+    this.packRefusal = undefined;
     this.error = undefined;
     this.#scope?.changed();
   }
@@ -579,6 +593,14 @@ export class FirstSetupBackupScreen extends LitElement {
       </section>`;
     }
     const disabled = this.busy || !this.status || (this.attempted && this.#invalidDraft);
+    const packError =
+      this.packRefusal === undefined
+        ? undefined
+        : {
+            no_code: s.packNoCode,
+            not_a_pack: s.packNotAPack,
+            damaged: s.packDamaged,
+          }[this.packRefusal];
     return html`<section
       data-test="screen-first-backup"
       @keydown=${(event: KeyboardEvent) => {
@@ -718,20 +740,30 @@ export class FirstSetupBackupScreen extends LitElement {
                         }}
                       ></wt-input>`
                   : this.draft.source === "bucket"
-                    ? html`<wt-textarea
-                        class="field"
-                        data-test="kit"
-                        name="bucket-recovery-kit"
-                        label=${s.kit}
-                        required
-                        .value=${this.draft.kit}
-                        ?disabled=${this.busy}
-                        .error=${this.#fieldError("kit")}
-                        @wt-change=${(event: CustomEvent<{ value: string }>) => {
-                          event.stopPropagation();
-                          this.#edit("kit", event.detail.value);
-                        }}
-                      ></wt-textarea>`
+                    ? html`<label for="repair-kit-file">${s.kitFile}</label
+                        ><input
+                          id="repair-kit-file"
+                          data-test="kit-file"
+                          name="bucket-recovery-pack-file"
+                          type="file"
+                          ?disabled=${this.busy}
+                          aria-invalid=${packError === undefined ? "false" : "true"}
+                          aria-describedby=${packError === undefined ? nothing : "repair-kit-file-error"}
+                          @change=${(event: Event) => void this.#readKitFile((event.currentTarget as HTMLInputElement).files?.[0])}
+                        />${packError === undefined ? nothing : html`<p id="repair-kit-file-error" data-test="kit-file-error" class="error">${packError}</p>`}<wt-textarea
+                          class="field"
+                          data-test="kit"
+                          name="bucket-recovery-kit"
+                          label=${s.kit}
+                          required
+                          .value=${this.draft.kit}
+                          ?disabled=${this.busy}
+                          .error=${this.#fieldError("kit")}
+                          @wt-change=${(event: CustomEvent<{ value: string }>) => {
+                            event.stopPropagation();
+                            this.#edit("kit", event.detail.value);
+                          }}
+                        ></wt-textarea>`
                     : html`<wt-button
                           data-test="cloud-start"
                           ?disabled=${this.busy}
