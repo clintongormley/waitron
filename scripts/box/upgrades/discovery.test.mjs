@@ -99,6 +99,7 @@ describe("bounded release discovery without application", () => {
       });
       const pending = discoverRelease(h.input, h.deps, h.signal);
       for (let attempt = 0; attempt < 3; attempt++) {
+        await vi.waitUntil(() => attempts === attempt + 1 && vi.getTimerCount() === 1);
         await vi.advanceTimersByTimeAsync(30_000);
         await timerTurn();
       }
