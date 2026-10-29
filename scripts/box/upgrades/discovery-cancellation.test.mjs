@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { spawnSync } from "node:child_process";
+import { URL } from "node:url";
 
 const discoveryUrl = new URL("./discovery.mjs", import.meta.url).href;
 
