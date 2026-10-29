@@ -1112,10 +1112,15 @@ with the floor read. The flag describes the party; it makes no claim about a dis
 member's. A touch or pen tap on a table, and Enter or Space on a focused one, send `wt-table-tap` at
 once; a mouse click waits 300 ms and sends it unless a second click on the same table makes a
 double-click, which sends `wt-table-details`. A second tap on a different table counts as a tap on
-it. A press held 500 ms marks its table (`data-held`: each shape's edge in `--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a 1 px `--wt-color-primary` line inside them,
-plus `--wt-selected-ring` outside a single table's edge, or once around a merge's whole box, which
-is then raised above a table touching it) and its release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and sends
-nothing. A held table that is dragged is drawn moved by whole squares, the step held so every member's
+it. A press held 500 ms marks its table `data-held`. Each of its shapes' edges is drawn in
+`--wt-color-primary`, except that a `clearing` outline keeps its `--wt-color-warning` dashes with a
+1 px `--wt-color-primary` line inside them. `--wt-selected-ring` is drawn `--wt-focus-offset` outside
+a single table's edge, or once around a merge's whole box, and the held table is drawn above every
+table that is neither held nor showing keyboard focus. When the held table, single or merged, also
+shows keyboard focus, its focus ring moves out to twice `--wt-focus-offset`, outside the selected
+ring; the two stay apart only while the selected ring is no wider than `--wt-focus-offset`. The
+press's release sends `wt-table-details`; a second finger or a cancelled pointer clears the mark and
+sends nothing. A held table that is dragged is drawn moved by whole squares, the step held so every member's
 corner stays within 0–999 (`groupStep`, as the server holds a move), and its release clears the
 mark and sends `wt-table-drag-end` instead: the held table's new `x`
 and `y` and `targetId`, the `data-table-id` of the table marked `data-drop-target` at release, else
