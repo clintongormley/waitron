@@ -2,6 +2,7 @@ import { closingEditsForTest } from "./testing/party-close-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -143,7 +144,8 @@ function written() {
 }
 
 /** A party seated at a fresh table through `app`, with `basket` sent to the kitchen on its main
- * bill. */
+ * bill through `app`. A basket with a line of several dishes is placed in-process instead, with
+ * each line one stored row. */
 async function seated(app: Hono, basket: Basket) {
   const table = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, { label: `M-${randomUUID().slice(0, 8)}`, zoneId: tables.zoneId }),
@@ -155,7 +157,17 @@ async function seated(app: Hono, basket: Basket) {
   await inTx(venue, (tx) =>
     writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.adminId),
   );
-  if (Object.keys(basket).length > 0) {
+  if (Object.values(basket).some((quantity) => quantity > 1)) {
+    await inTx(venue, (tx) =>
+      placeGroupedRound(
+        tx,
+        venue.cfg,
+        { partyId, tabId },
+        { lines: linesOf(tables, basket), release: "fire" },
+        venue.operatorId,
+      ),
+    );
+  } else if (Object.keys(basket).length > 0) {
     const ordered = await send(app, venue.cookie, "POST", `/api/parties/${partyId}/groups`, {
       submissionId: randomUUID(),
       expectedPartyRevision: seat.json.revision,

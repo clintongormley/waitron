@@ -99,7 +99,7 @@ async function fixture({
         ...(extras ? { olives: 2 } : {}),
       },
     ],
-    { release: held ? "hold" : "fire" },
+    { release: held ? "hold" : "fire", shape: "grouped" },
   );
   const at = new Date(Date.now() - 30 * 60_000).toISOString();
   await inTx(venue, async (tx) => {

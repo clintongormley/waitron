@@ -1,24 +1,25 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
+  adjustmentLines,
   approves,
   evaluateCancel,
   evaluateComp,
+  floorAllowance,
   findAdjustmentReason,
   isPercentBp,
   percentReduction,
   policySnapshotOf,
   readAdjustmentSettings,
-  readReasonItemShares,
-  readReasonTotals,
-  readWholeLineReductions,
+  readReasonStanding,
   recordAdjustment,
-  shareBp,
   spreadBillDiscount,
+  standingOff,
   type AdjustmentAction,
   type AdjustmentReason,
   type AdjustmentSplit,
   type AdjustmentStage,
   type AdjustmentVerdict,
+  type DishPrice,
   type Approval,
   type CompAction,
   type PricedRow,
@@ -55,6 +56,7 @@ import {
   divideDecimal,
   MONEY_SCALE,
   multiplyDecimal,
+  QUANTITY_SCALE,
   subtractDecimal,
   sumDecimals,
   thousandthsToDecimal,
@@ -83,14 +85,18 @@ import {
   partyAfterEdit,
   quantityOfLine,
   type OrderAttendance,
+  readLockedLines,
   readOrderRevision,
   refusePaymentInFlight,
   removeFromLine,
+  removePortions,
   splitLinesWithinOrder,
   type SplitRow,
+  type StoredOrderLine,
   type VoidTarget,
 } from "./working-order.js";
 import { firedQuantity, type TicketState } from "./kitchen-print.js";
+import { readPortionBindings, readWholePortionLines } from "./order-portions.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import "./errors.js";
 
@@ -103,6 +109,8 @@ export interface AdjustmentAsk {
   expectedRevision: number;
   /** The dish, or the extra, the action names; null for a discount on the whole bill. */
   lineId: string | null;
+  /** Every portion line of one till row, `lineId` among them (plan D31). */
+  lineIds?: string[];
   reasonId: string;
   action: AdjustmentAction;
   /** How much of the line; absent for all of it. An extra is taken only whole. */
@@ -153,8 +161,12 @@ interface Row {
   id: string;
   lineNo: number;
   parentLineId: string | null;
+  productId: string | null;
+  extraListId: string | null;
   name: string;
   variantName: string | null;
+  note: string | null;
+  courseId: string | null;
   quantity: number;
   priceQuantity: number;
   unit: number;
@@ -199,8 +211,18 @@ interface Plan {
   covered: number | null;
   /** A cancel's quantity taken off the dish, null for all of it. */
   removed: number | null;
+  /** On a row, the dish portions a cancel takes whole. */
+  removedPortions: Row[] | null;
   carve: Carve | null;
+  /** The prices the action sets, on the line, or on a row's stand-in lines (plan D32). */
   changes: Change[];
+  /** What is written: `changes`, or on a row, each of its portions' share of them. */
+  writes: Change[];
+  /** On a row, every line of each stand-in line the action prices, taken or not: each gets its list
+   * price, as one grouped line does before part of it is carved off (plan D32). */
+  stamped: string[];
+  /** On a row, the split one grouped line's second price would record (plan D33). */
+  rowSplits: AdjustmentSplit[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
   compedExtras: string[];
   reduction: Decimal;
@@ -231,8 +253,12 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      extraListId: workingOrderLines.extraListId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
+      note: workingOrderLines.note,
+      courseId: workingOrderLines.courseId,
       quantity: workingOrderLines.quantity,
       priceQuantity: workingOrderLines.priceQuantity,
       unit: workingOrderLines.unitPriceGross,
@@ -393,6 +419,338 @@ function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
   });
 }
 
+/**
+ * A whole-bill discount over the rows the bill files (plan D29): bound portions grouped as
+ * {@link readLockedLines} groups them for filing, each group spread as one line at its first member's
+ * line number, then the group's rows handed to its portions in ordinal order, the higher price first.
+ * A group of bound portions left at two prices pushes onto `splits` the split one grouped line would
+ * record (plan D33): from its first portion to its first portion at the lower price. A bill holding
+ * no bound portion is spread line by line.
+ */
+async function spreadOverFiledRows(
+  tx: Transaction,
+  orderId: string,
+  subjects: readonly Subject[],
+  discount: Decimal,
+  splits: AdjustmentSplit[],
+): Promise<Change[]> {
+  const bindings = await readPortionBindings(
+    tx,
+    subjects.map(({ row }) => row.id),
+  );
+  if (bindings.size === 0) return spread(subjects, discount);
+  const subjectOf = new Map(subjects.map((subject) => [subject.row.id, subject]));
+  const groups = (await readLockedLines(tx, orderId)).map(({ identity }) =>
+    (identity.lineIds ?? [identity.id]).map((id) => subjectOf.get(id)!),
+  );
+  const results = spreadBillDiscount(
+    groups.map((members) => {
+      const { row, exact } = members[0]!;
+      const quantity = members.reduce((sum, member) => sum + member.quantity, 0);
+      return {
+        lineId: row.id,
+        addedOrder: row.lineNo,
+        gross: gross(row, quantity),
+        quantity: thousandthsToDecimal(quantity),
+        priceQuantity: thousandthsToDecimal(row.priceQuantity),
+        grossUnit: centsToDecimal(row.unit),
+        exact,
+      };
+    }),
+    discount,
+  );
+  const ordinal = (subject: Subject) => bindings.get(subject.row.id)?.ordinal ?? 0;
+  return groups.flatMap((members) => {
+    const priced = results.get(members[0]!.row.id)!.rows;
+    const handed = handOut(
+      [...members].sort((a, b) => ordinal(a) - ordinal(b)),
+      priced,
+    );
+    const lower = priced[1]?.unitGross;
+    const second =
+      lower === undefined
+        ? undefined
+        : handed.find(({ rows }) => compareDecimal(rows[0]!.unitGross, lower) === 0);
+    if (second !== undefined) splits.push({ from: handed[0]!.row.id, to: second.row.id });
+    return handed.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0);
+  });
+}
+
+/** One line's priced rows handed to the lines standing for it, in the order given, each taking
+ * its own quantity from the rows that are left, the higher price first. */
+function handOut(
+  members: readonly Pick<Subject, "row" | "quantity" | "carved">[],
+  priced: readonly PricedRow[],
+): Change[] {
+  const pieces = priced.map((piece) => ({ ...piece, left: decimalToThousandths(piece.quantity) }));
+  return members.map(({ row, quantity, carved }) => {
+    const rows: PricedRow[] = [];
+    const cuts: Decimal[] = [];
+    for (let need = quantity; need > 0;) {
+      const piece = pieces.find((candidate) => candidate.left > 0)!;
+      const take = Math.min(need, piece.left);
+      piece.left -= take;
+      need -= take;
+      rows.push({ quantity: thousandthsToDecimal(take), unitGross: piece.unitGross });
+      cuts.push(
+        subtractDecimal(gross(row, take), gross(row, take, decimalToCents(piece.unitGross))),
+      );
+    }
+    return { row, carved, rows, reduction: sumDecimals(cuts) };
+  });
+}
+
+/**
+ * The dish lines a part of a row takes (plan D32): the last `covered` portions by line number not
+ * already cancelled, so the row's first portion, which the record names, stays while any of the row
+ * does. Else `adjustment.quantity_invalid`, as more than one grouped line holds is.
+ */
+async function takenPortions(
+  tx: Transaction,
+  orderId: string,
+  dish: Row,
+  members: readonly Row[],
+  covered: number,
+): Promise<Set<string>> {
+  const cancelled = await readLineCancellations(
+    tx,
+    members.map(({ id }) => id),
+  );
+  const active = members.filter(({ id }) => (cancelled.get(id) ?? 0) === 0);
+  const count = covered / 1000;
+  if (count > active.length) {
+    throw new AppError("adjustment.quantity_invalid", {
+      workingOrderId: orderId,
+      lineNo: dish.lineNo,
+      quantity: thousandthsToDecimal(covered),
+    });
+  }
+  return new Set(active.slice(active.length - count).map(({ id }) => id));
+}
+
+/** A row of identical portions as one stand-in line (plan D32), and what it stands for. */
+interface StandIn {
+  /** The stand-in dish: the first portion's id, prices and line number, the members' quantity. */
+  dish: Row;
+  /** What the request acts on: the stand-in dish, or one of its stand-in extras (plan D34). */
+  line: Row;
+  /** The bill's rows with the members and their extras replaced by the stand-in lines. */
+  view: Row[];
+  /** Every member's dish and extras lines. */
+  lines: Row[];
+  /** Each stand-in line's id, and the lines it stands for, in line order. */
+  membersOf: Map<string, Row[]>;
+}
+
+const STAGE_RANK: Record<AdjustmentStage, number> = { unsent: 0, held: 1, fired: 2, served: 3 };
+
+/** Object keys sorted, so stored descriptions in a different key order compare equal. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** What a filed group shows, its quantity, cohort and position left out; a list price equal to the
+ * price reads as none, as filing drops it. */
+function groupFields({ identity, locked }: StoredOrderLine): unknown {
+  const { id, lineIds, portionIds, listUnitGross, ...kept } = identity;
+  void id;
+  void lineIds;
+  void portionIds;
+  return {
+    ...kept,
+    listUnitGross:
+      listUnitGross !== null && compareDecimal(listUnitGross, decimal(locked.grossUnitPrice)) !== 0
+        ? listUnitGross
+        : null,
+    locked: { ...locked, quantity: null, parentLineNo: null },
+  };
+}
+
+/** The filed group holding dish line `lineId`, compared without its cohort: its fields and each of
+ * its extras' fields and quantity per dish. */
+function cohortFreeKey(groups: readonly StoredOrderLine[], lineId: string): string {
+  const at = groups.findIndex(
+    (group) => group.locked.parentLineNo == null && (group.identity.lineIds ?? []).includes(lineId),
+  );
+  const dish = groups[at]!;
+  const extras = groups
+    .filter((group) => group.locked.parentLineNo === at + 1)
+    .map((extra) =>
+      canonical([
+        groupFields(extra),
+        divideDecimal(
+          decimal(extra.locked.quantity),
+          decimal(dish.locked.quantity),
+          QUANTITY_SCALE,
+        ),
+      ]),
+    )
+    .sort();
+  return canonical([groupFields(dish), extras]);
+}
+
+/**
+ * The till row `ask.lineIds` names as one stand-in line, else `management.request_invalid` on
+ * `lineIds`: each member a dish line of this bill bound to a whole, unmeasured portion, every one
+ * of them in one filed group but for the cohort, with one note and one course (plan D31) — or one
+ * extra of each such dish, the same extra on every one (D34). The stand-in's extras are the
+ * members' extras, one per extra, each at the first member's extra's line number; its served
+ * quantity is the members' sum and its kitchen facts the furthest member's (D32).
+ */
+async function standInRow(
+  tx: Transaction,
+  orderId: string,
+  ask: Pick<AdjustmentAsk, "lineId" | "lineIds" | "action">,
+  rows: readonly Row[],
+): Promise<StandIn> {
+  const ids = ask.lineIds!;
+  // Every refusal here is a fault in Waitron: the till names only the rows it grouped.
+  if (ids.length < 2 || new Set(ids).size !== ids.length || !ids.includes(ask.lineId!)) {
+    throw invalid("lineIds");
+  }
+  const named = ids.map((id) => rows.find((row) => row.id === id));
+  if (named.some((one) => one === undefined)) throw invalid("lineIds");
+  const extrasRow = named[0]!.parentLineId !== null;
+  // An extra is cancelled on its own only from its own line.
+  if (extrasRow && ask.action === "cancel") throw invalid("lineIds");
+  if (named.some((one) => (one!.parentLineId !== null) !== extrasRow)) throw invalid("lineIds");
+  const dishIds = extrasRow ? named.map((one) => one!.parentLineId!) : ids;
+  if (new Set(dishIds).size !== dishIds.length) throw invalid("lineIds");
+  const members = dishIds.map((id) => rows.find((row) => row.id === id)!);
+  const whole = await readWholePortionLines(tx, dishIds);
+  if (dishIds.some((id) => !whole.has(id))) throw invalid("lineIds");
+  const groups = await readLockedLines(tx, orderId);
+  if (new Set(dishIds.map((id) => cohortFreeKey(groups, id))).size !== 1) {
+    throw invalid("lineIds");
+  }
+  // Filing groups dishes whatever their note or course; the till's row does not.
+  if (new Set(members.map((member) => canonical([member.note, member.courseId]))).size !== 1) {
+    throw invalid("lineIds");
+  }
+
+  const dishes = members.sort((a, b) => a.lineNo - b.lineNo);
+  // One product can come from two lists at one price.
+  const extraOrder = (row: Row) =>
+    canonical([
+      row.productId,
+      row.extraListId,
+      row.name,
+      row.variantName,
+      row.unit,
+      row.list,
+      row.priceQuantity,
+      row.quantity,
+    ]);
+  const families = dishes.map((dish) => ({
+    dish,
+    extras: rows
+      .filter((row) => row.parentLineId === dish.id)
+      .sort((a, b) => (extraOrder(a) < extraOrder(b) ? -1 : extraOrder(a) > extraOrder(b) ? 1 : 0)),
+  }));
+  const sum = (lines: readonly Row[], of: (row: Row) => number) =>
+    lines.reduce((total, row) => total + of(row), 0);
+  const furthest = dishes.reduce((far, dish) =>
+    STAGE_RANK[stageOf(dish)] > STAGE_RANK[stageOf(far)] ? dish : far,
+  );
+  const first = families[0]!;
+  const dish: Row = {
+    ...first.dish,
+    quantity: sum(dishes, (row) => row.quantity),
+    servedQuantity: sum(dishes, (row) => row.servedQuantity),
+    firedQuantity: sum(dishes, (row) => row.firedQuantity),
+    groupId: furthest.groupId,
+    groupState: furthest.groupState,
+    sentAt: furthest.sentAt,
+    ticketItemId: furthest.ticketItemId,
+    ticketFiredAt: furthest.ticketFiredAt,
+    ticketMadeHere: furthest.ticketMadeHere,
+    stationId: furthest.stationId,
+    ticketState: furthest.ticketState,
+  };
+  const membersOf = new Map<string, Row[]>([[dish.id, dishes]]);
+  const extras = first.extras.map((extra, i) => {
+    const standing = families.map((family) => family.extras[i]!);
+    membersOf.set(extra.id, standing);
+    return { ...extra, quantity: sum(standing, (row) => row.quantity) };
+  });
+  const lines = families.flatMap((family) => [family.dish, ...family.extras]);
+  const replaced = new Set(lines.map((row) => row.id));
+  let line = dish;
+  if (extrasRow) {
+    const asked = new Set(ids);
+    const extra = extras.find(({ id }) => {
+      const standing = membersOf.get(id)!;
+      return standing.length === asked.size && standing.every((one) => asked.has(one.id));
+    });
+    if (extra === undefined) throw invalid("lineIds");
+    line = extra;
+  }
+  return {
+    dish,
+    line,
+    view: [...rows.filter((row) => !replaced.has(row.id)), dish, ...extras].sort(
+      (a, b) => a.lineNo - b.lineNo,
+    ),
+    lines,
+    membersOf,
+  };
+}
+
+/** The dish lines, in line order, of the till row a cancel's `lineIds` names, `lineId` among them;
+ * refused as {@link standInRow} refuses a row the till could not have drawn. */
+export async function cancelRowMembers(
+  tx: Transaction,
+  orderId: string,
+  lineId: string,
+  lineIds: readonly string[],
+): Promise<string[]> {
+  const row = await standInRow(
+    tx,
+    orderId,
+    { lineId, lineIds: [...lineIds], action: "cancel" },
+    await readRows(tx, orderId),
+  );
+  return row.membersOf.get(row.dish.id)!.map(({ id }) => id);
+}
+
+/**
+ * The dish lines `lineIds` names, gathered into the rows the till would draw them as, each row in
+ * line order and the rows in the order of their first line in `lineIds`: whole portions in one filed
+ * group, its cohort included, in the same release group with the same note and course; any other
+ * line alone. For a Discard, which names no rows (plan D31's one exception).
+ */
+export async function rowsAmong(
+  tx: Transaction,
+  orderId: string,
+  lineIds: readonly string[],
+): Promise<string[][]> {
+  const rows = await readRows(tx, orderId);
+  const whole = await readWholePortionLines(tx, lineIds);
+  const groups = await readLockedLines(tx, orderId);
+  const keyOf = (id: string) => {
+    if (!whole.has(id)) return id;
+    const row = rows.find((one) => one.id === id)!;
+    const group = groups.findIndex(({ identity }) => (identity.lineIds ?? []).includes(id));
+    return canonical([group, row.groupId, row.note, row.courseId]);
+  };
+  const byKey = new Map<string, Row[]>();
+  for (const id of lineIds) {
+    const key = keyOf(id);
+    byKey.set(key, [...(byKey.get(key) ?? []), rows.find((one) => one.id === id)!]);
+  }
+  return [...byKey.values()].map((row) =>
+    row.sort((a, b) => a.lineNo - b.lineNo).map(({ id }) => id),
+  );
+}
+
 /** A comp's rows (plan D4): each one not already free is priced at exactly zero, never at a price
  * whose total merely rounds to nothing. */
 function zeroed(subjects: readonly Subject[]): Change[] {
@@ -442,8 +800,14 @@ export async function planAdjustment(
   let line: Row | null = null;
   let covered: number | null = null;
   let removed: number | null = null;
+  let removedPortions: Row[] | null = null;
   let carve: Carve | null = null;
   let changes: Change[] = [];
+  let writes: Change[] | null = null;
+  let stamped: string[] = [];
+  const rowSplits: AdjustmentSplit[] = [];
+  let row: StandIn | null = null;
+  let view: readonly Row[] = rows;
   let compedExtras: string[] = [];
   let reduction: Decimal;
   let nominal: Decimal;
@@ -453,7 +817,9 @@ export async function planAdjustment(
     if (ask.quantity !== undefined) throw invalid("quantity");
     const families = new Set(rows.flatMap((row) => row.parentLineId ?? []));
     before = sumDecimals(rows.map((row) => gross(row, row.quantity)));
-    changes = spread(
+    changes = await spreadOverFiledRows(
+      tx,
+      orderId,
       rows.map((row) => ({
         row,
         quantity: row.quantity,
@@ -461,6 +827,7 @@ export async function planAdjustment(
         exact: row.parentLineId === null && !families.has(row.id) && (row.unitPrecision ?? 0) === 0,
       })),
       requestedDiscount(ask, before),
+      rowSplits,
     );
     reduction = sumDecimals(changes.map((change) => change.reduction));
     nominal = sumDecimals(rows.map((row) => listValue(row, row.quantity)));
@@ -473,23 +840,33 @@ export async function planAdjustment(
     line = rows.find((row) => row.id === ask.lineId) ?? null;
     if (line === null)
       throw new AppError("tab.line_not_found", { tabId: orderId, lineId: ask.lineId });
+    if (ask.lineIds !== undefined) {
+      row = await standInRow(tx, orderId, ask, rows);
+      ({ line, view } = row);
+    }
     const target = line;
     // An extra has no extras of its own, so it is a family of one.
-    const family = [target, ...rows.filter((row) => row.parentLineId === target.id)];
+    const family = [target, ...view.filter((other) => other.parentLineId === target.id)];
     covered = coveredQuantity(orderId, target, ask.quantity);
     const partial = covered < target.quantity;
     const weighed = (target.unitPrecision ?? 0) > 0;
     if (ask.action === "cancel") {
       if (ask.percentBp !== undefined) throw invalid("percentBp");
       if (ask.amount !== undefined) throw invalid("amount");
-      const cancelled = await readLineCancellations(tx, [target.id]);
-      if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
-        throw new AppError("adjustment.quantity_invalid", {
-          workingOrderId: orderId,
-          lineNo: target.lineNo,
-          quantity: ask.quantity ?? thousandthsToDecimal(covered),
-        });
-      removed = partial ? covered : null;
+      if (row === null) {
+        const cancelled = await readLineCancellations(tx, [target.id]);
+        if (covered > serviceQuantities(target.quantity, 0, cancelled.get(target.id) ?? 0).active)
+          throw new AppError("adjustment.quantity_invalid", {
+            workingOrderId: orderId,
+            lineNo: target.lineNo,
+            quantity: ask.quantity ?? thousandthsToDecimal(covered),
+          });
+        removed = partial ? covered : null;
+      } else {
+        const members = row.membersOf.get(target.id)!;
+        const taken = await takenPortions(tx, orderId, target, members, covered);
+        removedPortions = members.filter((one) => taken.has(one.id));
+      }
       const left = familyAt(family, target.quantity - covered);
       reduction = sumDecimals(
         family.map((row) =>
@@ -498,9 +875,13 @@ export async function planAdjustment(
       );
       nominal = sumDecimals(family.map((row) => listValue(row, row.quantity - left.get(row.id)!)));
       before = reduction;
-      await refusePaidLines(tx, orderId, [
-        { id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered },
-      ]);
+      await refusePaidLines(
+        tx,
+        orderId,
+        removedPortions === null
+          ? [{ id: target.id, lineNo: target.lineNo, keeps: target.quantity - covered }]
+          : removedPortions.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
+      );
     } else {
       // Part of a weighed line, carved off, can round to totals whose sum is not the line's: 0.005 kg
       // at €1.00/kg is €0.01, while 0.002 kg and 0.003 kg are €0.00 each.
@@ -543,13 +924,58 @@ export async function planAdjustment(
       before = sumDecimals(subjects.map(({ row, quantity }) => gross(row, quantity)));
       const discount = requestedDiscount(ask, before);
       changes = ask.action === "comp" ? zeroed(subjects) : spread(subjects, discount);
-      if (ask.action === "comp" && !partial) compedExtras = family.slice(1).map((row) => row.id);
+      const standingFor = (one: Row) => (row === null ? [one] : row.membersOf.get(one.id)!);
+      const covering = family.flatMap(standingFor);
+      if (ask.action === "comp" && !partial) {
+        compedExtras = family
+          .slice(1)
+          .flatMap(standingFor)
+          .map((one) => one.id);
+      }
+      if (row !== null) {
+        const { membersOf } = row;
+        const taken = partial
+          ? await takenPortions(tx, orderId, target, membersOf.get(target.id)!, covered)
+          : null;
+        const takenOf = (standIn: Row) =>
+          membersOf
+            .get(standIn.id)!
+            .filter((member) => taken === null || taken.has(member.parentLineId ?? member.id));
+        // The part is carved off the line and each of its extras, as on one grouped line (plan D33).
+        if (taken !== null) {
+          for (const standIn of family) {
+            rowSplits.push({ from: standingFor(standIn)[0]!.id, to: takenOf(standIn)[0]!.id });
+          }
+        }
+        stamped = changes.flatMap((change) => standingFor(change.row).map((one) => one.id));
+        writes = changes.flatMap((change) => {
+          const portions = handOut(
+            takenOf(change.row).map((member) => ({
+              row: member,
+              quantity: member.quantity,
+              carved: false,
+            })),
+            change.rows,
+          );
+          // The line's second price is split off it, as on one grouped line (plan D33).
+          const lower = change.rows[1];
+          if (lower !== undefined) {
+            rowSplits.push({
+              from: portions[0]!.row.id,
+              to: portions.find(
+                (portion) => compareDecimal(portion.rows[0]!.unitGross, lower.unitGross) === 0,
+              )!.row.id,
+            });
+          }
+          return portions;
+        });
+      }
       reduction = sumDecimals(changes.map((change) => change.reduction));
       nominal = sumDecimals(subjects.map(({ row, quantity }) => listValue(row, quantity)));
       await refusePaidLines(
         tx,
         orderId,
-        family.map((row) => ({ id: row.id, lineNo: row.lineNo, keeps: 0 })),
+        covering.map((one) => ({ id: one.id, lineNo: one.lineNo, keeps: 0 })),
       );
     }
   }
@@ -563,26 +989,27 @@ export async function planAdjustment(
     .where(eq(persons.id, ask.operatorId));
   if (actor === undefined) throw new AppError("person.not_found", { personId: ask.operatorId });
   const actorRole = actor.role as PersonRoleValue;
-  const stage = line === null ? null : stageOf(dishOf(line, rows));
+  const stage = line === null ? null : stageOf(dishOf(line, view));
   const verdict =
     ask.action === "cancel"
       ? evaluateCancel(reason, { actorRole, note: ask.note, stage: stage! })
       : await judgeComp(tx, reason, {
           orderId,
           action: ask.action,
-          line,
           rows,
-          changes,
+          writes: writes ?? changes,
+          carve,
           reduction,
-          nominal,
+          before,
           actorRole,
           note: ask.note,
         });
   if (verdict.kind === "refused") throw new AppError(verdict.code, {});
   const parents = new Set(
-    (ask.action === "cancel" ? [line!] : changes.map((change) => change.row)).map(
-      (row) => row.parentLineId ?? row.id,
-    ),
+    [
+      ...(ask.action === "cancel" ? [line!] : changes.map((change) => change.row)),
+      ...(row?.lines ?? []),
+    ].map((one) => one.parentLineId ?? one.id),
   );
   let recalledDraftId: string | null = null;
   if (parents.size > 0) {
@@ -612,8 +1039,12 @@ export async function planAdjustment(
     line,
     covered,
     removed,
+    removedPortions,
     carve,
     changes,
+    writes: writes ?? changes,
+    stamped,
+    rowSplits,
     compedExtras,
     reduction,
     nominal,
@@ -628,79 +1059,29 @@ function dishOf(line: Row, rows: readonly Row[]): Row {
   return line.parentLineId === null ? line : rows.find((row) => row.id === line.parentLineId)!;
 }
 
-/**
- * A comp action's verdict (design §3.2). The reason's share of an item is what it took before
- * ({@link readReasonItemShares}) plus what this request takes, each at
- * `ceil(reduction × 10000 ÷ list value)`: on a line, the request's reduction over its list value; on
- * the whole bill, each changed row's over that row's. A percentage taken off a dish was spread over
- * its extras too, so an extra also counts its dish's share, and a dish the largest any of its extras
- * took on its own. What the reason's discounts on the whole bill took off each row is not recorded,
- * and the whole-cent spread can give one row more than its average, so each of the item's rows
- * counts their whole reduction, capped at what that row is now below its list value less what any
- * reason's comps and discounts of that row alone took ({@link readWholeLineReductions}, at the
- * row's present quantity and list value), and the item the largest of those.
- */
+/** A comp action's verdict (design §3.2); a reason's per-dish limit is a price floor (plan D36), and
+ * past the bill's limit the approver must be allowed both it and the reason (plan D37). */
 async function judgeComp(
   tx: Transaction,
   reason: AdjustmentReason,
   ask: {
     orderId: string;
     action: CompAction;
-    line: Row | null;
+    /** Every line of the bill, as {@link readRows} reads it. */
     rows: readonly Row[];
-    changes: readonly Change[];
+    /** What this request writes, on the bill's own lines. */
+    writes: readonly Change[];
+    carve: Carve | null;
     reduction: Decimal;
-    nominal: Decimal;
+    /** What the request's subject cost before it. */
+    before: Decimal;
     actorRole: PersonRoleValue;
     note: string | null;
   },
 ): Promise<AdjustmentVerdict> {
-  const { orderId, line, rows } = ask;
-  const { priorReductionOnBill } = await readReasonTotals(tx, {
-    workingOrderId: orderId,
-    reasonId: reason.id,
-  });
-  const subjects: { row: Row; reduction: Decimal; nominal: Decimal }[] =
-    line === null
-      ? ask.changes.map(({ row, reduction }) => ({
-          row,
-          reduction,
-          nominal: listValue(row, row.quantity),
-        }))
-      : [{ row: line, reduction: ask.reduction, nominal: ask.nominal }];
-  const relatedOf = (row: Row) =>
-    row.parentLineId === null
-      ? rows.filter((other) => other.parentLineId === row.id)
-      : [dishOf(row, rows)];
-  const lineIds = [
-    ...new Set(subjects.flatMap(({ row }) => [row, ...relatedOf(row)].map(({ id }) => id))),
-  ];
-  const { lines: shares, billReduction } = await readReasonItemShares(tx, {
-    workingOrderId: orderId,
-    reasonId: reason.id,
-    lineIds,
-  });
-  const lineReductions = await readWholeLineReductions(tx, { workingOrderId: orderId, lineIds });
-  const billShareOf = (row: Row) => {
-    const list = decimalToCents(listValue(row, row.quantity));
-    const alone = lineReductions
-      .filter(
-        (taken) =>
-          taken.lineId === row.id && taken.lineQuantity === row.quantity && taken.nominal === list,
-      )
-      .reduce((sum, taken) => sum + taken.reduction, 0);
-    const off = list - decimalToCents(gross(row, row.quantity)) - alone;
-    return shareBp(Math.min(billReduction, Math.max(0, off)), list);
-  };
-  const itemShareBp = Math.max(
-    0,
-    ...subjects.map(
-      ({ row, reduction, nominal }) =>
-        shares.get(row.id)! +
-        Math.max(0, ...relatedOf(row).map(({ id }) => shares.get(id)!)) +
-        Math.max(...[row, ...relatedOf(row)].map(billShareOf)) +
-        shareBp(decimalToCents(reduction), decimalToCents(nominal)),
-    ),
+  const { orderId, rows } = ask;
+  const standingOnBill = standingOff(
+    await readReasonStanding(tx, { workingOrderId: orderId, reasonId: reason.id }),
   );
   const billComped = sumDecimals(
     rows.map((row) => {
@@ -714,11 +1095,84 @@ async function judgeComp(
     reduction: ask.reduction,
     actorRole: ask.actorRole,
     note: ask.note,
-    priorReductionOnBill,
-    itemShareBp,
+    takesAll: compareDecimal(ask.reduction, ask.before) === 0,
+    standingOnBill,
+    dishes: dishPrices(ask.writes, rows, ask.carve),
     billComped,
     billLimit: { maxAmount: maxBillComp, approverRoles: billApproverRoles },
   });
+}
+
+/**
+ * Each dish `writes` names, as the floor reads it (plan D36 readings 3 to 5): a dish without extras
+ * once for each price its change leaves it at; a dish with extras once, its lines summed at the
+ * quantity of it the request covers. A portion of a row the request takes nothing off is named too;
+ * {@link standInRow} admits only portions of one price, so it is below its floor only when one the
+ * request reduces is too.
+ */
+function dishPrices(
+  writes: readonly Change[],
+  rows: readonly Row[],
+  carve: Carve | null,
+): DishPrice[] {
+  const byDish = new Map<string, Change[]>();
+  for (const change of writes) {
+    const dishId = change.row.parentLineId ?? change.row.id;
+    byDish.set(dishId, [...(byDish.get(dishId) ?? []), change]);
+  }
+  const quantityOf = (change: Change) =>
+    change.rows.reduce((sum, priced) => sum + decimalToThousandths(priced.quantity), 0);
+  const allowanceOf = (lines: { row: Row; quantity: number }[]) =>
+    floorAllowance(
+      lines.map(({ row, quantity }) => ({
+        quantity: thousandthsToDecimal(quantity),
+        priceQuantity: thousandthsToDecimal(row.priceQuantity),
+      })),
+    );
+  const dishes: DishPrice[] = [];
+  for (const [dishId, changed] of byDish) {
+    const dish = rows.find((row) => row.id === dishId)!;
+    const family = [dish, ...rows.filter((row) => row.parentLineId === dishId)];
+    const onDish = changed.find((change) => change.row.id === dishId);
+    if (family.length === 1) {
+      for (const priced of onDish!.rows) {
+        const quantity = decimalToThousandths(priced.quantity);
+        dishes.push({
+          list: listValue(dish, quantity),
+          after: gross(dish, quantity, decimalToCents(priced.unitGross)),
+          allowance: allowanceOf([{ row: dish, quantity }]),
+        });
+      }
+      continue;
+    }
+    // A dish at €0.00 keeps no change of its own here, though part of it was carved with its extras.
+    const covered =
+      onDish !== undefined
+        ? quantityOf(onDish)
+        : changed.some((change) => change.carved)
+          ? carve!.quantity
+          : dish.quantity;
+    const at = familyAt(family, covered);
+    const lines = family.map((row) => {
+      const change = changed.find((one) => one.row.id === row.id);
+      const quantity = change === undefined ? at.get(row.id)! : quantityOf(change);
+      const after =
+        change === undefined
+          ? gross(row, quantity)
+          : sumDecimals(
+              change.rows.map((priced) =>
+                gross(row, decimalToThousandths(priced.quantity), decimalToCents(priced.unitGross)),
+              ),
+            );
+      return { row, quantity, list: listValue(row, quantity), after };
+    });
+    dishes.push({
+      list: sumDecimals(lines.map(({ list }) => list)),
+      after: sumDecimals(lines.map(({ after }) => after)),
+      allowance: allowanceOf(lines),
+    });
+  }
+  return dishes;
 }
 
 /** What the adjustment would do, writing nothing: the same plan {@link applyAdjustment} writes. */
@@ -801,7 +1255,7 @@ async function setPrice(
 /**
  * Writes the plan's new prices, first splitting the part `carve` covers off its dish, with its
  * extras, when a change is to that part; answers each row it split off, with the row it came from,
- * a carved dish before its extras.
+ * a carved dish before its extras, and what each change took off each line it lowered.
  */
 async function reprice(
   tx: Transaction,
@@ -809,8 +1263,9 @@ async function reprice(
   orderId: string,
   carve: Carve | null,
   changes: readonly Change[],
-): Promise<AdjustmentSplit[]> {
-  const touched = changes.map(({ row }) => row.id);
+  stamped: readonly string[],
+): Promise<{ splits: AdjustmentSplit[]; taken: LineReduction[] }> {
+  const touched = [...new Set([...changes.map(({ row }) => row.id), ...stamped])];
   // Before any split, so a split row copies the price its line had (plan D21).
   await tx
     .update(workingOrderLines)
@@ -842,15 +1297,40 @@ async function reprice(
           orderId,
           twoRows.map(({ lineNo, change }) => ({ lineNo, quantity: change.rows[1]!.quantity })),
         );
+  const taken: LineReduction[] = [];
   for (const { id, change } of subjects) {
-    await setPrice(tx, id, change.rows[0]!, change.row.priceQuantity);
+    const [first, lower] = change.rows;
+    await setPrice(tx, id, first!, change.row.priceQuantity);
     const second = seconds.get(id);
+    let firstReduction = change.reduction;
     if (second !== undefined) {
       splits.push({ from: id, to: second.id });
-      await setPrice(tx, second.id, change.rows[1]!, change.row.priceQuantity);
+      await setPrice(tx, second.id, lower!, change.row.priceQuantity);
+      const quantity = decimalToThousandths(lower!.quantity);
+      const reduction = subtractDecimal(
+        gross(change.row, quantity),
+        gross(change.row, quantity, decimalToCents(lower!.unitGross)),
+      );
+      firstReduction = subtractDecimal(change.reduction, reduction);
+      taken.push({ lineId: second.id, reduction, quantity });
     }
+    taken.push({
+      lineId: id,
+      reduction: firstReduction,
+      quantity: decimalToThousandths(first!.quantity),
+    });
   }
-  return splits;
+  return {
+    splits,
+    taken: taken.filter(({ reduction }) => compareDecimal(reduction, ZERO) !== 0),
+  };
+}
+
+/** What a comp or a discount took off one line, `quantity` of it then (plan D37). */
+interface LineReduction {
+  lineId: string;
+  reduction: Decimal;
+  quantity: number;
 }
 
 /**
@@ -889,7 +1369,18 @@ export async function applyAdjustment(
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() };
       let splits: AdjustmentSplit[] = [];
-      if (args.action === "cancel") {
+      let taken: LineReduction[] = [];
+      if (plan.removedPortions !== null) {
+        await removePortions(
+          tx,
+          cfg,
+          args.orderId,
+          plan.removedPortions.map(voidTargetOf),
+          args.operatorId,
+          activity,
+          args.preparationStarted,
+        );
+      } else if (args.action === "cancel") {
         await removeFromLine(
           tx,
           cfg,
@@ -901,7 +1392,16 @@ export async function applyAdjustment(
           args.preparationStarted,
         );
       } else {
-        splits = await reprice(tx, cfg, args.orderId, plan.carve, plan.changes);
+        const repriced = await reprice(
+          tx,
+          cfg,
+          args.orderId,
+          plan.carve,
+          plan.writes,
+          plan.stamped,
+        );
+        splits = [...repriced.splits, ...plan.rowSplits];
+        taken = repriced.taken;
         await bumpRevision(tx, [args.orderId]);
         await assertBillInvariant(tx, [args.orderId]);
         await partyAfterEdit(tx, args.orderId, [], args.operatorId, activity);
@@ -964,6 +1464,16 @@ export async function applyAdjustment(
         note: args.note,
         preparationStarted: args.recordedPreparationStarted ?? null,
       });
+      if (taken.length > 0) {
+        await tx.insert(adjustmentLines).values(
+          taken.map(({ lineId, reduction, quantity }) => ({
+            adjustmentId: id,
+            lineId,
+            reduction: decimalToCents(reduction),
+            quantity,
+          })),
+        );
+      }
       const revision = await readOrderRevision(tx, args.orderId);
       if (attendance !== undefined) {
         const [order] = await tx

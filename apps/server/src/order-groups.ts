@@ -97,7 +97,8 @@ import {
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import type { AllergyPatch, AllergyLineRef } from "@waitron/module";
-import { enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
+import { copyAllergyWorkingTicks, enqueueKitchenAllergyChanges } from "./kitchen-allergy.js";
+import { expandPortionRows, registerPortions } from "./order-portions.js";
 import type { LateSendConfirmation } from "./late-send.js";
 import {
   applyPartyAllergyPatch,
@@ -212,18 +213,31 @@ export async function submitGroups(
         attendance === undefined
           ? undefined
           : { recorder: attendance.recorder, at: attendance.clock.now().instant.toISOString() },
-        async (parentIds) => {
+        async (portionIds) => {
           let parent = 0;
           const targets = input.groups.flatMap((group, groupIndex) =>
             group.lines.map((_, lineIndex) => ({
               ref: { kind: "submitted", groupIndex, lineIndex } as AllergyLineRef,
               draftLineId: null,
-              workingLineId: parentIds[parent++]!,
+              workingLineId: portionIds[parent++]![0]!,
             })),
           );
           if (allergy !== undefined) {
             const changes = await applyPartyAllergyPatch(tx, partyId, allergy, operatorId, targets);
-            await enqueueKitchenAllergyChanges(tx, cfg, changes);
+            // One target names one line, so a tick lands on the first portion and is copied to the rest.
+            const pairs = portionIds.flatMap(([first, ...rest]) =>
+              rest.map((to) => ({ from: first!, to })),
+            );
+            await copyAllergyWorkingTicks(tx, pairs);
+            const copied = new Set(changes.workingLineIds);
+            await enqueueKitchenAllergyChanges(tx, cfg, {
+              ...changes,
+              after: await VENUE_SERVICE.readPartyAllergy(tx, partyId),
+              workingLineIds: [
+                ...changes.workingLineIds,
+                ...pairs.filter(({ from }) => copied.has(from)).map(({ to }) => to),
+              ].sort(),
+            });
           }
           await assertPartyAllergyAnswered(tx, partyId);
         },
@@ -252,7 +266,7 @@ export async function placeGroups(
   partyId: string,
   input: PlaceGroupsInput,
   attendance?: { recorder: AttendanceRecorder; at: string },
-  beforeOutput?: (parentIds: readonly string[]) => Promise<void>,
+  beforeOutput?: (portionIds: readonly (readonly string[])[]) => Promise<void>,
 ): Promise<SubmittedGroups> {
   const { operatorId } = input;
   const expectedEdit = parseBillEditExpected(input.expectedEdit);
@@ -306,7 +320,7 @@ export async function placeGroups(
   const empty = (group: PlaceGroupsInput["groups"][number]) =>
     group.lines.length === 0 && (group.existingLineIds?.length ?? 0) === 0;
   // Recalled families already carry their charge and must bypass fresh pricing.
-  const round =
+  const priced =
     lines.length === 0 && !groups.some(empty)
       ? null
       : await priceTabRound(
@@ -320,6 +334,20 @@ export async function placeGroups(
   if (groups.some(empty)) {
     throw new AppError("sale.empty_basket", {});
   }
+  const expanded =
+    priced === null
+      ? null
+      : expandPortionRows(
+          priced.rows,
+          priced.lineContexts,
+          priced.portionable,
+          priced.rows[0]?.lineNo ?? 1,
+        );
+  const round =
+    priced === null || expanded === null
+      ? null
+      : { ...priced, rows: expanded.rows, lineContexts: expanded.lineContexts };
+  const requestOfRow = expanded?.requestOfRow ?? [];
   const groupIds: string[] = [];
   const insertedAfter = new Map<string, string>();
   for (const group of groups) {
@@ -336,17 +364,18 @@ export async function placeGroups(
     } else groupId = await startGroup(tx, partyId, group.release, operatorId);
     groupIds.push(groupId);
   }
-  // The k-th parent row is input line k; an extras child goes with its dish.
   const groupOfLine = input.groups.flatMap((group, i) => group.lines.map(() => groupIds[i]!));
-  const groupOfRow = new Map<string, string>();
-  let parents = 0;
-  const rows = (round?.rows ?? []).map((row) => {
-    const groupId =
-      row.parentLineId == null ? groupOfLine[parents++]! : groupOfRow.get(row.parentLineId)!;
-    groupOfRow.set(row.id!, groupId);
-    return { ...row, groupId, creditedTo: operatorId };
-  });
+  const rows = (round?.rows ?? []).map((row, i) => ({
+    ...row,
+    groupId: groupOfLine[requestOfRow[i]!]!,
+    creditedTo: operatorId,
+  }));
   const inserted = round === null ? [] : await insertTabRound(tx, cfg, round, rows);
+  if (expanded !== null) await registerPortions(tx, expanded.portions);
+  const portionsOfLine: string[][] = lines.map(() => []);
+  rows.forEach((row, i) => {
+    if (row.parentLineId == null) portionsOfLine[requestOfRow[i]!]!.push(row.id!);
+  });
   for (const [index, group] of groups.entries()) {
     const ids = group.existingLineIds ?? [];
     if (ids.length === 0) continue;
@@ -371,15 +400,14 @@ export async function placeGroups(
     await VENUE_SERVICE.moveAllergyDraftTicks(
       tx,
       partyId,
-      rows
-        .filter((row) => row.parentLineId == null)
-        .map((row, i) => ({
-          draftLineId: draftIds[i]!,
-          workingLineId: row.id!,
-        })),
+      portionsOfLine.map(([first], i) => ({ draftLineId: draftIds[i]!, workingLineId: first! })),
+    );
+    await copyAllergyWorkingTicks(
+      tx,
+      portionsOfLine.flatMap(([first, ...rest]) => rest.map((to) => ({ from: first!, to }))),
     );
   }
-  await beforeOutput?.(rows.filter((row) => row.parentLineId == null).map((row) => row.id!));
+  await beforeOutput?.(portionsOfLine);
   const routing = routingOnce(tx, cfg, new Date());
   for (const [i, group] of groups.entries()) {
     const groupId = groupIds[i]!;

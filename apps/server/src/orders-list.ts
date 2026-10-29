@@ -21,7 +21,9 @@ import {
   printJobs,
   printers,
   invoicePdfDownloads,
+  orderPortions,
   pagePrinters,
+  workingLinePortions,
 } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
@@ -36,6 +38,7 @@ import {
 } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import { outstandingOf, readPaymentsByBill } from "./bill-payments.js";
+import { optionAnswersKey } from "./receipt-lines.js";
 import { readIssuedSales } from "./sale-due.js";
 import {
   readInvoiceDeliveries,
@@ -751,8 +754,18 @@ async function readPdfDownloads(
 }
 
 async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine[]> {
-  const rows = await tx
+  const stored = await tx
     .select({
+      id: workingOrderLines.id,
+      parentLineId: workingOrderLines.parentLineId,
+      optionSnapshots: workingOrderLines.optionSnapshots,
+      note: workingOrderLines.note,
+      unitPriceGross: workingOrderLines.unitPriceGross,
+      courseId: workingOrderLines.courseId,
+      sentAt: workingOrderLines.sentAt,
+      servedAt: workingOrderLines.servedAt,
+      servedQuantity: workingOrderLines.servedQuantity,
+      measured: orderPortions.measured,
       lineNo: workingOrderLines.lineNo,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
@@ -762,14 +775,91 @@ async function readBillLines(tx: Transaction, billId: string): Promise<OrderLine
       creditedTo: workingOrderLines.creditedTo,
     })
     .from(workingOrderLines)
+    .leftJoin(workingLinePortions, eq(workingLinePortions.workingOrderLineId, workingOrderLines.id))
+    .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
     .where(eq(workingOrderLines.workingOrderId, billId))
     .orderBy(workingOrderLines.lineNo);
-  return rows.map((line) => ({
-    ...line,
+  return foldIdenticalPortions(stored).map((line) => ({
+    lineNo: line.lineNo,
+    name: line.name,
+    variantName: line.variantName,
     quantity: thousandthsToDecimal(line.quantity),
     total: centsToDecimal(line.total),
     listUnitPrice: line.listUnitPrice === null ? null : centsToDecimal(line.listUnitPrice),
+    creditedTo: line.creditedTo,
   }));
+}
+
+interface StoredBillLine {
+  id: string;
+  parentLineId: string | null;
+  name: string;
+  variantName: string | null;
+  optionSnapshots: unknown[];
+  note: string | null;
+  unitPriceGross: number;
+  courseId: string | null;
+  sentAt: string | null;
+  servedAt: string | null;
+  servedQuantity: number;
+  /** Of the line's portion; null on an extra and on a dish bound to none. */
+  measured: boolean | null;
+  listUnitPrice: number | null;
+  creditedTo: string | null;
+  quantity: number;
+  total: number;
+}
+
+/**
+ * `lines` (in line order) with each dish bound to a whole portion folded into an earlier one in the
+ * same course and kitchen state that the order detail shows the same, extras included: into its
+ * row and its extras' rows, quantities and amounts summed. Other lines stay as stored.
+ */
+function foldIdenticalPortions<L extends StoredBillLine>(lines: readonly L[]): L[] {
+  const out = lines.map((line) => ({ ...line }));
+  const extrasOf = new Map<string, L[]>();
+  for (const line of out) {
+    if (line.parentLineId === null) continue;
+    extrasOf.set(line.parentLineId, [...(extrasOf.get(line.parentLineId) ?? []), line]);
+  }
+  const looks = (line: L) =>
+    JSON.stringify([
+      line.name,
+      line.variantName,
+      optionAnswersKey(line.optionSnapshots),
+      line.note,
+      line.unitPriceGross,
+      line.listUnitPrice,
+      line.creditedTo,
+      line.courseId,
+      line.sentAt !== null,
+      line.servedAt !== null,
+      line.servedQuantity,
+    ]);
+  const byKey = new Map<string, { dish: L; extras: L[] }>();
+  const folded = new Set<string>();
+  for (const dish of out) {
+    if (dish.parentLineId !== null || dish.measured !== false) continue;
+    const extras = (extrasOf.get(dish.id) ?? [])
+      .map((extra) => ({ extra, key: JSON.stringify([looks(extra), extra.quantity]) }))
+      .sort((a, b) => (a.key < b.key ? -1 : 1));
+    const key = JSON.stringify([looks(dish), extras.map((entry) => entry.key)]);
+    const same = byKey.get(key);
+    if (same === undefined) {
+      byKey.set(key, { dish, extras: extras.map((entry) => entry.extra) });
+      continue;
+    }
+    same.dish.quantity += dish.quantity;
+    same.dish.total += dish.total;
+    folded.add(dish.id);
+    extras.forEach(({ extra }, at) => {
+      const into = same.extras[at]!;
+      into.quantity += extra.quantity;
+      into.total += extra.total;
+      folded.add(extra.id);
+    });
+  }
+  return out.filter((line) => !folded.has(line.id));
 }
 
 async function readSaleLines(tx: Transaction, saleId: string): Promise<OrderLine[]> {

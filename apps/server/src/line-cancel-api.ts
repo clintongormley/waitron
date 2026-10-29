@@ -23,7 +23,7 @@ import { cancelItem, type CancelItemAsk } from "./line-cancel.js";
 import type { Logger } from "./logger.js";
 import { madeHereSinkFor, replayPrepayMadeHere, sendingCfg } from "./made-here.js";
 import { partyRevision } from "./parties.js";
-import { cancellationRefundValue } from "./cancellation-refund-value.js";
+import { cancellationRefundValue, rowRefundValue } from "./cancellation-refund-value.js";
 import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { requestCfg } from "./request-config.js";
 import {
@@ -78,6 +78,14 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     body.reasonId === undefined
       ? undefined
       : requireBodyUuid(body.reasonId, "reasonId").toLowerCase();
+  if (
+    body.lineIds !== undefined &&
+    (!Array.isArray(body.lineIds) || body.lineIds.some((id) => typeof id !== "string"))
+  )
+    throw invalid("lineIds");
+  const lineIds = (body.lineIds as string[] | undefined)?.map((id) =>
+    requireBodyUuid(id, "lineIds").toLowerCase(),
+  );
   const expectedContext = parseCancellationContext(body.expectedContext);
   if (body.refundHandoff === true && expectedContext.billStatus !== "settled")
     throw invalid("refundHandoff");
@@ -96,6 +104,7 @@ function parseAsk(body: Record<string, unknown>): CancelItemAsk {
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     expectedBillRevision: requireRevision(body.expectedBillRevision, "expectedBillRevision"),
     expectedContext,
+    ...(lineIds === undefined ? {} : { lineIds }),
     submissionId: submissionIdOf(body),
     reasonId,
     note: body.note as string | undefined,
@@ -119,10 +128,13 @@ export function mountLineCancelApi(
       const session = await requireSession(deps, c, { action: "take-orders", passive: true });
       const partyId = requireBodyUuid(c.req.param("id"), "partyId").toLowerCase();
       const lineId = requireBodyUuid(c.req.param("lineId"), "lineId").toLowerCase();
+      const lineIds = c.req
+        .queries("lineIds")
+        ?.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
       const answer = await withTransaction(deps.db, async (tx) => {
         const current = await admittedSession(tx, deps, session);
         await checkZones(tx, deps.cfg, current, [{ partyId }]);
-        const context = await readCancellationContext(tx, partyId, lineId);
+        const context = await readCancellationContext(tx, partyId, lineId, lineIds);
         const [bill] = await tx
           .select({ id: workingOrders.id, revision: workingOrders.revision })
           .from(workingOrderLines)
@@ -134,7 +146,9 @@ export function mountLineCancelApi(
           .where(eq(sales.workingOrderId, bill!.id));
         const refundValue =
           context.billStatus === "settled" && sale !== undefined
-            ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
+            ? lineIds === undefined
+              ? await cancellationRefundValue(tx, bill!.id, sale.id, lineId)
+              : await rowRefundValue(tx, bill!.id, sale.id, lineIds)
             : undefined;
         return {
           context,
@@ -178,6 +192,7 @@ export function mountLineCancelApi(
                   expectedEdit: ask.expectedEdit,
                   expectedRevision: ask.expectedBillRevision,
                   lineId,
+                  ...(ask.lineIds === undefined ? {} : { lineIds: ask.lineIds }),
                   reasonId: ask.reasonId!,
                   action: "cancel",
                   quantity: ask.quantity,

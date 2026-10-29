@@ -63,6 +63,7 @@ import { resolveDefaultMenu, resolveDepartmentService } from "./menu-timetable.j
 import {
   copyOrderServiceContext,
   copyWorkingLineContext,
+  copyWorkingLineContexts,
   findOrderServiceContext,
   findOrderServiceModes,
   findOrderServiceZones,
@@ -165,6 +166,7 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   declineDepartmentTransfer,
   copyOrderContext: copyOrderServiceContext,
   copyLineContext: copyWorkingLineContext,
+  copyLineContexts: copyWorkingLineContexts,
   findOrderContext: findOrderServiceContext,
   findOrderModes: findOrderServiceModes,
   findOrderZones: findOrderServiceZones,

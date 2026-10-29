@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import { decimal } from "@waitron/shared";
 import {
   approves,
+  belowFloor,
   evaluateCancel,
   evaluateComp,
+  floorAllowance,
   policySnapshotOf,
+  standingOff,
   type AdjustmentReason,
   type Approval,
   type CancelRequest,
@@ -47,8 +50,9 @@ function comp(overrides: Partial<CompRequest> = {}): CompRequest {
     reduction: decimal("25.00"),
     actorRole: "supervisor",
     note: null,
-    priorReductionOnBill: decimal("0.00"),
-    itemShareBp: 10000,
+    takesAll: false,
+    standingOnBill: decimal("0.00"),
+    dishes: [{ list: decimal("25.00"), after: decimal("0.00"), allowance: 1 }],
     billComped: decimal("0.00"),
     billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager", "admin"] },
     ...overrides,
@@ -99,17 +103,20 @@ describe("evaluateComp", () => {
     });
   });
 
-  it("past the item limit asks the reason's approver, never refuses", () => {
+  it("below the floor asks the reason's approver, never refuses", () => {
     const halves = { ...COMPLAINT, maxPercentBp: 5000 };
     const small = { reduction: decimal("5.00") };
-    expect(evaluateComp(halves, comp({ ...small, itemShareBp: 5001 }))).toEqual(BY_REASON);
-    expect(evaluateComp(halves, comp({ ...small, itemShareBp: 5000 }))).toEqual({
+    const dish = (after: string) => [
+      { list: decimal("25.00"), after: decimal(after), allowance: 1 },
+    ];
+    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.49") }))).toEqual(BY_REASON);
+    expect(evaluateComp(halves, comp({ ...small, dishes: dish("12.50") }))).toEqual({
       kind: "allowed",
     });
   });
 
   it("past the reason's bill amount asks, never refuses", () => {
-    const prior = { priorReductionOnBill: decimal("20.00") };
+    const prior = { standingOnBill: decimal("20.00") };
     expect(evaluateComp(COMPLAINT, comp({ ...prior, reduction: decimal("10.01") }))).toEqual(
       BY_REASON,
     );
@@ -140,15 +147,16 @@ describe("evaluateComp", () => {
     });
   });
 
-  it("past the bill's comp limit, the reason's approver still needs the bill list", () => {
+  it("past the bill's comp limit, the reason's approver needs someone on both lists", () => {
     const reason = { ...COMPLAINT, approverRoles: ["supervisor" as const, "manager" as const] };
+    // An admin is on the bill's list but may only apply this reason within its €30.00.
     expect(evaluateComp(reason, comp({ reduction: decimal("50.00") }))).toEqual({
       kind: "needs_approval",
-      approval: { by: "bill_limit", roles: ["manager", "admin"], limit: decimal("40.00") },
+      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
     });
   });
 
-  it("past the bill's comp limit, someone on the bill list alone goes straight through", () => {
+  it("past the bill's comp limit, nobody on both lists is refused no_common_approver", () => {
     const reason = {
       ...COMPLAINT,
       applyRoles: ["admin" as const],
@@ -159,7 +167,84 @@ describe("evaluateComp", () => {
       reduction: decimal("50.00"),
       billLimit: { maxAmount: decimal("40.00"), approverRoles: ["manager"] },
     });
-    expect(evaluateComp(reason, request)).toEqual({ kind: "allowed" });
+    expect(evaluateComp(reason, request)).toEqual({
+      kind: "refused",
+      code: "adjustment.no_common_approver",
+    });
+  });
+
+  describe("past the bill's limit, whoever approves is allowed both (owner, 2026-10-28)", () => {
+    /** Two €25 steaks free under On the house, which only managers apply or approve, past a €40
+     * bill limit approved by supervisors and managers. */
+    const ON_THE_HOUSE: AdjustmentReason = {
+      ...COMPLAINT,
+      name: "On the house",
+      maxAmount: null,
+      applyRoles: ["manager"],
+      approverRoles: ["manager"],
+    };
+    const twoSteaks = (overrides: Partial<CompRequest> = {}) =>
+      comp({
+        reduction: decimal("50.00"),
+        dishes: [
+          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
+          { list: decimal("25.00"), after: decimal("0.00"), allowance: 1 },
+        ],
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor", "manager"] },
+        ...overrides,
+      });
+    const byManagerPastBill = {
+      kind: "needs_approval",
+      approval: { by: "bill_limit", roles: ["manager"], limit: decimal("40.00") },
+    };
+
+    it("Luis, a supervisor on the bill-limit list, needs a manager's PIN", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks())).toEqual(byManagerPastBill);
+    });
+
+    it("a manager, on both lists, goes straight through", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "manager" }))).toEqual({
+        kind: "allowed",
+      });
+    });
+
+    it("within the bill's limit the reason's lists decide, as today", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ reduction: decimal("40.00") }))).toEqual({
+        kind: "needs_approval",
+        approval: { by: "reason", roles: ["manager"] },
+      });
+    });
+
+    it("staff past the bill's limit get the bill list's roles that can do the reason", () => {
+      expect(evaluateComp(ON_THE_HOUSE, twoSteaks({ actorRole: "staff" }))).toEqual(
+        byManagerPastBill,
+      );
+    });
+
+    it("a bill-list role that may only apply the reason approves within the reason's limits", () => {
+      // Complaint: supervisors apply it up to €30.00 a bill; €15.00 on a bill with €30.00 comped.
+      const request = comp({
+        actorRole: "staff",
+        reduction: decimal("15.00"),
+        dishes: [{ list: decimal("15.00"), after: decimal("0.00"), allowance: 1 }],
+        billComped: decimal("30.00"),
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
+      });
+      expect(evaluateComp(COMPLAINT, request)).toEqual({
+        kind: "needs_approval",
+        approval: { by: "bill_limit", roles: ["supervisor"], limit: decimal("40.00") },
+      });
+    });
+
+    it("nobody on both lists is refused no_common_approver", () => {
+      const request = twoSteaks({
+        billLimit: { maxAmount: decimal("40.00"), approverRoles: ["supervisor"] },
+      });
+      expect(evaluateComp(ON_THE_HOUSE, request)).toEqual({
+        kind: "refused",
+        code: "adjustment.no_common_approver",
+      });
+    });
   });
 
   it("a bill comp limit of none never asks", () => {
@@ -194,6 +279,46 @@ describe("evaluateComp", () => {
     ).toEqual({ kind: "allowed" });
   });
 
+  describe("a reason without Free refuses everything off too (owner, 2026-10-28; plan D37 rule 4)", () => {
+    const CREW_MEAL: AdjustmentReason = {
+      ...COMPLAINT,
+      name: "Crew meal",
+      actions: ["discount_percent", "discount_amount"],
+      maxPercentBp: 5000,
+      maxAmount: null,
+      applyRoles: ["staff", "supervisor", "manager", "admin"],
+    };
+    const all = (action: "discount_percent" | "discount_amount") =>
+      comp({ action, actorRole: "manager", takesAll: true });
+
+    it.each(["discount_percent", "discount_amount"] as const)(
+      "%s taking everything off is refused free_not_allowed",
+      (action) => {
+        expect(evaluateComp(CREW_MEAL, all(action))).toEqual({
+          kind: "refused",
+          code: "adjustment.free_not_allowed",
+        });
+      },
+    );
+
+    it("is refused before a missing note is asked for", () => {
+      expect(evaluateComp({ ...CREW_MEAL, noteRequired: true }, all("discount_percent"))).toEqual({
+        kind: "refused",
+        code: "adjustment.free_not_allowed",
+      });
+    });
+
+    it("under a reason with Free, everything off by a percentage goes on to the checks", () => {
+      expect(evaluateComp(COMPLAINT, all("discount_percent"))).toEqual({ kind: "allowed" });
+    });
+
+    it("less than everything off goes on to the floor check", () => {
+      expect(
+        evaluateComp(CREW_MEAL, comp({ action: "discount_percent", takesAll: false })),
+      ).toEqual(BY_REASON);
+    });
+  });
+
   it("a missing required note is refused before any approval is asked", () => {
     const noted = { ...COMPLAINT, noteRequired: true };
     const past = { actorRole: "staff" as const, reduction: decimal("50.00") };
@@ -210,10 +335,24 @@ describe("evaluateComp", () => {
 
   it.each<[string, Partial<CompRequest>]>([
     ["a negative reduction", { reduction: decimal("-1.00") }],
-    ["a negative prior reduction on the bill", { priorReductionOnBill: decimal("-0.01") }],
+    ["a negative standing reduction on the bill", { standingOnBill: decimal("-0.01") }],
     ["a negative bill comp total", { billComped: decimal("-0.01") }],
-    ["a negative item share", { itemShareBp: -1 }],
-    ["a fractional item share", { itemShareBp: 12.5 }],
+    [
+      "a negative list",
+      { dishes: [{ list: decimal("-0.01"), after: decimal("0.00"), allowance: 1 }] },
+    ],
+    [
+      "a negative price after",
+      { dishes: [{ list: decimal("1.00"), after: decimal("-0.01"), allowance: 1 }] },
+    ],
+    [
+      "a negative allowance",
+      { dishes: [{ list: decimal("1.00"), after: decimal("0.50"), allowance: -1 }] },
+    ],
+    [
+      "a fractional allowance",
+      { dishes: [{ list: decimal("1.00"), after: decimal("0.50"), allowance: 0.5 }] },
+    ],
   ])("throws on %s, which is a caller's bug and not a verdict", (_case, overrides) => {
     expect(() => evaluateComp(COMPLAINT, comp(overrides))).toThrow(RangeError);
   });
@@ -313,5 +452,119 @@ describe("policySnapshotOf", () => {
     expect(snapshot.applyRoles).toEqual(["supervisor", "manager", "admin"]);
     expect(snapshot.approverRoles).toEqual(["manager", "admin"]);
     expect(policySnapshotOf({ ...COMPLAINT, maxAmount: null }).maxAmount).toBeNull();
+  });
+});
+
+describe("belowFloor: a dish is never charged below its floor (owner, 2026-10-28; plan D36)", () => {
+  const dish = (list: string, after: string, allowance = 1) => ({
+    list: decimal(list),
+    after: decimal(after),
+    allowance,
+  });
+
+  it("a €12.00 dish left at €6.00 is at its 50% floor and goes through; at €5.99 it asks", () => {
+    expect(belowFloor([dish("12.00", "6.00")], 5000)).toBe(false);
+    expect(belowFloor([dish("12.00", "5.99")], 5000)).toBe(true);
+  });
+
+  it("a €3.33 dish left at €1.66 goes through under 50%, at €1.65 it asks", () => {
+    expect(belowFloor([dish("3.33", "1.66")], 5000)).toBe(false);
+    expect(belowFloor([dish("3.33", "1.65")], 5000)).toBe(true);
+  });
+
+  it("three €3.33 dishes, allowance 3: €4.98 left goes through, €4.95 asks", () => {
+    expect(belowFloor([dish("9.99", "4.98", 3)], 5000)).toBe(false);
+    expect(belowFloor([dish("9.99", "4.95", 3)], 5000)).toBe(true);
+  });
+
+  it("3 kg of €12.99 Fish, allowance 3: €19.47 left goes through, €19.44 asks", () => {
+    expect(belowFloor([dish("38.97", "19.47", 3)], 5000)).toBe(false);
+    expect(belowFloor([dish("38.97", "19.44", 3)], 5000)).toBe(true);
+  });
+
+  it("€1.01 off one €3.34 dish goes through under 30%: the allowance is a whole cent", () => {
+    expect(belowFloor([dish("3.34", "2.33")], 3000)).toBe(false);
+    expect(belowFloor([dish("3.34", "2.32")], 3000)).toBe(true);
+  });
+
+  it("one entry below its floor asks though another is not", () => {
+    expect(belowFloor([dish("12.00", "12.00"), dish("12.00", "5.99")], 5000)).toBe(true);
+  });
+
+  it("a reason with no per-dish limit never asks on it", () => {
+    expect(belowFloor([dish("12.00", "0.00")], null)).toBe(false);
+  });
+});
+
+describe("floorAllowance: the cents rounding can move on a dish (plan D36 reading 3)", () => {
+  const line = (quantity: string, priceQuantity = "1.000") => ({
+    quantity: decimal(quantity),
+    priceQuantity: decimal(priceQuantity),
+  });
+
+  it("counts each line's priced quantity, summed and rounded up once", () => {
+    expect(floorAllowance([line("1.000")])).toBe(1);
+    expect(floorAllowance([line("3.000")])).toBe(3);
+    expect(floorAllowance([line("3.000", "1.000")])).toBe(3);
+    expect(floorAllowance([line("0.350", "1.000")])).toBe(1);
+    expect(floorAllowance([line("0.350", "0.100")])).toBe(4);
+    expect(floorAllowance([line("1.000"), line("2.000")])).toBe(3);
+    expect(floorAllowance([line("3.000"), line("6.000")])).toBe(9);
+    expect(floorAllowance([line("0.350"), line("0.350")])).toBe(1);
+  });
+
+  it("refuses a line whose quantity is not above zero", () => {
+    expect(() => floorAllowance([line("-1.500")])).toThrow(RangeError);
+    expect(() => floorAllowance([line("1.000", "0.000")])).toThrow(RangeError);
+  });
+});
+
+describe("standingOff: what a reason still has off a bill, its lines prorated (owner, 2026-10-28; plan D37)", () => {
+  const row = (reduction: string, quantityThen: string, quantityNow: string) => ({
+    reduction: decimal(reduction),
+    quantityThen: decimal(quantityThen),
+    quantityNow: decimal(quantityNow),
+  });
+
+  it("is nothing when the reason took nothing off a line on the bill", () => {
+    expect(standingOff([])).toBe("0.00");
+  });
+
+  it("counts a line still whole at what was taken off it", () => {
+    expect(standingOff([row("25.00", "1.000", "1.000"), row("4.99", "2.000", "2.000")])).toBe(
+      "29.99",
+    );
+  });
+
+  it("counts half of a line of two after one is cancelled, and nothing of a line now at none", () => {
+    expect(standingOff([row("12.00", "2.000", "1.000"), row("9.00", "1.000", "0.000")])).toBe(
+      "6.00",
+    );
+  });
+
+  it("prorates a weighed line by its weight now", () => {
+    expect(standingOff([row("3.60", "0.350", "0.175")])).toBe("1.80");
+  });
+
+  it("counts more of a line raised in place than was taken off it then", () => {
+    expect(standingOff([row("3.60", "3.000", "4.000")])).toBe("4.80");
+  });
+
+  it("rounds once, half up, after adding every line's share", () => {
+    expect(standingOff([row("0.01", "2.000", "1.000")])).toBe("0.01");
+    expect(standingOff([row("0.01", "2.000", "1.000"), row("0.01", "2.000", "1.000")])).toBe(
+      "0.01",
+    );
+    expect(standingOff([row("0.02", "3.000", "1.000"), row("0.02", "3.000", "1.000")])).toBe(
+      "0.01",
+    );
+  });
+
+  it.each([
+    ["a negative reduction", row("-0.01", "1.000", "1.000")],
+    ["a quantity then of none", row("1.00", "0.000", "1.000")],
+    ["a negative quantity now", row("1.00", "1.000", "-1.000")],
+  ])("throws on %s, a caller's bug", (_, bad) => {
+    expect(() => standingOff([bad])).toThrow(RangeError);
   });
 });

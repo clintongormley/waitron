@@ -639,6 +639,14 @@ Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adap
   call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
   size). Any query that binds one value per row can still meet it.
 
+Since A803 slice 1 a table send writes one line per portion. Run on that branch (2026-10-29, a
+throwaway case in `order-drafts.db.test.ts`): 999 burgers with a sauce (1,998 lines) were written;
+1,500 with a sauce (3,000 lines), and 3,000, 5,000 or 10,000 plain, failed with "Maximum call stack
+size exceeded" in the adapter's insert. The slice refuses more than 99 of one dish in one write
+(`tab.portions_too_many`), but per dish, so a send of about 31 different dishes at 99 each (about
+15 with an extra each) could still reach the limit — the build review's estimate, not measured.
+The review's suggested fix: insert in chunks in `node-sqlite-adapter.ts`.
+
 ## Decisions and deliberate limits
 
 **A972 regional demos (owner, 2026-10-27).** Each regional demo extends Casa Delgado

@@ -9,6 +9,7 @@ import "./cancel-item-dialog.js";
 type Dialog = LitElement & {
   name: string;
   lineId: string;
+  lineIds: string[] | undefined;
   unitPrecision: number;
   consent: CancellationRead | null;
   refundAvailable: boolean;
@@ -696,3 +697,41 @@ it("shows its in-flight cancellation on the native action button", async () => {
   await button(el).updateComplete;
   expect(button(el).shadowRoot!.querySelector("button")!.getAttribute("aria-busy")).toBe("true");
 });
+
+/** A paid row of three portions, each quantity 1, `cancelled` of each already cancelled. */
+const paidRow = (cancelled: Record<string, string> = {}): CancellationRead => {
+  const base = read("settled");
+  return {
+    ...base,
+    refundValue: { quantity: "3.000", gross: "10.00" },
+    context: {
+      ...base.context,
+      components: ["dish-1", "dish-2", "dish-3"].map((lineId, i) => ({
+        ...base.context.components[0]!,
+        id: `ticket-${i + 1}`,
+        lineId,
+        quantity: "1.000",
+        kitchenQuantity: "1.000",
+        cancelledQuantity: cancelled[lineId] ?? "0.000",
+      })),
+    },
+  };
+};
+const rowIds = ["dish-1", "dish-2", "dish-3"];
+it("A803 portion grouping: a grouped row offers a count up to its three portions", async () => {
+  const el = await mount({ consent: paidRow(), lineIds: rowIds, refundAvailable: true });
+  const stepper = root(el).querySelector<HTMLElement & { max: number }>("wt-number-stepper")!;
+  expect(stepper.max).toBe(3);
+});
+it.each([
+  ["1", {}, "€3.33"],
+  ["2", {}, "€6.67"],
+  ["1", { "dish-3": "1.000" }, "€3.34"],
+] as const)(
+  "A803 portion grouping: the refund shown for %s of a paid row of three (cancelled before: %o) is the row's value shared as the server caps it",
+  async (count, cancelled, amount) => {
+    const el = await mount({ consent: paidRow(cancelled), lineIds: rowIds, refundAvailable: true });
+    await fill(el, count);
+    expect(button(el).textContent?.trim()).toBe(`Cancel and refund ${amount}`);
+  },
+);

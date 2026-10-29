@@ -15,7 +15,7 @@ import { currentContentLanguages } from "@waitron/ui";
 import { assertQuantityPrecision } from "@waitron/catalogue/src/unit-validation.js";
 import { addDecimal, compareDecimal, decimal, subtractDecimal, sumDecimals } from "@waitron/shared";
 import type { Decimal, OptionSelection, OptionSnapshot } from "@waitron/shared";
-import { lineGross } from "./order-line.js";
+import { lineGross, takesExtras } from "./order-line.js";
 import { orderLineMergeKey } from "./draft-lines.js";
 import type { BlockReason } from "./menu-refresh.js";
 import type { EndedPeriod } from "./late-send.js";
@@ -26,7 +26,7 @@ import type {
   TillProduct,
   RecalledDraftLine,
 } from "../api/client.js";
-import { productUnit, soldByTheUnit, toPresentation } from "../widgets/product-name.js";
+import { productUnit, toPresentation } from "../widgets/product-name.js";
 import type { Place, placeFor } from "./draft-place.js";
 
 /**
@@ -676,7 +676,7 @@ export class WorkingOrderStore {
   splitLine(index: number): void {
     if (this.#refusesEdits) return;
     const line = this.#lines[index];
-    if (line === undefined || !soldByTheUnit(line.product)) return;
+    if (line === undefined || !takesExtras(line.product)) return;
     const count = Number(line.quantity);
     if (!Number.isInteger(count) || count < 2) return;
     line.quantity = "1";
@@ -702,7 +702,7 @@ export class WorkingOrderStore {
     if (key === null) return undefined;
     const unitGross = lineGross({ ...line, quantity: "1" });
     for (const member of family) {
-      if (!this.#lines.includes(member) || !soldByTheUnit(member.product)) return undefined;
+      if (!this.#lines.includes(member) || !takesExtras(member.product)) return undefined;
       const candidate = { ...member };
       delete candidate.noMerge;
       if (

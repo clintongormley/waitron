@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
 import { setLocale, t } from "../i18n/t.js";
+import type { TabLine } from "../api/client.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import { cleanupWidgets } from "../widgets/test-helpers.js";
 import { beer, mount, resized } from "./till-table-order-screen.test-helpers.js";
@@ -230,3 +231,111 @@ it.each([false, true])(
     expect(marks()).toEqual([]);
   },
 );
+
+const portion = (id: string, lineNo: number, over: Partial<TabLine> = {}): TabLine => ({
+  ...storedServed,
+  id,
+  lineNo,
+  name: "Burger",
+  productId: "burger",
+  quantity: "1.000",
+  priceQuantity: "1.000",
+  unitPriceGross: "9.50",
+  servedAt: null,
+  sentAt: "2026-09-28T19:50:00.000Z",
+  firedAt: "2026-09-28T19:50:00.000Z",
+  state: "queued",
+  nutrition: undefined,
+  portion: true,
+  ...over,
+});
+const portionCheese = (id: string, parentLineNo: number): TabLine =>
+  portion(id, parentLineNo + 10, {
+    name: "Cheese",
+    productId: "cheese",
+    parentLineNo,
+    unitPriceGross: "1.00",
+    listId: "toppings",
+    state: null,
+    portion: false,
+  });
+const fallbackRows = (el: HTMLElement) =>
+  [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((node) => [
+    node.dataset.sentFallbackLine,
+    node.textContent!.replace(/\s+/g, " ").trim(),
+  ]);
+
+it("A803 portion grouping: two identical sent portions show one ×2 row, each extra at its count per portion and its price for both", async () => {
+  const { el } = await mount({
+    lines: [
+      portion("burger-1", 1),
+      portionCheese("cheese-1", 1),
+      portion("burger-2", 2),
+      portionCheese("cheese-2", 2),
+    ],
+    currentOrders: null,
+  });
+  expect(fallbackRows(el)).toEqual([["burger-1", "Burger ×2 €19.00 Cheese ×1 €2.00"]]);
+});
+
+it("A803 portion grouping: two portions of two limes each show Lime ×2, priced for all four", async () => {
+  const lime = (id: string, parentLineNo: number) => ({
+    ...portionCheese(id, parentLineNo),
+    name: "Lime",
+    productId: "lime",
+    quantity: "2.000",
+    unitPriceGross: "0.50",
+  });
+  const { el } = await mount({
+    lines: [portion("burger-1", 1), lime("lime-1", 1), portion("burger-2", 2), lime("lime-2", 2)],
+    currentOrders: null,
+  });
+  expect(fallbackRows(el)).toEqual([["burger-1", "Burger ×2 €19.00 Lime ×2 €2.00"]]);
+});
+
+it("A803 portion grouping: a served portion and an unserved one show two rows", async () => {
+  const { el } = await mount({
+    lines: [
+      portion("burger-1", 1),
+      portion("burger-2", 2, { servedAt: "2026-09-28T20:00:00.000Z" }),
+      portion("burger-3", 3),
+    ],
+    currentOrders: null,
+  });
+  expect(fallbackRows(el)).toEqual([
+    ["burger-1", "Burger ×2 €19.00"],
+    ["burger-2", "Burger ×1 €9.50"],
+  ]);
+});
+
+it("A803 portion grouping: the Sent panel shows identical portions as one row", async () => {
+  const lines = [portion("burger-1", 1), portion("burger-2", 2)];
+  const { el } = await mount({
+    lines,
+    currentOrders: current({
+      groups: [
+        currentGroup("g1", 1, "fired", [
+          row("burger-1", "Burger", "1.000", { lineNo: 1, netAmount: "9.50" }),
+          row("burger-2", "Burger", "1.000", { lineNo: 2, netAmount: "9.50" }),
+        ]),
+      ],
+      ungrouped: [],
+      reminder: null,
+    }),
+  });
+  const panel = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
+  await panel.updateComplete;
+  expect(panel.lines).toBe(el.lines);
+  if (
+    panel.shadowRoot!.querySelector("[data-sent-toggle]")!.getAttribute("aria-expanded") !== "true"
+  ) {
+    panel.shadowRoot!.querySelector<HTMLButtonElement>("[data-sent-toggle]")!.click();
+    await panel.updateComplete;
+  }
+  expect(
+    [...panel.shadowRoot!.querySelectorAll<HTMLElement>("[data-fired-line]")].map((node) => [
+      node.dataset.firedLine,
+      node.querySelector(".what")!.textContent!.replace(/\s+/g, " ").trim(),
+    ]),
+  ).toEqual([["burger-1", "Burger ×2"]]);
+});

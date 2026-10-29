@@ -74,6 +74,8 @@ interface ColumnsWindow {
 interface DishMove {
   workingOrderId: string;
   lineId: string;
+  /** Every portion a grouped row moves; absent, the move is `lineId` alone. */
+  lineIds?: string[];
   name: string;
   stationId: string | null;
   stations: Station[];
@@ -802,7 +804,9 @@ export class TillStationScreen extends LitElement {
     event.stopPropagation();
     if (!this.#canMove() || this.moving !== null || this.#moveOpening) return;
     const detail = (
-      event as CustomEvent<Pick<DishMove, "workingOrderId" | "lineId" | "name" | "stationId">>
+      event as CustomEvent<
+        Pick<DishMove, "workingOrderId" | "lineId" | "lineIds" | "name" | "stationId">
+      >
     ).detail;
     this.#moveOpening = true;
     this.moveErrorCode = undefined;
@@ -863,7 +867,11 @@ export class TillStationScreen extends LitElement {
     if (this.moving !== open || !live()) return;
     const { stationId } = (event as CustomEvent<{ stationId: string | null }>).detail;
     if (open.busy || stationId === null || stationId === open.stationId) return;
-    const body = { submissionId: crypto.randomUUID(), lineIds: [open.lineId], stationId };
+    const body = {
+      submissionId: crypto.randomUUID(),
+      lineIds: open.lineIds ?? [open.lineId],
+      stationId,
+    };
     const busy = { ...open, busy: true, refusal: null };
     this.moving = busy;
     const limit = limited(TABLE_REQUEST_LIMIT_MS);

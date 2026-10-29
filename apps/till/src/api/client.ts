@@ -932,8 +932,8 @@ export interface AdjustmentReason {
 }
 
 /** Whose PIN an adjustment needs: holders of the reason's approver roles, holders of the roles that
- * may approve past the bill's comp limit (`limit`, a money string), or holders of the refund
- * permission. */
+ * may both approve past the bill's comp limit (`limit`, a money string) and approve the reason, or
+ * holders of the refund permission. */
 export type AdjustmentApproval =
   | { by: "reason"; roles: PersonRole[] }
   | { by: "bill_limit"; roles: PersonRole[]; limit: string }
@@ -948,6 +948,9 @@ export interface AdjustmentAsk {
   /** The bill's revision as the till last read it. */
   expectedRevision: number;
   lineId: string | null;
+  /** Every portion line of a row the till shows as one, or that row's lines of one extra product
+   * (plan D31, D34); `lineId` among them. */
+  lineIds?: string[];
   reasonId: string;
   action: AdjustmentAction;
   quantity?: string;
@@ -1032,7 +1035,6 @@ export interface TillSaleLine {
 export interface ReceiptAdjustment {
   /** `comp`: a full comp, printed as the discount word with 100%. */
   kind: "comp" | "discount";
-  /** Basis points, for a percentage discount only. */
   percentBp?: number;
   amount: string;
 }
@@ -1492,6 +1494,10 @@ export interface StationTodayWrite {
  */
 export interface QueueModifier {
   descriptions: Record<string, string>;
+  /** How many of a counted extra each dish has, as `QueueCrossRef.perDish` counts it. */
+  perDish?: number;
+  /** A measured extra's amount on each dish, in its unit. */
+  amount?: string;
   /** The extra's OWN allergens, shown beside the dish's own — never folded. Absent/null when it
    *  declares none. */
   addAllergens?: ProductAllergens | null;
@@ -2371,6 +2377,9 @@ export interface TabLine {
   /** On a dish sold as a variant, {@link productId} names the variant and this its parent product;
    * otherwise null. */
   parentProductId: string | null;
+  /** True on a dish line bound to a whole, unmeasured portion: only those share a row. Absent only
+   * on a fixture that omits it, read as false. */
+  portion?: boolean;
 }
 
 /**
@@ -4260,13 +4269,18 @@ export class TillApi {
     });
   }
 
+  /** With `lineIds`, the read covers every portion of the row the till shows as one. */
   getCancellation(
     partyId: string,
     lineId: string,
-    options: ReadOptions = {},
+    options: ReadOptions & { lineIds?: readonly string[] } = {},
   ): Promise<CancellationRead> {
+    const query =
+      options.lineIds === undefined
+        ? ""
+        : `?${new URLSearchParams(options.lineIds.map((id) => ["lineIds", id])).toString()}`;
     return this.#request(
-      `/api/parties/${partyId}/lines/${lineId}/cancellation`,
+      `/api/parties/${partyId}/lines/${lineId}/cancellation${query}`,
       "GET",
       undefined,
       options.signal,

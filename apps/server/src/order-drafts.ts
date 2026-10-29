@@ -49,13 +49,14 @@ import {
   readOrderRevision,
   refusePaymentInFlight,
   screenNote,
+  takesExtras,
 } from "./working-order.js";
 import type { TabLine, OrderAttendance } from "./working-order.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import { requireCourse, requireLiveCourse } from "./kitchen.js";
 import { RETAINED_COURSE } from "./retained-course.js";
 import { saveRecalledLine } from "./draft-recall.js";
-import { applyAdjustment, type AdjustmentArgs } from "./adjustments-apply.js";
+import { applyAdjustment, rowsAmong, type AdjustmentArgs } from "./adjustments-apply.js";
 import type { PinAttempts } from "@waitron/identity";
 import type { AttendanceRecorder } from "./attendance-capture.js";
 import {
@@ -68,6 +69,7 @@ import {
   requireBillEditor,
   transferBillEditor,
 } from "./bill-editing.js";
+import { readGrowingPortions } from "./order-portions.js";
 import "./errors.js";
 import { orderTableLabel } from "./kitchen-print.js";
 import { assertBillInvariant } from "./bill-payments.js";
@@ -231,6 +233,7 @@ export async function splitDraft(
           billId,
           newBillId,
           families.map((line) => line.lineNo),
+          { actorId: input.operatorId },
         );
         await assertBillInvariant(tx, [billId]);
         await bumpRevision(tx, [billId, newBillId]);
@@ -521,7 +524,28 @@ export async function saveDraft(
       throw invalid(`lines.${index}.sourceLineId`);
     retainedSources.delete(line.id);
   }
-  if (retainedSources.size > 0) throw invalid("lines");
+  if (retainedSources.size > 0) {
+    // A save that began before a raise added copies of a named portion knows only the original;
+    // the till reloads on draft.out_of_date and would otherwise be refused on every later save.
+    const omitted = previous.filter((line) => retainedSources.has(line.id));
+    const portions = await readGrowingPortions(tx, [
+      ...omitted.map((line) => line.sourceLineId!),
+      ...lines.flatMap((line) => (line.sourceLineId === null ? [] : [line.sourceLineId])),
+    ]);
+    const namedCohorts = new Set(
+      lines.flatMap((line) =>
+        line.sourceLineId === null ? [] : (portions.get(line.sourceLineId)?.cohortId ?? []),
+      ),
+    );
+    if (omitted.some((line) => namedCohorts.has(portions.get(line.sourceLineId!)?.cohortId ?? "")))
+      throw new AppError("draft.out_of_date", {
+        billId,
+        draftId: edit.draftId,
+        revision: edit.draftRevision,
+        edit,
+      });
+    throw invalid("lines");
+  }
   const freshLines = lines.filter(isFresh);
   await validateDraftPlaces(tx, partyId, lines);
   await requireCourses(tx, cfg, freshLines, previous.filter(isFresh));
@@ -615,16 +639,20 @@ export async function saveDraft(
     }),
     snapshot,
   );
+  const copiesOf = new Map<string, { referenceId: string; sourceLineId: string }[]>();
   for (const line of lines) {
     if (line.sourceLineId !== null)
-      await saveRecalledLine(
-        tx,
-        cfg,
-        partyId,
-        line.sourceLineId,
-        line,
-        operatorId,
-        sourcePlans.get(line.sourceLineId),
+      copiesOf.set(
+        line.id!,
+        await saveRecalledLine(
+          tx,
+          cfg,
+          partyId,
+          line.sourceLineId,
+          line,
+          operatorId,
+          sourcePlans.get(line.sourceLineId),
+        ),
       );
   }
   const allergy = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
@@ -636,22 +664,34 @@ export async function saveDraft(
     [draftId],
     draftId,
     normaliseDraftLines(
-      lines.map((line): DraftLine =>
-        line.sourceLineId === null
-          ? {
+      lines.flatMap((line): (DraftLine & { measured?: boolean })[] => {
+        if (line.sourceLineId === null)
+          return [
+            {
               ...line,
               source: null,
               id: line.id ?? newId(),
               noMerge: line.noMerge || (line.id !== undefined && assigned.has(line.id)),
               unavailable: false,
-            }
-          : {
-              ...(owned.get(line.id)! as RecalledDraftLine),
-              slot: line.slot,
-              joinGroupId: line.joinGroupId,
-              afterGroupId: line.afterGroupId,
+              measured: soldMeasured(offers.get(line.menuItemId)),
             },
-      ),
+          ];
+        const recalled: RecalledDraftLine = {
+          ...(owned.get(line.id)! as RecalledDraftLine),
+          slot: line.slot,
+          joinGroupId: line.joinGroupId,
+          afterGroupId: line.afterGroupId,
+        };
+        // A raised portion's copies are placed with it, straight after it.
+        return [
+          recalled,
+          ...copiesOf.get(line.id)!.map((copy) => ({
+            ...recalled,
+            id: copy.referenceId,
+            sourceLineId: copy.sourceLineId,
+          })),
+        ];
+      }),
     ),
   );
   if (lines.length === 0) {
@@ -965,14 +1005,23 @@ export async function discardDraft(
         .orderBy(orderDraftRecalledLines.position);
       if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
       const adjustmentIds: string[] = [];
-      for (const source of sources) {
+      // A row of identical dishes recalled together is cancelled as one, as one grouped line is.
+      const rows =
+        sources.length === 0
+          ? []
+          : await rowsAmong(
+              tx,
+              billId,
+              sources.map((source) => source.sourceLineId),
+            );
+      for (const row of rows) {
         // Reservation release and charge cancellation share the validated Discard transaction.
         await tx
           .delete(orderDraftRecalledLines)
           .where(
             and(
               eq(orderDraftRecalledLines.draftId, draft.id),
-              eq(orderDraftRecalledLines.sourceLineId, source.sourceLineId),
+              inArray(orderDraftRecalledLines.sourceLineId, row),
             ),
           );
         const applied = await applyAdjustment(
@@ -983,7 +1032,8 @@ export async function discardDraft(
             expectedEdit: await readBillEditState(tx, billId),
             expectedRevision: await readOrderRevision(tx, billId),
             submissionId: newId(),
-            lineId: source.sourceLineId,
+            lineId: row[0]!,
+            ...(row.length === 1 ? {} : { lineIds: row }),
             action: "cancel",
             reasonId: input.reasonId!,
             note: input.note,
@@ -1134,6 +1184,12 @@ export async function submitDraft(
       const assigned = new Set(
         allergy.ticks.flatMap((tick) => (tick.draftLineId === null ? [] : [tick.draftLineId])),
       );
+      const offers = await offersFor(
+        tx,
+        cfg,
+        partyId,
+        lines.filter(isFresh).map((line) => line.menuItemId),
+      );
       const freshGroups = groups.map(({ lineIds }) => {
         const selected = new Set(lineIds);
         return normaliseDraftLines(
@@ -1143,6 +1199,7 @@ export async function submitDraft(
             .map((line) => ({
               ...line,
               noMerge: assigned.has(line.id),
+              measured: soldMeasured(offers.get(line.menuItemId)),
               slot: 0,
               joinGroupId: null,
               afterGroupId: null,
@@ -1214,7 +1271,7 @@ export async function submitDraft(
       );
       return {
         ...placed,
-        draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id),
+        draft: emptied ? null : await readOpenDraft(tx, cfg, partyId, id, offers),
         edit: await readBillEditState(tx, billId),
       };
     },
@@ -1885,6 +1942,11 @@ async function takenOverFrom(
   return new Map(
     rows.map((row) => [row.draftId, { personId: row.personId!, name: row.name ?? "" }] as const),
   );
+}
+
+/** Whether `offer` sells its dish in a weight or measure; false when the dish has no offer. */
+function soldMeasured(offer: ZoneMenuOffer | undefined): boolean {
+  return offer !== undefined && !takesExtras(offer.unit);
 }
 
 /** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */

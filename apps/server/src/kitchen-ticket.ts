@@ -112,6 +112,13 @@ function entryKey(item: KitchenTicketItem): string {
   ]);
 }
 
+/** The key `item` merges under with entries that print identically, or `undefined` when it never
+ * merges: printed as sold, or not a whole number. */
+export function mergeKey(item: KitchenTicketItem): string | undefined {
+  const thousandths = stringToThousandths(String(item.qty));
+  return item.printedAsSold !== true && thousandths % 1000 === 0 ? entryKey(item) : undefined;
+}
+
 /**
  * One ticket list laid out by grouping. `combined` merges entries that would print identically into
  * the first of them, adding the quantities. `separate` prints a whole-number quantity N as N entries
@@ -139,7 +146,7 @@ export function arrangeTicketItems(
   const byKey = new Map<string, { item: KitchenTicketItem; thousandths: number }>();
   for (const item of items) {
     const thousandths = count(item);
-    const key = countable(item, thousandths) ? entryKey(item) : undefined;
+    const key = mergeKey(item);
     const same = key === undefined ? undefined : byKey.get(key);
     if (same !== undefined) {
       same.thousandths += thousandths;

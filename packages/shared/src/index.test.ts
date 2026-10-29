@@ -38,6 +38,7 @@ import {
   locationId,
   mapComments,
   MAX_GUEST_COUNT,
+  PORTIONS_AT_ONCE,
   MEDIA_FILENAME,
   MAX_MONEY_INTEGER_DIGITS,
   MAX_QUANTITY_INTEGER_DIGITS,
@@ -147,6 +148,10 @@ describe("package public surface (./index.js)", () => {
   it("re-exports the seating bound and its check", () => {
     expect(MAX_GUEST_COUNT).toBe(999);
     expect(isValidGuestCount(MAX_GUEST_COUNT)).toBe(true);
+  });
+
+  it("re-exports how many portions of one dish one write adds at most", () => {
+    expect(PORTIONS_AT_ONCE).toBe(99);
   });
 
   it("re-exports the table short-name rule", () => {

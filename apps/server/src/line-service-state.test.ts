@@ -78,9 +78,11 @@ describe("splitting charged cancellation service state", () => {
   });
 
   async function fixture(quantity = 3000, cancelled = 2000, served = 0, started = true) {
-    const { billId } = await billWith(venue, [
-      { name: "Pizza", quantity: String(quantity / 1000), olives: 2 },
-    ]);
+    const { billId } = await billWith(
+      venue,
+      [{ name: "Pizza", quantity: String(quantity / 1000), olives: 2 }],
+      { shape: "grouped" },
+    );
     return inTx(venue, async (tx) => {
       const [source] = await tx
         .select()

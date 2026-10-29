@@ -21,7 +21,11 @@ import { readLineCancellations, serviceQuantities } from "./line-service-state.j
 import { survivingParty } from "./party-allergy.js";
 import { fingerprint, partyFamily } from "./parties.js";
 import { isRecalledDish } from "./draft-source.js";
-import { enqueueAllergyCorrectionSlips, type CorrectionItem } from "./kitchen-print.js";
+import {
+  enqueueAllergyCorrectionSlips,
+  foldPortionNotices,
+  type CorrectionItem,
+} from "./kitchen-print.js";
 import { thousandthsToDecimal } from "@waitron/shared";
 import { kitchenAllergenLabel } from "./i18n/kitchen-allergy.js";
 
@@ -280,6 +284,9 @@ async function changedIngredientBlocks(
   );
 }
 
+const allergyKey = (item: { allergyBlock: KitchenAllergyBlock | null }) =>
+  fingerprint({ block: item.allergyBlock });
+
 async function enqueueKitchenAllergyUpdates(
   tx: Transaction,
   cfg: TradingContext,
@@ -379,7 +386,8 @@ async function enqueueKitchenAllergyUpdates(
     byOrder.set(row.orderId, items);
   }
   for (const [orderId, items] of byOrder) {
-    for (const item of items)
+    const { notices, read } = await foldPortionNotices(tx, cfg, items, allergyKey);
+    for (const item of notices)
       await VENUE_SERVICE.recordKitchenNotices(
         tx,
         cfg,
@@ -395,28 +403,37 @@ async function enqueueKitchenAllergyUpdates(
         item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
         { allergyBlock: item.allergyBlock },
       );
-    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items, read);
   }
 }
 
-export async function copyAllergyWorkingTick(
+/** Gives each `to` dish line the guest tick its `from` dish line holds, if any. */
+export async function copyAllergyWorkingTicks(
   tx: Transaction,
-  fromLineId: string,
-  toLineId: string,
+  pairs: readonly { from: string; to: string }[],
 ): Promise<void> {
-  const [line] = await tx
-    .select({ partyId: workingOrders.partyId })
+  if (pairs.length === 0) return;
+  const lines = await tx
+    .selectDistinct({ partyId: workingOrders.partyId })
     .from(workingOrderLines)
     .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-    .where(eq(workingOrderLines.id, fromLineId));
-  if (line?.partyId == null) return;
-  const partyId = await survivingParty(tx, line.partyId);
-  const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
-  const tick = snapshot.ticks.find((item) => item.workingLineId === fromLineId);
-  if (tick !== undefined)
-    await VENUE_SERVICE.setAllergyLineTicks(tx, partyId, [
-      { workingLineId: toLineId, guestId: tick.guestId },
-    ]);
+    .where(
+      inArray(
+        workingOrderLines.id,
+        pairs.map(({ from }) => from),
+      ),
+    );
+  for (const line of lines) {
+    if (line.partyId === null) continue;
+    const partyId = await survivingParty(tx, line.partyId);
+    const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, partyId);
+    const guestOf = new Map(snapshot.ticks.map((tick) => [tick.workingLineId, tick.guestId]));
+    const ticks = pairs.flatMap(({ from, to }) => {
+      const guestId = guestOf.get(from);
+      return guestId === undefined ? [] : [{ workingLineId: to, guestId }];
+    });
+    if (ticks.length > 0) await VENUE_SERVICE.setAllergyLineTicks(tx, partyId, ticks);
+  }
 }
 
 export async function notifyKitchenAllergyDestination(
@@ -484,16 +501,19 @@ export async function notifyKitchenAllergyDestination(
       allergyBlock: copy.currentBlock,
       ...(row.firedAt === null && row.group !== null ? { group: row.group } : {}),
     };
-    await VENUE_SERVICE.recordKitchenNotices(
-      tx,
-      cfg,
-      row.orderId,
-      [{ ...item, quantity: thousandthsToDecimal(quantity) }],
-      copy.currentBlock === null ? "allergy_removed" : "allergy_changed",
-      { allergyBlock: copy.currentBlock },
-    );
     byOrder.set(row.orderId, [...(byOrder.get(row.orderId) ?? []), item]);
   }
-  for (const [orderId, items] of byOrder)
-    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items);
+  for (const [orderId, items] of byOrder) {
+    const { notices, read } = await foldPortionNotices(tx, cfg, items, allergyKey);
+    for (const item of notices)
+      await VENUE_SERVICE.recordKitchenNotices(
+        tx,
+        cfg,
+        orderId,
+        [{ ...item, quantity: thousandthsToDecimal(item.quantity) }],
+        item.allergyBlock === null ? "allergy_removed" : "allergy_changed",
+        { allergyBlock: item.allergyBlock },
+      );
+    await enqueueAllergyCorrectionSlips(tx, cfg, orderId, items, read);
+  }
 }

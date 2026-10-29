@@ -8,11 +8,15 @@ import type {
   TicketState,
 } from "../api/client.js";
 import { type OverviewDish, dishThousandths } from "./kitchen-overview.js";
+import { kitchenPortionKey, portionGroups } from "./portion-groups.js";
 
 /** One course's dishes on a card, in the read's order. */
 export interface CourseSection {
   course: StationQueueCourse | null;
   items: StationQueueItem[];
+  /** Its dishes as drawn: identical portions of one bill as one row (spec §3.1), each row's
+   * dishes in the read's order. */
+  rows: StationQueueItem[][];
 }
 
 /** A merged queue's order: one station's lines of it, so `stationId` names whose. */
@@ -52,12 +56,29 @@ function courseSections(items: readonly StationQueueItem[]): CourseSection[] {
     const key = course?.id ?? null;
     let section = byCourse.get(key);
     if (section === undefined) {
-      section = { course, items: [] };
+      section = { course, items: [], rows: [] };
       byCourse.set(key, section);
     }
     section.items.push(item);
   }
   return [...byCourse.values()].sort((a, b) => courseOrder(a.course) - courseOrder(b.course));
+}
+
+function sectionRows(
+  section: CourseSection,
+  orderOf: ReadonlyMap<string, MergedQueueGroup>,
+): StationQueueItem[][] {
+  return portionGroups(
+    section.items,
+    (item) =>
+      kitchenPortionKey(item, item.quantity, [
+        orderOf.get(item.id)!.orderId,
+        item.afterPeriod ?? null,
+        item.lastMove ?? null,
+      ]),
+    // A stable sort, so each row keeps the read's order.
+    () => 0,
+  );
 }
 
 const fired = (item: StationQueueItem) => item.firedAt !== null;
@@ -112,8 +133,9 @@ export function kitchenCards(orders: readonly MergedQueueGroup[]): KitchenCard[]
   });
 
   const sorted = [...drafts.values()];
-  for (const { card } of sorted) {
+  for (const { card, orderOf } of sorted) {
     card.sections = courseSections(card.items);
+    for (const section of card.sections) section.rows = sectionRows(section, orderOf);
     card.items = card.sections.flatMap((section) => section.items);
     card.column = leastAdvanced(card.items);
     const times = card.items.filter(fired).map((item) => Date.parse(item.queuedAt));

@@ -5591,6 +5591,33 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(versions()).toEqual(["offer-beer v1"]);
   });
 
+  it("says a send adding too many of one dish is refused in its own words, not the generic table error", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    await tap(el, "Beer");
+    await saved(el);
+    api.submitDraft.mockRejectedValueOnce({ code: "tab.portions_too_many", status: 400 });
+
+    await act(el, "fire-all");
+    await flush(el);
+
+    expect(banner(el)?.textContent).toContain(codeMessage("tab.portions_too_many"));
+    expect(banner(el)?.textContent).not.toContain(t("table.error"));
+  });
+
+  it("says a saved draft adding too many of one dish is refused in its own words, not the generic table error", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    api.saveDraft.mockRejectedValueOnce({ code: "tab.portions_too_many", status: 400 });
+
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+    await flush(el, 6);
+
+    expect(banner(el)?.textContent).toContain(codeMessage("tab.portions_too_many"));
+    expect(banner(el)?.textContent).not.toContain(t("table.error"));
+  });
+
   it("adopts nothing onto another line when the server's draft replaced the lines while it asked", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
     await openTable(el);
@@ -8731,6 +8758,99 @@ describe("recalled draft source splitting", () => {
       expect(api.recallLines).not.toHaveBeenCalled();
       expect(draft(el).editsLocked).toBe(false);
       expect(banner(el)?.textContent).toContain(t("table.error"));
+    });
+
+    function twoPortions(recallToDraft: ReturnType<typeof vi.fn>) {
+      const sent = {
+        sentAt: "2026-10-17T08:00:00Z",
+        firedAt: "2026-10-17T08:00:00Z",
+        state: "queued" as const,
+      };
+      return recallOpening({
+        getTabLines: vi.fn().mockResolvedValue({
+          lines: [
+            { ...reference().source.line, ...sent },
+            { ...reference("source-9").source.line, ...sent },
+          ],
+          revision: 7,
+        }),
+        recallToDraft,
+      });
+    }
+
+    it("A803 portion grouping: recalls every member of a grouped row, one request each by line number", async () => {
+      let revision = 3;
+      const recallToDraft = vi.fn(async () => ({ revision: ++revision, draft: recordRecall() }));
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(
+        recallToDraft.mock.calls.map((call) => {
+          const [, lineId, command] = call as unknown as [
+            string,
+            string,
+            { expectedPartyRevision: number },
+          ];
+          return [lineId, command.expectedPartyRevision];
+        }),
+      ).toEqual([
+        ["source-7", 3],
+        ["source-9", 4],
+      ]);
+      expect(order.party?.revision).toBe(5);
+      expect(draft(el).sending).toBe(false);
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
+    it("A803 portion grouping: a grouped Recall that fails on its first member sends no other", async () => {
+      const recallToDraft = vi.fn(async () => {
+        throw new TypeError("offline");
+      });
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(t("table.error"));
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
+    it("A803 portion grouping: a grouped Recall refused on its second member keeps the first recalled, says why and reloads the bill", async () => {
+      let refuse!: (reason: unknown) => void;
+      const recallToDraft = vi
+        .fn()
+        .mockImplementationOnce(async () => ({ revision: 4, draft: recordRecall() }))
+        .mockImplementationOnce(
+          () =>
+            new Promise((_, reject) => {
+              refuse = reject;
+            }),
+        );
+      const { el, order } = await twoPortions(recallToDraft);
+      const reads = api.getTabLines.mock.calls.length;
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledTimes(2);
+      expect(order.groupCommandBusy).toBe(true);
+      expect(draft(el).busyAction).toBe("recall");
+      refuse({ code: "ticket.already_fired" });
+      await flush(el, 12);
+      expect(order.party?.revision).toBe(4);
+      expect(banner(el)?.textContent).toContain(codeMessage("ticket.already_fired"));
+      expect(api.getTabLines.mock.calls.length).toBe(reads + 1);
+      expect(order.groupCommandBusy).toBe(false);
+    });
+
+    it("A803 portion grouping: a grouped Recall whose first member is not read back sends no other", async () => {
+      const recallToDraft = vi.fn(async () => {
+        api.listDrafts.mockRejectedValueOnce(new TypeError("read offline"));
+        return { revision: 4, draft: recordRecall() };
+      });
+      const { el, order } = await twoPortions(recallToDraft);
+      emit(order, "recall-lines", { lineNos: [7, 9] });
+      await flush(el, 12);
+      expect(recallToDraft).toHaveBeenCalledOnce();
+      expect(banner(el)?.textContent).toContain(t("table.draft_read_failed"));
+      expect(order.groupCommandBusy).toBe(false);
     });
 
     it.each(["ticket.already_started", "ticket.already_fired", "order.payment_in_flight"])(

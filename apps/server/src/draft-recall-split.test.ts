@@ -68,7 +68,9 @@ async function setup(
   const p = await billWith(
     venue,
     [{ name: dish, quantity, ...(dish === "Pizza" ? { olives: 2 } : {}) }, { name: "Water" }],
-    { release },
+    // Grouped, as a counter order moved to a table keeps it (plan D1), so a recalled line can hold
+    // several dishes to split.
+    { release, shape: "grouped" },
   );
   const [line] = await rowsOf(venue, p.billId);
   if (paidQuantity !== undefined) {

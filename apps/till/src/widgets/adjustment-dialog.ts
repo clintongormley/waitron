@@ -26,6 +26,9 @@ export type AdjustKind = "cancel" | "comp" | "discount";
 export interface AdjustTarget {
   /** The dish or the extra; null for the whole bill. */
   lineId: string | null;
+  /** Every portion line of a row the till shows as one, or that row's lines of one extra product;
+   * `lineId` first. Absent on a single line. */
+  lineIds?: string[];
   name: string;
   /** Its quantity as shown; null for the bill. */
   quantity: string | null;
@@ -49,6 +52,7 @@ export interface AdjustTarget {
 export interface AdjustmentChoice {
   action: AdjustmentAction;
   lineId?: string;
+  lineIds?: string[];
   reasonId: string;
   note: string | null;
   quantity?: string;
@@ -76,6 +80,7 @@ export function refusalField(code: string, kind: AdjustKind, partial: boolean): 
       return "note";
     case "adjustment.exceeds_amount":
     case "adjustment.no_reduction":
+    case "adjustment.free_not_allowed":
       return kind === "discount" ? "value" : null;
     case "adjustment.action_not_allowed":
     case "adjustment_reason.not_found":
@@ -442,20 +447,26 @@ export class TillAdjustmentDialog extends LitElement {
       errors.set("quantity", codeMessage("adjustment.quantity_invalid"));
     if (this.combined ? this.compKind !== "free" : this.kind === "discount" && !this.#billFree()) {
       const number = this.#typedNumber();
+      // Everything off is Free by another name, which only a reason offering Free allows. A
+      // percentage that rounds to everything is left to the server's refusal of the same code.
+      const withoutFree = reason !== undefined && !reason.actions.includes("comp");
       if ((this.combined ? this.compKind : this.discountKind) === "percent") {
         const percent = Number(number);
         if (!TYPED_AMOUNT.test(number) || percent <= 0 || percent > 100)
           errors.set("value", t("adjust.percent_invalid"));
+        else if (percent === 100 && withoutFree)
+          errors.set("value", codeMessage("adjustment.free_not_allowed"));
       } else if (!TYPED_AMOUNT.test(number) || Number(number) <= 0) {
         errors.set("value", t("adjust.amount_invalid"));
-      } else if (
-        !errors.has("quantity") &&
-        compareDecimal(decimal(number), decimal(this.#covered())) > 0
-      ) {
-        errors.set(
-          "value",
-          t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
-        );
+      } else if (!errors.has("quantity")) {
+        const versus = compareDecimal(decimal(number), decimal(this.#covered()));
+        if (versus > 0)
+          errors.set(
+            "value",
+            t("adjust.amount_too_large").replace("{total}", () => this.#money(this.#covered())),
+          );
+        else if (versus === 0 && withoutFree)
+          errors.set("value", codeMessage("adjustment.free_not_allowed"));
       }
     }
     return errors;
@@ -513,6 +524,8 @@ export class TillAdjustmentDialog extends LitElement {
       )
         choice.quantity = this.#count();
     } else if (this.#partial() && this.quantity === "1") choice.quantity = "1";
+    const lineIds = this.#target()?.lineIds;
+    if (lineIds !== undefined) choice.lineIds = [...lineIds];
     const typed = this.#typedNumber();
     if (choice.action === "discount_percent")
       choice.percentBp = this.#billFree() ? 10000 : Math.round(Number(typed) * 100);
@@ -543,7 +556,8 @@ export class TillAdjustmentDialog extends LitElement {
       (this.#ownErrors().size > 0 ||
         (["action", "lineId", "reasonId", "note", "quantity", "percentBp", "amount"] as const).some(
           (key) => this.#choice()[key] !== choice[key],
-        ))
+        ) ||
+        String(this.#choice().lineIds) !== String(choice.lineIds))
     ) {
       this.#emit("adjust-edit");
       return;

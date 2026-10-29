@@ -171,6 +171,24 @@ A cleared step comes back when the moment it starts from happens again, such as 
 being served. A step that repeats every few minutes after the last order comes back with each
 repeat: **Done** clears the one on show, and another order starts the count again.
 
+## Each dish is its own line {#portions}
+
+When a table orders 2 × Burger with cheese, the bill holds two burgers, each with its own cheese,
+rather than one line of two. That way you can serve, move or void one burger and its cheese goes
+with it, and the bill and the kitchen agree on which burger is which.
+
+While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
+row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
+row in **Sent** marks all of it served; **Mark served** in the row's details asks how many. **Split by item** lets you choose how many of a row go to
+the new bill, each with its own extras, while **Transfer items** moves the whole row. **Comp** and
+**Void** work on the row and let you choose how many of its dishes.
+
+A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
+twice gives two lines rather than one of double the weight. On a table's bill you can add up to 99 of one dish at a time.
+
+An order taken at the counter keeps 2 × Burger as one line even after you move it to a
+table, so its 2 × Burger with cheese moves to another bill only as a whole.
+
 ## Get back to your tables with unsent dishes {#unsent-tables}
 
 On a busy shift it is easy to start an order at one table, get called to another, and forget the

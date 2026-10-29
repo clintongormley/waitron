@@ -178,6 +178,26 @@ Un paso ya hecho vuelve cuando ocurre otra vez el momento en que empieza, como c
 platos de un curso. Un paso que se repite cada pocos minutos desde el último pedido vuelve con cada
 repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cuenta.
 
+## Cada plato es su propia línea {#portions}
+
+Cuando una mesa pide 2 × Hamburguesa con queso, la cuenta tiene dos hamburguesas, cada una con su
+queso, en lugar de una línea de dos. Así puedes servir, mover o cancelar una hamburguesa y su queso
+va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
+
+Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
+**Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
+o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
+servido** en los detalles de la fila pregunta cuántos. **Dividir por artículo** te
+deja elegir cuántos platos de una fila pasan a la cuenta nueva, cada uno con sus extras, mientras que
+**Transferir artículos** mueve la fila entera. **Descuento** y **Cancelar** actúan sobre la fila y te
+dejan elegir cuántos de sus platos.
+
+Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
+plato al peso tienes dos líneas, no una del doble de peso. En la cuenta de una mesa puedes añadir hasta 99 unidades de un mismo plato cada vez.
+
+Un pedido de mostrador mantiene 2 × Hamburguesa como una sola línea aunque lo
+muevas a una mesa, así que sus 2 × Hamburguesa con queso solo pasan a otra cuenta enteras.
+
 ## Volver a tus mesas con platos sin enviar {#unsent-tables}
 
 En un turno con mucho trabajo es fácil empezar un pedido en una mesa, que te llamen desde otra y

@@ -62,9 +62,7 @@ async function fixture(paid = true, release: "hold" | "fire" = "hold", extras = 
       extras ? { name: "Pizza", quantity: "2", olives: 2 } : { name: "Burger", quantity: "2" },
       { name: "Water" },
     ],
-    {
-      release,
-    },
+    { release, shape: "grouped" },
   );
   if (paid)
     await payWorkingOrder({ db: venue.db, backend: venue.backend, clock: venue.clock }, venue.cfg, {

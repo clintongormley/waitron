@@ -129,27 +129,27 @@ async function paidHeld() {
 }
 
 async function cancelKeepingCharge(partyId: string, billId: string) {
-  const [line] = await topLines([billId]);
-  await inTx(venue, async (tx) => {
-    const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
-    await cancelItem(
-      tx,
-      venue.cfg,
-      partyId,
-      line!.id,
-      {
-        expectedEdit: await readBillEditState(tx, billId),
-        expectedContext: await readCancellationContext(tx, partyId, line!.id),
-        expectedPartyRevision: await partyRevision(partyId),
-        expectedBillRevision: bill!.revision,
-        submissionId: randomUUID(),
-        quantity: (line!.quantity / 1000).toFixed(3),
-        outcome: "keep_charge",
-        reasonId: venue.reasonId.houseVoid,
-      },
-      venue.staffId,
-    );
-  });
+  for (const line of await topLines([billId]))
+    await inTx(venue, async (tx) => {
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+      await cancelItem(
+        tx,
+        venue.cfg,
+        partyId,
+        line.id,
+        {
+          expectedEdit: await readBillEditState(tx, billId),
+          expectedContext: await readCancellationContext(tx, partyId, line.id),
+          expectedPartyRevision: await partyRevision(partyId),
+          expectedBillRevision: bill!.revision,
+          submissionId: randomUUID(),
+          quantity: (line.quantity / 1000).toFixed(3),
+          outcome: "keep_charge",
+          reasonId: venue.reasonId.houseVoid,
+        },
+        venue.staffId,
+      );
+    });
 }
 
 describe("releaseHeldWorkOf", () => {
@@ -204,7 +204,8 @@ describe("releaseHeldWorkOf", () => {
 
     await release(p.partyId, [p.billId]);
 
-    expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null]);
+    // Each portion is its own line (A803).
+    expect((await topLines([p.billId])).map((line) => line.groupId)).toEqual([null, null]);
     expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["removed"]);
   });
 
@@ -430,9 +431,12 @@ describe("moveSettledBillToCounter", () => {
     expect(slip![0]).toBe("*** MOVIDO ***");
     expect(slip).toContain("A:  (mostrador)");
     const text = slip!.join("\n");
-    expect(text).toContain("2.000 x BURG");
+    // A MOVED slip still names each line (A803 D16), and each burger is its own line.
+    expect(slip!.filter((line) => line.includes("1.000 x BURG"))).toHaveLength(2);
+    expect(text).not.toContain("2.000 x BURG");
     expect(text).toContain("1.000 x CHULETA");
     expect(await noticesOn(p.billId)).toEqual([
+      { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
       { stationId: venue.stationId, kind: "moved", lineName: "CHULETA", movedTo: null },
     ]);
@@ -484,7 +488,10 @@ describe("moveSettledBillToCounter", () => {
   });
 
   it("tells the kitchen about a partly served dish", async () => {
-    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "fire" });
+    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], {
+      release: "fire",
+      shape: "grouped",
+    });
     await venue.db
       .update(workingOrderLines)
       .set({ servedQuantity: 1000 })

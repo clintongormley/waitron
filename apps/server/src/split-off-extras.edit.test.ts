@@ -27,6 +27,7 @@ import { setStationPrinting } from "./testing/station-printing.js";
 
 import { fireGroup } from "./order-groups.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGrouped } from "./testing/adjustment-venue.js";
 import { VENUE_SERVICE } from "./modules.js";
 import "./errors.js";
 
@@ -314,10 +315,15 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      await placeGroups(tx, venue.cfg, venue.party.partyId, {
-        operatorId: OPERATOR,
-        groups: [{ lines: [line(venue, "burger", "1", 2)], release: "hold" }],
-      });
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      await placeGrouped(
+        tx,
+        venue.cfg,
+        venue.party,
+        [line(venue, "burger", "1", 2)],
+        "hold",
+        OPERATOR,
+      );
       await edit(tx, venue, 1, { quantity: "2" });
       expect(
         (await state(tx, venue.party.tabId)).items.find(
@@ -333,32 +339,109 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      await placeGroups(tx, venue.cfg, venue.party.partyId, {
-        operatorId: OPERATOR,
-        groups: [
-          {
-            lines: [
-              {
-                ...line(venue, "burger"),
-                extras: [
-                  {
-                    listId: venue.lists.burger,
-                    picks: [
-                      { productId: venue.products.chips, quantity: 1 },
-                      { productId: venue.products.cheese, quantity: 1 },
-                    ],
-                  },
-                ],
-              },
-            ],
-            release: "hold",
-          },
-        ],
-      });
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      const placed = [
+        {
+          ...line(venue, "burger"),
+          extras: [
+            {
+              listId: venue.lists.burger,
+              picks: [
+                { productId: venue.products.chips, quantity: 1 },
+                { productId: venue.products.cheese, quantity: 1 },
+              ],
+            },
+          ],
+        },
+      ];
+      await placeGrouped(tx, venue.cfg, venue.party, placed, "hold", OPERATOR);
       await edit(tx, venue, 1, { quantity: "2" });
       const items = (await state(tx, venue.party.tabId)).items;
       expect(items.find((item) => item.stationId === venue.stations.fryer)?.quantity).toBe(2000);
       expect(items).toHaveLength(2);
+    });
+  });
+
+  it("A803 portions: raising a sent held burger with chips adds a portion with its own chips", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "burger", "1", 2)], release: "hold" }],
+      });
+      await edit(tx, venue, 1, { quantity: "2" });
+      const { lines, items } = await state(tx, venue.party.tabId);
+      const dishes = lines.filter((row) => row.parentLineId === null);
+      expect(dishes.map((row) => row.quantity)).toEqual([1000, 1000]);
+      expect(
+        dishes.map((dish) =>
+          lines.filter((row) => row.parentLineId === dish.id).map((row) => row.quantity),
+        ),
+      ).toEqual([[2000], [2000]]);
+      expect(
+        items
+          .filter((item) => item.stationId === venue.stations.fryer)
+          .map((item) => item.quantity),
+      ).toEqual([2000, 2000]);
+      expect((await slips(tx, venue.printers.grill)).at(-1)).toContain("HOLD CHANGED");
+      expect((await slips(tx, venue.printers.fryer)).at(-1)).toContain("+2");
+    });
+  });
+
+  it("A803 portions: raising a sent held burger with a routed and an inline extra adds a portion", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      const burger = {
+        ...line(venue, "burger"),
+        extras: [
+          {
+            listId: venue.lists.burger,
+            picks: [
+              { productId: venue.products.chips, quantity: 1 },
+              { productId: venue.products.cheese, quantity: 1 },
+            ],
+          },
+        ],
+      };
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [burger], release: "hold" }],
+      });
+      await edit(tx, venue, 1, { quantity: "2" });
+      const items = (await state(tx, venue.party.tabId)).items;
+      expect(
+        items
+          .filter((item) => item.stationId === venue.stations.fryer)
+          .map((item) => item.quantity),
+      ).toEqual([1000, 1000]);
+      expect(items).toHaveLength(4);
+    });
+  });
+
+  it("A803 portions: raising a sent held water with chips adds a portion and no dish record", async () => {
+    const venue = await setupSplitExtrasVenue();
+    await withTransaction(db, async (tx) => {
+      await setStationPrinting(tx, { printHeldWork: true });
+      await placeGroups(tx, venue.cfg, venue.party.partyId, {
+        operatorId: OPERATOR,
+        groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
+      });
+      const before = (await slips(tx, venue.printers.fryer)).length;
+      await edit(tx, venue, 1, { quantity: "2" });
+      const { lines, items } = await state(tx, venue.party.tabId);
+      expect(lines.filter((row) => row.parentLineId === null).map((row) => row.quantity)).toEqual([
+        1000, 1000,
+      ]);
+      expect(items.map((item) => [item.stationId, item.quantity])).toEqual([
+        [venue.stations.fryer, 2000],
+        [venue.stations.fryer, 2000],
+      ]);
+      const after = await slips(tx, venue.printers.fryer);
+      expect(after).toHaveLength(before + 1);
+      expect(after.at(-1)).toContain("+2");
+      expect(await slips(tx, venue.printers.grill)).toEqual([]);
     });
   });
 
@@ -490,10 +573,15 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      await placeGroups(tx, venue.cfg, venue.party.partyId, {
-        operatorId: OPERATOR,
-        groups: [{ lines: [line(venue, "water", "1", 2)], release: "hold" }],
-      });
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      await placeGrouped(
+        tx,
+        venue.cfg,
+        venue.party,
+        [line(venue, "water", "1", 2)],
+        "hold",
+        OPERATOR,
+      );
       const before = (await slips(tx, venue.printers.fryer)).length;
       await edit(tx, venue, 1, { quantity: "2" });
       const items = (await state(tx, id)).items;

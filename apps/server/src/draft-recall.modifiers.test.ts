@@ -25,9 +25,10 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { adjustments, createAdjustmentReason } from "@waitron/adjustments";
-import { workingLineContexts } from "@waitron/venue-service";
+import { workingLineContexts, writePartyAllergy } from "@waitron/venue-service";
 import { decimal } from "@waitron/shared";
 import { applyAdjustment } from "./adjustments-apply.js";
+import { placeGrouped } from "./testing/adjustment-venue.js";
 import { type BillDraftSnapshot, type Draft } from "./order-drafts.js";
 import {
   inTx,
@@ -67,7 +68,7 @@ async function command(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
   return { submissionId: randomUUID(), expectedPartyRevision: party!.revision };
 }
-async function setup(withVariant = false) {
+async function setup(withVariant = false, shape?: "grouped") {
   const seeded = await inTx(venue, async (tx) => {
     const [existing] = await tx.select().from(products).where(eq(products.name, "Tarta"));
     const product = async (name: string, price: string) =>
@@ -168,25 +169,28 @@ async function setup(withVariant = false) {
   const cheesePicks = [
     { listId: seeded.extras.id, picks: [{ productId: seeded.cheese.id, quantity: 1 }] },
   ];
-  const sent = await call("POST", `/api/parties/${partyId}/groups`, {
-    allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-    ...(await command(partyId)),
-    groups: [
-      {
-        release: "hold",
-        lines: [
-          {
-            menuItemId: seeded.menuItemId,
-            variantId: seeded.variant?.id,
-            quantity: "2",
-            options: rare,
-            extras: cheesePicks,
-          },
-        ],
-      },
-    ],
-  });
-  expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+  const placed = [
+    {
+      menuItemId: seeded.menuItemId,
+      variantId: seeded.variant?.id,
+      quantity: "2",
+      options: rare,
+      extras: cheesePicks,
+    },
+  ];
+  if (shape === "grouped") {
+    await inTx(venue, async (tx) => {
+      await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.operatorId);
+      await placeGrouped(tx, venue.cfg, { partyId, tabId }, placed, "hold", venue.operatorId);
+    });
+  } else {
+    const sent = await call("POST", `/api/parties/${partyId}/groups`, {
+      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+      ...(await command(partyId)),
+      groups: [{ release: "hold", lines: placed }],
+    });
+    expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+  }
   const rows = await venue.db
     .select()
     .from(workingOrderLines)
@@ -269,19 +273,18 @@ describe("recalled modifier edits", () => {
   it.each([false, true])(
     "prices newly selected extras for two sources from one shared offer snapshot, fresh=%s",
     async (fresh) => {
-      const p = await setup();
-      const added = await call("POST", `/api/parties/${p.partyId}/groups`, {
-        ...(await command(p.partyId)),
-        groups: [
-          {
-            release: "hold",
-            lines: [
-              { menuItemId: p.menuItemId, quantity: "2", options: p.rare, extras: p.cheesePicks },
-            ],
-          },
-        ],
-      });
-      expect(added.status, JSON.stringify(added.json)).toBe(200);
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      const p = await setup(false, "grouped");
+      await inTx(venue, (tx) =>
+        placeGrouped(
+          tx,
+          venue.cfg,
+          { partyId: p.partyId, tabId: p.tabId },
+          [{ menuItemId: p.menuItemId, quantity: "2", options: p.rare, extras: p.cheesePicks }],
+          "hold",
+          venue.operatorId,
+        ),
+      );
       const second = (await family(p)).find(
         (row) => row.parentLineId === null && row.id !== p.parent.id,
       )!;
@@ -442,7 +445,8 @@ describe("recalled modifier edits", () => {
   });
 
   it("scales kept extras at their stored discount while pricing an addition at the increased quantity", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup(false, "grouped");
     const before = await frozen(p);
     const answer = await save(p, {
       quantity: "3",
@@ -479,8 +483,38 @@ describe("recalled modifier edits", () => {
     );
   });
 
+  it.each([
+    { quantity: "2", dishes: 2 },
+    { quantity: "1", dishes: 1 },
+  ])(
+    "prices an extra added to a whole portion raised to $quantity for one dish on each portion",
+    async ({ quantity, dishes }) => {
+      const p = await setup();
+      const answer = await save(p, {
+        quantity,
+        extras: [
+          {
+            listId: p.extras.id,
+            picks: [
+              { productId: p.cheese.id, quantity: 1 },
+              { productId: p.bacon.id, quantity: 1 },
+            ],
+          },
+        ],
+      });
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const bacon = (await family(p)).filter((row) => row.productId === p.bacon.id);
+      expect(bacon.map((row) => ({ quantity: row.quantity, total: row.lineTotal }))).toEqual(
+        Array.from({ length: dishes }, () => ({ quantity: 1000, total: 200 })),
+      );
+      expect(new Set(bacon.map((row) => row.parentLineId)).size).toBe(dishes);
+      expect(bacon[0]!.parentLineId).toBe(p.parent.id);
+    },
+  );
+
   it("removes a recorded extra while keeping the original dish price and adjustment history", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup(false, "grouped");
     const before = await frozen(p);
     const answer = await save(p, { extras: [] });
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
@@ -518,7 +552,8 @@ describe("recalled modifier edits", () => {
   );
 
   it("changes an option on an unavailable discounted dish without repricing its family", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup(false, "grouped");
     await venue.db
       .update(products)
       .set({ available: false, unitPrice: 9900 })
@@ -568,7 +603,8 @@ describe("recalled modifier edits", () => {
   it.each([false, true])(
     "adds only a newly priced extra to an unavailable dish, variant=%s",
     async (variant) => {
-      const p = await setup(variant);
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      const p = await setup(variant, "grouped");
       await venue.db
         .update(products)
         .set({ available: false, unitPrice: 9900 })
@@ -658,7 +694,8 @@ describe("recalled modifier edits", () => {
   );
 
   it("rolls back a newly priced extra that exceeds the simplified-invoice ceiling", async () => {
-    const p = await setup();
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup(false, "grouped");
     const before = await frozen(p);
     await expect(
       inTx(venue, (tx) =>
@@ -702,7 +739,8 @@ describe("mixed New order persistence through authenticated requests", () => {
   it.each([false, true])(
     "keeps fresh placement and a discounted recalled family through reread, takeover and partial send, variant=%s",
     async (variant) => {
-      const p = await setup(variant);
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      const p = await setup(variant, "grouped");
       const before = await frozen(p);
       const path = `/api/parties/${p.partyId}/drafts`;
       const firstRead = await call("GET", path);
@@ -820,10 +858,14 @@ describe("mixed New order persistence through authenticated requests", () => {
       expect(
         stored.filter((line) => line.id === p.parent.id || line.parentLineId === p.parent.id),
       ).toEqual(before.lines);
+      // The fresh Caña ×2 is sent as two portions, each its own line (A803).
       expect(
         stored.filter((line) => line.id !== p.parent.id && line.parentLineId !== p.parent.id),
-      ).toMatchObject([{ name: "Caña", quantity: 2000, lineTotal: 600 }]);
-      expect(stored).toHaveLength(3);
+      ).toMatchObject([
+        { name: "Caña", quantity: 1000, lineTotal: 300 },
+        { name: "Caña", quantity: 1000, lineTotal: 300 },
+      ]);
+      expect(stored).toHaveLength(4);
       const afterSend = await frozen(p);
       expect(afterSend.adjustments).toEqual(before.adjustments);
       expect(afterSend.sources).toEqual(afterSave.sources);

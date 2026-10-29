@@ -71,6 +71,13 @@
       "when": 1792969365976,
       "tag": "0009_personal_data_person_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1793210692202,
+      "tag": "0010_ordinary_colossus",
+      "breakpoints": true
     }
   ]
 }

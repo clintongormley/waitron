@@ -25,10 +25,16 @@ import { readBillEditState } from "./bill-editing.js";
 import type { BillDraftSnapshot } from "./order-drafts.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
+import { placeGrouped } from "./testing/adjustment-venue.js";
 import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { splitDraft, takeOverDraft } from "./order-drafts.js";
-import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "@waitron/venue-service";
+import {
+  readPartyAllergy,
+  savePartyAllergy,
+  setAllergyLineTicks,
+  writePartyAllergy,
+} from "@waitron/venue-service";
 import { createExtraList, writeProductModifiers } from "@waitron/catalogue";
 import type { ExtraSelection } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
@@ -118,30 +124,35 @@ async function withSource(
   p: Awaited<ReturnType<typeof setup>>,
   keepSent = false,
   selections: ExtraSelection[] = [],
+  shape?: "grouped",
 ) {
-  const groupPath = `/api/parties/${p.partyId}/groups`;
-  const sent = await send(
-    venue.app,
-    venue.cookie,
-    "POST",
-    groupPath,
-    await observedGroupSubmitBody(venue.db, groupPath, {
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      submissionId: randomUUID(),
-      expectedPartyRevision: p.body.expectedPartyRevision,
-      billId: p.billId,
-      groups: [
-        {
-          release: "hold",
-          lines: [
-            { menuItemId: venue.offerFor("Paella"), quantity: "2", extras: selections },
-            ...(keepSent ? [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] : []),
-          ],
-        },
-      ],
-    }),
-  );
-  expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+  const lines = [
+    { menuItemId: venue.offerFor("Paella"), quantity: "2", extras: selections },
+    ...(keepSent ? [{ menuItemId: venue.offerFor("Caña"), quantity: "1" }] : []),
+  ];
+  if (shape === "grouped") {
+    await inTx(venue, async (tx) => {
+      await writePartyAllergy(tx, p.partyId, { answer: "none", guests: [] }, venue.operatorId);
+      const seated = { partyId: p.partyId, tabId: p.billId };
+      await placeGrouped(tx, venue.cfg, seated, lines, "hold", venue.operatorId);
+    });
+  } else {
+    const groupPath = `/api/parties/${p.partyId}/groups`;
+    const sent = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      groupPath,
+      await observedGroupSubmitBody(venue.db, groupPath, {
+        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+        submissionId: randomUUID(),
+        expectedPartyRevision: p.body.expectedPartyRevision,
+        billId: p.billId,
+        groups: [{ release: "hold", lines }],
+      }),
+    );
+    expect(sent.status, JSON.stringify(sent.json)).toBe(200);
+  }
   const [source] = await venue.db
     .select()
     .from(workingOrderLines)
@@ -390,7 +401,8 @@ describe("splitting a saved outbox to a new bill", () => {
     "keeps a received %s on its original bill and refuses moving its charged food",
     async (kind) => {
       const p = await setup();
-      const { source, snapshot } = await withSource(p);
+      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      const { source, snapshot } = await withSource(p, false, [], "grouped");
       const paymentId = randomUUID();
       await inTx(venue, async (tx) => {
         await tx.insert(billPayments).values({
@@ -458,7 +470,8 @@ describe("splitting a saved outbox to a new bill", () => {
 
   it("uses the existing issuance path when the remaining sent food is fully paid after the split", async () => {
     const p = await setup();
-    const { snapshot } = await withSource(p, true);
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const { snapshot } = await withSource(p, true, [], "grouped");
     await venue.db.insert(billPayments).values({
       workingOrderId: p.billId,
       submissionId: randomUUID(),
@@ -496,7 +509,8 @@ describe("splitting a saved outbox to a new bill", () => {
 
   it("moves every extra with its recalled parent, retaining the recorded amounts and single reservation", async () => {
     const p = await setup();
-    const { source, snapshot } = await withSource(p, false, extras);
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const { source, snapshot } = await withSource(p, false, extras, "grouped");
     const before = await venue.db
       .select()
       .from(workingOrderLines)

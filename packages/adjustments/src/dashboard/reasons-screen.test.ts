@@ -1192,7 +1192,7 @@ describe("the editor", () => {
     [
       "en",
       "No limit",
-      "Everything this reason took off the item counts.",
+      "Counts every discount on the item, from any reason or on the whole bill.",
       "The venue's own amount. Above it, someone who can approve it is asked.",
     ],
     [
@@ -2159,7 +2159,7 @@ describe("the bill comp limit", () => {
       heading: "Limit on a bill's comps",
       label: "Most comped on one bill",
       placeholder: "No limit",
-      hint: "Every comp on the bill counts, whatever its reason. Above it, someone on the next list enters their PIN.",
+      hint: "Every comp on the bill counts, whatever its reason. Above it, someone on the next list who may also approve the reason enters their PIN.",
       roles: "Who can approve past it",
       value: "40.00",
       chosen: "Manager, Admin",

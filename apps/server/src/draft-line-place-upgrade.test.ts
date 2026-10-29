@@ -40,9 +40,28 @@ try {
   throw error;
 }
 
+// The predecessor database lacks the tables later core migrations create, so it carries no
+// append-only triggers for them.
+const laterTables = new Set(
+  journal.entries
+    .slice(index)
+    .flatMap(({ tag }) => [
+      ...readFileSync(join(core.migrationsFolder, `${tag}.sql`), "utf8").matchAll(
+        /CREATE TABLE `(\w+)`/g,
+      ),
+    ])
+    .map((match) => match[1]!),
+);
+
 const suite = useVenueDb({
   migrations: options.map((set) =>
-    set === core ? { ...set, migrationsFolder: previousFolder! } : set,
+    set === core
+      ? {
+          ...set,
+          migrationsFolder: previousFolder!,
+          appendOnlyTables: (set.appendOnlyTables ?? []).filter((name) => !laterTables.has(name)),
+        }
+      : set,
   ),
 });
 

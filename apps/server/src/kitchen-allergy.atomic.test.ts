@@ -57,6 +57,9 @@ async function ordered(
   for (const result of results) if (result.status === "rejected") throw result.reason;
   expect(order).toEqual(["first acquired", "first finished", "second acquired"]);
 }
+function byTicket<T extends { ticketItemId: string }>(rows: T[]) {
+  return [...rows].sort((a, b) => a.ticketItemId.localeCompare(b.ticketItemId));
+}
 async function editWithin(tx: Transaction, f: KitchenFixture, note: string) {
   const snapshot = await VENUE_SERVICE.readPartyAllergy(tx, f.party.partyId);
   const view = await readPartyAllergyView(tx, f.v.cfg, f.party.partyId);
@@ -98,13 +101,15 @@ describe("A669 atomic", () => {
           allergyBlock: { ...kitchenOriginal, note },
         })),
       );
-      expect(state.copies).toEqual([
-        {
-          ticketItemId: f.ticket.id,
-          originalBlock: kitchenOriginal,
-          currentBlock: { ...kitchenOriginal, note: notes[1] },
-        },
-      ]);
+      expect(byTicket(state.copies)).toEqual(
+        byTicket(
+          f.tickets.map((ticket) => ({
+            ticketItemId: ticket.id,
+            originalBlock: kitchenOriginal,
+            currentBlock: { ...kitchenOriginal, note: notes[1] },
+          })),
+        ),
+      );
       expect(state.jobs).toHaveLength(2);
     },
   );
@@ -163,7 +168,7 @@ describe("A669 atomic", () => {
           f.party.tabId,
           {
             submissionId: randomUUID(),
-            lineIds: [f.ticket.workingOrderLineId],
+            lineIds: f.tickets.map((ticket) => ticket.workingOrderLineId),
             stationId: destination.id,
           },
           { kind: "kitchen", deviceId: null, personId: OPERATOR },
@@ -182,9 +187,15 @@ describe("A669 atomic", () => {
           allergyBlock: kitchenCurrent,
         })),
       );
-      expect(state.copies).toEqual([
-        { ticketItemId: f.ticket.id, originalBlock: kitchenOriginal, currentBlock: kitchenCurrent },
-      ]);
+      expect(byTicket(state.copies)).toEqual(
+        byTicket(
+          f.tickets.map((ticket) => ({
+            ticketItemId: ticket.id,
+            originalBlock: kitchenOriginal,
+            currentBlock: kitchenCurrent,
+          })),
+        ),
+      );
     },
   );
 

@@ -3099,3 +3099,106 @@ describe("A773 waiter authority — expo contract", () => {
     expect("fireControl" in el).toBe(false);
   });
 });
+
+describe("A803 portion grouping: the pass", () => {
+  afterEach(cleanupWidgets);
+
+  const portion = (id: string, overrides: Partial<ExpoItem> = {}): ExpoItem => ({
+    ...threeCourseOrder.courses[0]!.items[0]!,
+    id,
+    name: "Burger",
+    qty: "1.000",
+    unitName: null,
+    unitPrecision: 0,
+    soldInEach: true,
+    state: "preparing",
+    ...overrides,
+  });
+  const withItems = (items: ExpoItem[]): ExpoOrder => ({
+    ...threeCourseOrder,
+    courses: [{ ...threeCourseOrder.courses[1]!, items }],
+  });
+  const names = (el: TillExpoScreen) =>
+    [...el.shadowRoot!.querySelectorAll(".item-name")].map((name) => name.textContent);
+
+  it("A803 portion grouping: two identical portions show as 2× Burger on one row", async () => {
+    const el = await mount({
+      api: stubApi([withItems([portion("p1"), portion("f1", { name: "Fish" }), portion("p2")])]),
+    });
+    expect(names(el)).toEqual(["2× Burger", "1× Fish"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it.each<[string, Partial<ExpoItem>]>([
+    ["another state", { state: "ready" }],
+    ["another station", { stationName: "Parrilla" }],
+    ["another extra", { modifiers: [{ descriptions: { "en-GB": "Cheese" } }] }],
+    ["another note", { note: "no salt" }],
+    ["a measure", { qty: "200.000", unitName: { "en-GB": "ml" }, soldInEach: false }],
+  ])("A803 portion grouping: a portion with %s shows apart", async (_, overrides) => {
+    const el = await mount({
+      api: stubApi([withItems([portion("p1"), portion("p2", overrides)])]),
+    });
+    expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
+  });
+
+  it("A803 portion grouping: a portion whose extra has another count shows apart, each row with its own count", async () => {
+    const cheese = (perDish: number) => [{ descriptions: { "en-GB": "Cheese" }, perDish }];
+    const el = await mount({
+      api: stubApi([
+        withItems([
+          portion("p1", { modifiers: cheese(1) }),
+          portion("p2", { modifiers: cheese(2) }),
+          portion("p3", { modifiers: cheese(1) }),
+        ]),
+      ]),
+    });
+    expect(names(el)).toEqual(["2× Burger", "1× Burger"]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Cheese", "+ Cheese x2"]);
+  });
+
+  it("A803 portion grouping: portions queued a millisecond apart still show as one row", async () => {
+    const el = await mount({
+      api: stubApi([
+        withItems([portion("p1"), portion("p2", { queuedAt: "2026-08-17T10:00:00.001Z" })]),
+      ]),
+    });
+    expect(names(el)).toEqual(["2× Burger"]);
+  });
+
+  it("A803 portion grouping: a forgotten portion and a fresh one show apart", async () => {
+    const el = await mount({
+      now: Date.parse("2026-08-17T10:20:00.000Z"),
+      api: stubApi([
+        withItems([portion("p1"), portion("p2", { queuedAt: "2026-08-17T10:10:00.000Z" })]),
+      ]),
+    });
+    expect(names(el)).toEqual(["1× Burger", "1× Burger"]);
+    expect(el.shadowRoot!.querySelectorAll("[data-forgotten]")).toHaveLength(1);
+  });
+
+  it("A803 portion grouping: a party's group section shows identical portions as one row", async () => {
+    const order: ExpoOrder = {
+      ...threeCourseOrder,
+      party: { id: "party-1", revision: 3 },
+      courses: [],
+      groups: [
+        {
+          groupId: "g-3",
+          position: 3,
+          displayNumber: 3,
+          numberPartyId: "party-1",
+          state: "fired",
+          fired: true,
+          items: [portion("p1"), portion("p2")],
+        },
+      ],
+    };
+    const el = await mount({ api: stubApi([order]) });
+    expect(names(el)).toEqual(["2× Burger"]);
+  });
+});

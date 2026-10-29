@@ -190,6 +190,17 @@ terminal, una tarjeta ofrece además **Reimprimir**, y **Entregar** cuando su pe
 pendiente de recoger; una pantalla de cocina en la que nadie inicia sesión no muestra ninguno de los
 dos.
 
+## Los platos iguales comparten fila {#identical-dishes}
+
+Un pedido de 2 × Hamburguesa de una mesa llega a cocina como dos platos, para que el terminal pueda
+servir o mover cada uno por separado. La cocina los sigue viendo juntos: la comanda de la estación,
+la pantalla de cocina y el pase los muestran como una fila de 2 mientras son iguales, y la lista
+**También en este pedido** de la comanda y las comandas de corrección como **HOLD CHANGED** los
+imprimen una sola vez. Los platos quedan en filas distintas cuando cambian sus extras o sus notas, o
+cuando uno va más avanzado que el otro. En la pantalla de cocina, tocar una fila, o moverla a otra
+estación, lleva todos sus platos. Los platos al peso siempre se muestran e imprimen uno a uno, porque
+cada uno se pesa por separado.
+
 ## Un plato enviado tras acabar su periodo {#after-period}
 
 En el terminal, un plato sin enviar cuyo periodo acabó antes en el mismo día de servicio muestra un

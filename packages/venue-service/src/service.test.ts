@@ -32,6 +32,7 @@ describe("VENUE_SERVICE", () => {
       "closeStationForToday",
       "closedZoneIdsAt",
       "copyLineContext",
+      "copyLineContexts",
       "copyOrderContext",
       "copyProfileKitchenScreens",
       "copyTicketAllergy",

@@ -191,6 +191,13 @@ export {
 export { saleVoids } from "./schema/sale-voids.js";
 export { unpaidDepartures } from "./schema/unpaid-departures.js";
 export {
+  ORDER_PORTION_EVENT_KINDS,
+  orderPortionEvents,
+  orderPortions,
+  saleLinePortions,
+  workingLinePortions,
+} from "./schema/order-portions.js";
+export {
   billPaymentKind,
   billPaymentLines,
   billPaymentMethod,

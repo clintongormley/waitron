@@ -20,7 +20,8 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { adjustments } from "@waitron/adjustments";
-import { kitchenNotices } from "@waitron/venue-service";
+import { kitchenNotices, writePartyAllergy } from "@waitron/venue-service";
+import { placeGrouped } from "./testing/adjustment-venue.js";
 import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import type { Draft } from "./order-drafts.js";
@@ -54,7 +55,7 @@ async function command(partyId: string) {
   const [party] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
   return { submissionId: randomUUID(), expectedPartyRevision: party!.revision };
 }
-async function setup(recalled: boolean, release: "hold" | "fire" = "hold") {
+async function setup(recalled: boolean, release: "hold" | "fire" = "hold", shape?: "grouped") {
   const table = await inTx(venue, (tx) =>
     createTable(tx, venue.cfg, {
       label: `Legacy-${randomUUID()}`,
@@ -64,15 +65,23 @@ async function setup(recalled: boolean, release: "hold" | "fire" = "hold") {
   const seated = await call("POST", `/api/tables/${table.id}/seat`, {});
   expect(seated.status).toBe(200);
   const { partyId, tabId } = seated.json as unknown as { partyId: string; tabId: string };
-  expect(
-    (
-      await call("POST", `/api/parties/${partyId}/groups`, {
-        allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-        ...(await command(partyId)),
-        groups: [{ release, lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "2" }] }],
-      })
-    ).status,
-  ).toBe(200);
+  const lines = [{ menuItemId: venue.offerFor("Tarta"), quantity: "2" }];
+  if (shape === "grouped") {
+    await inTx(venue, async (tx) => {
+      await writePartyAllergy(tx, partyId, { answer: "none", guests: [] }, venue.operatorId);
+      await placeGrouped(tx, venue.cfg, { partyId, tabId }, lines, release, venue.operatorId);
+    });
+  } else {
+    expect(
+      (
+        await call("POST", `/api/parties/${partyId}/groups`, {
+          allergy: { party: { answer: "none", guests: [] }, ticks: [] },
+          ...(await command(partyId)),
+          groups: [{ release, lines }],
+        })
+      ).status,
+    ).toBe(200);
+  }
   const [line] = await venue.db
     .select()
     .from(workingOrderLines)
@@ -188,7 +197,8 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
       (key) => key !== "basket omission" && key !== "named send",
     ) as (keyof typeof edits)[],
   )("still serves %s on a bill without a recalled source", async (operation) => {
-    const p = await setup(false);
+    // A move of both Tartas: grouped, as a counter order moved to a table keeps it (plan D1).
+    const p = await setup(false, "hold", operation === "group move" ? "grouped" : undefined);
     const answer = await edits[operation](p);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     if (operation === "line edit") {

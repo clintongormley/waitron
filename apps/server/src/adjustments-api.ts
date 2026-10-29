@@ -65,6 +65,7 @@ function parseAsk(
   }
   if (body.lineId === undefined) throw invalid("lineId");
   const lineId = requireNullableBodyUuid(body.lineId, "lineId");
+  const lineIds = lineIdsOf(body.lineIds, lineId);
   if (quantity !== undefined && typeof quantity !== "string") throw invalid("quantity");
   if (percentBp !== undefined && typeof percentBp !== "number") throw invalid("percentBp");
   const amount = optionalMoney(body.amount, "amount");
@@ -81,6 +82,7 @@ function parseAsk(
     ...(body.sourceDraftId === undefined ? {} : { sourceDraftId: body.sourceDraftId as string }),
     expectedRevision,
     lineId: lineId === null ? null : lineId.toLowerCase(),
+    ...(lineIds === undefined ? {} : { lineIds }),
     reasonId: requireBodyUuid(body.reasonId, "reasonId").toLowerCase(),
     action: action as AdjustmentAsk["action"],
     ...(quantity === undefined ? {} : { quantity }),
@@ -89,6 +91,16 @@ function parseAsk(
     note: typeof note === "string" ? note : null,
     operatorId,
   };
+}
+
+function lineIdsOf(value: unknown, lineId: string | null): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || lineId === null) throw invalid("lineIds");
+  const ids = value.map((id) => requireBodyUuid(id, "lineIds").toLowerCase());
+  if (ids.length < 2 || new Set(ids).size !== ids.length || !ids.includes(lineId.toLowerCase())) {
+    throw invalid("lineIds");
+  }
+  return ids;
 }
 
 /** `?roles=` as a comma-separated list: each a role, at least one, none twice. */

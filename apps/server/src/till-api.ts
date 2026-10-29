@@ -591,6 +591,7 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "table.not_shared": 409,
   "tab.transfer_modifier_line": 400,
   "tab.split_held_line": 400,
+  "tab.portions_too_many": 400,
   "party.not_open": 409,
   "party.not_found": 404,
   "service_step.not_found": 404,
@@ -643,6 +644,8 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "adjustment.action_not_allowed": 409,
   "adjustment.weighed_partial": 409,
   "adjustment.no_reduction": 409,
+  "adjustment.no_common_approver": 409,
+  "adjustment.free_not_allowed": 409,
   "adjustment.note_required": 400,
   "adjustment.quantity_invalid": 400,
 };

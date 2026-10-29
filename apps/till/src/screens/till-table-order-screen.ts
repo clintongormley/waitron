@@ -1,5 +1,5 @@
 import type { PartyAllergyRead } from "@waitron/module";
-import { allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
+import { allergyGuestId, allergyMark, allergyMarkStyles } from "../widgets/party-allergy-mark.js";
 import { allergenLabel } from "../i18n/allergen-names.js";
 import { DraftStore, type RetainedDraftCandidate } from "../state/draft-sync.js";
 import { groupNumberText } from "../widgets/group-name.js";
@@ -51,7 +51,9 @@ import {
   compareDecimal,
   decimal,
   formatMoney,
+  multiplyDecimal,
   subtractDecimal,
+  sumDecimals,
   type Decimal,
 } from "@waitron/shared";
 import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
@@ -63,11 +65,16 @@ import {
   memoVisibleProducts,
   shownMenu,
 } from "../menu-filter.js";
-import { lineProductName, productName, soldByTheUnit } from "../widgets/product-name.js";
+import { lineProductName, productName } from "../widgets/product-name.js";
 import { trimQuantity } from "../widgets/dish-format.js";
 import { WorkingOrderStore, type OrderLine } from "../state/working-order.js";
 import { lineNutrition } from "../widgets/line-nutrition.js";
-import { toWireLineExtras, toWireModifiers, toWireProductIdentity } from "../state/order-line.js";
+import {
+  takesExtras,
+  toWireLineExtras,
+  toWireModifiers,
+  toWireProductIdentity,
+} from "../state/order-line.js";
 import "../widgets/basket.js";
 import "../widgets/last-added.js";
 import "../widgets/menu-browser.js";
@@ -96,6 +103,7 @@ import {
   billGross,
   isStarted,
   lineAdjustTarget,
+  rowAdjustTarget,
   listedGross,
   tabLineGross,
 } from "../state/adjust-target.js";
@@ -155,6 +163,7 @@ import type { AdjustKind, AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { PayLine, PayWay } from "../widgets/bill-pay-dialog.js";
 import "../widgets/dead-ends-section.js";
 import { PAY_WAYS, paidQuantities, payLines } from "../state/bill-payment.js";
+import { portionGroups, sentSlicePortionKey, tabLinePortionKey } from "../state/portion-groups.js";
 
 /** The screen's own width, in CSS pixels, from which browsing and the draft show side by side.
  * Narrower, the draft opens on its own Review view. */
@@ -213,7 +222,7 @@ function flagged(line: OrderLine): boolean {
 
 /** A dish no longer offered has no unit to read, so a whole quantity is counted as whole units. */
 function countsWholeUnits(line: OrderLine): boolean {
-  return soldByTheUnit(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
+  return takesExtras(line.product) || (line.notOffered === true && /^\d+$/.test(line.quantity));
 }
 
 /** The table actions that name a table: Move guests, Join a table and Move this bill. */
@@ -1203,9 +1212,14 @@ export class TillTableOrderScreen extends LitElement {
     billId: string | undefined;
     visit: number;
   };
-  /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. */
-  @state() private servePending: { row: CurrentOrderRow; undo: boolean; count: Decimal } | null =
-    null;
+  /** A row whose Mark served, or its undo, asks how many; `count` is what is chosen so far. A
+   * grouped row's `members` are its portions by line number, and `count` counts portions. */
+  @state() private servePending: {
+    row: CurrentOrderRow;
+    undo: boolean;
+    count: Decimal;
+    members?: readonly CurrentOrderRow[];
+  } | null = null;
 
   #serveAuthority?: {
     api: TillApi | undefined;
@@ -1945,6 +1959,7 @@ export class TillTableOrderScreen extends LitElement {
       );
       this.#lineByNo = new Map(this.lines.map((line) => [line.lineNo, line]));
     }
+    this.#tidyPickedPortions();
     // A tab switch must not carry a half-open action flow across: its targets belong to the OLD tab.
     if (changed.has("orderId") && changed.get("orderId") !== undefined) {
       this.#closeActions();
@@ -2052,6 +2067,15 @@ export class TillTableOrderScreen extends LitElement {
    * product. */
   #isChild(line: TabLine): boolean {
     return (line.parentLineNo ?? null) !== null;
+  }
+
+  /** The server will not move part of a dish line with extras (`carveLines`). A portion is one
+   * whole dish, so only a dish that is not one can be asked to part. */
+  #holdsDishWithExtrasToPart(): boolean {
+    return this.lines.some(
+      (line) =>
+        line.portion !== true && this.lines.some((extra) => extra.parentLineNo === line.lineNo),
+    );
   }
 
   #nameFor(productId: string | null): string {
@@ -2195,14 +2219,10 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #lineTotal(line: TabLine): TemplateResult {
-    return lineTotal(listedGross(line), this.#lineGross(line));
-  }
-
-  #recallLine(lineNo: number): void {
+  #recallLines(lineNos: number[]): void {
     this.dispatchEvent(
       new CustomEvent("recall-lines", {
-        detail: { lineNos: [lineNo] },
+        detail: { lineNos },
         bubbles: true,
         composed: true,
       }),
@@ -2460,6 +2480,7 @@ export class TillTableOrderScreen extends LitElement {
       ${this.currentOrders === null ? this.#sentFallback() : nothing}
       <till-sent-orders
         .allergy=${this.#allergy()?.snapshot ?? null}
+        .lines=${this.lines}
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
@@ -2518,16 +2539,21 @@ export class TillTableOrderScreen extends LitElement {
     );
     const dishes = this.lines.filter((line) => !this.#isChild(line) && !recalled.has(line.id));
     if (dishes.length === 0) return nothing;
+    const groups = portionGroups(
+      dishes,
+      (dish) => this.#fallbackPortionKey(dish),
+      (dish) => dish.lineNo,
+    );
     // Bill lines lack partial serving quantities, so this fallback offers no actions.
     return html`<section class="sent-fallback" data-sent-fallback>
       <h2>${t("table.sent_title")}</h2>
       <ul>
-        ${dishes.map(
-          (dish) =>
-            html`<li data-sent-fallback-line=${dish.id}>
-              ${this.#sentFallbackLine(dish)}
+        ${groups.map(
+          ({ 0: dish, length: count }) =>
+            html`<li data-sent-fallback-line=${dish!.id}>
+              ${this.#sentFallbackLine(dish!, count)}
               <ul>
-                ${this.lines.filter((line) => line.parentLineNo === dish.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra)}</li>`)}
+                ${this.lines.filter((line) => line.parentLineNo === dish!.lineNo).map((extra) => html`<li data-sent-fallback-extra=${extra.id}>${this.#sentFallbackLine(extra, count)}</li>`)}
               </ul>
             </li>`,
         )}
@@ -2535,15 +2561,38 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #sentFallbackLine(line: TabLine): TemplateResult {
+  /** Portions also differ by what this list prints of each: its allergy mark and a whole payment.
+   * A part payment would print against one portion's count, so such a line stands alone. */
+  #fallbackPortionKey(dish: TabLine): string | null {
+    const balance = this.#balanceShown();
+    const paid = balance === null ? undefined : paidQuantities(balance).get(dish.lineNo);
+    if (
+      paid !== undefined &&
+      compareDecimal(decimal(paid), decimal("0")) > 0 &&
+      compareDecimal(decimal(paid), decimal(dish.quantity)) < 0
+    )
+      return null;
+    return tabLinePortionKey(dish, this.lines, [
+      paid ?? null,
+      allergyGuestId(this.#allergy()?.snapshot ?? null, { kind: "working", id: dish.id }),
+    ]);
+  }
+
+  /** `count` identical portions' line, shown once with its price multiplied; a dish's quantity is
+   * multiplied too, while an extra keeps its count per portion (spec §3.1). */
+  #sentFallbackLine(line: TabLine, count = 1): TemplateResult {
+    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
+    const quantity = decimal(line.quantity);
     return html`<div class="sent-fallback-row">
       <span class="sent-fallback-name"
-        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(line.quantity)}`}
+        >${this.#nameForLine(line)}${this.#nutrition(line)}${this.#isChild(line) ? nothing : allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: line.id })}${` ×${this.#displayQty(this.#isChild(line) ? quantity : times(quantity))}`}
         ${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${this.#lineNote(line)}
         ${this.#isChild(line) ? nothing : this.#sentCourse(line.courseId, line.course)}
         ${this.#paidMark(line.lineNo, line.quantity)}
       </span>
-      <span class="sent-fallback-price" data-sent-fallback-price>${this.#lineTotal(line)}</span>
+      <span class="sent-fallback-price" data-sent-fallback-price
+        >${lineTotal(times(listedGross(line)), times(this.#lineGross(line)))}</span
+      >
     </div>`;
   }
 
@@ -2560,6 +2609,12 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   #sentLine(): SentSlice | undefined {
+    return this.#sentLineMembers()?.[0];
+  }
+
+  /** The portions the open sheet speaks for, by line number: the row's one slice, or every member
+   * of a grouped row while they all still show as that one row. */
+  #sentLineMembers(): SentSlice[] | undefined {
     const pending = this.sentLinePending;
     if (
       pending === null ||
@@ -2572,12 +2627,31 @@ export class TillTableOrderScreen extends LitElement {
     )
       return;
     const model = sentPanel(this.currentOrders, this.orderId ?? "", this.now ?? Date.now());
-    return [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)].find(
-      (slice) =>
-        slice.row.lineId === pending.info.lineId &&
-        slice.kind === pending.info.kind &&
-        slice.row.workingOrderId === pending.info.workingOrderId,
-    );
+    const slices = [...model.served, ...model.fired, ...model.held.flatMap((group) => group.rows)];
+    const members: SentSlice[] = [];
+    for (const lineId of pending.info.lineIds ?? [pending.info.lineId]) {
+      const member = slices.find(
+        (slice) =>
+          slice.row.lineId === lineId &&
+          slice.kind === pending.info.kind &&
+          slice.row.workingOrderId === pending.info.workingOrderId,
+      );
+      if (member === undefined) return;
+      members.push(member);
+    }
+    members.sort((a, b) => a.row.lineNo - b.row.lineNo);
+    if (members.length > 1) {
+      const allergy = this.#allergy()?.snapshot ?? null;
+      const keys = members.map((member) =>
+        sentSlicePortionKey(
+          member,
+          this.lines,
+          allergyGuestId(allergy, { kind: "working", id: member.row.lineId }),
+        ),
+      );
+      if (keys.some((key) => key === null || key !== keys[0])) return;
+    }
+    return members;
   }
 
   #serveFromSentLine(pending: typeof this.sentLinePending, undo: boolean): void {
@@ -2589,17 +2663,24 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
-    const slice = this.#sentLine();
+    const members = this.#sentLineMembers();
     if (
-      slice === undefined ||
-      slice.kind !== (undo ? "served" : "fired") ||
-      (!undo && !slice.row.released) ||
-      (undo && !this.#sentBillOpen(slice.row))
+      members === undefined ||
+      members.some(
+        (slice) =>
+          slice.kind !== (undo ? "served" : "fired") ||
+          (!undo && !slice.row.released) ||
+          (undo && !this.#sentBillOpen(slice.row)),
+      )
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
-    this.#requestServe(slice.row, undo);
+    this.#requestServe(
+      members[0]!.row,
+      undo,
+      members.length === 1 ? undefined : members.map((member) => member.row),
+    );
   }
 
   #sentBillOpen(row: CurrentOrderRow): boolean {
@@ -2692,46 +2773,67 @@ export class TillTableOrderScreen extends LitElement {
       this.groupCommandBusy
     )
       return;
-    const slice = this.#sentLine();
+    const members = this.#sentLineMembers();
+    const slice = members?.[0];
     if (
+      members === undefined ||
       slice === undefined ||
       (action === "fire" && !this.#canFireSent(slice)) ||
-      (action === "recall" && !this.#canRecallSent(slice)) ||
-      (action === "station" && !this.#canMoveSent(slice)) ||
+      (action === "recall" && !members.every((member) => this.#canRecallSent(member))) ||
+      (action === "station" && !members.every((member) => this.#canMoveSent(member))) ||
       (action === "void" && !this.#canVoidSent(slice)) ||
-      (action === "comp" && this.#sentOrderLine(slice) === undefined)
+      (action === "comp" && members.some((member) => this.#sentOrderLine(member) === undefined))
     )
       return;
     this.sentLinePending = null;
     this.renderRoot.querySelector<WtDialog>("[data-sent-line-dialog]")!.closeAfter("saved");
+    // Fire now acts on the first portion of a grouped row: its request names one line, and firing
+    // members one by one would start a fire group and a ticket for each.
+    const lineIds =
+      members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {};
     if (action === "fire") this.#dispatch("fire-held-line", { lineId: slice.row.lineId });
-    else if (action === "recall") this.#recallLine(slice.row.lineNo);
+    else if (action === "recall") this.#recallLines(members.map((member) => member.row.lineNo));
     else if (action === "comp") {
       const line = this.#sentOrderLine(slice)!;
-      const target = lineAdjustTarget(line, this.lines, this.#adjustName(line));
-      target.extras = this.lines
-        .filter(
-          (row) =>
-            row.parentLineNo === line.lineNo && compareDecimal(tabLineGross(row), decimal("0")) > 0,
-        )
-        .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)));
+      const priced = (target: AdjustTarget) =>
+        compareDecimal(decimal(target.total), decimal("0")) > 0;
+      const target =
+        members.length > 1
+          ? rowAdjustTarget(
+              members.map((member) => this.#sentOrderLine(member)!),
+              this.lines,
+              this.#adjustName(line),
+              (extra) => this.#adjustName(extra),
+            )
+          : lineAdjustTarget(line, this.lines, this.#adjustName(line));
+      target.extras =
+        members.length > 1
+          ? target.extras!.filter(priced)
+          : this.lines
+              .filter((row) => row.parentLineNo === line.lineNo)
+              .map((row) => lineAdjustTarget(row, this.lines, this.#adjustName(row)))
+              .filter(priced);
       this.#dispatch("adjust", { kind: "comp", combined: true, target });
-    } else if (action === "void") this.#dispatch("cancel-item", { lineId: slice.row.lineId });
+    } else if (action === "void")
+      this.#dispatch("cancel-item", { lineId: slice.row.lineId, ...lineIds });
     else
       this.#dispatch("move-station", {
         workingOrderId: slice.row.workingOrderId,
         lineId: slice.row.lineId,
+        ...lineIds,
         name: slice.row.name,
         stationId: slice.row.kitchen!.stationId,
       });
   }
 
-  #sentLineMore(slice: SentSlice | undefined): TemplateResult | typeof nothing {
-    if (slice === undefined) return nothing;
+  #sentLineMore(members: readonly SentSlice[] | undefined): TemplateResult | typeof nothing {
+    const slice = members?.[0];
+    if (members === undefined || slice === undefined) return nothing;
     const fire = this.#canFireSent(slice);
-    const recall = this.#canRecallSent(slice);
-    const station = this.#canMoveSent(slice);
-    const unserve = slice.kind === "served" && this.#sentBillOpen(slice.row);
+    const recall = members.every((member) => this.#canRecallSent(member));
+    const station = members.every((member) => this.#canMoveSent(member));
+    const unserve =
+      slice.kind === "served" && members.every((member) => this.#sentBillOpen(member.row));
     const comp = this.#sentOrderLine(slice) !== undefined;
     const canVoid = this.#canVoidSent(slice);
     if (!fire && !recall && !station && !unserve && !canVoid && !comp) return nothing;
@@ -2771,23 +2873,33 @@ export class TillTableOrderScreen extends LitElement {
     return html`${extra === undefined ? nothing : this.#nutrition(line)}${optionAnswers(line.optionSnapshots, { reads: "staff" }).map((answer) => html`<span class="modifier-answer">${answer}</span>`)}${extra === undefined ? nothing : this.#lineNote(line)}`;
   }
 
+  /** `count` identical portions' price: `amount` is already theirs together. */
   #sentPrice(
     row: CurrentOrderRow,
     amount: Decimal,
     extra?: CurrentOrderRow["extras"][number],
+    count = 1,
   ): TemplateResult {
     const line = this.#sentBillLine(row, extra);
     const before =
       line?.listUnitPriceGross === undefined
         ? amount
-        : listedGross({ ...line, quantity: extra?.quantity ?? row.quantity });
+        : multiplyDecimal(
+            listedGross({ ...line, quantity: extra?.quantity ?? row.quantity }),
+            decimal(String(count)),
+          );
     return lineTotal(before, amount);
   }
 
   #sentLineDialog(): TemplateResult {
     const pending = this.sentLinePending;
-    const slice = this.#sentLine();
+    const members = this.#sentLineMembers();
+    const slice = members?.[0];
     const row = slice?.row;
+    const count = members?.length ?? 1;
+    // Members are identical portions, so the first one's amounts, times the count, are the row's.
+    const times = (value: Decimal) => multiplyDecimal(value, decimal(String(count)));
+    const shownQuantity = row === undefined ? "0" : times(decimal(row.quantity));
     const disabled = this.busy || this.groupCommandBusy;
     const group =
       row === undefined
@@ -2830,19 +2942,19 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`
               <p class="move-dish">
-                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(row.quantity)}
+                ${row.name}${this.#nutrition(row)} ×${this.#displayQty(shownQuantity)}
                 ${this.#sentDetails(row)}
                 ${allergyMark(this.#allergy()?.snapshot ?? null, { kind: "working", id: row.lineId })}
               </p>
               ${lineNutrition(row.nutrition)}
-              ${row.workingOrderId === this.orderId ? this.#paidMark(row.lineNo, row.quantity) : nothing}
+              ${row.workingOrderId === this.orderId ? this.#paidMarkOf(members!.map((member) => member.row)) : nothing}
               <div class="total-row">
                 <span>${row.name}</span
                 ><span class="amount" data-sent-line-amount
-                  >${this.#sentPrice(row, subtractDecimal(decimal(row.netAmount), extraTotal))}</span
+                  >${this.#sentPrice(row, times(subtractDecimal(decimal(row.netAmount), extraTotal)), undefined, count)}</span
                 >
               </div>
-              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, decimal(extra.netAmount), extra)}</span></div>`)}
+              ${row.extras.map((extra) => html`<div class="total-row" data-sent-extra=${extra.lineId}><span>${extra.name} ×${this.#displayQty(extra.quantity)}${this.#sentDetails(row, extra)}</span><span class="amount">${this.#sentPrice(row, times(decimal(extra.netAmount)), extra, count)}</span></div>`)}
               ${row.note === null ? nothing : html`<p>${t("line.note.label")}: ${row.note}</p>`}
               ${this.#sentCourse(row.courseId, this.currentOrders?.retainedCourses.find((course) => course.id === row.courseId) ?? this.lines.find((line) => line.id === row.lineId && line.lineNo === row.lineNo)?.course)}
               <p data-sent-line-status>
@@ -2852,7 +2964,7 @@ export class TillTableOrderScreen extends LitElement {
               ${partlyServed ? html`<p data-sent-line-served>${this.#servedOf(row)}</p>` : nothing}
               <div class="total-row">
                 <span>${t("label.total")}</span
-                ><span class="amount">${this.#money(row.netAmount)}</span>
+                ><span class="amount">${this.#money(times(decimal(row.netAmount)))}</span>
               </div>
             `
       }
@@ -2866,7 +2978,7 @@ export class TillTableOrderScreen extends LitElement {
           >${t("table.submitted_close")}</wt-button
         >
         ${slice?.kind === "fired" && slice.row.released ? html`<wt-button data-sent-line-serve aria-label=${`${t("table.serve")} · ${slice.row.name}`} variant=${disabled ? "secondary" : "primary"} ?disabled=${disabled} @click=${() => this.#serveFromSentLine(pending, false)}>${t("table.serve")}</wt-button>` : nothing}
-        ${this.#sentLineMore(slice)}
+        ${this.#sentLineMore(members)}
       </div>
     </wt-dialog>`;
   }
@@ -3409,7 +3521,7 @@ export class TillTableOrderScreen extends LitElement {
     const selected = this.#selected.has(line);
     const family = store.splitFamily(line);
     const splits =
-      soldByTheUnit(line.product) &&
+      takesExtras(line.product) &&
       Number.isInteger(Number(line.quantity)) &&
       Number(line.quantity) > 1;
     const isFlagged = flagged(line);
@@ -3548,7 +3660,7 @@ export class TillTableOrderScreen extends LitElement {
       store.sending ||
       store.editsLocked ||
       this.groupCommandBusy ||
-      !soldByTheUnit(line.product) ||
+      !takesExtras(line.product) ||
       !Number.isInteger(Number(line.quantity)) ||
       Number(line.quantity) <= 1
     )
@@ -4050,7 +4162,25 @@ export class TillTableOrderScreen extends LitElement {
   /** What is paid of the line numbered `lineNo` on the bill on screen, when any is. */
   #paidMark(lineNo: number, quantity: string): TemplateResult | typeof nothing {
     const balance = this.#balanceShown();
-    const paid = balance === null ? undefined : paidQuantities(balance).get(lineNo);
+    return this.#paidText(
+      balance === null ? undefined : paidQuantities(balance).get(lineNo),
+      quantity,
+    );
+  }
+
+  /** {@link #paidMark} for identical portions shown as one row: what is paid of them together. */
+  #paidMarkOf(rows: readonly CurrentOrderRow[]): TemplateResult | typeof nothing {
+    if (rows.length === 1) return this.#paidMark(rows[0]!.lineNo, rows[0]!.quantity);
+    const balance = this.#balanceShown();
+    if (balance === null) return nothing;
+    const paid = paidQuantities(balance);
+    return this.#paidText(
+      trimQuantity(sumDecimals(rows.map((row) => decimal(paid.get(row.lineNo) ?? "0")))),
+      trimQuantity(sumDecimals(rows.map((row) => decimal(row.quantity)))),
+    );
+  }
+
+  #paidText(paid: string | undefined, quantity: string): TemplateResult | typeof nothing {
     if (paid === undefined || compareDecimal(decimal(paid), decimal("0")) <= 0) return nothing;
     const whole = compareDecimal(decimal(paid), decimal(quantity)) >= 0;
     return html`<span class="line-paid" data-line-paid
@@ -4293,8 +4423,16 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** More than one whole unit asks how many; anything else, a weighed dish included, goes whole. */
-  #requestServe(row: CurrentOrderRow, undo: boolean): void {
+  /** The most a dialog can count: a grouped row's portions, or the row's own {@link #mostToServe}. */
+  #serveMost(pending: NonNullable<typeof this.servePending>): Decimal {
+    return pending.members === undefined
+      ? this.#mostToServe(pending.row, pending.undo)
+      : decimal(String(pending.members.length));
+  }
+
+  /** More than one whole unit, a grouped row's portions included, asks how many; anything else, a
+   * weighed dish included, goes whole. */
+  #requestServe(row: CurrentOrderRow, undo: boolean, members?: readonly CurrentOrderRow[]): void {
     if (!this.isConnected || this.busy || this.groupCommandBusy || this.currentOrdersUnread) return;
     if (undo && !this.#sentBillOpen(row)) return;
     this.#serveAuthority = {
@@ -4303,13 +4441,14 @@ export class TillTableOrderScreen extends LitElement {
       billId: this.orderId,
       visit: this.serviceVisit,
     };
-    const most = this.#mostToServe(row, undo);
+    const most =
+      members === undefined ? this.#mostToServe(row, undo) : decimal(String(members.length));
     if (row.unitPrecision === 0 && compareDecimal(most, decimal("1")) > 0) {
       this.#serveOpening++;
       this.#serveScope?.dispose();
       this.#serveScope = undefined;
       this.#serveBaseline = most;
-      this.servePending = { row, undo, count: most };
+      this.servePending = { row, undo, count: most, ...(members === undefined ? {} : { members }) };
       this.#watchServe();
       const dialog = this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]");
       if (dialog) dialog.open = true;
@@ -4318,7 +4457,12 @@ export class TillTableOrderScreen extends LitElement {
     this.#sendServe(row, undo, most);
   }
 
-  #sendServe(row: CurrentOrderRow, undo: boolean, quantity: Decimal): void {
+  #sendServe(
+    row: CurrentOrderRow,
+    undo: boolean,
+    quantity: Decimal,
+    members?: readonly CurrentOrderRow[],
+  ): void {
     const authority = this.#serveAuthority;
     this.#serveAuthority = undefined;
     if (
@@ -4336,16 +4480,44 @@ export class TillTableOrderScreen extends LitElement {
       authority.visit !== this.serviceVisit
     )
       return;
-    const current =
+    const rows =
       this.currentOrders === null
-        ? undefined
+        ? []
         : [
             ...this.currentOrders.ungrouped,
             ...this.currentOrders.groups.flatMap((group) => group.rows),
-          ].find(
-            (candidate) =>
-              candidate.lineId === row.lineId && candidate.workingOrderId === row.workingOrderId,
-          );
+          ];
+    const find = (wanted: CurrentOrderRow) =>
+      rows.find(
+        (candidate) =>
+          candidate.lineId === wanted.lineId && candidate.workingOrderId === wanted.workingOrderId,
+      );
+    if (members !== undefined) {
+      // Every portion of the group must still be there to serve or take back; the first
+      // `quantity` of them go, each whole.
+      const found = members.map(find);
+      const picked = found.slice(0, Number.parseInt(trimQuantity(quantity), 10));
+      // Any portion that changed since the dialog opened, picked or not, stops the send.
+      if (
+        found.some(
+          (current) =>
+            current === undefined ||
+            (undo && !this.#sentBillOpen(current)) ||
+            (!undo && !current.released) ||
+            compareDecimal(this.#mostToServe(current, undo), decimal("0")) <= 0,
+        ) ||
+        picked.length === 0 ||
+        compareDecimal(quantity, decimal(String(members.length))) > 0
+      )
+        return;
+      const items = picked.map((current) => ({
+        lineId: current!.lineId,
+        quantity: trimQuantity(this.#mostToServe(current!, undo)),
+      }));
+      this.#dispatch(undo ? "unserve-lines" : "serve-lines", { items } satisfies ServeLinesDetail);
+      return;
+    }
+    const current = find(row);
     if (
       current === undefined ||
       (undo && !this.#sentBillOpen(current)) ||
@@ -4376,7 +4548,7 @@ export class TillTableOrderScreen extends LitElement {
     this.servePending = null;
     this.#watchServe();
     this.renderRoot.querySelector<WtDialog>("[data-serve-dialog]")!.closeAfter("saved");
-    this.#sendServe(pending.row, pending.undo, pending.count);
+    this.#sendServe(pending.row, pending.undo, pending.count, pending.members);
   }
 
   /** Always present, driven by {@link servePending}, so an Escape close flows back through
@@ -4397,9 +4569,11 @@ export class TillTableOrderScreen extends LitElement {
         pending === null
           ? nothing
           : html`<p class="move-dish">
-                ${pending.row.name} ×${this.#displayQty(pending.row.quantity)}
+                ${pending.row.name}
+                ×${pending.members === undefined ? this.#displayQty(pending.row.quantity) : pending.members.length}
               </p>
               ${
+                pending.members === undefined &&
                 compareDecimal(decimal(pending.row.servedQuantity), decimal("0")) > 0
                   ? html`<p class="serve-so-far">${this.#servedOf(pending.row)}</p>`
                   : nothing
@@ -4420,9 +4594,7 @@ export class TillTableOrderScreen extends LitElement {
                   variant="ghost"
                   data-serve-inc
                   aria-label=${`${t("basket.increase")} ${pending.row.name}`}
-                  ?disabled=${
-                    compareDecimal(pending.count, this.#mostToServe(pending.row, pending.undo)) >= 0
-                  }
+                  ?disabled=${compareDecimal(pending.count, this.#serveMost(pending)) >= 0}
                   @click=${() => this.#stepServe(1)}
                 >
                   <span aria-hidden="true">+</span>
@@ -4913,11 +5085,64 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
-  #toggleTransferLine(line: TabLine, event: Event): void {
+  /** Transfer items' and Split bill's rows: dishes only, identical portions as one row whose
+   * members are in line-number order. */
+  #pickerRows(): TabLine[][] {
+    return portionGroups(
+      this.lines.filter((line) => !this.#isChild(line)),
+      (dish) => this.#fallbackPortionKey(dish),
+      (dish) => dish.lineNo,
+    );
+  }
+
+  /** A refresh can regroup the pickers' rows. A grouped Transfer row is then picked whole or not
+   * at all, and a grouped Split row's picks become its first portions, as many as were picked, so
+   * a row never sends what it does not show. */
+  #tidyPickedPortions(): void {
+    if (this.actionStep !== "transfer-lines" && this.actionStep !== "split-lines") return;
+    const groups = this.#pickerRows().filter((members) => members.length > 1);
+    if (this.actionStep === "transfer-lines") {
+      const picked = this.transferLineNos;
+      const partly = groups.filter(
+        (members) =>
+          members.some((member) => picked.has(member.lineNo)) &&
+          !members.every((member) => picked.has(member.lineNo)),
+      );
+      if (partly.length === 0) return;
+      const next = new Set(picked);
+      for (const member of partly.flat()) next.delete(member.lineNo);
+      this.transferLineNos = next;
+    } else {
+      let next: Map<number, string> | undefined;
+      for (const members of groups) {
+        const count = members.filter((member) => this.splitQuantities.has(member.lineNo)).length;
+        if (
+          members.every(
+            (member, index) => this.splitQuantities.has(member.lineNo) === index < count,
+          )
+        )
+          continue;
+        next ??= new Map(this.splitQuantities);
+        members.forEach((member, index) => {
+          if (index < count) next!.set(member.lineNo, this.#displayQty(member.quantity));
+          else next!.delete(member.lineNo);
+        });
+      }
+      if (next === undefined) return;
+      this.splitQuantities = next;
+    }
+    this.#actionScope?.changed();
+  }
+
+  /** A grouped row picks or drops every member. */
+  #toggleTransferLine(members: readonly TabLine[], event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
     const next = new Set(this.transferLineNos);
-    if (next.has(line.lineNo)) next.delete(line.lineNo);
-    else next.add(line.lineNo);
+    const selected = members.every((member) => next.has(member.lineNo));
+    for (const member of members) {
+      if (selected) next.delete(member.lineNo);
+      else next.add(member.lineNo);
+    }
     this.transferLineNos = next;
     this.#actionScope?.changed();
   }
@@ -4934,11 +5159,31 @@ export class TillTableOrderScreen extends LitElement {
     this.#closeActions();
   }
 
-  #toggleSplitLine(line: TabLine, event: Event): void {
+  /** A grouped row picks every member whole, or drops every member. */
+  #toggleSplitLine(members: readonly TabLine[], event: Event): void {
     if (!this.#actionControlCurrent(event)) return;
     const next = new Map(this.splitQuantities);
-    if (next.has(line.lineNo)) next.delete(line.lineNo);
-    else next.set(line.lineNo, this.#displayQty(line.quantity));
+    const selected = members.some((member) => next.has(member.lineNo));
+    for (const member of members) {
+      if (selected) next.delete(member.lineNo);
+      else next.set(member.lineNo, this.#displayQty(member.quantity));
+    }
+    this.splitQuantities = next;
+    this.#actionScope?.changed();
+  }
+
+  /** A grouped row's count is how many of its members are picked; its first ones are, each whole
+   * ({@link #tidyPickedPortions} keeps it so after a refresh). */
+  #stepSplitGroup(members: readonly TabLine[], delta: -1 | 1, event: Event): void {
+    if (!this.#actionControlCurrent(event)) return;
+    const count =
+      members.filter((member) => this.splitQuantities.has(member.lineNo)).length + delta;
+    if (count < 1) return;
+    const next = new Map(this.splitQuantities);
+    members.forEach((member, index) => {
+      if (index < count) next.set(member.lineNo, this.#displayQty(member.quantity));
+      else next.delete(member.lineNo);
+    });
     this.splitQuantities = next;
     this.#actionScope?.changed();
   }
@@ -5274,7 +5519,7 @@ export class TillTableOrderScreen extends LitElement {
     // Dishes only. `carveOffLines` REFUSES a directly named child with `tab.transfer_modifier_line`
     // and cascades a dish's children with the dish instead (`apps/server/src/working-order.ts`), so
     // offering a child row here only buys a refusal.
-    const lines = this.lines.filter((line) => !this.#isChild(line));
+    const rows = this.#pickerRows();
     return html`<section class="actions" data-transfer-lines>
       <h2>
         ${this.#billsHeading("table.transfer_from_to", {
@@ -5283,10 +5528,10 @@ export class TillTableOrderScreen extends LitElement {
         })}
       </h2>
       ${
-        lines.length === 0
+        rows.length === 0
           ? html`<p class="empty">${t("table.transfer_no_lines")}</p>`
           : html`<div class="action-options">
-              ${lines.map((line) => this.#transferLineRow(line))}
+              ${rows.map((members) => this.#transferLineRow(members))}
             </div>`
       }
       <wt-button
@@ -5302,31 +5547,42 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #transferLineRow(line: TabLine): TemplateResult {
+  #transferLineRow(members: readonly TabLine[]): TemplateResult {
+    const line = members[0]!;
     const name = this.#nameForLine(line);
-    const selected = this.transferLineNos.has(line.lineNo);
+    const selected = members.every((member) => this.transferLineNos.has(member.lineNo));
     return html`<button
       type="button"
       class="option transfer-line"
       data-transfer-line=${line.lineNo}
       aria-pressed=${selected}
-      @click=${(event: Event) => this.#toggleTransferLine(line, event)}
+      @click=${(event: Event) => this.#toggleTransferLine(members, event)}
     >
       <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
-      <span class="qty">${this.#displayQty(line.quantity)}</span>
+      <span class="qty">${this.#pickerQuantity(members)}</span>
     </button>`;
   }
 
+  #pickerQuantity(members: readonly TabLine[]): string {
+    return members.length > 1 ? String(members.length) : this.#displayQty(members[0]!.quantity);
+  }
+
   #splitLinesStep(): TemplateResult {
-    const lines = this.lines.filter((line) => !this.#isChild(line));
+    const rows = this.#pickerRows();
     const errors = this.splitAttempted ? this.#splitErrors() : [];
     return html`<section class="actions" data-split-lines>
       <h2>${t("table.split_pick_lines")}</h2>
-      <p data-split-help>${t("table.split_options_together")}</p>
       ${
-        lines.length === 0
+        this.#holdsDishWithExtrasToPart()
+          ? html`<p data-split-help>${t("table.split_options_together")}</p>`
+          : nothing
+      }
+      ${
+        rows.length === 0
           ? html`<p class="empty">${t("table.split_no_lines")}</p>`
-          : html`<div class="action-options">${lines.map((line) => this.#splitLineRow(line))}</div>`
+          : html`<div class="action-options">
+              ${rows.map((members) => this.#splitLineRow(members))}
+            </div>`
       }
       <wt-form-actions .error=${errors.length > 0 ? t("form.fix_fields") : ""}>
         ${this.#backButton("cancel")}
@@ -5343,46 +5599,79 @@ export class TillTableOrderScreen extends LitElement {
     </section>`;
   }
 
-  #splitLineRow(line: TabLine): TemplateResult {
+  #splitLineRow(members: readonly TabLine[]): TemplateResult {
+    const line = members[0]!;
     const selected = this.splitQuantities.has(line.lineNo);
     const quantity = this.splitQuantities.get(line.lineNo) ?? this.#displayQty(line.quantity);
     const name = this.#nameForLine(line);
     const error = this.splitAttempted && selected ? this.#splitQuantityError(line) : "";
+    const grouped = members.length > 1;
     return html`<div class="split-line-row">
       <button
         type="button"
         class="option transfer-line"
         data-split-line=${line.lineNo}
         aria-pressed=${selected}
-        @click=${(event: Event) => this.#toggleSplitLine(line, event)}
+        @click=${(event: Event) => this.#toggleSplitLine(members, event)}
       >
         <span aria-hidden="true">${selected ? "☑" : "☐"}</span> ${name}
-        <span class="qty">${this.#displayQty(line.quantity)}</span>
+        <span class="qty">${this.#pickerQuantity(members)}</span>
       </button>
       ${
-        selected
-          ? this.#splitPrecision(line) === 0
-            ? this.#splitEachQuantity(line, name, quantity)
-            : html`<wt-input
-                class="split-quantity"
-                data-split-quantity=${line.lineNo}
-                name=${`split-quantity-${line.lineNo}`}
-                decimal-locale=${currentLocale()}
-                required
-                .label=${t("table.split_quantity")}
-                .value=${quantity}
-                .error=${error}
-                @wt-change=${(event: Event) => {
-                  event.stopPropagation();
-                  if (!this.#actionControlCurrent(event)) return;
-                  this.#setSplitQuantity(
-                    line.lineNo,
-                    (event as CustomEvent<{ value: string }>).detail.value,
-                  );
-                }}
-              ></wt-input>`
-          : nothing
+        selected && grouped
+          ? this.#splitGroupQuantity(members, name)
+          : selected
+            ? this.#splitPrecision(line) === 0
+              ? this.#splitEachQuantity(line, name, quantity)
+              : html`<wt-input
+                  class="split-quantity"
+                  data-split-quantity=${line.lineNo}
+                  name=${`split-quantity-${line.lineNo}`}
+                  decimal-locale=${currentLocale()}
+                  required
+                  .label=${t("table.split_quantity")}
+                  .value=${quantity}
+                  .error=${error}
+                  @wt-change=${(event: Event) => {
+                    event.stopPropagation();
+                    if (!this.#actionControlCurrent(event)) return;
+                    this.#setSplitQuantity(
+                      line.lineNo,
+                      (event as CustomEvent<{ value: string }>).detail.value,
+                    );
+                  }}
+                ></wt-input>`
+            : nothing
       }
+    </div>`;
+  }
+
+  #splitGroupQuantity(members: readonly TabLine[], name: string): TemplateResult {
+    const line = members[0]!;
+    const count = members.filter((member) => this.splitQuantities.has(member.lineNo)).length;
+    return html`<div class="split-quantity split-stepper">
+      <span>${t("table.split_quantity")}</span>
+      <wt-button
+        variant="ghost"
+        size="sm"
+        data-split-dec=${line.lineNo}
+        aria-label=${`${t("basket.decrease")} ${name}`}
+        ?disabled=${count <= 1}
+        @click=${(event: Event) => this.#stepSplitGroup(members, -1, event)}
+      >
+        <span aria-hidden="true">−</span>
+      </wt-button>
+      <span class="split-count" data-split-count=${line.lineNo}>${count}</span>
+      <wt-button
+        variant="ghost"
+        size="sm"
+        data-split-inc=${line.lineNo}
+        aria-label=${`${t("basket.increase")} ${name}`}
+        ?disabled=${count >= members.length}
+        @click=${(event: Event) => this.#stepSplitGroup(members, 1, event)}
+      >
+        <span aria-hidden="true">+</span>
+      </wt-button>
     </div>`;
   }
 

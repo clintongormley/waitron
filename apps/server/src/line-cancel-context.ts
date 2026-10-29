@@ -1,7 +1,8 @@
 import { isDeepStrictEqual } from "node:util";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { AppError, thousandthsToDecimal } from "@waitron/shared";
+import { cancelRowMembers } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { isStarted, type TicketState } from "./kitchen-print.js";
 import { readLineCancellations } from "./line-service-state.js";
@@ -38,7 +39,19 @@ export async function readCancellationContext(
   tx: Transaction,
   partyId: string,
   lineId: string,
+  lineIds?: readonly string[],
 ): Promise<CancellationContext> {
+  return (await readRowContext(tx, partyId, lineId, lineIds)).context;
+}
+
+/** The context, and the dish lines it was read over: `lineId`, or the till row `lineIds` names in
+ * line order. */
+async function readRowContext(
+  tx: Transaction,
+  partyId: string,
+  lineId: string,
+  lineIds: readonly string[] | undefined,
+): Promise<{ context: CancellationContext; dishIds: string[] }> {
   const [subject] = await tx
     .select({ parentId: workingOrderLines.parentLineId, bill: workingOrders })
     .from(workingOrderLines)
@@ -53,6 +66,9 @@ export async function readCancellationContext(
     throw new AppError("bill.other_party", { workingOrderId: subject.bill.id });
   if (subject.bill.status === "abandoned")
     throw new AppError("tab.not_open", { tabId: subject.bill.id });
+  // A till row of identical dishes: what the cancel takes from depends on every one of them.
+  const dishIds =
+    lineIds === undefined ? [lineId] : await cancelRowMembers(tx, subject.bill.id, lineId, lineIds);
   const family = await tx
     .select({
       lineId: workingOrderLines.id,
@@ -68,14 +84,17 @@ export async function readCancellationContext(
     .where(
       and(
         eq(workingOrderLines.workingOrderId, subject.bill.id),
-        or(eq(workingOrderLines.id, lineId), eq(workingOrderLines.parentLineId, lineId)),
+        or(
+          inArray(workingOrderLines.id, dishIds),
+          inArray(workingOrderLines.parentLineId, dishIds),
+        ),
       ),
     );
   const cancellations = await readLineCancellations(
     tx,
     family.map((line) => line.lineId),
   );
-  return orderedCancellationContext({
+  const context = orderedCancellationContext({
     billStatus: subject.bill.status,
     stage: family.some((line) => isStarted(line.state) || line.servedQuantity > 0)
       ? "started"
@@ -92,6 +111,7 @@ export async function readCancellationContext(
       cancelledQuantity: thousandthsToDecimal(cancellations.get(line.lineId) ?? 0),
     })),
   });
+  return { context, dishIds };
 }
 
 export async function requireCancellationContext(
@@ -100,9 +120,21 @@ export async function requireCancellationContext(
   lineId: string,
   expected: CancellationContext,
 ): Promise<CancellationContext> {
+  return (await requireRowCancellationContext(tx, partyId, lineId, expected, undefined)).context;
+}
+
+/** {@link requireCancellationContext} over the till row `lineIds` names, answering its dish lines
+ * too. */
+export async function requireRowCancellationContext(
+  tx: Transaction,
+  partyId: string,
+  lineId: string,
+  expected: CancellationContext,
+  lineIds: readonly string[] | undefined,
+): Promise<{ context: CancellationContext; dishIds: string[] }> {
   // Kitchen transitions need not advance a bill or party revision.
-  const context = await readCancellationContext(tx, partyId, lineId);
-  if (!isDeepStrictEqual(orderedCancellationContext(expected), context))
-    throw new AppError("tab.cancel_context_changed", { context });
-  return context;
+  const read = await readRowContext(tx, partyId, lineId, lineIds);
+  if (!isDeepStrictEqual(orderedCancellationContext(expected), read.context))
+    throw new AppError("tab.cancel_context_changed", { context: read.context });
+  return read;
 }

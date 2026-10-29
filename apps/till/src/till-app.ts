@@ -600,6 +600,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
+  "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "service_zone.closed",
   "order.payment_in_flight",
@@ -895,6 +896,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "bill.unsent_dishes",
   "service_zone.closed",
@@ -1035,6 +1037,8 @@ interface CancellingItem {
   partyId: string;
   billId: string;
   lineId: string;
+  /** Every portion of the row the till shows as one, `lineId` among them; absent on one line. */
+  lineIds?: string[];
   name: string;
   unitPrecision: number;
   session: number;
@@ -1334,6 +1338,8 @@ interface DishMove {
   kind?: undefined;
   workingOrderId: string;
   lineId: string;
+  /** Every portion a grouped row moves, by line number; absent, the move is `lineId` alone. */
+  lineIds?: string[];
   name: string;
   stationId: string | null;
   refusal: string | null;
@@ -10223,6 +10229,7 @@ export class TillApp extends LitElement {
     if (open === null) return nothing;
     return html`<till-cancel-item-dialog
         .lineId=${open.lineId}
+        .lineIds=${open.lineIds}
         .name=${open.name}
         .unitPrecision=${open.unitPrecision}
         .consent=${open.consent}
@@ -12903,17 +12910,19 @@ export class TillApp extends LitElement {
     if (live()) await this.#loadTabLines();
   }
 
+  /** Recall names one line, so a grouped row's members go one request each, by line number; the
+   * first that does not apply, or applies but is not read back, stops the rest and says why. */
   async #onRecallLines(event: Event): Promise<void> {
     const { lineNos } = (event as CustomEvent<{ lineNos: number[] }>).detail;
     const sync = this.#draftSync;
-    const line = this.tabLines.find((row) => row.lineNo === lineNos[0]);
+    const lines = lineNos.map((lineNo) => this.tabLines.find((row) => row.lineNo === lineNo));
     if (
       sync === undefined ||
       this.#tableDraft() !== sync.store ||
       this.activeTabId !== sync.billId ||
-      lineNos.length !== 1 ||
-      line === undefined ||
-      line.parentLineNo != null ||
+      lines.length === 0 ||
+      new Set(lineNos).size !== lineNos.length ||
+      lines.some((line) => line === undefined || line.parentLineNo != null) ||
       this.groupCommandBusy ||
       sync.store.sending ||
       sync.store.editsLocked
@@ -12928,30 +12937,34 @@ export class TillApp extends LitElement {
     this.errorKey = undefined;
     try {
       if (!(await this.#flushPartyKitchenNote()) || !live()) return;
-      const outcome = await sync.runCommand(async (state, options) => {
-        const party = this.orderParty;
-        if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
-        return this.api.recallToDraft(
-          party.id,
-          line.id,
-          {
-            submissionId: crypto.randomUUID(),
-            expectedPartyRevision: party.revision,
-            expectedEdit: state.expectedEdit,
-          },
-          options,
-        );
-      });
-      if (!live()) return;
-      if (typeof outcome === "object" && "applied" in outcome) {
-        this.#notePartyRevision(sync.partyId, outcome.applied.revision);
-        if (!outcome.reloaded) this.errorKey = "table.draft_read_failed";
-      } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
-      else if (outcome === "failed") this.errorKey = "table.error";
-      else
-        this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
-          ? draftRefusalError(outcome)
-          : lineWriteError({ code: outcome.refused });
+      for (const line of lines.sort((a, b) => a!.lineNo - b!.lineNo)) {
+        const outcome = await sync.runCommand(async (state, options) => {
+          const party = this.orderParty;
+          if (!live() || party?.id !== sync.partyId) throw { code: "draft.out_of_date" };
+          return this.api.recallToDraft(
+            party.id,
+            line!.id,
+            {
+              submissionId: crypto.randomUUID(),
+              expectedPartyRevision: party.revision,
+              expectedEdit: state.expectedEdit,
+            },
+            options,
+          );
+        });
+        if (!live()) return;
+        if (typeof outcome === "object" && "applied" in outcome) {
+          this.#notePartyRevision(sync.partyId, outcome.applied.revision);
+          if (outcome.reloaded) continue;
+          this.errorKey = "table.draft_read_failed";
+        } else if (outcome === "unsaved") this.errorKey ??= "table.draft_save_failed";
+        else if (outcome === "failed") this.errorKey = "table.error";
+        else
+          this.errorKey = DRAFT_REFUSALS.has(outcome.refused)
+            ? draftRefusalError(outcome)
+            : lineWriteError({ code: outcome.refused });
+        break;
+      }
       await this.#loadTabLines();
     } finally {
       delete sync.store.busyAction;
@@ -12964,6 +12977,7 @@ export class TillApp extends LitElement {
       event as CustomEvent<{
         workingOrderId: string;
         lineId: string;
+        lineIds?: string[];
         name: string;
         stationId: string | null;
         counter?: boolean;
@@ -13162,7 +13176,7 @@ export class TillApp extends LitElement {
     }
     const body = {
       submissionId: crypto.randomUUID(),
-      lineIds: [open.lineId],
+      lineIds: open.lineIds ?? [open.lineId],
       stationId,
       expectedEdit: open.bill?.expectedEdit ?? null,
     };
@@ -13407,7 +13421,7 @@ export class TillApp extends LitElement {
     this.cancellingItem = null;
   }
 
-  async #onCancelItem(event: CustomEvent<{ lineId: string }>): Promise<void> {
+  async #onCancelItem(event: CustomEvent<{ lineId: string; lineIds?: string[] }>): Promise<void> {
     if (
       this.cancellingItem !== null ||
       this.#cancelItemRead !== undefined ||
@@ -13419,6 +13433,7 @@ export class TillApp extends LitElement {
     )
       return;
     const lineId = event.detail.lineId;
+    const lineIds = event.detail.lineIds === undefined ? {} : { lineIds: event.detail.lineIds };
     const line = this.tabLines.find((row) => row.id === lineId && row.parentLineNo == null);
     const recorded = [
       ...(this.currentOrders?.ungrouped ?? []),
@@ -13441,6 +13456,7 @@ export class TillApp extends LitElement {
     try {
       const consent = await opening.api.getCancellation(opening.partyId, lineId, {
         signal: opening.controller.signal,
+        ...lineIds,
       });
       if (this.#cancelItemRead !== opening || !this.#cancellationCurrent(opening)) return;
       const refundableTenders = await this.#cancellationTenders(
@@ -13455,6 +13471,7 @@ export class TillApp extends LitElement {
         ...opening,
         id: ++this.#cancelItems,
         lineId,
+        ...lineIds,
         name: line?.name ?? recorded?.name ?? "",
         unitPrecision: line?.unitPrecision ?? recorded?.unitPrecision ?? 0,
         consent,
@@ -13541,6 +13558,7 @@ export class TillApp extends LitElement {
         expectedEdit: open.bill.expectedEdits[0]!,
         expectedRevision: choice.consent.billRevision,
         lineId: open.lineId,
+        ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
         action: "cancel",
         quantity: choice.quantity,
         reasonId: choice.reasonId!,
@@ -13617,6 +13635,7 @@ export class TillApp extends LitElement {
     if (choice.outcome === "refund" && !this.#cancellationRefundAvailable(open)) return;
     const command: CancelItemRequest = {
       expectedEdit: open.bill.expectedEdits[0]!,
+      ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
       quantity: choice.quantity,
       outcome: choice.outcome === "refund" ? "keep_charge" : choice.outcome,
       ...(choice.outcome === "refund" ? { refundHandoff: true } : {}),
@@ -13680,13 +13699,12 @@ export class TillApp extends LitElement {
     approver: CarriedApprover | undefined,
   ): RefundFill | undefined {
     const value = choice.consent.refundValue;
-    const component = choice.consent.context.components.find((row) => row.lineId === open.lineId);
-    if (value === undefined || component === undefined) return undefined;
+    const ids = open.lineIds ?? [open.lineId];
+    const dishes = choice.consent.context.components.filter((row) => ids.includes(row.lineId));
+    if (value === undefined || dishes.length === 0) return undefined;
+    const cancelled = sumDecimals(dishes.map((row) => decimal(row.cancelledQuantity)));
     return {
-      target: toScale(
-        cancelRefundShare(value, component.cancelledQuantity, choice.quantity),
-        MONEY_SCALE,
-      ),
+      target: toScale(cancelRefundShare(value, cancelled, choice.quantity), MONEY_SCALE),
       startReasonId: choice.reasonId ?? "",
       dishes: this.#refundDishWords(choice.quantity, open.name),
       cancellationIds: links
@@ -13712,6 +13730,7 @@ export class TillApp extends LitElement {
       try {
         const consent = await open.api.getCancellation(open.partyId, open.lineId, {
           signal,
+          ...(open.lineIds === undefined ? {} : { lineIds: open.lineIds }),
         });
         if (!this.#itemCancellationShown(open)) return;
         const refundableTenders = await this.#cancellationTenders(open.api, consent, signal);
@@ -19018,7 +19037,7 @@ export class TillApp extends LitElement {
         @move-station=${(event: Event) => void this.#onMoveStation(event)}
         @open-make-at=${(event: Event) => void this.#onOpenMakeAt(event)}
         @adjust=${(event: Event) => void this.#onAdjust(event)}
-        @cancel-item=${(event: CustomEvent<{ lineId: string }>) => void this.#onCancelItem(event)}
+        @cancel-item=${(event: CustomEvent<{ lineId: string; lineIds?: string[] }>) => void this.#onCancelItem(event)}
         @change-line=${(event: Event) => void this.#onChangeLine(event)}
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}

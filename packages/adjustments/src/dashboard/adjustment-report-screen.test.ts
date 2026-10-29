@@ -702,7 +702,7 @@ describe("the drill-down", () => {
     expect(row(part(el, "entries")!, "e4").Action).toBe("Comp 12.5%");
   });
 
-  it("calls an amount comp that took the item's whole list value Comp 100%, and one that took less by its amount", async () => {
+  it("calls an amount comp that left its item at zero Comp 100%, and one that left part of it by its amount", async () => {
     const whole = {
       ...samEntry(),
       id: "whole",
@@ -719,13 +719,22 @@ describe("the drill-down", () => {
       reduction: "6.00",
       nominalValue: "12.00",
     };
+    const some = {
+      ...samEntry(),
+      id: "some",
+      beforeAmount: "12.00",
+      afterAmount: "6.00",
+      reduction: "6.00",
+      nominalValue: "12.00",
+    };
     const el = await mount(
-      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([whole, rest])) }),
+      fakeApi({ listEntries: vi.fn().mockResolvedValue(onePage([whole, rest, some])) }),
     );
     part(el, "show-all")!.click();
     await settle(el);
     expect(row(part(el, "entries")!, "whole").Action).toBe("Comp 100%");
-    expect(row(part(el, "entries")!, "rest").Action).toBe("Comp €6.00");
+    expect(row(part(el, "entries")!, "rest").Action).toBe("Comp 100%");
+    expect(row(part(el, "entries")!, "some").Action).toBe("Comp €6.00");
   });
 
   it("calls a 100% percentage comp Comp 100%", async () => {

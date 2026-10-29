@@ -29,7 +29,7 @@ export async function receiptLines(
   tx: Transaction,
   workingOrderId: string | null,
   priced: { lines: readonly ReceiptSource[] },
-  identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross">[],
+  identities: readonly Pick<OrderLineIdentity, "id" | "listUnitGross" | "lineIds">[],
   saleId?: string,
 ): Promise<Pick<TillSaleResult, "lines" | "billAdjustments">> {
   const each = await VENUE_SERVICE.readLinesSoldInEach(
@@ -82,8 +82,9 @@ export async function receiptLines(
   if (!lines.some((line) => line.listGross !== undefined)) return { lines };
   const records = workingOrderId === null ? [] : await readBillAdjustments(tx, workingOrderId);
 
+  // A row grouped from portions stands for each of its lines, and so takes each one's records.
   const rowIndex = new Map<string | undefined, number>(
-    identities.map((identity, i) => [identity.id, i]),
+    identities.flatMap((identity, i) => (identity.lineIds ?? [identity.id]).map((id) => [id, i])),
   );
   const byLine = new Map<number, ReceiptAdjustment[]>();
   const onBill: ReceiptAdjustment[] = [];
@@ -93,7 +94,7 @@ export async function receiptLines(
     takenOff = addDecimal(takenOff, record.reduction);
     const entry: ReceiptAdjustment = {
       kind: record.full ? "comp" : "discount",
-      ...(record.action === "discount_percent" ? { percentBp: record.percentBp! } : {}),
+      ...(record.percentBp === null ? {} : { percentBp: record.percentBp }),
       amount: record.reduction,
     };
     if (record.lineId === null) {

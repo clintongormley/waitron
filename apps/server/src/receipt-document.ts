@@ -29,7 +29,7 @@ import {
   type GroupDiscount,
 } from "./receipt-figures.js";
 import { receiptDateTime, receiptDateTimeNumeric, receiptDay } from "./receipt-dates.js";
-import { groupByParent, type LineGroup } from "./receipt-lines.js";
+import { groupByParent, mergeIdenticalGroups, type LineGroup } from "./receipt-lines.js";
 import { formatAmount, formatMoney, formatVatRate } from "./receipt-money.js";
 import type { ReceiptTable, ReceiptTableRow } from "./receipt-table.js";
 import type { ReceiptAdjustment, TillSaleLine, TillSaleResult } from "./till-sale.js";
@@ -386,7 +386,10 @@ export function buildReceiptDocument({
     }
   };
   let nextFiled = 0;
-  groups.forEach((group, at) => {
+  const printed = simplified
+    ? mergeIdenticalGroups(groups, result.vatBreakdown.length <= 1)
+    : groups;
+  printed.forEach((group, at) => {
     if (filedGroups[nextFiled]?.at === at) {
       tableGroup(filedGroups[nextFiled++]!);
     } else {

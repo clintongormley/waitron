@@ -7,6 +7,7 @@ import {
   decimal,
   formatMoney,
   subtractDecimal,
+  sumDecimals,
 } from "@waitron/shared";
 import {
   baseStyles,
@@ -121,6 +122,9 @@ export class TillCancelItemDialog extends LitElement {
   ];
   @property() name = "";
   @property() lineId = "";
+  /** Every portion line of the row the till shows as one, `lineId` among them; absent on a single
+   * line. */
+  @property({ attribute: false }) lineIds: string[] | undefined = undefined;
   @property({ type: Number }) unitPrecision: number | null = 0;
   @property({ attribute: false }) consent: CancellationRead | null = null;
   @property({ type: Boolean }) refundAvailable = false;
@@ -163,15 +167,23 @@ export class TillCancelItemDialog extends LitElement {
   #busy(): boolean {
     return this.busy || this.sending;
   }
-  #remaining(): string {
-    const row = this.consent?.context.components.find(
-      (component) => component.lineId === this.lineId,
+  /** The dish components of the line, or of every portion of the row. */
+  #dishes() {
+    const ids = this.lineIds ?? [this.lineId];
+    return (this.consent?.context.components ?? []).filter((component) =>
+      ids.includes(component.lineId),
     );
-    if (!row) return decimal("0");
-    const left = subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity));
-    return this.consent!.context.billStatus === "settled"
-      ? subtractDecimal(left, decimal(row.servedQuantity))
-      : left;
+  }
+  #remaining(): string {
+    const rows = this.#dishes();
+    if (rows.length === 0) return decimal("0");
+    const settled = this.consent!.context.billStatus === "settled";
+    return sumDecimals(
+      rows.map((row) => {
+        const left = subtractDecimal(decimal(row.quantity), decimal(row.cancelledQuantity));
+        return settled ? subtractDecimal(left, decimal(row.servedQuantity)) : left;
+      }),
+    );
   }
   #options(): Outcome[] {
     const context = this.consent?.context;
@@ -204,9 +216,7 @@ export class TillCancelItemDialog extends LitElement {
   #refundAmount(): string {
     const value = this.consent?.refundValue;
     if (value === undefined || !this.#quantityValid()) return "";
-    const cancelled = this.consent!.context.components.find(
-      (row) => row.lineId === this.lineId,
-    )!.cancelledQuantity;
+    const cancelled = sumDecimals(this.#dishes().map((row) => decimal(row.cancelledQuantity)));
     return formatMoney(
       cancelRefundShare(value, cancelled, quantityValue(this.draft.quantity)),
       currentLocale(),
@@ -222,7 +232,12 @@ export class TillCancelItemDialog extends LitElement {
     return this.consent?.context.stage === "started" || this.draft.preparationStarted === true;
   }
   #currentKey(): string {
-    return JSON.stringify([this.lineId, this.unitPrecision, consentKey(this.consent)]);
+    return JSON.stringify([
+      this.lineId,
+      this.lineIds ?? null,
+      this.unitPrecision,
+      consentKey(this.consent),
+    ]);
   }
 
   override willUpdate(changed: PropertyValues<this>): void {

@@ -179,6 +179,10 @@ A new venue gets one reason, "Entry error": cancel, staff apply it, a supervisor
 | Most off one bill (€) | — | optional: everything this reason comped on the bill |
 | Note required | switch | switch |
 
+**2026-10-28:** "Most off one item" is now a price floor counting every discount on the item, from any reason or on the whole bill — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D36.
+
+**2026-10-28:** "Most off one bill" now counts what the reason still has off the lines on the bill as it stands: a dish cancelled off the bill stops counting, and a dish moved to another bill takes what was taken off it with it — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rules 3 and 5.
+
 A Void reason is a label for the record (D13): who may cancel is the same under every one (§3.2).
 
 - **A Comp's two role lists** are a `wt-combobox` with `multiple` over today's four roles. Neither may be
@@ -208,6 +212,8 @@ A Void reason is a label for the record (D13): who may cancel is the same under 
    approver to at least a manager (a reason asking for nobody or someone lower is raised to a
    manager; an admin approver stays, `adjustments-apply.ts:539-542`), and it means one PIN is
    always enough.
+
+**2026-10-28:** past the bill's comp limit, whoever approves must be allowed both past it and the reason; nobody on both lists is refused `adjustment.no_common_approver` — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rule 2.
 
 **A void (a cancel)** (D12, D13):
 
@@ -241,6 +247,8 @@ comp limit €40, approved past by Manager, Admin. A table of eight; Chuletón a
 | Luis, supervisor | 1 free (€25) | within €30 → goes straight through |
 | Luis | 2 free (€50) | past €30 and past the bill's €40 → someone on "Who can approve past it" enters their PIN |
 | Marta, manager | 2 free (€50) | on both approval lists → goes straight through |
+
+**2026-10-28:** past the bill's comp limit, whoever approves must be allowed both past it and the reason; nobody on both lists is refused `adjustment.no_common_approver` — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rule 2.
 
 **The till.** The dialog already lists every reason of the chosen action to whoever is signed in
 (`apps/till/src/widgets/adjustment-dialog.ts:349-352`), which is "anyone may ask". What changes is
@@ -368,6 +376,8 @@ the reason; voids do not count (the owner's answer named comps). Someone on the 
 alone; anyone else needs a PIN from someone on it (§3.2 step 3). It replaces today's share
 (`maxBillDiscountBp`) and the code's fixed "manager" (`policy.ts:139`, `:179`;
 `adjustments-apply.ts:540-541`). Free items now count, because a free item is a comp (D5).
+
+**2026-10-28:** past the bill's comp limit, whoever approves must be allowed both past it and the reason; nobody on both lists is refused `adjustment.no_common_approver` — `docs/superpowers/plans/2026-10-27-a803-1-portions.md`, D37 rule 2.
 
 ### 3.6 Reports (D19)
 

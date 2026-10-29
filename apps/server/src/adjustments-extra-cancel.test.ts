@@ -25,7 +25,7 @@ import { applyAdjustment } from "./adjustments-apply.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { createStation } from "./kitchen.js";
 
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
 import type { TradingContext } from "./trading-context.js";
@@ -162,11 +162,13 @@ async function billOf(
       operatorId: venue.staffId,
     });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, venue.staffId);
-    await placeGroups(tx, venue.cfg, seated.partyId, {
-      groups: [{ lines: [withSides(offer[dish], portions)], release }],
-      operatorId: venue.staffId,
-      billId: seated.tabId,
-    });
+    await placeGroupedRound(
+      tx,
+      venue.cfg,
+      seated,
+      { lines: [withSides(offer[dish], portions)], release },
+      venue.staffId,
+    );
     return seated.tabId;
   });
 }

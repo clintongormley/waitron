@@ -26,12 +26,14 @@ import {
   billWith,
   inTx,
   lineIdOf,
+  todayLine,
   provisionAdjustmentVenue,
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
 import { payWorkingOrder, readSettledTicket } from "./testing/whole-payment-fixture.js";
 import { readStoredOrder } from "./working-order.js";
+import type { ReceiptAdjustment } from "./till-sale.js";
 import { completeBillPayment } from "./bill-payments.js";
 import "./errors.js";
 
@@ -160,7 +162,7 @@ describe("receiptLines", () => {
   it("keeps filed net figures with discounted and weighted F1 lines in either display order", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.250" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -274,7 +276,7 @@ describe("receiptLines", () => {
   it("reads back a weighed F1 line's stored price before its discount", async () => {
     const billId = await bill([{ name: "Ham", quantity: "0.123" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -293,7 +295,7 @@ describe("receiptLines", () => {
   it("replays an F1 discount from the filed list price rather than the display identity", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Ham", quantity: "0.250" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -429,7 +431,7 @@ describe("receiptLines", () => {
   it("puts a comp of one of three units under the unit it split off", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       quantity: "1",
     });
@@ -447,7 +449,7 @@ describe("receiptLines", () => {
   it("names a line's percentage discount and what it took off", async () => {
     const billId = await bill([{ name: "Bottle" }, { name: "Bread" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -478,7 +480,7 @@ describe("receiptLines", () => {
 
   it("keeps a line's comp and a later amount off the bill each where it was made", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Bottle" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await adjust(billId, { action: "discount_amount", amount: "5.00" });
 
     const receipt = await receiptOf(billId);
@@ -487,15 +489,24 @@ describe("receiptLines", () => {
       [{ kind: "comp", amount: "12.00" }],
       undefined,
     ]);
-    expect(receipt.billAdjustments).toEqual([{ kind: "discount", amount: "5.00" }]);
+    expect(receipt.billAdjustments).toEqual([
+      { kind: "discount", percentBp: 1667, amount: "5.00" },
+    ]);
   });
 
   it("falls back to what each dish lost when the records no longer add up to the bill", async () => {
     const billId = await bill([{ name: "Burger", quantity: "3" }, { name: "Bottle" }]);
-    const burgers = await lineIdOf(venue, billId, 1);
-    await adjust(billId, { lineId: burgers, action: "discount_amount", amount: "3.00" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "discount_amount",
+      amount: "3.00",
+    });
     await adjust(billId, { action: "discount_percent", percentBp: 1000 });
-    await adjust(billId, { lineId: burgers, action: "cancel", quantity: "1" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "cancel",
+      quantity: "1",
+    });
 
     const receipt = await receiptOf(billId);
 
@@ -512,10 +523,17 @@ describe("receiptLines", () => {
       { name: "Bread" },
       { name: "Pizza", olives: 1 },
     ]);
-    const burgers = await lineIdOf(venue, billId, 1);
-    await adjust(billId, { lineId: burgers, action: "discount_amount", amount: "3.00" });
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 3), action: "comp" });
-    await adjust(billId, { lineId: burgers, action: "cancel", quantity: "1" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "discount_amount",
+      amount: "3.00",
+    });
+    await adjust(billId, { ...(await todayLine(venue, billId, 3)), action: "comp" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "cancel",
+      quantity: "1",
+    });
 
     expect(shown(await receiptOf(billId))).toEqual([
       ["Hamburguesa", "2", "22.00", "24.00", [{ kind: "discount", amount: "2.00" }]],
@@ -527,7 +545,7 @@ describe("receiptLines", () => {
 
   it("falls back when a record names a row that is not on this receipt, even if the sums agree", async () => {
     const billId = await bill([{ name: "Burger" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     const receipt = await inTx(venue, async (tx) => {
       const stored = await readStoredOrder(tx, billId);
@@ -559,9 +577,9 @@ describe("receiptLines", () => {
 
   it("prints a paid bill's comp, percentage off a line and discount on the bill, adding up", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "discount_percent",
       percentBp: 2000,
     });
@@ -628,7 +646,7 @@ describe("receiptLines", () => {
     it("prints an amount that took the Burger's whole price as Descuento 100%", async () => {
       const billId = await bill([{ name: "Burger" }]);
       await adjust(billId, {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "discount_amount",
         amount: "12.00",
       });
@@ -639,26 +657,65 @@ describe("receiptLines", () => {
       expect(goods).toEqual([at80("1  Hamburguesa", "12,00"), at80("  Descuento 100%", "-12,00")]);
     });
 
-    it("prints an amount that took what a 50% left with its amount", async () => {
+    // Each line prints what its own step took: everything a 50% left is 100% of it, however it was
+    // asked for (owner, 2026-10-28).
+    it.each<[string, Ask, ReceiptAdjustment]>([
+      ["Free", { action: "comp" }, { kind: "comp", amount: "6.00" }],
+      [
+        "100%",
+        { action: "discount_percent", percentBp: 10000 },
+        { kind: "discount", percentBp: 10000, amount: "6.00" },
+      ],
+      [
+        "€6.00 off",
+        { action: "discount_amount", amount: "6.00" },
+        { kind: "comp", amount: "6.00" },
+      ],
+    ])("prints %s after a 50% as Descuento 100% of what was left", async (_, second, entry) => {
       const billId = await bill([{ name: "Burger" }]);
-      const burger = await lineIdOf(venue, billId, 1);
-      await adjust(billId, { lineId: burger, action: "discount_percent", percentBp: 5000 });
-      await adjust(billId, { lineId: burger, action: "discount_amount", amount: "6.00" });
+      await adjust(billId, {
+        ...(await todayLine(venue, billId, 1)),
+        action: "discount_percent",
+        percentBp: 5000,
+      });
+      await adjust(billId, { ...(await todayLine(venue, billId, 1)), ...second });
 
       const { result, goods } = await payAndPrint(billId, "0.00");
 
       expect(result.lines[0]!.adjustments).toEqual([
         { kind: "discount", percentBp: 5000, amount: "6.00" },
-        { kind: "discount", amount: "6.00" },
+        entry,
       ]);
       expect(goods).toEqual([
         at80("1  Hamburguesa", "12,00"),
         at80("  Descuento 50%", "-6,00"),
-        at80("  Descuento", "-6,00"),
+        at80("  Descuento 100%", "-6,00"),
       ]);
     });
 
-    it("prints an amount on the whole bill as Descuento 100% only when it took the bill's whole price", async () => {
+    it("prints two €6.00 amounts off the €12.00 Burger as 50% and then 100%", async () => {
+      const billId = await bill([{ name: "Burger" }]);
+      await adjust(billId, {
+        ...(await todayLine(venue, billId, 1)),
+        action: "discount_amount",
+        amount: "6.00",
+      });
+      await adjust(billId, {
+        ...(await todayLine(venue, billId, 1)),
+        action: "discount_amount",
+        amount: "6.00",
+      });
+
+      const { goods } = await payAndPrint(billId, "0.00");
+
+      expect(goods).toEqual([
+        at80("1  Hamburguesa", "12,00"),
+        at80("  Descuento 50%", "-6,00"),
+        at80("  Descuento 100%", "-6,00"),
+      ]);
+    });
+
+    it("prints an amount on the whole bill as Descuento 100% only when it left the bill at zero", async () => {
       const whole = await bill([{ name: "Burger" }]);
       await adjust(whole, { action: "discount_amount", amount: "12.00" });
       const part = await bill([{ name: "Burger" }]);
@@ -672,17 +729,19 @@ describe("receiptLines", () => {
         at80("1  Hamburguesa", "12,00"),
         at80("Descuento 100%", "-12,00"),
       ]);
-      expect(partPrinted.result.billAdjustments).toEqual([{ kind: "discount", amount: "5.00" }]);
+      expect(partPrinted.result.billAdjustments).toEqual([
+        { kind: "discount", percentBp: 4167, amount: "5.00" },
+      ]);
       expect(partPrinted.goods).toEqual([
         at80("1  Hamburguesa", "12,00"),
-        at80("Descuento", "-5,00"),
+        at80("Descuento 41,67%", "-5,00"),
       ]);
     });
 
     it("prints a Free comp of one of three Burgers beneath the Burger it carved off", async () => {
       const billId = await bill([{ name: "Burger", quantity: "3" }]);
       await adjust(billId, {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "comp",
         quantity: "1",
       });
@@ -704,7 +763,7 @@ describe("receiptLines", () => {
   it("stores the unit price before a discount on a bill paid at once, and nothing on an untouched line", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Bread" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -732,11 +791,12 @@ describe("receiptLines", () => {
   });
 
   it("prints a whole-line discount that split the line in two beneath the line it was made on", async () => {
-    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows, and the
-    // second is numbered after the Bread.
+    // €1.00 off three Croquetas at €3.33 leaves unit prices in whole cents only as two rows. Each
+    // croqueta is its own portion line (A803), so the second row keeps its place before the Bread.
+    // The amount prints the share it took: 1.00 of 9.99.
     const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Bread" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_amount",
       amount: "1.00",
     });
@@ -764,16 +824,16 @@ describe("receiptLines", () => {
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
       at80("2  Croquetas de jamón", "6,66"),
-      at80("  Descuento", "-1,00"),
-      at80("1  Pan de pueblo", "2,50"),
+      at80("  Descuento 10,01%", "-1,00"),
       at80("1  Croquetas de jamón", "3,33"),
+      at80("1  Pan de pueblo", "2,50"),
     ]);
   });
 
   it("marks both rows of a full invoice's line its own discount split into two prices as one family", async () => {
     const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -785,9 +845,14 @@ describe("receiptLines", () => {
   });
 
   it("marks a family whose rows another dish sits between, and leaves that dish unmarked", async () => {
-    const billId = await bill([{ name: "Croquetas", quantity: "3" }, { name: "Burger" }]);
+    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    const { billId } = await billWith(
+      venue,
+      [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }],
+      { shape: "grouped" },
+    );
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -805,7 +870,7 @@ describe("receiptLines", () => {
   it("marks a family the discount on the bill split, and not a dish only its own discount touched", async () => {
     const billId = await bill([{ name: "Burger" }, { name: "Croquetas", quantity: "3" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -823,7 +888,7 @@ describe("receiptLines", () => {
   it("marks a dish's extras rows with the family's number when a discount carves part of the dish off", async () => {
     const billId = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
       quantity: "1",
@@ -841,7 +906,7 @@ describe("receiptLines", () => {
   it("marks no family on a simplified receipt", async () => {
     const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -857,9 +922,16 @@ describe("receiptLines", () => {
 
   it("marks no family when the records no longer add up to the bill", async () => {
     const billId = await bill([{ name: "Croquetas", quantity: "3" }]);
-    const croquetas = await lineIdOf(venue, billId, 1);
-    await adjust(billId, { lineId: croquetas, action: "discount_percent", percentBp: 1000 });
-    await adjust(billId, { lineId: croquetas, action: "cancel", quantity: "1" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "discount_percent",
+      percentBp: 1000,
+    });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "cancel",
+      quantity: "1",
+    });
 
     const lines = await invoiceOf(billId);
     expect(lines.some((line) => line.adjustments?.some((entry) => "percentBp" in entry))).toBe(

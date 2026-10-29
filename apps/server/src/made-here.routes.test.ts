@@ -3,6 +3,7 @@ import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
 import { observedGroupSender } from "./testing/group-composition-fixture.js";
 import { observedBillActionBody } from "./testing/bill-action-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -765,26 +766,43 @@ describe("made-here route wiring", () => {
     );
     expect(recalled.json.code).toBe("ticket.already_started");
   });
+  /**
+   * Sends `quantity` Cañas from the first till's device as one stored line of that count; answers
+   * status 200.
+   */
+  async function sendCañasGrouped(party: { partyId: string; tabId: string }, quantity: number) {
+    const deviceId = venue.cookie.match(/waitron_device=([0-9a-f-]+)\./)![1]!;
+    await inTx(venue, (tx) =>
+      placeGroupedRound(
+        tx,
+        { ...venue.cfg, sendingDeviceId: deviceId },
+        party,
+        {
+          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: String(quantity) }],
+          release: "fire",
+        },
+        venue.operatorId,
+      ),
+    );
+    return { status: 200 };
+  }
   it.each([1, 2])(
     "cancels a made-here drink from quantity %i without Bar paper or notice",
     async (quantity) => {
       const party = await seatedWith(venue);
-      const sent = await send(
-        venue.app,
-        venue.cookie,
-        "POST",
-        `/api/parties/${party.partyId}/groups`,
-        {
-          submissionId: randomUUID(),
-          expectedPartyRevision: party.revision,
-          groups: [
-            {
-              lines: [{ menuItemId: venue.offerFor("Caña"), quantity: String(quantity) }],
-              release: "fire",
-            },
-          ],
-        },
-      );
+      const sent =
+        quantity === 1
+          ? await send(venue.app, venue.cookie, "POST", `/api/parties/${party.partyId}/groups`, {
+              submissionId: randomUUID(),
+              expectedPartyRevision: party.revision,
+              groups: [
+                {
+                  lines: [{ menuItemId: venue.offerFor("Caña"), quantity: String(quantity) }],
+                  release: "fire",
+                },
+              ],
+            })
+          : await sendCañasGrouped(party, quantity);
       expect(sent.status).toBe(200);
       const [item] = await inTx(venue, (tx) =>
         tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),
@@ -894,19 +912,7 @@ describe("made-here route wiring", () => {
   });
   it("keeps the made-here mark when splitting a drink onto another bill", async () => {
     const party = await seatedWith(venue);
-    const sent = await send(
-      venue.app,
-      venue.cookie,
-      "POST",
-      `/api/parties/${party.partyId}/groups`,
-      {
-        submissionId: randomUUID(),
-        expectedPartyRevision: party.revision,
-        groups: [
-          { lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }], release: "fire" },
-        ],
-      },
-    );
+    const sent = await sendCañasGrouped(party, 2);
     expect(sent.status).toBe(200);
     const [item] = await inTx(venue, (tx) =>
       tx.select().from(ticketItems).where(eq(ticketItems.workingOrderId, party.tabId)),

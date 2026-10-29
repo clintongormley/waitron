@@ -183,68 +183,100 @@ export async function setAllergyLineTicks(
     .where(eq(partyAllergyGuests.partyId, partyId));
   const known = new Set(guests.map((g) => g.id));
   const seen = new Set<string>();
-  const checked = [];
+  const checked: {
+    index: number;
+    guestId: string | null;
+    draftLineId: string | null;
+    workingLineId: string | null;
+  }[] = [];
+  // Entries are refused in order: one whose line is missing refuses before a later malformed one.
+  let malformed: (() => never) | undefined;
   for (const [i, entry] of input.entries()) {
     const field = (name: string) => `ticks.${i}.${name}`;
-    if (!record(entry)) invalid(field("line"));
+    const refuse = (name: string) => {
+      malformed = () => invalid(field(name));
+    };
+    if (!record(entry)) {
+      refuse("line");
+      break;
+    }
     const draftLineId = entry.draftLineId ?? null;
     const workingLineId = entry.workingLineId ?? null;
-    if ((draftLineId === null) === (workingLineId === null)) invalid(field("line"));
     const lineId = draftLineId ?? workingLineId;
-    if (typeof lineId !== "string" || !isUuid(lineId) || seen.has(lineId)) invalid(field("line"));
+    if (
+      (draftLineId === null) === (workingLineId === null) ||
+      typeof lineId !== "string" ||
+      !isUuid(lineId) ||
+      seen.has(lineId)
+    ) {
+      refuse("line");
+      break;
+    }
     seen.add(lineId);
-    if (entry.guestId !== null && (typeof entry.guestId !== "string" || !known.has(entry.guestId)))
-      invalid(field("guestId"));
-    if (draftLineId !== null) {
-      const [line] = await tx
-        .select({ id: orderDraftLines.id })
-        .from(orderDraftLines)
-        .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
-        .where(
-          and(
-            eq(orderDraftLines.id, lineId),
-            eq(orderDrafts.partyId, partyId),
-            eq(orderDrafts.state, "open"),
-          ),
-        );
-      if (line === undefined) invalid(field("line"));
-    } else {
-      const [line] = await tx
-        .select({ id: workingOrderLines.id })
-        .from(workingOrderLines)
-        .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
-        .where(
-          and(
-            eq(workingOrderLines.id, lineId),
-            inArray(
-              workingOrders.partyId,
-              sql`(
-              with recursive family(id) as (
-                select ${partyId}
-                union select p.id from parties p join family f on p.merged_into_party_id = f.id
-              ) select id from family
-            )`,
-            ),
-            isNull(workingOrderLines.parentLineId),
-          ),
-        );
-      if (line === undefined) invalid(field("line"));
+    if (
+      entry.guestId !== null &&
+      (typeof entry.guestId !== "string" || !known.has(entry.guestId))
+    ) {
+      refuse("guestId");
+      break;
     }
     checked.push({
+      index: i,
       guestId: entry.guestId as string | null,
       draftLineId: draftLineId as string | null,
       workingLineId: workingLineId as string | null,
     });
   }
-  for (const tick of checked) {
-    const target =
-      tick.draftLineId === null
-        ? eq(allergyLineTicks.workingLineId, tick.workingLineId!)
-        : eq(allergyLineTicks.draftLineId, tick.draftLineId);
-    await tx.delete(allergyLineTicks).where(target);
-    if (tick.guestId !== null)
-      await tx.insert(allergyLineTicks).values({ ...tick, guestId: tick.guestId });
-  }
+  const draftLineIds = checked.flatMap((tick) => tick.draftLineId ?? []);
+  const workingLineIds = checked.flatMap((tick) => tick.workingLineId ?? []);
+  const found = new Set<string>();
+  if (draftLineIds.length > 0)
+    for (const { id } of await tx
+      .select({ id: orderDraftLines.id })
+      .from(orderDraftLines)
+      .innerJoin(orderDrafts, eq(orderDrafts.id, orderDraftLines.draftId))
+      .where(
+        and(
+          inArray(orderDraftLines.id, draftLineIds),
+          eq(orderDrafts.partyId, partyId),
+          eq(orderDrafts.state, "open"),
+        ),
+      ))
+      found.add(id);
+  if (workingLineIds.length > 0)
+    for (const { id } of await tx
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .innerJoin(workingOrders, eq(workingOrders.id, workingOrderLines.workingOrderId))
+      .where(
+        and(
+          inArray(workingOrderLines.id, workingLineIds),
+          inArray(
+            workingOrders.partyId,
+            sql`(
+              with recursive family(id) as (
+                select ${partyId}
+                union select p.id from parties p join family f on p.merged_into_party_id = f.id
+              ) select id from family
+            )`,
+          ),
+          isNull(workingOrderLines.parentLineId),
+        ),
+      ))
+      found.add(id);
+  const missing = checked.find((tick) => !found.has((tick.draftLineId ?? tick.workingLineId)!));
+  if (missing !== undefined) invalid(`ticks.${missing.index}.line`);
+  malformed?.();
+  if (draftLineIds.length > 0)
+    await tx.delete(allergyLineTicks).where(inArray(allergyLineTicks.draftLineId, draftLineIds));
+  if (workingLineIds.length > 0)
+    await tx
+      .delete(allergyLineTicks)
+      .where(inArray(allergyLineTicks.workingLineId, workingLineIds));
+  const ticks = checked.flatMap(({ guestId, draftLineId, workingLineId }) =>
+    guestId === null ? [] : [{ guestId, draftLineId, workingLineId }],
+  );
+  if (ticks.length > 0) await tx.insert(allergyLineTicks).values(ticks);
 }
 
 export async function moveAllergyDraftTicks(

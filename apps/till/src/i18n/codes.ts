@@ -1,3 +1,4 @@
+import { PORTIONS_AT_ONCE } from "@waitron/shared";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -27,6 +28,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "device_zones.changed": {
     en: "These zone choices changed. Read them again before saving.",
     es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
+  },
+  "tab.portions_too_many": {
+    en: `At most ${PORTIONS_AT_ONCE} of one dish can be added at a time. Lower it to ${PORTIONS_AT_ONCE}, then add the rest.`,
+    es: `Se pueden añadir como máximo ${PORTIONS_AT_ONCE} de un mismo plato a la vez. Baja a ${PORTIONS_AT_ONCE} y añade el resto después.`,
   },
   "party.not_found": {
     en: "The table order could not be found.",
@@ -609,6 +614,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
   "adjustment.approval_required": {
     en: "Someone who can approve this must enter their PIN",
     es: "Alguien que pueda autorizarlo debe introducir su PIN",
+  },
+  "adjustment.no_common_approver": {
+    en: "Nobody can approve this: whoever may go past this bill's limit may not approve this reason. Take less off, choose another reason, or Close to change nothing.",
+    es: "Nadie puede autorizarlo: quien puede superar el límite de esta cuenta no puede autorizar este motivo. Quita menos, elige otro motivo o pulsa Cerrar para no cambiar nada.",
+  },
+  "adjustment.free_not_allowed": {
+    en: "This reason can't take everything off. Take less off, choose a reason that allows Free, or Close to change nothing.",
+    es: "Este motivo no puede quitarlo todo. Quita menos, elige un motivo que permita dejarlo gratis o pulsa Cerrar para no cambiar nada.",
   },
   "adjustment.weighed_partial": {
     en: "Part of an item sold by weight or measure can't be comped. Comp the whole line instead",

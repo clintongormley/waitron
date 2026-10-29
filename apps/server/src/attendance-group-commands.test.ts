@@ -21,7 +21,7 @@ import { recordAttendanceFact, type AttendanceRecorder } from "./attendance-capt
 import { readAttendanceFacts } from "./attendance-facts.js";
 import { mountTillApi } from "./till-api.js";
 import { fireGroup } from "./order-groups.js";
-import { submitGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import {
   provisionBillVenue,
   seatedWith,
@@ -69,17 +69,20 @@ function api(attendance?: AttendanceRecorder) {
 }
 async function prepare() {
   const party = await seatedWith(v);
-  const result = await withTransaction(suite.db, (tx) =>
-    submitGroups(tx, v.cfg, party.partyId, {
-      submissionId: newId(),
-      expectedPartyRevision: party.revision,
-      operatorId: v.adminId,
-      groups: ["Ensalada", "Tarta"].map((name) => ({
-        release: "hold" as const,
-        lines: [{ menuItemId: v.offerFor(name), quantity: "2" }],
-      })),
-    }),
-  );
+  const result = await withTransaction(suite.db, async (tx) => {
+    const placed = [];
+    for (const name of ["Ensalada", "Tarta"])
+      placed.push(
+        await placeGroupedRound(
+          tx,
+          v.cfg,
+          party,
+          { release: "hold", lines: [{ menuItemId: v.offerFor(name), quantity: "2" }] },
+          v.adminId,
+        ),
+      );
+    return { ...placed[1]!, groups: placed.flatMap((round) => round.groups) };
+  });
   const [line] = await suite.db
     .select()
     .from(workingOrderLines)

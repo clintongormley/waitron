@@ -166,6 +166,16 @@ Each card carries its order's kitchen note and any printing problem. On a till, 
 **Reprint**, and **Collect** once its order is paid and waiting to be collected; a kitchen screen
 that nobody signs in on shows neither.
 
+## Identical dishes share a row {#identical-dishes}
+
+A table's order of 2 × Burger reaches the kitchen as two dishes, so the till can serve or move each
+one on its own. The kitchen still reads them together: the station ticket, the kitchen screen and
+the pass show them as one row of 2 while they are the same, and the ticket's **Also on this order** list and
+correction slips such as **HOLD CHANGED** print them once. Dishes stay on separate rows when their
+extras or notes differ, or when one is further along than the other. On the kitchen screen, tapping
+a row, or moving it to another station, takes every dish in it. Weighed dishes always show and
+print one by one, since each is weighed on its own.
+
 ## A dish sent after its period ended {#after-period}
 
 On the till, an unsent dish whose period ended earlier the same business day shows a warning sign

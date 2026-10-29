@@ -702,7 +702,8 @@ rate, on '80mm' in 'eu-ES'".
 when no one adjustment names the row, for instance a dish with two or more comps of its own
 (`GroupDiscount`, `apps/server/src/receipt-figures.ts`), and the row then falls back to the
 zero-base flag. A finish-branch probe on 2026-10-21 rendered two €6.00 amounts that took a €12.00
-dish to zero as one «Descuento 100%» row, though neither amount counts as full by A911's rule.
+dish to zero as one «Descuento 100%» row, where the ticket prints them as two steps, «Descuento
+50%» and «Descuento 100%» (A803 slice 1's decision, [till.md](till.md#decisions-and-deliberate-limits)).
 And a dish taken to zero by two comps of its own plus a bill comp prints «Descuento 100%» beside
 only its own part (the A758-4 plan's owner point 3). Owner to confirm.
 

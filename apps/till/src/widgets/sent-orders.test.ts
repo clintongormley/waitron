@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import type { LitElement } from "lit";
-import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders } from "../api/client.js";
+import type { CurrentOrderGroup, CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { setLocale } from "../i18n/t.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./sent-orders.js";
@@ -13,6 +13,7 @@ type Panel = LitElement & {
   busy: boolean;
   now: number;
   billLabels: ReadonlyMap<string, string>;
+  lines: readonly TabLine[];
 };
 const now = Date.parse("2026-10-18T12:00:00Z");
 const at = (minute: number) => `2026-10-18T11:${String(minute).padStart(2, "0")}:00Z`;
@@ -879,4 +880,166 @@ it("refuses a retained serve control when the latest row has an unreleased compo
   expect(calls).toEqual([]);
   await el.updateComplete;
   expect((find(el, '[data-serve-line="Bravas"]') as HTMLButtonElement).disabled).toBe(true);
+});
+
+const billLine = (id: string, lineNo: number): TabLine => ({
+  id,
+  lineNo,
+  stationId: null,
+  changesAfterSending: null,
+  movable: true,
+  name: "Burger",
+  productId: "burger",
+  parentProductId: null,
+  parentLineNo: null,
+  quantity: "1.000",
+  priceQuantity: "1.000",
+  unitPrecision: 0,
+  unitPriceGross: "9.50",
+  servedAt: null,
+  courseId: null,
+  sentAt: at(40),
+  firedAt: at(40),
+  state: null,
+  groupId: null,
+  note: null,
+  listId: null,
+  menuItemId: "offer-burger",
+  portion: true,
+});
+const burgers = [billLine("burger-1", 1), billLine("burger-2", 2), billLine("burger-3", 3)];
+const burger = (id: string, lineNo: number, over: Partial<CurrentOrderRow> = {}) =>
+  row(id, { name: "Burger", lineNo, netAmount: "9.50", ...over });
+const shownLines = (el: Panel, attribute: string) =>
+  [...root(el).querySelectorAll<HTMLElement>(`[${attribute}]`)].map((node) => [
+    node.getAttribute(attribute),
+    node.querySelector(".what")!.textContent!.replace(/\s+/g, " ").trim(),
+    node.querySelector(".amount")!.textContent!.trim(),
+  ]);
+
+it("A803 portion grouping: two identical sent portions show one ×2 row, and a tap serves both", async () => {
+  const el = await mount(
+    current([
+      burger("burger-2", 2),
+      burger("burger-1", 1),
+      burger("burger-3", 3, { readyAt: at(50) }),
+    ]),
+    { lines: burgers },
+  );
+  expect(shownLines(el, "data-fired-line")).toEqual([
+    ["burger-3", "Burger ×1", "€9.50"],
+    ["burger-1", "Burger ×2", "€19.00"],
+  ]);
+  const calls = collect(el, "serve-lines");
+  await click(el, "[data-serve-line=burger-1]");
+  expect(calls).toEqual([
+    {
+      items: [
+        { lineId: "burger-1", quantity: "1" },
+        { lineId: "burger-2", quantity: "1" },
+      ],
+    },
+  ]);
+});
+
+it("A803 portion grouping: a served portion and an unserved one show two rows", async () => {
+  const el = await mount(
+    current([
+      burger("burger-1", 1, { servedQuantity: "1.000", servedAt: at(55) }),
+      burger("burger-2", 2),
+      burger("burger-3", 3, { servedQuantity: "1.000", servedAt: at(56) }),
+    ]),
+    {
+      lines: [
+        { ...burgers[0]!, servedAt: at(55) },
+        burgers[1]!,
+        { ...burgers[2]!, servedAt: at(56) },
+      ],
+    },
+  );
+  await click(el, "[data-sent-toggle]");
+  await click(el, "[data-served-toggle]");
+  expect(shownLines(el, "data-served-line")).toEqual([["burger-1", "Burger ×2", "€19.00"]]);
+  expect(shownLines(el, "data-fired-line")).toEqual([["burger-2", "Burger ×1", "€9.50"]]);
+});
+
+it("A803 portion grouping: identical held portions show one row in their group", async () => {
+  const held = { released: false, firedAt: null };
+  const el = await mount(
+    current([], [group("g", [burger("burger-1", 1, held), burger("burger-2", 2, held)])]),
+    { lines: burgers.map((line) => ({ ...line, firedAt: null, groupId: "g" })) },
+  );
+  await click(el, "[data-sent-toggle]");
+  await click(el, "[data-held-toggle]");
+  expect(shownLines(el, "data-held-line")).toEqual([["burger-1", "Burger ×2", "€19.00"]]);
+});
+
+it("A803 portion grouping: a portion ticked for a guest's allergy stands apart from its twin", async () => {
+  const el = await mount(
+    current([burger("burger-1", 1), burger("burger-2", 2), burger("burger-3", 3)]),
+    {
+      lines: burgers,
+      allergy: {
+        answer: "allergies",
+        guests: [
+          { id: "guest", position: 0, who: "Blue shirt", allergens: { milk: {} }, note: null },
+        ],
+        ticks: [{ guestId: "guest", draftLineId: null, workingLineId: "burger-3" }],
+        changedBy: null,
+        changedAt: null,
+        revision: 1,
+      },
+    } as Partial<Panel>,
+  );
+  await click(el, "[data-sent-toggle]");
+  expect(shownLines(el, "data-fired-line")).toEqual([
+    ["burger-1", "Burger ×2", "€19.00"],
+    ["burger-3", "Burger ×1Blue shirt", "€9.50"],
+  ]);
+});
+
+it("A803 portion grouping: a grouped row's information names every member by line number", async () => {
+  const held = { released: false, firedAt: null };
+  const el = await mount(
+    current([], [group("g", [burger("burger-2", 2, held), burger("burger-1", 1, held)])]),
+    { lines: burgers.map((line) => ({ ...line, firedAt: null, groupId: "g" })) },
+  );
+  const details = collect(el, "sent-line-info");
+  await click(el, "[data-sent-toggle]");
+  await click(el, "[data-held-toggle]");
+  await click(el, "[data-sent-info=burger-1]");
+  expect(details).toEqual([
+    { lineId: "burger-1", workingOrderId: "b1", kind: "held", lineIds: ["burger-1", "burger-2"] },
+  ]);
+});
+
+it("A803 portion grouping: a long press on a grouped row names every member", async () => {
+  const el = await mount(current([burger("burger-2", 2), burger("burger-1", 1)]), {
+    lines: burgers,
+  });
+  const serves = collect(el, "serve-lines");
+  const details = collect(el, "sent-line-info");
+  await click(el, "[data-sent-toggle]");
+  const dish = find(el, "[data-serve-line=burger-1]");
+  dish.dispatchEvent(
+    new PointerEvent("pointerdown", {
+      bubbles: true,
+      composed: true,
+      pointerId: 1,
+      pointerType: "mouse",
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+    }),
+  );
+  await new Promise((resolve) => setTimeout(resolve, 550));
+  window.dispatchEvent(
+    new PointerEvent("pointerup", { pointerId: 1, pointerType: "mouse", clientX: 10, clientY: 10 }),
+  );
+  dish.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, detail: 1 }));
+  await el.updateComplete;
+  expect(details).toEqual([
+    { lineId: "burger-1", workingOrderId: "b1", kind: "fired", lineIds: ["burger-1", "burger-2"] },
+  ]);
+  expect(serves).toEqual([]);
 });

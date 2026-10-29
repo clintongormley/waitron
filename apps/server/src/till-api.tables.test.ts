@@ -1,5 +1,5 @@
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
-import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
+import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -18,7 +18,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -398,7 +398,16 @@ describe("table + tab routes", () => {
       createTable(tx, cfg, { label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
     );
     const { tabId, partyId } = await seat(id);
-    await sendRound(partyId, [{ menuItemId, quantity: "3" }]);
+    await withTransaction(suite.db, (tx) =>
+      placeGroupedRound(
+        tx,
+        { ...cfg, origin: jobOrigin("dashboard") },
+        { partyId, tabId },
+        { lines: [{ menuItemId, quantity: "3" }], release: "fire" },
+        ana.id,
+        { party: { answer: "none", guests: [] }, ticks: [] },
+      ),
+    );
 
     for (const quantity of ["0", "4", "abc"]) {
       const refused = await cancel(tabId, 1, quantity);
@@ -484,7 +493,8 @@ describe("table + tab routes", () => {
     // The tab's revision rides with its lines: the round counted one, and a served mark, which is
     // not a write to the bill, none.
     expect(revision).toBe(1);
-    expect(lines).toHaveLength(2);
+    // The second dish ×2 is two portions, each its own line (A803).
+    expect(lines).toHaveLength(3);
     // Seeded product is 1.50; the locked gross unit rides back verbatim, and the quantity at the
     // three places `thousandthsToDecimal` renders.
     expect(lines[0]).toMatchObject({
@@ -494,7 +504,8 @@ describe("table + tab routes", () => {
       unitPriceGross: "1.50",
     });
     expect(lines[0]!.servedAt).not.toBeNull();
-    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "2.000", servedAt: null });
+    expect(lines[1]).toMatchObject({ lineNo: 2, quantity: "1.000", servedAt: null });
+    expect(lines[2]).toMatchObject({ lineNo: 3, quantity: "1.000", servedAt: null });
   });
 
   it("the tab-lines read carries no venue switch", async () => {

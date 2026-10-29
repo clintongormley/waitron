@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { beforeEach, expect, it } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import { CATALOGUE_MIGRATIONS } from "@waitron/catalogue";
 import {
@@ -121,6 +121,35 @@ async function workingLine(id = partyId, parentLineId?: string) {
     .returning();
   return line!.id;
 }
+
+it("sets any number of ticks in as many queries as one", async () => {
+  const state = await save({ answer: "allergies", guests: [guest] });
+  const guestId = state.guests[0]!.id;
+  const session = (t: Transaction) =>
+    (t as unknown as { session: { prepareQuery: (...args: never[]) => unknown } }).session;
+  const queriesFor = (ticks: unknown[]) =>
+    tx(async (t) => {
+      const prepared = vi.spyOn(session(t), "prepareQuery");
+      try {
+        await allergy.setAllergyLineTicks(t, partyId, ticks);
+        return prepared.mock.calls.length;
+      } finally {
+        prepared.mockRestore();
+      }
+    });
+  const one = await queriesFor([
+    { guestId, workingLineId: await workingLine() },
+    { guestId, draftLineId: await draftLine() },
+  ]);
+  const working = await Promise.all([1, 2, 3].map(() => workingLine()));
+  const drafts = [await draftLine(), await draftLine(), await draftLine()];
+  const many = await queriesFor([
+    ...working.map((workingLineId) => ({ guestId, workingLineId })),
+    ...drafts.map((draftLineId) => ({ guestId, draftLineId })),
+  ]);
+  expect(many).toBe(one);
+  expect((await read()).ticks).toHaveLength(8);
+});
 
 it("starts unanswered, records the editor and time, and advances the party revision", async () => {
   expect(await read()).toEqual({
@@ -460,6 +489,25 @@ it.each([
       code: "allergy.invalid",
       params: { field },
     });
+  expect((await read()).ticks).toEqual([]);
+});
+
+it("refuses the first bad entry in order, whether its line is missing or it is malformed", async () => {
+  const state = await save({ answer: "allergies", guests: [guest] });
+  const guestId = state.guests[0]!.id;
+  const missing = { guestId, workingLineId: randomUUID() };
+  const malformed = { guestId, draftLineId: "bad" };
+  const fine = { guestId, workingLineId: await workingLine() };
+  for (const [ticks, field] of [
+    [[fine, missing, malformed], "ticks.1.line"],
+    [[fine, malformed, missing], "ticks.1.line"],
+    [[missing, { guestId: randomUUID(), workingLineId: fine.workingLineId }], "ticks.0.line"],
+    [[{ guestId: randomUUID(), workingLineId: fine.workingLineId }, missing], "ticks.0.guestId"],
+  ] as const)
+    await expect(
+      tx((t) => allergy.setAllergyLineTicks(t, partyId, [...ticks])),
+      JSON.stringify(ticks),
+    ).rejects.toMatchObject({ code: "allergy.invalid", params: { field } });
   expect((await read()).ticks).toEqual([]);
 });
 

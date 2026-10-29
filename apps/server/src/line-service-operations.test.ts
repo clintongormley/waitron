@@ -55,7 +55,9 @@ useVenueDb({
 });
 
 async function fixture(quantity = 3, cancelled = 2) {
-  const order = await billWith(venue, [{ name: "Pizza", quantity: String(quantity), olives: 2 }]);
+  const order = await billWith(venue, [{ name: "Pizza", quantity: String(quantity), olives: 2 }], {
+    shape: "grouped",
+  });
   return inTx(venue, async (tx) => {
     const rows = await tx
       .select()
@@ -323,7 +325,10 @@ describe("firing with charged cancellations", () => {
   });
 
   it("does not release a cancelled no-preparation dish even when a legacy line Fire names it", async () => {
-    const order = await billWith(venue, [{ name: "Coffee", quantity: "2" }], { release: "hold" });
+    const order = await billWith(venue, [{ name: "Coffee", quantity: "2" }], {
+      release: "hold",
+      shape: "grouped",
+    });
     const [parent] = await rows(order.billId);
     await inTx(venue, async (tx) => {
       await tx.insert(lineServiceCancellations).values({
@@ -339,7 +344,10 @@ describe("firing with charged cancellations", () => {
   });
 
   it("omits cancelled no-preparation food from the unsent-work read", async () => {
-    const order = await billWith(venue, [{ name: "Coffee", quantity: "2" }], { release: "hold" });
+    const order = await billWith(venue, [{ name: "Coffee", quantity: "2" }], {
+      release: "hold",
+      shape: "grouped",
+    });
     const [parent] = await rows(order.billId);
     await inTx(venue, (tx) =>
       tx.insert(lineServiceCancellations).values({

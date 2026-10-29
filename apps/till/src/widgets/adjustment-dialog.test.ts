@@ -567,7 +567,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       },
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `This takes the bill's comps past ${money("50.00")}. Someone who can approve past the bill's limit must enter their PIN.`,
+      `This takes the bill's comps past ${money("50.00")}. Someone who may go past the bill's limit and approve this reason must enter their PIN.`,
     );
     expect(confirmButton(el).textContent!.trim()).toBe("Ask for approval");
   });
@@ -583,7 +583,7 @@ describe("till-adjustment-dialog: before confirming", () => {
       (el) => chooseReason(el, "Complaint"),
     );
     expect(text(root(el).querySelector("[data-needs-approval]")!)).toBe(
-      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda autorizar por encima del límite debe introducir su PIN.`,
+      `Con esto, los descuentos de la cuenta pasan de ${money("50.00")}. Alguien que pueda superar el límite y autorizar este motivo debe introducir su PIN.`,
     );
   });
 
@@ -715,6 +715,8 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     "adjustment.note_required",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
+    "adjustment.no_common_approver",
+    "adjustment.free_not_allowed",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment_reason.not_found",
@@ -727,6 +729,72 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     const el = await mount({ kind: "discount", target: steaks, refusal: code });
     expect(codeMessage(code)).not.toBe(codeMessage("server.internal"));
     expect(shownMessages(el).join(" ")).toContain(codeMessage(code));
+  });
+
+  it("says nobody can approve a request past both lists, and leaves every choice in place", async () => {
+    const el = await mount({ kind: "discount", target: steaks });
+    await chooseReason(el, "Regular");
+    el.refusal = "adjustment.no_common_approver";
+    await el.updateComplete;
+    expect(actions(el).error).toBe(
+      "Nobody can approve this: whoever may go past this bill's limit may not approve this reason. Take less off, choose another reason, or Close to change nothing.",
+    );
+    expect(shownMessages(el).filter((message) => message !== "")).toHaveLength(1);
+    expect(continueButton(el).disabled).toBe(false);
+    expect(field(el, "percent").hasAttribute("disabled")).toBe(false);
+    const radios = [...root(el).querySelectorAll<HTMLInputElement>('input[name="reason"]')];
+    expect(radios.length).toBeGreaterThan(0);
+    expect(radios.every((radio) => !radio.disabled)).toBe(true);
+
+    // A refusal about no field stays until the next submission.
+    await type(el, "percent", "5");
+    expect(actions(el).error).toContain(codeMessage("adjustment.no_common_approver"));
+
+    const sent = [
+      ...capture(el, "adjust-preview"),
+      ...capture(el, "adjust-confirm"),
+      ...capture(el, "adjust-edit"),
+    ];
+    const closed = capture(el, "adjust-close");
+    const close = root(el).querySelector<HTMLElement & { disabled: boolean }>(
+      "[data-adjust-close]",
+    )!;
+    expect(close.disabled).toBe(false);
+    await press(close, el);
+    expect(closed).toHaveLength(1);
+    expect(sent).toEqual([]);
+  });
+
+  it("puts the server's refusal of everything off under the value, in both languages", async () => {
+    const el = await mount({ kind: "discount", target: steaks });
+    await chooseReason(el, "Regular");
+    await type(el, "percent", "99.99");
+    el.refusal = "adjustment.free_not_allowed";
+    await el.updateComplete;
+    expect(field(el, "percent").error).toBe(
+      "This reason can't take everything off. Take less off, choose a reason that allows Free, or Close to change nothing.",
+    );
+    expect(actions(el).error).toBe(t("form.fix_fields"));
+    setLocale("es");
+    el.requestUpdate();
+    await el.updateComplete;
+    expect(field(el, "percent").error).toBe(
+      "Este motivo no puede quitarlo todo. Quita menos, elige un motivo que permita dejarlo gratis o pulsa Cerrar para no cambiar nada.",
+    );
+    await type(el, "percent", "90");
+    expect(field(el, "percent").error).toBe("");
+  });
+
+  it("says nobody can approve it in Spanish", async () => {
+    setLocale("es");
+    const el = await mount({
+      kind: "discount",
+      target: steaks,
+      refusal: "adjustment.no_common_approver",
+    });
+    expect(actions(el).error).toBe(
+      "Nadie puede autorizarlo: quien puede superar el límite de esta cuenta no puede autorizar este motivo. Quita menos, elige otro motivo o pulsa Cerrar para no cambiar nada.",
+    );
   });
 
   it("shows a refusal on the confirm step above the action", async () => {
@@ -759,6 +827,8 @@ describe("till-adjustment-dialog: a refusal from the server", () => {
     expect(refusalField("adjustment.exceeds_amount", "comp", false)).toBeNull();
     expect(refusalField("adjustment.no_reduction", "discount", false)).toBe("value");
     expect(refusalField("adjustment.no_reduction", "comp", true)).toBeNull();
+    expect(refusalField("adjustment.free_not_allowed", "discount", false)).toBe("value");
+    expect(refusalField("adjustment.free_not_allowed", "comp", false)).toBeNull();
     expect(refusalField("bill.line_paid", "comp", false)).toBeNull();
   });
 });
@@ -789,7 +859,8 @@ for (const locale of ["en", "es"]) {
     const el = await mount({ kind: "discount", target: steaks });
     const asked = capture<AdjustmentChoice>(el, "adjust-preview");
     await choose(el, "discountKind", "amount");
-    await chooseReason(el, "Regular");
+    // Staff meal offers Free, so it may take the whole steak off (owner, 2026-10-28).
+    await chooseReason(el, "Staff meal");
     for (const value of ["00.00", "0000000005.50", "05.555", "-05.50", "05,5.0"]) {
       await type(el, "amount", value);
       await press(continueButton(el), el);
@@ -812,7 +883,7 @@ for (const locale of ["en", "es"]) {
     expect(asked).toEqual([
       {
         action: "discount_amount",
-        reasonId: "Regular",
+        reasonId: "Staff meal",
         note: null,
         quantity: "1",
         amount: "25.00",
@@ -899,6 +970,24 @@ describe("till-adjustment-dialog: comping the whole bill", () => {
     await chooseReason(fresh, "Regular");
     await choose(fresh, "discountKind", "free");
     expect(reasonChosen(fresh)).toBe(false);
+  });
+
+  it("refuses everything off the bill under a reason without Free, under the value (owner, 2026-10-28)", async () => {
+    const el = await mountBill();
+    const previews = capture<AdjustmentChoice>(el, "adjust-preview");
+    await chooseReason(el, "Regular");
+    await type(el, "percent", "100");
+    await press(continueButton(el), el);
+    expect(field(el, "percent").error).toBe(codeMessage("adjustment.free_not_allowed"));
+    expect(continueButton(el).disabled).toBe(true);
+
+    await choose(el, "discountKind", "amount");
+    await chooseReason(el, "Regular");
+    await type(el, "amount", "40.00");
+    await press(continueButton(el), el);
+    expect(field(el, "amount").error).toBe(codeMessage("adjustment.free_not_allowed"));
+    expect(continueButton(el).disabled).toBe(true);
+    expect(previews).toEqual([]);
   });
 
   it("puts a free bill's refusal above the action", async () => {

@@ -26,6 +26,7 @@ import {
   inTx,
   PINS,
   provisionAdjustmentVenue,
+  todayLine,
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
@@ -79,8 +80,14 @@ async function pay(b: Bill, amount: string) {
   return { saleId: sale!.id, tenderId: tender!.id };
 }
 
-/** A still-charge cancel of `quantity` of the line; `refundHandoff` is the Refund tick. */
-async function cancel(b: Bill, lineId: string, quantity: string, refundHandoff: boolean) {
+/** A still-charge cancel of `quantity` of the row; `refundHandoff` is the Refund tick. */
+async function cancel(
+  b: Bill,
+  row: { lineId: string; lineIds?: string[] },
+  quantity: string,
+  refundHandoff: boolean,
+) {
+  const { lineId, lineIds } = row;
   const answer = await inTx(venue, async (tx) => {
     const [party] = await tx.select().from(parties).where(eq(parties.id, b.partyId));
     const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
@@ -91,7 +98,8 @@ async function cancel(b: Bill, lineId: string, quantity: string, refundHandoff: 
       reasonId: venue.reasonId.houseVoid,
       expectedPartyRevision: party!.revision,
       expectedBillRevision: order!.revision,
-      expectedContext: await readCancellationContext(tx, b.partyId, lineId),
+      expectedContext: await readCancellationContext(tx, b.partyId, lineId, lineIds),
+      ...(lineIds === undefined ? {} : { lineIds }),
       submissionId: randomUUID(),
       ...(refundHandoff ? { refundHandoff: true } : {}),
     };
@@ -152,8 +160,8 @@ async function ledgers() {
 async function twoCancels() {
   const b = await bill([{ name: "Burger" }, { name: "Ham" }, { name: "Steak" }]);
   const paid = await pay(b, "61.00");
-  const burger = await cancel(b, b.lineIds[0]!, "1", true);
-  const ham = await cancel(b, b.lineIds[1]!, "1", true);
+  const burger = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+  const ham = await cancel(b, await todayLine(venue, b.billId, 2), "1", true);
   return { b, paid, burger, ham };
 }
 
@@ -212,8 +220,8 @@ describe("a refund names the cancels it pays back", () => {
   it("caps part-cancels of one line by what the till showed", async () => {
     const b = await bill([{ name: "Burger", quantity: "3" }]);
     const paid = await pay(b, "36.00");
-    const one = await cancel(b, b.lineIds[0]!, "1", true);
-    const two = await cancel(b, b.lineIds[0]!, "1", true);
+    const one = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
+    const two = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
     const caps = await venue.db
       .select({ id: adjustments.id, refundValue: adjustments.refundValue })
       .from(adjustments)
@@ -250,6 +258,7 @@ describe("a refund names the cancels it pays back", () => {
 
     it("a comp row", async () => {
       const b = await bill([{ name: "Burger" }, { name: "Ham" }]);
+      const burger = await todayLine(venue, b.billId, 1);
       const comp = await inTx(venue, async (tx) => {
         const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
         await applyAdjustment(
@@ -259,7 +268,7 @@ describe("a refund names the cancels it pays back", () => {
             expectedEdit: await readBillEditState(tx, b.billId),
             orderId: b.billId,
             expectedRevision: order!.revision,
-            lineId: b.lineIds[0]!,
+            ...burger,
             reasonId: venue.reasonId.house,
             action: "comp",
             note: null,
@@ -281,7 +290,7 @@ describe("a refund names the cancels it pays back", () => {
     it("a paid-bill cancel with nothing ticked", async () => {
       const b = await bill([{ name: "Burger" }, { name: "Ham" }]);
       const paid = await pay(b, "36.00");
-      await refused(paid, [await cancel(b, b.lineIds[0]!, "1", false)]);
+      await refused(paid, [await cancel(b, await todayLine(venue, b.billId, 1), "1", false)]);
     });
 
     it("a still-charge cancel made while the bill was unpaid, the bill paid after", async () => {
@@ -293,7 +302,7 @@ describe("a refund names the cancels it pays back", () => {
           .where(eq(ticketItems.workingOrderLineId, b.lineIds[0]!));
         await advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing");
       });
-      const early = await cancel(b, b.lineIds[0]!, "1", true);
+      const early = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
       const [row] = await venue.db.select().from(adjustments).where(eq(adjustments.id, early));
       expect(row).toMatchObject({ chargeKept: true, refundHandoff: false });
       const paid = await pay(b, "36.00");
@@ -340,7 +349,8 @@ describe("a refund names the cancels it pays back", () => {
           .where(eq(workingOrderLines.id, extra!.id));
         tx.run(sql.raw(trigger!.sql));
       });
-      const id = await cancel(b, b.lineIds[0]!, "1", true);
+      // On portions the drifted extra sets its pizza apart from the other two: a row of its own.
+      const id = await cancel(b, { lineId: b.lineIds[0]! }, "1", true);
       const [row] = await venue.db.select().from(adjustments).where(eq(adjustments.id, id));
       expect(row).toMatchObject({ refundHandoff: true, refundValue: null });
       await refused(paid, [id]);
@@ -439,7 +449,7 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
           .where(eq(tenders.id, paid.tenderId));
         for (const trigger of triggers) tx.run(sql.raw(trigger.sql));
       });
-    return { paid, burger: await cancel(b, b.lineIds[0]!, "1", true) };
+    return { paid, burger: await cancel(b, await todayLine(venue, b.billId, 1), "1", true) };
   }
 
   async function refusedOver(paid: { saleId: string; tenderId: string }, body: object) {
@@ -510,6 +520,7 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
 
   it("accepts the till's amount after an earlier don't-charge cancel", async () => {
     const b = await bill([{ name: "Burger", quantity: "7" }], "fire");
+    const row = await todayLine(venue, b.billId, 1);
     await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, b.partyId));
       const [order] = await tx.select().from(workingOrders).where(eq(workingOrders.id, b.billId));
@@ -517,7 +528,7 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
         tx,
         venue.cfg,
         b.partyId,
-        b.lineIds[0]!,
+        row.lineId,
         {
           quantity: "1",
           expectedEdit: await readBillEditState(tx, b.billId),
@@ -525,14 +536,15 @@ describe("a PIN-approved linked refund cannot exceed its cancels", () => {
           reasonId: venue.reasonId.houseVoid,
           expectedPartyRevision: party!.revision,
           expectedBillRevision: order!.revision,
-          expectedContext: await readCancellationContext(tx, b.partyId, b.lineIds[0]!),
+          expectedContext: await readCancellationContext(tx, b.partyId, row.lineId, row.lineIds),
+          ...(row.lineIds === undefined ? {} : { lineIds: row.lineIds }),
           submissionId: randomUUID(),
         },
         venue.managerId,
       );
     });
     const paid = await pay(b, "72.00");
-    const cancelled = await cancel(b, b.lineIds[0]!, "1", true);
+    const cancelled = await cancel(b, await todayLine(venue, b.billId, 1), "1", true);
     const answer = await staffRefund(paid, refundBody(paid, "12.00", [cancelled]));
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);
     expect(await linksOf((answer.json as { id: string }).id)).toEqual([

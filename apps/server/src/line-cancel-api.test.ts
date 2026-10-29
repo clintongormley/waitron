@@ -83,7 +83,7 @@ async function fixture(release: "hold" | "fire" = "hold", madeHere = false) {
   const p = await billWith(
     madeHere ? { ...venue, cfg: { ...venue.cfg, sendingDeviceId: venue.deviceId } } : venue,
     [{ name: "Pizza", quantity: "2", olives: 2 }, { name: "Water" }],
-    { release },
+    { release, shape: "grouped" },
   );
   const [parent, extra, water] = await rowsOf(venue, p.billId);
   return { ...p, parent: parent!, extra: extra!, water: water! };

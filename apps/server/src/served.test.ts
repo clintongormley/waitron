@@ -51,6 +51,7 @@ import {
   type GroupLine,
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { markGroupServed, markServed, unmarkServed } from "./working-order.js";
 import "./errors.js";
@@ -272,6 +273,17 @@ async function group(
   return groups[0]!.id;
 }
 
+/** Submits one group with each input line stored once, as before portions; answers its id. */
+async function groupedGroup(
+  v: Venue,
+  s: Seated,
+  release: GroupRelease,
+  lines: GroupLine[],
+): Promise<string> {
+  const { groups } = await inTx((tx) => placeGroupedRound(tx, v.cfg, s, { release, lines }, ALEX));
+  return groups[0]!.id;
+}
+
 async function fire(v: Venue, partyId: string, groupId: string) {
   const command = await args(partyId);
   return inTx((tx) => fireGroup(tx, v.cfg, partyId, groupId, command));
@@ -410,7 +422,7 @@ async function pay(v: Venue, billId: string, amount: string): Promise<void> {
 /** A party with Croquetas ×4 fired. */
 async function croquetas(v: Venue) {
   const s = await seated(v);
-  const groupId = await group(v, s.partyId, "fire", [line(v, "croquetas", "4")]);
+  const groupId = await groupedGroup(v, s, "fire", [line(v, "croquetas", "4")]);
   const croq = await lineNamed(s.partyId, "croquetas");
   return { ...s, groupId, croq };
 }
@@ -491,7 +503,7 @@ describe("served by quantity (§12 item 5)", () => {
   it("serves several lines in one command", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.partyId, "fire", [line(v, "croquetas", "4"), line(v, "water", "2")]);
+    await groupedGroup(v, s, "fire", [line(v, "croquetas", "4"), line(v, "water", "2")]);
     const croq = await lineNamed(s.partyId, "croquetas");
     const water = await lineNamed(s.partyId, "water");
 
@@ -513,7 +525,7 @@ describe("served by quantity (§12 item 5)", () => {
   it("markGroupServed serves every line of the group, including one split onto another bill of the party", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const groupId = await group(v, s.partyId, "fire", [
+    const groupId = await groupedGroup(v, s, "fire", [
       line(v, "croquetas", "4"),
       line(v, "water", "2"),
     ]);
@@ -555,7 +567,7 @@ describe("served by quantity (§12 item 5)", () => {
   it("markGroupServed leaves a line already fully served as it was", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const groupId = await group(v, s.partyId, "fire", [
+    const groupId = await groupedGroup(v, s, "fire", [
       line(v, "croquetas", "4"),
       line(v, "water", "2"),
     ]);
@@ -599,7 +611,7 @@ describe("served by quantity (§12 item 5)", () => {
   it("serves a dish's extras in step with it, and unserves them with it", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.partyId, "fire", [
+    await groupedGroup(v, s, "fire", [
       {
         ...line(v, "steak", "2"),
         extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
@@ -746,7 +758,7 @@ describe("refusals, each writing nothing", () => {
   it("refuses serving a line of a held group, one by one or the whole group (group.line_held)", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const held = await group(v, s.partyId, "hold", [line(v, "flan", "2"), line(v, "water")]);
+    const held = await groupedGroup(v, s, "hold", [line(v, "flan", "2"), line(v, "water")]);
     const flan = await lineNamed(s.partyId, "flan");
 
     await expectRefusedWithNothingWritten(
@@ -965,7 +977,7 @@ describe("retries and stale screens (Review Focus 2 and 3; D8, D19)", () => {
   it("refuses device A's group served mark after device B moved a line into the held group and fired it, then serves every line, the moved one included", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const mains = await group(v, s.partyId, "hold", [line(v, "croquetas", "2")]);
+    const mains = await groupedGroup(v, s, "hold", [line(v, "croquetas", "2")]);
     await group(v, s.partyId, "hold", [line(v, "flan")]);
     const flan = await lineNamed(s.partyId, "flan");
     const seenByA = await revisionOf(s.partyId);
@@ -1017,7 +1029,7 @@ describe("served on a settled bill (D18)", () => {
   it("marks the Flan served after its bill is paid, leaving the filed sale and its registro as they were", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    await groupedGroup(v, s, "fire", [line(v, "croquetas", "2")]);
     const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
     await fire(v, s.partyId, desserts);
     await pay(v, s.tabId, "21.00");
@@ -1065,7 +1077,7 @@ describe("served on a bill paid before its group was fired (D18)", () => {
   it("serves the Flan and the Water of a group fired after the bill was paid", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    await groupedGroup(v, s, "fire", [line(v, "croquetas", "2")]);
     const desserts = await group(v, s.partyId, "hold", [line(v, "flan"), line(v, "water")]);
     await pay(v, s.tabId, "23.00");
     await fire(v, s.partyId, desserts);
@@ -1298,7 +1310,7 @@ describe("a partly served line split or cut", () => {
   it("follows a line edit: a cut clamps and marks it served, a raise clears served_at", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await group(v, s.partyId, "fire", [line(v, "water", "3")]);
+    await groupedGroup(v, s, "fire", [line(v, "water", "3")]);
     const water = await lineNamed(s.partyId, "water");
     await serve(v, s.partyId, [{ lineId: water.id, quantity: "2" }]);
 

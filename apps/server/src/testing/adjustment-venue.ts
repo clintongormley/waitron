@@ -2,7 +2,7 @@ import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/te
 import { setRoutingCell, writePartyAllergy } from "@waitron/venue-service";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 import {
   assignCatalogueToLocation,
   createCatalogue,
@@ -16,8 +16,11 @@ import { createAdjustmentReason, type AdjustmentReasonInput } from "@waitron/adj
 import {
   deviceProfiles,
   kitchenStations,
+  orderPortionEvents,
+  orderPortions,
   ticketItems,
   withTransaction,
+  workingLinePortions,
   workingOrderLines,
   workingOrders,
 } from "@waitron/db";
@@ -39,6 +42,14 @@ import type { Logger } from "../logger.js";
 import { ALL_MODULES } from "../modules.js";
 
 import { placeGroups } from "./group-submit-fixture.js";
+import { printHoldTickets, recordGroupEvent, startGroup } from "../order-groups.js";
+import {
+  bumpRevision,
+  fireLines,
+  insertTabRound,
+  priceTabRound,
+  type TabRoundLine,
+} from "../working-order.js";
 import { seatTable } from "../parties.js";
 import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";
@@ -507,16 +518,37 @@ export interface RoundLine {
   olives?: number;
 }
 
+/** The round `lines` ask for, as a placed group's lines. */
+function roundLines(venue: AdjustmentVenue, lines: RoundLine[]): TabRoundLine[] {
+  return lines.map((line) => ({
+    menuItemId: venue.item(line.name),
+    quantity: line.quantity ?? "1",
+    ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
+    ...(line.olives === undefined
+      ? {}
+      : {
+          extras: [
+            {
+              listId: venue.pizzaExtras,
+              picks: [{ productId: venue.olivesId, quantity: line.olives }],
+            },
+          ],
+        }),
+  }));
+}
+
 /**
  * A party seated at a fresh table by `operatorId`, with `lines` placed on its bill as one group,
- * fired or held. Answers the party, its bill and the bill's revision.
+ * fired or held. Answers the party, its bill and the bill's revision. With `shape: "grouped"` each
+ * line is one stored line of its count, as `createOpenOrder` stores a counter order's.
  */
 export async function billWith(
   venue: AdjustmentVenue,
   lines: RoundLine[],
-  opts: { release?: "fire" | "hold"; operatorId?: string } = {},
+  opts: { release?: "fire" | "hold"; operatorId?: string; shape?: "grouped" } = {},
 ): Promise<{ partyId: string; billId: string; revision: number }> {
   const operatorId = opts.operatorId ?? venue.staffId;
+  const release = opts.release ?? "fire";
   return inTx(venue, async (tx) => {
     const table = await createTable(tx, venue.cfg, {
       label: `M-${randomUUID().slice(0, 8)}`,
@@ -528,28 +560,11 @@ export async function billWith(
       operatorId,
     });
     await writePartyAllergy(tx, seated.partyId, { answer: "none", guests: [] }, operatorId);
-    if (lines.length > 0) {
+    if (lines.length > 0 && opts.shape === "grouped") {
+      await placeGrouped(tx, venue.cfg, seated, roundLines(venue, lines), release, operatorId);
+    } else if (lines.length > 0) {
       await placeGroups(tx, venue.cfg, seated.partyId, {
-        groups: [
-          {
-            lines: lines.map((line) => ({
-              menuItemId: venue.item(line.name),
-              quantity: line.quantity ?? "1",
-              ...(line.variantId === undefined ? {} : { variantId: line.variantId }),
-              ...(line.olives === undefined
-                ? {}
-                : {
-                    extras: [
-                      {
-                        listId: venue.pizzaExtras,
-                        picks: [{ productId: venue.olivesId, quantity: line.olives }],
-                      },
-                    ],
-                  }),
-            })),
-            release: opts.release ?? "fire",
-          },
-        ],
+        groups: [{ lines: roundLines(venue, lines), release }],
         operatorId,
         billId: seated.tabId,
       });
@@ -560,6 +575,48 @@ export async function billWith(
       .where(eq(workingOrders.id, seated.tabId));
     return { partyId: seated.partyId, billId: seated.tabId, revision: order!.revision };
   });
+}
+
+/** One group placed as `placeGroups` placed it before portions, each line stored once; answers its id. */
+export async function placeGrouped(
+  tx: Transaction,
+  cfg: DeviceRequestConfig,
+  seated: { partyId: string; tabId: string },
+  lines: TabRoundLine[],
+  release: "fire" | "hold",
+  operatorId: string,
+): Promise<string> {
+  const fire = release === "fire";
+  const round = await priceTabRound(
+    tx,
+    cfg,
+    seated.tabId,
+    lines.map((line) => ({ ...line, hold: !fire, release: fire })),
+    "checked",
+  );
+  const groupId = await startGroup(tx, seated.partyId, release, operatorId);
+  const inserted = await insertTabRound(
+    tx,
+    cfg,
+    round,
+    round.rows.map((row) => ({ ...row, groupId, creditedTo: operatorId })),
+  );
+  await fireLines(
+    tx,
+    cfg,
+    seated.tabId,
+    inserted.map((row) => ({ ...row, hold: !fire, release: fire })),
+  );
+  if (!fire) await printHoldTickets(tx, cfg, [groupId]);
+  await bumpRevision(tx, [seated.tabId]);
+  await recordGroupEvent(tx, {
+    partyId: seated.partyId,
+    groupId,
+    kind: "submitted",
+    actorId: operatorId,
+    detail: { workingOrderId: seated.tabId, release },
+  });
+  return groupId;
 }
 
 /** A bill's rows in line order, as the cases read them: prices and totals as decimal strings. */
@@ -608,6 +665,142 @@ export async function lineIdOf(
   );
   if (row === undefined) throw new Error(`no line ${lineNo} on bill ${billId}`);
   return row.id;
+}
+
+/**
+ * What a request names for line `lineNo` as today's writer would have numbered the bill: on
+ * grouped lines, that line; on portions, each cohort's dishes as one line, then its extras one line
+ * per extra product in order of first appearance, answered as the portions standing for it. A
+ * cohort's portions an action set apart (another price, group or served state) stand for the line
+ * today's split appends after the bill's other lines; dishes that left the bill leave today's
+ * numbers as they were. Covers one split action at a time, and refuses a bill a whole row of
+ * several dishes left, whose extras it cannot count.
+ */
+export async function todayLine(
+  venue: Pick<AdjustmentVenue, "db">,
+  billId: string,
+  lineNo: number,
+): Promise<{ lineId: string; lineIds?: string[] }> {
+  const { rows, left } = await inTx(venue, async (tx) => ({
+    rows: await tx
+      .select({
+        id: workingOrderLines.id,
+        lineNo: workingOrderLines.lineNo,
+        parentLineId: workingOrderLines.parentLineId,
+        productId: workingOrderLines.productId,
+        unitPriceGross: workingOrderLines.unitPriceGross,
+        listUnitPriceGross: workingOrderLines.listUnitPriceGross,
+        groupId: workingOrderLines.groupId,
+        servedAt: workingOrderLines.servedAt,
+        portionId: orderPortions.id,
+        cohortId: orderPortions.cohortId,
+        ordinal: orderPortions.ordinal,
+      })
+      .from(workingOrderLines)
+      .leftJoin(
+        workingLinePortions,
+        eq(workingLinePortions.workingOrderLineId, workingOrderLines.id),
+      )
+      .leftJoin(orderPortions, eq(orderPortions.id, workingLinePortions.portionId))
+      .where(eq(workingOrderLines.workingOrderId, billId))
+      .orderBy(asc(workingOrderLines.lineNo)),
+    left: await tx
+      .select({
+        portionId: orderPortions.id,
+        cohortId: orderPortions.cohortId,
+        ordinal: orderPortions.ordinal,
+      })
+      .from(orderPortionEvents)
+      .innerJoin(orderPortions, eq(orderPortions.id, orderPortionEvents.portionId))
+      .where(eq(orderPortionEvents.fromOrderId, billId)),
+  }));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  // Every dish of each cohort that was on this bill, still here or since gone: its ordinal.
+  const placed = new Map<string, Map<string, number>>();
+  for (const one of [...rows, ...left]) {
+    if (one.cohortId === null || one.portionId === null || one.ordinal === null) continue;
+    const dishes = placed.get(one.cohortId) ?? new Map<string, number>();
+    dishes.set(one.portionId, one.ordinal);
+    placed.set(one.cohortId, dishes);
+  }
+  const present = new Set(rows.map((row) => row.cohortId));
+  for (const [cohort, dishes] of placed) {
+    if (!present.has(cohort) && dishes.size > 1)
+      throw new Error(`todayLine: a row of several dishes left bill ${billId}`);
+  }
+  const productsOf = new Map<string, string[]>();
+  for (const row of rows) {
+    const cohort = row.parentLineId === null ? null : byId.get(row.parentLineId)!.cohortId;
+    if (cohort === null) continue;
+    const products = productsOf.get(cohort) ?? [];
+    if (!products.includes(row.productId!)) products.push(row.productId!);
+    productsOf.set(cohort, products);
+  }
+  // The grouped line each dish row folds into: its cohort and the facts a split sets apart.
+  const setOf = (dish: (typeof rows)[number]) =>
+    JSON.stringify([
+      dish.cohortId,
+      dish.unitPriceGross,
+      dish.listUnitPriceGross,
+      dish.groupId,
+      dish.servedAt !== null,
+    ]);
+  const firstSet = new Map<string, string>();
+  const opened = new Map<string, Map<string | null, string[]>>();
+  const inPlace = new Map<number, string[]>();
+  const appended: string[][] = [];
+  // Rows a cohort placed beyond one grouped line per dish and per extra product.
+  let folded = 0;
+  for (const row of rows) {
+    const dish = byId.get(row.parentLineId ?? row.id)!;
+    if (dish.cohortId === null) {
+      inPlace.set(row.lineNo - folded, [row.id]);
+      continue;
+    }
+    const products = productsOf.get(dish.cohortId) ?? [];
+    const width = 1 + products.length;
+    const set = setOf(dish);
+    if (!firstSet.has(dish.cohortId)) {
+      firstSet.set(dish.cohortId, set);
+      const ordinals = [...placed.get(dish.cohortId)!.values()].sort((a, b) => a - b);
+      const start = dish.lineNo - ordinals.indexOf(dish.ordinal!) * width - folded;
+      const lines = new Map<string | null, string[]>([[null, []]]);
+      products.forEach((product) => lines.set(product, []));
+      [...lines.values()].forEach((ids, i) => inPlace.set(start + i, ids));
+      opened.set(set, lines);
+      folded += (ordinals.length - 1) * width;
+    }
+    const lines = opened.get(set) ?? new Map<string | null, string[]>();
+    opened.set(set, lines);
+    const key = row.parentLineId === null ? null : row.productId;
+    const line = lines.get(key);
+    if (line !== undefined) line.push(row.id);
+    else {
+      lines.set(key, [row.id]);
+      appended.push(lines.get(key)!);
+    }
+  }
+  const last = Math.max(0, ...inPlace.keys());
+  const ids = inPlace.get(lineNo) ?? appended[lineNo - last - 1];
+  if (ids === undefined || ids.length === 0) throw new Error(`no line ${lineNo} on bill ${billId}`);
+  return ids.length === 1 ? { lineId: ids[0]! } : { lineId: ids[0]!, lineIds: ids };
+}
+
+/** The stored line numbers of the lines {@link todayLine} answers, in line order. */
+export async function todayLineNos(
+  venue: Pick<AdjustmentVenue, "db">,
+  billId: string,
+  lineNo: number,
+): Promise<number[]> {
+  const today = await todayLine(venue, billId, lineNo);
+  const rows = await inTx(venue, (tx) =>
+    tx
+      .select({ lineNo: workingOrderLines.lineNo })
+      .from(workingOrderLines)
+      .where(inArray(workingOrderLines.id, today.lineIds ?? [today.lineId]))
+      .orderBy(asc(workingOrderLines.lineNo)),
+  );
+  return rows.map((row) => row.lineNo);
 }
 
 /** The ticket item of line `lineNo`. */

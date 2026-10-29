@@ -745,12 +745,6 @@ Left open:
   wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
   are separate, or that the count is per device. **Next action:** the owner decides whether to
   add the countdown and make the limit required.
-- **A reason's percentage limit can be exceeded** by combining a bill discount with a line
-  discount, or two bill discounts under one reason, because a bill discount counts as 0% on
-  each line. A row split off by splitting the bill, by a transfer, or by moving part of a line
-  to another group starts with no percentage history. B11b's venue limit on a bill's total
-  discount can ask for a manager's PIN; this per-reason cap is unchanged. **Next action:**
-  decide whether the per-line cap should see bill discounts.
 - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
   (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
   till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
@@ -760,7 +754,8 @@ Left open:
   in the way.
 - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
   transferring items and moving part of a dish to another group still refuse a partial move
-  of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
+  of a line with extras (`tab.transfer_modifier_line`): a counter order's line of several
+  dishes, or part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
@@ -1453,7 +1448,7 @@ venues get `g`, `mg` and `ml` at 0 places (`packages/catalogue/src/provisioning.
 decides "whole units" with `soldByTheUnit`, which does not read `measure`
 (`apps/till/src/screens/till-table-order-screen.ts:214-215`,
 `apps/till/src/widgets/product-name.ts:85-88`), so it adds 330 for a 330 ml dish. Fix: the
-`takesExtras` rule (`apps/server/src/working-order.ts:457-459`) in all three.
+`takesExtras` rule (`apps/server/src/working-order.ts:486-488`) in all three.
 
 ## A859. Floor plans and the till's layout banner: looks left to the owner
 
@@ -1507,6 +1502,37 @@ whether those reads should follow today's map once a group is left.
   no hyphen (A841 slice 10b).** English is among those languages. The measurement is under "A
   name's language" in
   [conventions-ui.md](../developers/conventions-ui.md#what-an-open-till-keeps-current).
+
+- **Reductions follow their dish; the price floor and the euro cap read the bill as it stands
+  (owner, 2026-10-28; A803 slice 1, closes A910).** The owner's rules: "a dish is never charged
+  below its floor … after EVERY reduction on it, whatever the reason, each counted once, and the
+  floor follows the dish when it moves bill or course" (1); "a reason's euro-per-bill cap counts
+  only what is still off the bill; a reduction on a dish later voided stops counting" (3); "a
+  reduction stays with its dish and counts against the reason's euro cap on whichever bill the dish
+  is on now; each bill's cap applies to that bill as it stands" (5). What a reason has off a bill
+  is what its comps and discounts took off each line now on it, scaled by the line's quantity now
+  against its quantity then (`standingOff`, `packages/adjustments/src/policy.ts`), so raising a
+  line, in place or by copies that carry its original's rows, counts more than was taken off it
+  then. A dish cancelled with its charge kept stays on the bill, so what was taken off it still
+  counts (a reading, A803 slice 1; the bill's own comp limit reads every line of the bill too,
+  `readRows` in `apps/server/src/adjustments-apply.ts`). Plan:
+  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), D36 and D37.
+
+- **Every comp or discount line prints what that step took (owner, 2026-10-28; A803 slice 1,
+  closes A911).** The owner's rule 4: "each receipt line prints the percentage that step actually
+  took off the price before it: €12 burger, 50% then Free / 100% / €6 off → second line
+  "Descuento 100% −6,00" in all three cases". Free, and an amount that leaves its item (or, on the
+  whole bill, the bill) at zero, print as 100% (`isFullComp`,
+  `packages/adjustments/src/full-comp.ts`), on the ticket, the till's ticket and the dashboard
+  report alike. On the ticket and the till's ticket any other amount prints its share of the price
+  before it, half up to a basis point and never as 0% or 100% (`readBillAdjustments`,
+  `packages/adjustments/src/record.ts`); the report still shows such an amount in euros. Two
+  places print no share: a full invoice's row that joins several steps (a dish with two of its own,
+  or two whole-bill steps), which prints one row, «Descuento», or «Descuento 100%» when every line
+  at its rate was filed at zero (A961), and the per-dish fallback used when the records no longer
+  add up to the bill. The filed sale is unchanged. A reason without Free refuses 100% too (the rule's first
+  half, `adjustment.free_not_allowed`). Plan:
+  [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
 
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
@@ -2672,6 +2698,44 @@ Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says 
 table's bill for this reason. Done when the till either sends the bill's expectation or does not
 offer Discard on a table's bill, with a test through the till.
 
+## A1190. Counter orders keep one line for several of a dish
+
+A803 slice 1 splits a dish into portions only in the table-service writers (its plan's finding 1
+and D1, [plan](../superpowers/plans/2026-10-27-a803-1-portions.md)). `createOpenOrder` still
+writes one line for "2 ×" on walk-up sales and parked counter orders, because fiscal control tests
+that must stay byte-unedited pin that shape: `till-api.fiscal-sale-paths.test.ts` (a walk-up
+sale's stored lines, and a parked order's kitchen items after payment), `split-bill.fiscal.test.ts`
+and `bill-payments.test.ts` (both act on part of a line of several). So a counter order moved to a
+table still brings a line of several, and the grouped code paths stay (A1196). In slice 1's LOOK
+the counter also kept two separate adds of the same dish with extras as two lines of one, where a
+table's draft merges them. Expanding counter orders is the owner's decision, and would change
+those control tests.
+
+## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
+
+On a till row that groups identical portions, Comp and Void take a count and act on the last
+portions still active; Mark served (from the row's details) and Split by item's count take the
+first; Transfer items takes the whole row. A plain tap on a Sent row serves all of it without
+asking (seen in slice 1's LOOK; the guide says so). On the kitchen screen a grouped row's tap and
+Move act on every portion, so one of two identical portions cannot be bumped or moved alone there.
+Fire now on a grouped row fires only its first portion, because the server's fire route names one
+line and firing members one by one would start a fire group and a ticket for each. Choices the
+build review left for the owner: accept, word the button differently on a grouped row, or let the
+route take a list. Slice 4's picker is planned as the way to choose which portions.
+
+## A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused
+
+Seen in A803 slice 1's LOOK (2026-10-29): Counter → Parked orders → Retrieve a table's bill →
+Cancel on one extra (or Comp at 50%) → Continue shows "Check the form and try again" with no field
+marked, and the server logs `management.request_invalid` with `field: "expectedEdit"`. The same
+happened on a bill slice 1 does not change (one unbound line of a counter order moved to a table).
+The till builds the request in `#adjustAsk` (`apps/till/src/till-app.ts`) with
+`expectedEdit: open.bill === undefined ? null : …`, and the counter opens no bill there. I believe
+it predates slice 1: `git blame` dates that line to c9ad7a634 (2026-10-19), an ancestor of the
+branch's base, and `main` at 1891ed658 has the same line; the branch changes no server
+`expectedEdit` check. Not run on `main`. A922 is the same refusal for Discard. Done when the
+counter sends the bill's expectation for a table's bill, with a test through the till.
+
 ## A1007. The till's adjustment window keeps a give-away and a line discount nothing opens
 
 Since A758-5 a dish or extra is comped only through the Comp window
@@ -2683,7 +2747,7 @@ drives the table's comps through that separate mode (`requestAdjustment` emits n
 `apps/till/src/till-app-adjustments.test.ts:356`) though the table screen sends `combined: true`
 (`apps/till/src/screens/till-table-order-screen.ts:2652`) — both since A773-1. Retire the two
 modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
-one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:880`) and
+one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:894`) and
 `adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
 the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
 `apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the
@@ -2736,40 +2800,6 @@ Left open by A758-6. Each works as built, with the default named; the owner may 
 16. **The reason drop-down shows a search box** even with the five starter Void reasons.
 17. **The report's "Refunded €5.50" cell repeats its column heading.**
 18. **On a phone, the report's new columns sit mid-scroll.**
-
-## A910. A reason's item limit errs toward asking (left open by A758-1).
-
-Each share is rounded
-up to a whole basis point (`shareBp`, `packages/adjustments/src/record.ts`). What the reason's
-discounts on the whole bill took off each row is not recorded, so `judgeComp`
-(`apps/server/src/adjustments-apply.ts`) counts their total on each row of the item (the row asked
-about, and its dish or its extras), capped at what that row is now below its list value less what
-comps and discounts of any reason recorded on that row on this bill alone took (`readWholeLineReductions`: the
-whole line, nothing split off, at the row's present quantity and list value); the item counts the
-largest of those. A row no bill discount reached, such as one added after them, counts nothing for
-them unless something else left in its cap reduced it. Left in the cap, and so counted up to the
-reason's total: other reasons' discounts on the whole bill, a comp or discount of a dish that
-priced its extras too, a comp or discount that carved the row off another, one taken on another bill before the line
-moved here, and anything taken off a row that was split or part-cancelled since. The cap assumes no row's price rises after a discount took from it;
-that was not tested. Revisit if a venue meets an approval it did not expect. The other way: an
-item's count starts again on another bill, because the reason's earlier comps are read from the
-item's present bill only. A finish-branch probe on 2026-10-20 took 40% off a bill with that
-reason, split the Burger onto a new bill with `splitBill`, and a further 50% off it went through
-with no approval under a 50% item limit; on the original bill the same 50% asked. Decide whether
-an item's count should follow it to another bill.
-
-## A911. What counts as a full comp (left open by A758-1, A758-3 and A758-4).
-
-Free always
-counts, even after an earlier comp took part of the price, so it prints «Descuento 100%» beside
-what was left, as a 100% percentage already does. An amount counts only when it took the item's
-whole list price; one that takes what an earlier comp left prints «Descuento» and its amount, and
-the report reads "Comp €6.00". One rule (`packages/adjustments/src/full-comp.ts`) decides the
-ticket, the till's ticket and the report; a full invoice names a dish's row by its one own comp,
-unless a bill comp also stands and the dish's discounts fall at more than one VAT rate, and
-otherwise prints «Descuento 100%» whenever every line at that rate was filed at zero
-(`GroupDiscount.comp`, `apps/server/src/receipt-figures.ts`).
-Owner to confirm both halves.
 
 ## A1120. A handheld stays on the table after its last send, so its button shows highlighted without ✎
 

@@ -32,6 +32,7 @@ import { orderedMigrationSets } from "../packages/module/src/module.js";
  * dropping one is a decision that should cost an edit here.
  */
 const EXPECTED = [
+  "adjustment_lines",
   "adjustment_refunds",
   "adjustments",
   "bill_payment_lines",
@@ -52,12 +53,15 @@ const EXPECTED = [
   "order_amendments",
   "order_draft_events",
   "order_group_events",
+  "order_portion_events",
+  "order_portions",
   "pay_period_closures",
   "payment_hold_outcomes",
   "payment_holds",
   "payment_resolutions",
   "receipt_reprints",
   "registros_facturacion",
+  "sale_line_portions",
   "sale_lines",
   "sale_receipt_guests",
   "sale_receipt_headers",

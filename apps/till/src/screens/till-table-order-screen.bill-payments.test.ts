@@ -347,6 +347,53 @@ describe("till-table-order-screen: items already paid for", () => {
     ]);
   });
 
+  it("A803 portion grouping: groups identical portions only when paid alike, never a part-paid one", async () => {
+    const burger = (lineNo: number) =>
+      line({
+        lineNo,
+        name: "Burger",
+        unitPriceGross: "9.50",
+        priceQuantity: "1.000",
+        portion: true,
+      });
+    const el = await mountScreen({
+      lines: [4, 5, 6, 7, 8, 9].map(burger),
+      bills: [partlyPaid],
+      billBalance: balance({
+        paidLines: [6, 7]
+          .map((lineNo) => ({
+            lineId: `line-${lineNo}`,
+            lineNo,
+            paidQuantity: "1.000",
+          }))
+          .concat(
+            [8, 9].map((lineNo) => ({
+              lineId: `line-${lineNo}`,
+              lineNo,
+              paidQuantity: "0.500",
+            })),
+          ),
+      }),
+    });
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-sent-fallback-line]")].map((row) => [
+        row.dataset.sentFallbackLine,
+        text(row.querySelector(".sent-fallback-name")!),
+      ]),
+    ).toEqual([
+      ["line-4", "Burger ×2"],
+      ["line-6", `Burger ×2 ${t("bill_pay.paid")}`],
+      [
+        "line-8",
+        `Burger ×1 ${t("bill_pay.paid_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
+      ],
+      [
+        "line-9",
+        `Burger ×1 ${t("bill_pay.paid_part").replace("{paid}", "0.5").replace("{quantity}", "1")}`,
+      ],
+    ]);
+  });
+
   it("marks nothing paid from another bill's balance", async () => {
     const el = await mountScreen({
       billBalance: balance({

@@ -1,6 +1,7 @@
 import { joinCustomerPresentationText } from "@waitron/catalogue";
 import type { GrossLine } from "@waitron/catalogue";
 import {
+  addDecimal,
   compareDecimal,
   decimal,
   divideDecimal,
@@ -114,4 +115,98 @@ export function groupByParent(lines: readonly TillSaleLine[]): LineGroup[] {
     }
   }
   return groups;
+}
+
+/**
+ * A simplified receipt shows identical dishes as one row (A803 D17). A group joins an earlier one
+ * when its dish and each extra print the same at the same unit price and VAT rate, counted not
+ * measured, with no list price and no comp or discount; counts and amounts add. A row carries its
+ * rate only on a full invoice, so the other rows group only when `oneRate` says the sale filed one.
+ * Twin: `apps/till/src/screens/till-ticket-view.ts`.
+ */
+export function mergeIdenticalGroups(groups: readonly LineGroup[], oneRate: boolean): LineGroup[] {
+  const merged: LineGroup[] = [];
+  for (const group of groups) {
+    const at = merged.findIndex((earlier) => samePrinting(earlier, group, oneRate));
+    if (at === -1) {
+      merged.push(group);
+      continue;
+    }
+    const earlier = merged[at]!;
+    merged[at] = {
+      dish: summed(earlier.dish, group.dish),
+      options: earlier.options.map((option, i) => summed(option, group.options[i]!)),
+    };
+  }
+  return merged;
+}
+
+function summed(left: TillSaleLine, right: TillSaleLine): TillSaleLine {
+  return {
+    ...left,
+    quantity: String(Number(left.quantity) + Number(right.quantity)),
+    gross: addDecimal(decimal(left.gross), decimal(right.gross)),
+  };
+}
+
+function samePrinting(a: LineGroup, b: LineGroup, oneRate: boolean): boolean {
+  const lines = (group: LineGroup) => [group.dish, ...group.options];
+  if (a.options.length !== b.options.length) return false;
+  if (![...lines(a), ...lines(b)].every(groupable)) return false;
+  if (answersKey(a.dish) !== answersKey(b.dish)) return false;
+  const [aDishes, bDishes] = [decimal(a.dish.quantity), decimal(b.dish.quantity)];
+  return lines(a).every((left, i) => {
+    const right = lines(b)[i]!;
+    const [aCount, bCount] = [decimal(left.quantity), decimal(right.quantity)];
+    return (
+      sameNames(left.descriptions, right.descriptions) &&
+      sameRate(left, right, oneRate) &&
+      // The same count per dish, and the same price each: compared crosswise, so nothing divides.
+      compareDecimal(multiplyDecimal(aCount, bDishes), multiplyDecimal(bCount, aDishes)) === 0 &&
+      compareDecimal(
+        multiplyDecimal(decimal(left.gross), bCount),
+        multiplyDecimal(decimal(right.gross), aCount),
+      ) === 0
+    );
+  });
+}
+
+function answersKey(dish: TillSaleLine): string {
+  return optionAnswersKey(dish.optionSnapshots);
+}
+
+/** A dish's answers by value: neither their order nor any key order tells two dishes apart. */
+export function optionAnswersKey(answers: readonly unknown[] | null | undefined): string {
+  const sorted = (value: unknown): unknown =>
+    value === null || typeof value !== "object"
+      ? value
+      : Object.fromEntries(
+          Object.entries(value)
+            .sort(([x], [y]) => (x < y ? -1 : 1))
+            .map(([key, inner]) => [key, sorted(inner)]),
+        );
+  return JSON.stringify((answers ?? []).map((answer) => JSON.stringify(sorted(answer))).sort());
+}
+
+function groupable(line: TillSaleLine): boolean {
+  return (
+    line.unitName == null &&
+    /^[1-9]\d*$/.test(line.quantity) &&
+    line.listGross === undefined &&
+    (line.adjustments ?? []).length === 0
+  );
+}
+
+function sameNames(a: Record<string, string>, b: Record<string, string>): boolean {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
+function sameRate(a: TillSaleLine, b: TillSaleLine, oneRate: boolean): boolean {
+  if (a.net === undefined && b.net === undefined) return oneRate;
+  return (
+    a.net !== undefined &&
+    b.net !== undefined &&
+    compareDecimal(decimal(a.net.rate), decimal(b.net.rate)) === 0
+  );
 }

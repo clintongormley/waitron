@@ -1,19 +1,18 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, withTransaction, type Database } from "@waitron/db";
+import { CORE_MIGRATIONS, withTransaction, workingOrderLines, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { decimal, subtractDecimal } from "@waitron/shared";
+import { decimal, decimalToCents, stringToThousandths, subtractDecimal } from "@waitron/shared";
 import { ADJUSTMENTS_MIGRATIONS } from "./migrations.js";
 import { policySnapshotOf, type AdjustmentReason } from "./policy.js";
 import {
   readBillAdjustments,
-  readReasonItemShares,
-  readReasonTotals,
-  readWholeLineReductions,
+  readReasonStanding,
   recordAdjustment,
   type NewAdjustment,
 } from "./record.js";
+import { adjustmentLines } from "./schema/adjustment-lines.js";
 import { adjustments, type AdjustmentSplit } from "./schema/adjustments.js";
 import { seedReason, seedWorkingOrder } from "../test/seed.js";
 
@@ -85,23 +84,51 @@ async function record(row: NewAdjustment): Promise<string> {
   return withTransaction(db, (tx) => recordAdjustment(tx, row));
 }
 
-async function totals(workingOrderId: string, reasonId: string) {
-  return withTransaction(db, (tx) => readReasonTotals(tx, { workingOrderId, reasonId }));
-}
-
-function readShares(workingOrderId: string, reasonId: string, lineIds: string[]) {
-  return withTransaction(db, (tx) =>
-    readReasonItemShares(tx, { workingOrderId, reasonId, lineIds }),
+async function standing(workingOrderId: string, reasonId: string) {
+  const rows = await withTransaction(db, (tx) =>
+    readReasonStanding(tx, { workingOrderId, reasonId }),
   );
+  return rows
+    .map((row) => `${row.reduction} off ${row.quantityThen} now ${row.quantityNow}`)
+    .sort();
 }
 
-/** Each of `lineIds`' own share, the reason's rows on the whole bill left out. */
-async function shares(workingOrderId: string, reasonId: string, lineIds: string[]) {
-  return (await readShares(workingOrderId, reasonId, lineIds)).lines;
+let lineCount = 0;
+
+/** A €10.00 line of `quantity` on `workingOrderId`; returns its id. */
+async function lineOn(workingOrderId: string, quantity: string): Promise<string> {
+  lineCount += 1;
+  const [row] = await db
+    .insert(workingOrderLines)
+    .values({
+      workingOrderId,
+      lineNo: lineCount,
+      name: "Burger",
+      descriptions: { es: "Burger" },
+      quantity: stringToThousandths(quantity),
+      priceQuantity: stringToThousandths("1"),
+      unitPriceGross: decimalToCents(decimal("10.00")),
+      vatClass: "general",
+      lineTotal: 0,
+    })
+    .returning({ id: workingOrderLines.id });
+  return row!.id;
 }
 
-async function shareOf(workingOrderId: string, reasonId: string, lineId: string) {
-  return (await shares(workingOrderId, reasonId, [lineId])).get(lineId)!;
+/** Records `row` with what it took off each of `taken`'s lines, at that line's quantity then. */
+async function recordTaking(
+  row: NewAdjustment,
+  taken: { lineId: string; reduction: string; quantity: string }[],
+): Promise<void> {
+  const adjustmentId = await record(row);
+  await db.insert(adjustmentLines).values(
+    taken.map(({ lineId, reduction, quantity }) => ({
+      adjustmentId,
+      lineId,
+      reduction: decimalToCents(decimal(reduction)),
+      quantity: stringToThousandths(quantity),
+    })),
+  );
 }
 
 describe("recordAdjustment", () => {
@@ -246,413 +273,52 @@ describe("recordAdjustment", () => {
   });
 });
 
-describe("readReasonTotals", () => {
-  it("answers nothing taken when the reason has not touched the bill", async () => {
+describe("readReasonStanding: what a reason took off each line now on the bill (plan D37)", () => {
+  it("answers nothing when the reason took nothing off a line on the bill", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    expect(await totals(order, reason.id)).toEqual({ priorReductionOnBill: "0.00" });
+    await lineOn(order, "1");
+    expect(await standing(order, reason.id)).toEqual([]);
   });
 
-  it("sums this reason's reductions on this bill, bill-level discounts included", async () => {
+  it("answers each line's reduction with its quantity then and now, wherever the record was made", async () => {
     const order = await seedWorkingOrder(db);
     const other = await seedWorkingOrder(db);
     const reason = await seedReason(db);
     const another = await seedReason(db);
-    await record(comp(order, reason));
-    await record(comp(order, reason));
-    await record(
-      comp(order, reason, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("15.01"),
-        reduction: decimal("4.99"),
-        nominalValue: decimal("4.99"),
-      }),
-    );
-    await record(comp(order, another));
-    await record(comp(other, reason));
-    expect((await totals(order, reason.id)).priorReductionOnBill).toBe("28.99");
-  });
+    const kept = await lineOn(order, "2");
+    const movedHere = await lineOn(order, "1");
+    const movedAway = await lineOn(other, "1");
+    await recordTaking(comp(order, reason), [
+      { lineId: kept, reduction: "12.00", quantity: "3" },
+      { lineId: movedAway, reduction: "4.00", quantity: "1" },
+    ]);
+    await recordTaking(comp(other, reason), [
+      { lineId: movedHere, reduction: "25.00", quantity: "1" },
+    ]);
+    await recordTaking(comp(order, another), [{ lineId: kept, reduction: "1.00", quantity: "2" }]);
+    await recordTaking(comp(order, reason), [
+      { lineId: randomUUID(), reduction: "9.00", quantity: "1" },
+    ]);
 
-  it("leaves out the reason's cancels, which a reason changed from Void to Comp still holds", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    await record(comp(order, reason, { action: "cancel" }));
-    await record(
-      comp(order, reason, { reduction: decimal("1.00"), afterAmount: decimal("11.00") }),
-    );
-    expect((await totals(order, reason.id)).priorReductionOnBill).toBe("1.00");
-  });
-});
-
-describe("readReasonItemShares", () => {
-  it("sums this reason's shares on this line only, comps included", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const line = randomUUID();
-    const neighbour = randomUUID();
-    await record(percent(order, reason, line, 1000));
-    await record(percent(order, reason, line, 3000));
-    await record(percent(order, another, line, 2000));
-    await record(percent(order, reason, neighbour, 500));
-    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: line } }));
-    expect(await shareOf(order, reason.id, line)).toBe(14000);
-    expect(await shareOf(order, reason.id, neighbour)).toBe(500);
-  });
-
-  it("counts the percentage taken off the line a row was split from, at every remove", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [line, carved, carvedAgain] = [randomUUID(), randomUUID(), randomUUID()];
-    await record(percent(order, reason, line, 1000));
-    // Another reason's comp carves `carved` off `line`; this reason then takes 20% off `carved`,
-    // carving `carvedAgain` off it.
-    await record(
-      comp(order, another, {
-        line: { ...comp(order, another).line!, id: line },
-        splits: [{ from: line, to: carved }],
-      }),
-    );
-    await record(percent(order, reason, carved, 2000, [{ from: carved, to: carvedAgain }]));
-    expect(await shareOf(order, reason.id, carved)).toBe(3000);
-    expect(await shareOf(order, reason.id, carvedAgain)).toBe(3000);
-    // What a row carved off a line takes never counts against the line it came from; what the line
-    // takes after the carve still counts against the row.
-    expect(await shareOf(order, reason.id, line)).toBe(1000);
-    await record(percent(order, reason, line, 500));
-    expect(await shareOf(order, reason.id, carved)).toBe(3500);
-  });
-
-  it("leaves out the reason's cancel of the line a row was split from", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [line, carved] = [randomUUID(), randomUUID()];
-    const onLine = { ...comp(order, reason).line!, id: line, quantity: "2" };
-    await record(comp(order, another, { line: onLine, splits: [{ from: line, to: carved }] }));
-    await record(comp(order, reason, { line: { ...onLine, quantity: "1" }, action: "cancel" }));
-    await record(percent(order, reason, carved, 1000));
-    expect(await shareOf(order, reason.id, carved)).toBe(1000);
-  });
-
-  it("follows a split a bill discount made back to the row it came from", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [line, neighbour, carved] = [randomUUID(), randomUUID(), randomUUID()];
-    await record(percent(order, reason, line, 3000));
-    await record(percent(order, reason, neighbour, 1000));
-    // Another reason's discount on the whole bill splits `carved` off `line`.
-    await record(
-      comp(order, another, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("19.99"),
-        reduction: decimal("0.01"),
-        nominalValue: decimal("20.00"),
-        splits: [{ from: line, to: carved }],
-      }),
-    );
-    expect(await shareOf(order, reason.id, carved)).toBe(3000);
-  });
-
-  it("does not follow a split recorded on another bill", async () => {
-    const order = await seedWorkingOrder(db);
-    const other = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const [line, carved] = [randomUUID(), randomUUID()];
-    await record(percent(other, reason, line, 1000, [{ from: line, to: carved }]));
-    await record(percent(order, reason, line, 2000));
-    expect(await shareOf(order, reason.id, carved)).toBe(0);
-  });
-
-  it("answers each line's shares apart in one call, each following its own splits", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [dish, extra, carved, untouched] = [
-      randomUUID(),
-      randomUUID(),
-      randomUUID(),
-      randomUUID(),
-    ];
-    await record(percent(order, reason, dish, 1000));
-    await record(percent(order, reason, extra, 2500));
-    await record(percent(order, another, extra, 500));
-    await record(percent(order, reason, dish, 500, [{ from: dish, to: carved }]));
-
-    const percents = await withTransaction(db, (tx) =>
-      readReasonItemShares(tx, {
-        workingOrderId: order,
-        reasonId: reason.id,
-        lineIds: [dish, extra, carved, untouched],
-      }),
-    );
-
-    expect(percents).toEqual({
-      lines: new Map([
-        [dish, 1500],
-        [extra, 2500],
-        [carved, 1500],
-        [untouched, 0],
-      ]),
-      billReduction: 0,
-    });
-  });
-
-  /** An amount of `reduction` off `nominal` on line `lineId`. */
-  function amountOff(
-    workingOrderId: string,
-    reason: AdjustmentReason,
-    lineId: string,
-    reduction: string,
-    nominal: string,
-    splits: AdjustmentSplit[] = [],
-  ): NewAdjustment {
-    const base = comp(workingOrderId, reason);
-    return {
-      ...base,
-      line: { ...base.line!, id: lineId, listUnitPriceGross: decimal(nominal) },
-      splits,
-      action: "discount_amount",
-      beforeAmount: decimal(nominal),
-      afterAmount: subtractDecimal(decimal(nominal), decimal(reduction)),
-      reduction: decimal(reduction),
-      nominalValue: decimal(nominal),
-    };
-  }
-
-  it("counts a free item as 10000", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(comp(order, reason, { line: { ...comp(order, reason).line!, id: line } }));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 10000]]));
-  });
-
-  it("counts a €3.00 amount off a €12.00 item as 2500", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(amountOff(order, reason, line, "3.00", "12.00"));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 2500]]));
-  });
-
-  it("rounds a share up: €1.00 off €3.00 is 3334", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(amountOff(order, reason, line, "1.00", "3.00"));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 3334]]));
-  });
-
-  it("rounds each row up on its own: two rows of €1.00 off €3.00 are 6668, not 6667", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(amountOff(order, reason, line, "1.00", "3.00"));
-    await record(amountOff(order, reason, line, "1.00", "3.00"));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 6668]]));
-  });
-
-  it("adds nothing for a row with no list value", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(amountOff(order, reason, line, "0.00", "0.00"));
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 0]]));
-  });
-
-  it("adds a row split off the item, at any remove", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [line, carved, carvedAgain] = [randomUUID(), randomUUID(), randomUUID()];
-    await record(amountOff(order, reason, line, "3.00", "12.00"));
-    await record(amountOff(order, another, line, "1.00", "12.00", [{ from: line, to: carved }]));
-    await record(amountOff(order, reason, carved, "1.00", "10.00"));
-    await record(
-      amountOff(order, another, carved, "1.00", "9.00", [{ from: carved, to: carvedAgain }]),
-    );
-    expect(await shares(order, reason.id, [line, carved, carvedAgain])).toEqual(
-      new Map([
-        [line, 2500],
-        [carved, 3500],
-        [carvedAgain, 3500],
-      ]),
-    );
-  });
-
-  it("answers the reason's discount on the whole bill in cents, apart from each line's own share", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const [line, neighbour] = [randomUUID(), randomUUID()];
-    await record(amountOff(order, reason, line, "3.00", "12.00"));
-    await record(
-      comp(order, reason, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("18.00"),
-        reduction: decimal("2.00"),
-        nominalValue: decimal("20.00"),
-      }),
-    );
-    expect(
-      await withTransaction(db, (tx) =>
-        readReasonItemShares(tx, {
-          workingOrderId: order,
-          reasonId: reason.id,
-          lineIds: [line, neighbour],
-        }),
-      ),
-    ).toEqual({
-      lines: new Map([
-        [line, 2500],
-        [neighbour, 0],
-      ]),
-      billReduction: 200,
-    });
-  });
-
-  it("counts a line named twice once", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    await record(amountOff(order, reason, line, "3.00", "12.00"));
-    await record(
-      comp(order, reason, {
-        line: null,
-        quantity: null,
-        action: "discount_amount",
-        beforeAmount: decimal("20.00"),
-        afterAmount: decimal("18.00"),
-        reduction: decimal("2.00"),
-        nominalValue: decimal("20.00"),
-      }),
-    );
-    expect(await readShares(order, reason.id, [line, line])).toEqual({
-      lines: new Map([[line, 2500]]),
-      billReduction: 200,
-    });
-  });
-
-  it("leaves out another reason's rows and another bill's", async () => {
-    const order = await seedWorkingOrder(db);
-    const other = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const line = randomUUID();
-    const billWide = {
-      line: null,
-      quantity: null,
-      action: "discount_amount" as const,
-      beforeAmount: decimal("20.00"),
-      afterAmount: decimal("10.00"),
-      reduction: decimal("10.00"),
-      nominalValue: decimal("20.00"),
-    };
-    await record(amountOff(order, reason, line, "1.20", "12.00"));
-    await record(amountOff(order, another, line, "3.00", "12.00"));
-    await record(comp(order, another, billWide));
-    await record(amountOff(other, reason, line, "6.00", "12.00"));
-    await record(comp(other, reason, billWide));
-    expect(await readShares(order, reason.id, [line])).toEqual({
-      lines: new Map([[line, 1000]]),
-      billReduction: 0,
-    });
-  });
-
-  it("adds nothing for a cancel", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const line = randomUUID();
-    const voidReason = { ...reason, id: randomUUID(), name: "Void" };
-    await record(
-      comp(order, voidReason, {
-        line: { ...comp(order, reason).line!, id: line },
-        action: "cancel",
-      }),
-    );
-    expect(await shares(order, reason.id, [line])).toEqual(new Map([[line, 0]]));
-  });
-
-  it("counts a comp of one of two burgers on the burger it carved off, not on the other", async () => {
-    const order = await seedWorkingOrder(db);
-    const reason = await seedReason(db);
-    const another = await seedReason(db);
-    const [line, carved, carvedAgain] = [randomUUID(), randomUUID(), randomUUID()];
-    await record(
-      comp(order, reason, {
-        line: { ...comp(order, reason).line!, id: line, quantity: "2" },
-        quantity: "1",
-        splits: [{ from: line, to: carved }],
-      }),
-    );
-    await record(
-      amountOff(order, another, carved, "0.00", "0.00", [{ from: carved, to: carvedAgain }]),
-    );
-    expect(await shares(order, reason.id, [line, carved, carvedAgain])).toEqual(
-      new Map([
-        [line, 0],
-        [carved, 10000],
-        [carvedAgain, 10000],
-      ]),
-    );
-  });
-});
-
-describe("readWholeLineReductions", () => {
-  /** The rows found, smallest reduction first. */
-  async function read(workingOrderId: string, lineIds: string[]) {
-    const found = await withTransaction(db, (tx) =>
-      readWholeLineReductions(tx, { workingOrderId, lineIds }),
-    );
-    return found.sort((a, b) => a.reduction - b.reduction);
-  }
-
-  it("answers every reason's comps and discounts of a whole line that split nothing, in cents and thousandths", async () => {
-    const order = await seedWorkingOrder(db);
-    const [reason, another] = [await seedReason(db), await seedReason(db)];
-    const [line, neighbour] = [randomUUID(), randomUUID()];
-    await record(percent(order, reason, line, 1000));
-    await record(
-      comp(order, another, {
-        line: { ...comp(order, reason).line!, id: line, quantity: "2" },
-        quantity: "2",
-        beforeAmount: decimal("24.00"),
-        reduction: decimal("24.00"),
-        nominalValue: decimal("24.00"),
-      }),
-    );
-    await record(percent(order, reason, neighbour, 2000));
-    expect(await read(order, [line])).toEqual([
-      { lineId: line, lineQuantity: 1000, nominal: 1000, reduction: 100 },
-      { lineId: line, lineQuantity: 2000, nominal: 2400, reduction: 2400 },
+    expect(await standing(order, reason.id)).toEqual([
+      "12.00 off 3.000 now 2.000",
+      "25.00 off 1.000 now 1.000",
     ]);
   });
 
-  it("leaves out a cancel, part of a line, a row that split a row off, the whole bill and another bill", async () => {
+  it("leaves out rows of the reason's cancels, which no cancel writes today", async () => {
     const order = await seedWorkingOrder(db);
-    const other = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    const line = randomUUID();
-    const twoBurgers = { ...comp(order, reason).line!, id: line, quantity: "2" };
-    await record(
-      comp(order, reason, { line: { ...comp(order, reason).line!, id: line }, action: "cancel" }),
+    const line = await lineOn(order, "1");
+    await recordTaking(comp(order, reason, { action: "cancel" }), [
+      { lineId: line, reduction: "12.00", quantity: "1" },
+    ]);
+    await recordTaking(
+      comp(order, reason, { reduction: decimal("1.00"), afterAmount: decimal("11.00") }),
+      [{ lineId: line, reduction: "1.00", quantity: "1" }],
     );
-    await record(comp(order, reason, { line: twoBurgers, quantity: "1" }));
-    await record(percent(order, reason, line, 1000, [{ from: line, to: randomUUID() }]));
-    await record(comp(order, reason, { line: null, quantity: null, action: "discount_amount" }));
-    await record(percent(other, reason, line, 1000));
-    expect(await read(order, [line])).toEqual([]);
+    expect(await standing(order, reason.id)).toEqual(["1.00 off 1.000 now 1.000"]);
   });
 });
 
@@ -741,22 +407,47 @@ describe("readBillAdjustments", () => {
         splits: [],
         partOfLine: false,
         action: "discount_amount",
-        percentBp: null,
+        percentBp: 2500,
         reduction: "5.00",
         full: false,
       },
     ]);
   });
 
-  it("marks a Free comp and an amount that took the whole list value as full", async () => {
+  it("gives an amount that left part of its subject the percentage it took of the price before it", async () => {
     const order = await seedWorkingOrder(db);
     const reason = await seedReason(db);
-    const amount = (beforeAmount: string, nominalValue: string) =>
+    const amount = (seconds: number, beforeAmount: string, reduction: string) =>
+      recordAt(
+        `2026-09-30T12:00:0${seconds}.000Z`,
+        comp(order, reason, {
+          action: "discount_amount",
+          beforeAmount: decimal(beforeAmount),
+          afterAmount: subtractDecimal(decimal(beforeAmount), decimal(reduction)),
+          reduction: decimal(reduction),
+        }),
+      );
+    await amount(0, "9.99", "1.00");
+    await amount(1, "8.00", "0.01");
+    await amount(2, "8.00", "0.03");
+    await amount(3, "3000.00", "0.01");
+    await amount(4, "3000.00", "2999.99");
+
+    const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
+    // 10.01001…%, 0.125% and 0.375% round half up to a basis point; the last two would round to
+    // 0% and 100%, which neither is.
+    expect(read.map((row) => row.percentBp)).toEqual([1001, 13, 38, 1, 9999]);
+  });
+
+  it("marks a Free comp and an amount that left its subject at zero as full", async () => {
+    const order = await seedWorkingOrder(db);
+    const reason = await seedReason(db);
+    const amount = (beforeAmount: string, nominalValue: string, afterAmount = "0.00") =>
       comp(order, reason, {
         action: "discount_amount",
         beforeAmount: decimal(beforeAmount),
-        afterAmount: decimal("0.00"),
-        reduction: decimal(beforeAmount),
+        afterAmount: decimal(afterAmount),
+        reduction: subtractDecimal(decimal(beforeAmount), decimal(afterAmount)),
         nominalValue: decimal(nominalValue),
       });
     await recordAt("2026-09-30T12:00:00.000Z", comp(order, reason));
@@ -767,9 +458,10 @@ describe("readBillAdjustments", () => {
       line: null,
       quantity: null,
     });
+    await recordAt("2026-09-30T12:00:04.000Z", amount("12.00", "12.00", "3.00"));
 
     const read = await withTransaction(db, (tx) => readBillAdjustments(tx, order));
-    expect(read.map((row) => row.full)).toEqual([true, true, false, true]);
+    expect(read.map((row) => row.full)).toEqual([true, true, true, true, false]);
   });
 
   it("reads the bill's adjustments through the index that leads with the working order", async () => {

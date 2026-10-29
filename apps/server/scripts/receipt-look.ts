@@ -492,7 +492,7 @@ const SAMPLES: Record<string, ReceiptDocumentInput> = {
           listGross: "2.50",
           adjustments: [
             { kind: "discount", percentBp: 5000, amount: "1.25" },
-            { kind: "discount", amount: "1.25" },
+            { kind: "comp", amount: "1.25" },
           ],
         },
       ],

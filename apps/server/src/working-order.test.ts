@@ -109,7 +109,7 @@ import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 const LOCALE = "es-ES";
@@ -4722,15 +4722,25 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
       // `suitableFor: []`) — the shape the KDS renders per extra beside the dish's own.
       expect(group!.items[0]!.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
-        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        {
+          descriptions: { [LOCALE]: "Leche avena" },
+          perDish: 1,
+          addAllergens: null,
+          suitableFor: [],
+        },
       ]);
 
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
-        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        {
+          descriptions: { [LOCALE]: "Leche avena" },
+          perDish: 1,
+          addAllergens: null,
+          suitableFor: [],
+        },
       ]);
     });
   });
@@ -6483,21 +6493,22 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
       const offers = await tableOffers(tx, cfg);
-      await placeGroups(tx, cfg, partyId, {
-        operatorId: OPERATOR,
-        groups: [
-          {
-            release: "hold",
-            lines: offers.toOfferLines([
-              {
-                productId: cafeId,
-                quantity: "2",
-                extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
-              },
-            ]),
-          },
-        ],
-      });
+      await placeGroupedRound(
+        tx,
+        cfg,
+        { partyId, tabId },
+        {
+          release: "hold",
+          lines: offers.toOfferLines([
+            {
+              productId: cafeId,
+              quantity: "2",
+              extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+            },
+          ]),
+        },
+        OPERATOR,
+      );
       const [{ revision }] = await tx
         .select({ revision: workingOrders.revision })
         .from(workingOrders)

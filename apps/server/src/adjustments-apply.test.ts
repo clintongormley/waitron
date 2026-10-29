@@ -8,7 +8,7 @@ import {
   placeOrder,
 } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -43,6 +43,7 @@ import type { AdjustmentArgs } from "./adjustments-apply.js";
 import { splitBill } from "./testing/bill-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { fireGroup } from "./order-groups.js";
+import { registerPortions } from "./order-portions.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { formatReceipt } from "./receipt-ticket.js";
 import { printedLines } from "./testing/decode-ticket.js";
@@ -69,6 +70,8 @@ import {
   REASONS,
   rowsOf,
   ticketOf,
+  todayLine,
+  todayLineNos,
   type AdjustmentVenue,
   type RoundLine,
 } from "./testing/adjustment-venue.js";
@@ -184,6 +187,11 @@ async function priced(billId: string) {
   ]);
 }
 
+/** `priced` rows of `count` identical portions: each portion's rows, in turn. */
+function portions(count: number, ...rows: (string | null)[][]) {
+  return Array.from({ length: count }, () => rows).flat();
+}
+
 /** Pays the whole bill in cash, filing its invoice; answers the sale and its lines. */
 async function payAll(billId: string) {
   const due = total(await rowsOf(venue, billId));
@@ -286,7 +294,7 @@ describe("a comp (plan D4)", () => {
     const items = await ticketItemCount(billId);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -300,9 +308,9 @@ describe("a comp (plan D4)", () => {
 
   it("comps 1 of Steak ×2 by splitting it into a row at €25.00 and a row at €0.00", async () => {
     const { billId } = await bill([{ name: "Steak", quantity: "2" }]);
-    const steak = await lineIdOf(venue, billId, 1);
+    const steak = await todayLine(venue, billId, 1);
 
-    await adjust(billId, { lineId: steak, action: "comp", quantity: "1" });
+    await adjust(billId, { ...steak, action: "comp", quantity: "1" });
 
     expect(await priced(billId)).toEqual([
       ["Steak", "1.000", "25.00", "25.00", "25.00"],
@@ -310,19 +318,19 @@ describe("a comp (plan D4)", () => {
     ]);
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({
-      lineId: steak,
+      lineId: steak.lineId,
       quantity: 1000,
       lineQuantity: 2000,
       reduction: 2500,
       nominalValue: 2500,
-      splits: [{ from: steak, to: await lineIdOf(venue, billId, 2) }],
+      splits: [{ from: steak.lineId, to: (await todayLine(venue, billId, 2)).lineId }],
     });
   });
 
   it("comps 0.005 kg of ham at €24.00/kg to a unit price of exactly €0.00", async () => {
     const { billId } = await bill([{ name: "Ham", quantity: "0.005" }]);
 
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     expect(await priced(billId)).toEqual([["Ham", "0.005", "0.00", "24.00", "0.00"]]);
     expect((await recordedOn(billId))[0]).toMatchObject({
@@ -335,7 +343,7 @@ describe("a comp (plan D4)", () => {
   it("comps a dish together with its extras", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
 
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     expect(await priced(billId)).toEqual([
       ["Pizza", "1.000", "0.00", "9.00", "0.00"],
@@ -350,11 +358,11 @@ describe("a comp (plan D4)", () => {
     const cancelled = await bill([glass]);
 
     await adjust(comped.billId, {
-      lineId: await lineIdOf(venue, comped.billId, 1),
+      ...(await todayLine(venue, comped.billId, 1)),
       action: "comp",
     });
     await adjust(cancelled.billId, {
-      lineId: await lineIdOf(venue, cancelled.billId, 1),
+      ...(await todayLine(venue, cancelled.billId, 1)),
       action: "cancel",
     });
 
@@ -376,12 +384,13 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
   /** A bill of Pizza × `quantity` with olives, and the ids of the pizza and its one extras row. */
   async function pizzaWithOlives(quantity = "1") {
     const { billId } = await bill([{ name: "Pizza", quantity, olives: 1 }]);
-    const pizza = await lineIdOf(venue, billId, 1);
+    const target = await todayLine(venue, billId, 1);
+    const pizza = target.lineId;
     const extras = (await rowsOf(venue, billId))
       .filter((row) => row.parentLineId === pizza)
       .map((row) => row.id);
     expect(extras).toHaveLength(1);
-    return { billId, pizza, extras };
+    return { billId, pizza, target, extras };
   }
 
   it("records the dish's extras row on a whole comp of the dish", async () => {
@@ -395,9 +404,9 @@ describe("the extras rows an adjustment records as comped with their dish (B11f)
   });
 
   it("records none on a comp of part of the dish", async () => {
-    const { billId, pizza } = await pizzaWithOlives("2");
+    const { billId, pizza, target } = await pizzaWithOlives("2");
 
-    await adjust(billId, { lineId: pizza, action: "comp", quantity: "1" });
+    await adjust(billId, { ...target, action: "comp", quantity: "1" });
 
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ lineId: pizza, action: "comp", quantity: 1000 });
@@ -438,9 +447,9 @@ describe("the receipt (ruling R13)", () => {
 
   async function compBurgerAndDiscountBottle() {
     const { billId } = await bill([{ name: "Burger" }, { name: "Bottle" }, { name: "Bread" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -537,7 +546,7 @@ describe("a line discount (plan D4)", () => {
     const { billId } = await bill([{ name: "Bottle" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -574,13 +583,14 @@ describe("a line discount (plan D4)", () => {
     const { billId } = await bill([{ name: "Croquetas", quantity: "3" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
 
     expect(await priced(billId)).toEqual([
-      ["Croquetas", "2.000", "3.00", "3.33", "6.00"],
+      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
       ["Croquetas", "1.000", "2.99", "3.33", "2.99"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 100 });
@@ -593,7 +603,7 @@ describe("a line discount (plan D4)", () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -632,23 +642,25 @@ describe("a line discount (plan D4)", () => {
     const { billId } = await bill([{ name: "Croquetas", quantity: "5" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_amount",
       quantity: "3",
       amount: "1.00",
     });
 
     expect(await priced(billId)).toEqual([
-      ["Croquetas", "2.000", "3.33", "3.33", "6.66"],
-      ["Croquetas", "2.000", "3.00", "3.33", "6.00"],
+      ["Croquetas", "1.000", "3.33", "3.33", "3.33"],
+      ["Croquetas", "1.000", "3.33", "3.33", "3.33"],
+      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
+      ["Croquetas", "1.000", "3.00", "3.33", "3.00"],
       ["Croquetas", "1.000", "2.99", "3.33", "2.99"],
     ]);
     const [row] = await recordedOn(billId);
     expect(row).toMatchObject({ quantity: 3000, beforeAmount: 999, reduction: 100 });
-    const [first, second, third] = [1, 2, 3].map((lineNo) => lineIdOf(venue, billId, lineNo));
+    const [first, third, fifth] = [1, 3, 5].map((lineNo) => lineIdOf(venue, billId, lineNo));
     expect(row!.splits).toEqual([
-      { from: await first, to: await second },
-      { from: await second, to: await third },
+      { from: await first, to: await third },
+      { from: await third, to: await fifth },
     ]);
   });
 });
@@ -658,7 +670,7 @@ describe("too large (plan D4)", () => {
     const { billId } = await bill([{ name: "Bottle" }]);
     await refusedWith(
       billId,
-      { lineId: await lineIdOf(venue, billId, 1), action: "discount_amount", amount: "40.00" },
+      { ...(await todayLine(venue, billId, 1)), action: "discount_amount", amount: "40.00" },
       "adjustment.exceeds_amount",
       { requested: "40.00", available: "30.00" },
     );
@@ -725,7 +737,7 @@ describe("a bill discount with a weighed line (plan D15)", () => {
       ["3.27", 328, ["Fish", "2.500", "11.68", "12.99", "29.20"]],
     ] as const) {
       const { billId } = await bill([{ name: "Fish", quantity: "2.5" }, { name: "Water" }]);
-      await adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp" });
+      await adjust(billId, { ...(await todayLine(venue, billId, 2)), action: "comp" });
       const ask: Ask = { action: "discount_amount", amount: asked };
 
       expect((await preview(billId, ask)).reduction).toBe((achieved / 100).toFixed(2));
@@ -744,8 +756,10 @@ describe("a bill discount over a dish with extras (ruling R7)", () => {
     await adjust(billId, { action: "discount_amount", amount: "3.01" });
 
     expect(await priced(billId)).toEqual([
-      ["Pizza", "2.000", "8.13", "9.00", "16.26"],
-      ["Olives", "2.000", "1.36", "1.50", "2.72"],
+      ["Pizza", "1.000", "8.13", "9.00", "8.13"],
+      ["Olives", "1.000", "1.36", "1.50", "1.36"],
+      ["Pizza", "1.000", "8.13", "9.00", "8.13"],
+      ["Olives", "1.000", "1.36", "1.50", "1.36"],
       ["Salad", "1.000", "9.01", "10.00", "9.01"],
     ]);
     expect((await recordedOn(billId))[0]).toMatchObject({ reduction: 301 });
@@ -813,7 +827,7 @@ function expectNoPinIn(value: unknown, pin: string, key = ""): void {
 
 describe("approval (plan D6)", () => {
   const comp = async (billId: string, approver?: AdjustmentArgs["approver"]) => ({
-    lineId: await lineIdOf(venue, billId, 1),
+    ...(await todayLine(venue, billId, 1)),
     action: "comp" as const,
     reasonId: venue.reasonId.complaint,
     operatorId: venue.staffId,
@@ -893,7 +907,7 @@ describe("approval (plan D6)", () => {
 
 describe("a cancel's approval (A758 D12, D13)", () => {
   const cancel = async (billId: string, extra: Partial<Ask> = {}): Promise<Ask> => ({
-    lineId: await lineIdOf(venue, billId, 1),
+    ...(await todayLine(venue, billId, 1)),
     action: "cancel",
     operatorId: venue.staffId,
     ...extra,
@@ -1046,7 +1060,7 @@ describe("split rows and groups (plan D19)", () => {
     const partyBefore = await partyRevision(partyId);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       quantity: "1",
     });
@@ -1182,7 +1196,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
         billId,
       }),
     );
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     const before = total(await rowsOf(venue, billId));
 
     await raise(billId, 1, "2");
@@ -1219,7 +1233,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       const comped = await bill([{ name: "Burger" }], { release: "hold" });
       const plain = await bill([{ name: "Burger" }], { release: "hold" });
       await adjust(comped.billId, {
-        lineId: await lineIdOf(venue, comped.billId, 1),
+        ...(await todayLine(venue, comped.billId, 1)),
         action: "comp",
       });
 
@@ -1247,7 +1261,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1" }],
       operatorId: venue.staffId,
     });
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     await raise(billId, 1, "2");
 
@@ -1265,7 +1279,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       lines: [{ menuItemId: venue.item("Burger"), quantity: "1", makeAt: venue.stationId }],
       operatorId: venue.staffId,
     });
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     await inTx(venue, async (tx) =>
       updateOrderLine(
@@ -1294,7 +1308,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     const { billId } = await bill([{ name: "Coffee" }]);
     const coffee = await placeOf(billId, 1);
     expect(coffee).toMatchObject({ sent: true, items: [] });
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
 
     await raise(billId, 1, "2");
 
@@ -1308,7 +1322,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
   it("sells the added bottle at its full price beside the discounted one", async () => {
     const { billId } = await bill([{ name: "Bottle" }], { release: "hold" });
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -1323,7 +1337,7 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
 
   it("holds the Burger added to a comped one recalled from the kitchen", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     await inTx(venue, (tx) => recallLines(tx, venue.cfg, billId, [1]));
 
     await raise(billId, 1, "2");
@@ -1337,12 +1351,200 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect((await placeOf(billId, 2)).groupId).toBe((await placeOf(billId, 1)).groupId);
   });
 
+  /** Bind line `lineNo` to a portion of a cohort of its own, as the portion writers do; a line the
+   * writer already bound keeps its portion. Answers the portion's cohort. */
+  async function bindAsPortion(billId: string, lineNo: number): Promise<string> {
+    const lineId = await lineIdOf(venue, billId, lineNo);
+    const [bound] = venue.db.all<{ cohortId: string }>(
+      sql`select p.cohort_id as cohortId from working_line_portions b
+          join order_portions p on p.id = b.portion_id
+          where b.working_order_line_id = ${lineId}`,
+    );
+    if (bound !== undefined) return bound.cohortId;
+    const cohortId = randomUUID();
+    await inTx(venue, (tx) =>
+      registerPortions(tx, [
+        { portionId: randomUUID(), lineId, ordinal: 1, pricingCohortId: cohortId, measured: false },
+      ]),
+    );
+    return cohortId;
+  }
+
+  /** Each dish line's number, the cohort and ordinal of its portion, its price and served count. */
+  function dishPortions(billId: string) {
+    return venue.db.all<{
+      lineNo: number;
+      cohortId: string | null;
+      ordinal: number | null;
+      unitPrice: number;
+      served: number;
+    }>(
+      sql`select l.line_no as lineNo, p.cohort_id as cohortId, p.ordinal,
+            l.unit_price_gross as unitPrice, l.served_quantity as served
+          from working_order_lines l
+          left join working_line_portions b on b.working_order_line_id = l.id
+          left join order_portions p on p.id = b.portion_id
+          where l.working_order_id = ${billId} and l.parent_line_id is null
+          order by l.line_no`,
+    );
+  }
+
+  it("A803 portions: raising a bound held Burger to 3 adds two held portions and prints a plain raise's HOLD CHANGED slip", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    try {
+      const bound = await bill([{ name: "Burger" }], { release: "hold" });
+      const plain = await bill([{ name: "Burger" }], { release: "hold" });
+      const cohortId = await bindAsPortion(bound.billId, 1);
+
+      const beforePlain = await kitchenJobCount();
+      await raise(plain.billId, 1, "3");
+      const plainJobs = await kitchenJobsSince(beforePlain);
+      const beforeBound = await kitchenJobCount();
+      await raise(bound.billId, 1, "3");
+      const boundJobs = await kitchenJobsSince(beforeBound);
+
+      expect(
+        dishPortions(bound.billId).map((line) => [line.lineNo, line.cohortId, line.ordinal]),
+      ).toEqual([
+        [1, cohortId, 1],
+        [2, cohortId, 2],
+        [3, cohortId, 3],
+      ]);
+      const held = await placeOf(bound.billId, 1);
+      for (const lineNo of [2, 3])
+        expect(await kitchenOf(bound.billId, lineNo)).toEqual({ group: "held", firedAt: null });
+      expect((await placeOf(bound.billId, 3)).groupId).toBe(held.groupId);
+      const shape = (jobs: string[][]) =>
+        jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
+      expect(shape(plainJobs)).toEqual([["*** HOLD CHANGED ***", "+2.000 x BURG"]]);
+      expect(shape(boundJobs)).toEqual(shape(plainJobs));
+    } finally {
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("A803 portions: raising a comped bound held Burger to 3 sells the two added at today's price as two portions of a new cohort, with a plain raise's slip", async () => {
+    await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: true }));
+    try {
+      const comped = await bill([{ name: "Burger" }], { release: "hold" });
+      const plain = await bill([{ name: "Burger" }], { release: "hold" });
+      const cohortId = await bindAsPortion(comped.billId, 1);
+      await adjust(comped.billId, {
+        ...(await todayLine(venue, comped.billId, 1)),
+        action: "comp",
+      });
+
+      const beforePlain = await kitchenJobCount();
+      await raise(plain.billId, 1, "3");
+      const plainJobs = await kitchenJobsSince(beforePlain);
+      const beforeComped = await kitchenJobCount();
+      await raise(comped.billId, 1, "3");
+      const compedJobs = await kitchenJobsSince(beforeComped);
+
+      const dishes = dishPortions(comped.billId);
+      expect(dishes.map((line) => [line.lineNo, line.ordinal, line.unitPrice])).toEqual([
+        [1, 1, 0],
+        [2, 1, 1200],
+        [3, 2, 1200],
+      ]);
+      expect(dishes[0]!.cohortId).toBe(cohortId);
+      expect(dishes[1]!.cohortId).not.toBe(cohortId);
+      expect(dishes[2]!.cohortId).toBe(dishes[1]!.cohortId);
+      const shape = (jobs: string[][]) =>
+        jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
+      expect(shape(compedJobs)).toEqual(shape(plainJobs));
+    } finally {
+      await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
+    }
+  });
+
+  it("A803 portions: raising a served bound coffee poured at the bar adds a sent, unserved portion with no kitchen item", async () => {
+    const { billId } = await bill([{ name: "Coffee" }]);
+    const coffee = await placeOf(billId, 1);
+    const cohortId = await bindAsPortion(billId, 1);
+    await inTx(venue, (tx) => serveLine(tx, venue.cfg, billId, 1));
+
+    await raise(billId, 1, "2");
+
+    expect(dishPortions(billId)).toEqual([
+      { lineNo: 1, cohortId, ordinal: 1, unitPrice: 150, served: 1000 },
+      { lineNo: 2, cohortId, ordinal: 2, unitPrice: 150, served: 0 },
+    ]);
+    expect(await placeOf(billId, 2)).toEqual({ groupId: coffee.groupId, sent: true, items: [] });
+  });
+
+  it.each([false, true])(
+    "A803 portions: Olives added while raising a bound held Pizza to 2 are one dish's on each Pizza, comped=%s",
+    async (comped) => {
+      const { billId } = await bill([{ name: "Pizza" }], { release: "hold" });
+      await bindAsPortion(billId, 1);
+      if (comped) await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+
+      await inTx(venue, async (tx) =>
+        updateOrderLine(
+          tx,
+          venue.cfg,
+          billId,
+          1,
+          {
+            quantity: "2",
+            extras: [
+              { listId: venue.pizzaExtras, picks: [{ productId: venue.olivesId, quantity: 1 }] },
+            ],
+          },
+          await readOrderRevision(tx, billId),
+          venue.staffId,
+        ),
+      );
+
+      const rows = await rowsOf(venue, billId);
+      const olives = rows.filter((row) => row.name === "Olives");
+      expect(olives.map((row) => [row.quantity, row.lineTotal])).toEqual([
+        ["1.000", "1.50"],
+        ["1.000", "1.50"],
+      ]);
+      expect(new Set(olives.map((row) => row.parentLineId)).size).toBe(2);
+    },
+  );
+
+  it("A803 portions: a raise that would add 100 portions of a bound held Burger is refused and changes nothing; 99 goes", async () => {
+    const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
+    await bindAsPortion(billId, 1);
+
+    await expect(raise(billId, 1, "101")).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    expect(dishPortions(billId)).toHaveLength(1);
+
+    await raise(billId, 1, "100");
+    expect(dishPortions(billId)).toHaveLength(100);
+  });
+
+  it("A803 portions: a raise that would add 100 portions of a comped bound held Burger is refused and changes nothing; 99 goes", async () => {
+    const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
+    await bindAsPortion(billId, 1);
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+
+    await expect(raise(billId, 1, "101")).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    expect(dishPortions(billId)).toHaveLength(1);
+
+    await raise(billId, 1, "100");
+    expect(dishPortions(billId)).toHaveLength(100);
+  });
+
   it("still widens a line nobody adjusted", async () => {
     const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
 
     await raise(billId, 1, "2");
 
-    expect(await priced(billId)).toEqual([["Burger", "2.000", "12.00", null, "24.00"]]);
+    expect(await priced(billId)).toEqual([
+      ["Burger", "1.000", "12.00", null, "12.00"],
+      ["Burger", "1.000", "12.00", null, "12.00"],
+    ]);
   });
 });
 
@@ -1358,7 +1560,7 @@ describe("the reason as it was (plan D20)", () => {
       ).id;
     });
     const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp", reasonId });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp", reasonId });
 
     await inTx(venue, (tx) =>
       updateAdjustmentReason(tx, reasonId, {
@@ -1368,7 +1570,7 @@ describe("the reason as it was (plan D20)", () => {
         maxAmount: decimal("50.00"),
       }),
     );
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp", reasonId });
+    await adjust(billId, { ...(await todayLine(venue, billId, 2)), action: "comp", reasonId });
 
     const [first, second] = await recordedOn(billId);
     expect(first).toMatchObject({
@@ -1386,7 +1588,7 @@ describe("the reason as it was (plan D20)", () => {
   it("records the reason's name in the operator's language", async () => {
     const { billId } = await bill([{ name: "Burger" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -1438,7 +1640,7 @@ describe("cumulative limits (plan D6)", () => {
   it("asks past the reason's €30 on the bill", async () => {
     const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }, { name: "Burger" }]);
     const comp = async (lineNo: number) => ({
-      lineId: await lineIdOf(venue, billId, lineNo),
+      ...(await todayLine(venue, billId, lineNo)),
       action: "comp" as const,
       reasonId: venue.reasonId.complaint,
     });
@@ -1459,7 +1661,7 @@ describe("cumulative limits (plan D6)", () => {
     });
     const { billId } = await bill([{ name: "Burger" }, { name: "Burger" }], { release: "hold" });
     const kept = await lineIdOf(venue, billId, 2);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "cancel", reasonId });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "cancel", reasonId });
     await inTx(venue, (tx) =>
       updateAdjustmentReason(tx, reasonId, {
         ...REASONS.house,
@@ -1494,7 +1696,7 @@ describe("cumulative limits (plan D6)", () => {
   it("asks for a second 30% on one line under a 50% item limit, and applies it with a manager's PIN", async () => {
     const { billId } = await bill([{ name: "Salad" }]);
     const discount = async (approver?: AdjustmentArgs["approver"]) => ({
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent" as const,
       percentBp: 3000,
       reasonId: venue.reasonId.staffMeal,
@@ -1512,7 +1714,7 @@ describe("cumulative limits (plan D6)", () => {
     ]);
   });
 
-  it("counts a €12.00 amount off the €12.00 Burger as 100% under a 20% item limit", async () => {
+  it("refuses a €12.00 amount off the €12.00 Burger under a reason without Free, as it refuses Free", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1525,21 +1727,83 @@ describe("cumulative limits (plan D6)", () => {
     });
     const { billId } = await bill([{ name: "Burger" }]);
     const ask = {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_amount" as const,
       amount: "12.00",
       reasonId,
     };
-    expect(await preview(billId, ask)).toMatchObject({
-      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    await expect(preview(billId, ask)).rejects.toMatchObject({
+      code: "adjustment.free_not_allowed",
     });
-    await refusedWith(billId, ask, "adjustment.approval_required", { approval: "reason" });
+    await refusedWith(billId, ask, "adjustment.free_not_allowed");
+  });
+
+  describe("a reason without Free refuses everything off too (owner, 2026-10-28; plan D37 rule 4)", () => {
+    it("Crew meal refuses 100% off a Burger, and €12.00 off it, even with a manager's PIN", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      const lineId = await lineIdOf(venue, billId, 1);
+      const off = { lineId, reasonId: venue.reasonId.staffMeal, approver: MANAGER_PIN() };
+      await refusedWith(
+        billId,
+        { ...off, action: "discount_percent", percentBp: 10000 },
+        "adjustment.free_not_allowed",
+      );
+      await refusedWith(
+        billId,
+        { ...off, action: "discount_amount", amount: "12.00" },
+        "adjustment.free_not_allowed",
+      );
+    });
+
+    it("100% off the whole bill is refused under Crew meal and goes through under House", async () => {
+      const { billId } = await bill([{ name: "Salad" }, { name: "Burger" }]);
+      const all = (reasonId: string): Ask => ({
+        action: "discount_percent",
+        percentBp: 10000,
+        reasonId,
+        operatorId: venue.managerId,
+      });
+      await refusedWith(billId, all(venue.reasonId.staffMeal), "adjustment.free_not_allowed");
+
+      await adjust(billId, all(venue.reasonId.house));
+
+      expect(total(await rowsOf(venue, billId))).toBe("0.00");
+    });
+
+    it("Crew meal refuses 99.99% off a €12.00 Burger, which leaves it at €0.00", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      await refusedWith(
+        billId,
+        {
+          ...(await todayLine(venue, billId, 1)),
+          action: "discount_percent",
+          percentBp: 9999,
+          reasonId: venue.reasonId.staffMeal,
+          approver: MANAGER_PIN(),
+        },
+        "adjustment.free_not_allowed",
+      );
+    });
+
+    it("90% under Crew meal goes on to the floor check, which asks", async () => {
+      const { billId } = await bill([{ name: "Burger" }]);
+      const ask: Ask = {
+        ...(await todayLine(venue, billId, 1)),
+        action: "discount_percent",
+        percentBp: 9000,
+        reasonId: venue.reasonId.staffMeal,
+        operatorId: venue.staffId,
+      };
+      expect(await preview(billId, ask)).toMatchObject({
+        needsApproval: { by: "reason", roles: ["manager", "admin"] },
+      });
+    });
   });
 
   it("lets staff take Crew meal 50% off one of two Burgers on one line, then 50% off the other, both straight through", async () => {
     const { billId } = await bill([{ name: "Burger", quantity: "2" }]);
     const half = async (quantity?: string) => ({
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent" as const,
       percentBp: 5000,
       reasonId: venue.reasonId.staffMeal,
@@ -1568,7 +1832,7 @@ describe("cumulative limits (plan D6)", () => {
     await refusedWith(billId, off(6000), "adjustment.approval_required", { approval: "reason" });
   });
 
-  it("counts the reason's earlier discount on the whole bill once on a dish with extras: 30% off the bill, then 10% on the pizza goes straight through for staff, while 30% asks", async () => {
+  it("counts a discount on the whole bill once on a dish with extras: 30% off the bill, then 10% on the pizza goes straight through for staff, while 30% asks", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
     await adjust(billId, {
       action: "discount_percent",
@@ -1576,7 +1840,7 @@ describe("cumulative limits (plan D6)", () => {
       reasonId: venue.reasonId.staffMeal,
     });
     const ask: Ask = {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
       reasonId: venue.reasonId.staffMeal,
@@ -1592,11 +1856,11 @@ describe("cumulative limits (plan D6)", () => {
     expect((await recordedOn(billId)).map((row) => row.approvedBy)).toEqual([null, null]);
   });
 
-  it("counts each row's earlier share on a discount of the whole bill: 40% then 20% asks, 20% then 20% goes through", async () => {
+  it("counts each row's earlier discount in its floor on a discount of the whole bill: 40% then 20% asks, 20% then 20% goes through", async () => {
     const twice = async (first: number) => {
       const { billId } = await bill([{ name: "Salad" }]);
       await adjust(billId, {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "discount_percent",
         percentBp: first,
         reasonId: venue.reasonId.staffMeal,
@@ -1613,7 +1877,7 @@ describe("cumulative limits (plan D6)", () => {
     expect(await twice(2000)).toMatchObject({ needsApproval: null });
   });
 
-  it("counts the cent a whole-bill discount took off one of two Burgers on that Burger, not half a cent on each", async () => {
+  it("lets €6.00 off the Burger a whole-bill cent was taken from through under a 50.05% limit, at €5.99, and asks for €6.01", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1636,7 +1900,7 @@ describe("cumulative limits (plan D6)", () => {
       ["Burger", "1.000", "12.00", null, "12.00"],
     ]);
     const sixOff = async (lineNo: number): Promise<Ask> => ({
-      lineId: await lineIdOf(venue, billId, lineNo),
+      ...(await todayLine(venue, billId, lineNo)),
       action: "discount_amount",
       amount: "6.00",
       reasonId,
@@ -1644,16 +1908,20 @@ describe("cumulative limits (plan D6)", () => {
     });
     expect(await preview(billId, await sixOff(2))).toMatchObject({ needsApproval: null });
 
-    // €6.01 off the €12.00 Burger is 50.09%, past 50.05%.
-    await refusedWith(billId, await sixOff(1), "adjustment.approval_required", {
-      approval: "reason",
-    });
+    // Off the €12.00 Burger in all: €6.01 is under its €6.006 share plus one cent; €6.02 is not.
+    expect(await preview(billId, await sixOff(1))).toMatchObject({ needsApproval: null });
+    await refusedWith(
+      billId,
+      { ...(await sixOff(1)), amount: "6.01" },
+      "adjustment.approval_required",
+      { approval: "reason" },
+    );
   });
 
-  it("does not count olives another reason gave away as Crew meal's share of the pizza: €1.50 off the bill, then 10% off the pizza goes straight through", async () => {
+  it("lets 10% off a pizza straight through after another reason gave its olives away and €1.50 came off the bill", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }, { name: "Burger" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -1669,10 +1937,10 @@ describe("cumulative limits (plan D6)", () => {
       ["Burger", "1.000", "11.14", "12.00", "11.14"],
     ]);
 
-    // €0.64 of €9.00 and €0.84 of €10.50 are under 17% in all.
+    // The €10.50 pizza and its olives are left at €7.52, above their €5.25 floor.
     expect(
       await preview(billId, {
-        lineId: await lineIdOf(venue, billId, 1),
+        ...(await todayLine(venue, billId, 1)),
         action: "discount_percent",
         percentBp: 1000,
         reasonId: venue.reasonId.staffMeal,
@@ -1681,7 +1949,7 @@ describe("cumulative limits (plan D6)", () => {
     ).toMatchObject({ needsApproval: null });
   });
 
-  it("still counts what Crew meal's bill discount took off the olives before another reason gave them away", async () => {
+  it("counts every discount on a pizza and its olives in its floor, the olives another reason gave away among them: €3.72 more goes through, €3.73 asks", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1700,7 +1968,7 @@ describe("cumulative limits (plan D6)", () => {
       operatorId: venue.staffId,
     });
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -1710,22 +1978,21 @@ describe("cumulative limits (plan D6)", () => {
       ["Burger", "1.000", "11.93", "12.00", "11.93"],
     ]);
     const off = async (amount: string): Promise<Ask> => ({
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_amount",
       amount,
       reasonId,
       operatorId: venue.staffId,
     });
 
-    // The olives' €0.01 of €1.50 is 67 basis points, more than the pizza's €0.05 of €9.00 (56).
-    // With €5.18 of the €10.50 dish (4934) that is 5001; with €5.19 (4943), 5010, past 5005.
-    expect(await preview(billId, await off("5.18"))).toMatchObject({ needsApproval: null });
-    expect(await preview(billId, await off("5.19"))).toMatchObject({
+    // €1.55 is off the €10.50 dish; its share is €5.25525 and its allowance two cents.
+    expect(await preview(billId, await off("3.72"))).toMatchObject({ needsApproval: null });
+    expect(await preview(billId, await off("3.73"))).toMatchObject({
       needsApproval: { by: "reason", roles: ["manager", "admin"] },
     });
   });
 
-  it("still counts the reason's bill discount on a Burger another reason discounted while there were two of it", async () => {
+  it("counts another reason's 10%, taken while there were two of the Burger, in its floor: €6.00 more asks", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1737,7 +2004,6 @@ describe("cumulative limits (plan D6)", () => {
       ).id;
     });
     const { billId } = await bill([{ name: "Burger", quantity: "2" }, { name: "Salad" }]);
-    const burgers = await lineIdOf(venue, billId, 1);
     await adjust(billId, {
       action: "discount_amount",
       amount: "0.03",
@@ -1745,21 +2011,25 @@ describe("cumulative limits (plan D6)", () => {
       operatorId: venue.staffId,
     });
     await adjust(billId, {
-      lineId: burgers,
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
       reasonId: venue.reasonId.complaint,
     });
-    await adjust(billId, { lineId: burgers, action: "cancel", quantity: "1" });
+    await adjust(billId, {
+      ...(await todayLine(venue, billId, 1)),
+      action: "cancel",
+      quantity: "1",
+    });
     expect(await priced(billId)).toEqual([
       ["Burger", "1.000", "10.79", "12.00", "10.79"],
       ["Salad", "1.000", "9.99", "10.00", "9.99"],
     ]);
 
-    // The Burger kept €0.01 of the €0.03: 9 basis points, and €6.00 of €12.00 is 5000.
+    // €6.00 more leaves the €12.00 Burger at €4.79, below its floor.
     expect(
       await preview(billId, {
-        lineId: burgers,
+        ...(await todayLine(venue, billId, 1)),
         action: "discount_amount",
         amount: "6.00",
         reasonId,
@@ -1768,7 +2038,7 @@ describe("cumulative limits (plan D6)", () => {
     ).toMatchObject({ needsApproval: { by: "reason", roles: ["manager", "admin"] } });
   });
 
-  it("counts on a dish the larger share a bill discount took off one of its extras", async () => {
+  it("counts what a bill discount took off a dish's extras in the dish's floor: €5.23 more goes through, €5.24 asks", async () => {
     const reasonId = await inTx(venue, async (tx) => {
       return (
         await createAdjustmentReason(tx, {
@@ -1791,17 +2061,19 @@ describe("cumulative limits (plan D6)", () => {
       ["Olives", "1.000", "1.49", "1.50", "1.49"],
     ]);
 
-    // The olives' €0.01 of €1.50 is 67 basis points, the pizza's €0.03 of €9.00 34, and €5.20 of
-    // the €10.50 dish 4953: 5020 in all, past 5005.
-    expect(
-      await preview(billId, {
-        lineId: await lineIdOf(venue, billId, 1),
+    // €0.04 is off the €10.50 dish; its share is €5.25525 and its allowance two cents.
+    const off = async (amount: string) =>
+      preview(billId, {
+        ...(await todayLine(venue, billId, 1)),
         action: "discount_amount",
-        amount: "5.20",
+        amount,
         reasonId,
         operatorId: venue.staffId,
-      }),
-    ).toMatchObject({ needsApproval: { by: "reason", roles: ["manager", "admin"] } });
+      });
+    expect(await off("5.23")).toMatchObject({ needsApproval: null });
+    expect(await off("5.24")).toMatchObject({
+      needsApproval: { by: "reason", roles: ["manager", "admin"] },
+    });
   });
 
   it("does not count a discount on the whole bill against a Burger added after it", async () => {
@@ -1820,7 +2092,7 @@ describe("cumulative limits (plan D6)", () => {
       ["Burger", "1.000", "12.00", null, "12.00"],
     ]);
     const half = async (lineNo: number): Promise<Ask> => ({
-      lineId: await lineIdOf(venue, billId, lineNo),
+      ...(await todayLine(venue, billId, lineNo)),
       action: "discount_percent",
       percentBp: 5000,
       reasonId: venue.reasonId.staffMeal,
@@ -1833,30 +2105,32 @@ describe("cumulative limits (plan D6)", () => {
     });
   });
 
-  it("counts a line's share on the row a bill discount split off it", async () => {
+  it("counts a line's earlier discount in the floor of the row a bill discount split off it", async () => {
     const { billId } = await bill([{ name: "Bottle", quantity: "3" }]);
-    const bottles = await lineIdOf(venue, billId, 1);
+    const bottles = await todayLine(venue, billId, 1);
     await adjust(billId, {
-      lineId: bottles,
+      ...bottles,
       action: "discount_percent",
       percentBp: 3000,
       reasonId: venue.reasonId.staffMeal,
     });
     await adjust(billId, { action: "discount_amount", amount: "0.01" });
     expect(await priced(billId)).toEqual([
-      ["Bottle", "2.000", "21.00", "30.00", "42.00"],
+      ["Bottle", "1.000", "21.00", "30.00", "21.00"],
+      ["Bottle", "1.000", "21.00", "30.00", "21.00"],
       ["Bottle", "1.000", "20.99", "30.00", "20.99"],
     ]);
-    const carved = await lineIdOf(venue, billId, 2);
+    // Retargeted by hand: the bottle the cent came off is the third portion.
+    const carved = { lineId: await lineIdOf(venue, billId, 3) };
     expect((await recordedOn(billId))[1]).toMatchObject({
       lineId: null,
-      splits: [{ from: bottles, to: carved }],
+      splits: [{ from: bottles.lineId, to: carved.lineId }],
     });
 
     await refusedWith(
       billId,
       {
-        lineId: carved,
+        ...carved,
         action: "discount_percent",
         percentBp: 3000,
         reasonId: venue.reasonId.staffMeal,
@@ -1864,6 +2138,103 @@ describe("cumulative limits (plan D6)", () => {
       "adjustment.approval_required",
       { approval: "reason" },
     );
+  });
+});
+
+describe("a reason's euro limit counts what is still off the bill (owner, 2026-10-28; plan D37 rules 3 and 5)", () => {
+  // Guest complaint allows €30.00 a bill and is approved by managers and admins; the supervisor
+  // may apply it.
+  const complaint = (lineId: string): Ask => ({
+    lineId,
+    action: "comp",
+    reasonId: venue.reasonId.complaint,
+  });
+  const verdict = async (billId: string, ask: Ask) =>
+    (await preview(billId, ask)).needsApproval ?? "through";
+  const ASKS_REASON = { by: "reason", roles: ["manager", "admin"] };
+
+  it("another reason's €25 free steak does not count toward Guest complaint's €30", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const burger = await lineIdOf(venue, billId, 2);
+    await adjust(billId, { lineId: steak, action: "comp" });
+
+    expect(await verdict(billId, complaint(burger))).toBe("through");
+  });
+
+  it("a €25 steak given free and then cancelled no longer counts: a €12 burger free goes through", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const burger = await lineIdOf(venue, billId, 2);
+    await adjust(billId, complaint(steak));
+    expect(await verdict(billId, complaint(burger))).toEqual(ASKS_REASON);
+
+    await adjust(billId, { lineId: steak, action: "cancel" });
+
+    expect(await verdict(billId, complaint(burger))).toBe("through");
+  });
+
+  it("after Split bill moves the free €25 steak and a burger to a new bill, the burger left behind goes free without asking, and the one moved asks", async () => {
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }, { name: "Burger" }]);
+    const steak = await lineIdOf(venue, billId, 1);
+    const moving = await lineIdOf(venue, billId, 2);
+    const staying = await lineIdOf(venue, billId, 3);
+    await adjust(billId, complaint(steak));
+    expect(await verdict(billId, complaint(staying))).toEqual(ASKS_REASON);
+    const [party] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+    const moved = (
+      await inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, billId, [{ lineNo: 1 }, { lineNo: 2 }], {
+          operatorId: venue.staffId,
+          expectedPartyRevision: party!.revision,
+        }),
+      )
+    ).billId;
+
+    expect(await verdict(billId, complaint(staying))).toBe("through");
+    expect(await verdict(moved, complaint(moving))).toEqual(ASKS_REASON);
+  });
+
+  it("a whole-bill €10 discount's share on a dish moved away leaves the bill it left", async () => {
+    const reasonId = await inTx(venue, async (tx) => {
+      return (
+        await createAdjustmentReason(tx, {
+          ...REASONS.house,
+          name: "Eleven a bill",
+          names: {},
+          maxAmount: decimal("11.00"),
+          approverRoles: ["manager", "admin"],
+        })
+      ).id;
+    });
+    const { billId } = await bill([{ name: "Steak" }, { name: "Burger" }, { name: "Burger" }]);
+    const staying = await lineIdOf(venue, billId, 3);
+    const euroOff: Ask = { lineId: staying, action: "discount_amount", amount: "1.01", reasonId };
+    await adjust(billId, { action: "discount_amount", amount: "10.00", reasonId });
+    expect(await verdict(billId, euroOff)).toEqual(ASKS_REASON);
+    const [party] = await inTx(venue, (tx) =>
+      tx
+        .select({ revision: parties.revision })
+        .from(workingOrders)
+        .innerJoin(parties, eq(parties.id, workingOrders.partyId))
+        .where(eq(workingOrders.id, billId)),
+    );
+
+    await inTx(venue, (tx) =>
+      splitBill(tx, venue.cfg, billId, [{ lineNo: 1 }], {
+        operatorId: venue.staffId,
+        expectedPartyRevision: party!.revision,
+      }),
+    );
+
+    // The two burgers' shares of the €10.00 stay, under €9.99; the steak's left with it.
+    expect(await verdict(billId, euroOff)).toBe("through");
   });
 });
 
@@ -1921,7 +2292,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     // The €12.00 burger given away leaves €28.00 of the limit.
     const { billId } = await bill([{ name: "Burger" }, { name: "Salad", quantity: "10" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       ...byStaff(),
     });
@@ -1942,8 +2313,8 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     // 20% off €130.00 is €26.00, leaving €14.00 of the limit for a dish.
     const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
     await adjust(billId, { action: "discount_percent", percentBp: 2000, ...byStaff() });
-    const bottle = await lineIdOf(venue, billId, 2);
-    const onBottle = (amount: string): Ask => ({ lineId: bottle, ...billOff(amount) });
+    const bottle = await todayLine(venue, billId, 2);
+    const onBottle = (amount: string): Ask => ({ ...bottle, ...billOff(amount) });
 
     expect(await preview(billId, onBottle("14.01"))).toMatchObject(
       askedOfBill(["manager", "admin"]),
@@ -1960,7 +2331,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     await setLimit("40.00");
     const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "comp",
       ...byStaff(),
     });
@@ -1971,7 +2342,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
 
     // A supervisor holds the refund permission a sent dish's cancel needs.
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "cancel",
       operatorId: venue.supervisorId,
     });
@@ -1991,12 +2362,12 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       release: "hold",
     });
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       ...billOff("50.00", { operatorId: venue.managerId }),
     });
     expect(await preview(billId, billOff("0.01"))).toMatchObject(askedOfBill(["manager", "admin"]));
     const cancel: Ask = {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "cancel",
       ...byStaff(),
     };
@@ -2009,7 +2380,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     ]);
   });
 
-  it("someone on Who can approve past it goes past alone, whoever the reason's lists name", async () => {
+  it("nobody on both Who can approve past it and the reason's approvers is refused", async () => {
     await setLimit("40.00", ["supervisor"]);
     const ownersComp = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {
@@ -2028,28 +2399,58 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     expect(await preview(billId, bySupervisor("10.00"))).toMatchObject({
       needsApproval: { by: "reason", roles: ["admin"] },
     });
-    // Past it, past the reason's €30.00 too, the supervisor needs nobody.
-    expect(await preview(billId, bySupervisor("50.00"))).toMatchObject({ needsApproval: null });
-    await adjust(billId, bySupervisor("50.00"));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, null]]);
+    // Past it, only supervisors may pass the bill and only admins may approve the reason.
+    await expect(preview(billId, bySupervisor("50.00"))).rejects.toMatchObject({
+      code: "adjustment.no_common_approver",
+    });
+    await refusedWith(billId, bySupervisor("50.00"), "adjustment.no_common_approver");
+    expect(await approvals(billId)).toEqual([]);
   });
 
-  it("past both the reason's limit and the bill's, one PIN from the bill's list is enough", async () => {
-    await setLimit("40.00", ["supervisor"]);
+  it("past both the reason's limit and the bill's, one PIN from someone on both lists is enough", async () => {
+    await setLimit("40.00", ["supervisor", "manager"]);
     const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
     // Guest complaint allows €30.00 a bill and is approved by managers and admins.
     const complaint = (extra: Partial<Ask> = {}) =>
       billOff("50.00", { reasonId: venue.reasonId.complaint, ...extra });
 
-    expect(await preview(billId, complaint())).toMatchObject(askedOfBill(["supervisor"]));
+    expect(await preview(billId, complaint())).toMatchObject(askedOfBill(["manager"]));
     await refusedWith(
       billId,
-      complaint({ approver: MANAGER_PIN() }),
+      complaint({ approver: SUPERVISOR_PIN() }),
       "adjustment.approval_required",
       PAST_BILL,
     );
-    await adjust(billId, complaint({ approver: SUPERVISOR_PIN() }));
-    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.supervisorId]]);
+    await adjust(billId, complaint({ approver: MANAGER_PIN() }));
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
+  });
+
+  it("Luis, a supervisor on Who can approve past it, needs a manager's PIN for a managers-only reason", async () => {
+    await setLimit("40.00", ["supervisor", "manager"]);
+    const onTheHouse = await inTx(venue, (tx) =>
+      createAdjustmentReason(tx, {
+        ...REASONS.complaint,
+        name: "On the house A803",
+        names: {},
+        maxAmount: null,
+        applyRoles: ["manager"],
+        approverRoles: ["manager"],
+      }),
+    );
+    const { billId } = await bill([{ name: "Salad", quantity: "10" }]);
+    const byLuis = (extra: Partial<Ask> = {}) =>
+      billOff("50.00", { reasonId: onTheHouse.id, operatorId: venue.supervisorId, ...extra });
+
+    expect(await preview(billId, byLuis())).toMatchObject(askedOfBill(["manager"]));
+    await refusedWith(billId, byLuis(), "adjustment.approval_required", PAST_BILL);
+    await refusedWith(
+      billId,
+      byLuis({ approver: SUPERVISOR_PIN() }),
+      "adjustment.approval_required",
+      PAST_BILL,
+    );
+    await adjust(billId, byLuis({ approver: MANAGER_PIN() }));
+    expect(await approvals(billId)).toEqual([["discount_amount", 5000, venue.managerId]]);
   });
 
   it("a PIN from someone off the bill's list is refused", async () => {
@@ -2074,7 +2475,7 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       { name: "Bottle" },
     ]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       ...byStaff(),
     });
@@ -2085,9 +2486,13 @@ describe("the bill's comp limit (A758 §3.5)", () => {
         .innerJoin(parties, eq(parties.id, workingOrders.partyId))
         .where(eq(workingOrders.id, billId)),
     );
+    const leaving = [
+      ...(await todayLineNos(venue, billId, 1)),
+      ...(await todayLineNos(venue, billId, 2)),
+    ].map((lineNo) => ({ lineNo }));
     const moved = (
       await inTx(venue, (tx) =>
-        splitBill(tx, venue.cfg, billId, [{ lineNo: 1 }, { lineNo: 2 }], {
+        splitBill(tx, venue.cfg, billId, leaving, {
           ...byStaff(),
           expectedPartyRevision: party!.revision,
         }),
@@ -2106,13 +2511,12 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     const aboveList = async () => {
       const { billId } = await bill([{ name: "Salad", quantity: "10" }, { name: "Bottle" }]);
       // Written by hand: no product path is known to price a row above its list price.
+      const bottle = await todayLine(venue, billId, 2);
       await inTx(venue, (tx) =>
         tx
           .update(workingOrderLines)
           .set({ listUnitPriceGross: 2000 })
-          .where(
-            and(eq(workingOrderLines.workingOrderId, billId), eq(workingOrderLines.lineNo, 2)),
-          ),
+          .where(inArray(workingOrderLines.id, bottle.lineIds ?? [bottle.lineId])),
       );
       return billId;
     };
@@ -2123,8 +2527,8 @@ describe("the bill's comp limit (A758 §3.5)", () => {
     // €15.00 off the salads leaves €25.00 of the limit; the bottle's €10.00 above its list price
     // gives none of it back.
     const billId = await aboveList();
-    const salads = await lineIdOf(venue, billId, 1);
-    const onSalads = (amount: string): Ask => ({ lineId: salads, ...billOff(amount) });
+    const salads = await todayLine(venue, billId, 1);
+    const onSalads = (amount: string): Ask => ({ ...salads, ...billOff(amount) });
     await adjust(billId, onSalads("15.00"));
 
     expect(await preview(billId, onSalads("25.01"))).toMatchObject(
@@ -2146,12 +2550,12 @@ describe("the bill's comp limit (A758 §3.5)", () => {
       { name: "Salad", quantity: "10" },
     ]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       ...byStaff(),
     });
-    const salads = await lineIdOf(venue, billId, 3);
-    const onSalads = (amount: string): Ask => ({ lineId: salads, ...billOff(amount) });
+    const salads = await todayLine(venue, billId, 3);
+    const onSalads = (amount: string): Ask => ({ ...salads, ...billOff(amount) });
 
     expect(await preview(billId, onSalads("29.51"))).toMatchObject(
       askedOfBill(["manager", "admin"]),
@@ -2179,7 +2583,7 @@ describe("a cancel (menus §11.5)", () => {
     const jobs = await printJobCount();
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "cancel",
       reasonId: venue.reasonId.mistake,
       note: "Wrong table",
@@ -2222,7 +2626,7 @@ describe("a cancel (menus §11.5)", () => {
     const { billId } = await bill([{ name: "Steak", quantity: "3" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "cancel",
       quantity: "2",
     });
@@ -2233,10 +2637,10 @@ describe("a cancel (menus §11.5)", () => {
 
   it("cancels 1 of Pizza ×2 with two olives each: the olives follow the dish, the kitchen is told, and the bill's drop is recorded", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 2 }]);
-    const pizza = await lineIdOf(venue, billId, 1);
+    const pizza = await todayLine(venue, billId, 1);
     const ticket = await ticketOf(venue, billId, 1);
     const before = total(await rowsOf(venue, billId));
-    const ask = { lineId: pizza, action: "cancel", quantity: "1" } as const;
+    const ask = { ...pizza, action: "cancel", quantity: "1" } as const;
     const previewed = await preview(billId, ask);
 
     await adjust(billId, ask);
@@ -2269,28 +2673,34 @@ describe("a cancel (menus §11.5)", () => {
     expect(previewed).toMatchObject({
       reduction: "12.00",
       nominalValue: "12.00",
-      lines: [{ lineId: pizza, reduction: "12.00", rows: [] }],
+      lines: [{ lineId: pizza.lineId, reduction: "12.00", rows: [] }],
     });
   });
 
   it("records a part cancel of a discounted Pizza with olives at what the bill loses, and its list value as nominal", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
-    const pizza = await lineIdOf(venue, billId, 1);
-    await adjust(billId, { lineId: pizza, action: "discount_percent", percentBp: 1000 });
-    expect(await priced(billId)).toEqual([
-      ["Pizza", "3.000", "8.10", "9.00", "24.30"],
-      ["Olives", "3.000", "1.35", "1.50", "4.05"],
-    ]);
+    const pizza = await todayLine(venue, billId, 1);
+    await adjust(billId, { ...pizza, action: "discount_percent", percentBp: 1000 });
+    expect(await priced(billId)).toEqual(
+      portions(
+        3,
+        ["Pizza", "1.000", "8.10", "9.00", "8.10"],
+        ["Olives", "1.000", "1.35", "1.50", "1.35"],
+      ),
+    );
     const before = total(await rowsOf(venue, billId));
-    const ask = { lineId: pizza, action: "cancel", quantity: "1" } as const;
+    const ask = { ...pizza, action: "cancel", quantity: "1" } as const;
     const previewed = await preview(billId, ask);
 
     await adjust(billId, ask);
 
-    expect(await priced(billId)).toEqual([
-      ["Pizza", "2.000", "8.10", "9.00", "16.20"],
-      ["Olives", "2.000", "1.35", "1.50", "2.70"],
-    ]);
+    expect(await priced(billId)).toEqual(
+      portions(
+        2,
+        ["Pizza", "1.000", "8.10", "9.00", "8.10"],
+        ["Olives", "1.000", "1.35", "1.50", "1.35"],
+      ),
+    );
     const drop = subtractDecimal(decimal(before), decimal(total(await rowsOf(venue, billId))));
     expect(drop).toBe("9.45");
     expect((await recordedOn(billId))[1]).toMatchObject({
@@ -2352,19 +2762,22 @@ describe("an extra on its own (B11d)", () => {
 
   it("discounts the olives of Pizza ×2 alone, leaving the pizzas at their price", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
-    const olives = await lineIdOf(venue, billId, 2);
-    const ask = { lineId: olives, action: "discount_percent", percentBp: 1000 } as const;
+    const olives = await todayLine(venue, billId, 2);
+    const ask = { ...olives, action: "discount_percent", percentBp: 1000 } as const;
     const previewed = await preview(billId, ask);
 
     await adjust(billId, ask);
 
-    expect(await priced(billId)).toEqual([
-      ["Pizza", "2.000", "9.00", null, "18.00"],
-      ["Olives", "2.000", "1.35", "1.50", "2.70"],
-    ]);
+    expect(await priced(billId)).toEqual(
+      portions(
+        2,
+        ["Pizza", "1.000", "9.00", null, "9.00"],
+        ["Olives", "1.000", "1.35", "1.50", "1.35"],
+      ),
+    );
     expect(await recordedOn(billId)).toMatchObject([
       {
-        lineId: olives,
+        lineId: olives.lineId,
         action: "discount_percent",
         percentBp: 1000,
         quantity: 2000,
@@ -2437,8 +2850,8 @@ describe("an extra on its own (B11d)", () => {
       await inTx(venue, (tx) => recallLines(tx, venue.cfg, billId, [1]));
     }
 
-    await adjust(dish.billId, { lineId: await lineIdOf(venue, dish.billId, 1), action: "comp" });
-    await adjust(extra.billId, { lineId: await lineIdOf(venue, extra.billId, 2), action: "comp" });
+    await adjust(dish.billId, { ...(await todayLine(venue, dish.billId, 1)), action: "comp" });
+    await adjust(extra.billId, { ...(await todayLine(venue, extra.billId, 2)), action: "comp" });
 
     const [dishStage, extraStage] = await Promise.all(
       [dish, extra].map(async ({ billId }) => (await recordedOn(billId))[0]!.stage),
@@ -2447,12 +2860,19 @@ describe("an extra on its own (B11d)", () => {
     expect(extraStage).toBe(dishStage);
   });
 
-  it.each(["cancel", "discount_percent"] as const)(
-    "refuses a %s of part of the olives, whose quantity follows the pizza's",
-    async (action) => {
-      const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+  it.each([
+    // A cancel names a row's olives only on one line: as a counter order moved to a table keeps it.
+    { action: "cancel", shape: "grouped" },
+    { action: "discount_percent", shape: undefined },
+  ] as const)(
+    "refuses a $action of part of the olives, whose quantity follows the pizza's",
+    async ({ action, shape }) => {
+      const { billId } = await bill(
+        [{ name: "Pizza", quantity: "2", olives: 1 }],
+        shape === undefined ? undefined : { shape },
+      );
       const ask = {
-        lineId: await lineIdOf(venue, billId, 2),
+        ...(await todayLine(venue, billId, 2)),
         action,
         quantity: "1",
         ...(action === "discount_percent" ? { percentBp: 1000 } : {}),
@@ -2468,26 +2888,40 @@ describe("an extra on its own (B11d)", () => {
     },
   );
 
+  it("refuses a cancel naming the olives of a row of portions, which the till never sends: an extra is cancelled from its own line", async () => {
+    const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
+    const olives = await todayLine(venue, billId, 2);
+    expect(olives.lineIds).toHaveLength(2);
+    const ask = { ...olives, action: "cancel", quantity: "1" } as const;
+    await expect(preview(billId, ask)).rejects.toMatchObject({
+      code: "management.request_invalid",
+    });
+    await refusedWith(billId, ask, "management.request_invalid", { field: "lineIds" });
+  });
+
   it("takes all of the olives when the quantity asked is all of them", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "comp",
       quantity: "2",
     });
 
-    expect(await priced(billId)).toEqual([
-      ["Pizza", "2.000", "9.00", null, "18.00"],
-      ["Olives", "2.000", "0.00", "1.50", "0.00"],
-    ]);
+    expect(await priced(billId)).toEqual(
+      portions(
+        2,
+        ["Pizza", "1.000", "9.00", null, "9.00"],
+        ["Olives", "1.000", "0.00", "1.50", "0.00"],
+      ),
+    );
     expect((await recordedOn(billId))[0]).toMatchObject({ quantity: 2000, reduction: 300 });
   });
 
   it("asks the reason's approver for a staff member's comp of the olives", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
     const ask = {
-      lineId: await lineIdOf(venue, billId, 2),
+      ...(await todayLine(venue, billId, 2)),
       action: "comp" as const,
       reasonId: venue.reasonId.complaint,
       operatorId: venue.staffId,
@@ -2512,31 +2946,36 @@ describe("an extra on its own (B11d)", () => {
     reasonId: venue.reasonId.staffMeal,
   });
 
-  it("counts the pizza's percentage against its olives discounted afterwards", async () => {
-    const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), ...percent(3000) });
-    const olives = await lineIdOf(venue, billId, 2);
+  it("checks olives discounted after their pizza against the pizza's floor: 30% then 30% goes through, 50% then 10% asks", async () => {
+    const thirty = await bill([{ name: "Pizza", olives: 1 }]);
+    await adjust(thirty.billId, {
+      ...(await todayLine(venue, thirty.billId, 1)),
+      ...percent(3000),
+    });
+    await adjust(thirty.billId, {
+      ...(await todayLine(venue, thirty.billId, 2)),
+      ...percent(3000),
+    });
 
+    const half = await bill([{ name: "Pizza", olives: 1 }]);
+    await adjust(half.billId, { ...(await todayLine(venue, half.billId, 1)), ...percent(5000) });
     await refusedWith(
-      billId,
-      { lineId: olives, ...percent(3000) },
+      half.billId,
+      { ...(await todayLine(venue, half.billId, 2)), ...percent(1000) },
       "adjustment.approval_required",
-      {
-        approval: "reason",
-      },
+      { approval: "reason" },
     );
-    await adjust(billId, { lineId: olives, ...percent(2000) });
   });
 
-  it("counts the olives' own percentage against the pizza discounted afterwards", async () => {
+  it("checks a pizza discounted after its olives against the pizza's floor: 30% then 30% goes through", async () => {
     const { billId } = await bill([{ name: "Pizza", olives: 1 }]);
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 2), ...percent(3000) });
+    await adjust(billId, { ...(await todayLine(venue, billId, 2)), ...percent(3000) });
     const pizza = await lineIdOf(venue, billId, 1);
 
-    await refusedWith(billId, { lineId: pizza, ...percent(3000) }, "adjustment.approval_required", {
-      approval: "reason",
+    expect(await preview(billId, { lineId: pizza, ...percent(3000) })).toMatchObject({
+      needsApproval: null,
     });
-    await adjust(billId, { lineId: pizza, ...percent(2000) });
+    await adjust(billId, { lineId: pizza, ...percent(3000) });
   });
 });
 
@@ -2556,9 +2995,10 @@ describe("part of a dish with extras (B11d)", () => {
 
   it("comps 1 of Pizza ×2 with an olive each: the carved pizza and its olive at €0.00, the other at full price", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
-    const pizza = await lineIdOf(venue, billId, 1);
-    const olives = await lineIdOf(venue, billId, 2);
-    const ask = { lineId: pizza, action: "comp", quantity: "1" } as const;
+    const row = await todayLine(venue, billId, 1);
+    const pizza = row.lineId;
+    const olives = (await todayLine(venue, billId, 2)).lineId;
+    const ask = { ...row, action: "comp", quantity: "1" } as const;
     const previewed = await preview(billId, ask);
 
     await adjust(billId, ask);
@@ -2575,7 +3015,9 @@ describe("part of a dish with extras (B11d)", () => {
       [3, "Pizza", "1.000", "0.00", null],
       [4, "Olives", "1.000", "0.00", 3],
     ]);
-    const [carvedPizza, carvedOlives] = [3, 4].map((lineNo) => lineIdOf(venue, billId, lineNo));
+    const [carvedPizza, carvedOlives] = [3, 4].map(
+      async (lineNo) => (await todayLine(venue, billId, lineNo)).lineId,
+    );
     expect(await recordedOn(billId)).toMatchObject([
       {
         lineId: pizza,
@@ -2629,9 +3071,8 @@ describe("part of a dish with extras (B11d)", () => {
 
   it("discounts 10% off 1 of Pizza ×3 with two olives each: the carved pizza and its two olives take it", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 2 }]);
-    const pizza = await lineIdOf(venue, billId, 1);
     const ask = {
-      lineId: pizza,
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
       quantity: "1",
@@ -2641,12 +3082,15 @@ describe("part of a dish with extras (B11d)", () => {
     await adjust(billId, ask);
 
     expect(await priced(billId)).toEqual([
-      ["Pizza", "2.000", "9.00", "9.00", "18.00"],
-      ["Olives", "4.000", "1.50", "1.50", "6.00"],
+      ...portions(
+        2,
+        ["Pizza", "1.000", "9.00", "9.00", "9.00"],
+        ["Olives", "2.000", "1.50", "1.50", "3.00"],
+      ),
       ["Pizza", "1.000", "8.10", "9.00", "8.10"],
       ["Olives", "2.000", "1.35", "1.50", "2.70"],
     ]);
-    expect((await families(billId)).map((row) => row[4])).toEqual([null, 1, null, 3]);
+    expect((await families(billId)).map((row) => row[4])).toEqual([null, 1, null, 3, null, 5]);
     expect(await recordedOn(billId)).toMatchObject([
       {
         action: "discount_percent",
@@ -2673,33 +3117,38 @@ describe("part of a dish with extras (B11d)", () => {
       const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
       const before = total(await rowsOf(venue, billId));
       expect(before).toBe("31.50");
-      const full = { lineId: await lineIdOf(venue, billId, 1), quantity: "1", ...ask };
+      const full = { ...(await todayLine(venue, billId, 1)), quantity: "1", ...ask };
       const previewed = await preview(billId, full);
 
       await adjust(billId, full);
 
       const rows = await rowsOf(venue, billId);
-      expect(rows.map((row) => [row.name, row.quantity])).toEqual([
-        ["Pizza", "2.000"],
-        ["Olives", "2.000"],
-        ["Pizza", "1.000"],
-        ["Olives", "1.000"],
+      expect(rows.map((row) => [row.name, row.quantity])).toEqual(
+        portions(3, ["Pizza", "1.000"], ["Olives", "1.000"]),
+      );
+      expect(rows.slice(0, 4).map((row) => row.lineTotal)).toEqual([
+        "9.00",
+        "1.50",
+        "9.00",
+        "1.50",
       ]);
-      expect(rows.slice(0, 2).map((row) => row.lineTotal)).toEqual(["18.00", "3.00"]);
       const [recorded] = await recordedOn(billId);
       const reduction = toScale(decimal(String(recorded!.reduction / 100)), 2);
       expect(previewed.reduction).toBe(reduction);
       expect(total(rows)).toBe(toScale(subtractDecimal(decimal(before), decimal(reduction)), 2));
-      expect(total(rows.slice(2))).toBe(
+      expect(total(rows.slice(4))).toBe(
         toScale(subtractDecimal(decimal("10.50"), decimal(reduction)), 2),
       );
     },
   );
 
   /** Pizza ×3 with 2 olives, written by hand: no product path is known to store an extra that is
-   * not a whole count a dish. */
+   * not a whole count a dish. Grouped, as a counter order moved to a table keeps it (plan D1): a
+   * portion's olives are its own. */
   async function unevenOlives() {
-    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }]);
+    const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }], {
+      shape: "grouped",
+    });
     await inTx(venue, (tx) =>
       tx
         .update(workingOrderLines)
@@ -2713,7 +3162,7 @@ describe("part of a dish with extras (B11d)", () => {
   it("refuses part of a dish whose extra is not a whole count a dish, rather than let the bill drift", async () => {
     const billId = await unevenOlives();
     const ask = {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
       quantity: "1",
@@ -2747,13 +3196,13 @@ describe("part of a dish with extras (B11d)", () => {
   it("prints the carved pizza's olives on the VOID slip when the carved pizza is cancelled", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       quantity: "1",
     });
     const jobs = await printJobCount();
 
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 3), action: "cancel" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 3)), action: "cancel" });
 
     expect(await priced(billId)).toEqual([
       ["Pizza", "1.000", "9.00", "9.00", "9.00"],
@@ -2773,7 +3222,7 @@ describe("part of a dish with extras (B11d)", () => {
   it("prints the comp beneath the carved pizza on the receipt, the other pizza and olive as sold", async () => {
     const { billId } = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       quantity: "1",
     });
@@ -2813,7 +3262,7 @@ describe("part of a dish with extras (B11d)", () => {
     const before = await report();
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       quantity: "1",
     });
@@ -2885,12 +3334,11 @@ describe("what an adjustment reads (B11d)", () => {
   it("reads a percentage's priors for a dish with an extra in as many statements as for one without", async () => {
     const burger = await bill([{ name: "Burger" }]);
     const pizza = await bill([{ name: "Pizza", olives: 1 }]);
-    const ask = (billId: string) =>
-      lineIdOf(venue, billId, 1).then((lineId) => ({
-        lineId,
-        action: "discount_percent" as const,
-        percentBp: 1000,
-      }));
+    const ask = async (billId: string) => ({
+      ...(await todayLine(venue, billId, 1)),
+      action: "discount_percent" as const,
+      percentBp: 1000,
+    });
 
     const plain = await previewCounted(burger.billId, await ask(burger.billId));
     const withExtra = await previewCounted(pizza.billId, await ask(pizza.billId));
@@ -2901,13 +3349,12 @@ describe("what an adjustment reads (B11d)", () => {
   it("looks up no line number for the rows it carves off a dish, however many extras go with it", async () => {
     const steak = await bill([{ name: "Steak", quantity: "2" }]);
     const pizza = await bill([{ name: "Pizza", quantity: "2", olives: 1 }]);
-    const ask = (billId: string) =>
-      lineIdOf(venue, billId, 1).then((lineId) => ({
-        lineId,
-        action: "discount_percent" as const,
-        percentBp: 1000,
-        quantity: "1",
-      }));
+    const ask = async (billId: string) => ({
+      ...(await todayLine(venue, billId, 1)),
+      action: "discount_percent" as const,
+      percentBp: 1000,
+      quantity: "1",
+    });
 
     const plain = await adjustCounted(steak.billId, await ask(steak.billId));
     const withExtra = await adjustCounted(pizza.billId, await ask(pizza.billId));
@@ -2922,7 +3369,7 @@ describe("a weighed line (B11d)", () => {
     { action: "discount_amount", amount: "1.00" },
   ] as const)("refuses $action of part of it as adjustment.weighed_partial", async (ask) => {
     const { billId } = await bill([{ name: "Ham", quantity: "0.333" }]);
-    const full = { lineId: await lineIdOf(venue, billId, 1), quantity: "0.100", ...ask };
+    const full = { ...(await todayLine(venue, billId, 1)), quantity: "0.100", ...ask };
 
     await expect(preview(billId, full)).rejects.toMatchObject({
       code: "adjustment.weighed_partial",
@@ -2937,7 +3384,7 @@ describe("a weighed line (B11d)", () => {
     const { billId } = await bill([{ name: "Ham", quantity: "0.333" }]);
     const before = total(await rowsOf(venue, billId));
     const ask = {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     } as const;
@@ -2955,7 +3402,7 @@ describe("a weighed line (B11d)", () => {
     const { billId } = await bill([{ name: "Ham", quantity: "0.333" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "cancel",
       quantity: "0.100",
     });
@@ -3000,12 +3447,12 @@ describe("the bill's own rules", () => {
 
 describe("a give-away or a discount that takes nothing off", () => {
   const comped = async (billId: string) =>
-    adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
   const onLine =
     (lineNo: number, ask: Ask) =>
     async (billId: string): Promise<Ask> => ({
       ...ask,
-      lineId: await lineIdOf(venue, billId, lineNo),
+      ...(await todayLine(venue, billId, lineNo)),
     });
   const onBill = (ask: Ask) => (): Promise<Ask> => Promise.resolve(ask);
 
@@ -3074,7 +3521,7 @@ describe("a give-away or a discount that takes nothing off", () => {
     const { billId } = await bill([{ name: "Steak" }]);
     await comped(billId);
 
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "cancel" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "cancel" });
 
     expect((await recordedOn(billId)).map((row) => [row.action, row.reduction])).toEqual([
       ["comp", 2500],
@@ -3172,7 +3619,7 @@ describe("refusals change nothing", () => {
       billId,
       {
         ...rest,
-        lineId: await lineIdOf(venue, billId, "lineNo" in shape ? shape.lineNo : 1),
+        ...(await todayLine(venue, billId, "lineNo" in shape ? shape.lineNo : 1)),
         reasonId: venue.reasonId[reason],
       },
       code,
@@ -3183,7 +3630,7 @@ describe("refusals change nothing", () => {
     const { billId } = await bill([{ name: "Ham", quantity: "0.333" }]);
     await refusedWith(
       billId,
-      { lineId: await lineIdOf(venue, billId, 1), action: "comp", quantity: "0.100" },
+      { ...(await todayLine(venue, billId, 1)), action: "comp", quantity: "0.100" },
       "adjustment.weighed_partial",
       { workingOrderId: billId, lineNo: 1 },
     );
@@ -3209,7 +3656,7 @@ describe("refusals change nothing", () => {
     const nobody = randomUUID();
     await refusedWith(
       billId,
-      { lineId: await lineIdOf(venue, billId, 1), action: "comp", operatorId: nobody },
+      { ...(await todayLine(venue, billId, 1)), action: "comp", operatorId: nobody },
       "person.not_found",
       { personId: nobody },
     );
@@ -3224,7 +3671,7 @@ describe("refusals change nothing", () => {
     });
     await refusedWith(
       billId,
-      { lineId: await lineIdOf(venue, billId, 1), action: "comp", reasonId: missing },
+      { ...(await todayLine(venue, billId, 1)), action: "comp", reasonId: missing },
       "adjustment_reason.not_found",
       { reasonId: missing },
     );
@@ -3349,7 +3796,7 @@ describe("a counter order (B11c)", () => {
     const before = await counterStateOf(billId);
 
     const applied = await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
     });
@@ -3374,7 +3821,7 @@ describe("a counter order (B11c)", () => {
     const billId = await movedToCounter([{ name: "Bottle" }]);
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "discount_percent",
       percentBp: 1000,
     });
@@ -3401,7 +3848,7 @@ describe("a counter order (B11c)", () => {
     const jobs = await printJobCount();
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "cancel",
       reasonId: venue.reasonId.mistake,
       note: "Wrong order",
@@ -3431,7 +3878,7 @@ describe("a counter order (B11c)", () => {
     const jobs = await printJobCount();
 
     await adjust(billId, {
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "cancel",
       quantity: "1",
     });
@@ -3452,7 +3899,7 @@ describe("a counter order (B11c)", () => {
   it("asks for the reason's approver: refused without a PIN, applied with a manager's", async () => {
     const billId = await movedToCounter([{ name: "Burger" }]);
     const comp = async (approver?: AdjustmentArgs["approver"]): Promise<Ask> => ({
-      lineId: await lineIdOf(venue, billId, 1),
+      ...(await todayLine(venue, billId, 1)),
       action: "comp",
       reasonId: venue.reasonId.complaint,
       operatorId: venue.staffId,
@@ -3571,14 +4018,14 @@ describe("a counter order (B11c)", () => {
     expect(before.order).toMatchObject({ status: "open", partyId: null });
 
     await expect(
-      adjust(billId, { lineId: await lineIdOf(venue, billId, 2), action: "comp" }),
+      adjust(billId, { ...(await todayLine(venue, billId, 2)), action: "comp" }),
     ).rejects.toMatchObject({
       code: "bill.line_paid",
       params: { workingOrderId: billId, lineNo: 2 },
     });
     expect(await counterStateOf(billId)).toEqual(before);
 
-    await adjust(billId, { lineId: await lineIdOf(venue, billId, 1), action: "comp" });
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
     expect(await priced(billId)).toEqual([
       ["Burger", "1.000", "0.00", "12.00", "0.00"],
       ["Steak", "1.000", "25.00", null, "25.00"],

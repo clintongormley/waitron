@@ -1,16 +1,24 @@
 import type { PartyAllergySnapshot } from "@waitron/module";
-import { allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
+import { allergyGuestId, allergyMark, allergyMarkStyles } from "./party-allergy-mark.js";
 import { LitElement, css, html, nothing, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 import { keyed } from "lit/directives/keyed.js";
 import { baseStyles, formatDecimalInput, Gestures } from "@waitron/ui";
 import { scrollAncestors } from "@waitron/ui/src/reorder-table.js";
-import { addDecimal, decimal, formatMoney } from "@waitron/shared";
-import type { CurrentOrderRow, CurrentOrders } from "../api/client.js";
+import {
+  MONEY_SCALE,
+  addDecimal,
+  decimal,
+  formatMoney,
+  sumDecimals,
+  toScale,
+} from "@waitron/shared";
+import type { CurrentOrderRow, CurrentOrders, TabLine } from "../api/client.js";
 import { clockTime, currentLocale, t } from "../i18n/t.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
 import { sentPanel, type SentPanel, type SentSlice } from "../state/sent-panel.js";
+import { portionGroups, sentSlicePortionKey } from "../state/portion-groups.js";
 import { reminderDueAt } from "../state/release-reminder.js";
 import { trimQuantity } from "./dish-format.js";
 import { groupName } from "./group-name.js";
@@ -28,6 +36,8 @@ export interface SentLineInfo {
   lineId: string;
   workingOrderId: string;
   kind: SentSlice["kind"];
+  /** Present when the row shows several identical portions: every member, by line number. */
+  lineIds?: string[];
 }
 interface HeldOrder {
   scope: string;
@@ -43,6 +53,8 @@ export interface SentReorderDetail {
 @customElement("till-sent-orders")
 export class TillSentOrders extends LitElement {
   @property({ attribute: false }) allergy: PartyAllergySnapshot | null = null;
+  /** The bill's lines, which say which rows are identical portions; none known groups none. */
+  @property({ attribute: false }) lines: readonly TabLine[] = [];
 
   static override styles = [
     baseStyles,
@@ -227,7 +239,12 @@ export class TillSentOrders extends LitElement {
   #pressedModel: SentPanel | null = null;
   #pressedNow?: number;
   #gestures?: Gestures;
-  #pressed?: { slice: SentSlice; scope: string; billId: string; target: EventTarget };
+  #pressed?: {
+    members: readonly SentSlice[];
+    scope: string;
+    billId: string;
+    target: EventTarget;
+  };
   #suppressClick = false;
   @state() private dragging: string | null = null;
   #headingPress?: { id: string; target: EventTarget; expected: HeldOrder };
@@ -259,7 +276,7 @@ export class TillSentOrders extends LitElement {
           press.scope === this.scope &&
           press.billId === this.billId
         )
-          this.#info(press.slice.row.lineId, press.slice.kind);
+          this.#info(press.members);
         this.#releaseHeading();
       },
       pan: ({ dy }) => {
@@ -415,19 +432,20 @@ export class TillSentOrders extends LitElement {
     this.#dispatch("serve-lines", { items: displayed.map((item) => ({ ...item })) });
     this.#releasePointer();
   }
-  #info(lineId: string, kind: SentSlice["kind"]): void {
+  #info(members: readonly SentSlice[]): void {
     if (!this.isConnected || this.busy) return;
     const model = this.#model();
-    const slice =
-      model &&
-      [...model.served, ...model.fired, ...model.held.flatMap((g) => g.rows)].find(
-        (slice) => slice.row.lineId === lineId && slice.kind === kind,
-      );
-    if (slice)
+    const slices = model && [...model.served, ...model.fired, ...model.held.flatMap((g) => g.rows)];
+    const found = members.map((member) =>
+      slices?.find((slice) => slice.row.lineId === member.row.lineId && slice.kind === member.kind),
+    );
+    const slice = found[0];
+    if (slice && found.every((each) => each !== undefined))
       this.#dispatch("sent-line-info", {
-        lineId,
+        lineId: slice.row.lineId,
         workingOrderId: slice.row.workingOrderId,
-        kind,
+        kind: slice.kind,
+        ...(members.length > 1 ? { lineIds: members.map((member) => member.row.lineId) } : {}),
       } satisfies SentLineInfo);
     this.#releasePointer();
   }
@@ -442,21 +460,22 @@ export class TillSentOrders extends LitElement {
     this.#pressedNow = undefined;
     this.requestUpdate();
   }
-  #pressLine(slice: SentSlice, event: PointerEvent): void {
+  #pressLine(members: readonly SentSlice[], event: PointerEvent): void {
+    const slice = members[0]!;
     this.#releaseHeading();
     if (this.busy || (slice.kind === "fired" && !slice.row.released)) return;
     const target = event.composedPath()[0];
     if (target === undefined) return;
-    this.#pressed = { slice, scope: this.scope, billId: this.billId, target };
+    this.#pressed = { members, scope: this.scope, billId: this.billId, target };
     if (slice.kind === "fired") {
       this.#pressedModel = this.#model();
       this.#pressedNow = this.now ?? Date.now();
     }
     this.#suppressClick = false;
   }
-  #clickServe(slice: SentSlice, event: MouseEvent): void {
+  #clickServe(members: readonly SentSlice[], event: MouseEvent): void {
     if (event.detail === 0 || !this.#suppressClick)
-      this.#serve([{ lineId: slice.row.lineId, quantity: slice.quantity }]);
+      this.#serve(members.map((slice) => ({ lineId: slice.row.lineId, quantity: slice.quantity })));
     this.#releasePointer();
   }
   #displayNow(): number {
@@ -467,6 +486,18 @@ export class TillSentOrders extends LitElement {
   }
   #quantity(value: string): string {
     return formatDecimalInput(trimQuantity(value), currentLocale());
+  }
+  #portions(slices: readonly SentSlice[]): SentSlice[][] {
+    return portionGroups(
+      slices,
+      (slice) =>
+        sentSlicePortionKey(
+          slice,
+          this.lines,
+          allergyGuestId(this.allergy, { kind: "working", id: slice.row.lineId }),
+        ),
+      (slice) => slice.row.lineNo,
+    );
   }
   #what(row: CurrentOrderRow, quantity: string): TemplateResult {
     return html`<span class="what"
@@ -494,11 +525,17 @@ export class TillSentOrders extends LitElement {
           .now=${this.#displayNow()}
         ></till-fired-ago>`;
   }
-  #line(slice: SentSlice): TemplateResult {
+  #line(members: readonly SentSlice[]): TemplateResult {
+    const slice = members[0]!;
     const fired = slice.kind === "fired";
-    const contents = html`${this.#what(slice.row, slice.quantity)}<span class="status"
+    const quantity = trimQuantity(sumDecimals(members.map((member) => decimal(member.quantity))));
+    const amount = toScale(
+      sumDecimals(members.map((member) => decimal(member.amount))),
+      MONEY_SCALE,
+    );
+    const contents = html`${this.#what(slice.row, quantity)}<span class="status"
         >${this.#status(slice)}</span
-      ><span class="amount">${this.#money(slice.amount)}</span>`;
+      ><span class="amount">${this.#money(amount)}</span>`;
     return html`<li
       data-fired-line=${fired ? slice.row.lineId : nothing}
       data-served-line=${slice.kind === "served" || slice.kind === "cancelled_charged" ? slice.row.lineId : nothing}
@@ -512,14 +549,14 @@ export class TillSentOrders extends LitElement {
               data-serve-line=${slice.row.lineId}
               ?disabled=${this.busy || !slice.row.released}
               aria-description=${t("table.serve")}
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
-              @click=${(event: MouseEvent) => this.#clickServe(slice, event)}
+              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
+              @click=${(event: MouseEvent) => this.#clickServe(members, event)}
             >
               ${contents}
             </button>`
           : html`<div
               class="dish"
-              @pointerdown=${(event: PointerEvent) => this.#pressLine(slice, event)}
+              @pointerdown=${(event: PointerEvent) => this.#pressLine(members, event)}
             >
               ${contents}
             </div>`
@@ -529,7 +566,7 @@ export class TillSentOrders extends LitElement {
         data-sent-info=${slice.row.lineId}
         aria-label=${`${t("table.sent_info")} · ${slice.row.name}`}
         ?disabled=${this.busy}
-        @click=${() => this.#info(slice.row.lineId, slice.kind)}
+        @click=${() => this.#info(members)}
         >ⓘ</wt-button
       >
     </li>`;
@@ -627,7 +664,7 @@ export class TillSentOrders extends LitElement {
         >
       </div>
       <ul>
-        ${entry.rows.map((slice) => this.#line(slice))}
+        ${this.#portions(entry.rows).map((members) => this.#line(members))}
         ${entry.companions.map(
           (row) =>
             html`<li class="companion" data-companion=${row.lineId}>
@@ -740,7 +777,7 @@ export class TillSentOrders extends LitElement {
                   !this.servedOpen
                     ? nothing
                     : html`<ul>
-                        ${model.served.map((slice) => this.#line(slice))}
+                        ${this.#portions(model.served).map((members) => this.#line(members))}
                       </ul>`
                 }
               </section>
@@ -760,9 +797,9 @@ export class TillSentOrders extends LitElement {
                   @pointerleave=${() => this.#releasePointer()}
                 >
                   ${repeat(
-                    fired,
-                    (slice) => slice.row.lineId,
-                    (slice) => this.#line(slice),
+                    this.#portions(fired),
+                    (members) => members[0]!.row.lineId,
+                    (members) => this.#line(members),
                   )}
                 </ul>
               </section>

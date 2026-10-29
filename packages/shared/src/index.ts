@@ -150,7 +150,7 @@ export type {
   ServiceStepDue,
   TableSignal,
 } from "./table-signals.js";
-export { perDishOptionQuantity } from "./quantity.js";
+export { perDishOptionQuantity, PORTIONS_AT_ONCE } from "./quantity.js";
 export { draftLineMergeKey, normaliseDraftLines } from "./draft-merge.js";
 export type { MergeableDraftLine } from "./draft-merge.js";
 export { deriveDisplayName } from "./derive-display-name.js";

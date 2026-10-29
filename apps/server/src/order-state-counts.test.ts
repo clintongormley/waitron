@@ -41,7 +41,7 @@ import { seatTable } from "./parties.js";
 import { readHeldCounts } from "./order-groups.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { saveDraftForTest as saveDraft } from "./testing/draft-command-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import { serveLine } from "./testing/serve-line.js";
@@ -655,7 +655,15 @@ function saveBillDraft(
 describe("readOrderStateCounts on a party's bill", () => {
   it("counts a held group's dishes as held, extras adding nothing, as readHeldCounts does", async () => {
     const { partyId, billId } = await seatParty();
-    await holdGroup(partyId, [withSauce("Tarta", "2"), plain("Ensalada", "0.450")]);
+    await inTx(venue, (tx) =>
+      placeGroupedRound(
+        tx,
+        venue.cfg,
+        { partyId, tabId: billId },
+        { lines: [withSauce("Tarta", "2"), plain("Ensalada", "0.450")], release: "hold" },
+        venue.operatorId,
+      ),
+    );
 
     expect(await countsOfBill(billId)).toEqual({ ...zero, ordered: 3, held: 3 });
     expect(await inTx(venue, (tx) => readHeldCounts(tx, [partyId]))).toEqual(

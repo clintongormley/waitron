@@ -53,6 +53,7 @@ async function fixture(
 ) {
   const order = await billWith(venue, [{ name: "Pizza", quantity: String(quantity), olives: 2 }], {
     release: stage === "hold" ? "hold" : "fire",
+    shape: "grouped",
   });
   return inTx(venue, async (tx) => {
     const rows = await tx
@@ -336,7 +337,9 @@ describe("financial splits with charged service cancellations", () => {
   });
 
   it("carries cancellation-first allocation through every repeated unit split", async () => {
-    const { billId } = await billWith(venue, [{ name: "Burger", quantity: "5" }]);
+    const { billId } = await billWith(venue, [{ name: "Burger", quantity: "5" }], {
+      shape: "grouped",
+    });
     const [parent] = await venue.db
       .select()
       .from(workingOrderLines)

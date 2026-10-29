@@ -41,6 +41,11 @@ it.each([
     "This note changed on another device. Read it again before editing.",
     "Esta nota ha cambiado en otro dispositivo. Vuelve a leerla antes de editarla.",
   ],
+  [
+    "tab.portions_too_many",
+    "At most 99 of one dish can be added at a time. Lower it to 99, then add the rest.",
+    "Se pueden añadir como máximo 99 de un mismo plato a la vez. Baja a 99 y añade el resto después.",
+  ],
 ])("explains %s in English and Spanish", (code, english, spanish) => {
   expect(codeMessage(code, "en-GB")).toBe(english);
   expect(codeMessage(code, "es-ES")).toBe(spanish);
@@ -378,6 +383,8 @@ it("explains each refusal a cancel, comp or discount can give, in both languages
     "adjustment.note_required",
     "adjustment.exceeds_amount",
     "adjustment.approval_required",
+    "adjustment.no_common_approver",
+    "adjustment.free_not_allowed",
     "adjustment.weighed_partial",
     "adjustment.quantity_invalid",
     "adjustment.no_reduction",

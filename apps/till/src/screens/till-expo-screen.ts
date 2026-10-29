@@ -4,7 +4,7 @@ import {
   kitchenAllergyStyles,
 } from "../widgets/kitchen-allergy-block.js";
 import { groupName } from "../widgets/group-name.js";
-import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
+import { extraCount, queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
@@ -22,6 +22,7 @@ import {
 import { allergenName } from "../i18n/allergen-names.js";
 import { dietBadgeStyles, dietBadges, extraNutrition } from "../widgets/diet-badges.js";
 import { dishLine, snapshotDescriptionFor } from "../widgets/dish-format.js";
+import { kitchenPortionKey, portionGroups } from "../state/portion-groups.js";
 import "../widgets/stale-since.js";
 import type {
   ExpoCourse,
@@ -856,7 +857,7 @@ export class TillExpoScreen extends LitElement {
             </div>`
       }
       <ul class="items">
-        ${group.items.map((item) => html`<li>${this.#item(item)}</li>`)}
+        ${this.#rows(group.items).map((members) => html`<li>${this.#item(members)}</li>`)}
       </ul>
       ${group.groupId === null ? nothing : this.#groupLever(order, party, group, group.groupId, name)}
     </div>`;
@@ -897,19 +898,37 @@ export class TillExpoScreen extends LitElement {
     return html`<div class="course" data-course=${course.courseId ?? "none"}>
       ${course.courseName ? html`<div class="course-head">${course.courseName}</div>` : nothing}
       <ul class="items">
-        ${course.items.map((item) => html`<li>${this.#item(item)}</li>`)}
+        ${this.#rows(course.items).map((members) => html`<li>${this.#item(members)}</li>`)}
       </ul>
       ${this.#lever(order, course)}
     </div>`;
   }
 
+  /** A section's items as drawn: identical portions as one row, in the read's order (a stable sort).
+   * A portion's time is keyed only as the Forgotten flag it draws: the server stamps each ticket
+   * item's `queuedAt` on its own, so portions fired together can differ by a millisecond. */
+  #rows(items: readonly ExpoItem[]): ExpoItem[][] {
+    return portionGroups(
+      items,
+      (item) =>
+        kitchenPortionKey(item, item.qty, [item.stationName, this.#itemBand(item) === "forgotten"]),
+      () => 0,
+    );
+  }
+
   /** A FORGOTTEN item is flagged with a text label, not a second border colour, which would compete with
-   *  the item's own kitchen-state border for the same CSS property. */
-  #item(item: ExpoItem): TemplateResult {
+   *  the item's own kitchen-state border for the same CSS property. `members`: identical portions
+   *  drawn as one row from its first (spec §3.1). */
+  #item(members: ExpoItem[]): TemplateResult {
+    const [item] = members as [ExpoItem, ...ExpoItem[]];
     const held = item.firedAt === null;
     const forgotten = this.#itemBand(item) === "forgotten";
     const label = dishLine(
-      { quantity: item.qty, unitName: item.unitName, soldInEach: item.soldInEach },
+      {
+        quantity: members.length === 1 ? item.qty : String(members.length),
+        unitName: item.unitName,
+        soldInEach: item.soldInEach,
+      },
       item.name,
     );
     return html`<span class="item state-${item.state} ${held ? "held" : ""}" data-item=${item.id}>
@@ -966,7 +985,7 @@ export class TillExpoScreen extends LitElement {
       ${modifiers.map(
         (modifier, i) =>
           html`<span class="modifier"
-            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}`}${extraNutrition(
+            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
               modifier,
               `item-modifier-allergens-${item.id}-${i}`,
               `item-modifier-diet-${item.id}-${i}`,

@@ -1555,8 +1555,9 @@ describe("Device API — the device-guarded routes", () => {
       const res = await send(app, "GET", "/api/device/station-screen", { cookie: jar });
       expect(res.status).toBe(200);
       stations = ((await res.json()) as { stations: Station[] }).stations;
-      // One read for every station's dishes, and one for the rest of their orders.
-      expect(soldInEach).toHaveBeenCalledTimes(2);
+      // One read for every station's dishes, one for their extras, and one for the rest of their
+      // orders.
+      expect(soldInEach).toHaveBeenCalledTimes(3);
     } finally {
       soldInEach.mockRestore();
     }
