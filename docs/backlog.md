@@ -3475,6 +3475,19 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
 _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/printers.md).
 
+- **A1203: install a box as a till, with its own print agent (owner, 2026-10-29).** A venue
+  that needs a till with a USB or Bluetooth printer or a cash drawer beyond the main box and the
+  spare uses a small Linux box; the print agent already runs on Linux and only dials out, and the
+  2026-08-26 printing decision puts agents "on local servers and tills". What is missing is a way
+  to install a box as a till only (believed not offered by the USB installer, B3; check first). A
+  till whose printer is on the network needs no agent of its own: the main box's agent reaches it.
+
+- **A1204: tills on Windows, macOS and iOS (owner, 2026-10-29).** "Later we may need also to use a
+  windows or osx or iOS machine as a till." The till runs in a browser, so the till itself is
+  expected to work; a printer or drawer attached to such a machine needs a print agent for that
+  platform (a packaged agent, or an app as A1175 is for Android). Not started; network printers
+  need none.
+
 - **A1175: an Android app that runs the local print server when the venue runs from Waitron
   Cloud**, and possibly more (owner, 2026-10-28). Brainstorm with the owner first; nothing is
   decided yet. [Detail](backlog/printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
@@ -5295,6 +5308,14 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   [Detail](backlog/box.md#the-box-status-page-reads-the-wrongly-dated-sales-alerts-params-through-a-cast)
 
 ### Replication, failover and the cloud
+
+- **A1205: more than one spare box at a venue, after go-live (owner, 2026-10-29).** Today a venue
+  has one main box and at most one spare: Litestream 0.5 streams a database to one place only, so
+  the main box streams to a store on the spare and the spare passes it on to the bucket
+  ([A947 design](superpowers/specs/2026-10-21-a947-two-box-failover-design.md), "The main box
+  streams to an S3 store that runs on the spare box"). The owner's idea: a till box (A1203) is
+  similar hardware, so it could also be a spare. Needs a design: how a second spare receives the
+  stream, which spare takes over, and how alerts and the update order (A950) work with two.
 
 _Formerly _Afterwards_ and _Cloud connection integration_._ Detail: [backlog/replication-cloud.md](backlog/replication-cloud.md).
 
