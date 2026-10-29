@@ -1,6 +1,8 @@
 # A1189: remove the Waitron side of Cloud's fiscal allocation registry — implementation plan
 
-**Status:** plan, written 2026-10-29. Nothing below has been implemented.
+**Status:** plan, written 2026-10-29. Nothing below has been implemented. Fresh plan review
+(2026-10-29): 0 Critical, 3 Important, 4 Minor, all folded (errors-reachable does not check throw
+sites; the audit's live link; three settings left undocumented; the history receipt widened).
 
 **Owner's words (2026-10-29):** "We no longer have the reservations because we use the time-based
 codes instead" — "the registry can be removed."
@@ -45,8 +47,9 @@ document sentence that describes piece 1 as current or pending work.
 - `git grep -n "cloud-fiscal-allocation\|reconcileCloudFiscalAllocation\|signCloudFiscalReport\|createCloudFiscalAllocationClient\|FiscalAllocationTransport\|FiscalAllocationReport" -- . ':!docs'`
   lists only the two modules, `cloud-fiscal-allocation-client.test.ts`,
   `cloud-fiscal-reconciliation.test.ts` and `apps/server/test-durations.json:267-269`.
-- `git log -S"cloud-fiscal-allocation" --oneline -- apps/server/src/boot.ts apps/server/src/node-entry.ts apps/server/src/bin.ts`
-  prints nothing: no start path ever imported them.
+- `git log -S"cloud-fiscal-allocation" --oneline -- 'apps/server/src/*.ts' ':!apps/server/src/*.test.ts' ':!apps/server/src/cloud-fiscal-allocation*.ts'`
+  prints nothing: no server source file other than the two modules ever named them (without the
+  exclusions it lists only #1725 and #1752).
 
 So no route, start step, setting, screen, guide page, alert or log event disappears, and no
 first-fiscal-setup, recovery or reconciliation flow changes. The error codes the two modules
@@ -54,8 +57,10 @@ throw (`cloud.request_invalid`, `cloud.unavailable`, `cloud.busy`, `cloud.state_
 `cloud.binding_conflict`, `cloud.not_configured`) are all still thrown elsewhere — for example
 `apps/server/src/cloud-client.ts:315` (`cloud.busy`), `:352` (`cloud.binding_conflict`), `:218`
 (`cloud.state_invalid`), `:367` (`cloud.not_configured`) and `apps/server/src/cloud-api.ts:107`
-(`cloud.request_invalid`) — so `scripts/errors-reachable.test.ts` stays green and
-`apps/server/src/errors.ts:70-77` is untouched. `loadCloudOrigin` stays: `apps/server/src/boot.ts:935`
+(`cloud.request_invalid`), so `apps/server/src/errors.ts:70-77` is untouched. No guard checks that
+a code is thrown somewhere (`scripts/errors-reachable.test.ts` checks only that each package's
+`errors.ts` is reachable from its `index.ts`, and never reads `apps/server`; plan review, a control
+that removed every `cloud.busy` throw left it green), so Task 1 checks this with a grep. `loadCloudOrigin` stays: `apps/server/src/boot.ts:935`
 uses it.
 
 **Stays, unchanged:**
@@ -82,6 +87,12 @@ uses it.
   local table `fiscal_reservations` (`schema/reservations.ts:5`) is the dormant-standby record,
   also read on the live path (`hour-history-reader.ts`, `allocation.ts:96-101`). Neither is
   Cloud's registry.
+- **Three settings piece 2 reads, now undocumented.** `WAITRON_FISCAL_CLOUD_TRUST_FILE`,
+  `WAITRON_FISCAL_CLOUD_TRUST_FINGERPRINT` and `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` were
+  documented only in the guide Task 2 deletes; piece 2 still reads them
+  (`initial-setup.ts:376,381`, `allocation-configuration.ts:62,128-131`,
+  `initial-cloud-setup.ts:185-186`) and nothing under `deploy/` sets them. They go with piece 2
+  (owner question 1).
 - **The database.** Piece 1 kept its state in a file journal (`cloud-fiscal-allocation.ts:136-163`),
   never in a table. No migration is needed and none is written; no shipped migration is touched.
 - **The fiscal core:** `computeHuella`, the chain, invoice-number allocation,
@@ -153,10 +164,11 @@ table, the `FiscalAllocation`/`fiscalAllocations` identifiers, or the historical
 **Docs (23):** changed in Task 2 — `docs/developers/cloud-fiscal-allocation.md` (deleted),
 `docs/developers/paper-custodian.md`, `docs/backlog.md`, `docs/backlog/fiscal.md`,
 `docs/backlog/self-service-refusals.md`, and a one-line pointer in the registry plan. Unchanged —
-`docs/backlog/ci.md:361` (names `scripts/fiscal-allocation-migration.test.ts`, the local table's
+`docs/backlog/fiscal.md:475` ("a separately owned Cloud registry workstream", history inside
+the W41s paragraph); `docs/backlog/ci.md:361` (names `scripts/fiscal-allocation-migration.test.ts`, the local table's
 upgrade guard); `docs/operations/a1154-changed-checks.md`, `a679-changed-checks.md`,
-`a679-development-checkpoints.md`, `a760-migration-squash-inventory.md`,
-`planning-procedure-audit.md` (dated receipts); and the other eleven plans and specs under
+`a679-development-checkpoints.md`, `a760-migration-squash-inventory.md` (dated receipts);
+`planning-procedure-audit.md:22` gets its link pinned (Task 2); and the other eleven plans and specs under
 `docs/superpowers/` (historical records).
 
 **Guards and lists.** No guard under `scripts/`, no workflow under `.github/`, no ESLint zone, no
@@ -195,7 +207,11 @@ that is owner question 2, and this plan does not touch it.
 1. **The fiscal package's historical Cloud-receipt reader (piece 2).** It cannot be removed without
    changing the activation check (`allocation-envelope.ts:495-505`, reached from
    `allocation.ts:84` on the live minute-code path), what the start-again floor accepts
-   (`initial-hour-setup.ts:130-132`), and three tests' remaining assertions. Under this item's
+   (`initial-hour-setup.ts:130-132`), and three tests' remaining assertions, plus
+   `packages/fiscal-verifactu/src/paper-register-history.test.ts:589` (reads
+   `cloud-allocation-receipt.json`) and the renamed `hour-restore-retired-inputs.test.ts`
+   (`readCloudAllocationReceipt`, `cloudReceiptFixture` at `:23-24`). The three settings above go
+   with it. Under this item's
    rules that is a STOP, so this plan leaves it exactly as it is — matching A679's earlier choice to
    "retain historical source only where required for unchanged tests"
    (`docs/superpowers/plans/2026-10-16-a679-hour-code-implementation.md:353`). Task 2 adds a short
@@ -209,11 +225,10 @@ that is owner question 2, and this plan does not touch it.
 
 No schema question arises: Waitron has no registry tables (see "Stays").
 
-## Task 0: start the ledger
+## Task 0: the ledger
 
-- [ ] Create `docs/handoffs/2026-10-29-a1189-remove-fiscal-allocation-registry.md` (the folder is
-  gitignored, CLAUDE.md §6) with `Status: in progress`, the worktree and branch, and "next: Task 1".
-  Update it at the end of every task.
+The campaign's ledger (`~/waitron-campaign/item-a1189-ledger.md`) is the ledger; update it at the
+end of every task.
 
 ## Task 1: delete the server's registry client and adapter
 
@@ -259,6 +274,9 @@ and the live behaviour around the old call sites keeps passing unedited.
     — passes (read the `Tests` count).
   - `git diff -M --stat HEAD` shows the rename at 100% similarity.
   - The consumer grep from step 2 now prints nothing.
+  - Each of the six codes keeps a throw site:
+    `git grep -n -E '"cloud\.(request_invalid|unavailable|busy|state_invalid|binding_conflict|not_configured)"' -- 'apps/server/src/*.ts' ':!*.test.ts' ':!apps/server/src/errors.ts'`
+    shows every one of the six at least once.
 - [ ] `pnpm --filter @waitron/server exec eslint src/hour-restore-retired-inputs.test.ts` and
   `pnpm exec prettier --check apps/server/test-durations.json`.
 - [ ] Commit with `git commit -s`. Message, plain English, for example: "Remove the server's
@@ -293,21 +311,28 @@ Prefer deleting to rewording (CLAUDE.md §1); every new sentence is a claim and 
   "The durable lock in `cloud-fiscal-allocation.ts:197` has no caller established by this audit;
   do not turn that isolated function into a user-visible defect by assumption." Keep "Temporary
   local concurrency on these callers."
-- [ ] `docs/backlog.md:179-191`: replace A1189 with what is left open:
-  - "**A1189 (Cloud half). Cloud's registry removal can land now that Waitron's has.** Waitron
-    no longer has a client for it. Cloud's own [removal design](…same link…) keeps migration 038
-    and its stored records pending a separate owner decision."
+- [ ] `docs/backlog.md:179-191`: delete A1189. Cloud's half is Cloud's work, tracked in Cloud's
+  own design; the landing receipt goes to the Cloud lane through the campaign's questions file, not
+  into Waitron's backlog (plan review M6). Then:
   - If the owner answers question 1 "yes" (or has not answered): a new short entry, area fiscal,
     "**Retire the historical allocation formats from `fiscal-verifactu`.** Signed paper, Cloud
     receipts and emergency names are still read by historical code: the activation check
     (`allocation-envelope.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical
-    setup contribution (`initial-setup.ts`). Removing them changes activation and three tests'
-    assertions, so it is its own fiscal change for the owner to land. Left by A1189."
+    setup contribution (`initial-setup.ts`), which also reads the now-undocumented settings
+    `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `_TRUST_FINGERPRINT` and `_RECEIPT_DIRECTORY`. Removing
+    them changes activation and several tests' assertions, so it is its own fiscal change for the
+    owner to land. Left by A1189."
 - [ ] `docs/superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md:298`: append to the
   existing 2026-10-29 note: " Waitron's client and report journal were removed by A1189." Nothing
   else in that historical plan changes.
-- [ ] Check links: `git grep -n "cloud-fiscal-allocation\.md\|cloud-fiscal-allocation\.ts\|cloud-fiscal-allocation-client\|cloud-fiscal-reconciliation" -- docs ':!docs/superpowers' ':!docs/operations'`
-  prints nothing. Matches under `docs/superpowers/` and `docs/operations/` are dated history and stay.
+- [ ] `docs/operations/planning-procedure-audit.md:22`: its last cell links the guide as the
+  "permanent home" (plan review I2). Point it at the guide as it stood before this branch,
+  `https://github.com/clintongormley/waitron/blob/b475819bc753b701af04981b0c5cbdb7e57d17de/docs/developers/cloud-fiscal-allocation.md`,
+  followed by "(removed 2026-10-29, A1189)". Nothing else in that file changes.
+- [ ] Check links: `git grep -n "cloud-fiscal-allocation\.md\|cloud-fiscal-allocation\.ts\|cloud-fiscal-allocation-client\|cloud-fiscal-reconciliation" -- docs ':!docs/superpowers'`
+  prints only the pinned `blob/` link in `planning-procedure-audit.md` and dated receipts under
+  `docs/operations/` that name the files as history (list each and say why it stays). Matches
+  under `docs/superpowers/` are dated history and stay.
 - [ ] `docs/` is ignored by prettier (`pnpm exec prettier --file-info docs/backlog.md` prints
   `"ignored": true`), so no format check applies there.
 - [ ] Commit with `git commit -s`, plain English: "Retire the documents that describe Cloud's
