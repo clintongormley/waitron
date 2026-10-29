@@ -92,7 +92,7 @@ function contents(spec: PDFDict): Uint8Array {
   return bytes;
 }
 
-/** All the decoding stages together may hold about this much; see {@link boundedDecode}. */
+/** All the decoding stages together hold under twice this much; see {@link boundedDecode}. */
 const DECODE_BUDGET = 16 * MAX_PACK_FILE;
 
 type Stage = {

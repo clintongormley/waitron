@@ -9,7 +9,6 @@ export type RecoveryPackPage = {
   notes: string[];
 };
 
-/** Where the server key in force is printed: this pack, an earlier pack, or a recovery sheet. */
 export type ServerKeyLocation =
   | { kind: "this-pack" }
   | { kind: "pack"; number: number; madeOn: string; received: boolean }

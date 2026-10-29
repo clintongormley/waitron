@@ -88,9 +88,8 @@ export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const;
 
 /**
- * Translation catalogues, excluded by exact suffix from the scan: a module's
- * `src/dashboard/strings.ts` and the recovery pack's `src/i18n/pack-words.ts`. Their `es` values
- * are translation, not vocabulary.
+ * Translation catalogues, excluded by exact suffix from the scan: their `es` values are
+ * translation, not vocabulary.
  *
  * NARROW, by design: only those exact suffixes, so any other file in those folders is still
  * scanned.

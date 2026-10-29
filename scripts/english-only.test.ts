@@ -174,8 +174,7 @@ describe("configuration", () => {
   });
 
   it("excludes the translation catalogues by exact suffix, and nothing wider", () => {
-    // A module's `src/dashboard/strings.ts` holds `{ en, es }` UI copy: its `es` values are
-    // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down).
+    // Each catalogue holds `{ en, es }` copy: its `es` values are translation, not vocabulary.
     expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts", "i18n/pack-words.ts"]);
   });
 
