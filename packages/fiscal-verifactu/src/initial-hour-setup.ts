@@ -7,7 +7,7 @@ import {
   type ModuleOperationHost,
 } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import { encodeMinuteIdentity, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
+import { encodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 import { hostedHourPreparation, hourSetupInput } from "./hour-preparation.js";
 import "./errors.js";
 import { assertHourSeriesConfiguration } from "./hour-series-configuration.js";
@@ -81,19 +81,6 @@ export function readHourSetupInput(context: InitialSetupContext, input: unknown)
   return structuredClone(expected);
 }
 
-function hourAssignmentPositions(context: InitialSetupContext, input?: unknown) {
-  if (context.request == null && input === undefined) return [];
-  const allocation = readHourSetupInput(
-    context,
-    input ?? (context.request as { input: unknown }).input,
-  ).allocation;
-  return [
-    {
-      namespace: JSON.stringify([context.taxId, context.environment, "hour"]),
-      position: decodeMinuteIdentity(allocation.installationIdentity),
-    },
-  ];
-}
 async function reviewCommandClock(
   actions: InitialSetupCommandActions,
 ): Promise<{ status: "ready"; comparisonId: string } | { status: "cancelled" }> {
@@ -303,7 +290,7 @@ export function createHourInitialSetup(
         ]),
       ];
     },
-    assignmentPositions: hourAssignmentPositions,
+    assignmentPositions: undefined,
     startAgainHoldings,
   };
 }

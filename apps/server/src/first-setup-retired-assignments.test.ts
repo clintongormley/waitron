@@ -465,6 +465,23 @@ it("ordinary hour preparation retains earlier abandoned events for later", async
   expect(await restart.store.read()).toEqual(result.state);
   expect(await readFile(path)).toEqual(journal);
 });
+it("a new attempt may take a minute earlier than an abandoned attempt's name", async () => {
+  const f = await fixture(44, request.taxId, "production", false, 43, { previousIndex: 50 });
+  const result = await choose(f.host, f.state, f.claim.capability);
+  expect(result.state.consumptionIntent).toBe(true);
+  expect(
+    (result.state.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
+      .identity,
+  ).toBe("0CR6J");
+});
+it("an abandoned attempt that chose the same minute still refuses the new one", async () => {
+  const f = await fixture(44, request.taxId, "production", false, 43);
+  const { state } = await choose(f.host, f.state, f.claim.capability);
+  await expect(f.host.assertFreshAssignment(state, MODULE)).resolves.toBeUndefined();
+  await expect(
+    f.host.assertFreshAssignment({ ...state, previous: [...state.previous, state] }, MODULE),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+});
 it.each(["replace", "remove"] as const)(
   "Start again stays refused when a configured outside history is changed by %s",
   async (outsideChange) => {
