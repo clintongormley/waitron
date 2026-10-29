@@ -186,6 +186,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listOrderPages: vi.fn().mockResolvedValue({ rows: [], next: null, from: null, to: null }),
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
     passkeySignals: vi.fn().mockResolvedValue({

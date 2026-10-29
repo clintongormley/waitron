@@ -42,6 +42,7 @@ async function mount(path = "/manage/backup", permissions = ["venue.view", "venu
       getVenueTheme: async () => ({ hash: "waitron", css: "", logo: null }),
       getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
+      getDiskStop: async () => ({ stopped: false, deleted: null }),
       passkeySignals: async () => ({
         rpId: "localhost",
         userId: "cDE",

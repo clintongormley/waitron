@@ -1222,6 +1222,23 @@ it("refreshes the theme list on a theme change, passively after the first read",
   expect(active).toHaveBeenCalledOnce();
 });
 
+it("refreshes the full-disk stop every thirty seconds and when incidents change, passively after the first read", async () => {
+  const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
+    async () => new Response(JSON.stringify({ stopped: false, deleted: null }), { status: 200 }),
+  );
+  const api = new DashboardApi("", fetchImpl);
+  const query = dashboardQuery(api, "getDiskStop", []);
+  expect(query.dependencies).toEqual([{ type: "incidents" }]);
+  expect(query.refreshMs).toBe(30_000);
+  await query.read();
+  await query.read();
+  expect(fetchImpl.mock.calls.map(([path]) => path)).toEqual([
+    "/management-api/disk-stop",
+    "/management-api/disk-stop",
+  ]);
+  expect(new Headers(fetchImpl.mock.calls[1]![1].headers).get("x-waitron-live")).toBe("1");
+});
+
 it("refreshes the box's health every fifteen seconds, from no table, passively after the first read", async () => {
   const fetchImpl = vi.fn<(path: string, init: RequestInit) => Promise<Response>>(
     async () => new Response("{}", { status: 200 }),

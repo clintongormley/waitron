@@ -54,6 +54,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
     getVenueTheme: vi.fn().mockResolvedValue(FIXTURE_ANSWER),
     getContentLanguages: async () => ({ defaultLanguage: "es", languages: ["es"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
+    getDiskStop: async () => ({ stopped: false, deleted: null }),
     getSalesOverview: async () => ({
       businessDay: "2026-08-30",
       takings: { tenderTotal: "0.00", tipTotal: "0.00", grossTotal: "0.00" },

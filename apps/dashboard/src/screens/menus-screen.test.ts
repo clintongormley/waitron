@@ -7630,6 +7630,7 @@ it.each([
         onboardingIntent: "prepare",
       }),
       listAlerts: async () => ({ visible: false, alerts: [] }),
+      getDiskStop: async () => ({ stopped: false, deleted: null }),
       getGoogleConfig: async () => ({ configured: false }),
       passkeySignals: async () => ({
         rpId: "localhost",

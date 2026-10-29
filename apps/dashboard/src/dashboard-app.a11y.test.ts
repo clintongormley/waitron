@@ -109,6 +109,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
       topSellers: [],
     }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     ...overrides,
   } as unknown as DashboardApi;
 }

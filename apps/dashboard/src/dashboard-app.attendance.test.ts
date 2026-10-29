@@ -45,6 +45,7 @@ async function mount(modules: string[], permissions: string[], role = "superviso
     listMyAbsences: vi.fn().mockResolvedValue([]),
     getSalesOverview: vi.fn(() => new Promise(() => undefined)),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
   } as unknown as DashboardApi;
   const requests: string[] = [];
   const request = createRequest({

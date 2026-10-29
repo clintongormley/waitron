@@ -121,6 +121,7 @@ export async function mountReceiptApp(
       } satisfies VenueDefaults,
       "/management-api/venue-privacy": { privacyNoticeUrl: null, privacyEmail: null },
       "/management-api/alerts": { visible: false, alerts: [] },
+      "/management-api/disk-stop": { stopped: false, deleted: null },
       "/management-api/venue-service/opening-hours": {
         departments: [],
         menus: [],

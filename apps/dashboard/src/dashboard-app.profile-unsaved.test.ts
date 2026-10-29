@@ -55,6 +55,7 @@ async function mount(overrides: Partial<DashboardApi> = {}) {
       listMySwaps: async () => [],
       listMyAbsences: async () => [],
       listAlerts: async () => ({ visible: false, alerts: [] }),
+      getDiskStop: async () => ({ stopped: false, deleted: null }),
       passkeySignals: async () => ({
         rpId: "localhost",
         userId: "cDE",

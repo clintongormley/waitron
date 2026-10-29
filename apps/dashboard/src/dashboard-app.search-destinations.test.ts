@@ -136,6 +136,7 @@ async function mount(
     getVenueTheme: vi.fn().mockResolvedValue({ hash: "waitron", css: "", logo: null }),
     getContentLanguages: async () => ({ defaultLanguage: "en", languages: ["en"] }),
     listAlerts: async () => ({ visible: false, alerts: [] }),
+    getDiskStop: async () => ({ stopped: false, deleted: null }),
     getSalesOverview: () => new Promise(() => undefined),
   } as unknown as DashboardApi;
   const { el } = await mountWidget<DashboardApp>(
