@@ -212,6 +212,7 @@ export {
   backupRoomNoteTemporaryName,
   isBackupRoomFileName,
 } from "./spare-space-name.js";
+export { deleteBackupRoomNote } from "./backup-room-note-file.js";
 export {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,

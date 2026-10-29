@@ -1,7 +1,11 @@
 import { randomBytes } from "node:crypto";
 import { lstat, readFile, rename as renameFile, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
-import { BACKUP_ROOM_NOTE_FILE, backupRoomNoteTemporaryName } from "@waitron/provisioning";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  backupRoomNoteTemporaryName,
+  deleteBackupRoomNote,
+} from "@waitron/provisioning";
 import type { BackupFolder } from "./backup-room.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -36,6 +40,8 @@ export type BackupRoomNoteSkip =
   | "venue_db_missing"
   | "venue_db_unreadable"
   | "identity_mismatch";
+
+export { deleteBackupRoomNote };
 
 type Rename = (from: string, to: string) => Promise<void>;
 
@@ -93,15 +99,6 @@ export async function writeBackupRoomNote(options: {
     await unlink(temporary).catch(() => undefined);
     await deleteBackupRoomNote(stateDir).catch(() => undefined);
     log("warn", "backup.room_note_write_failed", { errno: errnoOf(error) ?? null });
-  }
-}
-
-/** A missing note counts as deleted; any other failure is thrown. */
-export async function deleteBackupRoomNote(stateDir: string): Promise<void> {
-  try {
-    await unlink(notePath(stateDir));
-  } catch (error) {
-    if (errnoOf(error) !== "ENOENT") throw error;
   }
 }
 
