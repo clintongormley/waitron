@@ -529,3 +529,91 @@ describe("a merge reached by Tab", () => {
     expect(getComputedStyle(merge, "::after").outlineOffset).toBe("2px");
   });
 });
+
+describe("a single table reached by Tab", () => {
+  // As wide as each other, as the default tokens are, so neither ring can show past the other's edge.
+  const FOCUS = "2px solid rgb(220, 0, 120)";
+  const SELECTED = "2px solid rgb(0, 160, 0)";
+
+  async function tabToTable(): Promise<{ el: WtFloorMap; table: HTMLButtonElement }> {
+    const outer = await mountThemed(
+      `<div><button id="before">Before</button><wt-floor-map style="width: 400px; height: 200px"></wt-floor-map></div>`,
+      "light",
+    );
+    const el = outer.querySelector<WtFloorMap>("wt-floor-map")!;
+    el.style.setProperty("--wt-focus-ring", FOCUS);
+    el.style.setProperty("--wt-selected-ring", SELECTED);
+    el.reducedMotion = true;
+    el.tables = [t("a", { x: 0 }), t("b", { x: 8 })];
+    await settled(el);
+    outer.querySelector<HTMLButtonElement>("#before")!.focus();
+    await userEvent.tab();
+    const table = button(el, "a");
+    expect(table.hasAttribute("data-merge")).toBe(false);
+    expect(el.shadowRoot!.activeElement).toBe(table);
+    expect(table.matches(":focus-visible")).toBe(true);
+    return { el, table };
+  }
+
+  async function hold(el: WtFloorMap, table: HTMLButtonElement): Promise<void> {
+    const shape = table.querySelector('[part="shape"]')!;
+    const box = shape.getBoundingClientRect();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      shape.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          bubbles: true,
+          composed: true,
+          cancelable: true,
+          pointerId: 1,
+          pointerType: "touch",
+          clientX: box.left + box.width / 2,
+          clientY: box.top + box.height / 2,
+        }),
+      );
+      vi.advanceTimersByTime(500);
+    } finally {
+      vi.useRealTimers();
+    }
+    await el.updateComplete;
+    expect(table.hasAttribute("data-held")).toBe(true);
+    expect(table.matches(":focus-visible")).toBe(true);
+  }
+
+  /**
+   * Which ring each point 1 to 8 px above the middle of the table's top edge is nearest in colour,
+   * or "surface" where the map's bare background, read 20 px above, is nearer than either.
+   */
+  async function above(el: WtFloorMap, table: HTMLButtonElement): Promise<string[]> {
+    const box = table.getBoundingClientRect();
+    const read = await pixels(el);
+    const x = box.left + box.width / 2;
+    const candidates = {
+      focus: rgb(FOCUS.slice(FOCUS.indexOf("rgb"))),
+      selected: rgb(SELECTED.slice(SELECTED.indexOf("rgb"))),
+      surface: read(x, box.top - 20),
+    };
+    return [1, 2, 3, 4, 5, 6, 7, 8].map((d) => {
+      const painted = read(x, box.top - d);
+      return Object.entries(candidates).reduce((a, b) =>
+        distance(painted, b[1]) < distance(painted, a[1]) ? b : a,
+      )[0];
+    });
+  }
+
+  it("not held, shows the focus ring and no selected ring", async () => {
+    const { el, table } = await tabToTable();
+    const nearest = await above(el, table);
+    expect(nearest).toContain("focus");
+    expect(nearest).not.toContain("selected");
+  });
+
+  it("held, shows the focus ring and keeps its selected ring", async () => {
+    const { el, table } = await tabToTable();
+    await hold(el, table);
+    const nearest = await above(el, table);
+    expect(nearest).toContain("focus");
+    expect(nearest).toContain("selected");
+    expect(nearest.indexOf("selected")).toBeLessThan(nearest.lastIndexOf("focus"));
+  });
+});

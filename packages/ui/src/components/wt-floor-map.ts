@@ -303,10 +303,10 @@ export class WtFloorMap extends LitElement {
         outline-offset: var(--wt-focus-offset);
       }
 
-      /* With keyboard focus the button's outline is the focus ring, so the selected ring is drawn on
-         ::after and the focus ring goes past it: right only while the selected ring is no wider than
+      /* With keyboard focus the button's outline is the focus ring, and it goes past the selected ring
+         (a merge's moves to ::after): right only while the selected ring is no wider than
          --wt-focus-offset. */
-      [part="table"][data-held][data-merge]:focus-visible {
+      [part="table"][data-held]:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(var(--wt-focus-offset) * 2);
       }
