@@ -186,14 +186,15 @@ va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
 
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
 **Enviado**. La fila se separa en cuanto un plato cambia, por ejemplo cuando se sirve una hamburguesa
-o se le quita el queso. **Marcar servido** en una fila pregunta cuántos. **Dividir por artículo** te
+o se le aplica un descuento. Al tocar una fila en **Enviado** se marca entera como servida; **Marcar
+servido** en los detalles de la fila pregunta cuántos. **Dividir por artículo** te
 deja elegir cuántos platos de una fila pasan a la cuenta nueva, cada uno con sus extras, mientras que
 **Transferir artículos** mueve la fila entera. **Descuento** y **Cancelar** actúan sobre la fila y te
 dejan elegir cuántos de sus platos.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: 350 g de pulpo nunca se reparten
 entre dos cuentas, y si añades dos veces el mismo plato al peso tienes dos líneas, no una del doble
-de peso. Puedes añadir hasta 99 unidades de un mismo plato cada vez.
+de peso. En la cuenta de una mesa puedes añadir hasta 99 unidades de un mismo plato cada vez.
 
 Un pedido de mostrador mantiene 2 × Hamburguesa como una sola línea, como antes, aunque lo
 muevas a una mesa, así que sus 2 × Hamburguesa con queso solo pasan a otra cuenta enteras.

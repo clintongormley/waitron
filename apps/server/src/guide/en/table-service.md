@@ -178,14 +178,14 @@ rather than one line of two. That way you can serve, move or void one burger and
 with it, and the bill and the kitchen agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
-row parts as soon as one dish differs, for example once one burger is served or loses its cheese.
-**Mark served** on a row asks how many. **Split by item** lets you choose how many of a row go to
+row parts as soon as one dish differs, for example once one burger is served or comped. Tapping a
+row in **Sent** marks all of it served; **Mark served** in the row's details asks how many. **Split by item** lets you choose how many of a row go to
 the new bill, each with its own extras, while **Transfer items** moves the whole row. **Comp** and
 **Void** work on the row and let you choose how many of its dishes.
 
 A weighed dish is different, because each one is weighed on its own: 350 g of octopus is never cut
 between bills, and adding the same weighed dish twice gives two lines rather than one of double the
-weight. You can add up to 99 of one dish at a time.
+weight. On a table's bill you can add up to 99 of one dish at a time.
 
 An order taken at the counter keeps 2 × Burger as one line, as before, even after you move it to a
 table, so its 2 × Burger with cheese moves to another bill only as a whole.
