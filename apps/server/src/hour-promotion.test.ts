@@ -644,6 +644,30 @@ it("waits past the minute a recorded installation name holds, writing no fiscal 
   expect(await rows()).toEqual(before);
 });
 
+it("a promotion takes its current minute although a later installation name is recorded", async () => {
+  const s = await service();
+  await admit(s);
+  const [live] = await suite.db.select().from(registroSif);
+  await suite.db.insert(registroSif).values({
+    nodeId: primary.nodeId,
+    nif: live!.nif,
+    idSistemaInformatico: live!.idSistemaInformatico,
+    numeroInstalacion: encodeMinuteIdentity(Date.now() + 10 * 60_000),
+    registradoEn: new Date(Date.now() - 60 * 60_000),
+    revocadoEn: new Date(Date.now() - 30 * 60_000),
+  });
+  await compare(s);
+  expect(
+    await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      { action: "select", comparisonId },
+      { onBox: true },
+    ),
+  ).toMatchObject({ status: "selected", identity: encodeMinuteIdentity(Date.now()) });
+});
+
 it("a key-only operation service refuses administrator credentials without a credential key ring", async () => {
   const s = createNodeOperationPreparation({
     stateDir: join(root, "state"),

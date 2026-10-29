@@ -26,6 +26,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
@@ -773,6 +774,18 @@ describe("a backup's own floors", () => {
   const asBrowser = { onBox: false };
   const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
     createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
+
+  it("selects at the ordinary wait although the backup's newest record and creation time are later", async () => {
+    await sellAt("2026-10-22T20:15:00Z");
+    clock.set(Date.parse("2026-10-21T10:00:00Z"));
+    const f = await host();
+    expect(
+      await recoverySelectPastWaits(clock, restoreService(f, "2026-10-23T08:00:00Z"), asBrowser),
+    ).toMatchObject({
+      status: "selected",
+      identity: encodeMinuteIdentity(Date.parse("2026-10-21T10:02:00Z")),
+    });
+  });
 
   it("waits and then selects once both clocks are past both floors", async () => {
     await sellAt("2026-10-22T20:15:00Z");

@@ -17,7 +17,7 @@ import {
   interactiveHost,
   clock,
 } from "../test/hour-recovery-host.js";
-import { selectPastWaits } from "./testing/hour-test-clock.js";
+import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
 import { loadKeyRing } from "@waitron/credentials";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -36,7 +36,12 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import { restoreFromArtifact, restoreFromArtifactFile, validateArtifact } from "./restore.js";
+import {
+  runRestoreHooks,
+  restoreFromArtifact,
+  restoreFromArtifactFile,
+  validateArtifact,
+} from "./restore.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
@@ -207,6 +212,63 @@ describe("selected-hour admission before archive placement", () => {
       }
     },
     120_000,
+  );
+
+  it.each(["archive", "stream"] as const)(
+    "places an older selected hour over a newer surviving %s destination",
+    async (kind) => {
+      const f = await archiveHost(kind);
+      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
+      const newerState = join(root, "newer-state");
+      await mkdir(newerState);
+      const newer = createSelectedRecoveryPreparation({
+        ...f.options,
+        stateDir: newerState,
+        binding: { ...f.options.binding, eventId: "newer-surviving-target" },
+      });
+      agreeInternet();
+      const selected = (await recoverySelectPastWaits(clock, newer, { onBox: true })) as {
+        identity: string;
+        input: unknown;
+      };
+      expect(selected.identity).toBe("0CNSP");
+      await runRestoreHooks({
+        db: suite.db,
+        node,
+        modules: newer.modules,
+        log: () => {},
+        withModuleOperations: newer.runner(selected.input),
+      });
+      const fresh = (await f.service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
+        id: string;
+      };
+      await f.service.prepare(
+        { action: "compare-clocks", browser: { challengeId: fresh.id, instantMs: Date.now() } },
+        { onBox: true },
+      );
+      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
+      await (kind === "archive"
+        ? restoreFromArtifact({
+            ...f.restore,
+            modules: f.service.modules,
+            withModuleOperations: f.service.runner(f.outcome.input),
+          })
+        : writeStreamRestore({
+            ...f.restore,
+            databasePath: f.database,
+            entries: f.entries,
+            modules: f.service.modules,
+            withModuleOperations: f.service.runner(f.outcome.input),
+          }));
+      const placed = await openVenueDatabase(f.roots.venueDir);
+      try {
+        const codes = (await placed.venue.select().from(invoiceSeries)).map((row) => row.code);
+        expect(codes).toContain(`A-${(f.outcome as unknown as { identity: string }).identity}`);
+        expect(codes.filter((code) => code.endsWith("-0CNSP"))).toEqual([]);
+      } finally {
+        await placed.close();
+      }
+    },
   );
 
   it("refuses unreadable surviving history before changing the destination or its identity", async () => {
