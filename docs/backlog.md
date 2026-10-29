@@ -4096,6 +4096,11 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   explains its effect before changing access.
   [Correction](backlog/self-service-refusals.md#sign-in).
 
+- **A1214. A second sign-in factor for people with no authenticator app (owner's idea,
+  2026-10-29).** "When we have mobile notifications then we could use those for 2fa instead. Or we
+  could use email now as well." An emailed one-time code now, a push to the Android app (A1175)
+  later. Not designed or scheduled; an idea for the owner to pick up.
+
 Detail: [backlog/dashboard.md](backlog/dashboard.md).
 
 - **Spacing for buttons grouped beside Cancel belongs in `wt-form-actions`.** The
@@ -4756,9 +4761,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   kit, the recovery sheet with the disk key and the archive recovery pack into one document,
   and add the venue's emergency address and emergency code from Waitron Cloud (A1188).
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
-  **Design waiting for the owner's answer** (2026-10-29):
-  [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), mock-ups in
-  `backlog/mockups/a1187-recovery-pack/`.
+  **Design approved by the owner** (2026-10-29), with the authenticator code asked for only when
+  the person has one set up: [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md),
+  mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is next to plan; part 2
+  waits for A1188 part 1, part 3 for B3's retained disk key.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)

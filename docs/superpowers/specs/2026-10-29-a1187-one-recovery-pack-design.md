@@ -1,6 +1,8 @@
 # A1187: one recovery pack
 
-**A design only, waiting for the owner's answer; nothing is built.** Revised the same day after a
+**Approved by the owner on 2026-10-29 (~10:30 CET): "Approve."** Every §11 default stands except
+item 4: the authenticator code is asked for only when the person has one set up (owner, ~10:20 CET:
+"No, authenticator is optional."), which is what B3 already says. Nothing is built yet. Revised the same day after a
 fresh review (three critical findings, seven important, five minor, all folded), and again after a
 narrow check of the corrections (seven points, all folded). Decisions marked
 **(owner)** quote the owner. Decisions marked **(default)** are this design's, open to the owner's
@@ -88,7 +90,7 @@ More facts the pack must fit:
   then base64url, as `encodeRecoveryKit` does), it **ran** to 602 characters; the review measured a
   sample at about 640. A search of `apps/setup` by the review for `BarcodeDetector` or
   `getUserMedia` found no camera scanning.
-- **No dashboard step asks for a fresh sign-in with a required authenticator code.** The nearest,
+- **No dashboard step asks for a fresh sign-in at the button.** The nearest,
   `withAuthenticatedOperation`, takes a password and an optional code, for `node.promote` and
   `mirror.create` only (A1188, "What exists today").
 
@@ -99,7 +101,8 @@ More facts the pack must fit:
   it (`2026-10-21-b3-usb-installer-design.md:595-640`): every later sheet includes a section «Clave
   de recuperación del disco» with the disk's id (LUKS UUID), the box's identity and the key as text
   and as a QR code; a later sheet is printed only after an administrator signs in again with
-  password or passkey **plus** an authenticator code; the first is delivered over a one-time channel
+  password or passkey **plus** an enrolled authenticator code (`:631-632`: "plus enrolled TOTP, as
+  in §11"; §12.2, `:1154-1155`: "plus enrolled TOTP … when present"); the first is delivered over a one-time channel
   from the box's host service before any administrator session exists (`:620-630`); each delivery is
   recorded outside the venue database (`:633-634`); the key is never in the venue database or its
   backups; and "never present a complete sheet missing its required disk section" (`:637`). The
@@ -192,10 +195,10 @@ The pack holds every secret the venue has. **(default)** Making one (except the 
 - `system.manage`, which every one of today's three documents needs;
 - the recovery PDF route's checks: an encrypted connection, and this same origin whenever the
   browser names where the request came from (`recovery-document-api.ts:30-43`);
-- **a fresh sign-in at the button**: password or passkey plus an authenticator code, B3's rule for a
-  later disk key (`b3 design:631-633`), the strictest part. **No such step exists today; the build
-  makes one.** A person with no authenticator set up is told so, with a link to set one up in their
-  own account settings, and Stop.
+- **a fresh sign-in at the button (owner, 2026-10-29)**: password or passkey, plus the
+  authenticator code only when the person has one set up — never a refusal for having none. This is
+  B3's rule for a later disk key (`b3 design:631-632`, and §12.2 at `:1154-1155`: "plus enrolled
+  TOTP … when present"). **No such step exists today; the build makes one.**
 
 The emergency code is printed only when the person also holds `node.promote`, who alone sees it on
 A1188's card (A1188 §2); for anyone else page 3 says "Made by someone who cannot start the venue in
@@ -304,7 +307,7 @@ holds that password. §2 changes only **when** a new server key is made.
 
 | Part | What | Needs |
 | --- | --- | --- |
-| 1 | The pack with today's parts (bucket copy, archives, server key with §2's checkbox); the attached file and every reader taking the pack (§1); the fiscal seat and wording changes (§2, §8); the record and the card (§4); the fresh sign-in with a required authenticator code, which does not exist yet (§3); setup's first pack (§6) | Nothing unbuilt |
+| 1 | The pack with today's parts (bucket copy, archives, server key with §2's checkbox); the attached file and every reader taking the pack (§1); the fiscal seat and wording changes (§2, §8); the record and the card (§4); the fresh sign-in at the button (authenticator code only when one is set up), which does not exist yet (§3); setup's first pack (§6) | Nothing unbuilt |
 | 2 | Page 3, the emergency start, and the fourth fact (§4) | A1188 part 1, and Cloud sending the code's issue date |
 | 3 | Page 2, the disk key | B3's slice 8 (the retained disk key) |
 
@@ -323,10 +326,10 @@ between packages and the fiscal module's reader, so it takes the full review.
 3. **Making a pack does not make a new server key unless you tick the box** (§2). Cost: page 6 of
    most packs points to an older pack. Alternative: every pack makes one; cost: older backups need
    older packs every time a pack is printed.
-4. **A fresh sign-in with an authenticator code at the button** (§3). Cost: a person with no
-   authenticator cannot make a pack, and the step has to be built. Alternative: the session's
-   sign-in, as today's three documents need; cost: the disk key would be printed under a weaker
-   check than B3 requires.
+4. **A fresh sign-in at the button** (§3). **Changed by the owner, 2026-10-29:** password or
+   passkey, plus the authenticator code only when the person has one set up. The earlier text here
+   said a person with no authenticator could not make a pack; that misread B3, whose rule asks for
+   the code only when one is enrolled. Cost: the step has to be built.
 5. **The emergency code only for people holding `node.promote`** (§3), following A1188.
 6. **The box keeps a record of each pack, never its secrets, and says when it is out of date and
    which packs to keep** (§4). Alternative: no record, as today.
@@ -346,4 +349,5 @@ In `docs/backlog/mockups/a1187-recovery-pack/`:
   Spanish, A4 (sample values, not real keys).
 - `02-backups-card-<theme>-<width>.png`: the Backups screen's new card, out of date, light and dark,
   1280 and 390 wide.
-- `03-sign-in-<theme>-<width>.png`: the make-pack dialog with the fresh sign-in.
+- `03-sign-in-<theme>-<width>.png`: the make-pack dialog with the fresh sign-in, for a person who has
+  an authenticator set up; for a person with none, the code field is not shown (§3).
