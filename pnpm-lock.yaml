@@ -1166,6 +1166,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../recovery-pack
       '@waitron/server-kit':
         specifier: workspace:*
         version: link:../server-kit

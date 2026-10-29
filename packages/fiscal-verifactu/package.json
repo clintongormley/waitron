@@ -25,6 +25,7 @@
     "@waitron/fiscal": "workspace:*",
     "@waitron/identity": "workspace:*",
     "@waitron/module": "workspace:*",
+    "@waitron/recovery-pack": "workspace:*",
     "@waitron/server-kit": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/store": "workspace:*",

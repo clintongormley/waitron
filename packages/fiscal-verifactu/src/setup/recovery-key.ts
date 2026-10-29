@@ -2,7 +2,7 @@ import { LitElement, css, html, type PropertyValues } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, draftScopeFor, type DraftScope } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-input.js";
-import { MAX_RECOVERY_PDF } from "../recovery-document.js";
+import { MAX_RECOVERY_PDF, RecoveryPackWithoutKeyError } from "../recovery-document.js";
 import { normaliseTypedCode } from "../paper-register-compact.js";
 import { decodeRecoveryKey } from "../recovery-key-code.js";
 import { WAITRON_ID_SISTEMA } from "../software.js";
@@ -13,6 +13,29 @@ interface Draft {
   file?: File;
 }
 const empty = (): Draft => ({ value: "" });
+function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
+  const held = error.heldBy;
+  if (held) {
+    const day = new Intl.DateTimeFormat(en ? "en-GB" : "es-ES", {
+      timeZone: "UTC",
+      dateStyle: "long",
+    }).format(new Date(`${held.madeOn}T00:00:00.000Z`));
+    const where = en
+      ? `This recovery pack does not hold the server key. It is on recovery pack ${held.number}, made on ${day}: choose that pack, or type the key from it.`
+      : `Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación ${held.number}, hecho el ${day}: elige ese paquete o introduce su clave.`;
+    if (held.received) return where;
+    return en
+      ? `${where} That pack never reached a browser when it was made: if you do not have it, the key cannot be read from any pack.`
+      : `${where} Ese paquete nunca llegó a un navegador cuando se hizo: si no lo tienes, la clave no se puede leer de ningún paquete.`;
+  }
+  if (error.serverKeyName !== null)
+    return en
+      ? `This recovery pack does not hold the server key: choose the pack or sheet whose key name is ${error.serverKeyName}.`
+      : `Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja cuyo nombre de clave es ${error.serverKeyName}.`;
+  return en
+    ? "This recovery pack does not hold the server key: choose the pack or sheet that holds it, or type the key from it."
+    : "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.";
+}
 @customElement("vf-recovery-key")
 export class RecoveryKeyEntry extends LitElement {
   static override styles = [
@@ -41,7 +64,7 @@ export class RecoveryKeyEntry extends LitElement {
   @property() locale: "en" | "es" = "en";
   @state() private draft = empty();
   @state() private invalid = false;
-  @state() private pdfError?: "manual" | "invalid" | "mismatch";
+  @state() private pdfError?: "manual" | "invalid" | "mismatch" | RecoveryPackWithoutKeyError;
   @state() private loaded = false;
   #generation = 0;
   #scope?: DraftScope<Draft>;
@@ -180,10 +203,13 @@ export class RecoveryKeyEntry extends LitElement {
     } catch (error) {
       if (current())
         this.pdfError =
-          error instanceof Error &&
-          error.message === "No recovery key attachment; enter the key from the sheet manually"
-            ? "manual"
-            : "invalid";
+          error instanceof RecoveryPackWithoutKeyError
+            ? error
+            : error instanceof Error &&
+                error.message ===
+                  "No recovery key attachment; enter the key from the sheet manually"
+              ? "manual"
+              : "invalid";
     }
   }
   override render() {
@@ -194,19 +220,21 @@ export class RecoveryKeyEntry extends LitElement {
         : "Revisa la clave de tu hoja de recuperación."
       : (this.errorMessage ?? "");
     const pdfError =
-      this.pdfError === "manual"
-        ? en
-          ? "Enter the key from the sheet below."
-          : "Introduce abajo la clave de la hoja."
-        : this.pdfError === "mismatch"
+      this.pdfError instanceof RecoveryPackWithoutKeyError
+        ? keyElsewhere(this.pdfError, en)
+        : this.pdfError === "manual"
           ? en
-            ? "Choose the recovery PDF for this backup's named key."
-            : "Elige el PDF de la clave indicada en esta copia."
-          : this.pdfError === "invalid"
+            ? "Enter the key from the sheet below."
+            : "Introduce abajo la clave de la hoja."
+          : this.pdfError === "mismatch"
             ? en
-              ? "Choose a valid recovery PDF, or enter the key below."
-              : "Elige un PDF de recuperación válido, o introduce la clave abajo."
-            : "";
+              ? "Choose the recovery PDF for this backup's named key."
+              : "Elige el PDF de la clave indicada en esta copia."
+            : this.pdfError === "invalid"
+              ? en
+                ? "Choose a valid recovery PDF, or enter the key below."
+                : "Elige un PDF de recuperación válido, o introduce la clave abajo."
+              : "";
     return html` <label for="recovery-pdf">${en ? "Recovery PDF" : "PDF de recuperación"}</label>
       <input
         id="recovery-pdf"
