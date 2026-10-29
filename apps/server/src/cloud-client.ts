@@ -256,7 +256,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...(state.view?.registration
         ? {
             installation: projectCloudInstallation(state),
-            accountUrl: `${options.origin}/account`,
+            ...(state.lifecycle?.revoked ? {} : { accountUrl: `${options.origin}/account` }),
           }
         : { signupUrl: `${options.origin}/signup` }),
     };

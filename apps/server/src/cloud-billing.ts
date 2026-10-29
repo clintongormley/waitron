@@ -246,7 +246,8 @@ function refusal(status: number, value: unknown, retryAfter: string | null): Bil
   return error;
 }
 
-/** One signed read. It saves nothing: the caller decides what a refusal means for the connection. */
+/** One signed read. It writes nothing itself; `onRefusal` decides what a refusal means for the
+ * connection. */
 export async function fetchBillingDisplay(
   state: SavedCloudState,
   options: { signal?: AbortSignal; onRefusal?: OnRefusal; timeoutMs?: number } = {},

@@ -239,6 +239,35 @@ describe("whether a period covers asOf is judged on the reply's own calendar", (
     expect(codeOf(() => readBillingDisplay(at("UTC", true), expected))).toBe("cloud.unavailable");
     expect(codeOf(() => readBillingDisplay(at("UTC", false), expected))).toBe("cloud.unavailable");
   });
+  const lapsed = (calendarTimeZone: string, coversAsOf: boolean) =>
+    reply(
+      {
+        status: "ready",
+        level: "connected",
+        state: "lapsed",
+        period: {
+          kind: "paid",
+          level: "connected",
+          from: "2026-10-01",
+          until: "2026-11-01",
+          coversAsOf,
+        },
+      },
+      PRICES,
+      { calendarTimeZone, asOf: "2026-10-31T23:30:00.000Z" },
+    );
+  it("a period ending on 31 October covers that instant in UTC and not in Madrid", () => {
+    expect(codeOf(() => readBillingDisplay(lapsed("UTC", true), expected))).toBe("accepted");
+    expect(codeOf(() => readBillingDisplay(lapsed("UTC", false), expected))).toBe(
+      "cloud.unavailable",
+    );
+    expect(codeOf(() => readBillingDisplay(lapsed("Europe/Madrid", false), expected))).toBe(
+      "accepted",
+    );
+    expect(codeOf(() => readBillingDisplay(lapsed("Europe/Madrid", true), expected))).toBe(
+      "cloud.unavailable",
+    );
+  });
 });
 
 describe("the allowed level, state and period combinations", () => {

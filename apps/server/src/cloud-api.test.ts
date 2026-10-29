@@ -509,7 +509,11 @@ it("the plan read needs a live manager on the primary, is passive, and answers w
     const read = (cookie = manager.cookie) =>
       app.request("/management-api/cloud/billing", { headers: { cookie } });
     expect((await read("")).status).toBe(401);
-    expect((await read(staff.cookie)).status).toBe(403);
+    const refused = await read(staff.cookie);
+    expect([refused.status, (await refused.json()).error.code]).toEqual([
+      403,
+      "authorization.not_permitted",
+    ]);
     primary = false;
     const notPrimary = await read();
     expect([notPrimary.status, (await notPrimary.json()).error.code]).toEqual([
@@ -588,3 +592,66 @@ it("a box not yet connected links to Cloud's sign-up page, not to an account", a
     await f.close();
   }
 });
+
+for (const change of ["the manager is suspended", "the box stops being the primary"] as const)
+  it(`the plan read checks again after Cloud answers: refused when ${change} meanwhile`, async () => {
+    const { installationFixture } = await import("../test/cloud-installation-fixture.js");
+    let primary = true;
+    let during: (() => Promise<void>) | undefined;
+    const f = await installationFixture(undefined, {
+      billing: async (values, saved, _req, res) => {
+        await during?.();
+        const r = (saved.view as { registration: Record<string, string> }).registration;
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            version: 1,
+            installationId: r.installationId,
+            venueId: r.venueId,
+            countryCode: "ES",
+            calendarTimeZone: "Europe/Madrid",
+            asOf: new Date().toISOString(),
+            billing: { status: "unavailable", reason: "state_not_ready" },
+            prices: { status: "unavailable", reason: "not_published" },
+            accountUrl: `${String(values[1])}/account`,
+          }),
+        );
+      },
+    });
+    const manager = await person("manager");
+    try {
+      const app = new Hono();
+      mountCloudApi(
+        app,
+        {
+          db: suite.db,
+          connection: f.client,
+          managementOrigin: "https://venue.test",
+          isPrimary: () => primary,
+        },
+        () => {},
+      );
+      during =
+        change === "the manager is suspended"
+          ? async () => {
+              await suite.db
+                .update(persons)
+                .set({ status: "suspended" })
+                .where(eq(persons.id, manager.id));
+            }
+          : async () => {
+              primary = false;
+            };
+      const answer = await app.request("/management-api/cloud/billing", {
+        headers: { cookie: manager.cookie },
+      });
+      expect([answer.status, (await answer.json()).error.code]).toEqual(
+        change === "the manager is suspended"
+          ? [403, "person.suspended"]
+          : [409, "cloud.not_primary"],
+      );
+    } finally {
+      await suite.db.update(persons).set({ status: "active" }).where(eq(persons.id, manager.id));
+      await f.close();
+    }
+  });

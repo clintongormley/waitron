@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ServerResponse } from "node:http";
 import { afterEach, expect, it, vi } from "vitest";
@@ -183,6 +183,87 @@ it("keeps no billing snapshot: a read with a live lease leaves the saved state u
     const before = await readFile(file);
     await f.client.billing();
     expect((await readFile(file)).equals(before)).toBe(true);
+  } finally {
+    await f.close();
+  }
+});
+
+const OTHER_INSTALLATION = "99999999-9999-4999-8999-999999999999";
+async function pairElsewhere(stateDir: string) {
+  const file = join(stateDir, "cloud-connection.json");
+  const state = JSON.parse(await readFile(file, "utf8"));
+  // A new pairing's file: another installation, and no lease or lifecycle from the old one yet.
+  state.view.registration.installationId = OTHER_INSTALLATION;
+  delete state.lifecycle;
+  await writeFile(file, JSON.stringify(state));
+}
+
+it("reads again at once for another registration, never serving the last one's answer", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((v, s, res) => send(res, 200, reply(v, s)));
+  try {
+    const first = await f.client.billing();
+    await pairElsewhere(f.options.stateDir);
+    const second = await f.client.billing();
+    expect(reads()).toBe(2);
+    expect([first.installationId, second.installationId]).toEqual([
+      expect.not.stringMatching(OTHER_INSTALLATION),
+      OTHER_INSTALLATION,
+    ]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("drops an answer when the box is paired elsewhere while the read waits, and reads for the new pairing at once", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  let during: (() => Promise<void>) | undefined;
+  const { f, reads } = await billingCloud(async (v, s, res) => {
+    const change = during;
+    during = undefined;
+    await change?.();
+    send(res, 200, reply(v, s));
+  });
+  during = () => pairElsewhere(f.options.stateDir);
+  try {
+    expect(await codeOf(f.client.billing())).toBe("cloud.unavailable");
+    expect((await f.client.billing()).installationId).toBe(OTHER_INSTALLATION);
+    expect(reads()).toBe(2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("waits at most an hour, however long a 429 asks for", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((_v, _s, res) =>
+    send(res, 429, { error: "rate_limited" }, { "retry-after": "86400" }),
+  );
+  try {
+    const start = Date.now();
+    await codeOf(f.client.billing());
+    vi.setSystemTime(start + 3_599_000);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(1);
+    vi.setSystemTime(start + 3_600_000);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("offers neither the account nor sign-up link once access is stopped", async () => {
+  const { f } = await billingCloud((v, s, res) => send(res, 200, reply(v, s)));
+  try {
+    expect((await f.client.status()).accountUrl).toBe(`${f.options.origin}/account`);
+    await f.client.revoke(async () => {});
+    const status = await f.client.status();
+    expect([status.installation?.state, status.accountUrl, status.signupUrl]).toEqual([
+      "revoked",
+      undefined,
+      undefined,
+    ]);
   } finally {
     await f.close();
   }
