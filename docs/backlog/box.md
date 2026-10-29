@@ -78,6 +78,9 @@ Slice 1 landed (plan
 before each backup run copies anything, it deletes its oldest deletable backups on the disk that
 holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
 managers and administrators. How it works and its limits: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
+The deletion words give the days the deleted backups were taken (the oldest and newest when they
+differ), and both emails' subjects start with the venue's name (owner, 2026-10-29). Slice 2's
+deletions use the same words.
 
 Still open:
 

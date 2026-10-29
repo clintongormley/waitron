@@ -71,12 +71,18 @@ function wordsFor(
   if (code === "backup.archives_deleted") {
     const words = BACKUP_DELETED_EMAIL_WORDS[language];
     const count = params?.["count"];
-    const date = params?.["date"];
-    const day =
-      typeof date === "string" ? receiptDay(date, language === "es" ? "es-ES" : "en-GB") : "";
-    const text = (count === 1 ? words.one : words.text)
+    const day = (name: string) => {
+      const value = params?.[name];
+      return typeof value === "string"
+        ? receiptDay(value, language === "es" ? "es-ES" : "en-GB")
+        : "";
+    };
+    const template =
+      params?.["severalDays"] === true ? words.severalDays : count === 1 ? words.one : words.text;
+    const text = template
       .replaceAll("{count}", () => String(count))
-      .replaceAll("{date}", () => day);
+      .replaceAll("{date}", () => day("date"))
+      .replaceAll("{lastDate}", () => day("lastDate"));
     return { subject: words.subject, text };
   }
   if (code === BACKUP_REFUSED_EMAIL_CODE) {

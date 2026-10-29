@@ -356,9 +356,9 @@ describe("a backup that stopped before reaching any destination", () => {
   });
 });
 
-it("says the box deleted its oldest backups for low disk space, and on which day", () => {
-  const one = { count: 1, date: "2026-10-28" };
-  const three = { count: 3, date: "2026-10-28" };
+it("says the box deleted its oldest backups for low disk space, and the day they were taken", () => {
+  const one = { count: 1, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false };
+  const three = { count: 3, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false };
   expect(alertMessage("backup.archives_deleted", one, "en")).toBe(
     "Low disk space: the box deleted its oldest backup (28 Oct 2026).",
   );
@@ -370,6 +370,16 @@ it("says the box deleted its oldest backups for low disk space, and on which day
   );
   expect(alertMessage("backup.archives_deleted", three, "es")).toBe(
     "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).",
+  );
+});
+
+it("says the first and last day the deleted backups were taken when they span several days", () => {
+  const params = { count: 3, date: "2026-10-21", lastDate: "2026-10-24", severalDays: true };
+  expect(alertMessage("backup.archives_deleted", params, "en")).toBe(
+    "Low disk space: the box deleted its 3 oldest backups (21 Oct 2026 to 24 Oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", params, "es")).toBe(
+    "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
   );
 });
 

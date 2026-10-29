@@ -96,6 +96,13 @@ export const ALERT_MESSAGES: Readonly<
       en: "Low disk space: the box deleted its oldest backup ({date:date}).",
       es: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua ({date:date}).",
     },
+    variants: {
+      severalDays: {
+        mode: "replace",
+        en: "Low disk space: the box deleted its {count} oldest backups ({date:date} to {lastDate:date}).",
+        es: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas (del {date:date} al {lastDate:date}).",
+      },
+    },
   },
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",

@@ -300,23 +300,27 @@ describe("readOpenEmailedIncidents", () => {
 });
 
 describe("boxEmailMessage for old backups deleted", () => {
-  it("words one deleted backup and the deletion day, in both languages", () => {
+  it("words one deleted backup and the day it was taken, with the venue first in the subject, in both languages", () => {
     expect(
       boxEmailMessage("backup.archives_deleted", "en", "Corner Bistro", {
         count: 1,
         date: "2026-10-28",
+        lastDate: "2026-10-28",
+        severalDays: false,
       }),
     ).toEqual({
-      subject: "Old backups deleted: low disk space",
+      subject: "Corner Bistro: Old backups deleted: low disk space",
       text: "Low disk space: the box deleted its oldest backup (28 Oct 2026).",
     });
     expect(
       boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", {
         count: 1,
         date: "2026-10-28",
+        lastDate: "2026-10-28",
+        severalDays: false,
       }),
     ).toEqual({
-      subject: "Copias antiguas borradas: poco espacio en disco",
+      subject: "Corner Bistro: Copias antiguas borradas: poco espacio en disco",
       text: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
     });
   });
@@ -326,14 +330,28 @@ describe("boxEmailMessage for old backups deleted", () => {
       boxEmailMessage("backup.archives_deleted", "en", "Corner Bistro", {
         count: 3,
         date: "2026-10-28",
+        lastDate: "2026-10-28",
+        severalDays: false,
       }).text,
     ).toBe("Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).");
     expect(
       boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", {
         count: 3,
         date: "2026-10-28",
+        lastDate: "2026-10-28",
+        severalDays: false,
       }).text,
     ).toBe("Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).");
+  });
+
+  it("words several deleted backups taken on different days by their first and last day, in both languages", () => {
+    const params = { count: 3, date: "2026-10-21", lastDate: "2026-10-24", severalDays: true };
+    expect(boxEmailMessage("backup.archives_deleted", "en", "Corner Bistro", params).text).toBe(
+      "Low disk space: the box deleted its 3 oldest backups (21 Oct 2026 to 24 Oct 2026).",
+    );
+    expect(boxEmailMessage("backup.archives_deleted", "es", "Corner Bistro", params).text).toBe(
+      "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (del 21 oct 2026 al 24 oct 2026).",
+    );
   });
 
   it("draws the day as the bell does", () => {
@@ -343,6 +361,8 @@ describe("boxEmailMessage for old backups deleted", () => {
       const { text } = boxEmailMessage("backup.archives_deleted", language, "Corner Bistro", {
         count: 1,
         date: "2026-10-28",
+        lastDate: "2026-10-28",
+        severalDays: false,
       });
       expect(text).toContain(`(${bell[language]}).`);
     }
@@ -352,16 +372,16 @@ describe("boxEmailMessage for old backups deleted", () => {
 describe("boxEmailMessage for a backup refused for lack of room", () => {
   const sizes = { neededBytes: 6_300_000_000, availableBytes: 1_900_000_000 };
 
-  it("words both sizes, in English", () => {
+  it("words both sizes, with the venue first in the subject, in English", () => {
     expect(boxEmailMessage("backup.run_stopped", "en", "Corner Bistro", sizes)).toEqual({
-      subject: "Backup not made: low disk space",
+      subject: "Corner Bistro: Backup not made: low disk space",
       text: "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
     });
   });
 
-  it("words both sizes, in Spanish", () => {
+  it("words both sizes, with the venue first in the subject, in Spanish", () => {
     expect(boxEmailMessage("backup.run_stopped", "es", "Corner Bistro", sizes)).toEqual({
-      subject: "Copia no hecha: poco espacio en disco",
+      subject: "Corner Bistro: Copia no hecha: poco espacio en disco",
       text: "Copia no hecha: necesita 6,3 GB libres y el disco tiene 1,9 GB.",
     });
   });
@@ -371,10 +391,10 @@ describe("readOpenEmailedIncidents for backups", () => {
   const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 
   it("reads an open old-backups-deleted alert and no handled one", async () => {
-    const row = (detectedAt: string, acknowledgedAt: string | null = null) => ({
+    const row = (detectedAt: string, date: string, acknowledgedAt: string | null = null) => ({
       source: "backup" as const,
       code: "backup.archives_deleted",
-      params: { count: 2, date: detectedAt.slice(0, 10) },
+      params: { count: 2, date, lastDate: date, severalDays: false },
       severity: "warning" as const,
       detectedAt,
       acknowledgedAt,
@@ -382,12 +402,15 @@ describe("readOpenEmailedIncidents for backups", () => {
     await suite.db
       .insert(incidents)
       .values([
-        row("2026-10-27T03:00:00.000Z", "2026-10-27T09:00:00.000Z"),
-        row("2026-10-28T03:00:00.000Z"),
+        row("2026-10-27T03:00:00.000Z", "2026-10-19", "2026-10-27T09:00:00.000Z"),
+        row("2026-10-28T03:00:00.000Z", "2026-10-20"),
       ]);
     const open = await readOpenEmailedIncidents(suite.db);
     expect(open.map(({ code, params }) => ({ code, params }))).toEqual([
-      { code: "backup.archives_deleted", params: { count: 2, date: "2026-10-28" } },
+      {
+        code: "backup.archives_deleted",
+        params: { count: 2, date: "2026-10-20", lastDate: "2026-10-20", severalDays: false },
+      },
     ]);
   });
 });

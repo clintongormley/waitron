@@ -27,7 +27,7 @@ words also say «Tell a manager» and are not covered by this answer (backlog).
 
 A third exception, the owner's of 2026-10-28 (A1167 slice 1): the two backup-room alerts name no
 next step. They are «Low disk space: the box deleted its oldest backup ({date}).» (or its {count}
-oldest backups) and «Backup not made: it needs {needed} free and the disk has {available}.», on the
+oldest backups), with «({date} to {lastDate})» when they were taken on different days and «Backup not made: it needs {needed} free and the disk has {available}.», on the
 bell and in their emails (`backup.archives_deleted` and the `spaceLow` variant of
 `backup.run_stopped` in `apps/dashboard/src/i18n/alert-messages.ts`; `BACKUP_DELETED_EMAIL_WORDS`
 and `BACKUP_REFUSED_EMAIL_WORDS` in `apps/server/src/i18n/box-emails.ts`). The owner's reason: “the

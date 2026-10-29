@@ -203,7 +203,12 @@ describe("readOpenAlerts", () => {
     await asApp((tx) =>
       recordIncident(tx, {
         origin: backupOrigin(),
-        error: new AppError("backup.archives_deleted", { count: 2, date: "2026-09-14" }),
+        error: new AppError("backup.archives_deleted", {
+          count: 2,
+          date: "2026-09-14",
+          lastDate: "2026-09-14",
+          severalDays: false,
+        }),
         severity: "warning",
         detectedAt: NOW,
       }),
@@ -216,7 +221,7 @@ describe("readOpenAlerts", () => {
       area: "backup",
       screen: "backup",
       source: "backup",
-      params: { count: 2, date: "2026-09-14" },
+      params: { count: 2, date: "2026-09-14", lastDate: "2026-09-14", severalDays: false },
     });
     const withoutIt = await asApp((tx) =>
       readOpenAlerts(tx, { registry, now: NOW, log: noopLog }, EVERYTHING),

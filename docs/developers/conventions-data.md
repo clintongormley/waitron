@@ -4575,9 +4575,11 @@ destination.
 
 **The report and the alert.** A room step that deleted anything calls `onArchivesDeleted` once on
 every way out: success, refusal, a stop or a failed `unlink`, before the refusal is rethrown. Boot
-wires it to `recordArchivesDeleted`, which records `backup.archives_deleted` (`count`, and `date`:
-the calendar day, in the venue's time zone, of the report just after the deleting; the alert's
-`detectedAt` is that report's time) with the `backup` origin through `recordIncidentOnce`, so while
+wires it to `recordArchivesDeleted`, which records `backup.archives_deleted` (`count`; `date` and
+`lastDate`, the calendar days, in the venue's time zone, on which the oldest and newest of the
+deleted backups were taken; and `severalDays`, true when those two days differ, which picks the
+several-days words on the bell and in the email; the alert's `detectedAt` is the time of the
+report just after the deleting) with the `backup` origin through `recordIncidentOnce`, so while
 one is open a later deletion changes nothing. A failure to record is
 logged `backup.archives_deleted_alert_failed` and never changes the run's outcome. Core's
 `CORE_ALERTS` claims `backup.` for `system.manage` (`packages/db/src/alerts.ts`). The managers' email
