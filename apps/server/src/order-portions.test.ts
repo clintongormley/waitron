@@ -30,7 +30,7 @@ import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { insertTabRound, priceTabRound, type PricedTabRound } from "./working-order.js";
 
 type Row = PricedTabRound["rows"][number];

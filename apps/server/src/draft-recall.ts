@@ -236,7 +236,7 @@ export async function saveRecalledLine(
  */
 async function copyRecalledPortion(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   lineId: string,
   draftId: string,
   portion: { cohortId: string; nextOrdinal: number },

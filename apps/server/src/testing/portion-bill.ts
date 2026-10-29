@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Transaction } from "@waitron/db";
 import { expandPortionRows, registerPortions, type PortionRef } from "../order-portions.js";
-import type { OriginConfig } from "../till-config.js";
+import type { OriginConfig } from "../trading-context.js";
 import {
   bumpRevision,
   fireLines,

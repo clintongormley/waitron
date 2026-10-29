@@ -1159,7 +1159,7 @@ export async function enqueueExtraCancelled(
  */
 export async function foldPortionNotices<T extends CorrectionItem>(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   items: readonly T[],
   sameAs: (item: T) => unknown = () => null,
 ): Promise<{ notices: T[]; read: PortionRead }> {

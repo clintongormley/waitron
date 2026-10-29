@@ -35,7 +35,7 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { PortionRef } from "./order-portions.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb, type ProductLine } from "./testing/split-extras-venue.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { readLockedLines, splitLinesWithinOrder, type StoredOrderLine } from "./working-order.js";
 
 const DAY = "2026-10-27";

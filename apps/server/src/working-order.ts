@@ -3213,7 +3213,7 @@ export async function removeFromLine(
  */
 export async function removePortions(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   targets: readonly VoidTarget[],
   operatorId: string | undefined,
