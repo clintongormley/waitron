@@ -1,5 +1,7 @@
 import "./errors.js";
-import { writeFile, rename, rm } from "node:fs/promises";
+import { open, writeFile, rename, rm } from "node:fs/promises";
+import { dirname } from "node:path";
+import { syncFolder } from "./folder-sync.js";
 
 /** Where {@link stageFile} writes `path`'s working copy. */
 export function stagedPath(path: string): string {
@@ -34,4 +36,24 @@ export async function writeFileAtomic(
   mode: number,
 ): Promise<void> {
   await rename(await stageFile(path, data, mode), path);
+}
+
+/** {@link writeFileAtomic}, also syncing the working copy before the rename and the folder after
+ * it. A failed sync is thrown. */
+export async function writeFileDurable(
+  path: string,
+  data: string | Uint8Array,
+  mode: number,
+): Promise<void> {
+  const tmp = stagedPath(path);
+  await rm(tmp, { force: true });
+  const handle = await open(tmp, "w", mode);
+  try {
+    await handle.writeFile(data);
+    await handle.sync();
+  } finally {
+    await handle.close();
+  }
+  await rename(tmp, path);
+  await syncFolder(dirname(path));
 }

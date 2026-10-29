@@ -24,7 +24,7 @@ import {
 import type { DeviceOf } from "./disk-usage.js";
 import { errnoOf } from "./errno.js";
 import type { Statfs } from "./free-bytes.js";
-import { writeFileAtomic } from "./fs-atomic.js";
+import { writeFileDurable } from "./fs-atomic.js";
 import type { Logger } from "./logger.js";
 import { RESET_REQUEST_FILE } from "./reset-request.js";
 import { RESTORE_REQUEST_FILE } from "./restore-request.js";
@@ -218,7 +218,7 @@ async function writeRecord(
     deleted: entries,
   };
   try {
-    await writeFileAtomic(recordPath(deps.stateDir), JSON.stringify(record), 0o600);
+    await writeFileDurable(recordPath(deps.stateDir), JSON.stringify(record), 0o600);
   } catch (error) {
     deps.log("warn", "backup.start_room_record_failed", { errno: errnoOf(error) });
   }

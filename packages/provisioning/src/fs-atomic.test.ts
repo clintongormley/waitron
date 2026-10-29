@@ -1,8 +1,11 @@
+import * as fs from "node:fs/promises";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
-import { stageFile, writeFileAtomic } from "./fs-atomic.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { stageFile, writeFileAtomic, writeFileDurable } from "./fs-atomic.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -58,5 +61,72 @@ describe("stageFile", () => {
     await writeFile(`${target}.tmp`, "stale", { mode: 0o644 });
     const staged = await stageFile(target, "fresh-secret", 0o600);
     expect((await stat(staged)).mode & 0o777).toBe(0o600);
+  });
+});
+
+/** Each sync of an opened file or folder and each rename, in order, while `run` runs. */
+async function syncsAndRenames(run: () => Promise<void>): Promise<string[]> {
+  const events: string[] = [];
+  const real = await vi.importActual<typeof fs>("node:fs/promises");
+  vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+    const handle = await real.open(...args);
+    const realSync = handle.sync.bind(handle);
+    handle.sync = async () => {
+      events.push(`sync ${String(args[0])}`);
+      return realSync();
+    };
+    return handle;
+  });
+  vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+    events.push(`rename ${String(from)} ${String(to)}`);
+    return real.rename(from, to);
+  });
+  try {
+    await run();
+  } finally {
+    vi.mocked(fs.open).mockReset();
+    vi.mocked(fs.rename).mockReset();
+  }
+  return events;
+}
+
+describe("writeFileDurable", () => {
+  it("syncs the working copy before renaming it onto the target, then syncs the folder", async () => {
+    const d = await newDir();
+    const target = join(d, "record.json");
+
+    const events = await syncsAndRenames(() => writeFileDurable(target, "{}", 0o600));
+
+    expect(events).toEqual([`sync ${target}.tmp`, `rename ${target}.tmp ${target}`, `sync ${d}`]);
+    expect(await readFile(target, "utf8")).toBe("{}");
+    expect((await stat(target)).mode & 0o777).toBe(0o600);
+    await expect(stat(`${target}.tmp`)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("does not inherit a stale working copy's broader permissions", async () => {
+    const d = await newDir();
+    const target = join(d, "record.json");
+    await writeFile(`${target}.tmp`, "stale", { mode: 0o644 });
+
+    await writeFileDurable(target, "fresh", 0o600);
+
+    expect(await readFile(target, "utf8")).toBe("fresh");
+    expect((await stat(target)).mode & 0o777).toBe(0o600);
+  });
+
+  it("throws when the folder cannot be synced after the rename, leaving the file in place", async () => {
+    const d = await newDir();
+    const target = join(d, "record.json");
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (String(args[0]) === d) throw Object.assign(new Error("no"), { code: "EIO" });
+      return real.open(...args);
+    });
+    try {
+      await expect(writeFileDurable(target, "{}", 0o600)).rejects.toMatchObject({ code: "EIO" });
+    } finally {
+      vi.mocked(fs.open).mockReset();
+    }
+    expect(await readFile(target, "utf8")).toBe("{}");
   });
 });

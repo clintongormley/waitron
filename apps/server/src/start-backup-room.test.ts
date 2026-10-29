@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import * as fs from "node:fs/promises";
 import {
   chmod,
   lstat,
@@ -25,6 +26,8 @@ import { writeBackupRoomNote } from "./backup-room-note.js";
 import { RESET_REQUEST_FILE } from "./reset-request.js";
 import { RESTORE_REQUEST_FILE } from "./restore-request.js";
 import { deleteOldBackupsAtStart, type StartBackupRoomDeps } from "./start-backup-room.js";
+
+vi.mock("node:fs/promises", { spy: true });
 
 const MIB = 1024 * 1024;
 const SPARE = 8 * MIB;
@@ -625,6 +628,42 @@ describe("deleteOldBackupsAtStart", () => {
       expect(record.at).toEqual(NOW);
       expect(record.deleted.map((a) => a.key)).toEqual([oldest]);
     });
+  });
+
+  it("syncs the record before its rename and the state folder after, so a power cut cannot empty it", async () => {
+    await note();
+    await archive(usb, days(1), 15);
+    await archive(usb, days(2), 15);
+    const { deps } = setup();
+    const record = join(stateDir, BACKUP_ROOM_START_DELETED_FILE);
+    const events: string[] = [];
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      const handle = await real.open(...args);
+      const realSync = handle.sync.bind(handle);
+      handle.sync = async () => {
+        events.push(`sync ${String(args[0])}`);
+        return realSync();
+      };
+      return handle;
+    });
+    vi.mocked(fs.rename).mockImplementation(async (from, to) => {
+      events.push(`rename ${String(from)} ${String(to)}`);
+      return real.rename(from, to);
+    });
+    try {
+      await deleteOldBackupsAtStart(deps);
+    } finally {
+      vi.mocked(fs.open).mockReset();
+      vi.mocked(fs.rename).mockReset();
+    }
+
+    expect(events).toEqual([
+      `sync ${record}.tmp`,
+      `rename ${record}.tmp ${record}`,
+      `sync ${stateDir}`,
+    ]);
+    expect((await readRecord()).deleted).toHaveLength(1);
   });
 
   it("a record that cannot be written is logged and the deletions stand", async () => {

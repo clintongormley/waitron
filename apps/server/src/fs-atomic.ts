@@ -1,1 +1,1 @@
-export { stagedPath, stageFile, writeFileAtomic } from "@waitron/provisioning";
+export { stagedPath, stageFile, writeFileAtomic, writeFileDurable } from "@waitron/provisioning";
