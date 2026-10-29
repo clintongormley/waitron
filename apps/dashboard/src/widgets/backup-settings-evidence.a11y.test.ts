@@ -40,6 +40,22 @@ function row(
   });
 }
 
+/** The server's `ARCHIVE_SETTINGS_REASONS` other than `schedule`, which "settings-invalid" draws. */
+const SETTINGS_REASONS = [
+  "not_json",
+  "fields",
+  "revision",
+  "enabled",
+  "destinations",
+  "destination",
+  "bucket",
+  "duplicate_id",
+  "duplicate_dir",
+  "buckets",
+  "retention",
+  "destinationTimeoutMs",
+] as const;
+
 /** What each state's read answers: an evidence answer, or a rejection, or a read that never ends. */
 const ANSWERS: Record<string, () => Promise<BackupSettingsEvidence>> = {
   "key-version-unknown": async () =>
@@ -53,11 +69,28 @@ const ANSWERS: Record<string, () => Promise<BackupSettingsEvidence>> = {
         detail: { keyVersion: 7 },
       },
     }),
+  "key-version-unknown-one-key": async () =>
+    evidence({
+      failures: [failure({ code: "credentials.key_version_unknown", detail: { keyVersion: 7 } })],
+      record: { keyVersion: 7, writtenAt: "2026-10-29T09:00:00.000Z", digest: "digest-a" },
+      boxKeyNumbers: { current: 3 },
+      now: {
+        state: "unreadable",
+        code: "credentials.key_version_unknown",
+        detail: { keyVersion: 7 },
+      },
+    }),
   "decrypt-failed": async () => evidence(),
   malformed: async () => row("credentials.malformed_payload", null, null),
   "credential-unusable": async () => row("server.credential_unusable", null, null),
   "settings-invalid": async () =>
     row("backup.archive_settings_invalid", { reason: "schedule" }, null),
+  ...Object.fromEntries(
+    SETTINGS_REASONS.map((reason) => [
+      `settings-invalid-${reason}`,
+      async () => row("backup.archive_settings_invalid", { reason }, null),
+    ]),
+  ),
   "recovery-key-missing": async () =>
     row("backup.recovery_key_missing", null, {
       now: { state: "readable", destinations: [FOLDER] },
@@ -122,15 +155,19 @@ const cases = [1280, 390].flatMap((width) =>
   ["en-GB", "es-ES"].map((locale) => ({ width, locale })),
 );
 
+async function screenshot(native: HTMLDialogElement, name: string) {
+  await page.screenshot({ element: native, path: `__screenshots__/look/${name}.png` });
+}
+
 describe.each(["light", "dark"] as const)(
   "backup settings evidence accessibility (%s)",
   (theme) => {
-    it.each(cases)("draws every state in $locale at $width px", async ({ width, locale }) => {
-      await page.viewport(width, 900);
-      expect(window.innerWidth).toBe(width);
-      setLocale(locale);
-      for (const [state, answer] of Object.entries(ANSWERS)) {
-        const api = { getBackupSettingsEvidence: answer } as unknown as DashboardApi;
+    describe.each(cases)("in $locale at $width px", ({ width, locale }) => {
+      it.each(Object.keys(ANSWERS))("draws %s", async (state) => {
+        await page.viewport(width, 900);
+        expect(window.innerWidth).toBe(width);
+        setLocale(locale);
+        const api = { getBackupSettingsEvidence: ANSWERS[state] } as unknown as DashboardApi;
         const { el, host } = await mountWidget<BackupSettingsEvidenceDialog>(
           "dashboard-backup-settings-evidence",
           { api, open: true },
@@ -159,14 +196,22 @@ describe.each(["light", "dark"] as const)(
           stop.focus();
           await expect.poll(() => stop.matches(":focus-within")).toBe(true);
         }
-        await page.screenshot({ element: native, path: `__screenshots__/look/${name}.png` });
+        await screenshot(native, name);
+        if (width === 390) {
+          const scroller = dialog.shadowRoot!.querySelector<HTMLElement>(".body")!;
+          scroller.scrollTop = scroller.scrollHeight;
+          await new Promise((resolve) =>
+            requestAnimationFrame(() => requestAnimationFrame(resolve)),
+          );
+          await screenshot(native, `${name}-end`);
+        }
         if (state === "stop") {
           stop.click();
           await expect.poll(() => el.open).toBe(false);
           await expect.poll(() => native.open).toBe(false);
         }
         host.remove();
-      }
+      });
     });
   },
 );
