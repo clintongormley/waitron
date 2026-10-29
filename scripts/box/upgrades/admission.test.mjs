@@ -50,7 +50,7 @@ const observation = () => ({
   checksFailed: false,
 });
 
-async function state(phase, changes = {}) {
+async function state(phase, changes = {}, initialClock = clock()) {
   const root = "/qualified/host";
   const layout = {
     version: 1,
@@ -125,7 +125,7 @@ async function state(phase, changes = {}) {
     if (phase === "IDLE") break;
     journal = await transitionAttempt(
       journal?.sequence ?? 0,
-      { type, binding: binding(), clock: clock(), data },
+      { type, binding: binding(), clock: initialClock, data },
       io,
     );
     if (journal.phase === phase && type !== "checks") break;
@@ -133,6 +133,8 @@ async function state(phase, changes = {}) {
   return {
     read: await readAttempt(root, "disk-1", io),
     observed: { ...observation(), ...changes },
+    io,
+    readNow: () => readAttempt(root, "disk-1", io),
   };
 }
 const old = { activeTreeId: "old-tree", releaseDigest: "b".repeat(64), candidate: "never-started" };
@@ -277,4 +279,86 @@ describe("startup decisions from verified attempt evidence", () => {
     const { read, observed } = await state("VALIDATING", { clock: time });
     expect(decideStartup(read, observed).kind).toBe(kind);
   });
+});
+
+describe("review recovery decisions", () => {
+  it.each([clock(301001, 300101), { ...clock(2000, 10), bootId: "boot-2", reliableUtc: false }])(
+    "inspects exhausted or unknowable restore budgets %#",
+    async (time) => {
+      const { read, observed } = await state("ROLLBACK_INTENT", {
+        candidate: "stopped",
+        clock: time,
+      });
+      expect(decideStartup(read, observed).kind).toBe("inspect");
+    },
+  );
+  it("does not derive cross-boot elapsed time from an untrusted phase start", async () => {
+    const { read, observed } = await state(
+      "ROLLBACK_INTENT",
+      { candidate: "stopped", clock: { ...clock(2000, 1), bootId: "boot-2" } },
+      { ...clock(), reliableUtc: false },
+    );
+    expect(decideStartup(read, observed)).toMatchObject({
+      kind: "inspect",
+      reason: "clock-unavailable",
+    });
+  });
+  it("keeps validation within its steady allowance after its untrusted start clock is corrected", async () => {
+    const { read, observed } = await state(
+      "VALIDATING",
+      { clock: clock(3602000, 1100) },
+      { ...clock(), reliableUtc: false },
+    );
+    expect(decideStartup(read, observed)).toMatchObject({
+      kind: "validate",
+      reason: "rerun-checks",
+    });
+  });
+  it("requires durable abandonment before reopening an intact incomplete freeze", async () => {
+    const result = await state("FREEZING", old);
+    expect(decideStartup(result.read, result.observed)).toMatchObject({
+      kind: "start-current",
+      recordAbandon: true,
+    });
+    await transitionAttempt(
+      result.read.journal.sequence,
+      { type: "cleanup", binding: binding(), clock: clock(), data: {} },
+      result.io,
+    );
+    expect(decideStartup(await result.readNow(), result.observed)).toMatchObject({
+      kind: "keep-serving-old",
+      reason: "abandoned",
+    });
+  });
+  it("does not use a backward UTC checkpoint after a different boot", async () => {
+    const result = await state("ROLLBACK_INTENT", {
+      candidate: "stopped",
+      clock: { ...clock(50000, 1), bootId: "boot-2" },
+    });
+    await transitionAttempt(
+      result.read.journal.sequence,
+      {
+        type: "restore-step",
+        binding: binding(),
+        clock: clock(101000, 100100),
+        data: { step: "candidate-stopped" },
+      },
+      result.io,
+    );
+    expect(decideStartup(await result.readNow(), result.observed)).toMatchObject({
+      kind: "inspect",
+      reason: "clock-unavailable",
+    });
+  });
+  it("refuses an already-started candidate beside an otherwise complete snapshot", async () => {
+    const { read, observed } = await state("SNAPSHOT_READY", { ...old, candidate: "running" });
+    expect(decideStartup(read, observed).kind).toBe("inspect");
+  });
+  it.each(["VALIDATING", "ROLLBACK_CLOSED"])(
+    "binds %s to the candidate image as well as its tree",
+    async (phase) => {
+      const { read, observed } = await state(phase, { releaseDigest: "0".repeat(64) });
+      expect(decideStartup(read, observed).kind).toBe("inspect");
+    },
+  );
 });

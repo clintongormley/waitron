@@ -108,9 +108,13 @@ function parseEvent(value) {
   }
   if (
     value.type === "rollback" &&
-    !["checks-failed", "candidate-crashed", "budget-exhausted", "administrator-return"].includes(
-      data.reason,
-    )
+    ![
+      "checks-failed",
+      "candidate-crashed",
+      "budget-exhausted",
+      "administrator-return",
+      "clock-unavailable",
+    ].includes(data.reason)
   )
     throw failure("event-invalid");
   return { type: value.type, binding: parseBinding(value.binding), clock: { ...clock }, data };
@@ -125,6 +129,7 @@ export function phaseElapsed(journal, clock) {
     return elapsed < journal.elapsedMsAtCheckpoint ? null : elapsed;
   }
   if (
+    journal.phaseUtcTrusted !== true ||
     clock.reliableUtc !== true ||
     !safeInteger(clock.utcMs) ||
     clock.utcMs < journal.phaseStartedUtcMs + journal.elapsedMsAtCheckpoint
@@ -140,6 +145,7 @@ function beginPhase(journal, phase, clock, budget) {
     phase,
     phaseStartedUtcMs: clock.utcMs,
     phaseDeadlineUtcMs: clock.utcMs + budget,
+    phaseUtcTrusted: clock.reliableUtc,
     startedBootId: clock.bootId,
     bootMonotonicStartMs: clock.steadyMs,
     elapsedMsAtCheckpoint: 0,
@@ -174,9 +180,12 @@ function derive(previous, event) {
   }
   if (!same(binding, previous.binding) || previous.sequence === Number.MAX_SAFE_INTEGER)
     throw failure("binding-conflict");
+  if (previous.outcome === "abandoned") throw failure("transition-refused");
   let next = { ...previous, sequence: previous.sequence + 1 };
   const phase = previous.phase;
   const elapsed = phaseElapsed(previous, clock);
+  if (type === "cleanup" && phase === "FREEZING")
+    return beginPhase({ ...next, outcome: "abandoned" }, "PREPARED", clock, 0);
   if (type === "freeze" && phase === "PREPARED")
     return beginPhase(next, "FREEZING", clock, 120_000);
   if (type === "rollback" && ["SNAPSHOT_READY", "VALIDATING"].includes(phase))
@@ -202,7 +211,7 @@ function derive(previous, event) {
   if (
     elapsed === null ||
     elapsed >= previous.phaseDeadlineUtcMs - previous.phaseStartedUtcMs ||
-    (clock.reliableUtc && clock.utcMs >= previous.phaseDeadlineUtcMs)
+    (previous.phaseUtcTrusted && clock.reliableUtc && clock.utcMs >= previous.phaseDeadlineUtcMs)
   )
     throw failure("phase-budget");
   next.elapsedMsAtCheckpoint = elapsed;

@@ -372,7 +372,10 @@ describe("attempt journal", () => {
     "refuses %s from a later boot without reusing the old nonce",
     async (type) => {
       const { io } = await fixture();
-      const journal = await advance(io, type === "release" ? "close" : "validate");
+      const journal = await advance(
+        io,
+        type === "release" ? "close" : type === "close" ? "checks" : "validate",
+      );
       const data =
         type === "release"
           ? { checkBinding: check(), releaseGeneration: "candidate-live" }
@@ -789,3 +792,186 @@ describe("attempt journal", () => {
     },
   );
 });
+
+describe("review regressions", () => {
+  it.each(["FREEZING", "VALIDATING", "ROLLBACK_INTENT"])(
+    "keeps %s within its steady budget when an untrusted phase clock is corrected",
+    async (phase) => {
+      for (const corrected of [false, true]) {
+        const { io } = await fixture();
+        const initial = { ...clock(), reliableUtc: false };
+        let journal = await transitionAttempt(0, { ...prepare(), clock: initial }, io);
+        journal = await transitionAttempt(journal.sequence, event("freeze", {}, initial), io);
+        if (phase !== "FREEZING") {
+          journal = await transitionAttempt(
+            journal.sequence,
+            event("capture", { captureId: "snapshot-1" }, initial),
+            io,
+          );
+          journal = await transitionAttempt(
+            journal.sequence,
+            event("validate", { checkBinding: check() }, initial),
+            io,
+          );
+        }
+        if (phase === "ROLLBACK_INTENT")
+          journal = await transitionAttempt(
+            journal.sequence,
+            event("rollback", { reason: "candidate-crashed" }, initial),
+            io,
+          );
+        const [type, data] =
+          phase === "FREEZING"
+            ? ["capture", { captureId: "snapshot-1" }]
+            : phase === "VALIDATING"
+              ? ["checks", { checkBinding: check(), checksDigest: "4".repeat(64) }]
+              : ["restore-step", { step: "candidate-stopped" }];
+        const result = await transitionAttempt(
+          journal.sequence,
+          event(type, data, clock(corrected ? 3602000 : 2000, 1100)),
+          io,
+        );
+        expect(result.sequence).toBe(journal.sequence + 1);
+        expect(result.elapsedMsAtCheckpoint).toBe(1000);
+      }
+    },
+  );
+  it("records the clock-unavailable rollback reason returned by startup", async () => {
+    const { io, read } = await fixture();
+    const journal = await advance(io);
+    await transitionAttempt(
+      journal.sequence,
+      event(
+        "rollback",
+        { reason: "clock-unavailable" },
+        { ...clock(), bootId: "boot-2", reliableUtc: false },
+      ),
+      io,
+    );
+    expect((await read()).journal).toMatchObject({
+      phase: "ROLLBACK_INTENT",
+      outcome: "clock-unavailable",
+    });
+  });
+  it("durably retires an incomplete freeze before the intact old service reopens", async () => {
+    const { io, read } = await fixture();
+    const journal = await advance(io, "freeze");
+    const abandoned = await transitionAttempt(journal.sequence, event("cleanup"), io);
+    expect(abandoned).toMatchObject({ phase: "PREPARED", outcome: "abandoned" });
+    await expect(
+      transitionAttempt(journal.sequence, event("capture", { captureId: "late-snapshot" }), io),
+    ).rejects.toMatchObject({ reason: "sequence-conflict" });
+    for (const [type, data] of [
+      ["capture", { captureId: "late-snapshot" }],
+      ["freeze", {}],
+    ])
+      await expect(
+        transitionAttempt(abandoned.sequence, event(type, data), io),
+      ).rejects.toMatchObject({ reason: "transition-refused" });
+    expect((await read()).journal.outcome).toBe("abandoned");
+  });
+  it.each([
+    [119999, true],
+    [120000, false],
+  ])("keeps capture inside the two-minute freeze boundary at %sms", async (elapsed, allowed) => {
+    const { io } = await fixture();
+    await advance(io, "freeze");
+    const operation = transitionAttempt(
+      2,
+      event("capture", { captureId: "snapshot-1" }, clock(1000 + elapsed, 100 + elapsed)),
+      io,
+    );
+    if (allowed) expect((await operation).phase).toBe("SNAPSHOT_READY");
+    else await expect(operation).rejects.toMatchObject({ reason: "phase-budget" });
+  });
+  it("refuses validation that names the old tree", async () => {
+    const { io } = await fixture();
+    await advance(io, "capture");
+    await expect(
+      transitionAttempt(3, event("validate", { checkBinding: check("old-tree") }), io),
+    ).rejects.toMatchObject({ reason: "transition-refused" });
+  });
+  it("refuses the wrong restored tree and repeated releases before or after cleanup", async () => {
+    const { io } = await fixture();
+    let journal = await advance(io);
+    journal = await transitionAttempt(
+      journal.sequence,
+      event("rollback", { reason: "checks-failed" }),
+      io,
+    );
+    for (const step of ["candidate-stopped", "tree-replaced", "floor-applied", "old-checked"])
+      journal = await transitionAttempt(journal.sequence, event("restore-step", { step }), io);
+    await expect(
+      transitionAttempt(
+        journal.sequence,
+        event("restored", { checkBinding: check(), releaseGeneration: "old-live" }),
+        io,
+      ),
+    ).rejects.toMatchObject({ reason: "transition-refused" });
+    journal = await transitionAttempt(
+      journal.sequence,
+      event("restored", { checkBinding: check("old-tree"), releaseGeneration: "old-live" }),
+      io,
+    );
+    const release = event("release", {
+      checkBinding: check("old-tree"),
+      releaseGeneration: "old-live",
+    });
+    journal = await transitionAttempt(journal.sequence, release, io);
+    await expect(transitionAttempt(journal.sequence, release, io)).rejects.toMatchObject({
+      reason: "transition-refused",
+    });
+    journal = await transitionAttempt(journal.sequence, event("cleanup"), io);
+    await expect(transitionAttempt(journal.sequence, release, io)).rejects.toMatchObject({
+      reason: "transition-refused",
+    });
+  });
+  it.each(["marker-episode", "head-count", "layout-attempt"])(
+    "checks independent %s evidence even when record hashes agree",
+    async (fault) => {
+      const { root, io, read } = await fixture();
+      await advance(io, "close");
+      const file =
+        fault === "marker-episode"
+          ? "attempt.json"
+          : fault === "head-count"
+            ? "head.json"
+            : "layout.json";
+      const value = JSON.parse(await io.read(file));
+      if (fault === "marker-episode") value.binding.episodeId = "another-episode";
+      if (fault === "head-count") value.sequence = 999;
+      if (fault === "layout-attempt") value.attemptId = "another-attempt";
+      await fs.writeFile(join(root, file), JSON.stringify(value) + "\n");
+      expect((await read()).kind).toBe("inspection-required");
+    },
+  );
+});
+
+it.each([false, true])(
+  "serialises real closure/rollback races with reversed start order %s",
+  async (reverse) => {
+    const { io, read } = await fixture();
+    await advance(io, "checks");
+    const actions = [
+      event("close", {
+        checkBinding: check(),
+        checksDigest: "4".repeat(64),
+        releaseGeneration: "candidate-live",
+      }),
+      event("rollback", { reason: "checks-failed" }),
+    ];
+    if (reverse) actions.reverse();
+    const results = await Promise.allSettled(
+      actions.map((action) => transitionAttempt(5, action, io)),
+    );
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const winner = results.findIndex((result) => result.status === "fulfilled");
+    const current = (await read()).journal;
+    expect(current.phase).toBe(
+      actions[winner].type === "close" ? "ROLLBACK_CLOSED" : "ROLLBACK_INTENT",
+    );
+    await expect(
+      transitionAttempt(current.sequence, actions[1 - winner], io),
+    ).rejects.toMatchObject({ reason: "transition-refused" });
+  },
+);

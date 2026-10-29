@@ -89,25 +89,34 @@ export function decideStartup(read, observed) {
   if (journal.phase === "PREPARED" || journal.phase === "FREEZING") {
     if (!oldTree || !observed.oldStateIntact || observed.candidate !== "never-started")
       return inspect("old-state-uncertain");
-    if (journal.phase === "PREPARED") return decision("keep-serving-old", "prepared");
+    if (journal.phase === "PREPARED")
+      return decision(
+        "keep-serving-old",
+        journal.outcome === "abandoned" ? "abandoned" : "prepared",
+      );
     return observed.allWritersStopped
-      ? decision("start-current", "intact-old")
+      ? decision("start-current", "intact-old", { recordAbandon: true })
       : inspect("writers-uncertain");
   }
   if (!observed.captureVerified || !observed.containment || observed.closure !== "absent")
     return inspect("rollback-uncertain");
-  if (journal.phase === "ROLLBACK_INTENT")
+  const rollback = (reason) => decision("resume-restore", reason, { recordIntent: true });
+  const elapsed = phaseElapsed(journal, observed.clock);
+  const expired =
+    elapsed !== null &&
+    (elapsed >= journal.phaseDeadlineUtcMs - journal.phaseStartedUtcMs ||
+      (journal.phaseUtcTrusted &&
+        observed.clock.reliableUtc &&
+        observed.clock.utcMs >= journal.phaseDeadlineUtcMs));
+  if (journal.phase === "ROLLBACK_INTENT") {
+    if (elapsed === null) return inspect("clock-unavailable");
+    if (expired) return inspect("budget-exhausted");
     return observed.allWritersStopped
       ? decision("resume-restore", "recorded-rollback", { recordIntent: false })
       : inspect("writers-uncertain");
-  const rollback = (reason) => decision("resume-restore", reason, { recordIntent: true });
-  const elapsed = phaseElapsed(journal, observed.clock);
+  }
   if (elapsed === null) return rollback("clock-unavailable");
-  if (
-    elapsed >= journal.phaseDeadlineUtcMs - journal.phaseStartedUtcMs ||
-    (observed.clock.reliableUtc && observed.clock.utcMs >= journal.phaseDeadlineUtcMs)
-  )
-    return rollback("budget-exhausted");
+  if (expired) return rollback("budget-exhausted");
   if (journal.phase === "SNAPSHOT_READY") {
     if (!oldTree || !observed.allWritersStopped || observed.candidate !== "never-started")
       return inspect("snapshot-start-uncertain");
