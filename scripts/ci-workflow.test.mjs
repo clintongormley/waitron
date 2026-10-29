@@ -3805,10 +3805,10 @@ function isArtifactDownload(step) {
 function artifactDownloadInputs(step) {
   if (step?.uses?.startsWith("actions/download-artifact@")) return step.with;
   const match =
-    /^node scripts\/download-coverage-blobs\.mjs '([a-z][a-z-]+-blob-\*)' '([\w./-]+)'$/.exec(
+    /^node scripts\/download-coverage-blobs\.mjs '([a-z][a-z-]+-blob-\*)' '([\w./-]+)' ([1-9]\d*)$/.exec(
       step?.command?.trim() ?? "",
     );
-  return match ? { pattern: match[1], path: match[2] } : {};
+  return match ? { pattern: match[1], path: match[2], expected: Number(match[3]) } : {};
 }
 
 function downloadAttempts(text) {
@@ -3887,7 +3887,7 @@ describe("the workflows' artifact downloads", () => {
     step
       .replace(
         "uses: actions/download-artifact@v8",
-        "run: node scripts/download-coverage-blobs.mjs 'service-blob-*' 'packages/service/.vitest-reports'",
+        "run: node scripts/download-coverage-blobs.mjs 'service-blob-*' 'packages/service/.vitest-reports' 4",
       )
       .replace(
         / {8}with:\n(?: {10}.*\n)+/,
@@ -3920,6 +3920,8 @@ describe("the workflows' artifact downloads", () => {
       "unsafe output path",
       (text) => text.replaceAll("packages/service/.vitest-reports", "../reports"),
     ],
+    ["different retry count", (text) => text.replace(".vitest-reports' 4", ".vitest-reports' 3")],
+    ["no expected count", (text) => text.replaceAll(".vitest-reports' 4", ".vitest-reports'")],
   ])("refuses the coverage helper with %s", (_label, change) => {
     const found = downloadAttempts(workflow(change(helper(first) + clear + helper(second))));
     expect(found.length).toBeGreaterThan(0);
@@ -3930,6 +3932,35 @@ describe("the workflows' artifact downloads", () => {
     const body = job("test-server-merge").body.join("\n");
     expect(body).toContain("    permissions:\n      contents: read\n      actions: read");
     expect(artifactDownloadBase(job("test-server-merge").body)).toBe("server-blob");
+  });
+
+  const helperMerges = mergeJobs.flatMap(({ id, body }) => {
+    const downloads = workflowSteps(body.join("\n"))
+      .filter((step) => step.command.includes("scripts/download-coverage-blobs.mjs"))
+      .map(artifactDownloadInputs);
+    return downloads.length === 0 ? [] : [{ id, body, downloads }];
+  });
+
+  it("finds merge jobs that download with the coverage helper", () => {
+    expect(helperMerges.map(({ id }) => id)).toContain("test-server-merge");
+  });
+
+  it("expects as many reports as the merge job's needed jobs upload", () => {
+    const uploaded = (base, needed) => {
+      const { body } = job(needed);
+      const shards = artifactUploadBase(body) === base ? (matrixShards(body)?.length ?? 0) : 0;
+      const stream = body.some((line) => line.trim() === `name: ${base}-stream`) ? 1 : 0;
+      return shards + stream;
+    };
+    const found = helperMerges.flatMap(({ id, body, downloads }) =>
+      downloads.map(({ pattern, expected }) => {
+        const base = pattern?.slice(0, -2);
+        const total = allNeedsOf(body).reduce((sum, needed) => sum + uploaded(base, needed), 0);
+        return { job: id, expected, uploaded: total };
+      }),
+    );
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.filter(({ expected, uploaded }) => expected !== uploaded)).toEqual([]);
   });
 
   it("ignores commented downloads", () => {

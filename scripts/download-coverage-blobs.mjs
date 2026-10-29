@@ -30,6 +30,7 @@ export async function downloadCoverageBlobs({
   token,
   pattern,
   directory,
+  expected,
   apiUrl = "https://api.github.com",
 }) {
   if (
@@ -37,7 +38,8 @@ export async function downloadCoverageBlobs({
     repository.includes("..") ||
     !/^[1-9]\d*$/.test(runId ?? "") ||
     !token ||
-    !/^[a-z][a-z-]+-blob-\*$/.test(pattern ?? "")
+    !/^[a-z][a-z-]+-blob-\*$/.test(pattern ?? "") ||
+    !/^[1-9]\d*$/.test(String(expected))
   ) {
     throw new Error("Invalid coverage download inputs");
   }
@@ -62,6 +64,8 @@ export async function downloadCoverageBlobs({
     const previous = latest.get(artifact.name);
     if (!previous || artifact.id > previous.id) latest.set(artifact.name, artifact);
   }
+  if (latest.size !== Number(expected))
+    throw new Error(`Expected ${expected} coverage reports, found ${latest.size}`);
   const reports = [...latest.values()].map((artifact) => {
     const suffix = new RegExp(`^${prefix}([1-9]\\d*|stream)$`).exec(artifact.name)?.[1];
     if (!suffix || artifact.expired || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest ?? "")) {
@@ -113,6 +117,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     apiUrl: process.env.GITHUB_API_URL,
     pattern: process.argv[2],
     directory: process.argv[3],
+    expected: process.argv[4],
   }).catch((error) => {
     console.error(error.message);
     process.exitCode = 1;

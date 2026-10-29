@@ -1247,7 +1247,7 @@ jobs:
 
       - id: download
         name: Download the server coverage blobs
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
         timeout-minutes: 1
         continue-on-error: true
         env:
@@ -1260,7 +1260,7 @@ jobs:
 
       - name: Download the server coverage blobs, second attempt
         if: steps.download.outcome == 'failure'
-        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'
+        run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21
         timeout-minutes: 1
         env:
           GH_TOKEN: ${{ github.token }}
