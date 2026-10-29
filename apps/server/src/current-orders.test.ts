@@ -64,6 +64,7 @@ import {
   type GroupLine,
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createTable } from "./testing/live-table.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -296,6 +297,17 @@ async function group(
   return { id: groups[0]!.id, lineIds: groups[0]!.lineIds };
 }
 
+/** {@link group}, with each input line stored as one row, as before portions. */
+async function groupedGroup(
+  v: Venue,
+  s: Seated,
+  release: GroupRelease,
+  lines: GroupLine[],
+): Promise<{ id: string; lineIds: string[] }> {
+  const { groups } = await inTx((tx) => placeGroupedRound(tx, v.cfg, s, { release, lines }, ALEX));
+  return { id: groups[0]!.id, lineIds: groups[0]!.lineIds };
+}
+
 async function fire(v: Venue, partyId: string, groupId: string) {
   const command = await args(partyId);
   return inTx((tx) => fireGroup(tx, v.cfg, partyId, groupId, command));
@@ -376,7 +388,7 @@ async function at<R>(iso: string, fn: () => Promise<R>): Promise<R> {
 async function fourGroups(v: Venue) {
   const s = await seated(v);
   const g1 = await group(v, s.partyId, "fire", [line(v, "croquetas")]);
-  const g2 = await group(v, s.partyId, "fire", [line(v, "steak", "2")]);
+  const g2 = await groupedGroup(v, s, "fire", [line(v, "steak", "2")]);
   const g3 = await group(v, s.partyId, "hold", [line(v, "flan")]);
   const g4 = await group(v, s.partyId, "hold", [line(v, "water")]);
   return { ...s, g1, g2, g3, g4 };
@@ -1181,7 +1193,7 @@ describe("readCurrentOrders (spec §4)", () => {
     const desserts = await inTx((tx) =>
       createCourse(tx, v.cfg, { name: "Desserts", displayOrder: 3 }),
     );
-    const held = await group(v, s.partyId, "hold", [
+    const held = await groupedGroup(v, s, "hold", [
       { ...line(v, "steak", "2"), courseId: mains.id },
       { ...line(v, "flan"), courseId: desserts.id },
       line(v, "water"),
@@ -1539,7 +1551,7 @@ describe("an abandoned bill", () => {
   it("neither holds up nor dates the reminder, and its rows are not shown", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const starters = await group(v, s.partyId, "fire", [line(v, "croquetas", "2")]);
+    const starters = await groupedGroup(v, s, "fire", [line(v, "croquetas", "2")]);
     const desserts = await group(v, s.partyId, "hold", [line(v, "flan")]);
     const [croq] = (await linesByName(s.partyId)).filter((l) => l.name === "croquetas");
     const { billId: checkId } = await inTx(async (tx) =>
@@ -1960,7 +1972,7 @@ describe("a paid held dish fired on its own", () => {
   it("preserves the paid charge, adjustment, payment and fiscal snapshots while companions stay held", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const held = await group(v, s.partyId, "hold", [
+    const held = await groupedGroup(v, s, "hold", [
       {
         ...line(v, "steak", "2"),
         extras: [{ listId: v.extrasListId, picks: [{ productId: v.sauceId, quantity: 1 }] }],
