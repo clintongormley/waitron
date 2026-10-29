@@ -5349,14 +5349,16 @@ Not in any track until the standalone primary is done.
   managed. Display only: the box never switches a service on or off from these values. Needs
   the billing section Cloud adds to the shared contract. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §5.
 
-- **A1188. A venue manager can start the venue in the cloud when the box has died (owner,
+- **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
   show the emergency link to an administrator when the box disappears. The locked copy Cloud
   restores after a valid emergency code offers only an administrator sign-in; a manager
   holding `node.promote`, signing in with password and authenticator code, makes A1018's
   declaration that the box is off, and only if the Cloud owner agreed in advance.
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
-  Design proposed 2026-10-29, waiting for the owner's answer; nothing is built:
+  Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
+  give them the permission; printers, drawers and card readers wait for A1175's Android app.
+  Building waits for A1018's build approval, A947's strip and Cloud's half:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 
 - **The till's theme fetch does not follow a server move (A841 slice 3).** The till fetches

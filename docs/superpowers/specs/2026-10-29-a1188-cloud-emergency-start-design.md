@@ -1,9 +1,12 @@
-# A1188: a venue manager starts the venue in the cloud when the box has died
+# A1188: starting the venue in the cloud when the box has died
 
-**Proposed, 2026-10-29. Not approved. Docs only; nothing is built until the owner answers the
-question at the end.** Revised the same day after a fresh review (one critical finding, ten
-important, thirteen minor), and again after a narrow check of its claims (five important, thirteen
-minor). Decisions marked **(owner)** quote the owner. Decisions marked
+**Approved by the owner, 2026-10-29, with its defaults; nothing is built yet.** Building waits for
+A1018's build approval, A947's strip and Cloud's half (§11). Revised the same day after a fresh
+review (one critical finding, ten important, thirteen minor), and again after a narrow check of its
+claims (five important, thirteen minor). **Revised again on 2026-10-29 for the owner's answers:**
+§13 item 1 is now "administrators by default, and a venue may give the permission to other roles"
+(the owner, about 09:25), and the device agent that lifts the first evening's limit is A1175's
+Android app (the owner, about 09:30). Decisions marked **(owner)** quote the owner. Decisions marked
 **(default)** are this design's, open to the owner's correction. Everything else is a fact about the
 current code or documents, with a pointer, and says whether it was read or run.
 
@@ -25,7 +28,10 @@ up in the cloud without being able to sign in to the owner's Cloud account.
 
 The entry says "administrator" in two places and "a manager holding `node.promote`" in a third.
 Today only administrators hold that permission, and no venue can give it to anyone else (see "What
-exists today"). Which people it should be is §13's first question.
+exists today"). **(owner)** "Allow the permission to be assigned to other roles too, so it's just
+admins by default" (2026-10-29, §13 item 1). So in this design the person who starts the venue is
+**someone holding `node.promote`**: an administrator at every venue, and anyone else whose role the
+venue has given it to once that is possible (§13 item 1 says when).
 
 Cloud's half (the owner's advance permission, the emergency code, the page that asks for it, the
 restore and the charging) is Cloud's to build (Cloud billing design §10). This design covers what
@@ -52,7 +58,10 @@ Waitron builds, and names what it needs Cloud to agree (§9).
   starting the venue elsewhere, and the missing last minutes are accepted
   ([A1018 §4](2026-10-23-a1018-simple-handover-design.md#4-emergency-handover-and-the-first-two-owner-points)).
 - **`node.promote`**: the permission to switch which machine runs the venue. A1018 §7 and A947 §6.2
-  already make it the permission for the emergency declaration.
+  already make it the permission for the emergency declaration. The pages call its holders "someone
+  allowed to switch the venue's server". A1002's permission list, which the owner accepted on
+  2026-10-28, renames it `node.manage`, together with the permission to add a mirror (A1002 §2);
+  this design means whichever name it has when built.
 - **Authenticator app and recovery codes**: the phone app that shows a new six-digit code every
   half-minute, which a person can set up for their Waitron sign-in; and the single-use codes a
   person is given when they set it up, for when the phone is lost.
@@ -60,7 +69,6 @@ Waitron builds, and names what it needs Cloud to agree (§9).
   machines. It is not the fiscal installation name that appears on invoices.
 - **Operation id**: one id for the whole start, sent with every message about it, so that a message
   sent twice is recognised as the same start and never counted as a second one.
-- **P6**: Cloud's build item for running a venue's server in Cloud (hosted design, `:3` and `:385`).
 
 ## The evening this is for
 
@@ -68,9 +76,9 @@ Harbour Kitchen, a Saturday. The owner, Lucía, is hiking with no signal. At 21:
 supply fails. The bar's internet still works.
 
 1. The tills show the red strip A947 §6.1 designs: the box does not answer. Because the owner left
-   the emergency start switched on, the strip on every till also offers **For managers: start the
-   venue in the cloud** (mock-up 1). Nora, the manager on shift, holds `node.promote` because, under
-   §13 question 1's recommended answer, every manager does.
+   the emergency start switched on, the strip on every till also offers **Start the venue in the
+   cloud** (mock-up 1). Nora, the administrator on shift, holds `node.promote`, as every
+   administrator does (§13 item 1).
 2. That opens a dialog with the emergency address as text and as a QR code, what is needed and what
    will happen (mock-up 2). Nora opens it on a phone, from the QR code; the dialog says the till's own
    browser can open it too.
@@ -189,7 +197,7 @@ connected to Cloud:
 - the emergency address, and the code hidden behind **Show code** (fetched from Cloud on press),
   with **the date the current code was issued**. The owner can replace the code from the Cloud
   account (Cloud billing design §7, `:389-390`), which makes every printed pack out of date; the date
-  lets a manager check a printed pack against the card;
+  lets a person check a printed pack against the card;
 - **who can start it**: the people who hold `node.promote` **and** have an authenticator app set up,
   by name; and, in one muted line, anyone who holds `node.promote` but has no authenticator — they
   could not sign in to the copy (§5). This is the one place a venue finds out before the evening that
@@ -198,8 +206,8 @@ connected to Cloud:
   it. Until A1187 lands, it prints a one-page card with the three.
 
 **(default) Who sees the card's code:** people holding `node.promote`. Cloud's design says
-"Admins can save or print it" (§7, item 2), and `node.promote` is what an administrator has (and,
-under §13 question 1's recommended answer, a manager too).
+"Admins can save or print it" (§7, item 2), and `node.promote` is what an administrator has (and
+anyone whose role the venue gives it to, §13 item 1).
 When the setting is off, the card says so and that the owner switches it on in the Cloud account
 — that is where the owner already manages billing (Cloud billing design §5).
 
@@ -209,10 +217,10 @@ The till shows the link only inside A947 §6.1's strip, the one that appears whe
 answered for 20 seconds — A1188 adds to that strip; it does not build a second one. So this part
 waits for A947's strip.
 
-- **Who sees it (default): everyone at the till**, worded for the people who can use it:
-  **For managers: start the venue in the cloud** (or **For administrators: …** if the owner chooses
-  answer B to §13 question 1). The owner's entry says "show the emergency link to an administrator";
-  this departs from it, for one reason. Signing in at a till needs the box (see "What exists
+- **Who sees it (default): everyone at the till**, as **Start the venue in the cloud**, with no
+  role in the button's words: which roles may use it differs by venue once a venue can give the
+  permission to other roles (§13 item 1), so the dialog says who. The owner's entry says "show the
+  emergency link to an administrator"; this departs from it, for one reason. Signing in at a till needs the box (see "What exists
   today"), so once the box is dead, nobody can sign in. A link shown only to a signed-in holder of
   `node.promote` would appear only on a till where such a person happened to be signed in when the
   box died; on most evenings nobody would see it. Showing the address hides nothing worth hiding:
@@ -223,18 +231,23 @@ waits for A947's strip.
   tills, printers and card readers on the venue's own network.
 - **What it does:** opens a dialog with the emergency address as text and as a QR code, the three
   things the person will need (the emergency code, their password, their authenticator app or a
-  recovery code), who can do it (worded by §13 question 1's answer: "a manager or administrator"
-  under answer A, "an administrator" under answer B), and what happens next in two lines.
+  recovery code), who can do it, and what happens next in two lines. **(default)** "Who can do it"
+  names the roles that hold `node.promote` at this venue: "Only an administrator can start it." at
+  a venue that has given the permission to nobody else, which is every venue until roles can be
+  edited (§13 item 1); "Only an administrator or a manager can start it." at a venue that has
+  given it to its managers. It names roles, never people.
   **Open here** sends this till's browser to the address; **Close** goes back. A phone scanning the
   code is usually quicker: the till is then free for §7.
-- **What the till keeps:** the emergency address and "open" from the start read, refreshed when the
+- **What the till keeps:** the emergency address, "open" and the names of the roles holding
+  `node.promote` (venue settings, not personal data) from the start read, refreshed when the
   box's setup changes like the till's other start-read values (the box sends `setupRevision`, a
   fingerprint of its setup, and a till that sees a new one reads its setup again,
-  `till-app.ts:9978-9979`; CLAUDE.md §3). **(default)** The two values are fields of the till's
+  `till-app.ts:9978-9979`; CLAUDE.md §3). **(default)** These values are fields of the till's
   setup, so a change in §1's facts counts as a setup change: `setupRevisionOf` fingerprints every
   field of the setup (`apps/server/src/till-setup.ts:145-146`), and the start read sends that
   fingerprint (`apps/server/src/till-api.ts:1512`). An owner switching the start off or on in the
-  Cloud account then reaches the tills the way their other setup changes do, without a reload. A
+  Cloud account, or a venue giving the permission to another role, then reaches the tills the way
+  their other setup changes do, without a reload. A
   till that reloads while the box is dead loads nothing at all (see "What exists today"), so the
   recovery pack (A1187) is the way in for a venue whose tills were all reloaded.
 - **Before the dialog opens**, the till checks the box once more, as A947 §6.2 does for the spare:
@@ -331,7 +344,7 @@ sign-in:
   authenticator code"). Today's checks ask for a code only from a person who has one set up
   (`manager-login.ts:105-107`), so refusing a person without one is a new check;
 - **accepts a recovery code in place of the authenticator code**, as the dashboard does ("What
-  exists today"), so a manager whose phone is lost can still start the venue. Using one normally
+  exists today"), so a person whose phone is lost can still start the venue. Using one normally
   marks it used in the database (`mfa.ts:82-98`); the copy instead marks it used in memory and
   writes that with the declaration (§6, step 4). If the copy is never started, the code stays unused
   in the venue's records;
@@ -378,7 +391,8 @@ instead. §9 asks Cloud to agree the change.
 ## 6. The declaration, and what happens after it
 
 The copy shows A1018's emergency screen (A1018 §4, "Proposed screen warning"), worded for this
-case (mock-up 4). It asks for nothing A1018 does not:
+case (mock-up 4). Its top line names the person signed in and says they are allowed to switch the
+venue's server, whatever role gave them that (§13 item 1). It asks for nothing A1018 does not:
 
 1. **The box is switched off.** Unplug it. The page says why in one sentence: a box that only lost
    its internet can still be selling.
@@ -495,9 +509,11 @@ for the venue's own domain (`device-session.ts:53-67`).
 venue; reaching them from a hosted server needs the outbound device agent the hosted design asks
 for ("Printers, drawers and payment terminals stay local. Use a Waitron-owned authenticated outbound
 agent contract", [hosted design](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-21-cloud-hosted-venue-design.md#reach-cloud-and-the-devices-in-your-venue),
-`:317`), which belongs to Cloud's hosting build item (P6) and is not designed here. Until it exists, a
-venue started in the cloud takes cash, or cards on a standalone terminal, and prints nothing; the
-declaration page says so before the start. **This is the largest limit of the design**, and the
+`:317`). **(owner)** That agent is A1175's Android app: "It is the android app really, which runs
+locally and hosts the print agent (et al)" (2026-10-29; [A1175](../../backlog/printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)).
+A1175 is still to be brainstormed and is not designed here. Until it exists, a venue started in the
+cloud takes cash, or cards on a standalone terminal, and prints nothing; the declaration page says
+so before the start. **This is the largest limit of the design**, and the
 reason a spare box (A947) comes first where a venue has one.
 
 ## 8. What each piece alone can do, and the false alarms
@@ -591,13 +607,12 @@ put to Cloud's builders as a question:
 
 ## 11. How it would be built
 
-Each part is a separate pull request, after this design is approved:
+Each part is a separate pull request:
 
 | Part | What | Waits for |
 | --- | --- | --- |
 | 0 | A stream restore that takes a new node identity instead of the box's (§5) | The contract amendment (§9, item 4) and A947's separation of each machine's own signing key (A947 §4, item 2; slice 3a) |
 | 1 | The box learns §1's facts; the Cloud services card (§2) | Cloud's billing section of the contract (§9, items 1–2); shares groundwork with A1185 |
-| 1b | Add `node.promote` to the built-in manager role, if the owner chooses §13 question 1's answer A | Nothing; a one-line change to `permissions.ts` with its tests |
 | 2 | The till's link, dialog and separate check of the emergency address (§3) | A947's strip (slice 3 onwards) and part 1 |
 | 3 | The locked start mode, its in-memory sign-in and its refusals (§5) | Part 0; §9 items 3–7 agreed; can be built against a local stand-in for Cloud |
 | 4 | The declaration and activation (§6) | Part 3; §9 item 8 agreed; A1018's emergency build, with its build authority |
@@ -605,7 +620,8 @@ Each part is a separate pull request, after this design is approved:
 | 6 | The returning box asks Cloud and stays restricted (§6, "When the box comes back") | §9 item 10; A1018's returning-box rule |
 
 A1187 (one recovery pack) prints the address, the code and its date; it reads them the way part 1's
-card does.
+card does. Giving `node.promote` to another role is not a part here: it comes with A1002's build
+(§13 item 1).
 
 ## 12. Left open
 
@@ -614,35 +630,50 @@ card does.
   how its invoices then reach the copy (§6).
 - Which clock wait the copy takes before activating: a restore's 90 to 150 seconds or a switch's next
   minute (§6); left to A1018's build.
-- The device agent for printers, drawers and card readers from a hosted server (§7; P6).
+- The device agent for printers, drawers and card readers from a hosted server: A1175's Android app,
+  still to be brainstormed (§7).
 - Whether a till that joins the copy can be matched to its old device record, keeping its profile,
   or always starts as a new device (§7).
 - Spanish wording of every new line; the mock-ups are in English.
 
-## 13. The question for the owner
+## 13. The owner's answers
 
-**Do you approve this design, with the defaults below?** Answer any number to change it. Each item
-gives the default, the alternative (or says none is proposed), and what each costs.
+**Approved by the owner on 2026-10-29 with the defaults below**, item 1 as the owner refined it the
+same morning. Each item gives the decision, the alternative (or says none was proposed), and what
+each costs.
 
-1. **Who can start it.** **A (recommended):** add `node.promote` to the built-in manager role, for
-   every venue — your entry's title says "a venue manager", the Cloud billing design says "the
-   venue's managers holding `node.promote`", and A947 §6.1 already reads "A manager — anyone holding
-   `node.promote`". Cost of A: every manager can also switch the venue to a spare box (A947); the
-   other gates stay (your advance consent, password plus authenticator, the declaration). **B:**
-   administrators only, as the code is today. Cost of B: on an evening with no administrator at the
-   venue, nobody there can start it; an administrator elsewhere with the code still can, and so can
-   you from your Cloud account. No venue can choose for itself: roles are fixed in the code for
-   every venue.
-2. **Password plus authenticator code, always; no passkeys at the copy** (§5). Cost: a manager with
+1. **Who can start it (owner): administrators by default, and a venue may give the permission to
+   other roles.** "Allow the permission to be assigned to other roles too, so it's just admins by
+   default" (2026-10-29, about 09:25; it replaces the owner's two earlier answers that morning,
+   first managers too, then administrators only). Today roles are fixed in the code
+   (`packages/identity/src/permissions.ts:80-85`, "What exists today"), so **until A1002 is built
+   only administrators can start it at any venue**; this design adds no permission to any role.
+   Giving it to another role arrives with **A1002** (custom roles and several roles per person,
+   [A1002 design](2026-10-22-a1002-custom-roles-design.md)): its §2 makes `node.promote` part of
+   `node.manage`, held by Admin by default, and its §3 makes the grants of the built-in Manager,
+   Supervisor and Staff roles, and of custom roles, editable. The owner has accepted both of those
+   (A1002 §11), but not yet the whole design. Under its §5, which is not yet approved, role
+   administration needs `person.admin`, and a role gains a permission only from someone who holds
+   it, so by default only an administrator can give it; if A1002 changes, this item follows it.
+   Cost: until A1002 is built, on an evening with no
+   administrator at the venue, nobody there can start it; an administrator elsewhere with the code
+   still can, and so can you from your Cloud account. Cost once a venue gives it to a role: everyone
+   in that role can also switch the venue to a spare box (A947) and, under A1002's merge into
+   `node.manage`, add a mirror. The other gates stay (your advance consent, password plus
+   authenticator, the declaration). The pages never name a role in their buttons; the till's dialog
+   names the roles that hold it (§3), and the copy's pages say "someone allowed to switch the
+   venue's server".
+2. **Password plus authenticator code, always; no passkeys at the copy** (§5). Cost: a person with
    no authenticator set up cannot start it. Alternative: also accept passkeys; its cost: the copy
    would write to the venue's database before the declaration.
 3. **A recovery code works in place of the authenticator code**, as on the dashboard (§5). Cost: a
-   manager who uses one has one fewer left. Alternative: refuse recovery codes; its cost: a manager
+   person who uses one has one fewer left. Alternative: refuse recovery codes; its cost: a person
    whose phone is lost cannot start it.
-4. **The strip shows the emergency link to everyone at the till, worded "For managers"** (§3),
+4. **The strip shows the emergency link to everyone at the till, with no role in its words** (§3),
    because nobody can sign in at a till once the box is dead, and the address starts nothing without
    the code. Cost: anyone at a till can see the address. Alternative: your entry's literal version,
-   shown only to a signed-in administrator; its cost: on most evenings nobody would see it, and the
+   shown only to a signed-in holder of the permission; its cost: on most evenings nobody would see
+   it, and the
    recovery pack is the only way in.
 5. **The emergency address is a Cloud name of its own, not the staff address** (§4). Cost: one more
    name for Cloud to run. Alternative: the staff address, as the Cloud billing design has it; its
@@ -675,15 +706,17 @@ gives the default, the alternative (or says none is proposed), and what each cos
     Cloud is down, nobody can start the venue in the cloud, even with every other step done. No
     alternative proposed.
 11. **The tills join the copy again, one press each to approve; printers, cash drawers and card
-    readers do not follow** until Cloud builds the program that would let a server in Cloud reach
-    them (not designed yet; hosted design `:317`). Cost: the venue takes cash or uses a standalone
-    card terminal that evening, and prints nothing (§7). Alternative: wait for that program before
-    offering this at all; its cost: nothing in this design is offered until it exists.
+    readers do not follow** until A1175's Android app exists (owner, 2026-10-29: it is the device
+    agent; still to be brainstormed; §7). Cost: the venue takes cash or uses a standalone card
+    terminal that evening, and prints nothing (§7). Alternative: wait for that app before offering
+    this at all; its cost: nothing in this design is offered until it exists.
 12. **Only people who may start it can see the code on the dashboard** (people holding
-    `node.promote`, §2). Cost: under answer A to question 1, every manager can see the code, and the
-    code starts a locked copy (§8). Alternative: administrators only, as the Cloud billing design
-    words it ("Admins can save or print it"); its cost: under answer A, a manager who may start it
-    cannot check a printed pack against the card.
+    `node.promote`, §2). By default that is the administrators, as the Cloud billing design words
+    it ("Admins can save or print it"). Cost: once a venue gives the permission to another role,
+    everyone in that role can see the code too, and the code starts a locked copy (§8).
+    Alternative: only administrators see the code, even where the venue gives the permission to
+    another role; its cost: a person the venue allowed to start it cannot check a printed pack
+    against the card.
 13. **This is A1018's emergency switch from the box to Cloud, not a fresh restore** (§5). The copy
     becomes a machine of its own, with its own identity. Cost: that needs restore work and a contract
     change first (§11, part 0). Alternative: a cold restore, which the hosted design also allows
@@ -710,10 +743,11 @@ gives the default, the alternative (or says none is proposed), and what each cos
 In [`docs/backlog/mockups/a1188-cloud-emergency-start/`](../../backlog/mockups/a1188-cloud-emergency-start/),
 light and dark, 1280 and 390 wide. The venue, people, address, times and price in them are invented:
 
-1. `01-till-strip` — the till's strip, shown to everyone, with **For managers: start the venue in the
-   cloud** (§3).
+1. `01-till-strip` — the till's strip, shown to everyone, with **Start the venue in the cloud**
+   (§3).
 2. `02-till-dialog` — the dialog with the emergency address, the QR code, what is needed (the code,
-   a password, an authenticator code or recovery code) and who can do it (§3).
+   a password, an authenticator code or recovery code) and who can do it, at a venue that has given
+   the permission to nobody but its administrators (§3).
 3. `03-copy-sign-in` — the locked copy's sign-in: email, password, authenticator or recovery code, a
    line saying passkeys are not offered, and the line under the form about setting up an
    authenticator before the box failed (§5).
