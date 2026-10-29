@@ -100,6 +100,53 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
   };
 }
 
+/**
+ * Each priced row's identity with the expanded lines and portions it stands for, as
+ * `projectPortionSale` reads them back: a dish row lists its portions' dish lines, an extra row that
+ * extra's copy under each portion, and both list the dish's portions. `identities` and `requestRows`
+ * are aligned, as `priceOrderLines` returns them; `expanded` is `expandPortionRows` of `requestRows`.
+ */
+export function portionIdentities(
+  identities: readonly OrderLineIdentity[],
+  requestRows: readonly Row[],
+  expanded: Pick<ReturnType<typeof expandPortionRows>, "rows" | "portions" | "requestOfRow">,
+): OrderLineIdentity[] {
+  const indexOf = new Map(requestRows.map((row, i) => [row.id!, i]));
+  const dishes: number[] = [];
+  const extrasOf = new Map<number, number[]>();
+  requestRows.forEach((row, i) => {
+    if (row.parentLineId == null) {
+      dishes.push(i);
+      return;
+    }
+    const parent = indexOf.get(row.parentLineId)!;
+    const extras = extrasOf.get(parent) ?? [];
+    extras.push(i);
+    extrasOf.set(parent, extras);
+  });
+  const portionOf = new Map(
+    expanded.portions.map((portion) => [portion.lineId, portion.portionId]),
+  );
+  const lineIds = requestRows.map((): string[] => []);
+  const portionIds = requestRows.map((): string[] => []);
+  let extrasLeft: number[] = [];
+  expanded.rows.forEach((row, k) => {
+    const dish = dishes[expanded.requestOfRow[k]!]!;
+    if (row.parentLineId == null) {
+      lineIds[dish]!.push(row.id!);
+      portionIds[dish]!.push(portionOf.get(row.id!)!);
+      extrasLeft = [...(extrasOf.get(dish) ?? [])];
+    } else {
+      lineIds[extrasLeft.shift()!]!.push(row.id!);
+    }
+  });
+  return identities.map((identity, i) => {
+    const parent = requestRows[i]!.parentLineId;
+    const dish = parent == null ? i : indexOf.get(parent)!;
+    return { ...identity, lineIds: lineIds[i]!, portionIds: portionIds[dish]! };
+  });
+}
+
 /** One dish's share of a row priced for `count` dishes, exact in cents and thousandths. */
 function share(row: Row, count: number): Row {
   if (count === 1) return { ...row };
