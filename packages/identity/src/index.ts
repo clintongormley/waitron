@@ -68,7 +68,6 @@ export {
   unlinkOwnGoogle,
   verifyOwnCredentials,
   verifyOwnFreshSignIn,
-  requireEnrolledCode,
   checkOwnPassword,
   removeOwnPasskey,
 } from "./profile.js";

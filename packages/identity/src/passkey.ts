@@ -360,6 +360,7 @@ export async function verifyOwnPasskey(
   const consumed = await consumeChallenge(tx, input.challengeHandle);
   // A sign-in challenge names no person, and one issued to another session's person is not ours.
   if (consumed.personId !== personId) throw new AppError("passkey.verification_failed", {});
+  if (input.response == null) throw new AppError("passkey.verification_failed", {});
 
   const [cred] = await tx
     .select({

@@ -1009,6 +1009,23 @@ describe("checking the signed-in person's own passkey", () => {
     }
   });
 
+  it("refuses a missing assertion as passkey.verification_failed", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    const begun = await beginCheck(token);
+    const missing = run((tx) =>
+      verifyOwnPasskey(tx, {
+        managementSessionId: token,
+        challengeHandle: begun.challengeHandle,
+        response: undefined as never,
+        rpId: "localhost",
+        origin: "http://localhost",
+        keyRing: TOTP_KEY_RING,
+      }),
+    );
+    expect(await codeOf(() => missing)).toBe("passkey.verification_failed");
+  });
+
   it("asks an enrolled person for their authenticator code, or a recovery code that is spent once", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     await seedCredential(personId, "cred-mine", 0);

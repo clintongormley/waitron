@@ -13,8 +13,8 @@ import { hashSessionToken } from "./session-token.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
 import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
+import { issueCheck } from "./secret-check.js";
 import {
-  checkOwnPassword,
   requireEnrolledCode,
   verifyOwnFreshSignIn,
   readOwnProfile,
@@ -692,13 +692,23 @@ describe("a fresh sign-in by the signed-in person", () => {
     );
   });
 
-  it("trusts a password check taken before the transaction for the same person", async () => {
+  it("takes a password check made before the transaction instead of checking the password again", async () => {
     const f = await fixture();
-    const checked = await checkOwnPassword(suite.db, {
+    const stored = await suite.db.execute<{ password_hash: string }>(
+      sql`select password_hash from persons where id = ${f.personId}`,
+    );
+    const row = stored.rows[0];
+    // A verdict saying "matched" for a wrong password: accepted only if the verdict is used.
+    const checked = issueCheck({
       personId: f.personId,
-      currentPassword: "correct horse",
+      secret: "wrong",
+      derivedAgainst: row!.password_hash,
+      matches: true,
     });
-    const person = await fresh({ ...f, currentPassword: "correct horse", checked, keyRing });
+    expect(await codeOf(() => fresh({ ...f, currentPassword: "wrong", keyRing }))).toBe(
+      "password.invalid",
+    );
+    const person = await fresh({ ...f, currentPassword: "wrong", checked, keyRing });
     expect(person.id).toBe(f.personId);
   });
 
