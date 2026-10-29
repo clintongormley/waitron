@@ -6015,4 +6015,24 @@ describe("A803 portions: a sent table order stores one line per portion", () => 
     expect(await db.select().from(workingLinePortions)).toHaveLength(2);
     expect((await boundDishes(partyId)).map((d) => d.ordinal)).toEqual([1, 2]);
   });
+
+  it("A803 portions: a send of 100 of one dish is refused and writes nothing; 99 goes", async () => {
+    const v = await setupVenue();
+    const { partyId } = await seated(v);
+    const tooMany = await save(v, partyId, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], extras: sauce(v), quantity: "100" }),
+    ]);
+
+    await expect(
+      submit(v, partyId, tooMany, ALEX, [{ lineIds: lineIds(tooMany), release: "fire" }]),
+    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+    expect(await boundDishes(partyId)).toEqual([]);
+
+    const { partyId: other } = await seated(v, "Table 2");
+    const most = await save(v, other, ALEX, null, 0, [
+      item(v, "burger", { options: [v.rare], extras: sauce(v), quantity: "99" }),
+    ]);
+    await submit(v, other, most, ALEX, [{ lineIds: lineIds(most), release: "fire" }]);
+    expect(await boundDishes(other)).toHaveLength(99);
+  });
 });

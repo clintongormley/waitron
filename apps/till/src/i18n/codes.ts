@@ -28,6 +28,10 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "These zone choices changed. Read them again before saving.",
     es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
   },
+  "tab.portions_too_many": {
+    en: "At most 99 of one dish can be added at a time. Lower it to 99, then add the rest.",
+    es: "Se pueden añadir como máximo 99 de un mismo plato a la vez. Baja a 99 y añade el resto después.",
+  },
   "party.not_found": {
     en: "The table order could not be found.",
     es: "No se ha encontrado el pedido de la mesa.",

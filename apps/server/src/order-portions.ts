@@ -11,7 +11,9 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import type { PortionBinding } from "./portion-sale-projection.js";
+import "./errors.js";
 import type { OrderLineIdentity, PricedTabRound } from "./working-order.js";
 
 type Row = PricedTabRound["rows"][number];
@@ -26,6 +28,15 @@ export interface PortionRef {
   pricingCohortId: string;
   /** Sold by weight, in decimals or in a measure: one portion, never split. */
   measured: boolean;
+}
+
+/** The most portions of one dish a send or a raise adds at once. */
+export const PORTIONS_AT_ONCE = 99;
+
+/** Refuses adding `count` portions of one dish in one write. */
+export function refuseTooManyPortions(count: number): void {
+  if (count > PORTIONS_AT_ONCE)
+    throw new AppError("tab.portions_too_many", { limit: PORTIONS_AT_ONCE });
 }
 
 /**
@@ -62,6 +73,7 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
       throw new Error(
         `expandPortionRows: line ${row.id}'s quantity ${row.quantity} is not a whole number of portions`,
       );
+    refuseTooManyPortions(count);
     const cohort = randomUUID();
     for (let ordinal = 1; ordinal <= count; ordinal++) {
       const id = ordinal === 1 ? row.id! : randomUUID();

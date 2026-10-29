@@ -759,6 +759,11 @@ declare module "@waitron/shared" {
      * held (a recalled dish, or a held round with no group). `lineNo` is the offending source line.
      */
     "tab.split_held_line": { tabId: string; lineNo: number };
+    /**
+     * A send or a raise would add more than `limit` portions of one dish at once. Each portion is
+     * its own line, and one write of a few thousand lines fails in the store.
+     */
+    "tab.portions_too_many": { limit: number };
     /** No floor-plan zone with this id. */
     "zone.not_found": { zoneId: string };
     /**

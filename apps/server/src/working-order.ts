@@ -58,6 +58,7 @@ import {
   cancelPortions,
   carryLineReductions,
   expandPortionRows,
+  refuseTooManyPortions,
   linkSalePortions,
   readGrowingPortions,
   recordPortionEvents,
@@ -6544,6 +6545,7 @@ export function addedPortions(lineId: string, quantity: Decimal, requested: Deci
   const added = Number(subtractDecimal(requested, quantity));
   if (compareDecimal(quantity, decimal("1")) !== 0 || !Number.isInteger(added))
     throw new Error(`whole portion ${lineId} of ${quantity} cannot rise to ${requested}`);
+  refuseTooManyPortions(added);
   return added;
 }
 

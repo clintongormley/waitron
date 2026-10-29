@@ -1649,6 +1649,31 @@ describe("A803 portions: raising a dish", () => {
     ).toEqual([]);
   });
 
+  it("A803 portions: raising a recalled burger by 100 is refused 400 and saves nothing; by 99 is saved", async () => {
+    const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
+    const [dish] = linesOf(bound.billId);
+    const [line] = await venue.db
+      .select({ id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(
+        and(
+          eq(workingOrderLines.workingOrderId, bound.billId),
+          eq(workingOrderLines.lineNo, dish!.lineNo),
+        ),
+      );
+    const draft = await recallLine(bound, line!.id);
+
+    const refused = await sendDraftLines(bound, draft, [{ ...draft.lines[0]!, quantity: "101" }]);
+    expect([refused.status, refused.json]).toMatchObject([
+      400,
+      { code: "tab.portions_too_many", params: { limit: 99 } },
+    ]);
+    expect(linesOf(bound.billId).filter((l) => l.name === "Burger")).toHaveLength(1);
+
+    await saveDraftLines(bound, draft, [{ ...draft.lines[0]!, quantity: "100" }]);
+    expect(linesOf(bound.billId).filter((l) => l.name === "Burger")).toHaveLength(100);
+  });
+
   it("A803 portions: submitting places all three recalled portions in the chosen group", async () => {
     const bound = await billOf(burgersWithCheese("1"), { bound: true, fire: true });
     const draft = await raiseRecalled(bound, "3");

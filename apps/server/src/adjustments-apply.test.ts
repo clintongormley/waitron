@@ -1473,6 +1473,35 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect(await placeOf(billId, 2)).toEqual({ groupId: coffee.groupId, sent: true, items: [] });
   });
 
+  it("A803 portions: a raise that would add 100 portions of a bound held Burger is refused and changes nothing; 99 goes", async () => {
+    const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
+    await bindAsPortion(billId, 1);
+
+    await expect(raise(billId, 1, "101")).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    expect(dishPortions(billId)).toHaveLength(1);
+
+    await raise(billId, 1, "100");
+    expect(dishPortions(billId)).toHaveLength(100);
+  });
+
+  it("A803 portions: a raise that would add 100 portions of a comped bound held Burger is refused and changes nothing; 99 goes", async () => {
+    const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
+    await bindAsPortion(billId, 1);
+    await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+
+    await expect(raise(billId, 1, "101")).rejects.toMatchObject({
+      code: "tab.portions_too_many",
+      params: { limit: 99 },
+    });
+    expect(dishPortions(billId)).toHaveLength(1);
+
+    await raise(billId, 1, "100");
+    expect(dishPortions(billId)).toHaveLength(100);
+  });
+
   it("still widens a line nobody adjusted", async () => {
     const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
 
