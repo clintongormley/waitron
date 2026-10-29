@@ -3131,30 +3131,23 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   until this is decided. The venue logo follows the same path, so such a till keeps an old logo too
   (A841 slice 8b).
 
+- **The floor map draws a neighbouring table's allergy mark over a held table's rings.**
+  `[part="allergy"]` has `z-index: 2` and hangs half outside its table's top-left corner; a table
+  button that is neither held nor focused has no `z-index` and so makes no stacking context of its
+  own, so its mark stacks above a held table (`z-index: 1`) and covers that table's selected ring
+  where the two overlap (`packages/ui/src/components/wt-floor-map.ts`). Found by A1182's review
+  with a scratch browser probe: table `a` held, table `b` touching its right edge with an allergy
+  mark, the pixel 4 px right of `a`'s edge read the danger colour instead of the ring's. A focused
+  table's ring is covered the same way. `isolation: isolate` on each table button would contain the
+  mark, but a scratch probe showed it then lets a table later in the page cover an earlier one's
+  mark where it overhangs; decide which gives way. The design system's floor-map paragraph states
+  the gap.
+
 - **`wt-slider`'s step marks run from the left in a right-to-left page.** Each mark is placed with
   a physical `left` (`packages/ui/src/components/wt-slider.ts`), so right to left the mark for
   `min` sits at the left end while the thumb at `min` sits at the right. Measured on cd506f69c
   (A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
   app sets right to left yet.
-
-- **`wt-slider` works out its snapped value twice.** The shown number reads it from an off-page
-  range (`#onRange`, A1181) and the filled track from the real one in `updated()`
-  (`packages/ui/src/components/wt-slider.ts`). Both agree today; one source would be tidier. Raised
-  by A1181's convention review as a tidy-up, not a defect.
-
-- **The design system's floor-map paragraph does not say how a focused held merge is drawn.** Since
-  A1181 the focus ring sits outside the selected ring there (`docs/developers/design-system.md`,
-  floor map). The paragraph is not wrong, only silent; reword it as a whole, since inserting a clause
-  leaves "which is then raised…" pointing at the wrong ring.
-
-- **The floor map may hide keyboard focus on a held single table.** A held table that is not a
-  merge draws `--wt-selected-ring` on its inner `[part="shape"]`, at the same place the button's
-  focus ring sits (`packages/ui/src/components/wt-floor-map.ts`), and the shape's outline may paint
-  over it. A1181 fixed the same shape for a held merge (test: "a merge reached by Tab" in
-  `wt-floor-map.keys.test.ts`, with focus and selected rings set to different colours); this case
-  was reported by A1181's implementer from reading, not run. With the default colours the two rings
-  are the same blue, so it shows only where the focus and brand colours differ. First a test like
-  A1181's for a held single table; fix only if it fails.
 
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
   to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with

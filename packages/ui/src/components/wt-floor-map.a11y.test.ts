@@ -203,6 +203,18 @@ describe.each(["light", "dark"] as const)("wt-floor-map a11y (%s theme)", (theme
     await expectNoA11yViolations(host);
   });
 
+  test("a single table held while it has keyboard focus", async () => {
+    await mountMap(theme, [t("T1", { x: 0 }), t("T2", { x: 8 })]);
+    const table = host
+      .querySelector("wt-floor-map")!
+      .shadowRoot!.querySelector<HTMLElement>('[data-table-id="T1"]')!;
+    table.focus();
+    await userEvent.keyboard("{Shift}");
+    table.setAttribute("data-held", "");
+    expect(table.matches(":not([data-merge]):focus-visible")).toBe(true);
+    await expectNoA11yViolations(host);
+  });
+
   test("a fixed table's copy over a target", async () => {
     await mountMap(theme, [t("T1", { x: 8 }, { fixed: true }), t("T2", { x: 0 })]);
     const el = host.querySelector("wt-floor-map")!;
