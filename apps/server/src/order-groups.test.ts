@@ -1969,7 +1969,7 @@ describe("extras lines follow their dish", () => {
   it("refuses to move part of a dish that has extras (tab.transfer_modifier_line), writing nothing", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    await submit(v, s.partyId, [
+    await submitGrouped(v, s, [
       { release: "hold", lines: [{ ...steakWithSauce(v), quantity: "2" }] },
     ]);
     const target = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "flan")] }]))
