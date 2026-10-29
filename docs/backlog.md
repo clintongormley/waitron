@@ -4789,8 +4789,28 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: a stopped or refused bucket stream needs restart or ownership choices.** Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
-- **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop. Evidence-first design and plan (2026-10-29, awaiting the owner's build approval): `docs/superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md`, `docs/superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md`. Repair stays open.
-  [Audit](backlog/self-service-refusals.md#backup-settings).
+- **A1089: unusable archive settings still have no repair beyond choosing them again.** Backups'
+  **What the box recorded** panel shows the failed reads and the saved record now, and changes
+  nothing. Still open: explaining or reconciling key numbers, restoring an old credentials key, and
+  rewriting the record. Left open by A1089's settings-evidence panel
+  (feat/a1089-backup-settings-evidence). [Audit](backlog/self-service-refusals.md#backup-settings).
+
+- **A1089: the settings-evidence panel shows no failure from before the box's last restart.** The
+  box keeps its failed reads of the saved settings in memory only, at most five, as the design's
+  decision 1 chose; keeping them across a restart needs a new owner decision.
+  [Design](superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md)
+
+- **Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
+  "You don't have permission to do that" twice and names no next step, against the refusal rule.
+  The screen's `admin-sign-in` event is already routed (`apps/dashboard/src/dashboard-app.ts`), so
+  the fix is to offer the button there. Normally unreachable: the Backups entry is shown to the
+  manager and admin roles only; it appears when the dashboard's role and the session's permissions
+  disagree.
+
+- **Backups' Spanish calls the box both "caja" and "equipo".** `backup.status.managed`,
+  `backup.reload_failed_after_save`, `backup.destination.local` and `backup.destination.off_box`
+  say "caja"; the settings-evidence panel and the backup alerts say "equipo". Pick one word across
+  the screen; elsewhere "caja" also means the till.
 
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real
