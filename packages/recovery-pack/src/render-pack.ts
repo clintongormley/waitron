@@ -45,7 +45,8 @@ const GREY = "#555555";
 const LINE = "#bbbbbb";
 const FILL = "#eeeeee";
 
-function dates(locale: PackLocale, timeZone: string) {
+/** How the pack prints instants (in `timeZone`) and `YYYY-MM-DD` days. */
+export function packDates(locale: PackLocale, timeZone: string) {
   const language = locale === "en" ? "en-GB" : "es-ES";
   let long: Intl.DateTimeFormat;
   let short: Intl.DateTimeFormat;
@@ -98,7 +99,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const { locale, cover, parts } = input;
   if (locale !== "en" && locale !== "es") refuse("locale");
   const words = PACK_WORDS[locale];
-  const when = dates(locale, input.timeZone);
+  const when = packDates(locale, input.timeZone);
   for (const part of parts) {
     if (part.state === "included" && !part.page) refuse("parts");
     if (part.state === "failed" && !part.failure) refuse("parts");

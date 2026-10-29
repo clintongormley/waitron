@@ -249,7 +249,12 @@ export {
   writeNodeMembership,
   writeNodeMembershipTx,
 } from "./node-membership.js";
-export { readMembershipTrustSet, setNodePublicKey, setNodePublicKeyTx } from "./node-identity.js";
+export {
+  readMembershipTrustSet,
+  readMembershipTrustSetIn,
+  setNodePublicKey,
+  setNodePublicKeyTx,
+} from "./node-identity.js";
 export {
   compareBackupTables,
   verifyCoreBackupData,

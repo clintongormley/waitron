@@ -4,7 +4,12 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { readMembershipTrustSet, setNodePublicKey } from "./node-identity.js";
+import {
+  readMembershipTrustSet,
+  readMembershipTrustSetIn,
+  setNodePublicKey,
+} from "./node-identity.js";
+import { withTransaction } from "./tenancy.js";
 import { locations } from "./schema/tenants.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -51,6 +56,13 @@ describe("membership trust-set accessors", () => {
     expect(await readMembershipTrustSet(suite.db)).toEqual({
       [nodeId]: "KEY_A",
       [nodeId2]: "KEY_B",
+    });
+  });
+
+  it("readMembershipTrustSetIn reads inside a transaction the caller already holds", async () => {
+    await setNodePublicKey(suite.db, nodeId, "KEY_A");
+    expect(await withTransaction(suite.db, (tx) => readMembershipTrustSetIn(tx))).toEqual({
+      [nodeId]: "KEY_A",
     });
   });
 });

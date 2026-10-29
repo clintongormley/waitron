@@ -262,9 +262,14 @@ export async function readArchiveSettings(
   db: Database,
   ring: KeyRing,
 ): Promise<ArchiveSettings | null> {
-  const value = await withTransaction(db, (tx) =>
-    tryGetCredential(tx, ring, { purpose: ARCHIVE_PURPOSE }),
-  );
+  return withTransaction(db, (tx) => readArchiveSettingsIn(tx, ring));
+}
+
+export async function readArchiveSettingsIn(
+  tx: Transaction,
+  ring: KeyRing,
+): Promise<ArchiveSettings | null> {
+  const value = await tryGetCredential(tx, ring, { purpose: ARCHIVE_PURPOSE });
   if (value === null) return null;
   return parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings"));
 }
@@ -307,8 +312,21 @@ export async function readHeldArchiveSettings(
   db: Database,
   ring: KeyRing,
 ): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
+  return heldArchiveSettings(() => readArchiveSettings(db, ring));
+}
+
+export async function readHeldArchiveSettingsIn(
+  tx: Transaction,
+  ring: KeyRing,
+): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
+  return heldArchiveSettings(() => readArchiveSettingsIn(tx, ring));
+}
+
+async function heldArchiveSettings(
+  read: () => Promise<ArchiveSettings | null>,
+): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
   try {
-    return { settings: await readArchiveSettings(db, ring) };
+    return { settings: await read() };
   } catch (error) {
     if (isAppError(error) && UNREADABLE_SETTINGS.has(error.code)) {
       return { unreadable: error.code };

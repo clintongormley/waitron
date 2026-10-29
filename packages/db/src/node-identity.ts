@@ -26,10 +26,12 @@ export function setNodePublicKey(db: Database, nodeId: string, publicKey: string
  * keyless ones.
  */
 export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
-  return withTransaction(db, async (tx) => {
-    const rows = await tx.select({ id: nodes.id, publicKey: nodes.publicKey }).from(nodes);
-    const trust: Record<string, string> = {};
-    for (const r of rows) if (r.publicKey !== null) trust[r.id] = r.publicKey;
-    return trust;
-  });
+  return withTransaction(db, (tx) => readMembershipTrustSetIn(tx));
+}
+
+export async function readMembershipTrustSetIn(tx: Transaction): Promise<TrustSet> {
+  const rows = await tx.select({ id: nodes.id, publicKey: nodes.publicKey }).from(nodes);
+  const trust: Record<string, string> = {};
+  for (const r of rows) if (r.publicKey !== null) trust[r.id] = r.publicKey;
+  return trust;
 }
