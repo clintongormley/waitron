@@ -17,11 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import {
-  createFirstSetupCoordinator,
-  raiseStartAgainNote,
-  readModulePreparationHistory,
-} from "@waitron/provisioning";
+import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import {
   withOperationAuthority,
   withPreparedModuleOperations,
@@ -598,23 +594,26 @@ it("serves clock, selection and authenticated promotion through the management r
   }
 });
 
-it("a promotion with the clock behind the start-again note is refused, not given a repeated name", async () => {
+it("a promotion beside a leftover start-again note file names its minute as a box without one does", async () => {
   const stateDir = join(root, "state");
   const s = await service();
   await admit(s);
-  const floorMs = Date.now() + 10 * 60_000;
-  await raiseStartAgainNote(stateDir, { floorMs, lastName: "0CNQT", module: binding.module });
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(
+    join(stateDir, "first-setup-start-again.json"),
+    JSON.stringify({
+      version: 1,
+      floorMs: Date.now() + 10 * 60_000,
+      lastName: "0CNQT",
+      module: binding.module,
+    }),
+  );
   const recovery = binding;
   const auth = { breakGlass: key.secret };
   await compare(s, auth, recovery);
-  const before = await rows();
-  await expect(
-    s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: floorMs },
-  });
-  expect(await rows()).toEqual(before);
+  expect(
+    await s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
+  ).toMatchObject({ status: "selected" });
 });
 
 it("a key-only operation service refuses administrator credentials without a credential key ring", async () => {

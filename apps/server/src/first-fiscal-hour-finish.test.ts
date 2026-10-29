@@ -288,15 +288,11 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
     revision: before.inspection.revision!,
     ownerGeneration: before.inspection.ownerGeneration!,
   };
-  const abandoned = (
-    firstSetupModuleContext((await f.host.store.read())!, MODULE).request as { identity: string }
-  ).identity;
   await actions.startAgainFirstSetup(restart as Parameters<typeof actions.startAgainFirstSetup>[0]);
   await expect(
     readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
   ).rejects.toMatchObject({ code: "ENOENT" });
   await expectStartAgainDeleted(f);
-  expect(await startAgainNoteName(f)).toBe(abandoned);
   const next = createFirstSetupModuleHost({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
@@ -317,11 +313,6 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
     randomBytes(32).toString("base64url"),
   );
   const owner = { ...claim.state, capability: claim.capability };
-  vi.setSystemTime("2026-10-16T11:40:00Z");
-  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
-  });
   vi.setSystemTime("2026-10-16T12:01:00Z");
   const selected = await chooseMinute(next, owner);
   expect(firstSetupModuleContext(selected.state, MODULE).request).toMatchObject({
