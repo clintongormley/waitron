@@ -113,7 +113,14 @@ import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
 import { markAlertHandled } from "./widgets/alert-format.js";
-import type { AlertView, AlertsResponse, DashboardApi, PersonRole } from "./api/client.js";
+import type {
+  AlertView,
+  AlertsResponse,
+  DashboardApi,
+  DiskStopResponse,
+  PersonRole,
+} from "./api/client.js";
+import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
   consumeGoogleLoginPreference,
   rememberSuccessfulLogin,
@@ -973,6 +980,12 @@ export class DashboardApp extends LitElement {
     () => this.api,
     (error) => diag.record("warn", "alerts.load_failed", { code: codeOf(error) }),
   );
+  @state() private diskStop: DiskStopResponse | null = null;
+  readonly #diskStopQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => diag.record("warn", "disk_stop.load_failed", { code: codeOf(error) }),
+  );
   readonly #venueThemeQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -1226,7 +1239,21 @@ export class DashboardApp extends LitElement {
     if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
     this.#loadContentLanguages();
     this.#watchAlerts();
+    this.#watchDiskStop();
     this.#watchVenueTheme();
+  }
+
+  #watchDiskStop(): void {
+    void this.#diskStopQueries
+      .watch(
+        "getDiskStop",
+        [],
+        (answer) => {
+          this.diskStop = answer;
+        },
+        { passive: true },
+      )
+      .catch(() => undefined);
   }
 
   #watchVenueTheme(): void {
@@ -1384,6 +1411,8 @@ export class DashboardApp extends LitElement {
     navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
     this.#venueThemeQueries.release("getVenueTheme");
+    this.#diskStopQueries.release("getDiskStop");
+    this.diskStop = null;
     this.#clearAlerts();
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;
@@ -1702,7 +1731,7 @@ export class DashboardApp extends LitElement {
   }
 
   #notices(slot?: string): TemplateResult {
-    return html`${this.#updateBar(slot)}
+    return html`${this.#diskStopBar(slot)} ${this.#updateBar(slot)}
       <wt-toast
         class="alert-toast"
         data-test="alert-toast"
@@ -1720,6 +1749,17 @@ export class DashboardApp extends LitElement {
         @wt-activate=${(e: Event) => this.#onToastActivate(e)}
         @wt-close=${(e: Event) => this.#onToastClose(e)}
       ></wt-toast>`;
+  }
+
+  #diskStopBar(slot?: string): TemplateResult | typeof nothing {
+    if (this.diskStop?.stopped !== true) return nothing;
+    const canOpenBoxStatus = this.#sessionPermissions.includes("system.manage");
+    return html`<wt-banner
+      data-test="disk-stop-bar"
+      slot=${slot ?? nothing}
+      tone="error"
+      message=${diskStopMessage(canOpenBoxStatus ? this.diskStop.deleted : null, canOpenBoxStatus)}
+    ></wt-banner>`;
   }
 
   #updateBar(slot?: string): TemplateResult | typeof nothing {

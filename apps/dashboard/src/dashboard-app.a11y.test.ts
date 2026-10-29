@@ -7,7 +7,7 @@ import { png } from "./testing/venue-logo-fixture.js";
 
 import type { DashboardApp } from "./dashboard-app.js";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
-import type { WtToast, WtVenueLogo } from "@waitron/ui";
+import type { WtBanner, WtToast, WtVenueLogo } from "@waitron/ui";
 import { startVenueTheme, VENUE_THEME_STORAGE_KEY } from "@waitron/ui";
 import { LiveData } from "@waitron/dashboard-kit";
 import type { DashboardApi, PersonSummary } from "./api/client.js";
@@ -607,6 +607,30 @@ describe.each(["light", "dark"] as const)("dashboard-app a11y (%s theme)", (them
     await toast().updateComplete;
     // Axe files the pop-up's text contrast as "incomplete" here, because the pop-up sits over the
     // page; wt-toast's own accessibility test judges its contrast.
+    await expectNoA11yViolations(host);
+  });
+
+  it("the full-disk bar is accessible under the banner", async () => {
+    const api = stubApi({
+      liveData: new LiveData(),
+      getMe: vi.fn().mockResolvedValue({
+        personId: "p1",
+        role: "manager",
+        locale: null,
+        venueLocale: "es-ES",
+        sessionDefault: "es-ES",
+        venueName: "Deli Test SL",
+        permissions: ["system.manage"],
+        modules: [],
+      }),
+      getDiskStop: vi.fn().mockResolvedValue({
+        stopped: true,
+        deleted: { count: 1, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false },
+      }),
+    });
+    const { el, host } = await mountWidget<DashboardApp>("dashboard-app", { api }, theme);
+    const bar = () => el.shadowRoot!.querySelector<WtBanner>("[data-test=disk-stop-bar]");
+    await expect.poll(() => bar()?.shadowRoot?.querySelector(".message")?.textContent).toBeTruthy();
     await expectNoA11yViolations(host);
   });
 
