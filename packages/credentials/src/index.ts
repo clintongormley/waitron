@@ -16,10 +16,11 @@ export {
   getCredential,
   listCredentials,
   putCredential,
+  readCredentialMeta,
   rotateCredentials,
   tryGetCredential,
 } from "./store.js";
-export type { CredentialMeta, CredentialRef, RotationResult } from "./store.js";
+export type { CredentialMeta, CredentialRef, CredentialRowMeta, RotationResult } from "./store.js";
 
 export { CREDENTIALS_CLASSIFICATION } from "./classification.js";
 

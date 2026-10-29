@@ -142,11 +142,46 @@ export async function credentialRevision(
     .from(tenantCredentials)
     .where(eq(tenantCredentials.purpose, ref.purpose));
   if (row === undefined) return null;
+  return rowDigest(row);
+}
+
+function rowDigest(row: {
+  keyVersion: number;
+  iv: Uint8Array;
+  ciphertext: Uint8Array;
+  authTag: Uint8Array;
+}): string {
   const hash = createHash("sha256").update(`${row.keyVersion}`);
   for (const bytes of [row.iv, row.ciphertext, row.authTag]) {
     hash.update(`:${bytes.length}:`).update(bytes);
   }
   return hash.digest("hex").slice(0, 16);
+}
+
+/** What one row reveals without being opened: its key number, written time and
+ * {@link credentialRevision} digest, from one query. Null when there is no row. */
+export interface CredentialRowMeta {
+  keyVersion: number;
+  updatedAt: string;
+  digest: string;
+}
+
+export async function readCredentialMeta(
+  tx: Transaction,
+  ref: CredentialRef,
+): Promise<CredentialRowMeta | null> {
+  const [row] = await tx
+    .select({
+      keyVersion: tenantCredentials.keyVersion,
+      updatedAt: tenantCredentials.updatedAt,
+      iv: tenantCredentials.iv,
+      ciphertext: tenantCredentials.ciphertext,
+      authTag: tenantCredentials.authTag,
+    })
+    .from(tenantCredentials)
+    .where(eq(tenantCredentials.purpose, ref.purpose));
+  if (row === undefined) return null;
+  return { keyVersion: row.keyVersion, updatedAt: row.updatedAt, digest: rowDigest(row) };
 }
 
 /** True when a row was removed, false when there was none. */
