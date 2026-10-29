@@ -2041,6 +2041,25 @@ side the check expects the box, that a larger font still fits, or the check meas
 and timing rather than placement. A control that forced the box to 240 px only once filled (wrapping `show`) failed the
 reordered check five times in five without the added room, and passed five times in five with it.
 
+## A check of what an observer's first report does polls for it, never counts frames
+
+On 2026-10-29 "shows the first tab at the strip's start when the strip comes back after the Floor
+had one zone" (`apps/till/src/screens/till-floor-screen.zone-tabs.test.ts`) failed two of #2238's
+three CI runs at `expected 50 to be close to 6`, 44 px being the start room the Floor scrolls the
+strip past. The strip comes back already marked as overflowing, before its tabs are drawn, so
+`#restStrip` in `till-floor-screen.ts` finds nothing to scroll and waits for a retry. The only
+retry that can land inside the test's two `requestAnimationFrame`s is the intersection observer's
+first report, a separate task; the resize observer's retry is queued for a frame and runs after the
+test's second frame callback. Debug logging on a run under CPU load had that report land 0.5 ms
+before the second frame finished. A stand-in that delivered the report two frames late failed the
+two-frame check with CI's numbers, and passed a poll on the first tab's place, the resize observer
+having rested the strip. With both observers silenced the poll failed too, as it did with the
+Floor's scroll deleted, so the poll still catches a strip that never rests. That CI's runs met a
+late report is inferred from these runs; the failing runs logged nothing that shows it.
+
+So: when the outcome hangs on an observer's report, poll for the outcome. Two frames guarantee only
+the frames.
+
 **Guards that read the whole tree**
 
 ## Source scanners check filesystem type as well as the filename suffix — select files, not just paths ending in `.ts`.
@@ -2971,6 +2990,10 @@ Cost: A505's row menu stayed open on the real page while every scripted test clo
 ### A placement check measures a box after the content that sizes it arrives, with room for CI's larger fonts on the side it expects the box
 
 Cost: A771, the check failed 3 of 7 main runs.
+
+### A check of what an observer's first report does polls for it, never counts frames
+
+Cost: a Floor zone-tab test failed two of #2238's three CI runs (A1124's rest, A1125's branch).
 
 ### A proof by deletion says nothing about what the guard wrongly REFUSES, and that needs its own case
 

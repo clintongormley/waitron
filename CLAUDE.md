@@ -708,6 +708,10 @@ browser test** — most of these rules exist because a test passed while proving
 - **A placement check measures a box after the content that sizes it arrives, with room for CI's
   larger fonts on the side it expects the box.** Nothing guards it. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-placement-check-measures-a-box-at-its-final-size-with-room-for-cis-fonts).
+- **A check of what an intersection or resize observer's report does polls for the outcome, never
+  waits a fixed number of frames**: an intersection observer reports in a task of its own, and
+  under CPU load one landed 0.5 ms before a test's second frame ended. Nothing guards it. Receipt:
+  [testing-guide.md](docs/developers/testing-guide.md#a-check-of-what-an-observers-first-report-does-polls-for-it-never-counts-frames).
 - **Test public recovery links through the real boot modes that serve them.** [Detail](docs/developers/testing-guide.md).
 - **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** [Detail](docs/developers/testing-guide.md).
 - **Local reactivation cannot restore a removed provider registration.** Successful unpair records a
