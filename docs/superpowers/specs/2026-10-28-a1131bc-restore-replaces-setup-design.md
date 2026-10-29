@@ -383,7 +383,8 @@ and a record found there refuses the wipe (`keptFault`).
 was entered in the setup that stopped part way. No invoice was sent to AEAT." ES «Empezar de nuevo borra
 lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.»
 The second sentence shows only once the box has read the database and found no invoice. With the
-database missing, the existing missing-database words and tick stay instead.
+database missing, the first sentence shows; the existing missing-database words and tick take the
+place of the second (settled 2026-10-29 in slice 1's plan review).
 
 **b. Recover from backup's confirmation** (picture 2). `recoverDeletes`: EN "Recover from backup first
 deletes what was entered in the setup that stopped part way. No invoice was sent to AEAT. Then you choose
@@ -457,13 +458,21 @@ restore from must be kept off the box; a test box's sales since its recovery are
 Each is one pull request, smallest first; no slice adds a migration. None edits the fiscal core; the
 one possible exception, in slice 2, goes to the owner first (§2).
 
-1. **Start again's words without counts** (§9a, `heldLost`; the summary and confirmation stop carrying
-   counts; the user guide's count lines). Light review. Picture 1's words.
+1. **Start again's words without counts** (§9a, `heldLost`; the confirmation stops showing counts; the
+   user guide's count lines and the runbook's quote of the help line). Light review. Picture 1's words.
+   Amended 2026-10-29 on slice 1's plan review: the summary keeps carrying the counts in slice 1,
+   because the page's refusal still draws them and four parts check them; slice 2 takes them off.
 2. **One wipe, no password** (server, plus the words and docs that would otherwise be false). Start
    again's wipe-guarding password steps go (§3), the "files found" page's stays; the "database holds
    rows" case is offered with or without a stopped recovery; every row of §1a as a test, with §9c's
    words; the confirmation records of §4; the wipe of a database it cannot read (question 2, answer A); the `module-evidence/` check of §2 (which
-   stops for the owner if it finds a fiscal-module change is needed). Docs: every sentence in the user
+   stops for the owner if it finds a fiscal-module change is needed). The counts leave the wire: the
+   summary, the route's parser (`shownHeld`, `setup-first-fiscal-api.ts:128-142`), the server's exact
+   comparison of what the page showed (`first-setup-resolution.ts:636-653`), the confirmation record's
+   reader (`packages/provisioning/src/first-setup-start-again-confirmation.ts:133-153`) and the page
+   session's checks (`first-setup-session.ts:107-124`, `:183`) stop carrying them; the counts go to the
+   log line; `first-setup-retirement.test.ts:249-264` is reworked, checking which message the person
+   then sees. Docs: every sentence in the user
    guide pair (`apps/server/src/guide/{en,es}/backup-recovery.md`), `docs/operations/first-live-fiscal-setup.md`,
    `deploy/README.md` and `deploy/waitron.sh` that says Start again asks for the setup password, times
    something from the password step, or says who confirmed; found again by search when the slice is

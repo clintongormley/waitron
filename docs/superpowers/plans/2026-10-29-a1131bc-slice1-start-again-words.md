@@ -94,6 +94,14 @@ words, "Slices" item 1 for the scope. Mock-up: `docs/backlog/mockups/a1131bc-res
   `apps/server/src/guide/es/backup-recovery.md:35-36` ("…también dice cuántos, y que ninguno es una
   factura."). `rg -n -i "saved item|how many|cuántos"` over `apps/server/src/guide`, `docs/operations`
   and `deploy/README.md` found no other count line about the setup database (run 2026-10-29).
+- The runbook quotes today's help line: `docs/operations/first-live-fiscal-setup.md:125-126`
+  ('… — and, under "Deletes this attempt. This box will not use its invoice series names again.",
+  says "New series names can start from {date}, {time}."'). The paragraph it sits in covers a
+  damaged name record with the database missing **and** present (`:115-126`). `rg -n "Deletes this
+  attempt|Borra este intento|its invoice series names again|sus nombres de serie de facturas"` over
+  `apps/server/src/guide`, `docs/operations`, `docs/developers`, `deploy`, `apps/*/src` and
+  `packages/*/src` (tests excluded) found only that runbook line and the two strings themselves
+  (run 2026-10-29, after the plan review's I1).
 - Guide files are formatted by Prettier: `pnpm exec prettier --file-info
   apps/server/src/guide/en/backup-recovery.md` printed `"ignored": false` (run 2026-10-29).
 
@@ -124,9 +132,13 @@ words, "Slices" item 1 for the scope. Mock-up: `docs/backlog/mockups/a1131bc-res
   §9a's last sentence: with the database missing, the missing-database words and the "Nothing was
   filed…" tick stand **instead of the second sentence**; the first sentence still shows there, so
   the missing confirmation still says Start again deletes something after D3 removes "Deletes this
-  attempt" from the help line. (The other reading — no new paragraph at all with the database
-  missing — would leave that confirmation saying nothing about deletion; flagged for the plan
-  review.)
+  attempt" from the help line. The plan review confirmed this reading (§9b says the middle
+  sentence of `recoverDeletes` "follows (a)'s rule", so only the second sentence is conditional),
+  and the spec's §9a now states it (amended 2026-10-29).
+- **D5 — the spec records the deferral.** The spec's Slices list was amended on 2026-10-29 (plan
+  review I2): slice 1 no longer says "the summary … stop carrying counts", and slice 2 now names
+  the four parts that stop carrying them, the log line, and the rework of
+  `first-setup-retirement.test.ts:249-264`.
 - **Not in this slice:** the password removal, §9b, §9c, §9d, the `heldChanged` rewording, the
   server and every doc that describes the password (slice 2 lists them).
 
@@ -143,6 +155,9 @@ words, "Slices" item 1 for the scope. Mock-up: `docs/backlog/mockups/a1131bc-res
 | `apps/setup/src/setup-app-held-database.a11y.test.ts:83` | polls `held-database` | polls `start-again-deletes` | element renamed |
 | `apps/setup/src/setup-app-missing-database.test.ts:512-516` | `confirmationLines(app).slice(-3)` = `[seriesPicksDamaged, startAgainHelp, namesFrom]` | `.slice(-4)` = `[seriesPicksDamaged, heldLost, startAgainHelp, namesFrom]` | D4 adds a line before the help |
 | `setup-app-missing-database.test.ts:547-552` | `.slice(-4)` = `[recoveryRecordDamaged, seriesPicksDamaged, startAgainHelp, namesFrom]` | `.slice(-5)` with `heldLost` before `startAgainHelp` | D4 |
+| `setup-app-resolution.test.ts:130-155` ("the confirmation says the attempt is deleted") | proves deletion only through `startAgainHelp`, which D3 empties of "Deletes" | also asserts `start-again-deletes` text is `${heldLost} ${noInvoiceSent}` (empty database) | still passes unedited, but would stop proving its title (plan review m2) |
+| `setup-app-resolution.test.ts:918-940` ("the warning is shown above what Start again deletes") | warning precedes the help line | also asserts the warning precedes `start-again-deletes` | m2 |
+| `setup-app-missing-database.test.ts:447-461` ("…named in the confirmation, above what Start again deletes") | notice precedes the help line | also asserts the notice precedes `start-again-deletes` | m2 |
 
 Behavioural assertions in those tests that are **not** about words stay exactly as they are:
 Start again enabled/disabled, element order, the request body (`confirmRecoveryDiscard: { shown:
@@ -152,7 +167,12 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
 ## Review Focus
 
 1. **Missing database:** the page must not say "No invoice was sent to AEAT" — the box never read
-   a database. Pinned by Task 1's missing-database test.
+   a database. Pinned **by outcome** by Task 1's missing-database test. That test does not prove the
+   `!missing` part of the condition: with the database missing the inspection answers
+   `emptyDatabase: false` (`packages/provisioning/src/first-setup-resolution-inspection.ts:82`) and
+   `held` is read from `firstStoppedSummary`, which only the present-database path fills
+   (`setup-app.ts:1573`), so deleting `!missing` leaves it green. `!missing` stays as a redundant
+   guard.
 2. **A held database that would be refused** (kept or invoice rows) must still show the refusal
    with its counts and no `start-again-deletes` paragraph. Pinned by the edited
    `expectNoHeldConfirmation`.
@@ -160,10 +180,12 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
    with `setup.attempt_conflict`. Pinned by the kept request-body assertion in the 105 test.
 4. **Spanish at phone width:** the longer Spanish sentence wraps inside 390 px in both themes.
    Pinned by the held and resolution a11y suites' `scrollWidth` checks and the look check (Task 2).
-5. **`heldChanged` still says "Enter the password again to see what it holds now."** After this
-   slice the offered confirmation no longer lists what the database holds, only that no invoice was
-   sent; the refused one still does. Not changed here (slice 2 rewrites it, §9c); the reviewer
-   should judge whether the sentence still reads true and say so in the PR.
+5. **`heldChanged` stays true and stays unchanged.** It is drawn only after the confirmation's send
+   was refused `kept-records` (`setup-app.ts:1505-1508`). The next password step reads a fresh
+   summary (`#openPresentConfirmation`, `:1531-1592`); that summary has `kept > 0 || records > 0`,
+   so the page draws the refusal block (`:2700`), which still lists the counts (D2). So "Enter the
+   password again to see what it holds now" still describes what the person sees. Slice 2 rewrites
+   it (§9c). Not an open point for the PR.
 
 ---
 
@@ -201,7 +223,8 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
   `t.noInvoiceSent` nor (EN) "No invoice"; `missing-database` still reads `t.missingDatabase`; the
   tick's label is still `t.missingConfirm`.
 
-  Apply every edit in "Tests edited by design" now, with the new expectations.
+  Apply every edit in "Tests edited by design" now, with the new expectations — including the
+  three m2 rows, which pass unedited but must be pointed at `start-again-deletes`.
 
 - [ ] **Step 2: Run them and watch them fail**
 
@@ -249,6 +272,7 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
 
 **Files:**
 - Modify: `apps/server/src/guide/en/backup-recovery.md:33-34`, `apps/server/src/guide/es/backup-recovery.md:35-36`
+- Modify: `docs/operations/first-live-fiscal-setup.md:125-126` (the quoted help line)
 - Modify: `apps/setup/src/setup-app-held-database.a11y.test.ts` (a look flag beside the a11y check)
 
 **Interfaces:**
@@ -261,6 +285,16 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
   `pnpm exec prettier --write` on both files. (No failing-test step: no test reads guide prose;
   the guide suites below guard structure and links.)
 
+  Runbook: in `docs/operations/first-live-fiscal-setup.md:125-126`, replace
+  '— and, under "Deletes this attempt. This box will not use its invoice series names again.", says'
+  with '— then "Start again deletes what was entered in the setup that stopped part way." (followed
+  by "No invoice was sent to AEAT." when the venue database is present) and, under "This box will
+  not use this setup's invoice series names again.", says'. Re-read `:115-131` after the edit: the
+  paragraph covers both the missing and the present database, so neither case may be described
+  with the other's words. `docs/` is ignored by Prettier, so `format:check` proves nothing about
+  this file; read it. Then re-run the old-words search from "Current behaviour" and expect only
+  test files.
+
 - [ ] **Step 2: Look flag.** In `setup-app-held-database.a11y.test.ts`, after the existing
   `scrollWidth` check of the `"offered"/"confirmation"` loop, add the same guarded screenshot its
   siblings use (`setup-app-resolution.a11y.test.ts:75-78`):
@@ -270,11 +304,15 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
   ```
   env -u AI_AGENT -u CLAUDECODE VITE_A1131BC_HELD_LOOK=1 pnpm --filter @waitron/setup exec vitest run src/setup-app-held-database.a11y.test.ts -t confirmation
   env -u AI_AGENT -u CLAUDECODE VITE_A679_RESOLUTION_LOOK=1 pnpm --filter @waitron/setup exec vitest run src/setup-app-resolution.a11y.test.ts -t confirmation
-  env -u AI_AGENT -u CLAUDECODE VITE_A679_MISSING_LOOK=1 pnpm --filter @waitron/setup exec vitest run src/setup-app-missing-database.a11y.test.ts -t confirmation
+  env -u AI_AGENT -u CLAUDECODE VITE_A679_MISSING_LOOK=1 pnpm --filter @waitron/setup exec vitest run src/setup-app-missing-database.a11y.test.ts -t "confirmation|names-damaged"
   ```
   Find the files (`find apps/setup -path '*__screenshots__*' \( -path '*a1131bc-held*' -o -path '*a679-interruption*' -o -path '*a679-missing*' \) -name '*confirmation*.png' -newer apps/setup/src/setup-app.ts`),
   copy them to `~/waitron-campaign/a1131bc-1-shots/`, and open at least, for each of the three
-  states: EN light 390, EN dark 390, ES light 390, ES dark 390 and EN light 1280. What passes: the
+  states: EN light 390, EN dark 390, ES light 390, ES dark 390 and EN light 1280. Also open
+  `a679-missing/*-names-damaged.png` (taken by the same `VITE_A679_MISSING_LOOK` run) at EN and ES
+  390 px, light and dark: it is the screen that puts the new paragraph between a damaged-record line
+  and the help line (plan review m5) — find it with the same `find` and `-name '*names-damaged*.png'`.
+  What passes: the
   new paragraph sits above the help line, wraps inside the card at 390 px, is legible in dark, shows
   both sentences in the held and empty cases and only the first in the missing case, and no count
   appears anywhere. Compare with `docs/backlog/mockups/a1131bc-restore/1-start-again*.png`. Write
@@ -293,7 +331,7 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
 - [ ] **Step 5: Commit**
   ```
   git add apps/server/src/guide/en/backup-recovery.md apps/server/src/guide/es/backup-recovery.md \
-    apps/setup/src/setup-app-held-database.a11y.test.ts
+    docs/operations/first-live-fiscal-setup.md apps/setup/src/setup-app-held-database.a11y.test.ts
   git commit -s
   ```
 
@@ -301,6 +339,11 @@ heldSummary(105) }` — the counts still travel, D1), the restarting status, ref
 
 Light path (spec: "Light review"; no risk trigger — no server, wire, fiscal or migration change):
 no per-task reviewer. Then `/finish-branch` with the worktree path and this plan; its run-it seat
-and plan-vs-spec read still run. The PR description carries: the boundary decisions D1-D4, the
-"Tests edited by design" table, the look-check list, and Review Focus item 5 as an open point.
-Before the PR, update `docs/backlog.md` only if an entry says slice 1 is pending (grep `A1131`).
+and plan-vs-spec read still run. The PR description carries: the boundary decisions D1-D5, the
+"Tests edited by design" table and the look-check list.
+
+`docs/backlog.md`'s A1131c entry was rewritten in the plan-review fold (the commit after
+`94ca8966c`): approved 2026-10-29 with both answers A, being built in four slices, slice 1 = this
+branch and this plan. Before the PR, re-read the entry and keep it true for the moment this branch
+lands: it must say slice 1 changes the words and that the counts leave the wire in slice 2; slices
+2–4 are still to come.

@@ -643,10 +643,12 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   setup's series names go into the never-reuse note, then its files are deleted, and Recover from
   backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
   record, saved trading settings and a finished setup stay. Designed with A1131 below
-  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`, revised 2026-10-29);
-  waits for the owner's two questions in it (who may delete a failed setup, given the repair page is
-  reachable from the venue's network; and a damaged setup database). Slice 1 (Start again's words)
-  does not depend on them.
+  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
+  owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
+  failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
+  taken from when it last saved anything. Being built in the spec's four slices; slice 1 (Start
+  again's words without counts) is branch `feat/a1131bc-1-start-again-words`, planned in
+  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
   missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore
