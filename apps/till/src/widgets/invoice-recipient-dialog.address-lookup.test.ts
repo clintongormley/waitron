@@ -1,4 +1,4 @@
-import { getCountryPack } from "@waitron/country-packs";
+import { countryNameFor, getCountryPack } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import type {
@@ -8,6 +8,7 @@ import type {
 } from "@waitron/ui/src/components/wt-address-lookup.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { es } from "../i18n/strings.js";
 import "./invoice-recipient-dialog.js";
 import type {
   InvoiceRecipientDetail,
@@ -111,9 +112,9 @@ describe("the invoice recipient dialog's address search", () => {
 
   it("names the chosen country in its label", async () => {
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe("Find the customer's address (Spain)");
+    expect(lookup(el)!.label).toBe("Find the address (Spain)");
     await chooseCountry(el, "FR");
-    expect(lookup(el)!.label).toBe("Find the customer's address (France)");
+    expect(lookup(el)!.label).toBe("Find the address (France)");
   });
 
   it("Escape closes an open list and leaves the dialog open", async () => {
@@ -246,11 +247,13 @@ describe("the invoice recipient dialog's address search", () => {
 
   it("says so in Spanish", async () => {
     setLocale("es-ES");
+    const spain = countryNameFor("ES", "es-ES");
+    expect(spain).not.toBe(countryNameFor("ES", "en"));
     const el = await mountDialog();
-    expect(lookup(el)!.label).toBe("Buscar la dirección del cliente (España)");
+    expect(lookup(el)!.label).toBe(es["invoice.address_lookup.label"].replace("{country}", spain));
     await choose(el, { ...MADRID, countryCode: "PT" });
     expect(lookup(el)!.message).toBe(
-      "Esa dirección no está en España. Elige otra o escríbela abajo.",
+      es["invoice.address_lookup.other_country"].replace("{country}", spain),
     );
   });
 

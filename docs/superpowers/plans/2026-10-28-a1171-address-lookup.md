@@ -203,7 +203,7 @@ mark.
 2. **The search sits directly above the street field**, after the customer name, and asks in the
    dialog's chosen country (`country-code` follows `countryCode`; the field already drops a search
    on its way when the country changes). The country is picked below the fields, so the search's
-   label names it: "Find the customer's address (Spain)". With no country chosen the search is
+   label names it: "Find the address (Spain)". With no country chosen the search is
    hidden.
 3. **A choice fills street, postcode, locality and province.** The street is every line joined with
    ", " (the dialog has one street line, so a typed floor or unit is replaced — a departure from
@@ -230,7 +230,7 @@ mark.
 7. **Enter on an active suggestion chooses it and does not press Save choice** — the search gets no
    `submitOnEnter`.
 8. **Strings** (en/es) in `apps/till/src/i18n/strings.ts`: `invoice.address_lookup.label` ("Find
-   the customer's address ({country})"), `.placeholder`, `.no_results`, `.unavailable`, `.other_country` — the
+   the address ({country})", short because the dialog sizes to its fields and cut a longer one), `.placeholder`, `.no_results`, `.unavailable`, `.other_country` — the
    setup app's wording with "customer" where it helps.
 
 ### Task (one, written inline, test first)
