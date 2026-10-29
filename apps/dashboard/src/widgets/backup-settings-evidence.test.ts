@@ -4,6 +4,12 @@ import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale } from "../i18n/t.js";
 import { en, es, type StringKey } from "../i18n/strings.js";
 import type { BackupLoadFailure, BackupSettingsEvidence, DashboardApi } from "../api/client.js";
+import {
+  apiAnswering,
+  deferred,
+  evidence,
+  failure,
+} from "../testing/backup-settings-evidence-fixture.js";
 import type { BackupSettingsEvidenceDialog } from "./backup-settings-evidence.js";
 
 const modules = import.meta.glob<typeof import("./backup-settings-evidence.js")>(
@@ -21,38 +27,6 @@ type Api = Pick<DashboardApi, "getBackupSettingsEvidence">;
 function words(catalogue: Catalogue, key: StringKey, values: Record<string, string> = {}) {
   return catalogue[key].replace(/\{(\w+)\}/g, (whole, name: string) => values[name] ?? whole);
 }
-function deferred<T>() {
-  let resolve!: (value: T) => void, reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((yes, no) => {
-    resolve = yes;
-    reject = no;
-  });
-  return { promise, resolve, reject };
-}
-function failure(overrides: Partial<BackupLoadFailure> = {}): BackupLoadFailure {
-  return {
-    at: "2026-10-29T10:00:00.000Z",
-    code: "credentials.decrypt_failed",
-    detail: null,
-    recordDigest: "digest-a",
-    recordWrittenAt: "2026-10-29T09:00:00.000Z",
-    ...overrides,
-  };
-}
-function evidence(overrides: Partial<BackupSettingsEvidence> = {}): BackupSettingsEvidence {
-  return {
-    readAt: "2026-10-29T11:00:00.000Z",
-    managedByEnvironment: false,
-    failures: [failure()],
-    lastCleanLoadAt: null,
-    record: { keyVersion: 2, writtenAt: "2026-10-29T09:00:00.000Z", digest: "digest-a" },
-    rewrittenSinceLastFailure: false,
-    boxKeyNumbers: { current: 2 },
-    now: { state: "unreadable", code: "credentials.decrypt_failed", detail: null },
-    recoveryKey: { held: true, tooShort: false, fingerprint: "ABCD1234" },
-    ...overrides,
-  };
-}
 async function mount(api: Api, locale = "en-GB") {
   setLocale(locale);
   const load = modules["./backup-settings-evidence.ts"];
@@ -63,11 +37,6 @@ async function mount(api: Api, locale = "en-GB") {
     { api: api as DashboardApi, open: true },
   );
   return el;
-}
-function apiAnswering(...answers: (() => Promise<BackupSettingsEvidence>)[]) {
-  const getBackupSettingsEvidence = vi.fn<() => Promise<BackupSettingsEvidence>>();
-  for (const answer of answers) getBackupSettingsEvidence.mockImplementationOnce(answer);
-  return { getBackupSettingsEvidence };
 }
 const q = (el: HTMLElement, selector: string) =>
   el.shadowRoot!.querySelector<HTMLElement>(selector);
