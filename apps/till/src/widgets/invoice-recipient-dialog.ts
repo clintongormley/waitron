@@ -8,9 +8,19 @@ import {
   draftScopeFor,
   saveActionState,
 } from "@waitron/ui";
-import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import type {
+  AddressChosenDetail,
+  AddressLookupProvider,
+  WtAddressLookup,
+  WtDialog,
+  DraftScope,
+  LeaveCoordinator,
+  LeaveReason,
+} from "@waitron/ui";
+import { findAdministrativeArea, findAdministrativeAreaByPostalCode } from "@waitron/country";
 import {
   countryNameFor,
+  getCountryPack,
   RECIPIENT_COUNTRY_CODES,
   RECIPIENT_IDENTIFIER_POLICY,
   recipientIdentifierResult,
@@ -24,6 +34,7 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-combobox.js";
+import "@waitron/ui/src/components/wt-address-lookup.js";
 import { trackDialog } from "./track-dialog.js";
 import { currentLocale, t } from "../i18n/t.js";
 import type { InvoiceDeliveryChoice, InvoiceDeliveryOptions } from "../api/client.js";
@@ -52,6 +63,14 @@ interface RecipientDraft {
   email: string;
 }
 
+/** The fields a chosen address fills, by the name a server refusal gives each. */
+const SEARCH_FILLS = {
+  streetAddress: "address",
+  postalCode: "postalCode",
+  locality: "locality",
+  province: "province",
+} as const satisfies Partial<Record<keyof RecipientDraft, string>>;
+
 @customElement("till-invoice-recipient-dialog")
 export class TillInvoiceRecipientDialog extends LitElement {
   static override styles = [
@@ -75,6 +94,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   };
   /** The delivery already staged for the order; kept unless the delivery field is changed. */
   @property({ attribute: false }) savedDelivery?: InvoiceDeliveryChoice;
+  /** Address suggestions; without one the address search stays hidden. */
+  @property({ attribute: false }) addressProvider?: AddressLookupProvider;
   @state() private attempted = false;
   @state() private countryCode = "ES";
   @state() private identifierType: RecipientIdentifierType = "tax-number";
@@ -87,6 +108,8 @@ export class TillInvoiceRecipientDialog extends LitElement {
   @state() private province = "";
   @state() private medium: DeliveryMedium = "receipt";
   @state() private email = "";
+  /** The chosen country a found address was not in, until another choice or country. */
+  @state() private foreignAddressCountry?: string;
   #choiceShown = false;
 
   @state() private active = true;
@@ -322,6 +345,7 @@ export class TillInvoiceRecipientDialog extends LitElement {
     const taxId = this.#identifierResult();
     if (!taxId.valid) return;
     this.#submitted = this.#value();
+    this.#cancelAddressSearch();
     const delivery = this.#delivery();
     this.dispatchEvent(
       new CustomEvent<InvoiceRecipientDetail>("invoice-recipient-confirm", {
@@ -365,10 +389,45 @@ export class TillInvoiceRecipientDialog extends LitElement {
     if (field === "identifierType")
       this.identifierType = event.detail.value as RecipientIdentifierType;
     else this[field] = event.detail.value;
+    if (field in SEARCH_FILLS) this.#cancelAddressSearch();
+    if (field === "countryCode") this.foreignAddressCountry = undefined;
     this.#scope?.changed();
     this.#edited(field === "streetAddress" ? "address" : field);
     if (field === "identifierType" && this.identifierType === "tax-number")
       this.#edited("identifierCountryCode");
+  }
+
+  /** So an address still on its way cannot overwrite what the person typed or saved. */
+  #cancelAddressSearch(): void {
+    this.shadowRoot!.querySelector<WtAddressLookup>("wt-address-lookup")?.cancelSearch();
+  }
+
+  #onAddressChosen(event: CustomEvent<AddressChosenDetail>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    const address = event.detail.address;
+    if (address.countryCode !== this.countryCode) {
+      this.foreignAddressCountry = this.countryCode;
+      return;
+    }
+    this.foreignAddressCountry = undefined;
+    const pack = getCountryPack(this.countryCode);
+    const postal = pack?.postalCode?.validate(address.postalCode);
+    const area =
+      pack === undefined
+        ? undefined
+        : ((address.administrativeAreaCode === undefined
+            ? undefined
+            : findAdministrativeArea(pack, address.administrativeAreaCode)) ??
+          (postal?.valid === true
+            ? findAdministrativeAreaByPostalCode(pack, postal.normalized)
+            : undefined));
+    this.streetAddress = address.lines.join(", ");
+    this.postalCode = address.postalCode;
+    this.locality = address.locality;
+    if (area !== undefined) this.province = area.name;
+    this.#scope?.changed();
+    for (const refused of Object.values(SEARCH_FILLS)) this.#edited(refused);
   }
 
   #chooseDelivery(event: CustomEvent<{ value: string }>): void {
@@ -504,6 +563,23 @@ export class TillInvoiceRecipientDialog extends LitElement {
               this.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]"),
             )}
         ></wt-input>
+        <wt-address-lookup
+          name="address-search"
+          .provider=${this.addressProvider}
+          country-code=${this.countryCode}
+          label=${t("invoice.address_lookup.label")}
+          placeholder=${t("invoice.address_lookup.placeholder")}
+          no-results-label=${t("invoice.address_lookup.no_results")}
+          unavailable-label=${t("invoice.address_lookup.unavailable")}
+          .message=${
+            this.foreignAddressCountry === undefined
+              ? ""
+              : t("invoice.address_lookup.other_country").replace("{country}", () =>
+                  countryNameFor(this.foreignAddressCountry!, currentLocale()),
+                )
+          }
+          @wt-address-chosen=${(event: CustomEvent<AddressChosenDetail>) => this.#onAddressChosen(event)}
+        ></wt-address-lookup>
         <wt-input
           name="address"
           required

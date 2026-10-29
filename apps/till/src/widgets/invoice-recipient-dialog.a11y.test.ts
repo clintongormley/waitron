@@ -170,3 +170,38 @@ for (const theme of ["light", "dark"] as const) {
     await expectNoA11yViolations(host);
   });
 }
+
+for (const theme of ["light", "dark"] as const) {
+  it(`the address search, open and with its line, is accessible in ${theme}`, async () => {
+    setLocale("es-ES");
+    const { el, host } = await mountWidget<TillInvoiceRecipientDialog>(
+      "till-invoice-recipient-dialog",
+      {
+        addressProvider: {
+          suggest: async () => [
+            { id: "s1", label: "Calle Mayor 1", secondaryLabel: "28013 Madrid" },
+          ],
+          resolve: async () => ({
+            lines: ["Rua Augusta 1"],
+            locality: "Lisboa",
+            postalCode: "1100-048",
+            countryCode: "PT",
+          }),
+        },
+      },
+      theme,
+    );
+    const search =
+      el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-address-lookup"]>(
+        "wt-address-lookup",
+      )!;
+    search.delay = 0;
+    await userEvent.fill(page.elementLocator(search.shadowRoot!.querySelector("input")!), "Calle");
+    await expect.poll(() => search.shadowRoot!.querySelectorAll("[role=option]").length).toBe(1);
+    await userEvent.keyboard("{ArrowDown}");
+    await expectNoA11yViolations(host);
+    await userEvent.keyboard("{Enter}");
+    await expect.poll(() => search.message).not.toBe("");
+    await expectNoA11yViolations(host);
+  });
+}
