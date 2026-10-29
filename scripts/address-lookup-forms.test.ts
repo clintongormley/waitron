@@ -15,10 +15,7 @@ import { describe, expect, test } from "vitest";
 const ROOT = join(import.meta.dirname, "..");
 
 /** Address forms still to gain the search field; the list shrinks. */
-const WAITING: Readonly<Record<string, string>> = {
-  "apps/till/src/widgets/invoice-recipient-dialog.ts":
-    "A1171 part 3, after lane E's A963 rebuilds the dialog",
-};
+const WAITING: Readonly<Record<string, string>> = {};
 
 /** Files that name an address field and draw some other field, but are not address forms. */
 const NOT_ADDRESS_FORMS: Readonly<Record<string, string>> = {
@@ -68,6 +65,7 @@ describe("address forms offer the shared address search", () => {
       expect.arrayContaining([
         "apps/setup/src/screens/venue-screen.ts",
         "apps/dashboard/src/screens/venue-details-panel.ts",
+        "apps/till/src/widgets/invoice-recipient-dialog.ts",
         ...Object.keys(WAITING),
       ]),
     );

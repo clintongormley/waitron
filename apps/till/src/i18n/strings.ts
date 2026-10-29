@@ -427,6 +427,13 @@ export const en = {
   "invoice.tax_id_invalid": "Enter a valid Spanish tax ID.",
   "invoice.legal_name": "Customer legal name",
   "invoice.name_required": "Enter the customer's complete legal name.",
+  "invoice.address_lookup.label": "Find the address ({country})",
+  "invoice.address_lookup.placeholder": "Start typing the street and number",
+  "invoice.address_lookup.no_results": "No address found. Type it below.",
+  "invoice.address_lookup.unavailable":
+    "Address suggestions are not available. Type the address below.",
+  "invoice.address_lookup.other_country":
+    "That address is not in {country}. Choose another or type it below.",
   "invoice.street_address": "Customer street and number",
   "invoice.street_address_required": "Enter the customer's street and number.",
   "invoice.postal_code": "Customer postcode",
@@ -2221,6 +2228,13 @@ export const es: Record<StringKey, string> = {
   "invoice.tax_id_invalid": "Introduce un identificador fiscal español válido.",
   "invoice.legal_name": "Nombre o razón social del cliente",
   "invoice.name_required": "Introduce el nombre o razón social completos del cliente.",
+  "invoice.address_lookup.label": "Buscar la dirección ({country})",
+  "invoice.address_lookup.placeholder": "Empieza a escribir la calle y el número",
+  "invoice.address_lookup.no_results": "No se ha encontrado la dirección. Escríbela abajo.",
+  "invoice.address_lookup.unavailable":
+    "Las sugerencias de direcciones no están disponibles. Escribe la dirección abajo.",
+  "invoice.address_lookup.other_country":
+    "Esa dirección no está en {country}. Elige otra o escríbela abajo.",
   "invoice.street_address": "Calle y número del cliente",
   "invoice.street_address_required": "Introduce la calle y el número del cliente.",
   "invoice.postal_code": "Código postal del cliente",

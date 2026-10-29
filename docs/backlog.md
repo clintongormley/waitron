@@ -1849,9 +1849,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A1171 part 3: the till's invoice recipient dialog offers the address search.** A963 (#2145),
-  which rebuilt `invoice-recipient-dialog.ts`, has landed, so this can start;
-  `scripts/address-lookup-forms.test.ts` lists the dialog as waiting. Left open by A1171 parts 1–2.
+- **A Spanish invoice recipient's locality or province holding a comma is refused only at the
+  server.** The server checks a Spanish recipient's joined address by splitting it on commas
+  (`completeSpanishPostalAddress`, `packages/country-es/src/spain.ts`), so "Centro, Madrid" as the
+  locality is refused as `address`, while the till's own check (`recipientAddressErrors`) passes
+  it (run 2026-10-29 in a throwaway till test: "Centro, Madrid" gave no till error and failed the
+  server's check; "Madrid" passed both). The address search writes a comma-free province, but a
+  provider's locality could still hold one. Left open by A1171 part 3.
 
 - **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
   accepted a counter bill from another location into an answered party. The new allergy move
@@ -5294,7 +5298,12 @@ Not in any track until the standalone primary is done.
   `wt-address-lookup` a provider yet. Waitron Cloud's proposed design also asks for provider
   attribution beside the list, a confirm call at Save, an allowance message, a province inferred
   from a postcode shown for review, its own session token, and the provider's area codes turned
-  into the pack's. Left open by A1171 parts 1–2.
+  into the pack's. When the search first shows, the guides that describe these forms gain a line: the
+  till's full-invoice section in `table-service.md`, and the "Full invoices" entry's "Who receives
+  it" ("Destinatarios" in es) and the invoice notice in `data-protection.md`, en and es, with the
+  emailed notice in `apps/server/src/i18n/invoice-email-notice.ts`, since the provider then
+  receives what staff type into the till's address search and which suggestion they pick. Left
+  open by A1171.
 
 - **A1171: the dashboard's Venue card knows a province only by its code and main name.** The server's
   `provinces` list carries no other names, so a chosen address naming "Alicante" for

@@ -2,6 +2,10 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LitElement, html } from "lit";
 import { LeaveController } from "@waitron/ui";
+import type {
+  AddressLookupProvider,
+  AddressLookupResult,
+} from "@waitron/ui/src/components/wt-address-lookup.js";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
 import "./invoice-recipient-dialog.js";
@@ -438,3 +442,54 @@ for (const [field, value] of [
     expect(unload()).toBe(false);
   });
 }
+
+const MADRID: AddressLookupResult = {
+  lines: ["Calle Mayor 1"],
+  locality: "Madrid",
+  administrativeAreaCode: "28",
+  postalCode: "28013",
+  countryCode: "ES",
+};
+const addressProvider: AddressLookupProvider = {
+  suggest: async () => [{ id: "s1", label: "Calle Mayor 1", secondaryLabel: "28013 Madrid" }],
+  resolve: async () => MADRID,
+};
+function addressFields(form: TillInvoiceRecipientDialog) {
+  return ["address", "postalCode", "locality", "province"].map(
+    (name) =>
+      form.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-input"]>(`wt-input[name=${name}]`)!
+        .value,
+  );
+}
+
+it("a chosen address asks before discarding, Keep keeps what it filled and Discard restores the starting fields", async () => {
+  const { app, form } = await mount();
+  form.addressProvider = addressProvider;
+  await form.updateComplete;
+  expect(unload()).toBe(false);
+  form.shadowRoot!.querySelector("wt-address-lookup")!.dispatchEvent(
+    new CustomEvent("wt-address-chosen", {
+      detail: { address: MADRID },
+      bubbles: true,
+      composed: true,
+    }),
+  );
+  await form.updateComplete;
+  expect(unload()).toBe(true);
+  cancel(form);
+  const q = await question(app);
+  expect(q.open).toBe(true);
+  expect(app.closes).toBe(0);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+  await expect.poll(() => q.open).toBe(false);
+  expect(addressFields(form)).toEqual(["Calle Mayor 1", "28013", "Madrid", "Madrid"]);
+  cancel(form);
+  await question(app);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => app.closes).toBe(1);
+  expect(form.shadowRoot!.querySelector("wt-dialog")!.open).toBe(false);
+  await form.updateComplete;
+  expect(addressFields(form)).toEqual(["", "", "", ""]);
+  expect(app.submitted).toEqual([]);
+  expect(unload()).toBe(false);
+});
