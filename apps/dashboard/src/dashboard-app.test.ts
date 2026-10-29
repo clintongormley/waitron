@@ -8922,6 +8922,24 @@ it("signs out when the Orders screen asks for an administrator", async () => {
   expect(ordersScreen(el)).toBeNull();
 });
 
+const backupScreen = (el: DashboardApp) => el.shadowRoot!.querySelector("dashboard-backup-screen");
+
+it("signs out when the Backups screen asks for an administrator", async () => {
+  history.replaceState(null, "", "/manage/backup");
+  const api = stubApi();
+  const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+  await flush(el);
+  expect(backupScreen(el)).not.toBeNull();
+
+  backupScreen(el)!.dispatchEvent(
+    new CustomEvent("admin-sign-in", { bubbles: true, composed: true }),
+  );
+
+  await vi.waitFor(() => expect(api.logout).toHaveBeenCalledOnce());
+  await expect.poll(() => login(el)).toBeTruthy();
+  expect(backupScreen(el)).toBeNull();
+});
+
 describe("the Users screen's administrator sign-in, pressed for real", () => {
   const marta: PersonSummary = {
     personId: "p2",

@@ -12,6 +12,7 @@ import {
   getCredential,
   listCredentials,
   putCredential,
+  readCredentialMeta,
   tryGetCredential,
 } from "./store.js";
 import { captured } from "./testing/captured.js";
@@ -408,5 +409,41 @@ describe("credentialRevision", () => {
       expect(rev).not.toContain(hex.slice(0, 16));
     }
     expect(rev).not.toContain("sk_test_x");
+  });
+});
+
+describe("readCredentialMeta", () => {
+  const meta = () =>
+    withTransaction(suite.db, (tx) => readCredentialMeta(tx, { purpose: "payments.stripe" }));
+  const put = () =>
+    withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING_V1, { purpose: "payments.stripe", value: STRIPE }),
+    );
+
+  it("is null when nothing is stored", async () => {
+    expect(await meta()).toBeNull();
+  });
+
+  it("answers the row's key number, written time and revision digest, and moves on each write", async () => {
+    await put();
+    const first = (await meta())!;
+    expect(Object.keys(first).sort()).toEqual(["digest", "keyVersion", "updatedAt"]);
+    expect(first.keyVersion).toBe(1);
+    expect(first.digest).toBe(
+      await withTransaction(suite.db, (tx) =>
+        credentialRevision(tx, { purpose: "payments.stripe" }),
+      ),
+    );
+    // Backdated, so the rewrite's time is strictly later whatever the clock's precision.
+    await suite.db.execute(
+      sql`update tenant_credentials set updated_at = '2020-01-01T00:00:00.000Z'`,
+    );
+    const backdated = (await meta())!;
+    expect(backdated.updatedAt).toBe("2020-01-01T00:00:00.000Z");
+    await put();
+    const second = (await meta())!;
+    expect(second.digest).toMatch(/^[0-9a-f]{16}$/);
+    expect(second.digest).not.toBe(first.digest);
+    expect(second.updatedAt > backdated.updatedAt).toBe(true);
   });
 });

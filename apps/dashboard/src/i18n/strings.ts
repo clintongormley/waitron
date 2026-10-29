@@ -1720,6 +1720,91 @@ export const en = {
     "This node isn't the venue's primary, so backups are changed from the primary node.",
   "backup.status.stored_off": "Switched off — the saved destination is kept",
   "backup.status.load_failed": "Backups are off because the saved settings can't be used.",
+  "backup_evidence.heading": "What the box recorded",
+  "backup_evidence.happened": "What happened",
+  "backup_evidence.no_failures":
+    "No failure to use the saved backup settings has been recorded since the box last started.",
+  "backup_evidence.again_rewritten":
+    "This happened again after the settings were rewritten at {time}.",
+  "backup_evidence.again_changed": "This happened again after the saved settings changed.",
+  "backup_evidence.written_then": "The settings it read had been written at {time}.",
+  "backup_evidence.cause.key_version_unknown":
+    "The saved settings were locked with key number {n}. This box holds key number {m}, so it cannot open them.",
+  "backup_evidence.cause.key_version_unknown_two":
+    "The saved settings were locked with key number {n}. This box holds key numbers {m} and {p}, so it cannot open them.",
+  "backup_evidence.cause.decrypt_failed":
+    "The saved settings carry this box's key number {n}, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which.",
+  "backup_evidence.cause.decrypt_failed_plain":
+    "The settings it read carried a key number this box held, but the box's key of that number did not open them. Either that key was replaced, or that record was changed or came from another box; Waitron cannot tell which.",
+  "backup_evidence.cause.malformed":
+    "The saved record opened but its contents are not backup settings.",
+  "backup_evidence.cause.settings_invalid":
+    "The saved settings opened, but their {part} could not be used.",
+  "backup_evidence.cause.recovery_key_missing":
+    "The saved settings read correctly, but this box holds no backup recovery key, and backups are never made without one.",
+  "backup_evidence.cause.recovery_key_too_short":
+    "The saved settings read correctly, but the backup recovery key on this box is shorter than {min} characters.",
+  "backup_evidence.cause.config_invalid":
+    "The saved settings read correctly, but this box's own setting {variable} is not a whole number above zero.",
+  "backup_evidence.cause.unknown":
+    "The box could not use its backup settings ({code}). Waitron cannot say more about this failure.",
+  "backup_evidence.part.not_json": "format",
+  "backup_evidence.part.fields": "fields",
+  "backup_evidence.part.revision": "revision",
+  "backup_evidence.part.enabled": "on or off setting",
+  "backup_evidence.part.destinations": "list of destinations",
+  "backup_evidence.part.destination": "destination",
+  "backup_evidence.part.bucket": "bucket",
+  "backup_evidence.part.duplicate_id": "destinations (two have the same identifier)",
+  "backup_evidence.part.duplicate_dir": "folders (two are the same folder)",
+  "backup_evidence.part.buckets": "buckets",
+  "backup_evidence.part.retention": "retention",
+  "backup_evidence.part.destinationTimeoutMs": "time limit for a destination",
+  "backup_evidence.part.schedule": "schedule",
+  "backup_evidence.part.contents": "contents",
+  "backup_evidence.now_heading": "The saved record now",
+  "backup_evidence.rewritten":
+    "The saved settings were rewritten after the last failure, so the facts below describe the new record, not the one that failed.",
+  "backup_evidence.removed":
+    "What is saved now is no longer the record that failed: that record has been removed since.",
+  "backup_evidence.absent": "No backup settings are saved on this box.",
+  "backup_evidence.written": "Last written at {time}, locked with key number {n}.",
+  "backup_evidence.box_keys": "This box holds key number {m}.",
+  "backup_evidence.box_keys_two": "This box holds key numbers {m} and {p}.",
+  "backup_evidence.managed":
+    "Backups on this box are set by its environment, not by saved settings, so no saved destination is in effect.",
+  "backup_evidence.cannot_tell": "Waitron cannot tell which folder or bucket these settings named.",
+  "backup_evidence.folder": "Folder",
+  "backup_evidence.look.folder": "It exists and is a folder.",
+  "backup_evidence.look.missing": "It does not exist.",
+  "backup_evidence.look.not_a_folder": "It exists but is not a folder.",
+  "backup_evidence.look.unknown": "It could not be checked.",
+  "backup_evidence.address": "Address",
+  "backup_evidence.region": "Region",
+  "backup_evidence.bucket": "Bucket",
+  "backup_evidence.access_key_id": "Access key ID",
+  "backup_evidence.archive_folder": "Archive folder",
+  "backup_evidence.key_heading": "Recovery key",
+  "backup_evidence.key.missing": "This box holds no backup recovery key.",
+  "backup_evidence.key.too_short": "The backup recovery key on this box is too short.",
+  "backup_evidence.key.usable":
+    "This box holds a usable backup recovery key, fingerprint {fingerprint}.",
+  "backup_evidence.key.usable_plain": "This box holds a usable backup recovery key.",
+  "backup_evidence.reads_now":
+    "The saved settings read correctly now. Backups stay off until the settings are saved again, the recovery key is replaced, or the box restarts. Nothing was changed.",
+  "backup_evidence.turn_on":
+    "Choosing the destinations again in the form below and using “{apply}” replaces the saved record.",
+  "backup_evidence.turn_on_new":
+    "Choosing the destinations in the form below and using “{apply}” saves new settings.",
+  "backup_evidence.choices":
+    "“{read_again}” reads these facts again and changes nothing; it does not turn backups on. “{stop}” closes this panel and sends nothing.",
+  "backup_evidence.reading": "Reading what the box recorded…",
+  "backup_evidence.failed":
+    "Waitron could not read these facts from the box. “{read_again}” tries once more; nothing was changed.",
+  "backup_evidence.not_permitted":
+    "This account can no longer manage the box, so these facts cannot be shown. Sign in as an administrator to see them: this signs you out here first.",
+  "backup_evidence.read_again": "Read again",
+  "backup_evidence.stop": "Stop",
   "backup.reload_failed_after_save": "Saved, but the box could not load the new settings.",
   "backup.destination.local": "On this box",
   "backup.destination.off_box": "Off the box",
@@ -5271,6 +5356,94 @@ export const es: Record<StringKey, string> = {
   "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
   "backup.status.load_failed":
     "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
+  "backup_evidence.heading": "Lo que ha registrado el equipo",
+  "backup_evidence.happened": "Qué ha pasado",
+  "backup_evidence.no_failures":
+    "No consta ninguna ocasión en la que el equipo no haya podido usar sus ajustes de copias guardados desde que se inició.",
+  "backup_evidence.again_rewritten":
+    "Volvió a pasar después de que los ajustes se reescribieran ({time}).",
+  "backup_evidence.again_changed": "Volvió a pasar después de que cambiaran los ajustes guardados.",
+  "backup_evidence.written_then": "Los ajustes que leyó se habían escrito el {time}.",
+  "backup_evidence.cause.key_version_unknown":
+    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene la clave número {m}, así que no puede abrirlos.",
+  "backup_evidence.cause.key_version_unknown_two":
+    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene las claves número {m} y {p}, así que no puede abrirlos.",
+  "backup_evidence.cause.decrypt_failed":
+    "Los ajustes guardados llevan la clave número {n} de este equipo, pero la clave de ese número que tiene este equipo no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otro equipo; Waitron no puede saber cuál.",
+  "backup_evidence.cause.decrypt_failed_plain":
+    "Los ajustes que leyó llevaban un número de clave que este equipo tenía, pero la clave de ese número que tenía el equipo no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otro equipo; Waitron no puede saber cuál.",
+  "backup_evidence.cause.malformed":
+    "El registro guardado se abrió, pero su contenido no son ajustes de copias de seguridad.",
+  "backup_evidence.cause.settings_invalid":
+    "Los ajustes guardados se abrieron, pero esta parte no se pudo usar: {part}.",
+  "backup_evidence.cause.recovery_key_missing":
+    "Los ajustes guardados se leen bien, pero este equipo no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
+  "backup_evidence.cause.recovery_key_too_short":
+    "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de este equipo tiene menos de {min} caracteres.",
+  "backup_evidence.cause.config_invalid":
+    "Los ajustes guardados se leen bien, pero el ajuste propio de este equipo {variable} no es un número entero mayor que cero.",
+  "backup_evidence.cause.unknown":
+    "El equipo no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
+  "backup_evidence.part.not_json": "el formato",
+  "backup_evidence.part.fields": "los campos",
+  "backup_evidence.part.revision": "la revisión",
+  "backup_evidence.part.enabled": "el ajuste de activación",
+  "backup_evidence.part.destinations": "la lista de destinos",
+  "backup_evidence.part.destination": "un destino",
+  "backup_evidence.part.bucket": "el bucket",
+  "backup_evidence.part.duplicate_id": "los destinos (dos tienen el mismo identificador)",
+  "backup_evidence.part.duplicate_dir": "las carpetas (dos son la misma carpeta)",
+  "backup_evidence.part.buckets": "los buckets",
+  "backup_evidence.part.retention": "la conservación",
+  "backup_evidence.part.destinationTimeoutMs": "el tiempo límite por destino",
+  "backup_evidence.part.schedule": "la programación",
+  "backup_evidence.part.contents": "el contenido",
+  "backup_evidence.now_heading": "El registro guardado ahora",
+  "backup_evidence.rewritten":
+    "Los ajustes guardados se reescribieron después del último fallo, así que los datos de abajo describen el registro nuevo, no el que falló.",
+  "backup_evidence.removed":
+    "Lo guardado ahora ya no es el registro que falló: ese registro se ha borrado desde entonces.",
+  "backup_evidence.absent": "Este equipo no tiene ajustes de copias de seguridad guardados.",
+  "backup_evidence.written": "Última escritura: {time}, cerrado con la clave número {n}.",
+  "backup_evidence.box_keys": "Este equipo tiene la clave número {m}.",
+  "backup_evidence.box_keys_two": "Este equipo tiene las claves número {m} y {p}.",
+  "backup_evidence.managed":
+    "Las copias de seguridad de este equipo las fija su entorno, no unos ajustes guardados, así que ningún destino guardado está en uso.",
+  "backup_evidence.cannot_tell":
+    "Waitron no puede saber qué carpeta o bucket indicaban estos ajustes.",
+  "backup_evidence.folder": "Carpeta",
+  "backup_evidence.look.folder": "Existe y es una carpeta.",
+  "backup_evidence.look.missing": "No existe.",
+  "backup_evidence.look.not_a_folder": "Existe, pero no es una carpeta.",
+  "backup_evidence.look.unknown": "No se pudo comprobar.",
+  "backup_evidence.address": "Dirección",
+  "backup_evidence.region": "Región",
+  "backup_evidence.bucket": "Bucket",
+  "backup_evidence.access_key_id": "ID de la clave de acceso",
+  "backup_evidence.archive_folder": "Carpeta de las copias",
+  "backup_evidence.key_heading": "Clave de recuperación",
+  "backup_evidence.key.missing": "Este equipo no tiene clave de recuperación de copias.",
+  "backup_evidence.key.too_short":
+    "La clave de recuperación de copias de este equipo es demasiado corta.",
+  "backup_evidence.key.usable":
+    "Este equipo tiene una clave de recuperación de copias válida, con huella {fingerprint}.",
+  "backup_evidence.key.usable_plain":
+    "Este equipo tiene una clave de recuperación de copias válida.",
+  "backup_evidence.reads_now":
+    "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el equipo. No se ha cambiado nada.",
+  "backup_evidence.turn_on":
+    "Elegir de nuevo los destinos en el formulario de abajo y usar «{apply}» sustituye el registro guardado.",
+  "backup_evidence.turn_on_new":
+    "Elegir los destinos en el formulario de abajo y usar «{apply}» guarda ajustes nuevos.",
+  "backup_evidence.choices":
+    "«{read_again}» vuelve a leer estos datos y no cambia nada; no activa las copias. «{stop}» cierra este panel y no envía nada.",
+  "backup_evidence.reading": "Leyendo lo que ha registrado el equipo…",
+  "backup_evidence.failed":
+    "Waitron no ha podido leer estos datos del equipo. «{read_again}» lo intenta otra vez; no se ha cambiado nada.",
+  "backup_evidence.not_permitted":
+    "Esta cuenta ya no puede gestionar el equipo, así que no se pueden mostrar estos datos. Inicia sesión como administrador para verlos: antes se cierra tu sesión aquí.",
+  "backup_evidence.read_again": "Leer de nuevo",
+  "backup_evidence.stop": "Parar",
   "backup.reload_failed_after_save":
     "Se ha guardado, pero la caja no ha podido cargar los ajustes nuevos.",
   "backup.destination.local": "En esta caja",

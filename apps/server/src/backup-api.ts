@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { stat } from "node:fs/promises";
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { KeyRing } from "@waitron/credentials";
@@ -41,6 +42,7 @@ import {
   type BackupSchedule,
 } from "./backup-config.js";
 import { writeRecoveryKey } from "./backup-env-writer.js";
+import { readSettingsEvidence, recoveryKeyFacts } from "./backup-settings-evidence.js";
 import { UNREADABLE_CREDENTIAL } from "./credentials.js";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -80,6 +82,8 @@ export interface BackupApiDeps {
   /** Builds the backend Save tests an archive bucket through. */
   buildBackend?: (dest: BackupDestination) => StorageBackend;
   archiveProbeTimeoutMs?: number;
+  /** How the settings evidence looks at a saved folder; `stat` by default. */
+  statFolder?: (dir: string) => Promise<{ isDirectory(): boolean }>;
 }
 
 const STATUS: Record<string, ContentfulStatusCode> = {
@@ -338,19 +342,15 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
   // is the held key.
   const statusBody = async () => {
     const env = await deps.readBoxEnv();
-    const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
-    const loadedKey = deps.supervisor.current().recoveryKey;
-    const { held, key } = fileKey.held
-      ? fileKey
-      : { held: loadedKey !== undefined, key: loadedKey };
+    const key = await recoveryKeyFacts(env, () => deps.supervisor.current().recoveryKey);
     return {
       ...projectStatus(await deps.supervisor.status()),
       venueId: deps.venueId,
-      ...(fileKey.key === undefined
+      ...(key.fileKey === undefined
         ? {}
-        : { keyFingerprint: keyFingerprint(fileKey.key), keyRotatedAt: loadKeyRotatedAt(env) }),
-      recoveryKeySet: held,
-      recoveryKeyTooShort: held && key === undefined,
+        : { keyFingerprint: keyFingerprint(key.fileKey), keyRotatedAt: loadKeyRotatedAt(env) }),
+      recoveryKeySet: key.held,
+      recoveryKeyTooShort: key.tooShort,
       stream: deps.readStream(),
     };
   };
@@ -367,6 +367,26 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     run(c, log, async () => {
       await authorize(c);
       return c.json(await statusBody());
+    }),
+  );
+
+  // Like status, it takes no backup turn.
+  app.get("/api/backup/settings-evidence", (c) =>
+    run(c, log, async () => {
+      await authorize(c);
+      const { supervisor } = deps;
+      return c.json(
+        await readSettingsEvidence({
+          db: deps.db,
+          ring: deps.ring,
+          current: () => supervisor.current(),
+          loadHistory: () => supervisor.loadHistory(),
+          readBoxEnv: deps.readBoxEnv,
+          now: () => supervisor.now(),
+          statFolder: deps.statFolder ?? stat,
+          lookTimeoutMs: supervisor.statusReadTimeoutMs,
+        }),
+      );
     }),
   );
 

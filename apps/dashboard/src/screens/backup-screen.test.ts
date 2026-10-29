@@ -7,6 +7,9 @@ import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
+import type { BackupSettingsEvidenceDialog } from "../widgets/backup-settings-evidence.js";
+import { apiAnswering, evidence } from "../testing/backup-settings-evidence-fixture.js";
+import { en, es } from "../i18n/strings.js";
 import type { StreamSettingsPanel } from "./stream-settings-panel.js";
 import type { WtInput } from "@waitron/ui";
 
@@ -2197,4 +2200,113 @@ describe("A1089 unreadable archive settings choices", () => {
       }
     });
   }
+});
+
+describe("A1089 what the box recorded", () => {
+  const evidenceDialog = (el: BackupScreen) =>
+    el.shadowRoot!.querySelector<BackupSettingsEvidenceDialog>(
+      "dashboard-backup-settings-evidence",
+    );
+  const evidenceButton = (el: BackupScreen) => q(el, "[data-test=evidence-open]");
+  const FAILED: BackupStatusView = {
+    ...OFF,
+    loadErrorCode: "credentials.decrypt_failed",
+    recoveryKeySet: true,
+  };
+
+  for (const [locale, words] of [
+    ["en-GB", en],
+    ["es-ES", es],
+  ] as const) {
+    it(`offers the dialog beside the load failure, labelled as its heading (${locale})`, async () => {
+      const previous = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+          api: stubApi({}, FAILED),
+          canManage: true,
+        });
+        await flush(el);
+        const button = evidenceButton(el);
+        expect(button).not.toBeNull();
+        expect(button!.closest("dd")).toBe(q(el, "[data-test=load-failed]")!.closest("dd"));
+        expect(button!.textContent!.trim()).toBe(words["backup_evidence.heading"]);
+      } finally {
+        setLocale(previous);
+      }
+    });
+
+    it(`the alert for unusable settings names the button (${locale})`, () => {
+      expect(alertMessage("backup.archive_settings_unusable", {}, locale)).toContain(
+        words["backup_evidence.heading"],
+      );
+    });
+  }
+
+  it("shows no button and no open dialog when the settings loaded", async () => {
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi({}, OFF),
+      canManage: true,
+    });
+    await flush(el);
+    expect(evidenceButton(el)).toBeNull();
+    expect(evidenceDialog(el)?.open ?? false).toBe(false);
+  });
+
+  it("removes the button once a later status read finds the settings loaded", async () => {
+    const api = stubApi({}, FAILED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    expect(evidenceButton(el)).not.toBeNull();
+
+    vi.mocked(api.getBackupStatus).mockResolvedValue(OFF);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test=load-failed]")).toBeNull();
+    expect(evidenceButton(el)).toBeNull();
+  });
+
+  it("opens the dialog on the screen's api, reading only then, and closes it on its close event", async () => {
+    const answers = apiAnswering(() => Promise.resolve(evidence()));
+    const api = stubApi(answers, FAILED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    expect(answers.getBackupSettingsEvidence).not.toHaveBeenCalled();
+    evidenceButton(el)!.click();
+    await flush(el);
+    const dialog = evidenceDialog(el)!;
+    expect(dialog.open).toBe(true);
+    expect(dialog.api).toBe(api);
+    await vi.waitFor(() => expect(answers.getBackupSettingsEvidence).toHaveBeenCalledOnce());
+    dialog.dispatchEvent(new CustomEvent("evidence-close", { bubbles: true, composed: true }));
+    await flush(el);
+    expect(evidenceDialog(el)?.open ?? false).toBe(false);
+    expect(api.applyBackup).not.toHaveBeenCalled();
+    expect(api.rotateBackupKey).not.toHaveBeenCalled();
+  });
+
+  it("lets the dialog's administrator sign-in reach past the screen", async () => {
+    const answers = apiAnswering(() => Promise.reject({ code: "authorization.not_permitted" }));
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api: stubApi(answers, FAILED),
+      canManage: true,
+    });
+    await flush(el);
+    const heard = vi.fn();
+    el.addEventListener("admin-sign-in", heard);
+    evidenceButton(el)!.click();
+    await flush(el);
+    const signIn = () =>
+      evidenceDialog(el)!.shadowRoot!.querySelector<HTMLElement>("[data-test=admin-sign-in]");
+    await expect.poll(signIn).not.toBeNull();
+    signIn()!.click();
+    expect(heard).toHaveBeenCalledOnce();
+  });
 });

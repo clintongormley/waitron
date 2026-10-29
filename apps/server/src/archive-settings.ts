@@ -1,6 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { putCredential, tryGetCredential, type KeyRing } from "@waitron/credentials";
+import {
+  getCredential,
+  putCredential,
+  readCredentialMeta,
+  tryGetCredential,
+  type KeyRing,
+} from "@waitron/credentials";
 import { withTransaction, type Database, type Transaction } from "@waitron/db";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import {
@@ -14,6 +20,11 @@ import {
   MIN_DESTINATION_TIMEOUT_MS,
   type BackupSchedule,
 } from "./backup-config.js";
+import {
+  attachRecordMeta,
+  type ArchiveRecordMeta,
+  type ArchiveSettingsReason,
+} from "./backup-settings-evidence.js";
 import { credentialField, UNREADABLE_CREDENTIAL } from "./credentials.js";
 import type { BackupDestination } from "./storage-backend.js";
 import type { StreamSettings } from "./stream-host.js";
@@ -91,7 +102,7 @@ export function isText(value: unknown): value is string {
   return typeof value === "string" && value !== "" && !CONTROL.test(value);
 }
 
-function settingsInvalid(reason: string): AppError {
+function settingsInvalid(reason: ArchiveSettingsReason): AppError {
   return new AppError("backup.archive_settings_invalid", { reason });
 }
 
@@ -258,8 +269,38 @@ export async function readArchiveSettings(
   return parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings"));
 }
 
+/**
+ * {@link readArchiveSettings} with the record's metadata, both read in one transaction so they
+ * describe one record. A failing read throws its own error, carrying the metadata of the row that
+ * failed for `recordMetaOf`.
+ */
+export async function readArchiveSettingsWithMeta(
+  db: Database,
+  ring: KeyRing,
+): Promise<{ meta: ArchiveRecordMeta | null; settings: ArchiveSettings | null }> {
+  let meta: ArchiveRecordMeta | null = null;
+  try {
+    return await withTransaction(db, async (tx) => {
+      const row = await readCredentialMeta(tx, { purpose: ARCHIVE_PURPOSE });
+      if (row === null) return { meta: null, settings: null };
+      meta = { keyVersion: row.keyVersion, writtenAt: row.updatedAt, digest: row.digest };
+      const value = await getCredential(tx, ring, { purpose: ARCHIVE_PURPOSE });
+      return {
+        meta,
+        settings: parseArchiveSettings(credentialField(value, ARCHIVE_PURPOSE, "settings")),
+      };
+    });
+  } catch (error) {
+    attachRecordMeta(error, meta);
+    throw error;
+  }
+}
+
 /** What reading a stored archive record answers when the record itself cannot be read. */
-const UNREADABLE_SETTINGS = new Set(["backup.archive_settings_invalid", ...UNREADABLE_CREDENTIAL]);
+export const UNREADABLE_SETTINGS: ReadonlySet<string> = new Set([
+  "backup.archive_settings_invalid",
+  ...UNREADABLE_CREDENTIAL,
+]);
 
 /** The stored archive settings, or the code that says the stored record cannot be read. */
 export async function readHeldArchiveSettings(

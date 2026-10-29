@@ -24,6 +24,7 @@ describe("the public surface", () => {
         "getCredential",
         "listCredentials",
         "putCredential",
+        "readCredentialMeta",
         "rotateCredentials",
         "tryGetCredential",
       ].sort(),

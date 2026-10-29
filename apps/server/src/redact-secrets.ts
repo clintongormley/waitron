@@ -22,7 +22,8 @@
  * WHERE IT IS APPLIED. Every line written to the box's rotating `waitron.log`
  * (`createRotatingFileSink`, `log-file.ts`), because the recovery page serves that file's tail to
  * anyone on the venue's LAN with no login; the entrypoint's own boot-failure report
- * (`node-entry.ts`); and the trigger names that page shows for a refusal (`recovery-surface.ts`).
+ * (`node-entry.ts`); the trigger names that page shows for a refusal (`recovery-surface.ts`); and
+ * a saved bucket endpoint in the settings-evidence answer (`backup-settings-evidence.ts`).
  * The box's stdout is deliberately NOT filtered — see `boot.ts`.
  *
  * The user-info half is left visible: naming the user is what makes the line diagnosable.

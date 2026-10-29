@@ -4789,8 +4789,37 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: a stopped or refused bucket stream needs restart or ownership choices.** Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
-- **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop. Evidence-first design and plan (2026-10-29, awaiting the owner's build approval): `docs/superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md`, `docs/superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md`. Repair stays open.
-  [Audit](backlog/self-service-refusals.md#backup-settings).
+- **A1089: unusable archive settings still have no repair beyond choosing them again.**
+  Explaining or reconciling key numbers, restoring an old credentials key and rewriting the record
+  remain open; left open by A1089's settings-evidence panel (#2244).
+  [Detail](backlog/self-service-refusals.md#backup-settings)
+
+- **A1089: the settings-evidence panel shows no failure from before the box's last restart.** The
+  box keeps the times it could not use its saved backup settings in memory only, at most five, as
+  the design's decision 1 chose; keeping them across a restart needs a new owner decision.
+  [Design](superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md)
+
+- **Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
+  "You don't have permission to do that" twice and names no next step.
+  [Detail](backlog/self-service-refusals.md#backups-admin-sign-in)
+
+- **Backups says "try again" after a saved-settings failure it has no words for.** The "Backups
+  are off because the saved settings can't be used" line appends the code's dashboard message
+  (`backup-screen.ts`, from #1642), and a code with none, such as `credentials.decrypt_failed`,
+  falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
+  recorded" panel saying Read again turns nothing on.
+
+- **Backups' Spanish names the box both "caja" and "equipo".** Both words appear across its
+  strings (`strings.ts` `backup.*`) and its error messages (`codes.ts` `backup.*`); its alerts
+  (`alert-messages.ts`) and the settings-evidence panel say "equipo". Pick one word across the
+  screen; elsewhere "caja" also means the till.
+
+- **Backup status sends a saved bucket address as stored, password included.** A bucket address
+  written as `https://user:secret@host` passes the settings checks, and `GET /api/backup/status`
+  returns it unchanged (`destinationView`, `apps/server/src/backup-supervisor.ts`, since
+  2026-10-13). The settings-evidence answer masks that password with `redactSecrets`; the status
+  reply does not, and the Backups form may need the address back as saved, so check the form
+  before masking it there.
 
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real

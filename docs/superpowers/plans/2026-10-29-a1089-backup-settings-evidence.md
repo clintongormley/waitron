@@ -3,6 +3,8 @@
 **Status: proposed, 2026-10-29. Not approved for building.** The owner approves the build
 separately. Design: [2026-10-29-a1089-backup-settings-evidence-design.md](../specs/2026-10-29-a1089-backup-settings-evidence-design.md).
 
+_2026-10-29: build approved by the owner's rule of 2026-10-29 ~08:07, and built on that day._
+
 **Goal:** when the saved scheduled-backup settings cannot be used, Backups shows what the box
 recorded about each failure and what the saved record looks like now, with **Read again** and
 **Stop**, and changes nothing.
@@ -92,7 +94,7 @@ new code is needed (none expected).
    call `supervisor.status()` or `readStream()`. The status route's answers stay byte-identical
    (its existing cases pass unedited).
 2. `readSettingsEvidence(deps)` answers:
-   `{ readAt, managedByEnvironment, failures, lastCleanLoadAt, record: null | { keyVersion,
+   `{ readAt, managedByEnvironment, failures, lastCleanLoadAt, latestLoadFailed, record: null | { keyVersion,
    writtenAt, digest }, rewrittenSinceLastFailure, boxKeyNumbers: { current, previous? }, now:
    { state: "absent" } | { state: "unreadable", code, detail } | { state: "readable",
    destinations: EvidenceDestination[] }, recoveryKey: { held, tooShort, fingerprint? } }`.
@@ -103,6 +105,8 @@ new code is needed (none expected).
    folder `stat` runs after the transaction, under the supervisor's status-read time limit
    (`statusReadTimeoutMs`, `apps/server/src/backup-supervisor.ts:147`); a timeout or a permission
    error is `unknown`.
+   _2026-10-29, as built: a password in the endpoint's URL is masked as `user:***@host` by
+   `redactSecrets`._
 3. Mount `GET /api/backup/settings-evidence` with the existing `authorize` (`system.manage`), and
    no backup turn.
 4. Tests on a real venue database (`useVenueDb`) with real key rings, one per design row: key
@@ -139,6 +143,9 @@ new code is needed (none expected).
    failure" ahead of the record's facts when `rewrittenSinceLastFailure`, the saved record now, the
    recovery key, and one sentence on the form's **Turn on backups**. The "reads correctly now"
    sentence shows only for `readable` with a usable key and not `managedByEnvironment`.
+   _2026-10-29, as built: the sentence also needs `latestLoadFailed` and a newest failure other
+   than `server.config_invalid`; with no saved record, the **Turn on backups** sentence says it
+   saves new settings (`backup_evidence.turn_on_new`)._
 4. `authorization.not_permitted` shows its reason, **Sign in as an administrator** (dispatches
    `admin-sign-in`, `bubbles`/`composed`, as `apps/dashboard/src/screens/staff-screen.ts:169` does)
    and **Stop**, and shows no facts. An expired, missing or suspended session is left to the

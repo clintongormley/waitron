@@ -41,7 +41,7 @@ referrals, not completed recovery experiments.
 | [Setup environment](#setup-environment) | Establish a fresh-start/reinstall choice applicable to this state, with a safe Stop before data loss. Do not improvise a reset of trading data. |
 | [Incomplete join](#setup-reset) | Give the person an authenticated retry/restart choice and its outcome if the half-join remains. |
 | [Setup readiness](#setup-readiness) | Explain the missing capability or refused source and offer an applicable source/image/recovery choice. Replace administrator referrals in repeated status failures too. |
-| [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. Persistent host/key diagnosis and correction remain open. |
+| [Archive settings](#backup-settings) | Referral reworked: Backups shows the load error, accepts replacement choices, retains a field refusal and permits leaving without applying. The **What the box recorded** panel shows what the box recorded; repair (key numbers, an old credentials key, rewriting the record) remains open. |
 | [Bucket stream](#backup-stream) | Settings refusal explains editing, testing, applying and cancelling below. Host-configuration diagnosis, restart and ownership choices remain open, with authentication and evidence before resuming a primary. |
 | [Sealed state](#backup-state) | Expose the safe cause and a correction/retry choice; show whether the key copy was refreshed. |
 | [Backup preparation](#backup-preparation) | Offer safe disk/file recovery choices. A request to ask the installer to free space is still a gap. |
@@ -788,15 +788,33 @@ server route cases exercise replacement of unreadable records, rejection of a mi
 and a successful write whose reload still fails. The latter remains a saved write with a load
 error; the message does not promise that every apply starts the worker.
 
-**Still open:** guided diagnosis and correction when a host/key refusal persists after replacement.
-The screen displays a code, but this wording change adds no authenticated host repair. Do not
-replace recovery keys or discard backup files just because settings cannot be read.
+**Still open:** correction when a host/key refusal persists after replacement — explaining or
+reconciling key numbers, restoring an old credentials key, and rewriting the record. Do not replace
+recovery keys or discard backup files just because settings cannot be read.
 
-**2026-10-29, proposed, not approved for building:** an evidence-first panel on Backups showing
-what the box recorded about each failed read and what the saved record looks like now, with Read
-again and Stop, changing nothing:
+**2026-10-29, A1089 settings-evidence panel (#2244):** when Backups says the saved settings
+can't be used, a **What the box recorded** button opens a panel that reads `GET
+/api/backup/settings-evidence`. It lists the times the box could not use its saved backup settings
+since it last started, newest first, at most five, each with a sentence about its cause (for example
+the key number the record was locked with against the numbers this box holds). It then shows the
+saved record now: when it was written and with which key number, the box's key numbers, and, when
+the record reads and the environment does not set backups, its folders (with whether each exists)
+and buckets (address, region, bucket, access key ID and archive folder, never the secret). It says
+whether the box holds a usable recovery key, by fingerprint only. **Read again** reads the facts
+again and does not turn backups on; **Stop** closes the panel; a refusal for lack of permission
+offers an administrator sign-in. The panel writes nothing and repairs nothing. Failures are kept in
+memory, so a restart empties the list (design decision 1):
 [design](../superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
-[plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md). Repair stays open.
+[plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md).
+
+### backups-admin-sign-in
+
+**Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
+"You don't have permission to do that" twice and names no next step, against the refusal rule.
+The screen's `admin-sign-in` event is already routed (`apps/dashboard/src/dashboard-app.ts`), so
+the fix is to offer the button there. Normally unreachable: the Backups entry is shown to the
+manager and admin roles only; it appears when the dashboard's role and the session's permissions
+disagree.
 
 ### backup-stream
 

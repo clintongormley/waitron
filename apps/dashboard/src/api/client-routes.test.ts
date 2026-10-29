@@ -1044,6 +1044,18 @@ describe("DashboardApi routes", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it("reads the backup settings evidence as an ordinary GET, never passive", async () => {
+    const evidence = { readAt: "2026-10-29T10:00:00.000Z", failures: [] };
+    const fetchImpl = vi.fn().mockResolvedValueOnce(jsonResponse(evidence));
+    const api = new DashboardApi("", fetchImpl);
+
+    await expect(api.getBackupSettingsEvidence()).resolves.toEqual(evidence);
+
+    expect(callsOf(fetchImpl)).toEqual([["/api/backup/settings-evidence", "GET", undefined]]);
+    const [, init] = (fetchImpl.mock.calls as [string, RequestInit][])[0]!;
+    expect(new Headers(init.headers).get("x-waitron-live")).toBeNull();
+  });
+
   it("marks a background read passive but never a background write", async () => {
     const onSuccess = vi.fn();
     const fetchImpl = vi
