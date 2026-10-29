@@ -239,15 +239,17 @@ Files: `invoice-recipient-dialog.ts`, a new `invoice-recipient-dialog.address-lo
 a11y suite (one shown-search state in both themes), till strings, `scripts/address-lookup-forms.test.ts`
 (the dialog leaves `WAITING`), `docs/developers/design-system.md` → Addresses (one sentence for the
 dialog), `docs/backlog.md` (delete "A1171 part 3"; the Cloud-bridge entry gains: the till guide's
-full-invoice section, `table-service.md` en/es, gains a line when the search first shows).
+full-invoice section, `table-service.md` en/es, gains a line when the search first shows; the
+finish-branch review widened it to `data-protection.md` and the emailed invoice notice).
 
 Tests first: hidden with no provider and the dialog unchanged; shown above the street field with the
 chosen country, and following a country change; a Spanish choice fills the four fields (province
 from the area code), Save choice sends `"Calle Mayor 1, 28013 Madrid, Madrid"`; province from the
-postcode when no code; a two-line address joined; no area found → province kept; another country
+postcode when no code; a two-line address joined; no area found → province emptied; another country
 refused with the line, nothing filled, line cleared by a country change; the draft becomes changed;
 a refused `address` field sends `invoice-recipient-edit`; editing a filled field or Save cancels a
-search on its way (spy on `cancelSearch`); Enter on an open suggestion does not send
+search on its way (a provider whose resolve is held,
+answered after the edit or the Save); Enter on an open suggestion does not send
 `invoice-recipient-confirm`. Run `pnpm --filter @waitron/till exec vitest run
 src/widgets/invoice-recipient-dialog` and `pnpm exec vitest run scripts/address-lookup-forms.test.ts`.
 
