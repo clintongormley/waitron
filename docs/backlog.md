@@ -2981,6 +2981,12 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
   where the toast goes.
 
+- **A1212. The Order screen's bar height may be read before the bar's buttons are drawn.** A
+  reviewer's reading in A1125's review (#2238), not run: when the bar and its buttons first appear
+  together, the height the screen keeps clear under a newly added dish may be measured too early,
+  so that dish could land under the bar. Run it first (add the first dish of an empty order at
+  1024×768 and 390 px and check the line is wholly above the bar); fix only if it reproduces.
+
 - **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
   bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
   can make. Each should reach the order screen by the table's bar button or `/tabs/order`; on a counter
@@ -5493,6 +5499,13 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   [Detail](backlog/replication-cloud.md#a-promoting-standby-may-list-itself-with-an-empty-contacturl)
 
 ### CI, tests and developer tooling
+
+- **A1213. Does a re-run of a failed till shard leave `test-till-merge` reading the failed
+  attempt's coverage?** Seen once, not proven, in A1125's CI (#2238, 2026-10-29): after a till
+  shard failed and was re-run green, the merge job still failed, and the finish-branch run read
+  its log as downloading the first attempt's `till-blob-7`. Check it on a throwaway branch (fail
+  one shard on purpose, re-run it, read which artifact the merge downloads); if it holds, write
+  the trap into `docs/developers/ci-and-gates.md` or make the merge take the latest attempt.
 
 - **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
   `apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
