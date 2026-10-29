@@ -6,6 +6,8 @@ _2026-10-22, A973: the invoice-first settlement operator script and its test are
 
 > 2026-10-25: historical on Start again too; Start again no longer keeps a retirement archive or moves the box into a first-setup workspace — it deletes the attempt and keeps one small note of the last series name (A1042, [plan](../superpowers/plans/2026-10-24-a1042-start-again-series-note.md)). The workspace, retirement and selection checks below record the earlier tree.
 
+> 2026-10-29: A1189 removed the server's Cloud allocation client and report journal with `cloud-fiscal-allocation-client.test.ts` and `cloud-fiscal-reconciliation.test.ts`, and renamed `cloud-fiscal-allocation.test.ts`, unchanged, to `hour-restore-retired-inputs.test.ts`.
+
 Use this inventory to review changes to checks that existed before the replacement setup flow.
 It records changes on the candidate branch, not acceptance of the finished product.
 
