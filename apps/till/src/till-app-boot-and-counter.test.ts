@@ -3499,6 +3499,31 @@ describe("till-app logout while a request is waiting for the server", () => {
     expect(parkOrder).toHaveBeenCalledOnce();
   });
 
+  it.each(["en-GB", "es-ES"])(
+    "a retrieved order's save refused for too many portions at once says so when parked or paid (%s)",
+    async (locale) => {
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({ ...till, locale }),
+        updateWorkingOrder: vi
+          .fn()
+          .mockRejectedValue({ code: "tab.portions_too_many", status: 400, limit: 99 }),
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "1");
+      c.store.markPersisted();
+      c.store.setLineQuantity(0, "100");
+      const shown = () => el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim();
+
+      emit(c, "park-order", { label: "Later" });
+      await flush(el);
+      expect(shown()).toBe(codeMessage("tab.portions_too_many", locale));
+
+      emit(c, "confirm-payment", { method: "cash", amount: "500" });
+      await flush(el);
+      expect(shown()).toBe(codeMessage("tab.portions_too_many", locale));
+    },
+  );
+
   it("does not retry a cash sale after its save-refusal recheck outlives sign-out", async () => {
     let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
     const recordSale = vi.fn();

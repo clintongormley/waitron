@@ -896,6 +896,7 @@ function lineWriteError(error: unknown): CounterError {
  * generic "try again" does not: what to do next, or, for `device.profile_changed`, that no card was
  * charged. */
 const ACTIONABLE_REFUSALS = new Set([
+  "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "bill.unsent_dishes",
   "service_zone.closed",

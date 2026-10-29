@@ -1605,6 +1605,24 @@ describe("A803 portions: raising a dish", () => {
     ]);
   });
 
+  it("A803 portions: each portion of a new line on a sent party bill gets its own kitchen item", async () => {
+    const bill = await billOf(croquetas("1"), { bound: true, fire: true });
+    const [croqueta] = bill.portions;
+
+    await saveLines(bill.billId, [
+      { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+      ...burgersWithCheese("3"),
+    ]);
+
+    const items = venue.db.all<{ name: string; quantity: number; dish: number }>(
+      sql`select l.name, t.quantity, l.parent_line_id is null as dish
+          from ticket_items t join working_order_lines l on l.id = t.working_order_line_id
+          where t.working_order_id = ${bill.billId} and l.name = 'Burger'
+          order by l.line_no`,
+    );
+    expect(items).toEqual([1, 2, 3].map(() => ({ name: "Burger", quantity: 1000, dish: 1 })));
+  });
+
   it("A803 portions: a line whose product changed, on a party bill, is written as portions", async () => {
     const bill = await billOf(croquetas("1"), { bound: true });
     const [croqueta] = bill.portions;
