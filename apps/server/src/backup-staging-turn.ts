@@ -1,5 +1,6 @@
-/** One holder at a time over `<state>/backup-staging` in this process: backup runs, and the
- * free-space deletions. A page's survey never takes it. */
+/** One holder at a time over `<state>/backup-staging` in this process: backup runs, Box status's
+ * Free, and the free-space watch's deletion of old backups (so no run starts while it deletes). A
+ * page's survey never takes it. */
 export interface StagingTurn {
   /** A backup run: waits for the holder before it (a deletion or an earlier run), then holds the
    * turn until `work` settles. Runs go in the order they asked. */

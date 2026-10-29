@@ -4,6 +4,10 @@ _2026-10-28: slice 1 is built by [the slice 1 plan](../plans/2026-10-28-a1167-1-
 The owner's answers replace §5's words, and the plan's "Deviations from the design" list
 where the build differs from this design. Slice 2 and the start-time slice (Q4) are not built._
 
+_2026-10-29: slice 2 is built by [the slice 2 plan](../plans/2026-10-29-a1167-2-watch-deletes-backups.md).
+§1's "never deletes toward a goal it cannot reach" binds a backup run's room step only: as §2 says,
+the watch deletes every backup §1 allows when they cannot reach 2.5 GiB._
+
 The owner, 2026-10-28 ~08:35 CET (`~/waitron-campaign/questions.md`, "WATCHER … A1167 queued for
 you"):
 

@@ -5,9 +5,11 @@ import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
 
-/** Below this the box warns that its disk is running out (design §4.6 item 4). */
+/** Below this the box warns that its disk is running out (design §4.6 item 4), and the watch deletes
+ * old backups. */
 export const SPACE_LOW_BYTES = 2 * 1024 ** 3;
-/** The warning goes off only at this much free, so it does not toggle at the line. */
+/** The warning goes off only at this much free, so it does not toggle at the line; the watch's
+ * deletions aim for it. */
 export const SPACE_OK_BYTES = 2.5 * 1024 ** 3;
 export const FREE_SPACE_CHECK_MS = 60_000;
 
@@ -51,10 +53,11 @@ export function createFreeSpaceState(deps: { log: Logger }): FreeSpaceState {
 
 /**
  * Reads `dir`'s free space at once and then every `intervalMs`, each timer armed after the reading
- * before it finished. Each reading lets `restoreSpare` write the box's spare file back, then reads
- * free space. While `disk` holds a noted stop, each reading also asks it to re-check, so a stop
- * lifts when space is freed even if nothing writes. `stop()` answers once the reading in flight,
- * and any write-back in it, has finished.
+ * before it finished. Each reading lets `freeOldBackups` delete old backups, then `restoreSpare`
+ * write the box's spare file back, then reads free space, so room the deletion made is in the
+ * reading and the spare. While `disk` holds a noted stop, each reading also asks it to re-check, so a stop
+ * lifts when space is freed even if nothing writes. `stop()` aborts the deletion's signal and
+ * answers once the reading in flight, and any deletion or write-back in it, has finished.
  */
 export function startFreeSpaceWatch(deps: {
   dir: string;
@@ -65,14 +68,18 @@ export function startFreeSpaceWatch(deps: {
   log: Logger;
   statfs?: Statfs;
   restoreSpare?: () => Promise<void>;
+  freeOldBackups?: (signal: AbortSignal) => Promise<void>;
   timer?: (ms: number, fn: () => void) => Timer;
 }): { stop: () => Promise<void> } {
   const timer = deps.timer ?? unrefTimer;
   let stopped = false;
+  const stopping = new AbortController();
   let reading: Promise<void> = Promise.resolve();
 
   async function read(): Promise<void> {
     try {
+      await freeOldBackups();
+      if (stopped) return;
       await restore();
       if (stopped) return;
       const free = await freeBytes(deps.dir, deps.statfs);
@@ -83,6 +90,18 @@ export function startFreeSpaceWatch(deps: {
       deps.log("warn", "storage.free_space_check_failed", { errorCode: codeOf(error) });
     } finally {
       if (!stopped) armed = timer(deps.intervalMs, start);
+    }
+  }
+
+  async function freeOldBackups(): Promise<void> {
+    try {
+      await deps.freeOldBackups?.(stopping.signal);
+    } catch (error) {
+      if (stopped) return;
+      deps.log("warn", "backup.low_space_delete_failed", {
+        errorCode: codeOf(error),
+        errno: errnoOf(error) ?? null,
+      });
     }
   }
 
@@ -103,6 +122,7 @@ export function startFreeSpaceWatch(deps: {
   return {
     stop: () => {
       stopped = true;
+      stopping.abort();
       armed.cancel();
       return reading;
     },

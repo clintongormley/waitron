@@ -372,7 +372,7 @@ own, can also make scheduled backups, and can export your setup to start another
   **A folder on this box** stay wherever that folder is.
 - How long: the bucket copy keeps a week of history. Each time Waitron stores a scheduled backup in
   a place, it deletes from that place any backup beyond the newest 7 and any older than 30 days,
-  unless you change those settings. Before a backup, when the box's disk is short of space, the box
+  unless you change those settings. Before a backup, or whenever the box's disk falls under about 2 GB free, the box
   can also delete its oldest backups in folders on that disk, never the newest in each. Turning off
   the bucket copy or the scheduled backups leaves what is already stored, so delete it at your
   provider, or from the folder, when you no longer need it. Anything else: _set with your adviser_.

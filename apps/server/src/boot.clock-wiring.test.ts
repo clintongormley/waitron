@@ -16,6 +16,8 @@ import type { StartedServer } from "./boot.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
+import { startFreeSpaceWatch } from "./free-space-watch.js";
+import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
 import { mountContentSuggestionsApi } from "./content-suggestions-api.js";
@@ -46,6 +48,18 @@ vi.mock("./backup-supervisor.js", async (original) => {
 vi.mock("./backup-deletion-alert.js", async (original) => {
   const actual = await original<typeof import("./backup-deletion-alert.js")>();
   return { ...actual, createBackupRoomHooks: vi.fn(actual.createBackupRoomHooks) };
+});
+vi.mock("./low-space-backups.js", async (original) => {
+  const actual = await original<typeof import("./low-space-backups.js")>();
+  return {
+    ...actual,
+    lowSpaceBackupDeletion: vi.fn(actual.lowSpaceBackupDeletion),
+    runningLocalBackends: vi.fn(actual.runningLocalBackends),
+  };
+});
+vi.mock("./free-space-watch.js", async (original) => {
+  const actual = await original<typeof import("./free-space-watch.js")>();
+  return { ...actual, startFreeSpaceWatch: vi.fn(actual.startFreeSpaceWatch) };
 });
 vi.mock("./cloud-snapshot-worker.js", async (original) => {
   const actual = await original<typeof import("./cloud-snapshot-worker.js")>();
@@ -198,6 +212,25 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
+      // The free-space watch's first step deletes old backups with the same hooks and staging turn
+      // as every run, on the disk the watch reads.
+      expect(lowSpaceBackupDeletion).toHaveBeenCalledOnce();
+      const [stepDeps] = vi.mocked(lowSpaceBackupDeletion).mock.calls[0]!;
+      const [watchDeps] = vi.mocked(startFreeSpaceWatch).mock.calls[0]!;
+      expect(stepDeps.dir).toBe(watchDeps.dir);
+      expect(stepDeps.staging).toBe(clocks.archive!.stagingTurn);
+      expect(stepDeps.installationStartedAt).toBe(hooks.readInstallationStart);
+      expect(stepDeps.onArchivesDeleted).toBe(hooks.recordArchivesDeleted);
+      expect(stepDeps.statfs).toBe(watchDeps.statfs);
+      // The step's folders are the running duty's, read from the supervisor's live status: this
+      // primary has no backups set up, so there are none.
+      expect(stepDeps.backends()).toEqual([]);
+      expect(runningLocalBackends).toHaveBeenLastCalledWith(
+        expect.objectContaining({ enabled: false, isPrimary: true, destinations: [] }),
+      );
+      expect(watchDeps.freeOldBackups).toBe(
+        vi.mocked(lowSpaceBackupDeletion).mock.results[0]!.value,
+      );
       const live = suite.db.all<{ at: string }>(
         sql`select registrado_en as at from registro_sif where node_id = ${venue.cfg.nodeId} and revocado_en is null`,
       );

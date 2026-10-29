@@ -111,7 +111,9 @@ Conserva la base de datos, las claves de recuperación y las copias guardadas.
 Antes de cada copia de seguridad, si falta espacio en el disco, el equipo puede borrar sus copias
 más antiguas de ese disco para hacer sitio. Nunca borra la copia más reciente de una carpeta, una
 copia anterior a la última restauración o puesta en marcha desde cero del equipo, ni una copia de un
-bucket. Si aun así no basta, la copia no se hace y la campana dice cuánto espacio necesita.
+bucket. Si aun así no basta, la copia no se hace y la campana dice cuánto espacio necesita. Mientras
+las copias están activadas, el equipo también borra sus copias más antiguas de ese disco, con los mismos
+límites, cuando al disco le quedan menos de unos 2 GB libres, hasta tener unos 2,5 GB libres.
 
 Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor.
 
@@ -381,7 +383,7 @@ parada, como explica [Cuando se paran los cobros por la hora](box-status.md#cloc
 El equipo envía un correo a todas las personas que pueden gestionar el sistema y tienen dirección de
 correo cuando:
 
-- a su disco le quedan unos 2 GB libres o menos;
+- a su disco le quedan unos 2 GB libres o menos, después de borrar las copias antiguas que puede;
 - su disco está lleno, así que no se puede guardar nada;
 - su reloj marca una fecha anterior al 28 de octubre de 2024, así que no se puede registrar ninguna
   venta;

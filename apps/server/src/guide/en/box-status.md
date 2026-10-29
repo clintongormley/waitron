@@ -106,7 +106,9 @@ keys and saved backups.
 Before each backup, when the disk is short of space, the box can delete its oldest backups on that
 disk to make room. It never deletes the newest backup in a folder, a backup from before the box's
 last restore or fresh setup, or a backup in a bucket. If that is still not enough, the backup is not
-made, and the bell says how much room it needs.
+made, and the bell says how much room it needs. While backups are on, the box also deletes its
+oldest backups on that disk, within the same limits, whenever the disk falls under about 2 GB free, until about
+2.5 GB is free.
 
 This page cannot remove other files or move your data to a larger disk.
 
@@ -356,7 +358,7 @@ payments stop because of the clock](box-status.md#clock-behind) explains.
 
 The box emails everyone who can manage the system and has an email address when:
 
-- its disk has about 2 GB free or less;
+- its disk has about 2 GB free or less, after deleting any old backups it may;
 - its disk is full, so nothing can be saved;
 - its clock is set before 28 October 2024, so no sale can be recorded;
 - its clock reads earlier than its last sale, so payments have stopped;

@@ -1,4 +1,9 @@
+import { existsSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
 import { FULL_DISK_BYTES } from "./boot-failure.js";
 import { createDiskFullState, type DiskFullState } from "./disk-full-state.js";
 import type { Statfs } from "./free-bytes.js";
@@ -11,6 +16,7 @@ import {
   type FreeSpaceState,
 } from "./free-space-watch.js";
 import type { Logger, LogLevel } from "./logger.js";
+import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 
 const GIB = 1024 ** 3;
 const MIB = 1024 ** 2;
@@ -130,6 +136,7 @@ describe("startFreeSpaceWatch", () => {
       statfs?: Statfs;
       log?: Logger;
       restoreSpare?: () => Promise<void>;
+      freeOldBackups?: (signal: AbortSignal) => Promise<void>;
     } = {},
   ) {
     const spy = logSpy();
@@ -154,6 +161,7 @@ describe("startFreeSpaceWatch", () => {
       log,
       statfs,
       ...(options.restoreSpare ? { restoreSpare: options.restoreSpare } : {}),
+      ...(options.freeOldBackups ? { freeOldBackups: options.freeOldBackups } : {}),
       timer: (ms, fn) => {
         const entry = { ms, fn, cancelled: false };
         armed.push(entry);
@@ -349,6 +357,124 @@ describe("startFreeSpaceWatch", () => {
     w.armed[0]!.fn();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
+    expect(w.armed).toHaveLength(1);
+    expect(w.state.current().freeBytes).toBeNull();
+  });
+
+  it("deletes old backups first, then writes the spare back and reads, so a low disk they fixed raises no warning", async () => {
+    const calls: string[] = [];
+    const freeOldBackups = async () => {
+      calls.push("delete");
+      w.reading.free = 4 * GIB;
+    };
+    const restoreSpare = async () => {
+      calls.push("restore");
+    };
+    const w = watch({ freeOldBackups, restoreSpare });
+    w.reading.free = 1.9 * GIB;
+    await w.tick();
+    expect(calls).toEqual(["delete", "restore"]);
+    expect(w.state.current()).toEqual({ freeBytes: 4 * GIB, readAt: w.now, lowSince: null });
+    expect(w.events("storage.space_low")).toEqual([]);
+
+    const control = watch({ restoreSpare });
+    control.reading.free = 1.9 * GIB;
+    await control.tick();
+    expect(control.events("storage.space_low")).toHaveLength(1);
+  });
+
+  it("a box started on its released spare writes it back and lifts the stop in the reading whose deletion made the room", async () => {
+    for (const withStep of [true, false]) {
+      const stateDir = await mkdtemp(join(tmpdir(), "free-space-watch-spare-"));
+      try {
+        await writeFile(join(stateDir, SPARE_SPACE_RELEASED_FILE), "");
+        const free = { value: FULL_DISK_BYTES - 1 };
+        const statfs: Statfs = async () => ({ bavail: free.value, frsize: 1 });
+        const { log } = logSpy();
+        const disk = createDiskFullState({
+          dir: stateDir,
+          now: () => at(0),
+          log,
+          statfs,
+          spareReleased: () => spareReleased(stateDir, log),
+        });
+        disk.noteRefused();
+        const w = watch({
+          disk,
+          statfs,
+          restoreSpare: spareRestorer({
+            stateDir,
+            venueDir: stateDir,
+            bytes: SPARE_SPACE_BYTES,
+            log,
+            statfs,
+          }),
+          ...(withStep
+            ? {
+                freeOldBackups: async () => {
+                  free.value = 3 * GIB;
+                },
+              }
+            : {}),
+        });
+        await w.tick();
+        expect(existsSync(join(stateDir, SPARE_SPACE_FILE))).toBe(withStep);
+        expect(existsSync(join(stateDir, SPARE_SPACE_RELEASED_FILE))).toBe(!withStep);
+        expect(disk.noted()).toBe(!withStep);
+      } finally {
+        await rm(stateDir, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it("logs nothing when the deletion step ends because the watch stopped", async () => {
+    let fail!: (error: Error) => void;
+    const w = watch({
+      freeOldBackups: () => new Promise<void>((_, reject) => (fail = reject)),
+    });
+    w.armed[0]!.fn();
+    await vi.waitFor(() => expect(fail).toBeTypeOf("function"));
+    const stopping = w.handle.stop();
+    fail(new Error("stopping"));
+    await stopping;
+    expect(w.events("backup.low_space_delete_failed")).toEqual([]);
+  });
+
+  it("a deletion step that throws is logged, and the same reading still writes the spare back and records", async () => {
+    const restoreSpare = vi.fn(async () => {});
+    const w = watch({
+      restoreSpare,
+      freeOldBackups: async () => {
+        throw Object.assign(new Error("gone"), { code: "ENOENT" });
+      },
+    });
+    await w.tick();
+    expect(w.events("backup.low_space_delete_failed")).toEqual([
+      ["warn", "backup.low_space_delete_failed", { errorCode: "unknown", errno: "ENOENT" }],
+    ]);
+    expect(restoreSpare).toHaveBeenCalledTimes(1);
+    expect(w.state.current().freeBytes).toBe(10 * GIB);
+  });
+
+  it("stop() aborts the deletion step's signal and answers once the step has finished", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let given: AbortSignal | undefined;
+    const freeOldBackups = async (signal: AbortSignal) => {
+      given = signal;
+      await held;
+    };
+    const w = watch({ freeOldBackups });
+    w.armed[0]!.fn();
+    await vi.waitFor(() => expect(given).toBeDefined());
+    expect(given!.aborted).toBe(false);
+    let stopped = false;
+    const stopping = w.handle.stop().then(() => (stopped = true));
+    expect(given!.aborted).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    release();
+    await stopping;
     expect(w.armed).toHaveLength(1);
     expect(w.state.current().freeBytes).toBeNull();
   });
