@@ -524,7 +524,7 @@ async function invoiceOf(billId: string) {
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "Calle Mayor 2, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
