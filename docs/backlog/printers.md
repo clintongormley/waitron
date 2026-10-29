@@ -19,7 +19,8 @@ locally and hosts the print agent (et al)". It is the Waitron-owned outbound age
 design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
 started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
 
-**Brainstorm started 2026-10-29; paused until the owner can run a device test on 3 November.**
+**Brainstorm started 2026-10-29; paused until the owner is back on 3 November.** The device test
+queued for that day may no longer be needed (see the router answer below).
 
 The owner's answers (2026-10-29):
 
@@ -33,19 +34,29 @@ The owner's answers (2026-10-29):
   the cloud server." No local server holds sales while the line is down.
 - The owner's concern with that: "If the mobile is using mobile internet, then it isn't connected to
   the LAN. If it is connected to the LAN then it won't be able to reach the internet."
+- Who owns the devices, and what that means for an outage: "the devices are likely to belong to the
+  venue, not the waiter, and they're likely to not have a SIM card. Either the handheld device or
+  the router needs a SIM device to keep functioning. The router would be the simpler solution."
+
+What follows from that answer: a device with no SIM has no mobile internet of its own, so during an
+outage every device, handhelds included, reaches Cloud only through the venue's Wi-Fi. The way a
+cloud-run venue keeps selling is therefore a router with a mobile-data backup (its own SIM): every
+device stays on Wi-Fi, the router switches to mobile data when the line fails, and the owner's
+concern above does not arise, because the Wi-Fi still reaches the internet. It needs no app work;
+its cost is equipment the venue buys and sets up.
 
 Proposed in the brainstorm, not agreed:
 
-- Handhelds need no local network: every print goes through the server to the print agent
-  (cloud-compatibility rule 5), so only the device running the print agent must reach both the
-  printers and Cloud.
-- That device holds both connections at once. As read from Android's documentation and developer
-  write-ups, NOT run: an installed app can ask for the Wi-Fi network without requiring internet
-  from it, ask for mobile data as well, and tie each connection to one of them
-  (`ConnectivityManager.requestNetwork`, `Network.bindSocket`/`openConnection`). A web page has no
-  such choice. The test below settles it.
-- The alternative needs no app work: a venue router with a mobile-data backup (its own SIM), so
-  every device stays on Wi-Fi. Its cost is equipment the venue buys and sets up.
+- The print agent needs only the venue's Wi-Fi: it reaches the printers and, through the backup
+  router, Cloud. Handhelds never talk to printers directly; every print goes through the server to
+  the print agent (cloud-compatibility rule 5).
+- Holding Wi-Fi and mobile data at once on one device now matters only to a venue with no backup
+  router whose print-agent tablet has its own SIM, and even then its SIM-less handhelds stop
+  selling. As read from Android's documentation and developer write-ups, NOT run: an installed app
+  can ask for the Wi-Fi network without requiring internet from it, ask for mobile data as well,
+  and tie each connection to one of them (`ConnectivityManager.requestNetwork`,
+  `Network.bindSocket`/`openConnection`). A web page has no such choice. The test below would
+  settle it.
 - The print agent runs on a device that stays in the venue (the counter tablet), never a waiter's
   phone, which leaves at the end of a shift.
 - The same app shows Waitron's screens. On fixed tablets it locks the tablet to Waitron (kiosk
@@ -56,7 +67,10 @@ Proposed in the brainstorm, not agreed:
   alerts while the phone is in a pocket.
 - A venue with a box already has its print agent there; for it the app is optional.
 
-Still to ask: whether kiosk mode replaces the Fully Kiosk resale; whether a second device takes over
+Still to ask: whether the device test below is still worth running, now that the backup router
+covers the case it was for; whether Waitron recommends (or resells) a backup router, and whether it
+should tell staff when the venue is running on the router's mobile data; whether kiosk mode
+replaces the Fully Kiosk resale; whether a second device takes over
 printing automatically when the print-agent tablet is off; which printer connections it must reach
 (network, USB, Bluetooth); and how it compares with printers that fetch jobs from the cloud
 themselves ([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),

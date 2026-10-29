@@ -111,8 +111,9 @@ need to get that working soon." This repository's part is **A951**, the box's la
 public-certificate client (_Replication, failover and the cloud_).
 **A1175 — an Android app for venues run from Waitron Cloud** joins this group (owner, 2026-10-28):
 its first job is the local print server a cloud-run venue needs. The brainstorm started on
-2026-10-29 and waits for a device test the owner runs on 3 November (_Printers, the print agent
-and receipts_).
+2026-10-29 and resumes on 3 November; a venue router with a mobile-data backup is now the proposed
+way through an internet outage, so the queued device test may not be needed (_Printers, the print
+agent and receipts_).
 
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
 come after the list above:
