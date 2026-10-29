@@ -67,7 +67,7 @@ interface RecipientDraft {
   email: string;
 }
 
-/** The fields a chosen address fills; a server refusal names any of them `address`. */
+/** The fields a chosen address fills. */
 const SEARCH_FILLS: ReadonlySet<string> = new Set([
   "streetAddress",
   "postalCode",

@@ -6,7 +6,10 @@ import { codeMessage } from "../i18n/codes.js";
 import "./invoice-recipient-dialog.js";
 import type { TillInvoiceRecipientDialog } from "./invoice-recipient-dialog.js";
 
-afterEach(cleanupWidgets);
+afterEach(() => {
+  cleanupWidgets();
+  setLocale("en");
+});
 
 const saveButton = (el: TillInvoiceRecipientDialog) =>
   el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>("[data-invoice-save]")!;
