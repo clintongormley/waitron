@@ -86,24 +86,6 @@ export async function readModulePreparationHistory(
  * for a reader that must keep every name it can still read. `malformed` says some part would be
  * refused; a refused revision's module cannot be trusted, so it counts against every module.
  */
-export async function readWellFormedModulePreparations(
-  options: { stateDir: string; venueDir: string },
-  module: string,
-): Promise<{ history: readonly unknown[]; malformed: boolean }> {
-  const value = await readDurableHostJson(
-    join(options.stateDir, "module-preparation-state.json"),
-    LIMIT,
-  );
-  if (value === null) return { history: [], malformed: false };
-  if (!record(value) || !Array.isArray(value.revisions)) return invalid();
-  const revisions = value.revisions as unknown[];
-  const kept = revisions.filter(wellFormedRevision);
-  return {
-    history: kept.filter((row) => row.binding.module === module).map((row) => row.value),
-    malformed:
-      kept.length !== revisions.length || Object.keys(value).length !== 2 || value.version !== 1,
-  };
-}
 export function createModulePreparationState(options: Options) {
   return {
     async withState<T>(

@@ -5,11 +5,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createFirstSetupCoordinator, type FirstSetupHold } from "./index.js";
 import { lockVenueDatabase } from "@waitron/db";
 import type { OperationBinding } from "@waitron/module";
-import {
-  createModulePreparationState,
-  readModulePreparationHistory,
-  readWellFormedModulePreparations,
-} from "./module-preparation-state.js";
+import { createModulePreparationState } from "./module-preparation-state.js";
 
 vi.mock("node:fs/promises", { spy: true });
 const roots: string[] = [];
@@ -342,95 +338,4 @@ it("writes no wait when the grant check refuses", async () => {
     store.withState(binding, (state) => state.replace({ entries: [] }, "wait")),
   ).rejects.toThrow("no grant");
   await expect(fs.readFile(f.path)).rejects.toMatchObject({ code: "ENOENT" });
-});
-
-const otherBinding: OperationBinding = { ...binding, module: "other-module", eventId: "event2" };
-async function writeLedger(f: Awaited<ReturnType<typeof fixture>>, value: unknown) {
-  await fs.writeFile(f.path, typeof value === "string" ? value : JSON.stringify(value));
-}
-it("the well-formed read of a missing ledger is empty and not malformed", async () => {
-  const f = await fixture();
-  expect(await readWellFormedModulePreparations(f, binding.module)).toEqual({
-    history: [],
-    malformed: false,
-  });
-});
-it("the well-formed read of an intact ledger gives the strict read's rows, not malformed", async () => {
-  const f = await fixture();
-  await writeLedger(f, {
-    version: 1,
-    revisions: [
-      { binding, value: { n: 1 } },
-      { binding: otherBinding, value: { n: 2 } },
-      { binding, value: { n: 3 } },
-    ],
-  });
-  const strict = await readModulePreparationHistory(f, binding.module);
-  expect(strict).toEqual([{ n: 1 }, { n: 3 }]);
-  expect(await readWellFormedModulePreparations(f, binding.module)).toEqual({
-    history: strict,
-    malformed: false,
-  });
-});
-it.each([
-  ["a non-object revision", null],
-  ["a revision with an extra key", { binding, value: { n: 9 }, extra: true }],
-  ["a revision with no value", { binding }],
-  ["a revision whose binding lacks a key", { binding: { module: binding.module }, value: {} }],
-  [
-    "a revision whose binding names a blank event",
-    { binding: { ...binding, eventId: " " }, value: {} },
-  ],
-])(
-  "beside %s, the well-formed read keeps this module's other revisions and says the ledger is malformed, while the strict read refuses",
-  async (_which, bad) => {
-    const f = await fixture();
-    await writeLedger(f, {
-      version: 1,
-      revisions: [
-        { binding, value: { n: 1 } },
-        bad,
-        { binding: otherBinding, value: { n: 2 } },
-        { binding, value: { n: 3 } },
-      ],
-    });
-    await expect(readModulePreparationHistory(f, binding.module)).rejects.toMatchObject({
-      code: "setup.attempt_invalid",
-    });
-    expect(await readWellFormedModulePreparations(f, binding.module)).toEqual({
-      history: [{ n: 1 }, { n: 3 }],
-      malformed: true,
-    });
-  },
-);
-it.each([
-  ["an extra top-level key", { extra: true }],
-  ["another version", { version: 2 }],
-])(
-  "with %s, the well-formed read keeps the revisions and says the ledger is malformed",
-  async (_which, change) => {
-    const f = await fixture();
-    await writeLedger(f, { version: 1, revisions: [{ binding, value: { n: 1 } }], ...change });
-    await expect(readModulePreparationHistory(f, binding.module)).rejects.toMatchObject({
-      code: "setup.attempt_invalid",
-    });
-    expect(await readWellFormedModulePreparations(f, binding.module)).toEqual({
-      history: [{ n: 1 }],
-      malformed: true,
-    });
-  },
-);
-it.each([
-  ["text that is not JSON", "{damaged"],
-  ["a top-level array", "[]"],
-  ["revisions that are not a list", { version: 1, revisions: {} }],
-])("the well-formed read refuses %s, as the strict read does", async (_which, value) => {
-  const f = await fixture();
-  await writeLedger(f, value);
-  await expect(readModulePreparationHistory(f, binding.module)).rejects.toMatchObject({
-    code: "setup.attempt_invalid",
-  });
-  await expect(readWellFormedModulePreparations(f, binding.module)).rejects.toMatchObject({
-    code: "setup.attempt_invalid",
-  });
 });

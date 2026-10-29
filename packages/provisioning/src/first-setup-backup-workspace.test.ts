@@ -5,7 +5,6 @@ import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import * as provision from "./index.js";
 import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
-import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import {
@@ -935,10 +934,6 @@ it("refuses a journal whose abandoned record carries different input from the re
   expect((await f.store.read()).at(-1)!.phase).toBe("abandoned");
 });
 it.each([
-  [
-    "the series-name note",
-    (stateDir: string) => writeFile(join(stateDir, START_AGAIN_NOTE_FILE), "{}"),
-  ],
   [
     "a confirmation record",
     async (stateDir: string) => {

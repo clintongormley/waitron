@@ -5,13 +5,6 @@ import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it } from "vitest";
-import type { DurableJsonIo } from "./durable-host-json.js";
-import {
-  START_AGAIN_NOTE_FILE,
-  raiseStartAgainNote,
-  readStartAgainNote,
-  startAgainFloorSources,
-} from "./first-setup-start-again-note.js";
 import {
   START_AGAIN_MARKER_FILE,
   START_AGAIN_MARKER_LIMIT,
@@ -36,332 +29,13 @@ import { createFirstSetupResolutionStore } from "./first-setup-resolution.js";
 
 const dirs: string[] = [];
 async function stateDir() {
-  const dir = await mkdtemp(join(tmpdir(), "start-again-note-"));
+  const dir = await mkdtemp(join(tmpdir(), "start-again-marker-"));
   dirs.push(dir);
   return dir;
 }
 afterEach(async () => {
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
-const refused = { code: "setup.attempt_invalid", params: {} };
-
-it("a missing note is no floor", async () => {
-  const dir = await stateDir();
-  expect(await readStartAgainNote(dir)).toBeNull();
-  expect(startAgainFloorSources(null)).toEqual([]);
-});
-
-it("a missing state folder is no floor", async () => {
-  const dir = await stateDir();
-  expect(await readStartAgainNote(join(dir, "absent"))).toBeNull();
-});
-
-it("a note round-trips exactly", async () => {
-  const dir = await stateDir();
-  const written = await raiseStartAgainNote(dir, {
-    floorMs: 1792154580000,
-    lastName: "0CNQT",
-    module: "fiscal-verifactu",
-  });
-  const note = {
-    version: 1 as const,
-    floorMs: 1792154580000,
-    lastName: "0CNQT",
-    module: "fiscal-verifactu",
-  };
-  expect(written).toEqual(note);
-  expect(await readStartAgainNote(dir)).toEqual(note);
-  expect(JSON.parse(await readFile(join(dir, START_AGAIN_NOTE_FILE), "utf8"))).toEqual(note);
-  expect(startAgainFloorSources(note)).toEqual([
-    { reference: "start-again-note", complete: true, records: [], timeFloorMs: 1792154580000 },
-  ]);
-});
-
-it("raising never lowers the floor", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  const kept = await raiseStartAgainNote(dir, { floorMs: 100, lastName: "second", module: "n" });
-  const first = { version: 1, floorMs: 200, lastName: "first", module: "m" };
-  expect(kept).toEqual(first);
-  expect(await readStartAgainNote(dir)).toEqual(first);
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "equal", module: "n" });
-  expect(await readStartAgainNote(dir)).toEqual(first);
-  const raised = await raiseStartAgainNote(dir, { floorMs: 300, lastName: "third", module: "n" });
-  expect(raised).toEqual({ version: 1, floorMs: 300, lastName: "third", module: "n" });
-  expect(await readStartAgainNote(dir)).toEqual(raised);
-});
-
-it("a note whose name is unknown round-trips", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, {
-    floorMs: 1792150980000,
-    lastName: null,
-    module: "fiscal-verifactu",
-  });
-  expect(await readStartAgainNote(dir)).toEqual({
-    version: 1,
-    floorMs: 1792150980000,
-    lastName: null,
-    module: "fiscal-verifactu",
-  });
-});
-
-it("an unknown-name note never lowers a known one", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  await raiseStartAgainNote(dir, { floorMs: 100, lastName: null, module: "m" });
-  const first = { version: 1, floorMs: 200, lastName: "first", module: "m" };
-  expect(await readStartAgainNote(dir)).toEqual(first);
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: null, module: "m" });
-  expect(await readStartAgainNote(dir)).toEqual(first);
-  await raiseStartAgainNote(dir, { floorMs: 300, lastName: null, module: "m" });
-  expect(await readStartAgainNote(dir)).toEqual({
-    version: 1,
-    floorMs: 300,
-    lastName: null,
-    module: "m",
-  });
-});
-
-it.each([
-  ["empty", ""],
-  ["partial", '{"version":1,'],
-  ["an array", "[]"],
-  ["a wrong version", '{"version":2,"floorMs":1,"lastName":"a","module":"m"}'],
-  ["a missing key", '{"version":1,"floorMs":1,"lastName":"a"}'],
-  ["a missing name key", '{"version":1,"floorMs":1,"module":"m"}'],
-  ["an extra key", '{"version":1,"floorMs":1,"lastName":"a","module":"m","x":1}'],
-  ["a text floor", '{"version":1,"floorMs":"1","lastName":"a","module":"m"}'],
-  ["a numeric name", '{"version":1,"floorMs":1,"lastName":1,"module":"m"}'],
-  ["a numeric module", '{"version":1,"floorMs":1,"lastName":"a","module":1}'],
-  ["an empty object", "{}"],
-  ["an empty name", '{"version":1,"floorMs":1,"lastName":"","module":"m"}'],
-  [
-    "a name over 64 characters",
-    JSON.stringify({ version: 1, floorMs: 1, lastName: "a".repeat(65), module: "m" }),
-  ],
-  ["a fractional floor", '{"version":1,"floorMs":1.5,"lastName":"a","module":"m"}'],
-  ["an empty module", '{"version":1,"floorMs":1,"lastName":"a","module":""}'],
-  [
-    "a module that is not a module id",
-    '{"version":1,"floorMs":1,"lastName":"a","module":"Fiscal/x"}',
-  ],
-  [
-    "oversized",
-    JSON.stringify({ version: 1, floorMs: 1, lastName: "a".repeat(5000), module: "m" }),
-  ],
-])("an unreadable note is refused, not read as absent: %s", async (_name, text) => {
-  const dir = await stateDir();
-  await writeFile(join(dir, START_AGAIN_NOTE_FILE), text);
-  await expect(readStartAgainNote(dir)).rejects.toMatchObject(refused);
-  await expect(
-    raiseStartAgainNote(dir, { floorMs: 1, lastName: "a", module: "m" }),
-  ).rejects.toMatchObject(refused);
-  expect(await readFile(join(dir, START_AGAIN_NOTE_FILE), "utf8")).toBe(text);
-});
-
-it("a note that is a folder is refused, not read as absent", async () => {
-  const dir = await stateDir();
-  await mkdir(join(dir, START_AGAIN_NOTE_FILE));
-  await expect(readStartAgainNote(dir)).rejects.toMatchObject(refused);
-});
-
-it("a raise to a floor that is not a whole number is refused and writes nothing", async () => {
-  const dir = await stateDir();
-  await expect(
-    raiseStartAgainNote(dir, { floorMs: 1.5, lastName: "a", module: "m" }),
-  ).rejects.toMatchObject(refused);
-  expect(await readStartAgainNote(dir)).toBeNull();
-});
-
-it("a symbolic link in place of the note is refused, not followed", async () => {
-  const dir = await stateDir();
-  const target = join(dir, "elsewhere.json");
-  await writeFile(target, JSON.stringify({ version: 1, floorMs: 1, lastName: "a", module: "m" }));
-  await symlink(target, join(dir, START_AGAIN_NOTE_FILE));
-  await expect(readStartAgainNote(dir)).rejects.toMatchObject(refused);
-  await expect(
-    raiseStartAgainNote(dir, { floorMs: 2, lastName: "b", module: "m" }),
-  ).rejects.toMatchObject(refused);
-});
-
-it.each([
-  ["an empty name", { floorMs: 2, lastName: "", module: "m" }],
-  ["an empty module", { floorMs: 2, lastName: "a", module: "" }],
-])("a raise with %s is refused and leaves the note as it was", async (_name, next) => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 1, lastName: "a", module: "m" });
-  await expect(raiseStartAgainNote(dir, next)).rejects.toMatchObject(refused);
-  expect(await readStartAgainNote(dir)).toEqual({
-    version: 1,
-    floorMs: 1,
-    lastName: "a",
-    module: "m",
-  });
-});
-
-it("an equal floor writes nothing", async () => {
-  const dir = await stateDir();
-  const path = join(dir, START_AGAIN_NOTE_FILE);
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  const before = { bytes: await readFile(path), info: await stat(path) };
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "other", module: "n" });
-  const after = await stat(path);
-  expect(await readFile(path)).toEqual(before.bytes);
-  expect(after.mtimeMs).toBe(before.info.mtimeMs);
-  expect(after.ino).toBe(before.info.ino);
-});
-
-it("a later floor replaces the note whole", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  await raiseStartAgainNote(dir, { floorMs: 300, lastName: "second", module: "n" });
-  expect(JSON.parse(await readFile(join(dir, START_AGAIN_NOTE_FILE), "utf8"))).toEqual({
-    version: 1,
-    floorMs: 300,
-    lastName: "second",
-    module: "n",
-  });
-});
-
-function cutIo(cut: "rename" | "after-rename"): DurableJsonIo {
-  let renamed = false;
-  return {
-    mkdir: fs.mkdir,
-    lstat: fs.lstat,
-    chmod: fs.chmod,
-    unlink: fs.unlink,
-    async rename(from, to) {
-      if (cut === "rename") throw new Error("power cut before rename");
-      await fs.rename(from, to);
-      renamed = true;
-    },
-    async open(path, flags, mode) {
-      if (renamed) throw new Error("power cut after rename");
-      return fs.open(path, flags, mode);
-    },
-  };
-}
-
-it("a write cut before its rename leaves the old note readable", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  await expect(
-    raiseStartAgainNote(dir, { floorMs: 300, lastName: "second", module: "m" }, cutIo("rename")),
-  ).rejects.toMatchObject(refused);
-  expect(await readStartAgainNote(dir)).toEqual({
-    version: 1,
-    floorMs: 200,
-    lastName: "first",
-    module: "m",
-  });
-  expect((await fs.readdir(dir)).sort()).toEqual([START_AGAIN_NOTE_FILE]);
-});
-
-it("a write cut after its rename leaves the new one", async () => {
-  const dir = await stateDir();
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  await expect(
-    raiseStartAgainNote(
-      dir,
-      { floorMs: 300, lastName: "second", module: "m" },
-      cutIo("after-rename"),
-    ),
-  ).rejects.toMatchObject(refused);
-  expect(await readStartAgainNote(dir)).toEqual({
-    version: 1,
-    floorMs: 300,
-    lastName: "second",
-    module: "m",
-  });
-  expect((await fs.readdir(dir)).sort()).toEqual([START_AGAIN_NOTE_FILE]);
-});
-
-function folderSyncIo(dir: string, failSync: () => boolean) {
-  const io = {
-    folderSyncs: 0,
-    mkdir: fs.mkdir,
-    lstat: fs.lstat,
-    chmod: fs.chmod,
-    unlink: fs.unlink,
-    rename: fs.rename,
-    async open(path: string, flags: number, mode?: number) {
-      const handle = await fs.open(path, flags, mode);
-      return {
-        writeFile: (data: string) => handle.writeFile(data),
-        close: () => handle.close(),
-        async sync() {
-          if (path === dir) {
-            if (failSync()) throw new Error("folder sync failed");
-            io.folderSyncs++;
-          }
-          await handle.sync();
-        },
-      };
-    },
-  } satisfies DurableJsonIo & { folderSyncs: number };
-  return io;
-}
-
-it.each([
-  ["the same floor", 300],
-  ["a lower floor", 250],
-])(
-  "a retry with %s after a failed folder sync syncs the folder before returning the note",
-  async (_name, retryFloorMs) => {
-    const dir = await stateDir();
-    const path = join(dir, START_AGAIN_NOTE_FILE);
-    let fail = true;
-    const io = folderSyncIo(dir, () => fail);
-    await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-    const raised = { floorMs: 300, lastName: "second", module: "m" };
-    await expect(raiseStartAgainNote(dir, raised, io)).rejects.toMatchObject(refused);
-    const bytes = await readFile(path);
-    expect(await readStartAgainNote(dir)).toEqual({ version: 1, ...raised });
-    await expect(
-      raiseStartAgainNote(dir, { floorMs: retryFloorMs, lastName: "retry", module: "n" }, io),
-    ).rejects.toMatchObject(refused);
-    fail = false;
-    const kept = await raiseStartAgainNote(
-      dir,
-      { floorMs: retryFloorMs, lastName: "retry", module: "n" },
-      io,
-    );
-    expect(kept).toEqual({ version: 1, ...raised });
-    expect(io.folderSyncs).toBe(1);
-    expect(await readFile(path)).toEqual(bytes);
-  },
-);
-
-it("a later floor after a failed folder sync writes the note and syncs the folder once", async () => {
-  const dir = await stateDir();
-  let fail = true;
-  const io = folderSyncIo(dir, () => fail);
-  await raiseStartAgainNote(dir, { floorMs: 200, lastName: "first", module: "m" });
-  await expect(
-    raiseStartAgainNote(dir, { floorMs: 300, lastName: "second", module: "m" }, io),
-  ).rejects.toMatchObject(refused);
-  fail = false;
-  const raised = await raiseStartAgainNote(
-    dir,
-    { floorMs: 400, lastName: "third", module: "n" },
-    io,
-  );
-  expect(raised).toEqual({ version: 1, floorMs: 400, lastName: "third", module: "n" });
-  expect(await readStartAgainNote(dir)).toEqual(raised);
-  expect(io.folderSyncs).toBe(1);
-});
-
-it("the module offers no way to delete the note", async () => {
-  const exported = Object.keys(await import("./first-setup-start-again-note.js")).sort();
-  expect(exported).toEqual([
-    "START_AGAIN_NOTE_FILE",
-    "raiseStartAgainNote",
-    "readStartAgainNote",
-    "startAgainFloorSources",
-  ]);
-});
-
 const incomplete = { code: "setup.start_again_incomplete", params: {} };
 const RECORD = randomUUID();
 const ATTEMPT = { attemptId: randomUUID(), frozenDigest: "a".repeat(64) };
@@ -407,7 +81,6 @@ async function attemptFolders(
   await mkdir(roots.venueDir, { recursive: true });
   await put(roots.venueDir, venue);
   await put(roots.stateDir, { ...state, ...KEPT_STATE });
-  await raiseStartAgainNote(roots.stateDir, { floorMs: 200, lastName: "0CNQT", module: "m" });
   return roots;
 }
 
@@ -438,17 +111,10 @@ const snapshot = async (roots: { venueDir: string; stateDir: string }) => ({
 async function expectOnlyKept(roots: { venueDir: string; stateDir: string }) {
   expect(Object.keys(await tree(roots.venueDir))).toEqual([]);
   expect(await tree(roots.stateDir)).toEqual({
-    [START_AGAIN_NOTE_FILE]: sha(await readFile(join(roots.stateDir, START_AGAIN_NOTE_FILE))),
     "first-setup-start-again-confirmations/": "",
     "first-setup-start-again-confirmations/1-x.json": sha("confirmation"),
     "tls/": "",
     "tls/cert.pem": sha("certificate"),
-  });
-  expect(await readStartAgainNote(roots.stateDir)).toEqual({
-    version: 1,
-    floorMs: 200,
-    lastName: "0CNQT",
-    module: "m",
   });
 }
 
@@ -746,7 +412,6 @@ it("a marker over 1 MiB is refused setup.not_ready before anything is written", 
 });
 
 it.each([
-  ["state", START_AGAIN_NOTE_FILE],
   ["state", "first-setup-start-again-confirmations/1-x.json"],
   ["state", "tls/cert.pem"],
   ["state", "../venue/venue.db"],
