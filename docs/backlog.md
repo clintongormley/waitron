@@ -2966,7 +2966,7 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
 
-- **A1207. A help tooltip near the window's foot covers its own "?".** Seen, 2026-10-29 (A1125's
+- **A1209. A help tooltip near the window's foot covers its own "?".** Seen, 2026-10-29 (A1125's
   look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125, #2238.
   With no room below its "?", `wt-help-tooltip` slides up over it instead of opening above
   (`positionTooltip`, `packages/ui/src/components/wt-help-tooltip.ts`): on a phone, it covers the
@@ -2977,6 +2977,11 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   covers the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like
   the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
   where the toast goes.
+
+- **A1210. A Floor zone-tab test fails now and then in CI.** "shows the first tab at the strip's
+  start when the strip comes back after the Floor had one zone" in
+  `apps/till/src/screens/till-floor-screen.zone-tabs.test.ts` failed once on #2238's CI (`expected
+  50 to be close to 6`) and passed on a re-run and three local runs; #2238 does not touch the Floor.
 
 - **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
   bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
