@@ -26,7 +26,9 @@ import {
 import { withDestinationCall } from "./backup-destination-call.js";
 import {
   foldersOnDisk,
+  installationStartOrNull,
   makeRoom,
+  reportArchivesDeleted,
   type BackupFolder,
   type DeletableArchive,
 } from "./backup-room.js";
@@ -162,21 +164,6 @@ async function localFoldersOnDisk(
   }
 }
 
-async function readInstallationStart(
-  deps: Pick<BackupSweepDeps, "installationStartedAt" | "log">,
-): Promise<Date | null> {
-  if (!deps.installationStartedAt) return null;
-  try {
-    return await deps.installationStartedAt();
-  } catch (err) {
-    deps.log("warn", "backup.installation_start_unreadable", {
-      errorCode: codeOf(err),
-      errno: errnoOf(err),
-    });
-    return null;
-  }
-}
-
 /**
  * One backup. A failure to build the manifest or collect state throws before the database copy, and
  * no partial archive is ever put to a destination.
@@ -193,17 +180,8 @@ export async function runOnce(
   let dumped = false;
   let encryptedDir: string | undefined;
   const budget = new ArchiveReadBudget();
-  const reportDeleted = async (deleted: readonly DeletableArchive[]) => {
-    if (!deps.onArchivesDeleted) return;
-    try {
-      await deps.onArchivesDeleted(deleted, now());
-    } catch (err) {
-      deps.log("warn", "backup.archives_deleted_alert_failed", {
-        errorCode: codeOf(err),
-        errno: errnoOf(err),
-      });
-    }
-  };
+  const reportDeleted = (deleted: readonly DeletableArchive[]) =>
+    reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
   try {
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
@@ -232,7 +210,8 @@ export async function runOnce(
     let copies = 0;
     if (deps.stagingEstimateBytes) {
       let installationStart: Promise<Date | null> | undefined;
-      const installationStartedAt = () => (installationStart ??= readInstallationStart(deps));
+      const installationStartedAt = () =>
+        (installationStart ??= installationStartOrNull(deps.installationStartedAt, deps.log));
       const estimate = await deps.stagingEstimateBytes();
       const onDisk = await localFoldersOnDisk(deps);
       copies = onDisk.copies;

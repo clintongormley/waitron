@@ -141,6 +141,43 @@ async function realOrNearest(path: string): Promise<{ real: string; existing: st
   }
 }
 
+/** The installation start, or null when there is no reader or it throws (logged
+ * `backup.installation_start_unreadable`), so nothing is deleted. */
+export async function installationStartOrNull(
+  read: (() => Promise<Date | null>) | undefined,
+  log: Logger,
+): Promise<Date | null> {
+  if (!read) return null;
+  try {
+    return await read();
+  } catch (err) {
+    log("warn", "backup.installation_start_unreadable", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+    return null;
+  }
+}
+
+/** Records the deletion alert; a failure is logged `backup.archives_deleted_alert_failed`, never
+ * thrown. */
+export async function reportArchivesDeleted(
+  record: ((deleted: readonly DeletableArchive[], at: Date) => Promise<void>) | undefined,
+  deleted: readonly DeletableArchive[],
+  at: Date,
+  log: Logger,
+): Promise<void> {
+  if (!record) return;
+  try {
+    await record(deleted, at);
+  } catch (err) {
+    log("warn", "backup.archives_deleted_alert_failed", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+  }
+}
+
 export interface MakeRoomOptions {
   neededBytes: number;
   floorBytes: number;
