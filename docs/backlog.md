@@ -2966,13 +2966,15 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
 
-- **A1207. A help tooltip near the bottom of the window covers its own "?".** `wt-help-tooltip`
-  always opens below its "?" and, when there is no room, slides up to stay on screen rather than
-  opening above (`positionTooltip` in `packages/ui/src/components/wt-help-tooltip.ts`). Since
-  A1125 the till Order screen's Fire / Send all bar stays at the bottom of the window, so in help
-  mode on a phone its tooltip now routinely covers the "?" and the whole bar (still readable,
-  nothing blocked). Pictures `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`. Fix:
-  open above the "?" when there is more room there.
+- **A1207. A help tooltip near the bottom of the window covers its own "?".** Seen, 2026-10-29
+  (A1125's look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125.
+  `wt-help-tooltip` only opens below its "?" (`positionTooltip`), so in help mode on a phone the
+  Order screen's button bar's tooltip covers the "?" and the bar. Fix: open above when room allows.
+
+- **A1208. The Served toast covers the Order screen's Fire / Send all buttons.** Measured
+  2026-10-29 in A1125's review; left open by A1125. At 1024×768 it covers the top 26 px of Fire /
+  Send all; on a 390 px phone, all of Move to…. A fixed lift like the Floor's Ready bar's does not
+  fit, as the bar is not always at the window's foot; where the toast goes is the owner's choice.
 
 - **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
   bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
