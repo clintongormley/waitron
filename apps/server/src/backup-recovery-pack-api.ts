@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { TLSSocket } from "node:tls";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
-import type { KeyRing } from "@waitron/credentials";
+import { credentialRevision, type KeyRing } from "@waitron/credentials";
 import {
   insertRecoveryPack,
   locations,
@@ -15,6 +15,7 @@ import {
   withTransaction,
   type Database,
   type RecoveryPackRecord,
+  type Transaction,
 } from "@waitron/db";
 import {
   authorizeManager,
@@ -32,7 +33,14 @@ import {
   requireManagementSession,
 } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
+import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
+import {
+  archiveDestinations,
+  loadKeyRotatedAt,
+  loadRecoveryKey,
+  type BackupSchedule,
+} from "./backup-config.js";
 import {
   buildArchivesPart,
   buildBucketPart,
@@ -42,11 +50,13 @@ import {
   type KeyHolder,
   type PartsContext,
 } from "./backup-recovery-pack-parts.js";
+import { packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
 import type { Turns } from "./backup-turns.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-api.js";
+import { STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackApiDeps {
@@ -96,6 +106,12 @@ export interface BackupRecoveryPackMakeDeps extends BackupRecoveryPackApiDeps {
   turns: Turns;
   readBoxEnv: () => Promise<Readonly<Record<string, string | undefined>>>;
   managedByEnvironment: () => boolean;
+  /** What the backup supervisor loaded last; the key never leaves the server. */
+  loadedBackups: () => {
+    schedule: BackupSchedule | undefined;
+    retention: { count: number; days: number } | undefined;
+    recoveryKey: string | undefined;
+  };
   documentEvidence: RecoveryDocumentEvidence;
   loadFont: () => Promise<Uint8Array>;
   now: () => Date;
@@ -177,6 +193,39 @@ function keyHolder(records: RecoveryPackRecord[], name: string, timeZone: string
     number: pack.number,
     madeOn: dayIn(timeZone, pack.madeAt.toISOString()),
     received: pack.receivedAt !== null,
+  };
+}
+
+async function currentChecks(
+  tx: Transaction,
+  deps: BackupRecoveryPackMakeDeps,
+  env: Readonly<Record<string, string | undefined>>,
+): Promise<CurrentChecks> {
+  const streamRevision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
+  const managedByEnvironment = deps.managedByEnvironment();
+  let sealed: ArchiveSettings | null = null;
+  let unreadable = false;
+  if (!managedByEnvironment) {
+    const read = await readHeldArchiveSettingsIn(tx, deps.ring);
+    if ("unreadable" in read) unreadable = true;
+    else sealed = read.settings;
+  }
+  const archives = archiveDestinations({
+    managedByEnvironment,
+    env,
+    sealed,
+    venueId: deps.venueId,
+  });
+  const owner = deps.modules.some((m) => m.backup?.recoveryPackPage !== undefined);
+  return {
+    keyChangedAt: loadKeyRotatedAt(env),
+    bucket: streamRevision === null ? null : { revision: streamRevision },
+    // An unreadable record has no revision to compare, so a pack's archive page counts as changed.
+    archives:
+      unreadable || archives.length > 0
+        ? { revision: unreadable ? undefined : sealed?.revision }
+        : null,
+    serverKeyName: owner ? await readBreakGlassKeyName(tx, deps.node.nodeId) : undefined,
   };
 }
 
@@ -317,6 +366,46 @@ export function mountBackupRecoveryPackMakeApi(
         "X-Waitron-Recovery-Pack": String(made.number),
         "X-Waitron-Recovery-Pack-Key": made.key,
       });
+    });
+  });
+
+  app.get("/api/backup/recovery-pack", (c) => {
+    c.header("Cache-Control", "no-store");
+    return makeRun(c, log, async () => {
+      const token = requireManagementSession(c);
+      const env = await deps.readBoxEnv();
+      const status = await withTransaction(deps.db, async (tx) => {
+        await authorizeManager(tx, { managementSessionId: token, permission: "system.manage" });
+        const records = await readRecoveryPacks(tx, nodeId);
+        const makers = [...new Set(records.flatMap((r) => (r.madeBy === null ? [] : [r.madeBy])))];
+        const names = new Map(
+          makers.length === 0
+            ? []
+            : (
+                await tx
+                  .select({ id: persons.id, name: persons.displayName })
+                  .from(persons)
+                  .where(inArray(persons.id, makers))
+              ).map((p) => [p.id, p.name] as const),
+        );
+        const loaded = deps.loadedBackups();
+        const fileKey = loadRecoveryKey(env);
+        return packStatus({
+          records: records.map((r) => ({
+            ...r,
+            madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
+          })),
+          current: await currentChecks(tx, deps, env),
+          retention: loaded.retention,
+          schedule: loaded.schedule,
+          backupsUseOlderKey:
+            loaded.recoveryKey !== undefined &&
+            fileKey !== undefined &&
+            loaded.recoveryKey !== fileKey,
+          now: deps.now(),
+        });
+      });
+      return c.json(status);
     });
   });
 

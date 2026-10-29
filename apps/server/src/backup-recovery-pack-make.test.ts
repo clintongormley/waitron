@@ -1,6 +1,6 @@
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -17,7 +17,7 @@ import {
 } from "@waitron/db";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { verifySecretAsync } from "@waitron/identity";
+import { persons, verifySecretAsync } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
@@ -62,6 +62,8 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 let node: ProvisionedNode;
 let keyInForce: { secret: string; name: string };
 let admin: { personId: string; token: string };
+let boxEnv: Record<string, string>;
+let loadedKey: string | undefined;
 const sockets: TLSSocket[] = [];
 const logs: unknown[][] = [];
 
@@ -71,6 +73,11 @@ afterEach(() => {
 
 beforeEach(async () => {
   logs.length = 0;
+  boxEnv = {
+    WAITRON_BACKUP_RECOVERY_KEY: KEY,
+    WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
+  };
+  loadedKey = KEY;
   await seedTenant(suite.db);
   await stampDeployment(suite.db, "preproduction");
   const [location] = await suite.db
@@ -116,9 +123,11 @@ function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date 
       venueId: VENUE,
       modules,
       turns: options.turns ?? createTurns(),
-      readBoxEnv: async () => ({
-        WAITRON_BACKUP_RECOVERY_KEY: KEY,
-        WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
+      readBoxEnv: async () => ({ ...boxEnv }),
+      loadedBackups: () => ({
+        schedule: ARCHIVES.schedule,
+        retention: ARCHIVES.retention,
+        recoveryKey: loadedKey,
       }),
       managedByEnvironment: () => false,
       documentEvidence: async () => ({}),
@@ -168,6 +177,10 @@ function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date 
     ) => post("/api/backup/recovery-pack", body, extra),
     received: (number: number, extra: Parameters<typeof post>[2] = {}) =>
       post(`/api/backup/recovery-pack/${number}/received`, {}, extra),
+    status: (token: string | null = admin.token) =>
+      app.request("https://box.test/api/backup/recovery-pack", {
+        headers: token === null ? {} : { cookie: `waitron_management_session=${token}` },
+      }),
   };
 }
 
@@ -511,5 +524,105 @@ describe("the received route", () => {
       params: { reason: "shape" },
     });
     expect(await receivedAt()).toBeNull();
+  });
+});
+
+describe("the status route", () => {
+  type Answer = {
+    latest: { number: number; madeByName: string | null; received: boolean } | null;
+    upToDate: boolean;
+    unreceived: { number: number; holdsCurrentServerKey: boolean } | null;
+    reasons: { part: string; kind: string }[];
+    keep: { number: number; why: string }[];
+    backupsUseOlderKey: boolean;
+  };
+  const read = async (f: ReturnType<typeof fixture>) => {
+    const response = await f.status();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    return (await response.json()) as Answer;
+  };
+
+  it("needs a session and system.manage", async () => {
+    const f = fixture();
+    expect((await f.status(null)).status).toBe(401);
+    const supervisor = await openManagementSession(suite.db, "supervisor");
+    const response = await f.status(supervisor.token);
+    expect(response.status).toBe(403);
+    expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+  });
+
+  it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
+    const f = fixture();
+    expect(await read(f)).toMatchObject({ latest: null, upToDate: false });
+    await (await f.make()).arrayBuffer();
+    expect(await read(f)).toMatchObject({
+      latest: { number: 1, received: false },
+      upToDate: false,
+    });
+    await f.received(1);
+    const fresh = await read(f);
+    expect(fresh).toMatchObject({ upToDate: true, reasons: [], backupsUseOlderKey: false });
+    const [person] = await suite.db
+      .select({ name: persons.displayName })
+      .from(persons)
+      .where(eq(persons.id, admin.personId));
+    expect(fresh.latest!.madeByName).toBe(person!.name);
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-29T08:00:00.000Z" };
+    expect((await read(f)).reasons).toEqual([
+      { part: "bucket", kind: "key_changed", at: "2026-10-29T08:00:00.000Z" },
+      { part: "archives", kind: "key_changed", at: "2026-10-29T08:00:00.000Z" },
+    ]);
+  });
+
+  it("names a lost pack as the only copy of the server key, until a newer ticked pack replaces it", async () => {
+    const f = fixture();
+    // The answer is never read: the record and the new key are committed all the same.
+    await f.make(true);
+    const [record] = await packs();
+    expect(record).toMatchObject({ receivedAt: null });
+    expect(record!.parts[2]).toMatchObject({ carriedKey: true });
+    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(record!.parts[2]!.keyName);
+    expect(await read(f)).toMatchObject({
+      upToDate: false,
+      unreceived: { number: 1, holdsCurrentServerKey: true },
+      keep: [],
+    });
+    await (await f.make(true)).arrayBuffer();
+    expect((await read(f)).unreceived).toEqual({
+      number: 2,
+      madeAt: "2026-10-30T09:00:00.000Z",
+      holdsCurrentServerKey: true,
+    });
+    await f.received(2);
+    expect(await read(f)).toMatchObject({
+      upToDate: true,
+      unreceived: null,
+      keep: [{ number: 2, why: "server_key" }],
+    });
+  });
+
+  it("says the box's backups still use the older key when the loaded key differs from the settings file's", async () => {
+    const f = fixture();
+    loadedKey = "the-key-before-the-change";
+    const answer = await read(f);
+    expect(answer.backupsUseOlderKey).toBe(true);
+    expect(JSON.stringify(answer)).not.toContain(loadedKey);
+    expect(JSON.stringify(answer)).not.toContain(KEY);
+    loadedKey = undefined;
+    expect((await read(f)).backupsUseOlderKey).toBe(false);
+  });
+
+  it("answers for this node only", async () => {
+    await withTransaction(suite.db, (tx) =>
+      insertRecoveryPack(tx, {
+        nodeId: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        number: 1,
+        madeAt: new Date("2026-10-29T09:00:00.000Z"),
+        madeBy: admin.personId,
+        parts: [],
+      }),
+    );
+    expect((await read(fixture())).latest).toBeNull();
   });
 });

@@ -2721,6 +2721,14 @@ async function bootServer(
       turns: backupTurns,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
       managedByEnvironment: isBackupManagedByEnvironment,
+      loadedBackups: () => {
+        const loaded = backupSupervisor.current();
+        return {
+          schedule: loaded.schedule,
+          retention: loaded.retention,
+          recoveryKey: loaded.recoveryKey,
+        };
+      },
       documentEvidence: (module) =>
         readRecoveryDocumentEvidence(
           { stateDir: config.stateDir, venueDir: config.venueDir },
