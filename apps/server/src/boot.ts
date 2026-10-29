@@ -322,7 +322,7 @@ import {
   loadBackupSettings,
   loadRecoveryKey,
 } from "./backup-config.js";
-import { readArchiveSettings } from "./archive-settings.js";
+import { readArchiveSettingsWithMeta } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
@@ -2282,7 +2282,7 @@ async function bootServer(
       loadBackupSettings({
         managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
-        readSealed: () => readArchiveSettings(db, ring),
+        readSealedWithMeta: () => readArchiveSettingsWithMeta(db, ring),
         venueId: tradingContext.locationId,
       }),
     isManagedByEnvironment: isBackupManagedByEnvironment,

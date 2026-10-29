@@ -4,6 +4,12 @@ import { codeOf } from "@waitron/server-kit";
 import { AppError, isAppError } from "@waitron/shared";
 import { normalisePrefix, readBucketConfig, type BucketConfig } from "@waitron/stream";
 import { archiveNamespace, type ArchiveSettings } from "./archive-settings.js";
+import {
+  recordMetaOf,
+  safeLoadDetail,
+  type ArchiveRecordMeta,
+  type LoadFailureDetail,
+} from "./backup-settings-evidence.js";
 import { isUnset } from "./env-value.js";
 import { positiveInt } from "./config.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
@@ -340,10 +346,25 @@ export function archiveDestinations(input: {
   return input.sealed?.destinations ?? [];
 }
 
-/** The dashboard's stored settings could not be read or used, so archives stay off. */
+/** The dashboard's stored settings could not be read or used, so archives stay off. Each optional
+ * key is present only when it has a value. */
 export interface BackupConfigUnusable {
   loadErrorCode: string;
+  loadErrorDetail?: LoadFailureDetail;
+  /** The saved record the load read or failed on. */
+  record?: { digest: string; writtenAt: string };
 }
+
+/** Exactly one way to read the sealed record; only the one with metadata names the record. */
+type SealedReader =
+  | { readSealed: () => Promise<ArchiveSettings | null>; readSealedWithMeta?: never }
+  | {
+      readSealedWithMeta: () => Promise<{
+        meta: ArchiveRecordMeta | null;
+        settings: ArchiveSettings | null;
+      }>;
+      readSealed?: never;
+    };
 
 /**
  * {@link resolveBackupConfig} over the settings' one source. An environment the box cannot use
@@ -351,21 +372,31 @@ export interface BackupConfigUnusable {
  * instead, so the box still starts and sells, as it does when the bucket copy's sealed settings
  * fail (`StreamHost.start`).
  */
-export async function loadBackupSettings(input: {
-  managedByEnvironment: boolean;
-  env: Env;
-  readSealed: () => Promise<ArchiveSettings | null>;
-  venueId: string;
-}): Promise<BackupConfig | BackupConfigUnusable | undefined> {
+export async function loadBackupSettings(
+  input: { managedByEnvironment: boolean; env: Env; venueId: string } & SealedReader,
+): Promise<BackupConfig | BackupConfigUnusable | undefined> {
   const { managedByEnvironment, env, venueId } = input;
   if (managedByEnvironment) {
     return resolveBackupConfig({ managedByEnvironment, env, sealed: null, venueId });
   }
+  let meta: ArchiveRecordMeta | null = null;
   try {
-    const sealed = await input.readSealed();
+    let sealed: ArchiveSettings | null;
+    if (input.readSealedWithMeta === undefined) {
+      sealed = await input.readSealed();
+    } else {
+      ({ meta, settings: sealed } = await input.readSealedWithMeta());
+    }
     return resolveBackupConfig({ managedByEnvironment, env, sealed, venueId });
   } catch (error) {
-    return { loadErrorCode: codeOf(error) };
+    // A failure after a clean read names the record that read; a failing read carries its own.
+    meta ??= recordMetaOf(error);
+    const detail = safeLoadDetail(error);
+    return {
+      loadErrorCode: codeOf(error),
+      ...(detail === null ? {} : { loadErrorDetail: detail }),
+      ...(meta === null ? {} : { record: { digest: meta.digest, writtenAt: meta.writtenAt } }),
+    };
   }
 }
 

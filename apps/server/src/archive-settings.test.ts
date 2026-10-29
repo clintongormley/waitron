@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { putCredential, loadKeyRing } from "@waitron/credentials";
+import { credentialRevision, putCredential, loadKeyRing } from "@waitron/credentials";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -11,11 +11,13 @@ import {
   archiveNamespace,
   parseArchiveSettings,
   readArchiveSettings,
+  readArchiveSettingsWithMeta,
   resolveArchiveChoice,
   resolveArchiveChoices,
   writeArchiveSettings,
   type ArchiveSettings,
 } from "./archive-settings.js";
+import { recordMetaOf } from "./backup-settings-evidence.js";
 import type { StreamSettings } from "./stream-host.js";
 
 const VENUE = "c0000000-0000-4000-8000-000000000002";
@@ -580,5 +582,57 @@ describe("stored archive settings", () => {
       }),
     );
     await expect(readArchiveSettings(suite.db, ring)).rejects.toSatisfy(isSettingsInvalid);
+  });
+
+  const digest = () =>
+    withTransaction(suite.db, (tx) => credentialRevision(tx, { purpose: ARCHIVE_PURPOSE }));
+
+  it("answers the record with its metadata, and no metadata when nothing is stored", async () => {
+    expect(await readArchiveSettingsWithMeta(suite.db, ring)).toEqual({
+      meta: null,
+      settings: null,
+    });
+    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const read = await readArchiveSettingsWithMeta(suite.db, ring);
+    expect(read.settings).toEqual(written);
+    expect(read.meta).toEqual({
+      keyVersion: 1,
+      writtenAt: expect.stringMatching(/^\d{4}-\d\d-\d\dT/),
+      digest: await digest(),
+    });
+  });
+
+  it("throws today's code for a key number the box does not hold, carrying the failed row's digest", async () => {
+    await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    const otherNumber = loadKeyRing({
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 7).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "2",
+    });
+    const today = await readArchiveSettings(suite.db, otherNumber).catch((e: unknown) => e);
+    const error = await readArchiveSettingsWithMeta(suite.db, otherNumber).catch((e: unknown) => e);
+    expect(error).toMatchObject({ code: "credentials.key_version_unknown" });
+    expect(error).toMatchObject({ code: (today as { code: string }).code });
+    expect(recordMetaOf(error)).toEqual({
+      keyVersion: 1,
+      writtenAt: expect.any(String),
+      digest: await digest(),
+    });
+    expect(recordMetaOf(today)).toBeNull();
+  });
+
+  it("carries the failed row's digest when the record does not parse", async () => {
+    const written = await withTransaction(suite.db, (tx) => writeArchiveSettings(tx, ring, input));
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, ring, {
+        purpose: ARCHIVE_PURPOSE,
+        value: { settings: JSON.stringify({ ...written, retention: { count: 0, days: 30 } }) },
+      }),
+    );
+    const error = await readArchiveSettingsWithMeta(suite.db, ring).catch((e: unknown) => e);
+    expect(error).toMatchObject({
+      code: "backup.archive_settings_invalid",
+      params: { reason: "retention" },
+    });
+    expect(recordMetaOf(error)?.digest).toBe(await digest());
   });
 });

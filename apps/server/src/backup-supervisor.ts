@@ -21,6 +21,7 @@ import { codeOf } from "@waitron/server-kit";
 import { archiveNamespace } from "./archive-settings.js";
 import { buildBackupBackend } from "./backup-backends.js";
 import type { BackupConfig, BackupConfigUnusable, BackupSchedule } from "./backup-config.js";
+import type { LoadFailure } from "./backup-settings-evidence.js";
 import { foldersOnDisk, type DeletableArchive } from "./backup-room.js";
 import { deleteBackupRoomNote, writeBackupRoomNote } from "./backup-room-note.js";
 import type { ScheduleClock } from "./backup-schedule.js";
@@ -113,6 +114,14 @@ type SweepRecord = Omit<SupervisedDestinationStatus, keyof DestinationStatus>;
  * a config, so a status read holding the old one keeps the settings and the record together. */
 type SweepRecords = Map<string, SweepRecord>;
 
+/** The kept load failures, newest first, and when the settings last loaded without one. */
+export interface BackupLoadHistory {
+  failures: Readonly<LoadFailure>[];
+  lastCleanLoadAt: string | null;
+}
+
+const KEPT_LOAD_FAILURES = 5;
+
 const NO_RECORD: SweepRecord = {
   storedUnderCurrentKey: false,
   uploadErrorCode: null,
@@ -189,6 +198,8 @@ export class BackupSupervisor {
   #db: VenueDatabase | undefined;
   #config: BackupConfig | undefined;
   #loadErrorCode: string | null = null;
+  #loadFailures: LoadFailure[] = [];
+  #lastCleanLoadAt: string | null = null;
   #reloading = false;
   /** Set once by `stop()` (shutdown is terminal). `reload()` checks it after every `await` and bails —
    * tearing down anything it opened — rather than start (or leave) a worker after a stop. */
@@ -216,13 +227,26 @@ export class BackupSupervisor {
       if (this.#stopped) return; // a stop() landed during buildConfig — don't adopt this config
       let cfg: BackupConfig | undefined;
       if (loaded !== undefined && "loadErrorCode" in loaded) {
+        const detail = loaded.loadErrorDetail;
         this.#deps.log("error", "backup.archive_settings_unusable", {
           errorCode: loaded.loadErrorCode,
+          ...(detail === undefined ? {} : { detail }),
         });
         this.#loadErrorCode = loaded.loadErrorCode;
+        this.#loadFailures = [
+          Object.freeze({
+            at: this.#now().toISOString(),
+            code: loaded.loadErrorCode,
+            detail: detail === undefined ? null : Object.freeze({ ...detail }),
+            recordDigest: loaded.record?.digest ?? null,
+            recordWrittenAt: loaded.record?.writtenAt ?? null,
+          }),
+          ...this.#loadFailures,
+        ].slice(0, KEPT_LOAD_FAILURES);
         cfg = undefined;
       } else {
         this.#loadErrorCode = null;
+        this.#lastCleanLoadAt = this.#now().toISOString();
         cfg = loaded;
       }
       this.#config = cfg;
@@ -364,6 +388,11 @@ export class BackupSupervisor {
       keyRotatedAt: cfg?.keyRotatedAt,
       recoveryKey: cfg?.recoveryKey,
     };
+  }
+
+  /** A copy: its entries are frozen and the list is new on every call. */
+  loadHistory(): BackupLoadHistory {
+    return { failures: [...this.#loadFailures], lastCleanLoadAt: this.#lastCleanLoadAt };
   }
 
   /** `current()` plus the async per-destination freshness read and the derived `archiveUnderCurrentKey`. */

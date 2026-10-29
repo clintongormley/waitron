@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { AppError } from "@waitron/shared";
 import type { ArchiveSettings } from "./archive-settings.js";
+import { attachRecordMeta } from "./backup-settings-evidence.js";
 import {
   BACKUP_ENV_KEYS,
   isBackupManagedByEnvironment,
@@ -617,5 +618,119 @@ describe("loadBackupSettings", () => {
         venueId: VENUE,
       }),
     ).toEqual({ loadErrorCode: "unknown" });
+  });
+
+  const meta = { keyVersion: 1, writtenAt: "2026-10-29T10:00:00.000Z", digest: "0123456789abcdef" };
+  const record = { digest: meta.digest, writtenAt: meta.writtenAt };
+  const KEY = { WAITRON_BACKUP_RECOVERY_KEY: "held-recovery-key-0123" };
+
+  it("keeps a failure's allowlisted detail beside its code", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: KEY,
+        readSealed: () =>
+          Promise.reject(new AppError("backup.archive_settings_invalid", { reason: "retention" })),
+        venueId: VENUE,
+      }),
+    ).toEqual({
+      loadErrorCode: "backup.archive_settings_invalid",
+      loadErrorDetail: { reason: "retention" },
+    });
+  });
+
+  it("names the record a failing read carried", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: KEY,
+        readSealedWithMeta: () => {
+          const error = new AppError("credentials.key_version_unknown", {
+            purpose: "backup.archive",
+            keyVersion: 1,
+          });
+          attachRecordMeta(error, meta);
+          return Promise.reject(error);
+        },
+        venueId: VENUE,
+      }),
+    ).toEqual({
+      loadErrorCode: "credentials.key_version_unknown",
+      loadErrorDetail: { keyVersion: 1 },
+      record,
+    });
+  });
+
+  it("names no record when a failing read carried none", async () => {
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: KEY,
+        readSealedWithMeta: unreadable,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "credentials.decrypt_failed" });
+  });
+
+  it("names the record that read when the failure came after the read", async () => {
+    const readSealedWithMeta = async () => ({ meta, settings: sealed });
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: {},
+        readSealedWithMeta,
+        venueId: VENUE,
+      }),
+    ).toEqual({ loadErrorCode: "backup.recovery_key_missing", record });
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: { WAITRON_BACKUP_RECOVERY_KEY: "short" },
+        readSealedWithMeta,
+        venueId: VENUE,
+      }),
+    ).toEqual({
+      loadErrorCode: "backup.recovery_key_too_short",
+      loadErrorDetail: { min: 12 },
+      record,
+    });
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: { ...KEY, WAITRON_BACKUP_STALE_AFTER_MS: "soon" },
+        readSealedWithMeta,
+        venueId: VENUE,
+      }),
+    ).toEqual({
+      loadErrorCode: "server.config_invalid",
+      loadErrorDetail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
+      record,
+    });
+  });
+
+  it("reads a record through its metadata as through the bare read", async () => {
+    const bare = await loadBackupSettings({
+      managedByEnvironment: false,
+      env: KEY,
+      readSealed: async () => sealed,
+      venueId: VENUE,
+    });
+    expect(bare).toMatchObject({ source: "dashboard", revision: sealed.revision });
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: KEY,
+        readSealedWithMeta: async () => ({ meta, settings: sealed }),
+        venueId: VENUE,
+      }),
+    ).toEqual(bare);
+    expect(
+      await loadBackupSettings({
+        managedByEnvironment: false,
+        env: KEY,
+        readSealedWithMeta: async () => ({ meta: null, settings: null }),
+        venueId: VENUE,
+      }),
+    ).toBeUndefined();
   });
 });

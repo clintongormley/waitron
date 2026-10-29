@@ -1509,3 +1509,128 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
     expect(existsSync(notePath(stateDir))).toBe(false);
   }, 60_000);
 });
+
+describe("BackupSupervisor keeps each settings load failure's safe facts", () => {
+  type Load = Awaited<ReturnType<BackupSupervisorDeps["buildConfig"]>>;
+
+  function supervisorLoading(next: () => Promise<Load>) {
+    let clock = Date.parse("2026-10-29T10:00:00.000Z");
+    const logs: { level: string; event: string; fields: unknown }[] = [];
+    const sup = new BackupSupervisor({
+      buildConfig: next,
+      isManagedByEnvironment: () => false,
+      readSingletonRole: () => "primary",
+      venueDir: "/nonexistent/never-opened",
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir: "/nonexistent/never-written",
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event, fields) => logs.push({ level, event, fields }),
+      now: () => new Date((clock += 1000)),
+    });
+    return { sup, logs };
+  }
+
+  const failure = (keyVersion: number): Load => ({
+    loadErrorCode: "credentials.key_version_unknown",
+    loadErrorDetail: { keyVersion },
+    record: { digest: `digest-${keyVersion}`, writtenAt: "2026-10-28T09:00:00.000Z" },
+  });
+
+  it("starts with no failures and no clean load", () => {
+    const { sup } = supervisorLoading(async () => undefined);
+    expect(sup.loadHistory()).toEqual({ failures: [], lastCleanLoadAt: null });
+  });
+
+  it("keeps the five newest failures, newest first, timed by its clock", async () => {
+    let n = 0;
+    const { sup } = supervisorLoading(async () => failure(++n));
+    for (let i = 0; i < 6; i++) await sup.reload();
+    const { failures } = sup.loadHistory();
+    expect(failures.map((f) => f.detail)).toEqual([
+      { keyVersion: 6 },
+      { keyVersion: 5 },
+      { keyVersion: 4 },
+      { keyVersion: 3 },
+      { keyVersion: 2 },
+    ]);
+    expect(failures[0]).toEqual({
+      at: "2026-10-29T10:00:06.000Z",
+      code: "credentials.key_version_unknown",
+      detail: { keyVersion: 6 },
+      recordDigest: "digest-6",
+      recordWrittenAt: "2026-10-28T09:00:00.000Z",
+    });
+    expect(sup.current().loadErrorCode).toBe("credentials.key_version_unknown");
+  });
+
+  it("keeps a failure with no detail or record as nulls", async () => {
+    const { sup } = supervisorLoading(async () => ({ loadErrorCode: "unknown" }));
+    await sup.reload();
+    expect(sup.loadHistory().failures).toEqual([
+      {
+        at: "2026-10-29T10:00:01.000Z",
+        code: "unknown",
+        detail: null,
+        recordDigest: null,
+        recordWrittenAt: null,
+      },
+    ]);
+  });
+
+  it("logs the detail beside the code, never the record's digest", async () => {
+    const { sup, logs } = supervisorLoading(async () => failure(4));
+    await sup.reload();
+    expect(logs).toContainEqual({
+      level: "error",
+      event: "backup.archive_settings_unusable",
+      fields: { errorCode: "credentials.key_version_unknown", detail: { keyVersion: 4 } },
+    });
+    expect(JSON.stringify(logs)).not.toContain("digest-4");
+  });
+
+  it("keeps the failures across a clean load and stamps when it happened", async () => {
+    let load: Load = failure(1);
+    const { sup } = supervisorLoading(async () => load);
+    await sup.reload();
+    load = undefined;
+    await sup.reload();
+    expect(sup.loadHistory()).toEqual({
+      failures: [expect.objectContaining({ detail: { keyVersion: 1 } })],
+      lastCleanLoadAt: "2026-10-29T10:00:02.000Z",
+    });
+    expect(sup.current().loadErrorCode).toBeNull();
+  });
+
+  it("answers a copy the caller cannot change the history through", async () => {
+    const { sup } = supervisorLoading(async () => failure(1));
+    await sup.reload();
+    const first = sup.loadHistory();
+    first.failures.pop();
+    expect(() => {
+      (sup.loadHistory().failures[0] as { code: string }).code = "changed";
+    }).toThrow(TypeError);
+    expect(sup.loadHistory().failures).toEqual([
+      expect.objectContaining({ code: "credentials.key_version_unknown" }),
+    ]);
+  });
+
+  it("records nothing when stop() lands while the settings are being read", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const released = new Promise<void>((r) => (release = r));
+    const reached = new Promise<void>((r) => (entered = r));
+    const { sup } = supervisorLoading(async () => {
+      entered();
+      await released;
+      return failure(1);
+    });
+    const reloading = sup.reload();
+    await reached;
+    await sup.stop();
+    release();
+    await reloading;
+    expect(sup.loadHistory()).toEqual({ failures: [], lastCleanLoadAt: null });
+  });
+});
