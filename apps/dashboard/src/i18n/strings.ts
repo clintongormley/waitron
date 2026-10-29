@@ -5354,34 +5354,34 @@ export const es: Record<StringKey, string> = {
   "backup.status.stored_off": "Desactivadas; el destino guardado se conserva",
   "backup.status.load_failed":
     "Las copias están desactivadas porque no se pueden usar los ajustes guardados.",
-  "backup_evidence.heading": "Lo que ha registrado la caja",
+  "backup_evidence.heading": "Lo que ha registrado el equipo",
   "backup_evidence.happened": "Qué ha pasado",
   "backup_evidence.no_failures":
-    "No consta ninguna lectura fallida de los ajustes guardados desde que se inició la caja.",
+    "No consta ninguna lectura fallida de los ajustes guardados desde que se inició el equipo.",
   "backup_evidence.again_rewritten":
     "Volvió a pasar después de que los ajustes se reescribieran ({time}).",
   "backup_evidence.again_changed": "Volvió a pasar después de que cambiaran los ajustes guardados.",
   "backup_evidence.written_then": "Los ajustes que leyó se habían escrito el {time}.",
   "backup_evidence.cause.key_version_unknown":
-    "Los ajustes guardados se cerraron con la clave número {n}. Esta caja tiene la clave número {m}, así que no puede abrirlos.",
+    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene la clave número {m}, así que no puede abrirlos.",
   "backup_evidence.cause.key_version_unknown_two":
-    "Los ajustes guardados se cerraron con la clave número {n}. Esta caja tiene las claves número {m} y {p}, así que no puede abrirlos.",
+    "Los ajustes guardados se cerraron con la clave número {n}. Este equipo tiene las claves número {m} y {p}, así que no puede abrirlos.",
   "backup_evidence.cause.decrypt_failed":
-    "Los ajustes guardados llevan la clave número {n} de esta caja, pero la clave de ese número que tiene esta caja no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otra caja; Waitron no puede saber cuál.",
+    "Los ajustes guardados llevan la clave número {n} de este equipo, pero la clave de ese número que tiene este equipo no los abre. O se cambió esa clave, o el registro guardado se modificó o vino de otro equipo; Waitron no puede saber cuál.",
   "backup_evidence.cause.decrypt_failed_plain":
-    "Los ajustes que leyó llevaban un número de clave que esta caja tenía, pero la clave de ese número que tenía la caja no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otra caja; Waitron no puede saber cuál.",
+    "Los ajustes que leyó llevaban un número de clave que este equipo tenía, pero la clave de ese número que tenía el equipo no los abrió. O se cambió esa clave, o ese registro se modificó o vino de otro equipo; Waitron no puede saber cuál.",
   "backup_evidence.cause.malformed":
     "El registro guardado se abrió, pero su contenido no son ajustes de copias de seguridad.",
   "backup_evidence.cause.settings_invalid":
     "Los ajustes guardados se abrieron, pero esta parte no se pudo usar: {part}.",
   "backup_evidence.cause.recovery_key_missing":
-    "Los ajustes guardados se leen bien, pero esta caja no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
+    "Los ajustes guardados se leen bien, pero este equipo no tiene clave de recuperación de copias, y nunca se hacen copias sin ella.",
   "backup_evidence.cause.recovery_key_too_short":
-    "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de esta caja tiene menos de {min} caracteres.",
+    "Los ajustes guardados se leen bien, pero la clave de recuperación de copias de este equipo tiene menos de {min} caracteres.",
   "backup_evidence.cause.config_invalid":
-    "Los ajustes guardados se leen bien, pero el ajuste propio de esta caja {variable} no es un número entero mayor que cero.",
+    "Los ajustes guardados se leen bien, pero el ajuste propio de este equipo {variable} no es un número entero mayor que cero.",
   "backup_evidence.cause.unknown":
-    "La caja no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
+    "El equipo no pudo usar sus ajustes de copias de seguridad ({code}). Waitron no puede decir nada más de este fallo.",
   "backup_evidence.part.not_json": "el formato",
   "backup_evidence.part.fields": "los campos",
   "backup_evidence.part.revision": "la revisión",
@@ -5401,12 +5401,12 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se reescribieron después del último fallo, así que los datos de abajo describen el registro nuevo, no el que falló.",
   "backup_evidence.removed":
     "Lo guardado ahora ya no es el registro que falló: ese registro se ha borrado desde entonces.",
-  "backup_evidence.absent": "Esta caja no tiene ajustes de copias de seguridad guardados.",
+  "backup_evidence.absent": "Este equipo no tiene ajustes de copias de seguridad guardados.",
   "backup_evidence.written": "Última escritura: {time}, cerrado con la clave número {n}.",
-  "backup_evidence.box_keys": "Esta caja tiene la clave número {m}.",
-  "backup_evidence.box_keys_two": "Esta caja tiene las claves número {m} y {p}.",
+  "backup_evidence.box_keys": "Este equipo tiene la clave número {m}.",
+  "backup_evidence.box_keys_two": "Este equipo tiene las claves número {m} y {p}.",
   "backup_evidence.managed":
-    "Las copias de seguridad de esta caja las fija su entorno, no unos ajustes guardados, así que ningún destino guardado está en uso.",
+    "Las copias de seguridad de este equipo las fija su entorno, no unos ajustes guardados, así que ningún destino guardado está en uso.",
   "backup_evidence.cannot_tell":
     "Waitron no puede saber qué carpeta o bucket indicaban estos ajustes.",
   "backup_evidence.folder": "Carpeta",
@@ -5420,23 +5420,24 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.access_key_id": "ID de la clave de acceso",
   "backup_evidence.archive_folder": "Carpeta de las copias",
   "backup_evidence.key_heading": "Clave de recuperación",
-  "backup_evidence.key.missing": "Esta caja no tiene clave de recuperación de copias.",
+  "backup_evidence.key.missing": "Este equipo no tiene clave de recuperación de copias.",
   "backup_evidence.key.too_short":
-    "La clave de recuperación de copias de esta caja es demasiado corta.",
+    "La clave de recuperación de copias de este equipo es demasiado corta.",
   "backup_evidence.key.usable":
-    "Esta caja tiene una clave de recuperación de copias válida, con huella {fingerprint}.",
-  "backup_evidence.key.usable_plain": "Esta caja tiene una clave de recuperación de copias válida.",
+    "Este equipo tiene una clave de recuperación de copias válida, con huella {fingerprint}.",
+  "backup_evidence.key.usable_plain":
+    "Este equipo tiene una clave de recuperación de copias válida.",
   "backup_evidence.reads_now":
-    "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie la caja. No se ha cambiado nada.",
+    "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el equipo. No se ha cambiado nada.",
   "backup_evidence.turn_on":
     "Elegir de nuevo los destinos en el formulario de abajo y usar «{apply}» sustituye el registro guardado.",
   "backup_evidence.choices":
     "«{read_again}» vuelve a leer estos datos y no cambia nada; no activa las copias. «{stop}» cierra este panel y no envía nada.",
-  "backup_evidence.reading": "Leyendo lo que ha registrado la caja…",
+  "backup_evidence.reading": "Leyendo lo que ha registrado el equipo…",
   "backup_evidence.failed":
-    "Waitron no ha podido leer estos datos de la caja. «{read_again}» lo intenta otra vez; no se ha cambiado nada.",
+    "Waitron no ha podido leer estos datos del equipo. «{read_again}» lo intenta otra vez; no se ha cambiado nada.",
   "backup_evidence.not_permitted":
-    "Esta cuenta ya no puede gestionar la caja, así que no se pueden mostrar estos datos. Inicia sesión como administrador para verlos: antes se cierra tu sesión aquí.",
+    "Esta cuenta ya no puede gestionar el equipo, así que no se pueden mostrar estos datos. Inicia sesión como administrador para verlos: antes se cierra tu sesión aquí.",
   "backup_evidence.read_again": "Leer de nuevo",
   "backup_evidence.stop": "Parar",
   "backup.reload_failed_after_save":

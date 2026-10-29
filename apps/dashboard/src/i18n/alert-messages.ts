@@ -110,7 +110,7 @@ export const ALERT_MESSAGES: Readonly<
   },
   "backup.archive_settings_unusable": {
     en: "Scheduled backups are off because their saved settings could not be used. Open Backups to read the error; its What the box recorded button shows what the box found and what each choice does. Choose the settings again there. Turn on backups replaces the saved choices; leave without applying to keep them. Sales continue.",
-    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Abre Copias de seguridad para leer el error; su botón Lo que ha registrado la caja muestra lo que encontró la caja y qué hace cada opción. Elige allí los ajustes de nuevo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
+    es: "Las copias programadas están desactivadas porque no se han podido usar sus ajustes guardados. Abre Copias de seguridad para leer el error; su botón Lo que ha registrado el equipo muestra lo que encontró el equipo y qué hace cada opción. Elige allí los ajustes de nuevo. Activar las copias sustituye los ajustes guardados; sal sin aplicarlos para conservarlos. Las ventas continúan.",
   },
   "backup.stream_behind": {
     en: "The bucket copy is {minutes} minutes behind: your most recent sales are not in it yet. Sales continue. Check the box's internet connection, and the bucket on the Backups page.",

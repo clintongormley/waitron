@@ -2253,6 +2253,23 @@ describe("A1089 what the box recorded", () => {
     expect(evidenceDialog(el)?.open ?? false).toBe(false);
   });
 
+  it("removes the button once a later status read finds the settings loaded", async () => {
+    const api = stubApi({}, FAILED);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    expect(evidenceButton(el)).not.toBeNull();
+
+    vi.mocked(api.getBackupStatus).mockResolvedValue(OFF);
+    api.liveData.invalidate([{ type: "backup_status" }]);
+    await vi.waitFor(() => expect(api.getBackupStatus).toHaveBeenCalledTimes(2));
+    await flush(el);
+    expect(q(el, "[data-test=load-failed]")).toBeNull();
+    expect(evidenceButton(el)).toBeNull();
+  });
+
   it("opens the dialog on the screen's api, reading only then, and closes it on its close event", async () => {
     const answers = apiAnswering(() => Promise.resolve(evidence()));
     const api = stubApi(answers, FAILED);
