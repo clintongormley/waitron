@@ -1812,14 +1812,12 @@ describe("transactional series restore identity", () => {
 it("resolves an archive node's own location through the read-only source database", async () => {
   const otherLocation = "c0000000-0000-4000-8000-000000000001";
   const otherNode = "c0000000-0000-4000-8000-000000000009";
-  await suite.db
-    .insert(locations)
-    .values({
-      id: otherLocation,
-      name: "Other location",
-      invoiceLocales: ["en"],
-      operationDescription: "Hospitality",
-    });
+  await suite.db.insert(locations).values({
+    id: otherLocation,
+    name: "Other location",
+    invoiceLocales: ["en"],
+    operationDescription: "Hospitality",
+  });
   await suite.db
     .insert(nodes)
     .values({ id: otherNode, locationId: otherLocation, name: "Other node" });
