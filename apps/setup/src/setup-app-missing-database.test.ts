@@ -454,6 +454,10 @@ it.each(locales)(
       (p) => p.textContent!.trim() === t.startAgainHelp,
     )!;
     expect(notice.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      notice.compareDocumentPosition(q(app, "start-again-deletes")!) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
     expect(q(app, "retire-confirmed")).not.toBeNull();
     expect(q(app, "cancel-start-again")).not.toBeNull();
     expect(startAgainRequests(requests)).toHaveLength(0);
@@ -491,6 +495,22 @@ it("confirming sends the summary as displayed, the damaged record included", asy
   expect(body.confirmMissingDatabase.shown).toEqual(damagedSummary);
 });
 
+it.each(locales)(
+  "with the database missing, the confirmation says what Start again deletes but not that no invoice was sent ($locale)",
+  async ({ locale, browser }) => {
+    const { app } = await damagedConfirmation(browser, namedSummary);
+    const t = initialOwnerStrings[locale];
+    expect(q(app, "start-again-deletes")!.textContent!.trim()).toBe(t.heldLost);
+    const text = app.shadowRoot!.textContent!;
+    expect(text).not.toContain(t.noInvoiceSent);
+    if (locale === "en") expect(text).not.toContain("No invoice");
+    expect(q(app, "missing-database")!.textContent!.trim()).toBe(t.missingDatabase);
+    expect(q(app, "retire-confirmed")!.closest("label")!.textContent!.trim()).toBe(
+      t.missingConfirm,
+    );
+  },
+);
+
 it("an undamaged record shows no damaged notice", async () => {
   const { app } = await damagedConfirmation("en-GB", namedSummary);
   expect(q(app, "retire-confirmed")).not.toBeNull();
@@ -510,8 +530,9 @@ it.each(locales)(
     const { app, requests } = await damagedConfirmation(browser, namesDamagedSummary);
     const t = initialOwnerStrings[locale];
     const lines = confirmationLines(app);
-    expect(lines.slice(-3)).toEqual([
+    expect(lines.slice(-4)).toEqual([
       t.seriesPicksDamaged,
+      t.heldLost,
       t.startAgainHelp,
       namesFromText(browser, namesFloorMs),
     ]);
@@ -544,9 +565,10 @@ it("a damaged recovery-key record and a damaged name record are both named befor
   const summary: StartAgainSummary = { ...namesDamagedSummary, recoveryRecordDamaged: true };
   const { app } = await damagedConfirmation("en-GB", summary);
   const t = initialOwnerStrings.en;
-  expect(confirmationLines(app).slice(-4)).toEqual([
+  expect(confirmationLines(app).slice(-5)).toEqual([
     t.recoveryRecordDamaged,
     t.seriesPicksDamaged,
+    t.heldLost,
     t.startAgainHelp,
     namesFromText("en-GB", namesFloorMs),
   ]);

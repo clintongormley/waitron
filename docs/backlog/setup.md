@@ -697,7 +697,9 @@ reading when it places the recovery. Next step: measure that on a box.
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
   wipe; the A1098 "files found" page keeps its password, since moving files aside is not that wipe.
 - **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
-  setup database holds records; the page says what is there and what is lost.**
+  setup database holds records; the page says what is there and what is lost.** (2026-10-29, A1131bc
+  slice 1: the confirmation no longer counts what is there; it says what Start again deletes and
+  that no invoice was sent.)
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or

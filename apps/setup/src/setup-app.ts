@@ -2633,12 +2633,9 @@ export class SetupApp extends LitElement {
     const held = this.firstStoppedSummary?.held;
     const heldRowsLine = (rows: number) =>
       html`<p>${rows === 1 ? t.heldRowsOne : t.heldRows.replace("{rows}", String(rows))}</p>`;
-    const heldBlock = (rows: number) =>
-      html`<div data-test="held-database">
-        ${heldRowsLine(rows)}
-        <p>${rows === 1 ? t.heldNoInvoicesOne : t.heldNoInvoices}</p>
-        <p>${t.heldLost}</p>
-      </div>`;
+    // A `held` reaching the confirmation has no kept or invoice rows: the refused branch takes the rest.
+    const noInvoiceFound =
+      !missing && (held !== undefined || this.firstInspection?.emptyDatabase === true);
     const heldRefused = (rows: number, kept: number, records: number, accepted: number) =>
       html`<div data-test="held-refused">
         ${heldRowsLine(rows)}
@@ -2712,7 +2709,9 @@ export class SetupApp extends LitElement {
               (record) =>
                 html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
             )}
-            ${!missing && held ? heldBlock(held.rows) : nothing}
+            <p data-test="start-again-deletes">
+              ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
+            </p>
             ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
             <p>${t.startAgainHelp}</p>
             ${namesFrom ? html`<p data-test="names-from">${namesFrom}</p>` : nothing}

@@ -117,10 +117,23 @@ it("sends no Start again request until it is confirmed", async () => {
   expect(requests.some((r) => /\/(claim|abandon|provision)$/.test(r.path))).toBe(false);
 });
 
-it("says in English that Start again deletes the attempt", () => {
-  expect(initialOwnerStrings.en.startAgainHelp).toBe(
-    "Deletes this attempt. This box will not use its invoice series names again.",
+it("Start again's confirmation words are the design's, in English and Spanish", () => {
+  const { en, es } = initialOwnerStrings;
+  expect(en.heldLost).toBe(
+    "Start again deletes what was entered in the setup that stopped part way.",
   );
+  expect(es.heldLost).toBe(
+    "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
+  );
+  expect(en.noInvoiceSent).toBe("No invoice was sent to AEAT.");
+  expect(es.noInvoiceSent).toBe("No se envió ninguna factura a la AEAT.");
+  expect(en.startAgainHelp).toBe("This box will not use this setup's invoice series names again.");
+  expect(es.startAgainHelp).toBe(
+    "Este equipo no volverá a usar los nombres de serie de facturas de esta configuración.",
+  );
+  for (const strings of [en, es])
+    for (const key of ["heldNoInvoices", "heldNoInvoicesOne"])
+      expect(Object.hasOwn(strings, key)).toBe(false);
   expect(initialOwnerStrings.en.retireConfirmed).toBe("Delete the old attempt and start again.");
   expect(initialOwnerStrings.en.restarting).toBe(
     "The old attempt is deleted. Reconnect to continue.",
@@ -137,6 +150,9 @@ it.each(["en-GB", "es-ES"])(
     await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
     await app.updateComplete;
     const section = q<HTMLElement>(app, "screen-first-owner");
+    expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+      `${t.heldLost} ${t.noInvoiceSent}`,
+    );
     expect(section.textContent).toContain(t.startAgainHelp);
     expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
       t.retireConfirmed,
@@ -152,6 +168,28 @@ it.each(["en-GB", "es-ES"])(
       .toBe(t.restarting);
     expect(app.shadowRoot!.textContent).not.toContain(t.startAgainHelp);
     expect(requests.filter((r) => r.path.endsWith("/start-again"))).toHaveLength(1);
+  },
+);
+
+it.each(["en-GB", "es-ES"])(
+  "with an empty setup database, the confirmation says what Start again deletes and that no invoice was sent, above the help line, in %s",
+  async (locale) => {
+    const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
+    const { app } = await mount();
+    setLocale(locale);
+    await app.updateComplete;
+    await userEvent.click(q<WtButton>(app, "start-again").shadowRoot!.querySelector("button")!);
+    await app.updateComplete;
+    const deletes = q(app, "start-again-deletes");
+    expect(deletes.textContent!.trim()).toBe(`${t.heldLost} ${t.noInvoiceSent}`);
+    const help = [...app.shadowRoot!.querySelectorAll("p")].find(
+      (p) => p.textContent === t.startAgainHelp,
+    )!;
+    expect(help).toBeDefined();
+    expect(deletes.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      help.compareDocumentPosition(q(app, "retire-confirmed")) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   },
 );
 
@@ -929,6 +967,13 @@ it.each(["en-GB", "es-ES"])(
     )!;
     expect(help).toBeDefined();
     expect(warning.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      warning.compareDocumentPosition(q(app, "start-again-deletes")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+      `${t.heldLost} ${t.noInvoiceSent}`,
+    );
     expect(q<HTMLInputElement>(app, "retire-confirmed").checked).toBe(false);
     expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
       t.retireConfirmed,
@@ -1973,10 +2018,8 @@ const heldSummary = (rows: number) => ({
   ...stoppedSummary(false),
   held: { rows, kept: 0, records: 0, accepted: 0 },
 });
-const heldLines = (app: SetupApp) =>
-  [...q(app, "held-database").querySelectorAll("p")].map((p) => p.textContent!.trim());
 it.each(["en-GB", "es-ES"])(
-  "with the database present and holding records beside a stopped recovery, Start again is offered and, after the password, says what the database holds, in %s",
+  "with the database present and holding records beside a stopped recovery, Start again is offered and, after the password, says what Start again deletes and that no invoice was sent, with no count, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
     const { app, requests } = await stoppedPresent({
@@ -1992,16 +2035,18 @@ it.each(["en-GB", "es-ES"])(
     expect(text).not.toContain(t.startUnavailable);
     await passwordAccepted(app);
     await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-    expect(heldLines(app)).toEqual([
+    expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+      `${t.heldLost} ${t.noInvoiceSent}`,
+    );
+    expect(q(app, "screen-first-owner").textContent).not.toContain("105");
+    expect(q(app, "screen-first-owner").textContent).not.toContain(
       t.heldRows.replace("{rows}", "105"),
-      t.heldNoInvoices,
-      t.heldLost,
-    ]);
+    );
     expect(q(app, "recovery-stopped").textContent).toContain(
       t.recoveryStopped.split("{started}")[1]!,
     );
     const order = [
-      q(app, "held-database"),
+      q(app, "start-again-deletes"),
       q(app, "recovery-stopped"),
       [...q(app, "screen-first-owner").querySelectorAll("p")].find(
         (p) => p.textContent === t.startAgainHelp,
@@ -2031,7 +2076,7 @@ it.each(["en-GB", "es-ES"])(
 );
 
 it.each(["en-GB", "es-ES"])(
-  "a setup database holding one row in a table other than the venue's says so in the singular, in %s",
+  "a setup database holding one row in a table other than the venue's is described in words that carry no count, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
     const { app } = await stoppedPresent({
@@ -2043,15 +2088,21 @@ it.each(["en-GB", "es-ES"])(
     expect(q<WtButton>(app, "start-again").disabled).toBe(false);
     await passwordAccepted(app);
     await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-    expect(heldLines(app)).toEqual([t.heldRowsOne, t.heldNoInvoicesOne, t.heldLost]);
+    expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+      `${t.heldLost} ${t.noInvoiceSent}`,
+    );
+    expect(q(app, "screen-first-owner").textContent).not.toContain(t.heldRowsOne);
   },
 );
 
-it("an empty setup database beside a stopped recovery draws no held lines", async () => {
-  const { app } = await stoppedPresent();
+it("an empty setup database beside a stopped recovery says what Start again deletes and that no invoice was sent", async () => {
+  const { app } = await stoppedPresent({ inspection: { emptyDatabase: true } });
   await passwordAccepted(app);
   await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=held-database]")).toBeNull();
+  const t = initialOwnerStrings.en;
+  expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+    `${t.heldLost} ${t.noInvoiceSent}`,
+  );
 });
 
 it("a refused Start again from the held confirmation goes back to the password step, still signed in, with the reason shown", async () => {
