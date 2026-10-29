@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { beforeEach, expect, it } from "vitest";
-import { CORE_MIGRATIONS } from "@waitron/db";
+import { CORE_MIGRATIONS, type Database } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { IDENTITY_MIGRATIONS, webauthnChallenges, webauthnCredentials } from "@waitron/identity";
 import { openManagementSession } from "@waitron/identity/test/fixtures.js";
@@ -65,7 +65,27 @@ it("answers the signed-in admin's own passkey challenge, never stored by a cache
 it("refuses an admin with no passkey as passkey.not_registered", async () => {
   const { token } = await openManagementSession(suite.db, "admin");
   const response = await options(token);
-  expect(response.status).toBe(401);
+  expect(response.status).toBe(404);
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(await response.json()).toMatchObject({ error: { code: "passkey.not_registered" } });
+});
+
+it("logs an unexpected failure under the backup routes' tag, answering an opaque 500", async () => {
+  const logged: string[] = [];
+  const broken = new Proxy({} as Database, {
+    get() {
+      throw new Error("database unavailable");
+    },
+  });
+  const instance = new Hono();
+  mountBackupRecoveryPackApi(instance, { db: broken, rpId: "localhost" }, (_level, event) => {
+    logged.push(event);
+  });
+  const response = await instance.request("/api/backup/recovery-pack/passkey-options", {
+    method: "POST",
+    headers: { cookie: "waitron_management_session=00000000-0000-4000-8000-000000000000" },
+  });
+  expect(response.status).toBe(500);
+  expect(await response.json()).toEqual({ error: { code: "server.internal" } });
+  expect(logged).toEqual(["backup.failed"]);
 });

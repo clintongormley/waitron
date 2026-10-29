@@ -17,9 +17,9 @@ const run = createErrorBoundary(
     "management_session.expired": 401,
     "person.suspended": 403,
     "authorization.not_permitted": 403,
-    "passkey.not_registered": 401,
+    "passkey.not_registered": 404,
   },
-  "management.failed",
+  "backup.failed",
 );
 
 export function mountBackupRecoveryPackApi(

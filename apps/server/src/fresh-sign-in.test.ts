@@ -13,7 +13,7 @@ import {
   regenerateOwnRecoveryCodes,
   webauthnCredentials,
 } from "@waitron/identity";
-import { codeOf, openManagementSession } from "@waitron/identity/test/fixtures.js";
+import { codeOf, openManagementSession, refusalOf } from "@waitron/identity/test/fixtures.js";
 
 vi.mock("@simplewebauthn/server", async (orig) => ({
   ...(await orig<typeof import("@simplewebauthn/server")>()),
@@ -209,6 +209,24 @@ describe("confirmFreshSignIn with a password", () => {
     ).toBe("management_session.required");
   });
 
+  it("refuses a present password or code that is not text as management.request_invalid, naming the field, before checking anything", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    for (const [field, value] of [
+      ["password", 42],
+      ["password", null],
+      ["totp", 123456],
+      ["recoveryCode", ["a"]],
+    ] as const) {
+      const body = { method: "password", password: "wrong", [field]: value };
+      expect(await refusalOf(() => confirm(token, body))).toMatchObject({
+        code: "management.request_invalid",
+        params: { field },
+      });
+    }
+    // None of the four counted as a wrong password.
+    expect(await confirm(token, { method: "password", password: "correct horse" })).toBe(personId);
+  });
+
   it("refuses a body that names no known method as management.request_invalid", async () => {
     const { token } = await openManagementSession(suite.db, "admin");
     for (const body of [null, "password", {}, { method: "pin", password: "correct horse" }]) {
@@ -292,6 +310,24 @@ describe("confirmFreshSignIn with a passkey", () => {
     ]) {
       expect(await codeOf(() => confirm(token, body))).toBe("management.request_invalid");
     }
+  });
+
+  it("refuses a present code that is not text as management.request_invalid, naming the field, before checking the passkey", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await withPasskey(personId, "cred-mine");
+    mockVerifyAuth.mockResolvedValue(authVerified());
+    const { challengeHandle } = await beginCheck(token);
+    for (const [field, value] of [
+      ["totp", 123456],
+      ["recoveryCode", null],
+    ] as const) {
+      const body = { method: "passkey", challengeHandle, response: { id: "cred-mine" } };
+      expect(await refusalOf(() => confirm(token, { ...body, [field]: value }))).toMatchObject({
+        code: "management.request_invalid",
+        params: { field },
+      });
+    }
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 
   it("refuses a suspended person with the session refusal", async () => {

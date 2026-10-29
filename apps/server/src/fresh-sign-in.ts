@@ -21,10 +21,20 @@ export interface FreshSignInDeps {
 
 type Codes = { totp?: string; recoveryCode?: string };
 
+/** An absent field stays absent; a present one that is not text is refused, naming it. */
+function optionalText(body: Record<string, unknown>, field: string): string | undefined {
+  const value = body[field];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new AppError("management.request_invalid", { field });
+  return value;
+}
+
 function codesOf(body: Record<string, unknown>): Codes {
+  const totp = optionalText(body, "totp");
+  const recoveryCode = optionalText(body, "recoveryCode");
   return {
-    ...(typeof body.totp === "string" ? { totp: body.totp } : {}),
-    ...(typeof body.recoveryCode === "string" ? { recoveryCode: body.recoveryCode } : {}),
+    ...(totp === undefined ? {} : { totp }),
+    ...(recoveryCode === undefined ? {} : { recoveryCode }),
   };
 }
 
@@ -43,12 +53,13 @@ export async function confirmFreshSignIn(
   }
   const fields = body as Record<string, unknown>;
   if (fields.method === "password") {
-    const currentPassword = typeof fields.password === "string" ? fields.password : undefined;
+    const currentPassword = optionalText(fields, "password");
+    const codes = codesOf(fields);
     return ownPasswordChanges(deps.db, deps.throttle)(
       managementSessionId,
       () => ({
         ...(currentPassword === undefined ? {} : { currentPassword }),
-        ...codesOf(fields),
+        ...codes,
         keyRing: deps.keyRing,
       }),
       async (tx, input) => (await verifyOwnFreshSignIn(tx, input)).id,
@@ -63,6 +74,7 @@ export async function confirmFreshSignIn(
     }
     const challengeHandle = fields.challengeHandle;
     const response = fields.response as Parameters<typeof verifyOwnPasskey>[1]["response"];
+    const codes = codesOf(fields);
     // A failed code check rolls the transaction back, which restores the challenge, so one signed
     // response can be resent with each new code guess until it expires: this throttle is the bound.
     return withTransaction(deps.db, async (tx) => {
@@ -75,7 +87,7 @@ export async function confirmFreshSignIn(
           response,
           rpId: deps.rpId,
           origin: deps.origin,
-          ...codesOf(fields),
+          ...codes,
           keyRing: deps.keyRing,
         });
         finish("success");

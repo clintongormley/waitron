@@ -686,6 +686,16 @@ describe("startServer, against a migrated venue directory", () => {
         error: { code: "management_session.required" },
       });
 
+      // A 404 would mean `mountBackupRecoveryPackApi` never ran.
+      const packPasskey = await fetch(
+        `http://127.0.0.1:${port}/api/backup/recovery-pack/passkey-options`,
+        { method: "POST" },
+      );
+      expect(packPasskey.status).toBe(401);
+      expect((await packPasskey.json()) as { error: { code: string } }).toMatchObject({
+        error: { code: "management_session.required" },
+      });
+
       // `server.listening` is an `info` event, so the file half of the tee'd logger appended it.
       expect(existsSync(join(logDir, "waitron.log"))).toBe(true);
       const logText = await readFile(join(logDir, "waitron.log"), "utf8");
