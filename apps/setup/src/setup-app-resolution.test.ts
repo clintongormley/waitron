@@ -971,6 +971,9 @@ it.each(["en-GB", "es-ES"])(
       warning.compareDocumentPosition(q(app, "start-again-deletes")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+    expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
+      `${t.heldLost} ${t.noInvoiceSent}`,
+    );
     expect(q<HTMLInputElement>(app, "retire-confirmed").checked).toBe(false);
     expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
       t.retireConfirmed,
@@ -2016,7 +2019,7 @@ const heldSummary = (rows: number) => ({
   held: { rows, kept: 0, records: 0, accepted: 0 },
 });
 it.each(["en-GB", "es-ES"])(
-  "with the database present and holding records beside a stopped recovery, Start again is offered and, after the password, says what the database holds, in %s",
+  "with the database present and holding records beside a stopped recovery, Start again is offered and, after the password, says what Start again deletes and that no invoice was sent, with no count, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
     const { app, requests } = await stoppedPresent({

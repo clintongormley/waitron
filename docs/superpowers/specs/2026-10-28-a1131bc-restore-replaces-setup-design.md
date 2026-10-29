@@ -378,10 +378,11 @@ The box checks only that the setup database holds no invoice record, so the word
 sent to AEAT", not "Nothing was sent". An invoice reaches AEAT only after its record is in the database,
 and a record found there refuses the wipe (`keptFault`).
 
-**a. Start again's confirmation** (picture 1). No password and no counts. `heldLost` replaces `heldRows`,
-`heldRowsOne`, `heldNoInvoices`, `heldNoInvoicesOne` and the old `heldLost`: EN "Start again deletes what
-was entered in the setup that stopped part way. No invoice was sent to AEAT." ES «Empezar de nuevo borra
-lo que se introdujo en la configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.»
+**a. Start again's confirmation** (picture 1). No password and no counts. `heldLost` (EN "Start again deletes
+what was entered in the setup that stopped part way." ES «Empezar de nuevo borra lo que se introdujo en
+la configuración que se detuvo a medias.») and `noInvoiceSent` (EN "No invoice was sent to AEAT." ES «No
+se envió ninguna factura a la AEAT.») replace `heldRows`, `heldRowsOne`, `heldNoInvoices`,
+`heldNoInvoicesOne` and the old `heldLost`; the page draws them as one paragraph.
 The second sentence shows only once the box has read the database and found no invoice. With the
 database missing, the first sentence shows; the existing missing-database words and tick take the
 place of the second (settled 2026-10-29 in slice 1's plan review).

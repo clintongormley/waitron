@@ -646,11 +646,14 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
   owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
   failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
-  taken from when it last saved anything. Being built in the spec's four slices; slice 1 (Start
-  again's words without counts) is branch `feat/a1131bc-1-start-again-words`, planned in
-  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`. Slice 1 changes only
-  what the page shows: the counts still travel between the page and the box, and are still stored
-  in the confirmation record, until slice 2 removes them. Slices 2 to 4 are still to come.
+  taken from when it last saved anything. Being built in the spec's four slices. Slice 1 (Start
+  again's words without counts, plan
+  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) is built: the
+  confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
+  still lists them, and the counts still travel between the page and the box and are stored in the
+  confirmation record, until slice 2 removes them. Slice 2 also corrects the two lines that call that
+  record "what the page showed" (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md`).
+  Slices 2 to 4 are still to come.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
   missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore

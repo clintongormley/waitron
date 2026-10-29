@@ -115,6 +115,26 @@ for (const locale of locales) {
     expectStoppedRefused(app, t);
   });
 
+  it(`${locale}: kept rows and no invoice record after the password: the saved items, the kept-items line with no invoice line, then the fault`, async () => {
+    const t = stringsFor(locale);
+    const { app } = await heldFixture({
+      locale,
+      summary: () => Response.json(heldSummary({ rows: 105, kept: 2, records: 0, accepted: 0 })),
+    });
+    await heldPasswordAccepted(app);
+    await expect.poll(() => q(app, "held-refused")).not.toBeNull();
+    await app.updateComplete;
+    const lines = [
+      t.heldRows.replace("{rows}", "105"),
+      t.heldKept.replace("{kept}", "2"),
+      t.heldFault,
+    ];
+    expect(refusedLines(app)).toEqual(lines);
+    expectInOrder(app, lines);
+    expectNoHeldConfirmation(app, t);
+    expectStoppedRefused(app, t);
+  });
+
   it(`${locale}: one kept row and several invoices use the singular and the plural`, async () => {
     const t = stringsFor(locale);
     const { app } = await heldFixture({

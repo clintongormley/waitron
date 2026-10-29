@@ -125,8 +125,8 @@ damaged and cannot be read.", "This setup's public fiscal record is damaged and 
 "This setup's fiscal documents on this box are damaged and cannot be read." — then "Start again
 deletes what was entered in the setup that stopped part way." (followed by "No invoice was sent to
 AEAT." when the venue database is present) and, under "This box will not use this setup's invoice
-series names again.", says "New series names can start from {date}, {time}." Because the box cannot read every name the attempt used, it takes that
-time from the attempt's own files and folders instead (not the databases): the first whole minute
+series names again.", says "New series names can start from {date}, {time}." Because the box
+cannot read every name the attempt used, it takes that time from the attempt's own files and folders instead (not the databases): the first whole minute
 more than 150 seconds after their newest modification time. The setup password step itself rewrites some
 of those files, so the time is usually two and a half to three and a half minutes after you entered
 the password. Start again then keeps the note with that minute and no name, unless a name the box

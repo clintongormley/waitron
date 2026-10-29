@@ -32,12 +32,12 @@ muestra la recuperación detenida después de que introduzcas la contraseña de 
 elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió nada a la AEAT ni se
 vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
 junto a la recuperación detenida. Empezar de nuevo pide entonces la contraseña de administrador y
-vuelve a mostrar la recuperación. Si la base de datos de la configuración ya guarda elementos,
-también dice que no se envió ninguna factura a la AEAT. Lo borra todo cuando marcas «Borrar el intento
-anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**. Empezar de nuevo no se ofrece
-si la configuración ya guardó los ajustes con los que vende el equipo. Si la base de datos tiene una
-factura u otro elemento que Waitron nunca borra, la página lo indica después de que introduzcas la
-contraseña, y Empezar de nuevo no se lleva a cabo.
+vuelve a mostrar la recuperación, con «Empezar de nuevo borra lo que se introdujo en la
+configuración que se detuvo a medias. No se envió ninguna factura a la AEAT.» Lo borra todo cuando
+marcas «Borrar el intento anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**.
+Empezar de nuevo no se ofrece si la configuración ya guardó los ajustes con los que vende el equipo.
+Si la base de datos tiene una factura u otro elemento que Waitron nunca borra, la página lo indica
+después de que introduzcas la contraseña, y Empezar de nuevo no se lleva a cabo.
 
 Si esa recuperación usaba una copia de Cloud, su aprobación en Waitron Cloud se cierra sola en menos
 de una hora desde que se dio. Hasta entonces, Waitron Cloud no puede aprobar otra recuperación para
