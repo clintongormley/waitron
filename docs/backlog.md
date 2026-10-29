@@ -2971,11 +2971,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
 
-- **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
-  tab.** Seen in A797 slice 3's LOOK, 2026-10-26: the tab reads "Terrac". I believe this predates
-  the slice (not run on main).
-  [Detail](backlog/till.md#a1124-at-360-px-a---chip-on-the-till-floors-zone-tabs-covers-the-end-of-the-terrace-tab)
-
 - **A1125. On a 1024×768 handheld the Order screen's Fire and Send all buttons are cut off at the
   bottom.** Seen in A797 slice 3's LOOK, 2026-10-26 (`c-order-two-dishes-1024-light-en.png`,
   `g-two-buttons-3-open-1024-light-en.png` and their dark and Spanish twins, «Marchar» /

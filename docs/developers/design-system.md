@@ -1049,10 +1049,14 @@ takes the state's tint as its background (`--wt-color-tab-*-tint`, Tokens → Co
 name; its accessible name adds the state's words ("Terrace, Forgotten"). A Forgotten tab pulses
 fast and an Overdue or Time to fire one slowly, with the map's outside ring; under reduced motion
 nothing moves and a Forgotten tab is filled `--wt-color-danger`. The strip is padded by the ring's
-reach, so the ring is not cut off. When a tab carrying a state is cut off beyond either end of the
-strip, that end shows a button at least `--wt-tap-min` square with the icon of the most urgent such
-tab and "‹" or "›", tinted and pulsing as that tab is and named "Show Terrace"; tapping it scrolls
-the tab into view (`#tabsEdge`, `apps/till/src/screens/till-floor-screen.ts`).
+reach, so the ring is not cut off. While the tabs do not all fit, each end of the strip gets a
+further `--wt-tap-min` of room, so the first and last tab can be scrolled clear of a button over
+that end; the strip first shows its first tab a ring's reach from its start, with the start's room
+scrolled out of sight until the person scrolls back to it (`#restStrip`,
+`apps/till/src/screens/till-floor-screen.ts`). When a tab carrying a state is cut off beyond either
+end of the strip, that end shows a button at least `--wt-tap-min` square with the icon of the most
+urgent such tab and "‹" or "›", tinted and pulsing as that tab is and named "Show Terrace"; tapping
+it scrolls the tab into view (`#tabsEdge`, `apps/till/src/screens/till-floor-screen.ts`).
 
 `wt-floor-map` draws the till's tables for a zone, fitted to its box: the tables' crop (two squares
 past them) is scaled to fit and centred, with no grid lines. Its size is its parent's choice; the

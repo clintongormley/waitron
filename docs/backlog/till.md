@@ -2779,11 +2779,3 @@ empties the New order returns a handheld to the Floor (`#returnToFloor` at the e
 `apps/till/src/till-app.ts`). Slice 3 kept that (its D13, the driver's ruling of 2026-10-26) because
 what the order screen does after a send is slice 10's, the handheld's order screen at phone width:
 [design](../superpowers/specs/2026-10-18-a797-device-screens-design.md) §4 and §10 (Q51 (b)).
-
-## A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace tab.
-
-Seen in A797 slice 3's LOOK, 2026-10-26 (`l-floor-360-light-es.png`,
-`l-floor-360-dark-es.png`, `l-floor-360-light-en.png` in `~/waitron-campaign-c/a797-3-shots/`):
-the tab reads "Terrac". `apps/till/src/screens/till-floor-screen.ts`, which draws the chip, is
-unchanged between `git merge-base origin/main HEAD` and slice 3's tip, so I believe this
-predates the slice (not run on main).

@@ -820,6 +820,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
         const strip = stripOf(el);
         await expect.poll(() => edgeOf(el, "end")).not.toBeNull();
         await nextFrames();
+        // From the very start, the room kept for a start edge in view.
+        strip.scrollLeft = 0;
+        await nextFrames();
         expect(edgeOf(el, "start")).toBeNull();
         const width = strip.getBoundingClientRect().width;
         const max = strip.scrollWidth - strip.clientWidth;
@@ -878,6 +881,10 @@ describe("till-floor-screen: the zone strip's edge", () => {
       async (el, host) => {
         const strip = stripOf(el);
         await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        // From the very start, the room kept for a start edge in view.
+        strip.scrollLeft = 0;
+        await nextFrames();
         const patio = () => tabOf(el, "z5").closest(".zone-tab")!.getBoundingClientRect();
         const fits = () => {
           const tabs = zoneTabs(el).map((tab) => tab.getBoundingClientRect());
@@ -1392,6 +1399,94 @@ describe("till-floor-screen: the zone strip's edge", () => {
       expect(el.shadowRoot!.querySelector("nav.tabs")).toBeNull();
       expect(edgeOf(el, "start")).toBeNull();
       expect(edgeOf(el, "end")).toBeNull();
+    });
+  });
+
+  describe("at rest", () => {
+    const ringOf = (host: HTMLElement) => tapProbe(host, "calc(var(--wt-space-1) * 1.5)");
+    const firstTabInset = (el: TillFloorScreen) =>
+      zoneTabs(el)[0]!.getBoundingClientRect().left - paddingBox(stripOf(el)).left;
+
+    it("shows the first tab at the strip's start, with the room kept for a start edge scrolled away", async () => {
+      await onPhone(urgentRight(), async (el, host) => {
+        await expect.poll(() => stripOf(el).hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        expect(firstTabInset(el)).toBeCloseTo(ringOf(host), 0);
+        expect(edgeOf(el, "start")).toBeNull();
+      });
+    });
+
+    // The demo venue's zone names.
+    it("leaves a tab that fits beside the end edge clear of it", async () => {
+      const unsentAt = (id: string, zoneId: string) =>
+        seated(id, zoneId, {
+          party: party(`p-${id}`, {
+            unsentDrafts: [
+              {
+                billId: `b-${id}`,
+                billNumber: 1,
+                ownerId: "o1",
+                ownerName: "Sam",
+                lineCount: 2,
+                savedAt: inMinutes(-1),
+              },
+            ],
+          }),
+        });
+      await onPhone(
+        [seated("t1", "z1"), unsentAt("t2", "z2"), unsentAt("t3", "z3")],
+        async (el, host) => {
+          const strip = stripOf(el);
+          await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+          const [dining, terrace] = zoneTabs(el) as [HTMLElement, HTMLElement];
+          const ring = ringOf(host);
+          const gap = tapProbe(host, "var(--wt-space-2)");
+          const edge = tapProbe(host, "var(--wt-tap-min)");
+          const first = dining.getBoundingClientRect().width;
+          // Ten pixels short of the end edge when the first tab sits a ring from the start.
+          await sizeTab(strip, terrace, (span) => span - ring - first - gap - edge - 10);
+          await expect
+            .poll(() => edgeOf(el, "end")?.getAttribute("aria-label"))
+            .toBe("Show Downstairs bar");
+          await nextFrames();
+          expect(terrace.getBoundingClientRect().right).toBeLessThanOrEqual(
+            edgeOf(el, "end")!.getBoundingClientRect().left,
+          );
+        },
+        true,
+        [zone("z1", "Dining room", 0), zone("z2", "Terrace", 1), zone("z3", "Downstairs bar", 2)],
+      );
+    });
+
+    it("shows the first tab at the strip's start when the strip comes back after the Floor had one zone", async () => {
+      await onPhone([seated("t1", "z1")], async (el, host) => {
+        await expect.poll(() => stripOf(el).hasAttribute("data-overflows")).toBe(true);
+        el.zones = many.slice(0, 1);
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("nav.tabs")).toBeNull();
+        el.zones = many;
+        await expect.poll(() => stripOf(el).hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        expect(firstTabInset(el)).toBeCloseTo(ringOf(host), 0);
+      });
+    });
+
+    it("leaves the strip where the person scrolled it, the start's room included", async () => {
+      await onPhone(urgentRight(), async (el, host) => {
+        const strip = stripOf(el);
+        await expect.poll(() => strip.hasAttribute("data-overflows")).toBe(true);
+        await nextFrames();
+        strip.scrollLeft = 0;
+        await nextFrames();
+        el.tables = [...urgentRight(), seated("t2", "z2", { readyToServe: 1 })];
+        await el.updateComplete;
+        await nextFrames();
+        expect(strip.scrollLeft).toBe(0);
+        expect(firstTabInset(el)).toBeCloseTo(
+          ringOf(host) + tapProbe(host, "var(--wt-tap-min)"),
+          0,
+        );
+      });
     });
   });
 });

@@ -1013,6 +1013,9 @@ export class TillFloorScreen extends LitElement {
   /** The strip being watched: `null` while there is none, `undefined` while not watching. */
   #tabsStrip?: HTMLElement | null;
   #tabsKeys?: string;
+  /** Whether an overflowing strip is still to be rested: set while the strip fits its tabs or is not
+   * drawn, cleared once one is rested or found already scrolled. */
+  #restDue = true;
   #rereadTimer?: ReturnType<typeof setInterval>;
 
   readonly #phone = new MediaQueryController(this, PHONE_WIDTH);
@@ -1093,6 +1096,7 @@ export class TillFloorScreen extends LitElement {
     this.#watchReminders();
     this.#watchFloor();
     this.#watchTabs();
+    this.#restStrip();
     const drawn = [...this.shadowRoot!.querySelectorAll<HTMLElement>("[data-tabs-edge]")]
       .map((edge) => edge.dataset.tabsEdge)
       .join();
@@ -2662,6 +2666,24 @@ export class TillFloorScreen extends LitElement {
 
   readonly #onStripScroll = () => this.#placeTabs();
 
+  /** The room kept at the start for a start edge stays reachable, but the strip first shows its
+   * first tab where it would sit if the tabs fitted. */
+  #restStrip(): void {
+    const strip = this.#tabsStrip;
+    if (!strip?.hasAttribute("data-overflows")) {
+      this.#restDue = true;
+      return;
+    }
+    if (!this.#restDue) return;
+    const style = getComputedStyle(strip);
+    const room = parseFloat(style.paddingInlineStart) - parseFloat(style.paddingBlockStart);
+    // Tabs not yet drawn leave nothing to scroll; the next #placeTabs or update tries again.
+    if (strip.scrollWidth - strip.clientWidth < room) return;
+    this.#restDue = false;
+    // A person may have scrolled it before its tabs were drawn.
+    if (strip.scrollLeft === 0) strip.scrollTo({ left: room, behavior: "instant" });
+  }
+
   #stopWatchingTabs(): void {
     this.#tabsObserver?.disconnect();
     this.#tabsObserver = undefined;
@@ -2676,6 +2698,7 @@ export class TillFloorScreen extends LitElement {
    * The observer only says when to read: a tab one scroll jump carries from beyond one end to beyond
    * the other gets no callback of its own. */
   #placeTabs(): void {
+    this.#restStrip();
     const strip = this.#tabsStrip!;
     const span = stripSpan(strip);
     const tabs = [...strip.querySelectorAll(".zone-tab")];
