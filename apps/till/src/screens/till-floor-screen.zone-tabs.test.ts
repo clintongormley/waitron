@@ -1466,8 +1466,9 @@ describe("till-floor-screen: the zone strip's edge", () => {
         expect(el.shadowRoot!.querySelector("nav.tabs")).toBeNull();
         el.zones = many;
         await expect.poll(() => stripOf(el).hasAttribute("data-overflows")).toBe(true);
-        await nextFrames();
-        expect(firstTabInset(el)).toBeCloseTo(ringOf(host), 0);
+        // The strip comes back marked as overflowing before its tabs are drawn, so it rests only
+        // when an observer first reports them, which can be more than two frames later.
+        await expect.poll(() => firstTabInset(el)).toBeCloseTo(ringOf(host), 0);
       });
     });
 

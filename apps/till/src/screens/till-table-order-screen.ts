@@ -274,6 +274,10 @@ function composedParent(node: Element): Element | null {
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
 }
 
+function barSize(bar: HTMLElement, height: number): void {
+  bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
+}
+
 /** `fire-group`: a held group the waiter confirmed firing. */
 export interface FireGroupDetail {
   groupId: string;
@@ -457,8 +461,11 @@ export class TillTableOrderScreen extends LitElement {
     servicePeriodStyles,
     tableTargetStyles,
     css`
+      /* Isolated so nothing raised inside the screen, the draft bar included, paints over an overlay
+         the shell lays over it. */
       :host {
         display: block;
+        isolation: isolate;
       }
 
       .width-probe {
@@ -872,6 +879,16 @@ export class TillTableOrderScreen extends LitElement {
         gap: var(--wt-space-2);
         flex: 0 1 auto;
         min-width: 0;
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+        padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
+        background: var(--wt-color-bg);
+      }
+
+      .side-by-side .draft-bar {
+        background: var(--wt-color-surface);
       }
 
       .draft-actions,
@@ -892,10 +909,11 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      /* No boxes of their own, so the draft bar's sticky limit is the whole order pane: a bar inside
+         a box that starts below the window cannot rise into it. The pane's gap spaces their parts. */
+      [data-round-controls],
       .round-bar {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
+        display: contents;
       }
 
       .draft-routing-warning {
@@ -1034,8 +1052,12 @@ export class TillTableOrderScreen extends LitElement {
         align-self: stretch;
       }
 
-      /* A draft being sent takes no edit until the answer comes back; the status line says why. */
-      .round-control[inert] {
+      /* A draft being sent takes no edit until the answer comes back; the status line says why.
+         The order's wrapper draws no box, so its parts are faded one by one, and the bar's contents
+         rather than the bar so the lines it covers do not show through it. */
+      .round-control[inert],
+      [data-round-controls][inert] .round-bar > :not(.draft-bar),
+      [data-round-controls][inert] .draft-bar > * {
         opacity: var(--wt-opacity-disabled);
       }
 
@@ -1050,6 +1072,12 @@ export class TillTableOrderScreen extends LitElement {
          remove button stay on screen. */
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
+      }
+
+      /* A line revealed at the scroll area's foot stops above the stuck bar rather than under it.
+         The bar's height depends on how its buttons lay out, so the screen measures it. */
+      .round-bar till-basket::part(entry) {
+        scroll-margin-block-end: var(--draft-bar-size);
       }
     `,
     segmentedOptionStyles,
@@ -1150,6 +1178,9 @@ export class TillTableOrderScreen extends LitElement {
   /** Below that width, the draft is open on its Review view in place of browsing. */
   @state() private reviewing = false;
   #resizing?: ResizeObserver;
+  #barSizing?: ResizeObserver;
+  #sizedBar?: HTMLElement;
+  #sizedBarShown = false;
   /** Where browsing was scrolled when Review opened, put back on Back. */
   #browsingScroll?: { scroller: Element; top: number };
 
@@ -1494,6 +1525,9 @@ export class TillTableOrderScreen extends LitElement {
     this.#watchedDraft = undefined;
     this.#resizing?.disconnect();
     this.#resizing = undefined;
+    this.#barSizing?.disconnect();
+    this.#barSizing = undefined;
+    this.#sizedBar = undefined;
   }
 
   /** Side by side has no Review view, so one left open is closed rather than kept for a later
@@ -1965,6 +1999,7 @@ export class TillTableOrderScreen extends LitElement {
    * even when the line is gone, for the same reason. */
   override updated(): void {
     this.#watchAutomaticRouting();
+    this.#sizeDraftBar();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
@@ -1973,6 +2008,27 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(
       new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
     );
+  }
+
+  /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
+   * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
+   * the basket reveals a line in the next frame, before a ResizeObserver would report; the observer
+   * follows later changes. */
+  #sizeDraftBar(): void {
+    const bar = this.renderRoot.querySelector<HTMLElement>(".draft-bar") ?? undefined;
+    const shown = this.wide || this.reviewing;
+    if (bar === this.#sizedBar && shown === this.#sizedBarShown) return;
+    this.#sizedBarShown = shown;
+    this.#barSizing ??= new ResizeObserver((entries) => {
+      const entry = entries.at(-1)!;
+      barSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
+    });
+    if (bar !== this.#sizedBar) {
+      if (this.#sizedBar !== undefined) this.#barSizing.unobserve(this.#sizedBar);
+      this.#sizedBar = bar;
+      if (bar !== undefined) this.#barSizing.observe(bar);
+    }
+    if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
   }
 
   #offerTaken = false;
@@ -3110,7 +3166,7 @@ export class TillTableOrderScreen extends LitElement {
             </p>`
           : nothing
       }
-      <div class="round-control" data-round-controls ?inert=${draft.sending}>
+      <div data-round-controls ?inert=${draft.sending}>
         <div class="round-bar">
           ${keyed(
             this.orderId,
