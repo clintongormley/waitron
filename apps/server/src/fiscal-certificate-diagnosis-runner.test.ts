@@ -19,7 +19,7 @@ vi.mock("node:child_process", async (original) => {
 
 const runners: ReturnType<typeof createCertificateDiagnosisRunner>[] = [];
 afterEach(async () => {
-  await Promise.all(runners.splice(0).map((runner) => runner.stop()));
+  await Promise.all(runners.splice(0).map((runner) => runner?.stop()));
   vi.useRealTimers();
   vi.mocked(spawn).mockRestore();
 });

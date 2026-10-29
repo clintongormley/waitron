@@ -11,7 +11,7 @@ const servers: Awaited<ReturnType<typeof startDiagnosticServer>>[] = [];
 const transports: ReturnType<typeof diagnosticTransport>[] = [];
 afterEach(async () => {
   await Promise.all(transports.splice(0).map((transport) => transport.destroy()));
-  await Promise.all(servers.splice(0).map((server) => server.close()));
+  await Promise.all(servers.splice(0).map((server) => server?.close()));
 });
 
 async function serve(answer: Parameters<typeof startDiagnosticServer>[1]) {

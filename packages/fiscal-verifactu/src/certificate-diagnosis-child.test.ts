@@ -17,7 +17,7 @@ const first = authority.issue({ commonName: "selected first" });
 const second = authority.issue({ commonName: "selected second" });
 const servers: Awaited<ReturnType<typeof startDiagnosticServer>>[] = [];
 afterEach(async () => {
-  await Promise.all(servers.splice(0).map((server) => server.close()));
+  await Promise.all(servers.splice(0).map((server) => server?.close()));
 });
 const input: CertificateDiagnosisChildInput = {
   operation: "check",
