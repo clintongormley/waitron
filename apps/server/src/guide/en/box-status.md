@@ -123,10 +123,12 @@ When the disk is full, nothing can be saved: tills cannot save orders, payments 
 and they show **Nothing can be saved: the box is out of space**. On this page, **Sales** and
 **Disk space** turn red.
 
-While the disk is full, a red bar at the top of every dashboard page says so and, to managers and
-administrators, which old backups the box deleted in the last day to make room. They open
-**Box status** from it; anyone else can sign in as a manager from it, which signs them out first.
-The bar goes within about half a minute of the tills saving again.
+While the disk is full, a red bar at the top of every dashboard page starts **Disk full: the tills
+cannot save anything (sales, orders, clock-ins).** To managers and administrators it also names the
+old backups the box deleted to make room, while the bell's alert about them is less than a day old
+and not marked handled. They press **Open Box status** on it; anyone else presses **Sign in as a
+manager**, which signs them out first. The bar goes within about half a minute of the tills saving
+again.
 
 Press **Free** to free space. Once enough space is free, the tills can save again by themselves;
 nobody needs to restart anything.

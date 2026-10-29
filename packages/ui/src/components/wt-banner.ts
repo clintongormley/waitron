@@ -4,6 +4,8 @@ import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-button.js";
 
+export type WtBannerTone = "info" | "error";
+
 /** A full-width strip with one message and, when given an action label, one action. */
 @customElement("wt-banner")
 export class WtBanner extends LitElement {
@@ -40,7 +42,7 @@ export class WtBanner extends LitElement {
     `,
   ];
 
-  @property({ reflect: true }) tone: "info" | "error" = "info";
+  @property({ reflect: true }) tone: WtBannerTone = "info";
   @property() message = "";
   @property({ attribute: "action-label" }) actionLabel = "";
 

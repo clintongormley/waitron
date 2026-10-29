@@ -128,11 +128,13 @@ Cuando el disco está lleno, no se puede guardar nada: los terminales no pueden 
 pagos ni otros cambios, y muestran **No se puede guardar nada: el equipo no tiene espacio**. En
 esta página, **Ventas** y **Espacio en disco** se ponen en rojo.
 
-Mientras el disco está lleno, una barra roja arriba de cada página del panel lo indica y, a los
-encargados y administradores, qué copias de seguridad antiguas borró el equipo en el último día para
-hacer sitio. Ellos abren **Estado del equipo** desde ella; cualquier otra persona puede iniciar
-sesión como encargado desde ella, lo que antes cierra su sesión. La barra desaparece en medio minuto,
-más o menos, después de que los terminales vuelvan a guardar.
+Mientras el disco está lleno, una barra roja arriba de cada página del panel empieza por **Disco
+lleno: las cajas no pueden guardar nada (ventas, pedidos, fichajes).** A los encargados y
+administradores también les nombra las copias de seguridad antiguas que borró el equipo para hacer
+sitio, mientras el aviso de la campana sobre ellas tenga menos de un día y no se haya marcado como
+resuelto. Ellos pulsan **Abrir Estado del equipo** en ella; cualquier otra persona pulsa **Iniciar
+sesión como encargado**, que antes cierra su sesión. La barra desaparece en medio minuto, más o
+menos, después de que los terminales vuelvan a guardar.
 
 Pulsa **Liberar** para liberar espacio. En cuanto hay espacio suficiente, los terminales vuelven a
 poder guardar por sí solos; no hace falta reiniciar nada.

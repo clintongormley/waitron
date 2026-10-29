@@ -535,7 +535,8 @@ export const QUERY_DEPENDENCIES = {
   clockMisdatedHandled: ["incidents", "persons"],
   listAlerts: ["incidents", "content_suggestion_jobs", "content_suggestions"],
   listHandledAlerts: ["incidents", "persons"],
-  // The stop is process state no table reports, so the timer reads it.
+  // The stop is process state no table reports, so the timer reads it; `incidents` holds the
+  // deletion it names.
   getDiskStop: ["incidents"],
 } as const;
 
