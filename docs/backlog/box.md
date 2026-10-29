@@ -63,37 +63,6 @@ Three parts:
   one-step choice, a bucket of the owner's as the other), and how loudly a box with no copy, or a
   stale one, says so.
 
-## A1167. Backups make room for themselves
-
-**Owner, 2026-10-28 ~08:35:** "our backup policy needs to delete old backups automatically when we're
-running out of disk space, plus alert the administrator, plus refuse to do a backup if there still
-isn't enough space, and alert the manager."
-
-Design: [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md).
-The owner answered its four questions on 2026-10-28 (`~/waitron-campaign/questions.md`, "OWNER
-ANSWERS — A1167").
-
-Slice 1 landed (plan
-[2026-10-28-a1167-1-room-before-backup.md](../superpowers/plans/2026-10-28-a1167-1-room-before-backup.md)):
-before each backup run copies anything, it deletes its oldest deletable backups on the disk that
-holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
-managers and administrators. How it works and its limits: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
-The deletion words give the days the deleted backups were taken (the oldest and newest when they
-differ), and both emails' subjects start with the venue's name (owner, 2026-10-29). Slice 2's
-deletions use the same words.
-
-Slice 2 landed (plan
-[2026-10-29-a1167-2-watch-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md)):
-every free-space reading under 2 GiB first deletes the oldest deletable backups toward 2.5 GiB, or
-every one it may when they cannot reach it, while backups run and no backup run holds or waits for
-the staging turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
-
-The start slice is built by plan
-[2026-10-29-a1167-start-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-start-deletes-backups.md):
-a start on a full disk deletes old backups under the same rules before it releases the spare file,
-reading the installation start from a note the running server leaves. How it works and its limits:
-[conventions-data.md](../developers/conventions-data.md#the-backup-room-note).
-
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
 ## Automatic upgrades with rollback until a clean, running restart

@@ -676,7 +676,33 @@ describe("deleteOldBackupsAtStart", () => {
     await deleteOldBackupsAtStart(deps);
 
     expect((await readdir(usb)).length).toBe(1);
-    expect(codes(log)).toContain("backup.start_room_record_failed");
+    expect(log).toHaveBeenCalledWith("warn", "backup.start_room_record_failed", {
+      errno: "EISDIR",
+      stage: "write",
+    });
+  });
+
+  it("a record written whose folder sync fails is logged as such, and the record stands", async () => {
+    await note();
+    await archive(usb, days(1), 15);
+    await archive(usb, days(2), 15);
+    const { deps, log } = setup();
+    const real = await vi.importActual<typeof fs>("node:fs/promises");
+    vi.mocked(fs.open).mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (String(args[0]) === stateDir) throw Object.assign(new Error("no"), { code: "EIO" });
+      return real.open(...args);
+    });
+    try {
+      await deleteOldBackupsAtStart(deps);
+    } finally {
+      vi.mocked(fs.open).mockReset();
+    }
+
+    expect(log).toHaveBeenCalledWith("warn", "backup.start_room_record_failed", {
+      errno: "EIO",
+      stage: "folder_sync",
+    });
+    expect((await readRecord()).deleted).toHaveLength(1);
   });
 
   it("logs any other failure of the step and never throws, releasing the lock", async () => {

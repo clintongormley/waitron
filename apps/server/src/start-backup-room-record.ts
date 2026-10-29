@@ -12,8 +12,8 @@ import {
 
 /**
  * Raises the deletion alert for what the start deleted before this boot, then deletes the start's
- * record. A record left for another `venue.db` is dropped: its deletions belong to an earlier
- * installation. The record is kept when the alert cannot be recorded, for the next start to try.
+ * record. A record left for another `venue.db` is dropped: it was written before `venue.db` was
+ * replaced. The record is kept when the alert cannot be recorded, for the next start to try.
  * Nothing is thrown.
  */
 export async function recordStartDeletions(deps: {

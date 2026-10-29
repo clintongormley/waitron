@@ -1,1 +1,7 @@
-export { stagedPath, stageFile, writeFileAtomic, writeFileDurable } from "@waitron/provisioning";
+export {
+  failedAtFolderSync,
+  stagedPath,
+  stageFile,
+  writeFileAtomic,
+  writeFileDurable,
+} from "@waitron/provisioning";

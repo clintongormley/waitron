@@ -21,7 +21,11 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "v
 import { openVenueDatabase } from "@waitron/db";
 import type { Alert } from "@waitron/module";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "@waitron/provisioning";
+import {
+  BACKUP_ROOM_START_DELETED_FILE,
+  SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
+} from "@waitron/provisioning";
 import { mintRecoveryKey } from "./backup-config.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { writeBackupRoomNote } from "./backup-room-note.js";
@@ -290,12 +294,12 @@ describe("a box started from its spare file", () => {
 
   /**
    * A dashboard-managed box (its recovery key only in backup.env, no sealed settings, so the booted
-   * server runs no backups) with a backup folder on the full disk: the oldest archive is 17 MiB, the
+   * server runs no backups) with a backup folder on the full disk: the oldest archive is 12 MiB, the
    * next 2 MiB, the newest 256 KiB and never deletable. Filled to leave 6 MiB (under
    * SPARE_SPACE_BYTES, so a start that deletes nothing releases the spare, and enough to boot with
    * the 1 MiB spare released), the start deletes toward the floor, the 1 MiB spare plus
-   * FULL_DISK_BYTES = 17 MiB: the oldest alone brings free space to about 23 MiB, so it is the one
-   * deletion, and the spare stays.
+   * FULL_DISK_BYTES = 17 MiB: the oldest alone brings free space to about 18 MiB, so it is the one
+   * deletion, and the spare stays; the next alone would bring it to about 8 MiB.
    */
   async function boxWithBackups(small: SmallDisk, name: string) {
     const box = await placeBox(small, name);
@@ -324,7 +328,7 @@ describe("a box started from its spare file", () => {
       writeFileSync(join(folder, key), Buffer.alloc(bytes, 7));
       return key;
     };
-    const oldest = archive(daysAgo(2), 17 * MiB);
+    const oldest = archive(daysAgo(2), 12 * MiB);
     archive(daysAgo(1), 2 * MiB);
     archive(daysAgo(0), 256 * KiB);
     return { box, oldest };
@@ -334,12 +338,15 @@ describe("a box started from its spare file", () => {
     const small = needDisk(ctx);
     const { box, oldest } = await boxWithBackups(small, "start-room");
     small.fill(6 * MiB);
-    expect(small.free()).toBeLessThan(SPARE_SPACE_BYTES);
+    expect(Math.abs(small.free() - 6 * MiB)).toBeLessThanOrEqual(64 * KiB);
 
     const started = await start(box, MiB);
+    expect(started.up()).toBe(true);
     expect(
       started.logged("backup.archive_deleted").filter(({ reason }) => reason === "start_room"),
-    ).toEqual([{ destination: "usb", key: oldest, bytes: 17 * MiB, reason: "start_room" }]);
+    ).toEqual([{ destination: "usb", key: oldest, bytes: 12 * MiB, reason: "start_room" }]);
+    expect(started.logged("backup.start_room_record_failed")).toEqual([]);
+    expect(existsSync(join(box.stateDir, BACKUP_ROOM_START_DELETED_FILE))).toBe(false);
     expect(statSync(spareIn(box)).size).toBe(MiB);
     expect(existsSync(markerIn(box))).toBe(false);
   });
@@ -351,9 +358,10 @@ describe("a box started from its spare file", () => {
     copyFileSync(venueDb, `${venueDb}.replacement`);
     renameSync(`${venueDb}.replacement`, venueDb);
     small.fill(6 * MiB);
-    expect(small.free()).toBeLessThan(SPARE_SPACE_BYTES);
+    expect(Math.abs(small.free() - 6 * MiB)).toBeLessThanOrEqual(64 * KiB);
 
     const started = await start(box, MiB);
+    expect(started.up()).toBe(true);
     expect(started.logged("backup.start_room_skipped")).toEqual([{ reason: "identity_mismatch" }]);
     expect(
       started.logged("backup.archive_deleted").filter(({ reason }) => reason === "start_room"),
