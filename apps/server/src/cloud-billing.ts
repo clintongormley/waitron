@@ -171,10 +171,16 @@ function readPrices(v: unknown): BillingPrices {
   return v as unknown as BillingPrices;
 }
 
-/** Checks a reply against the closed version-1 shape and the saved registration it must name. */
+// Contract: "A request proof allows 60 seconds of clock difference", so Cloud's clock is within a
+// minute of the box's for any read it answered.
+const CLOCK_DIFFERENCE_MS = 60_000;
+
+/** Checks a reply against the closed version-1 shape and the saved registration it must name;
+ * given the box times the request was sent and the reply read, also that `asOf` is fresh. */
 export function readBillingDisplay(
   value: unknown,
   expected: { installationId: string; venueId: string; accountUrl: string },
+  exchange?: { sentAt: number; receivedAt: number },
 ): BillingDisplay {
   exactKeys(value, [
     "version",
@@ -197,6 +203,9 @@ export function readBillingDisplay(
     typeof asOf !== "string" ||
     !Number.isFinite(Date.parse(asOf)) ||
     new Date(asOf).toISOString() !== asOf ||
+    (exchange &&
+      (Date.parse(asOf) < exchange.sentAt - CLOCK_DIFFERENCE_MS ||
+        Date.parse(asOf) > exchange.receivedAt + CLOCK_DIFFERENCE_MS)) ||
     value.accountUrl !== expected.accountUrl
   )
     unavailable();
@@ -258,6 +267,7 @@ export async function fetchBillingDisplay(
     throw new AppError("cloud.not_configured", {});
   const used = JSON.stringify(lease);
   const bound = AbortSignal.timeout(options.timeoutMs ?? 8000);
+  const sentAt = Date.now();
   try {
     const response = await fetch(`${state.origin}/api/installations/billing-display`, {
       method: "POST",
@@ -274,6 +284,7 @@ export async function fetchBillingDisplay(
       if (size > REPLY_BYTES) unavailable();
       chunks.push(chunk);
     }
+    const receivedAt = Date.now();
     let value: unknown;
     try {
       value = JSON.parse(
@@ -290,11 +301,15 @@ export async function fetchBillingDisplay(
         await options.onRefusal?.("invalid_proof", used, state.publicKey);
       throw refusal(response.status, value, response.headers.get("retry-after"));
     }
-    return readBillingDisplay(value, {
-      installationId: registration.installationId,
-      venueId: registration.venueId,
-      accountUrl: `${state.origin}/account`,
-    });
+    return readBillingDisplay(
+      value,
+      {
+        installationId: registration.installationId,
+        venueId: registration.venueId,
+        accountUrl: `${state.origin}/account`,
+      },
+      { sentAt, receivedAt },
+    );
   } catch (error) {
     if (error instanceof AppError) throw error;
     return unavailable();

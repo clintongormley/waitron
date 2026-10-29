@@ -2,7 +2,7 @@ import { createPrivateKey, createPublicKey, generateKeyPairSync, verify } from "
 import { readFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
 import { billingEnvelope, fetchBillingDisplay, readBillingDisplay } from "./cloud-billing.js";
 import type { SavedCloudState } from "./cloud-client.js";
@@ -323,7 +323,14 @@ describe("the allowed level, state and period combinations", () => {
 
 describe("the exchange with Cloud", () => {
   const servers: ReturnType<typeof createServer>[] = [];
+  // The box's clock at the contract examples' asOf, so those replies arrive fresh.
+  const NOW = Date.parse("2026-11-10T12:00:00.000Z");
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+  });
   afterEach(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await Promise.all(servers.splice(0).map((s) => new Promise((r) => s.close(r))));
   });
@@ -478,6 +485,39 @@ describe("the exchange with Cloud", () => {
     const error = await fetchBillingDisplay(c.state).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AppError);
     expect((error as AppError & { retryAfterMs?: number }).retryAfterMs).toBe(120_000);
+  });
+
+  describe("refuses a reply whose asOf is outside a minute either side of the exchange", () => {
+    // Cloud's reply takes five seconds, so the box sends at NOW and has the reply at NOW + 5 s.
+    const at = async (asOf: number, fields: object = {}) => {
+      let origin = "";
+      const c = await cloud((_req, res) => {
+        vi.setSystemTime(NOW + 5_000);
+        json(res, 200, { ...good(origin), asOf: new Date(asOf).toISOString(), ...fields });
+      });
+      origin = c.origin;
+      return codeOfAsync(fetchBillingDisplay(c.state));
+    };
+    it("accepts asOf a minute before the request was sent, and refuses a millisecond earlier", async () => {
+      expect(await at(NOW - 60_000)).toBe("accepted");
+      vi.setSystemTime(NOW);
+      expect(await at(NOW - 60_001)).toBe("cloud.unavailable");
+    });
+    it("accepts asOf a minute after the reply arrived, and refuses a millisecond later", async () => {
+      expect(await at(NOW + 65_000)).toBe("accepted");
+      vi.setSystemTime(NOW);
+      expect(await at(NOW + 65_001)).toBe("cloud.unavailable");
+    });
+    it("refuses a reply from a year earlier", async () => {
+      // A reply that is valid on its own day: no period and no prices to contradict that asOf.
+      const yearOld = {
+        billing: { status: "ready", level: "hosted", state: "active", period: null },
+        prices: { status: "unavailable", reason: "not_published" },
+      };
+      expect(await at(NOW, yearOld)).toBe("accepted");
+      vi.setSystemTime(NOW);
+      expect(await at(Date.parse("2025-11-10T12:00:00.000Z"), yearOld)).toBe("cloud.unavailable");
+    });
   });
 
   it("refuses a redirect", async () => {
