@@ -77,12 +77,6 @@ const survivingWithSwitch: HourHistorySource = {
   complete: true,
   records: [row("surviving-venue/switch/registro_sif/2", "activation", SPARE, UNSEEN, SWITCH)],
 };
-// A live series carries no time, so only the spent-name floor can refuse it.
-const survivingLiveSeries: HourHistorySource = {
-  reference: "surviving-venue/live",
-  complete: true,
-  records: [row("surviving-venue/live/invoice_series/2", "series", SPARE, UNSEEN, null)],
-};
 
 interface Row {
   box: number;
@@ -344,19 +338,34 @@ describe("refused", () => {
     });
   });
 
-  it("D1: a known later name in the surviving database", async () => {
+  // The surviving name is the restore's settle target: a box at 19:00 settles on 19:02.
+  const SETTLED = encodeMinuteIdentity(at("2026-10-23T19:02:00Z"));
+
+  it("D1: a name at the settle target in the surviving database", async () => {
     const box = at("2026-10-23T19:00:00Z");
-    expect(await restore({ box, surviving: [survivingWithSwitch] })).toEqual({
+    const surviving: HourHistorySource = {
+      reference: "surviving-venue/switch",
+      complete: true,
+      records: [
+        row("surviving-venue/switch/registro_sif/2", "activation", SPARE, SETTLED, MAIN_SETUP),
+      ],
+    };
+    expect(await restore({ box, surviving: [surviving] })).toEqual({
       refused: "minute_not_later",
-      allowedFromMs: "2026-10-23T19:41:00.000Z",
+      allowedFromMs: "2026-10-23T19:03:00.000Z",
     });
   });
 
-  it("D1v: a known later name on a live series, with no time", async () => {
+  it("D1v: a name at the settle target on a live series, with no time", async () => {
     const box = at("2026-10-23T19:00:00Z");
-    expect(await restore({ box, surviving: [survivingLiveSeries] })).toEqual({
+    const surviving: HourHistorySource = {
+      reference: "surviving-venue/live",
+      complete: true,
+      records: [row("surviving-venue/live/invoice_series/2", "series", SPARE, SETTLED, null)],
+    };
+    expect(await restore({ box, surviving: [surviving] })).toEqual({
       refused: "minute_not_later",
-      allowedFromMs: "2026-10-23T19:41:00.000Z",
+      allowedFromMs: "2026-10-23T19:03:00.000Z",
     });
   });
 
@@ -371,14 +380,14 @@ describe("refused", () => {
           "surviving-venue/old/invoice_series/1",
           "series",
           MAIN,
-          KNOWN,
-          at("2026-10-23T18:00:00Z"),
+          encodeMinuteIdentity(at("2026-10-23T17:02:00Z")),
+          MAIN_SETUP,
         ),
       ],
     };
     expect(await restore({ box, surviving: [surviving] })).toEqual({
       refused: "minute_not_later",
-      allowedFromMs: "2026-10-23T18:00:00.000Z",
+      allowedFromMs: "2026-10-23T17:03:00.000Z",
     });
   });
 

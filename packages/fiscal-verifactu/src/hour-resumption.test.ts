@@ -200,7 +200,7 @@ it("a further owner cannot resume with a different document binding", async () =
   expect(f.history).toHaveLength(3);
 });
 
-it.each(["known-later-hour", "clock-rollback"])(
+it.each(["known-own-hour", "clock-rollback"])(
   "resumption preserves the %s floor",
   async (change) => {
     const f = fixture();
@@ -223,7 +223,7 @@ it.each(["known-later-hour", "clock-rollback"])(
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: "other",
-                identity: "0CNPG",
+                identity: "0CNNW",
                 recordedAtMs: null,
               },
             ],

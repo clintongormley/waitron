@@ -463,7 +463,7 @@ it("a changed approval cannot ride an otherwise matching saved selection", async
   expect(await suite.db.select().from(fiscalAllocations)).toEqual([]);
 });
 
-it("preparation re-reads a raised historical floor before the real writer can run", async () => {
+it("preparation re-reads a name at its own minute before the real writer can run", async () => {
   const f = fixture();
   const selected = await f.select();
   if (selected.status !== "selected") throw new Error("selection did not finish");
@@ -480,7 +480,7 @@ it("preparation re-reads a raised historical floor before the real writer can ru
             kind: "retirement",
             softwareId: "OTHER",
             nodeId: "other-node",
-            identity: "0CNPG",
+            identity: "0CNNW",
             recordedAtMs: null,
           },
         ],

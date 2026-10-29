@@ -242,7 +242,7 @@ it.each([
   expect(await snapshot()).toEqual(before);
 });
 
-it("allows a later surviving host floor to raise an older selected backup floor", async () => {
+it("refuses a settle-target minute a surviving host already names, beside an older backup", async () => {
   const f = await fixture();
   Object.assign(f.facts, {
     history: [
@@ -257,8 +257,8 @@ it("allows a later surviving host floor to raise an older selected backup floor"
             nodeId: TENANT_A.nodeId2,
             softwareId: "OTHER",
             kind: "retirement",
-            identity: "0CNRC",
-            recordedAtMs: Date.parse("2026-10-16T13:00:00Z"),
+            identity: "0CNQR",
+            recordedAtMs: Date.parse("2026-10-16T12:30:00Z"),
           },
         ],
       },

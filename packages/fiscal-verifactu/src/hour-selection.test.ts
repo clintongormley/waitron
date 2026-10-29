@@ -703,12 +703,13 @@ it("promote waits for the minute after a spent one, twice in a row", async () =>
   });
 });
 it("waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead", async () => {
+  const used = ["0D00B", "0D00C", "0D00D"].map((identity) => activationRow(identity, null));
   const f = fixture();
-  withHistory(f, [activationRow("0D00D", null)]);
+  withHistory(f, used);
   f.at(at("2026-10-23T19:55:30Z"), 0);
   expect(await f.run()).toMatchObject({ status: "waiting", remainingMs: 150_000 });
   const g = fixture();
-  withHistory(g, [activationRow("0D00D", null)]);
+  withHistory(g, used);
   g.at(at("2026-10-23T19:55:30Z") - 1, 0);
   await expect(g.run()).rejects.toMatchObject({
     params: { reason: "minute_not_later", allowedFromMs: at("2026-10-23T19:58:00Z") },
