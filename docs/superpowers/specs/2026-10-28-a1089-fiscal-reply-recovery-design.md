@@ -128,3 +128,13 @@ with shared section ids. No mockups or rendered-UI qualification are claimed for
 **B:** design the complete fiscal decision/repair route before any build. This is substantial module/server/UI/auth
 integration and fiscal evidence association, so the queue requires your scope decision beyond a wording change.
 Either answer authorises planning only; a subsequent build requires your separate approval.
+
+## Owner decisions and implementation plan, 29 October 2026
+
+The owner chose evidence-first inspection at 01:58 CET. The later 08:07 CET rule approves building
+a read-only evidence screen once its plan has had a fresh review, provided it changes no certificate,
+setting, key, filing, record or backup. Sign-in, Read again and Stop are the permitted actions.
+Those decisions supersede the approval status above; the original proposal remains as written.
+Follow the [implementation plan](../plans/2026-10-29-a1089-fiscal-reply-evidence.md).
+Persistent mismatch repair remains open and requires its own owner decision. The plan and its review
+do not establish that the inspection has been built or qualified.

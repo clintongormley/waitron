@@ -217,8 +217,11 @@ under `docs/backlog/`.
 
 - **A1089: a fiscal reply-line mismatch needs accurate retry and evidence choices.** Describe only the drain behavior actually exercised, then offer evidence inspection and a decision path for persistent malformed replies, with any required sign-in there.
   [Audit](backlog/self-service-refusals.md#fiscal-reply).
-  The [proposed inspection scope](superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md)
-  awaits an owner decision. The first retained warning may differ from the latest reply; persistent repair remains open.
+  The [inspection design](superpowers/specs/2026-10-28-a1089-fiscal-reply-recovery-design.md) and
+  [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reply-evidence.md) follow the owner's
+  29 October evidence-first decision. The read-only build is approved once the plan has had its fresh
+  review; implementation and qualification remain open. The first retained warning may differ from
+  the latest reply; persistent repair requires a separate owner decision.
 
 - **A1089: fiscal filing-case alerts need a real decision route.** Use W41s-8/W41s-9 when released, or keep the missing workflow explicit. Rejections, cancellations, duplicate conflicts and repeated refusals cannot be fixed by an invented retry screen.
   [Audit](backlog/self-service-refusals.md#fiscal-cases).
