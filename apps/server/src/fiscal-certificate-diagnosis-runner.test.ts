@@ -277,8 +277,7 @@ describe("bounded child envelopes", () => {
         invalid = vi.fn();
       const remove = readDiagnosisFrames(stream, 16, receive, invalid);
       if (mode === "too-large") {
-        stream.write("x".repeat(17));
-        stream.write("x\n");
+        stream.write(JSON.stringify("x".repeat(17)) + "\n");
       } else if (mode === "bad-json") stream.write("invalid\n");
       else stream.emit("error", new Error("PRIVATE"));
       stream.write("null\n");
