@@ -407,7 +407,7 @@ test("field help sits outside the field box, at its trailing side", async () => 
 
 test("a form's failed submission focuses an invalid textarea (focusFirstInvalid)", async () => {
   await mount(`<form>
-      <wt-input label="Name" name="name" value="Ana"></wt-input>
+      <wt-input label="Name" name="name" value="Ann"></wt-input>
       <wt-textarea label="Note" name="note" error="Too long"></wt-textarea>
     </form>`);
   const form = host.querySelector("form")!;
