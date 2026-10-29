@@ -58,7 +58,7 @@ function lists(partial: Partial<ProfilePrinterLists>): ProfilePrinterLists {
 async function seedLocation(name: string): Promise<string> {
   const [row] = await suite.db
     .insert(locations)
-    .values({ name, invoiceLocales: ["es"], operationDescription: "Hostelería" })
+    .values({ name, invoiceLocales: ["es"], operationDescription: "Hospitality" })
     .returning({ id: locations.id });
   return row!.id;
 }

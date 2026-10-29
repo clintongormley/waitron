@@ -503,6 +503,7 @@ until A977).
   and printer samples use English; layout samples keep their character counts and word boundaries.
   Database kitchen-course, station and station-printer suites use English sample names.
   Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
+  Layouts' receipt, address and operation-description samples use English.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

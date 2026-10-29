@@ -59,7 +59,7 @@ describe("tenant receipt store against a real migrated database", () => {
   it("round-trips a manager-authored receipt through put → get", async () => {
     await seedTenant(suite.db);
     const managerSession = await seedSession("manager");
-    const receipt: ReceiptConfig = { headerSubtitle: "Hola" };
+    const receipt: ReceiptConfig = { headerSubtitle: "Hello" };
     await inTx((tx) => putReceipt(tx, { managementSessionId: managerSession, receipt }));
     expect(await inTx((tx) => getReceipt(tx))).toEqual(receipt);
   });
@@ -70,10 +70,10 @@ describe("tenant receipt store against a real migrated database", () => {
     await inTx((tx) =>
       putReceipt(tx, {
         managementSessionId: session,
-        receipt: { headerSubtitle: "Calle Mayor 1" },
+        receipt: { headerSubtitle: "1 High Street" },
       }),
     );
-    const next: ReceiptConfig = { footerMessage: "Gracias por su visita" };
+    const next: ReceiptConfig = { footerMessage: "Thanks for visiting" };
     await inTx((tx) => putReceipt(tx, { managementSessionId: session, receipt: next }));
     expect(await rowCount()).toBe(1);
     expect(await inTx((tx) => getReceipt(tx))).toEqual(next);
@@ -86,7 +86,7 @@ describe("tenant receipt store against a real migrated database", () => {
       inTx((tx) =>
         putReceipt(tx, {
           managementSessionId: staffSession,
-          receipt: { footerMessage: "Gracias" },
+          receipt: { footerMessage: "Thank you" },
         }),
       ),
     );
@@ -163,8 +163,8 @@ describe("the receipt logo", () => {
 
   it("strips logoRasters from getReceipt even when an import stored the row", async () => {
     await seedTenant(suite.db);
-    await storeRaw({ footerMessage: "Hola", logo: LOGO, logoRasters: RASTERS });
-    expect(await inTx((tx) => getReceipt(tx))).toEqual({ footerMessage: "Hola", logo: LOGO });
+    await storeRaw({ footerMessage: "Hello", logo: LOGO, logoRasters: RASTERS });
+    expect(await inTx((tx) => getReceipt(tx))).toEqual({ footerMessage: "Hello", logo: LOGO });
   });
 
   it("refuses a logo with no rasters when none are stored for it, writing nothing", async () => {
@@ -209,7 +209,7 @@ describe("the receipt logo", () => {
       inTx((tx) =>
         putReceipt(tx, {
           managementSessionId: session,
-          receipt: { logo: LOGO, footerMessage: "Gracias" },
+          receipt: { logo: LOGO, footerMessage: "Thank you" },
         }),
       ),
     );
@@ -251,11 +251,11 @@ describe("the receipt logo", () => {
     await inTx((tx) =>
       putReceipt(tx, {
         managementSessionId: session,
-        receipt: { footerMessage: "Adiós" },
+        receipt: { footerMessage: "Goodbye" },
         logoRasters: RASTERS,
       }),
     );
-    expect(await storedJson()).toEqual({ footerMessage: "Adiós" });
+    expect(await storedJson()).toEqual({ footerMessage: "Goodbye" });
     expect(await inTx((tx) => getReceiptLogo(tx, "80mm"))).toBeNull();
   });
 
@@ -326,16 +326,16 @@ describe("the receipt logo", () => {
 
   it("returns the trim beside the logo, from the same row", async () => {
     await seedTenant(suite.db);
-    await storeRaw({ footerMessage: "Hola", logo: LOGO, logoRasters: RASTERS });
+    await storeRaw({ footerMessage: "Hello", logo: LOGO, logoRasters: RASTERS });
     const printed = await inTx((tx) => getPrintedReceipt(tx, "80mm"));
-    expect(printed.receipt).toEqual({ footerMessage: "Hola", logo: LOGO });
+    expect(printed.receipt).toEqual({ footerMessage: "Hello", logo: LOGO });
     expect(printed.logo?.widthDots).toBe(504);
   });
 
   it.each([
     ["null", "null"],
     ["an array", `[{"logo":"${LOGO}"}]`],
-    ["text", '"Hola"'],
+    ["text", '"Hello"'],
   ])("reads a row an import stored as %s as the default trim with no logo", async (_, row) => {
     await seedTenant(suite.db);
     await suite.db.execute(
@@ -364,10 +364,10 @@ describe("the receipt logo", () => {
     expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({ receipt: {}, logo: null });
 
     await suite.db.update(tenantReceipts).set({
-      receipt: { headerSubtitle: "Desde 1990", email: "hola@deli.test", printAddress: false },
+      receipt: { headerSubtitle: "Since 1990", email: "hola@deli.test", printAddress: false },
     });
     expect(await inTx((tx) => getReceipt(tx))).toEqual({
-      headerSubtitle: "Desde 1990",
+      headerSubtitle: "Since 1990",
       email: "hola@deli.test",
       printAddress: false,
     });
@@ -455,14 +455,14 @@ describe("bounded imported global receipt fields", () => {
     await storeRaw({
       logo: LOGO,
       headerSubtitle: "x".repeat(200_000),
-      footerMessage: "Gracias",
+      footerMessage: "Thank you",
       printAddress: false,
       logoRasters: { "80mm": { widthDots: 8, heightDots: 1, data: "A".repeat(200_000) } },
     });
     const parsed = vi.spyOn(JSON, "parse");
     try {
       expect(await inTx((tx) => getPrintedReceipt(tx, "80mm"))).toEqual({
-        receipt: { logo: LOGO, footerMessage: "Gracias", printAddress: false },
+        receipt: { logo: LOGO, footerMessage: "Thank you", printAddress: false },
         logo: null,
       });
       expect(parsed.mock.calls.every(([text]) => text.length < 65_536)).toBe(true);
@@ -563,7 +563,7 @@ describe("independent venue receipt defaults", () => {
     null,
     { phone: "+34 910 000 000" },
     { printAddress: null },
-    { headerSubtitle: { es: "Hola" } },
+    { headerSubtitle: { es: "Hello" } },
   ])("refuses invalid defaults without replacing contact (%j)", async (settings) => {
     await seedTenant(suite.db);
     const session = await seedSession("manager");
