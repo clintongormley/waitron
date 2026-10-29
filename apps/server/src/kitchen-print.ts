@@ -42,6 +42,8 @@ import {
   mergeKey,
   movedPlaceText,
 } from "./kitchen-ticket.js";
+import { readKitchenLanguage } from "./kitchen-language.js";
+import type { KitchenLanguage } from "./i18n/kitchen-ticket.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readOrderKitchenNotes } from "./order-kitchen-note.js";
 import { printJobInTrouble, printedOrResent } from "./print-job-trouble.js";
@@ -173,6 +175,7 @@ async function buildTicketItems(
   tx: Transaction,
   cfg: TradingContext,
   lineIds: string[],
+  language: KitchenLanguage,
 ): Promise<
   Map<
     string,
@@ -290,7 +293,7 @@ async function buildTicketItems(
             ),
             stationName: child.stationName!,
           },
-          cfg.locale,
+          language,
         ),
       );
       crossRefsByParent.set(child.parentLineId!, refs);
@@ -348,7 +351,7 @@ async function buildTicketItems(
                     }),
                     stationName: row.parentStationName,
                   },
-                  cfg.locale,
+                  language,
                 ),
               ],
             }),
@@ -582,7 +585,8 @@ async function planKitchenTickets(
 
   const lineIds = [...new Set(firedItems.map((f) => f.workingOrderLineId))];
 
-  const itemsByLine = await buildTicketItems(tx, cfg, lineIds);
+  const language = await readKitchenLanguage(tx);
+  const itemsByLine = await buildTicketItems(tx, cfg, lineIds, language);
   const stationNames =
     known === undefined
       ? await readStations(tx, stationIds)
@@ -674,11 +678,11 @@ async function planKitchenTickets(
     await readWholePortionLines(tx, restLineIds),
   );
   const head = {
-    locale: cfg.locale,
-    kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
+    locale: language,
+    kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: language },
     reprintedAt,
-    from: from === undefined ? undefined : { stationName: from, locale: cfg.locale },
-    party: partyName === null ? undefined : { name: partyName, locale: cfg.locale },
+    from: from === undefined ? undefined : { stationName: from, locale: language },
+    party: partyName === null ? undefined : { name: partyName, locale: language },
     tableLabel: order.tableLabel ?? "",
     orderNumber: order.orderNumber,
     firedAt: new Date(),
@@ -717,7 +721,7 @@ async function planKitchenTickets(
           ...(leavesOut !== null
             ? {
                 alsoOnOrder: {
-                  locale: cfg.locale,
+                  locale: language,
                   items: restItems
                     .filter((item) => !leavesOut.includes(item.stationId))
                     .map((item) => item.other),
@@ -876,9 +880,9 @@ export interface CorrectionItem {
 /** What a correction slip says happened; the slip's header and its sign follow from it. */
 type CorrectionChange =
   | { kind: "VOID" | "RECALLED" }
-  | { kind: "TO STATION"; toStation: string; locale: string }
-  | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string; locale: string }
-  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange; locale: string }
+  | { kind: "TO STATION"; toStation: string }
+  | { kind: "EXTRA CANCELLED"; held: boolean; cancelledExtra: string }
+  | { kind: "ORDER NOTE CHANGED"; orderNoteChange: KitchenNoteChange }
   | { kind: "ALLERGY"; blocks: ReadonlyMap<string, KitchenAllergyBlock | null> }
   | HoldCorrection;
 
@@ -938,7 +942,6 @@ export async function enqueueOrderKitchenNoteChange(
     await printCorrectionSlips(tx, cfg, orderId, items, {
       kind: "ORDER NOTE CHANGED",
       orderNoteChange: change,
-      locale: cfg.locale,
     });
   }
 }
@@ -1026,7 +1029,7 @@ export async function enqueueStationMoved(
       cfg,
       orderId,
       fired,
-      { kind: "TO STATION", toStation: toStationName, locale: cfg.locale },
+      { kind: "TO STATION", toStation: toStationName },
       read,
     );
   if (held.length > 0)
@@ -1147,7 +1150,6 @@ export async function enqueueExtraCancelled(
     kind: "EXTRA CANCELLED",
     held: item.group !== undefined,
     cancelledExtra,
-    locale: cfg.locale,
   });
 }
 
@@ -1168,7 +1170,7 @@ export async function foldPortionNotices<T extends CorrectionItem>(
     items.map((item) => item.workingOrderLineId),
   );
   const built: TicketItemsByLine =
-    whole.size === 0 ? new Map() : await buildTicketItems(tx, cfg, [...whole]);
+    whole.size === 0 ? new Map() : await buildTicketItems(tx, cfg, [...whole], cfg.locale);
   const read = { whole, built };
   if (whole.size === 0) return { notices: [...items], read };
   const out: T[] = [];
@@ -1274,10 +1276,11 @@ async function printCorrectionSlips(
   }
 
   const lineIds = [...new Set(items.map((i) => i.workingOrderLineId))];
+  const language = await readKitchenLanguage(tx);
   const unread = lineIds.filter((id) => read?.built.has(id) !== true);
   const itemsByLine: TicketItemsByLine = new Map([
     ...(read?.built ?? []),
-    ...(unread.length === 0 ? [] : await buildTicketItems(tx, cfg, unread)),
+    ...(unread.length === 0 ? [] : await buildTicketItems(tx, cfg, unread, language)),
   ]);
   const stationNames = await readStations(tx, stationIds);
   const header = await readOrderHeader(tx, cfg, orderId);
@@ -1329,7 +1332,7 @@ async function printCorrectionSlips(
     for (const route of routeKitchenTickets(sorted, mappingsByStation(mappingRows))) {
       const bytes = formatKitchenNoteChangeSlip(
         {
-          locale: cfg.locale,
+          locale: language,
           stations: route.stationIds.map((id) => ({
             stationName: stationNames.get(id)!.name,
             items: arrangeTicketItems(
@@ -1404,8 +1407,8 @@ async function printCorrectionSlips(
       const bytes = formatCorrectionSlip(
         {
           ...correction,
-          locale: cfg.locale,
-          kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: cfg.locale },
+          locale: language,
+          kitchenNote: kitchenNote === null ? undefined : { text: kitchenNote, locale: language },
           stationName: stationNames.get(stationId)!.name,
           tableLabel: header.tableLabel,
           orderNumber: header.orderNumber,
@@ -1666,7 +1669,7 @@ async function notifyMoved(
     printing === null ? [] : told.map((move) => move.to),
   );
   for (const { before, to, after, items } of told) {
-    const texts = movedTexts(before.places, after.places, cfg.locale);
+    const texts = movedTexts(before.places, after.places, printing?.language ?? cfg.locale);
     // The station screen words the counter itself, in the screen's own language.
     await VENUE_SERVICE.recordKitchenNotices(tx, cfg, to, items.map(toNoticeItem), "moved", {
       movedTo: after.places.counter ? null : texts.toText,
@@ -1680,7 +1683,7 @@ async function notifyMoved(
       kitchenNote:
         kitchenNotes.get(to)!.note === null
           ? undefined
-          : { text: kitchenNotes.get(to)!.note!, locale: cfg.locale },
+          : { text: kitchenNotes.get(to)!.note!, locale: printing.language },
       fromNumber: String(before.places.orderNumber),
       ...(toNumber === before.places.orderNumber ? {} : { toNumber: String(toNumber) }),
       ...(partyName === null ? {} : { partyName }),
@@ -1709,6 +1712,7 @@ type MovedItem = CorrectionItem & { held: boolean };
 
 /** What MOVED slips print with: their stations' printers and stations, their lines. */
 interface MovedSlipPrinting {
+  language: KitchenLanguage;
   byStation: MappingsByStation;
   itemsByLine: Awaited<ReturnType<typeof buildTicketItems>>;
   stationNames: Awaited<ReturnType<typeof readStations>>;
@@ -1731,10 +1735,14 @@ async function readMovedSlipPrinting(
     [...withPrinters].filter(([id]) => stationNames.get(id)!.printMovedSlips),
   );
   if (byStation.size === 0) return null;
-  const itemsByLine = await buildTicketItems(tx, cfg, [
-    ...new Set(items.map((item) => item.workingOrderLineId)),
-  ]);
-  return { byStation, itemsByLine, stationNames };
+  const language = await readKitchenLanguage(tx);
+  const itemsByLine = await buildTicketItems(
+    tx,
+    cfg,
+    [...new Set(items.map((item) => item.workingOrderLineId))],
+    language,
+  );
+  return { byStation, itemsByLine, stationNames, language };
 }
 
 /**
@@ -1746,7 +1754,7 @@ async function readMovedSlipPrinting(
 async function printMovedSlips(
   tx: Transaction,
   cfg: TradingContext,
-  { byStation, itemsByLine, stationNames }: MovedSlipPrinting,
+  { byStation, itemsByLine, stationNames, language }: MovedSlipPrinting,
   items: readonly MovedItem[],
   slip: Pick<
     MovedSlip,
@@ -1795,7 +1803,7 @@ async function printMovedSlips(
           at,
           items: fired,
           held,
-          locale: cfg.locale,
+          locale: language,
         },
         group[0]!,
       );

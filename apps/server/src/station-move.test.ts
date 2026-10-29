@@ -1,3 +1,4 @@
+import { writeContentLanguages } from "@waitron/catalogue";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine, recallLines, sendLines } from "./testing/order-writer-fixture.js";
 import { randomUUID } from "node:crypto";
@@ -72,6 +73,9 @@ useVenueDb({
   setup: async (db) => {
     venue = await setupPartyVenue(db);
     venue.cfg.locale = "en-GB";
+    await inTx(venue, (tx) =>
+      writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] }),
+    );
     await inTx(venue, async (tx) => {
       bar = (await createStation(tx, venue.cfg, { name: "Bar", isDefault: true })).id;
       grill = (await createStation(tx, venue.cfg, { name: "Grill" })).id;
