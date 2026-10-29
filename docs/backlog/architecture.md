@@ -423,8 +423,6 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **A966 — point 2: emails.** `account-email.ts:38–72, 125` and `attendance-email.ts:18–22, 46, 49`
-  move into `apps/server/src/i18n/`. No visible change.
 - **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame
   (`attendance-export-pdf.ts:29–160`) and the category sales report (`category-sales-page.ts:48–65`);
   then the printer test and ruler pages (`printer-test-page.ts:26–29`, `test-page.ts:21–25`). No
