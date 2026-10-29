@@ -103,7 +103,7 @@ describe("the recovery pack's attached file", () => {
     ["a date", { createdAt: new Date("2026-10-12T09:30:00.000Z") }],
     ["a map", { keys: new Map() }],
     ["an object with no prototype", { scope: Object.create(null) as object }],
-    ["an array with a hole", { list: [1, , 3] }],
+    ["an array with holes", { list: new Array<number>(2) }],
     ["an array with an extra property", { list: Object.assign([1], { extra: 2 }) }],
     ["a symbol key", { [Symbol("hidden")]: "A" }],
     ["an undefined value inside an array", { list: [undefined] }],

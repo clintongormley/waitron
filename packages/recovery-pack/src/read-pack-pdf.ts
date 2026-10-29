@@ -87,7 +87,7 @@ function contents(spec: PDFDict): Uint8Array {
   if (unicodeStream && unicodeStream !== stream) refuse("carrier");
   const size = stream.dict.lookupMaybe(PDFName.of("Params"), PDFDict)?.get(PDFName.of("Size"));
   if (size && Number(size.toString()) > MAX_PACK_FILE) refuse("size");
-  const bytes = boundedDecode(stream).getBytes(MAX_PACK_FILE + 1);
+  const bytes = new Uint8Array(boundedDecode(stream).getBytes(MAX_PACK_FILE + 1));
   if (bytes.length > MAX_PACK_FILE) refuse("size");
   return bytes;
 }
