@@ -192,8 +192,9 @@ trial, a lapsed reply, and the unavailable state; save under
 ## Checks
 
 Focused: `pnpm --filter @waitron/server exec vitest run src/cloud-billing.test.ts
-src/cloud-client.test.ts src/cloud-api.test.ts`; `pnpm --filter @waitron/dashboard exec vitest run
-src/screens/cloud-services-screen.test.ts`; root guards touched: `scripts/live-subscriptions.test.ts`,
+src/cloud-client.test.ts src/cloud-client.billing.test.ts src/cloud-api.test.ts`;
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/cloud-services-screen.test.ts
+src/screens/cloud-services-screen.billing.test.ts src/screens/cloud-billing-day.test.ts`; root guards touched: `scripts/live-subscriptions.test.ts`,
 `scripts/errors-reachable.test.ts` (no new code planned), `scripts/native-form-fields.test.ts`.
 `pnpm format:check`. CI owns the package suites and coverage (98/98/98/95).
 
