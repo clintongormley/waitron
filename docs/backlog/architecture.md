@@ -501,6 +501,7 @@ until A977).
   suites use English sample labels and descriptions. Disclosure accessibility samples use English
   headings, summaries and body text; deliberate EN/ES summary examples remain. Printing layout
   and printer samples use English; layout samples keep their character counts and word boundaries.
+  Database kitchen-course, station and station-printer suites use English sample names.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
