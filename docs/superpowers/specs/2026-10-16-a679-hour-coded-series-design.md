@@ -4,6 +4,8 @@
 
 **Dated pointer, 2026-10-24: 'Preserve the original attempt and artifacts' is superseded by A1042 — Start again deletes the attempt and keeps one small note; see `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`.**
 
+**Dated pointer, 2026-10-29 (A1207):** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused when its minute is already in use, or while the box's clock is behind this attempt's own pick ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md)).
+
 The owner accepted this design as written, including the epoch, clock threshold and disclosed limits.
 References below to proposals and recommendations record the design presented for that decision.
 Follow the [replacement implementation plan](../plans/2026-10-16-a679-hour-code-implementation.md)

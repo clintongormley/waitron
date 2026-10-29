@@ -277,7 +277,7 @@ it.each([
     });
   },
 );
-it("allows the current hour strictly later than retained epoch hour zero", async () => {
+it("allows the current minute beside a name at epoch minute zero", async () => {
   const f = fixture();
   f.facts = {
     ...f.facts,
@@ -310,7 +310,7 @@ it("serializes concurrent exact requests into one intent", async () => {
   expect(a).toEqual(b);
   expect(f.writes).toHaveLength(1);
 });
-it("retains abandoned or uncertain intent and demands a later minute for its replacement", async () => {
+it("retains abandoned or uncertain intent and skips its minute for the replacement", async () => {
   const f = fixture();
   await f.run();
   const next = { ...binding, eventId: "replacement", sourceId: "replacement-attempt" };

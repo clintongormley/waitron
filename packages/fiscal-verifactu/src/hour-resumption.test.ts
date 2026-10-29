@@ -201,7 +201,7 @@ it("a further owner cannot resume with a different document binding", async () =
 });
 
 it.each(["known-own-hour", "clock-rollback"])(
-  "resumption preserves the %s floor",
+  "resumption still refuses after a %s",
   async (change) => {
     const f = fixture();
     const selected = await f.select();

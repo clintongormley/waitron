@@ -74,13 +74,13 @@ longer stop the restore (the same file's "selected although a later name is know
 `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although the backup's
 newest record and creation time are later"). Names made after the backup, or by a box this one
 never saw, are invisible to it, and a later name held only in the database the restore replaces is
-forgotten afterwards (`apps/server/src/hour-recovery-placement-3.test.ts`, "places an older
+not in the database the restore places (`apps/server/src/hour-recovery-placement-3.test.ts`, "places an older
 selected hour over a newer surviving %s destination").
 
 If the backup holds sales dated after the box's time, the restore finishes (the test below runs the
-restore's hooks, not the restore route and the restart after it) and the box then takes
-no payments until its clock is confirmed, as whenever the box's clock reads earlier than its last
-sale. On a box that sends records to the tax agency, the box asks the agency for its time about
+restore's hooks, not the restore route and the restart after it) and, when they are more than a
+minute later, the box then takes no payments until its clock catches up or is confirmed, as
+whenever the box's clock reads more than a minute earlier than its last sale. On a box that sends records to the tax agency, the box asks the agency for its time about
 once a minute, and an answer that agrees lifts the stop (`apps/server/src/guide/en/box-status.md`,
 "When payments stop because of the clock"; read, not run here). Once it is lifted, the alert
 `clock.records_misdated` lists how many sales are dated later than the real time and their first

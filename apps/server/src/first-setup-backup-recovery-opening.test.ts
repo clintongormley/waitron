@@ -354,7 +354,7 @@ it("refuses selected bytes changed after the authenticated session before prepar
   expect(await f.workspace.read()).toEqual([]);
 });
 
-it("local database history independently raises the prepared floor when its preparation journal is absent", async () => {
+it("local database history independently carries its names into the prepared evidence when its preparation journal is absent", async () => {
   const f = await fixture(true);
   const retainedRoots = {
     stateDir: join(root, "retained-state"),
