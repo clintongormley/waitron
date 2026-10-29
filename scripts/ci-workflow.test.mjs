@@ -280,6 +280,18 @@ function artifactUploadStep(body) {
 }
 
 /** The blob artifact's base name from the download action or coverage helper. */
+function jobPermissions(body) {
+  const permissionsAt = body.findIndex((line) => /^ {4}permissions:\s*$/.test(line));
+  if (permissionsAt === -1) return null;
+  const granted = [];
+  for (const line of body.slice(permissionsAt + 1)) {
+    if (line.trim() === "" || line.trim().startsWith("#")) continue;
+    if (!/^ {6}\S/.test(line)) break;
+    granted.push(line.trim());
+  }
+  return granted;
+}
+
 function artifactDownloadBase(body) {
   const helper = body.find((candidate) =>
     candidate.includes("run: node scripts/download-coverage-blobs.mjs"),
@@ -1365,16 +1377,7 @@ describe("the `ci` aggregate's jobs API cross-check", () => {
     }
     expect(lines.filter((line) => /^\s*JOBS_API_\w+\s*:/.test(line))).toEqual([]);
 
-    const body = job("ci").body;
-    const permissionsAt = body.findIndex((line) => /^ {4}permissions:\s*$/.test(line));
-    expect(permissionsAt).toBeGreaterThan(-1);
-    const granted = [];
-    for (const line of body.slice(permissionsAt + 1)) {
-      if (line.trim() === "" || line.trim().startsWith("#")) continue;
-      if (!/^ {6}\S/.test(line)) break;
-      granted.push(line.trim());
-    }
-    expect(granted).toEqual(["actions: read"]);
+    expect(jobPermissions(job("ci").body)).toEqual(["actions: read"]);
   });
 
   it(
@@ -3938,13 +3941,8 @@ describe("the workflows' artifact downloads", () => {
     expect(artifactDownloadBase(job("test-server-merge").body)).toBe("server-blob");
     expect(
       helperJobs
-        .filter(
-          ({ body }) =>
-            !body
-              .join("\n")
-              .includes("    permissions:\n      contents: read\n      actions: read"),
-        )
-        .map(({ id }) => id),
+        .map(({ id, body }) => ({ id, granted: jobPermissions(body)?.toSorted() }))
+        .filter(({ granted }) => JSON.stringify(granted) !== '["actions: read","contents: read"]'),
     ).toEqual([]);
   });
 

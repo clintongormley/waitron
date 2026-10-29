@@ -3469,13 +3469,13 @@ holding one file.
 The artifact-download cases in `scripts/ci-workflow.test.mjs` are weaker than their name: they
 read workflow text, never execute a workflow. They check the action and helper forms, matching
 inputs and authentication, cleanup limit and a job budget larger than both attempts plus cleanup;
-that no `ci.yml` download of a `-blob-*` pattern uses the action; that every job running the helper
-grants `actions: read` and `contents: read`; and that each helper call's report count equals what
-its needed jobs upload.
-They recognise literal action names, step fields and the helper's quoted command arguments, not
-composite actions, external reusable workflows, YAML anchors or alternative shell commands.
-A matching cleanup string does not prove that it ran or removed a file. The permission check finds the two
-lines as text, so a job granting further permissions beside them still passes.
+that no `ci.yml` download of a `-blob-*` pattern uses the action; that every `ci.yml` job running
+the helper grants exactly `contents: read` and `actions: read`; and that each helper call's report
+count equals what its needed jobs upload.
+They recognise literal action names, step fields and the helper's command as two quoted arguments
+followed by an unquoted report count, not composite actions, external reusable workflows, YAML
+anchors or alternative shell commands. A matching cleanup string does not prove that it ran or
+removed a file.
 
 ### A completed transfer can still leave the download action alive
 
@@ -3519,14 +3519,15 @@ venue-service and provisioning merges, run `40811624914`'s dashboard merge), and
 succeeded each time. The helper's 27 server first attempts took 7 to 13 seconds, and none needed a
 second attempt. That is why every coverage merge now uses the helper.
 
-The helper spends one REST request listing artifacts and one per report it downloads, so one run
-with all seven merge jobs makes 56 requests. GitHub's rate-limit page says "The rate limit for
-`GITHUB_TOKEN` is 1,000 requests per hour per repository". Summing the merge jobs that ran in the
-three hours of 27–29 October 2026 with the most CI runs started gives 168, at least 380 and at least 304 requests: "at
-least" because GitHub answered 502 for some runs' job lists. The busiest of those hours would use
-at least 38% of that limit. A listing GitHub refuses makes the helper fail with an error, and its count
-check refuses a short listing, so either way the merge job fails rather than merging part of the
-reports.
+The helper spends one REST request per page of the artifact listing and one per report it
+downloads, so one run with all seven merge jobs makes at least 56 requests; extra listing pages and
+second attempts add more. GitHub's rate-limit page says "The rate limit for `GITHUB_TOKEN` is
+1,000 requests per hour per repository". Counting, for each merge job that ran in the three hours
+of 27–29 October 2026 with the most CI runs started, one listing request plus one per report gives
+168, at least 380 and at least 304 helper requests: "at least" because GitHub answered 502 for
+some runs' job lists. The highest of those three would use at least 38% of that limit. A listing
+GitHub refuses makes the helper fail with an error, and its count check refuses a short listing,
+so either way the merge job fails rather than merging part of the reports.
 
 External provenance for this path:
 

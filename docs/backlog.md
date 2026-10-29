@@ -5597,12 +5597,12 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
-- **A1213. Does a re-run of a failed till shard leave `test-till-merge` reading the failed
-  attempt's coverage?** Seen once, not proven, in A1125's CI (#2238, 2026-10-29): after a till
-  shard failed and was re-run green, the merge job still failed, and the finish-branch run read
-  its log as downloading the first attempt's `till-blob-7`. Check it on a throwaway branch (fail
-  one shard on purpose, re-run it, read which artifact the merge downloads); if it holds, write
-  the trap into `docs/developers/ci-and-gates.md` or make the merge take the latest attempt.
+- **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
+  A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
+  merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report
+  name. Check on a throwaway branch (fail one shard on purpose, re-run it, read which artifact id
+  the helper downloads) that the highest id is the re-run's. If it is, delete this entry; if not,
+  make the helper keep the re-run's copy.
 
 - **Two setup-app checks for an absent error message cannot fail** (left open by A1176).
   `apps/setup/src/setup-app-missing-database.test.ts`'s "a damaged record reaches the
@@ -5619,10 +5619,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   `*-upgrade.test.ts` files with no shared helper.
 
 - **`mutation.yml`'s three report downloads still use `actions/download-artifact`** (left open by
-  A1216). The `mutation-ui-core-aggregate`, `mutation-ui-aggregate` and `mutation-db-aggregate` jobs fetch `mutation-report-*-shard-*` directories, which
-  `scripts/download-coverage-blobs.mjs` cannot read: it handles only one-file artifacts. They run
-  nightly and on manual dispatch only; their download times have not been measured. See
-  [the download receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
+  A1216). `mutation-ui-core-aggregate`, `mutation-ui-aggregate` and `mutation-db-aggregate` fetch
+  `mutation-report-*-shard-*` directories, and `scripts/download-coverage-blobs.mjs` reads only
+  one-file artifacts. Nightly and manual dispatch only; download times unmeasured.
+  [Receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
 
 For package distribution and the four-minute target, use the
 [CI job layout](developers/ci-and-gates.md#ci-job-layout-and-scheduling).

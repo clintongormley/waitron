@@ -350,7 +350,7 @@ describe("ciRunReaders", () => {
     const text = workflow(
       "  test-server-merge:",
       "    steps:",
-      "      - run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports'",
+      "      - run: node scripts/download-coverage-blobs.mjs 'server-blob-*' 'apps/server/.vitest-reports' 21",
       '      - run: pnpm --filter "@waitron/server" test:merge',
     );
     expect(ciRunReaders(text, members)).toEqual(
