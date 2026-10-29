@@ -24,10 +24,11 @@ started in the cloud after its box dies (A1188) print, open the drawer and take 
 The owner's answers (2026-10-29):
 
 - The app is needed for the print agent, "but not for card readers (over the internet) not for
-  cash drawers (connected to printers)". This differs from the
-  [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md) (§12 and
-  answer 11), which says card readers do not follow a cloud start until this app exists; the two
-  need reconciling.
+  cash drawers (connected to printers)". "The server speaks to the card reader over the internet.
+  This means that if we use an on prem server and the internet goes down then we can't talk to the
+  card readers and instead have to use standalone card readers or payment apps installed on the
+  mobile phone." The [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md)
+  was corrected the same day to match.
 - When a cloud-run venue's internet fails: "We should keep selling using mobile internet to talk to
   the cloud server." No local server holds sales while the line is down.
 - The owner's concern with that: "If the mobile is using mobile internet, then it isn't connected to

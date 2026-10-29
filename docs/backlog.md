@@ -5364,7 +5364,8 @@ Not in any track until the standalone primary is done.
   declaration that the box is off, and only if the Cloud owner agreed in advance.
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
   Design approved 2026-10-29: administrators by default, and other roles once A1002 lets a venue
-  give them the permission; printers, drawers and card readers wait for A1175's Android app.
+  give them the permission; printers and drawers wait for A1175's Android app, while card readers
+  follow, being reached over the internet (owner, 2026-10-29).
   Building waits for A1018's build approval, A947's strip and Cloud's half:
   [A1188 design](superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md).
 

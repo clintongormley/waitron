@@ -6,7 +6,9 @@ review (one critical finding, ten important, thirteen minor), and again after a 
 claims (five important, thirteen minor). **Revised again on 2026-10-29 for the owner's answers:**
 §13 item 1 is now "administrators by default, and a venue may give the permission to other roles"
 (the owner, about 09:25), and the device agent that lifts the first evening's limit is A1175's
-Android app (the owner, about 09:30). Decisions marked **(owner)** quote the owner. Decisions marked
+Android app (the owner, about 09:30). **Corrected on 2026-10-29 for the owner:** card readers are
+not part of that limit, because the server reaches them over the internet through their providers
+(§7). Decisions marked **(owner)** quote the owner. Decisions marked
 **(default)** are this design's, open to the owner's correction. Everything else is a fact about the
 current code or documents, with a pointer, and says whether it was read or run.
 
@@ -93,7 +95,7 @@ supply fails. The bar's internet still works.
    confirms, starts charging and emails Lucía at once with Nora's name and the time.
 6. The copy becomes the venue's server, with a new installation name and a new invoice series, as
    every restore and switch does (CLAUDE.md §5). Nora moves each till to it and approves each one
-   (§7), and the bar trades again, with cash or a standalone card terminal.
+   (§7), and the bar trades again, taking cards on its usual readers and printing nothing.
 
 If Nora's code is wrong, nothing starts. If Nora signs in but does not hold `node.promote`, the copy
 says why and offers the owner's Cloud sign-in in its place (§5). If she has no authenticator app set
@@ -228,7 +230,7 @@ waits for A947's strip.
   owner's literal version instead.
 - **Where a venue has a spare box**, the spare's switch (A947 §6.1, shown to people holding
   `node.promote`) comes first and the cloud start second, because a spare box keeps the venue's
-  tills, printers and card readers on the venue's own network.
+  tills and printers on the venue's own network.
 - **What it does:** opens a dialog with the emergency address as text and as a QR code, the three
   things the person will need (the emergency code, their password, their authenticator app or a
   recovery code), who can do it, and what happens next in two lines. **(default)** "Who can do it"
@@ -505,14 +507,24 @@ for the venue's own domain (`device-session.ts:53-67`).
    to join, with **Approve**. That is one more sign-in, then one press per till.
 4. Handhelds and kitchen screens follow the same way.
 
-**What does not follow on the first evening.** Printers, cash drawers and card readers stay at the
-venue; reaching them from a hosted server needs the outbound device agent the hosted design asks
-for ("Printers, drawers and payment terminals stay local. Use a Waitron-owned authenticated outbound
+**Card readers follow.** **(owner)** "The server speaks to the card reader over the internet"
+(2026-10-29). Read, not run: SumUp's client calls `https://api.sumup.com`
+(`packages/payments-sumup/src/sumup-client.ts:87`) and Stripe's drives a reader through
+`stripe.terminal.readers.processPaymentIntent` (`packages/payments-stripe/src/stripe-client.ts:31`),
+so the copy reaches the same readers with the provider keys its restored vault key opens
+("Who decides what"). Readers are chosen per
+device and per device profile (`device_card_readers`, `device_profile_card_readers`), so which
+reader a rejoined till uses depends on whether it keeps its old device record (§12).
+
+**What does not follow on the first evening.** Printers and cash drawers stay at the venue; reaching
+them from a hosted server needs the outbound device agent the hosted design asks for ("Printers,
+drawers and payment terminals stay local. Use a Waitron-owned authenticated outbound
 agent contract", [hosted design](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-21-cloud-hosted-venue-design.md#reach-cloud-and-the-devices-in-your-venue),
 `:317`). **(owner)** That agent is A1175's Android app: "It is the android app really, which runs
 locally and hosts the print agent (et al)" (2026-10-29; [A1175](../../backlog/printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)).
-A1175 is still to be brainstormed and is not designed here. Until it exists, a venue started in the
-cloud takes cash, or cards on a standalone terminal, and prints nothing; the declaration page says
+The hosted design's "payment terminals" are not part of this limit (the paragraph above). A1175 is
+still to be brainstormed and is not designed here. Until it exists, a venue started in the
+cloud prints nothing and opens no cash drawer; the declaration page says
 so before the start. **This is the largest limit of the design**, and the
 reason a spare box (A947) comes first where a venue has one.
 
@@ -630,7 +642,7 @@ card does. Giving `node.promote` to another role is not a part here: it comes wi
   how its invoices then reach the copy (§6).
 - Which clock wait the copy takes before activating: a restore's 90 to 150 seconds or a switch's next
   minute (§6); left to A1018's build.
-- The device agent for printers, drawers and card readers from a hosted server: A1175's Android app,
+- The device agent for printers and drawers from a hosted server: A1175's Android app,
   still to be brainstormed (§7).
 - Whether a till that joins the copy can be matched to its old device record, keeping its profile,
   or always starts as a new device (§7).
@@ -705,9 +717,11 @@ each costs.
     reason after Cloud confirms, charging has started and **Check again** repeats it (§6). Cost: if
     Cloud is down, nobody can start the venue in the cloud, even with every other step done. No
     alternative proposed.
-11. **The tills join the copy again, one press each to approve; printers, cash drawers and card
-    readers do not follow** until A1175's Android app exists (owner, 2026-10-29: it is the device
-    agent; still to be brainstormed; §7). Cost: the venue takes cash or uses a standalone card
+11. **The tills join the copy again, one press each to approve; card readers follow, and printers
+    and cash drawers do not** until A1175's Android app exists (owner, 2026-10-29: it is the device
+    agent; still to be brainstormed; corrected the same day: card readers are reached over the
+    internet; §7). Cost (written before that correction; the cost now is printing nothing and no
+    drawer): the venue takes cash or uses a standalone card
     terminal that evening, and prints nothing (§7). Alternative: wait for that app before offering
     this at all; its cost: nothing in this design is offered until it exists.
 12. **Only people who may start it can see the code on the dashboard** (people holding
@@ -751,7 +765,9 @@ light and dark, 1280 and 390 wide. The venue, people, address, times and price i
 3. `03-copy-sign-in` — the locked copy's sign-in: email, password, authenticator or recovery code, a
    line saying passkeys are not offered, and the line under the form about setting up an
    authenticator before the box failed (§5).
-4. `04-declaration` — the declaration (§6).
+4. `04-declaration` — the declaration (§6). Its line "Printers, cash drawers and card readers stay
+   with the box's network … take cash or use a standalone card terminal" predates the 2026-10-29
+   correction; the built page names printers and cash drawers only (§7).
 5. `05-dashboard-emergency-card` — the Cloud services card, with the date the code was issued (§2).
 6. `06-till-move` — the strip once the venue runs in the cloud; the person who started it approves
    each till (§7).
