@@ -183,11 +183,10 @@ row in **Sent** marks all of it served; **Mark served** in the row's details ask
 the new bill, each with its own extras, while **Transfer items** moves the whole row. **Comp** and
 **Void** work on the row and let you choose how many of its dishes.
 
-A weighed dish is different, because each one is weighed on its own: 350 g of octopus is never cut
-between bills, and adding the same weighed dish twice gives two lines rather than one of double the
-weight. On a table's bill you can add up to 99 of one dish at a time.
+A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
+twice gives two lines rather than one of double the weight. On a table's bill you can add up to 99 of one dish at a time.
 
-An order taken at the counter keeps 2 × Burger as one line, as before, even after you move it to a
+An order taken at the counter keeps 2 × Burger as one line even after you move it to a
 table, so its 2 × Burger with cheese moves to another bill only as a whole.
 
 ## Get back to your tables with unsent dishes {#unsent-tables}

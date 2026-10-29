@@ -26,7 +26,7 @@ export interface PortionRef {
   ordinal: number;
   /** The portions expanded from one priced request line. */
   pricingCohortId: string;
-  /** Sold by weight, in decimals or in a measure: one portion, never split. */
+  /** Sold by weight, in decimals or in a measure: one portion. */
   measured: boolean;
 }
 

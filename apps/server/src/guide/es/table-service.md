@@ -192,11 +192,10 @@ deja elegir cuántos platos de una fila pasan a la cuenta nueva, cada uno con su
 **Transferir artículos** mueve la fila entera. **Descuento** y **Cancelar** actúan sobre la fila y te
 dejan elegir cuántos de sus platos.
 
-Un plato al peso es distinto, porque cada uno se pesa por separado: 350 g de pulpo nunca se reparten
-entre dos cuentas, y si añades dos veces el mismo plato al peso tienes dos líneas, no una del doble
-de peso. En la cuenta de una mesa puedes añadir hasta 99 unidades de un mismo plato cada vez.
+Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
+plato al peso tienes dos líneas, no una del doble de peso. En la cuenta de una mesa puedes añadir hasta 99 unidades de un mismo plato cada vez.
 
-Un pedido de mostrador mantiene 2 × Hamburguesa como una sola línea, como antes, aunque lo
+Un pedido de mostrador mantiene 2 × Hamburguesa como una sola línea aunque lo
 muevas a una mesa, así que sus 2 × Hamburguesa con queso solo pasan a otra cuenta enteras.
 
 ## Volver a tus mesas con platos sin enviar {#unsent-tables}

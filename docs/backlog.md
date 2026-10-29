@@ -1658,7 +1658,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   puts them after it.** Owner FYI from A756 PR 6; say if the editor should follow the picture.
 
 - **A1065. A printer shared by a station recorded for a held group and one not recorded prints one
-  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:662-666`);
+  FIRE-marked ticket carrying both stations' dishes** (`apps/server/src/kitchen-print.ts:681-685`);
   ask the owner whether FIRE should mark only the recorded station's part. Left open by A756 PR 6.
 
 - **A1066. Four server test files mark a HOLD ticket printed without recording a station.**
@@ -1967,8 +1967,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-  ticket/receipt grouping, is built on branch `feat/a803-1-portions` and waits for the owner's
-  sign-off; it has not landed. What it leaves open is A1190–A1202 and the store limit under
+  ticket/receipt grouping, has landed. What it leaves open is A1190–A1202 and the store limit under
   _Modules, data and code health_. Remaining slices: named, stable-numbered bills;
   always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
@@ -2032,7 +2031,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1200. Raising a dish the kitchen has started, from the counter, says only "Could not park the
   order, try again".** The server answers `ticket.already_started`, which the till has words for,
   but the counter's park shows only the codes on `ACTIONABLE_REFUSALS` (`apps/till/src/till-app.ts`).
-  Seen in A803 slice 1's LOOK; by reading, main's list lacks it too (not run on main).
+  Seen in A803 slice 1's LOOK; by reading, it predates slice 1 (not run before it).
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
@@ -2227,7 +2226,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **Three server tests find the default kitchen station by the name «Cocina» (left open by A918
   slice 2, #2130).** `apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`
-  and `kitchen-print.test.ts:1253-1256` pass only because their venues have Spanish receipts. Find
+  and `kitchen-print.test.ts:1258-1261` pass only because their venues have Spanish receipts. Find
   it by `is_default` instead (`kitchen-print.test.ts` creates its own «Cocina» default, so it needs
   reading, not a swap).
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
@@ -3864,7 +3863,7 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 
 - **A1201. Owner question: a receipt's extra prints no count beside a grouped dish (seen in A803
   slice 1's LOOK).** Two Pollo asado with Padrón peppers print "2 Pollo asado con patatas 19.00"
-  then "Pimientos de Padrón 4.00", at 58 and 80 mm. What `main` prints for one line of two was not
+  then "Pimientos de Padrón 4.00", at 58 and 80 mm. What a line of two printed before slice 1 was not
   checked. Decide whether the extra's row shows its count.
 
 ### Payments and card readers

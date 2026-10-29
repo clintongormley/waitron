@@ -1005,7 +1005,7 @@ export async function discardDraft(
         .orderBy(orderDraftRecalledLines.position);
       if (sources.length > 0 && input.reasonId === undefined) throw invalid("reasonId");
       const adjustmentIds: string[] = [];
-      // A row of identical dishes recalled together is cancelled as one, as today's one line is.
+      // A row of identical dishes recalled together is cancelled as one, as one grouped line is.
       const rows =
         sources.length === 0
           ? []

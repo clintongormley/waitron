@@ -283,7 +283,6 @@ export interface TillSaleLine {
 export interface ReceiptAdjustment {
   /** `comp`: a full comp, printed as the discount word with 100%. */
   kind: "comp" | "discount";
-  /** Basis points, for a percentage discount only. */
   percentBp?: number;
   /** The positive amount taken off, as a decimal string. */
   amount: string;

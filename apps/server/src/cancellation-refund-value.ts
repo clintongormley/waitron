@@ -21,7 +21,7 @@ export async function cancellationRefundValue(
   return (await refundValues(tx, billId, saleId, [lineId]))[0];
 }
 
-/** A till row of identical portions valued as today's one line (plan D32): the portions' count and
+/** A till row of identical portions valued as one grouped line (plan D32): the portions' count and
  * the sum of each one's filed value; none when any portion's value cannot be read. */
 export async function rowRefundValue(
   tx: Transaction,

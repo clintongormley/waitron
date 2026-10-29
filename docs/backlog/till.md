@@ -745,12 +745,6 @@ Left open:
   wrong PINs share the drawer's and adjustments' count, that the sign-in and override counts
   are separate, or that the count is per device. **Next action:** the owner decides whether to
   add the countdown and make the limit required.
-- **A reason's percentage limit can be exceeded** by combining a bill discount with a line
-  discount, or two bill discounts under one reason, because a bill discount counts as 0% on
-  each line. A row split off by splitting the bill, by a transfer, or by moving part of a line
-  to another group starts with no percentage history. B11b's venue limit on a bill's total
-  discount can ask for a manager's PIN; this per-reason cap is unchanged. **Next action:**
-  decide whether the per-line cap should see bill discounts.
 - For an extra of a held dish whose HOLD ticket was queued, cancelling it tells the kitchen
   (B11g) but the till's cancel dialog still says only that it comes off the bill, because the
   till cannot see whether the HOLD ticket was queued. **Next action:** decide whether the till
@@ -760,7 +754,8 @@ Left open:
   in the way.
 - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
   transferring items and moving part of a dish to another group still refuse a partial move
-  of a dish with extras (`tab.transfer_modifier_line`). A whole dish moves with its extras.
+  of a counter order's line of several dishes with extras (`tab.transfer_modifier_line`). A
+  table's dishes are each one portion and move with their own extras.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
@@ -2752,7 +2747,7 @@ drives the table's comps through that separate mode (`requestAdjustment` emits n
 `apps/till/src/till-app-adjustments.test.ts:356`) though the table screen sends `combined: true`
 (`apps/till/src/screens/till-table-order-screen.ts:2652`) — both since A773-1. Retire the two
 modes, make `kind: "comp"` mean the Comp window, and move those app tests onto it. The
-one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:880`) and
+one-or-all choice (`#quantityChoice`, `apps/till/src/widgets/adjustment-dialog.ts:894`) and
 `adjust.quantity_one`, `adjust.quantity_all` and `adjust.quantity_shown` are not theirs alone:
 the cancel mode, which stays, uses them (a cancel offer of several whole units draws the choice,
 `apps/till/src/screens/till-table-order-screen.a11y.test.ts:375-389`), so they stay unless the

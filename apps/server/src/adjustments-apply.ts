@@ -217,9 +217,9 @@ interface Plan {
   /** What is written: `changes`, or on a row, each of its portions' share of them. */
   writes: Change[];
   /** On a row, every line of each stand-in line the action prices, taken or not: each gets its list
-   * price, as today's whole line does before part of it is carved off (plan D32). */
+   * price, as one grouped line does before part of it is carved off (plan D32). */
   stamped: string[];
-  /** On a row, the split today's second price would have recorded (plan D33). */
+  /** On a row, the split one grouped line's second price would record (plan D33). */
   rowSplits: AdjustmentSplit[];
   /** On a whole comp of a dish, its extras rows, all priced at zero by it. */
   compedExtras: string[];
@@ -419,7 +419,7 @@ function spread(subjects: readonly Subject[], discount: Decimal): Change[] {
  * A whole-bill discount over the rows the bill files (plan D29): bound portions grouped as
  * {@link readLockedLines} groups them for filing, each group spread as one line at its first member's
  * line number, then the group's rows handed to its portions in ordinal order, the higher price first.
- * A group of bound portions left at two prices pushes onto `splits` the split today's line would
+ * A group of bound portions left at two prices pushes onto `splits` the split one grouped line would
  * record (plan D33): from its first portion to its first portion at the lower price. A bill holding
  * no bound portion is spread line by line.
  */
@@ -499,7 +499,7 @@ function handOut(
 /**
  * The dish lines a part of a row takes (plan D32): the last `covered` portions by line number not
  * already cancelled, so the row's first portion, which the record names, stays while any of the row
- * does. Else `adjustment.quantity_invalid`, as more than today's line holds is.
+ * does. Else `adjustment.quantity_invalid`, as more than one grouped line holds is.
  */
 async function takenPortions(
   tx: Transaction,
@@ -926,7 +926,7 @@ export async function planAdjustment(
           membersOf
             .get(standIn.id)!
             .filter((member) => taken === null || taken.has(member.parentLineId ?? member.id));
-        // Today the part is carved off the line and each of its extras (plan D33).
+        // The part is carved off the line and each of its extras, as on one grouped line (plan D33).
         if (taken !== null) {
           for (const standIn of family) {
             rowSplits.push({ from: standingFor(standIn)[0]!.id, to: takenOf(standIn)[0]!.id });
@@ -942,7 +942,7 @@ export async function planAdjustment(
             })),
             change.rows,
           );
-          // Today the line's second price is split off it (plan D33).
+          // The line's second price is split off it, as on one grouped line (plan D33).
           const lower = change.rows[1];
           if (lower !== undefined) {
             rowSplits.push({
