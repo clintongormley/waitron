@@ -35,7 +35,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
         operationDescription: "Hostelería",
       },
     ]);
-    courseA = await seedCourse(LOCATION_A, "Entrantes");
+    courseA = await seedCourse(LOCATION_A, "Starters");
     const [cat] = await db
       .insert(catalogues)
       .values({ name: "Deli A" })
@@ -44,7 +44,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       .insert(products)
       .values({
         catalogueId: cat!.id,
-        name: "Café solo",
+        name: "Espresso",
         pricingUnit: "each",
         unitPrice: 100,
         vatClass: "general",
@@ -111,7 +111,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
   });
 
   it("maps display_order and name through the Drizzle export, with the active default", async () => {
-    const id = await seedCourse(LOCATION_A, "Principales", 1);
+    const id = await seedCourse(LOCATION_A, "Mains", 1);
     await inTx((tx) =>
       tx.update(kitchenCourses).set({ displayOrder: 5 }).where(eq(kitchenCourses.id, id)),
     );
@@ -119,7 +119,7 @@ describe("kitchen_courses schema (columns, defaults, course FKs)", () => {
       tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id)),
     );
     expect(row!.displayOrder).toBe(5);
-    expect(row!.name).toBe("Principales");
+    expect(row!.name).toBe("Mains");
     expect(row!.active).toBe(true);
   });
 

@@ -64,8 +64,8 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
   }
 
   it("maps every column through the Drizzle export and detaches by DELETE … RETURNING", async () => {
-    const station = await seedStation("Cocina");
-    const printer = await seedPrinter("Impresora Cocina", "poll-control");
+    const station = await seedStation("Kitchen");
+    const printer = await seedPrinter("Kitchen printer", "poll-control");
     await seedMapping(station, printer);
     const [row] = await inTx((tx) =>
       tx.select().from(stationPrinters).where(eq(stationPrinters.stationId, station)),
@@ -83,8 +83,8 @@ describe("station_printers schema (KDS-4 mapping — PK + FKs)", () => {
   });
 
   it("the primary key rejects a duplicate (station_id, printer_id) mapping", async () => {
-    const station = await seedStation("Barra");
-    const printer = await seedPrinter("Impresora Barra", "poll-dup");
+    const station = await seedStation("Bar");
+    const printer = await seedPrinter("Bar printer", "poll-dup");
     await seedMapping(station, printer);
     const e = await captureError(() => seedMapping(station, printer));
     expect(isRefusal(e, UNIQUE_VIOLATION)).toBe(true);

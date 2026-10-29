@@ -107,12 +107,12 @@ describe("kitchen_stations schema (columns, threshold CHECK, partial unique)", (
   });
 
   it("exposes every column through the Drizzle export, with the is_default and active defaults", async () => {
-    const id = await seedStation(LOCATION_A, "Cocina");
+    const id = await seedStation(LOCATION_A, "Kitchen");
     const [row] = await inTx((tx) =>
       tx.select().from(kitchenStations).where(eq(kitchenStations.id, id)),
     );
     expect(row).not.toHaveProperty("displayOrder");
-    expect(row!.name).toBe("Cocina");
+    expect(row!.name).toBe("Kitchen");
     expect(row!.isDefault).toBe(false);
     expect(row!.active).toBe(true);
     expect(row!.showsRestOfOrder).toBe(false);
