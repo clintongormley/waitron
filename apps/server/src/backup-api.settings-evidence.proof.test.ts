@@ -599,7 +599,7 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }
   }, 60_000);
 
-  it("leaks nothing: a password in a saved bucket endpoint's URL is masked in the answer and the read's log lines", async () => {
+  it("leaks nothing: a password in a saved bucket endpoint's URL is masked in the answer and absent from the read's log lines", async () => {
     const endpointPassword = "review-password-secret";
     await write({
       ...folderSettings(destDir()),

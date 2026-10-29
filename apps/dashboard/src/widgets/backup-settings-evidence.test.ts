@@ -285,7 +285,7 @@ const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
   ["settings from the environment", { now: READABLE, managedByEnvironment: true }, false],
   ["an unreadable record", {}, false],
   ["no record", { now: { state: "absent" }, record: null }, false],
-  ["no failure recorded", { now: READABLE, failures: [] }, false],
+  ["no failure recorded", { now: READABLE, failures: [], latestLoadFailed: false }, false],
   [
     "a clean load after the last failure",
     { now: READABLE, lastCleanLoadAt: "2026-10-29T10:30:00.000Z", latestLoadFailed: false },

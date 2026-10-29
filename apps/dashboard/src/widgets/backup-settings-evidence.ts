@@ -361,8 +361,7 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         usableKey &&
         !e.managedByEnvironment &&
         e.latestLoadFailed &&
-        e.failures[0] !== undefined &&
-        !EVERY_LOAD.has(e.failures[0].code)
+        !EVERY_LOAD.has(e.failures[0]!.code)
           ? html`<p data-test="reads-now">${t("backup_evidence.reads_now")}</p>`
           : nothing
       }

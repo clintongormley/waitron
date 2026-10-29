@@ -105,6 +105,8 @@ new code is needed (none expected).
    folder `stat` runs after the transaction, under the supervisor's status-read time limit
    (`statusReadTimeoutMs`, `apps/server/src/backup-supervisor.ts:147`); a timeout or a permission
    error is `unknown`.
+   _2026-10-29, as built: a password in the endpoint's URL is masked as `user:***@host` by
+   `redactSecrets`._
 3. Mount `GET /api/backup/settings-evidence` with the existing `authorize` (`system.manage`), and
    no backup turn.
 4. Tests on a real venue database (`useVenueDb`) with real key rings, one per design row: key
