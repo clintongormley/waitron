@@ -82,8 +82,8 @@ managers and administrators. How it works and its limits: [conventions-data.md](
 Slice 2 landed (plan
 [2026-10-29-a1167-2-watch-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md)):
 every free-space reading under 2 GiB first deletes the oldest deletable backups toward 2.5 GiB, or
-every one it may when they cannot reach it, while backups run and no backup run holds the staging
-turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
+every one it may when they cannot reach it, while backups run and no backup run holds or waits for
+the staging turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
 
 Still open:
 

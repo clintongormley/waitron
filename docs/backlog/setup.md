@@ -443,7 +443,6 @@ full-disk stop holds (which slice 2's marker now keeps across restarts). A1167's
 (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167", 2026-10-28 ~14:10) dropped the
 "Delete old backups…" dialog and its Box status button and kept the bar, which then says the box has
 already deleted what it may; its button goes to Box status. The bar's words are still to be written.
-Build with or after A1167 slice 2: slice 1 deletes old backups only during a backup run.
 
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 

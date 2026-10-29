@@ -2543,7 +2543,7 @@ every sale, order, kitchen send and clock-in is refused, even one whose own save
 - The free-space watch (`apps/server/src/free-space-watch.ts`, started by boot in trading mode)
   reads the venue folder's free space at start, then a minute after each reading finishes. While the
   stop is on, each reading also awaits `full()`, so the stop lifts within about a minute of 16 MiB
-  being free (while the spare's marker exists, of 24 MiB: each reading first writes the spare back,
+  being free (while the spare's marker exists, of 24 MiB: each reading writes the spare back before it reads,
   see [The box's spare file](#the-boxs-spare-file)), with no write. The watch never turns the stop on.
 - Before that, each reading runs `lowSpaceBackupDeletion` (`apps/server/src/low-space-backups.ts`,
   A1167 slice 2), which under 2 GiB free deletes old backups toward 2.5 GiB (see
@@ -2866,18 +2866,17 @@ turn: it runs while no backup supervisor is running in this process, before boot
 for the forced clean-up after a failed start (`node-entry.ts`), after the failed boot's unwind has
 stopped it — stopping the supervisor aborts a run under way and waits for it to settle. Cases:
 `apps/server/src/backup-staging-turn.test.ts`, and the turn shared with the backups in
-`free-space-now.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
+`free-space-now.test.ts`, `low-space-backups.test.ts` and `boot.box-health.test.ts`. Guard: `scripts/backup-staging-touchers.test.ts`,
 which allows exactly `start-space.ts`, `backup-supervisor.ts` and `free-space-now.ts` to name
 `BACKUP_STAGING_DIR` or `"backup-staging"`.
 A run's deletions of old backups to make room (`makeRoom`, `apps/server/src/backup-room.ts`) are
 steps of `runOnce`, so they happen inside that run's own turn (A1167 slice 1). The free-space
 watch's deletions of old backups (`lowSpaceBackupDeletion`, A1167 slice 2) take the turn through
-`ifNoBackup`, so no run starts while they delete and they never wait for one; they delete only in
-backup folders, never in staging.
+`ifNoBackup`, so no run starts while they delete and they never wait for one.
 `apps/server/scripts/cloud-backup-fixture.ts`, a development fixture, calls `runOnce` outside any
 turn on its own scratch root; it is outside the guard's `apps/*/src` scan.
 
-**What free-space deletion deletes.** Only what the box can make again: in
+**What Box status's Free deletes.** Only what the box can make again: in
 `<stateDir>/backup-staging`, a staged dump (`STAGED_DUMP`, also its `.partial`) and a real folder
 whose name starts `backup-encrypt-`; in `<logDir>`, rotated logs `waitron.log.<n>` with `n ≥ 2`,
 so the current log and the newest rotated one stay; in `<logDir>/crash-reports`, a
@@ -3368,8 +3367,8 @@ only while the marker exists, and a call while one is under way answers that one
 two cannot both write. Without the marker check every booted test server with room would append
 8 MiB to its state folder at the watch's first reading. Cost: a spare missing with no marker (the
 two windows above, the interleave below, or a first start without 24 MiB) waits for the next start
-with room. The watch writes the spare back first, then reads free space once, so the stop can lift
-in the same reading.
+with room. After its old-backup step, the watch writes the spare back, then reads free space once, so
+the stop can lift in the same reading.
 
 **A second start beside a running server can release that server's spare (accepted).** The start's
 release runs before any venue lock, unlike the staging clean-up beside it. Such a start deletes the
@@ -4530,9 +4529,10 @@ interface does not provide a reset or erase operation.
 ## A backup run makes room for itself, or is refused before it copies
 
 A1167 slice 1 (plan `docs/superpowers/plans/2026-10-28-a1167-1-room-before-backup.md`). The code
-is `makeRoom` and `foldersOnDisk` in `apps/server/src/backup-room.ts`, called from `runOnce` in
-`apps/server/src/backup-sweep.ts`; the cases are `backup-room.test.ts`, the backup-sweep suites and
-the real-disk file `backup-room.e2e.test.ts`.
+is `makeRoom` and `foldersOnDisk` in `apps/server/src/backup-room.ts`, called from `runOnce`
+(`apps/server/src/backup-sweep.ts`) and `lowSpaceBackupDeletion` (`apps/server/src/low-space-backups.ts`);
+the cases are `backup-room.test.ts`, the backup-sweep suites, `low-space-backups.test.ts`,
+`free-space-watch.test.ts` and the real-disk file `backup-room.e2e.test.ts`.
 
 **The need.** "The disk" is the one holding the run's working folder (`<state>/backup-staging`),
 where the run reads free space. Before the copy the run needs twice the database file's size (the
@@ -4570,7 +4570,7 @@ room check still runs. A bucket destination has no folder and is never deleted f
 file and its folder's real path the one it was listed by, or it is skipped. Free space is read again
 after each, and deleting stops once that reading reaches the goal or the deleted sizes cover the
 shortfall first read. Each deletion logs `backup.archive_deleted` with `destination`, `key`, `bytes`
-and `reason: "backup_room"`. An `unlink` that fails other than `ENOENT` logs
+and the caller's `reason` (`"backup_room"` for a run). An `unlink` that fails other than `ENOENT` logs
 `backup.archive_delete_failed` and ends the deleting for that step; the step is then refused when
 the last reading is under the floor, as it is after the last deletion. A reading that cannot be
 taken lets the run through. A stop (the run's signal) ends the step with the stop itself.

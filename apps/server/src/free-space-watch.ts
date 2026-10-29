@@ -5,9 +5,11 @@ import { freeBytes, type Statfs } from "./free-bytes.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
 
-/** Below this the box warns that its disk is running out (design §4.6 item 4). */
+/** Below this the box warns that its disk is running out (design §4.6 item 4), and the watch deletes
+ * old backups. */
 export const SPACE_LOW_BYTES = 2 * 1024 ** 3;
-/** The warning goes off only at this much free, so it does not toggle at the line. */
+/** The warning goes off only at this much free, so it does not toggle at the line; the watch's
+ * deletions aim for it. */
 export const SPACE_OK_BYTES = 2.5 * 1024 ** 3;
 export const FREE_SPACE_CHECK_MS = 60_000;
 

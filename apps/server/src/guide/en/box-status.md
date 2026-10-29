@@ -104,10 +104,11 @@ many archives to keep. Leave without changing the settings to stop. Keep your da
 keys and saved backups.
 
 Before each backup, when the disk is short of space, the box can delete its oldest backups on that
-disk to make room. While backups are on, it also does so whenever the disk falls under about 2 GB
-free, until about 2.5 GB is free. It never deletes the newest backup in a folder, a backup from before the box's
+disk to make room. It never deletes the newest backup in a folder, a backup from before the box's
 last restore or fresh setup, or a backup in a bucket. If that is still not enough, the backup is not
-made, and the bell says how much room it needs.
+made, and the bell says how much room it needs. While backups are on, the box also deletes its
+oldest backups, within the same limits, whenever the disk falls under about 2 GB free, until about
+2.5 GB is free.
 
 This page cannot remove other files or move your data to a larger disk.
 
