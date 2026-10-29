@@ -225,6 +225,7 @@ import { resolveEmailDelivery, resolveInvoiceEmailDelivery } from "./email-deliv
 import { mountEmailInboxApi } from "./email-inbox-api.js";
 import { mountEmailSettingsApi } from "./email-settings-api.js";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
+import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import { createMailpitClient } from "./mailpit-client.js";
 import { createSetupOperationStore } from "./setup-operation.js";
 import { stageRestoreRequest, stageStreamRestore } from "./restore-request.js";
@@ -2130,6 +2131,12 @@ async function bootServer(
     );
   }
   mountEmailSettingsApi(app, { db, ring, config }, log);
+  const certificateDiagnosis =
+    enabledFiscal.certificate?.diagnose !== undefined &&
+    enabledFiscal.certificate.diagnoseInChild !== undefined
+      ? createCertificateDiagnosisRunner({ fiscalId: enabledFiscal.id })
+      : undefined;
+  if (certificateDiagnosis) undoOnFailure.push(() => certificateDiagnosis.stop());
   if (enabledFiscal.certificate !== undefined) {
     mountFiscalCertificateApi(
       app,
@@ -2137,6 +2144,7 @@ async function bootServer(
         db,
         ring,
         seat: enabledFiscal.certificate,
+        diagnosisRunner: certificateDiagnosis,
         nodeId: tradingContext.nodeId,
         locationId: tradingContext.locationId,
         environment: config.environment,
@@ -3137,6 +3145,7 @@ async function bootServer(
           () => attendanceLoop,
           () => attendanceEmailLoop,
           () => certificateReminderLoop,
+          () => certificateDiagnosis?.stop(),
           () => invoiceEmailLoop,
           () => cloudWorker,
           () => cloudSnapshots,

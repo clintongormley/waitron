@@ -16,12 +16,25 @@ import "@waitron/ui/src/components/wt-input.js";
 import "@waitron/ui/src/components/wt-combobox.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
-import { codeMessage, codeOf, subscribeLocale } from "@waitron/dashboard-kit";
-import type { AeatCertificateClient, CertificateKind, InstallAnswerView } from "./client.js";
+import {
+  codeMessage,
+  codeOf,
+  subscribeLocale,
+  type DashboardPermissionContinuation,
+} from "@waitron/dashboard-kit";
+import type {
+  AeatCertificateClient,
+  CertificateKind,
+  CertificateCardView,
+  InstallAnswerView,
+} from "./client.js";
 import { t, type AeatCertificateKey } from "./strings.js";
 import { calendarDay } from "./dates.js";
 import { exportGuidesStyles, exportGuidesView } from "./export-guides-view.js";
 import { CERTIFICATE_MAX_BYTES } from "../certificate-limits.js";
+
+import "./certificate-diagnosis.js";
+import type { DiagnosisCandidate } from "./certificate-diagnosis-state.js";
 
 const KINDS: readonly CertificateKind[] = ["sello", "representante"];
 
@@ -107,6 +120,12 @@ export class AeatCertificateDialog extends LitElement {
   /** The card's revision when the dialog opened; the server refuses the install if it moved. */
   @property({ attribute: false }) revision: string | null = null;
   @property({ attribute: false }) kind: CertificateKind = "sello";
+  @property({ attribute: false }) savedCard?: CertificateCardView;
+  @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
+  @state() private diagnosing = false;
+  #diagnosisCandidate: DiagnosisCandidate | null = null;
+  #sourceGeneration = 0;
+  #unsubscribeAccount?: () => void;
   @state() private draft: Draft = { file: null, passphrase: "", certKind: "sello" };
   @state() private attempted = false;
   @state() private busy = false;
@@ -132,10 +151,27 @@ export class AeatCertificateDialog extends LitElement {
     this.#scope = scope;
     this.#leave = coordinator;
     scope.commit({ ...this.draft });
+    let generation = this.permissionContinuation?.snapshot().accountGeneration;
+    this.#unsubscribeAccount = this.permissionContinuation?.subscribe((snapshot) => {
+      if (snapshot.accountGeneration === generation) return;
+      generation = snapshot.accountGeneration;
+      this.#sourceGeneration++;
+      this.#diagnosisCandidate = null;
+      this.draft = { file: null, passphrase: "", certKind: this.kind };
+      this.visible = false;
+      this.refusal = undefined;
+      this.attempted = false;
+      this.#scope?.commit({ ...this.draft });
+      this.requestUpdate();
+    });
   }
 
   override disconnectedCallback(): void {
+    this.#sourceGeneration++;
     this.#unsubscribeLocale?.();
+    this.#unsubscribeAccount?.();
+    this.#diagnosisCandidate = null;
+    this.draft = { file: null, passphrase: "", certKind: this.kind };
     this.#scope?.dispose();
     this.#scope = undefined;
     this.#leave = undefined;
@@ -171,30 +207,47 @@ export class AeatCertificateDialog extends LitElement {
 
   #change(next: Partial<Draft>, field?: Field): void {
     if (field !== undefined && this.refusal?.field === field) this.refusal = undefined;
+    this.#sourceGeneration++;
     this.draft = { ...this.draft, ...next };
+    if (this.diagnosing)
+      this.#diagnosisCandidate = this.draft.file
+        ? { ...this.draft, file: this.draft.file, sourceGeneration: this.#sourceGeneration }
+        : null;
     this.#scope?.changed();
   }
 
   async #save(): Promise<void> {
-    if (this.busy || this.draft.file === null || saveActionState(this.#scope).unchanged) return;
+    if (
+      this.busy ||
+      this.diagnosing ||
+      this.draft.file === null ||
+      saveActionState(this.#scope).unchanged
+    )
+      return;
     this.attempted = true;
     this.refusal = undefined;
     if (this.#failsOwnChecks) {
       void this.updateComplete.then(() => focusFirstInvalid(this.shadowRoot!));
       return;
     }
+    const generation = this.#sourceGeneration;
     const submitted = { ...this.draft };
     this.busy = true;
     let answer: InstallAnswerView;
     try {
+      const pfxBase64 = await base64Of(submitted.file!);
+      if (!this.isConnected || generation !== this.#sourceGeneration) {
+        this.busy = false;
+        return;
+      }
       answer = await this.client.install({
-        pfxBase64: await base64Of(submitted.file!),
+        pfxBase64,
         passphrase: submitted.passphrase,
         certKind: submitted.certKind,
         expectedRevision: this.revision,
       });
     } catch (error) {
-      if (!this.isConnected) return;
+      if (!this.isConnected || generation !== this.#sourceGeneration) return;
       this.busy = false;
       const code = codeOf(error);
       if (VAULT_MAY_HAVE_CHANGED.has(code)) {
@@ -208,7 +261,7 @@ export class AeatCertificateDialog extends LitElement {
       };
       return;
     }
-    if (!this.isConnected) return;
+    if (!this.isConnected || generation !== this.#sourceGeneration) return;
     this.busy = false;
     if (answer.outcome === "refused") {
       this.refusal = refusalOf(answer);
@@ -242,7 +295,7 @@ export class AeatCertificateDialog extends LitElement {
       .value=${this.draft.passphrase}
       .error=${error}
       ?invalid=${error !== ""}
-      ?disabled=${this.busy}
+      ?disabled=${this.busy || this.diagnosing}
       @wt-change=${(event: CustomEvent<{ value: string }>) => {
         event.stopPropagation();
         this.#change({ passphrase: event.detail.value }, "passphrase");
@@ -278,8 +331,10 @@ export class AeatCertificateDialog extends LitElement {
       heading=${t("aeat_certificate.dialog.title")}
       .dismissible=${!this.busy}
       .beforeClose=${this.#beforeClose}
-      @keydown=${(event: KeyboardEvent) =>
-        submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=certificate-save]"))}
+      @keydown=${(event: KeyboardEvent) => {
+        if (this.diagnosing) return;
+        submitOnEnter(event, this.shadowRoot!.querySelector("[data-test=certificate-save]"));
+      }}
     >
       <div class="form">
         <p data-test="certificate-intro">${t("aeat_certificate.dialog.intro")}</p>
@@ -297,7 +352,7 @@ export class AeatCertificateDialog extends LitElement {
           }}
           .error=${fileError}
           ?invalid=${fileError !== ""}
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || this.diagnosing}
           @wt-change=${(event: CustomEvent<{ files: File[] }>) => {
             event.stopPropagation();
             this.#change({ file: event.detail.files[0] ?? null }, "file");
@@ -311,20 +366,40 @@ export class AeatCertificateDialog extends LitElement {
           search="never"
           .options=${KINDS.map((kind) => ({ value: kind, label: t(`aeat_certificate.kind.${kind}`) }))}
           .value=${this.draft.certKind}
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || this.diagnosing}
           @wt-change=${(event: CustomEvent<{ value: CertificateKind }>) => {
             event.stopPropagation();
             this.#change({ certKind: event.detail.value });
           }}
         ></wt-combobox>
         ${exportGuidesView()}
+        ${
+          this.refusal
+            ? html`<wt-button
+                data-test="editor-diagnose"
+                variant="secondary"
+                ?disabled=${this.busy || this.diagnosing}
+                @click=${() => {
+                  this.#diagnosisCandidate = this.draft.file
+                    ? {
+                        ...this.draft,
+                        file: this.draft.file,
+                        sourceGeneration: this.#sourceGeneration,
+                      }
+                    : null;
+                  this.diagnosing = true;
+                }}
+                >${t("aeat_certificate.diagnosis.title")}</wt-button
+              >`
+            : nothing
+        }
       </div>
       <wt-form-actions slot="footer" .error=${this.#bottom()}>
         <wt-button
           slot="cancel"
           variant="secondary"
           data-test="certificate-cancel"
-          ?disabled=${this.busy}
+          ?disabled=${this.busy || this.diagnosing}
           @click=${() => void this.shadowRoot!.querySelector("wt-dialog")!.requestClose("cancel")}
           >${t("aeat_certificate.dialog.cancel")}</wt-button
         >
@@ -332,7 +407,11 @@ export class AeatCertificateDialog extends LitElement {
           data-test="certificate-save"
           variant=${noFile ? "secondary" : action.variant}
           ?disabled=${
-            noFile || action.unchanged || this.busy || (this.attempted && this.#failsOwnChecks)
+            noFile ||
+            action.unchanged ||
+            this.busy ||
+            this.diagnosing ||
+            (this.attempted && this.#failsOwnChecks)
           }
           @click=${() => void this.#save()}
           >${t(
@@ -340,6 +419,28 @@ export class AeatCertificateDialog extends LitElement {
           )}</wt-button
         >
       </wt-form-actions>
+      ${
+        this.diagnosing
+          ? html`<dashboard-aeat-certificate-diagnosis
+              .client=${this.client}
+              .savedCard=${this.savedCard ?? { filing: true, revision: this.revision, timeZone: "UTC", installed: null }}
+              .permissionContinuation=${this.permissionContinuation}
+              .candidate=${this.#diagnosisCandidate}
+              source="candidate"
+              @diagnosis-edit=${(event: Event) => event.stopPropagation()}
+              @wt-close=${(event: Event) => {
+                event.stopPropagation();
+                this.diagnosing = false;
+                this.#diagnosisCandidate = null;
+                void this.updateComplete.then(() =>
+                  this.shadowRoot
+                    ?.querySelector<HTMLElement>("[data-test=editor-diagnose]")
+                    ?.focus(),
+                );
+              }}
+            ></dashboard-aeat-certificate-diagnosis>`
+          : nothing
+      }
     </wt-dialog>`;
   }
 }

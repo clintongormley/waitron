@@ -45,6 +45,8 @@ import { codeOf, codeMessage } from "./i18n/codes.js";
 import { applyVenueTheme, readVenueTheme, setContentLanguages } from "@waitron/ui";
 import { WAITRON_LOCKUP_DARK_URL, WAITRON_LOCKUP_URL } from "@waitron/ui/src/waitron-lockup.js";
 import { DashboardQueries } from "./api/query-controller.js";
+import { createSessionEpoch, type SessionEpoch } from "./session-signals.js";
+import { consumePermissionReturn, PermissionContinuation } from "./permission-continuation.js";
 import { diag } from "./diagnostics.js";
 import { signalAcceptedPasskeys } from "./passkey-signals.js";
 import type { StringKey } from "./i18n/strings.js";
@@ -853,6 +855,7 @@ export class DashboardApp extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ attribute: false }) sessionEpoch: SessionEpoch = createSessionEpoch();
 
   @property({ attribute: false }) request!: DashboardRequest;
   @property({ attribute: false }) liveUpdates?: { start(): void; stop(): void };
@@ -995,12 +998,64 @@ export class DashboardApp extends LitElement {
    * focus, is closed. Both of its buttons are removed on press, which would drop focus to the page. */
   #focusBeforeToast: HTMLElement | null = null;
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
+  #sessionDeadline = 0;
+  // View and connection stamps copy the shared epoch; they never advance authentication.
+  #screenAccountEpoch = 0;
+  #moduleAccountEpoch = 0;
+  #liveAccountEpoch?: number;
   private sessionIdleTimeoutSeconds = 30 * 60;
-  private sessionGeneration = 0;
+  private get sessionGeneration(): number {
+    return this.sessionEpoch.current();
+  }
+  readonly #permissionContinuation = new PermissionContinuation({
+    epoch: () => this.sessionEpoch,
+    identity: () => ({
+      authenticated: this.isConnected && this.sessionRole !== undefined,
+      permissions: this.isConnected ? this.#sessionPermissions : [],
+    }),
+    prepare: async () => {
+      let allowed = false;
+      await this.leave.coordinator.request({
+        scopes: "all",
+        reason: "navigation",
+        proceed: () => {
+          allowed = true;
+        },
+      });
+      return allowed;
+    },
+    open: () => this.requestUpdate(),
+    close: () => this.requestUpdate(),
+    suspend: () => this.#suspendIdentity(),
+    reconcile: async (generation) => {
+      const me = await this.api.getMe({ sessionErrors: "caller" });
+      if (!this.isConnected || generation !== this.sessionGeneration)
+        throw new Error("session changed");
+      this.#applyMe(me, undefined, true);
+    },
+    changed: () => {
+      if (
+        this.isConnected &&
+        this.sessionRole !== undefined &&
+        this.sessionExpiryTimer !== undefined
+      ) {
+        this.#scheduleSessionExpiry(Math.max(0, (this.#sessionDeadline - Date.now()) / 1000));
+        this.#startLiveUpdates();
+      }
+      this.requestUpdate();
+    },
+  });
   #signingOut = false;
 
   readonly #onSessionInvalid = (event: Event): void => {
-    const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    const detail = (event as CustomEvent<{ code?: unknown; generation?: number }>).detail;
+    const code = detail?.code;
+    if (
+      code !== "node.reset" &&
+      detail?.generation !== undefined &&
+      detail.generation !== this.sessionGeneration
+    )
+      return;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
     // An ended or absent session answers `required`: while signed out, or while signing out (which
@@ -1017,17 +1072,33 @@ export class DashboardApp extends LitElement {
       code === "person.suspended" ||
       code === "node.reset"
     ) {
+      if (
+        code !== "node.reset" &&
+        (this.#permissionContinuation.open || this.#permissionContinuation.unresolved)
+      ) {
+        this.sessionEpoch.advance();
+        this.#suspendIdentity();
+        this.#permissionContinuation.notify();
+        return;
+      }
       this.#returnToLogin(code);
     }
   };
 
   readonly #onVisibilityChange = (): void => {
-    if (document.visibilityState === "visible" && this.screen !== "login") {
+    if (
+      document.visibilityState === "visible" &&
+      this.screen !== "login" &&
+      !this.#permissionContinuation.open &&
+      !this.#permissionContinuation.unresolved
+    ) {
       void this.#probeSession();
     }
   };
 
-  readonly #onSessionActive = (): void => {
+  readonly #onSessionActive = (event: Event): void => {
+    const generation = (event as CustomEvent<{ generation?: number }>).detail?.generation;
+    if (generation !== undefined && generation !== this.sessionGeneration) return;
     if (this.sessionRole !== undefined) {
       this.#scheduleSessionExpiry(this.sessionIdleTimeoutSeconds);
       this.#broadcastSessionDeadline(Date.now() + this.sessionIdleTimeoutSeconds * 1000);
@@ -1089,7 +1160,8 @@ export class DashboardApp extends LitElement {
   }
 
   override disconnectedCallback(): void {
-    this.sessionGeneration += 1;
+    this.sessionEpoch.advance();
+    this.#permissionContinuation.disconnect();
     this.liveUpdates?.stop();
     this.#breakpoint?.removeEventListener("change", this.#onBreakpointChange);
     this.#breakpoint = undefined;
@@ -1114,9 +1186,11 @@ export class DashboardApp extends LitElement {
   async #boot(): Promise<void> {
     const url = new URL(window.location.href);
     const googleCallback = url.searchParams.get("login") === "google";
+    const returnPath = consumePermissionReturn(googleCallback);
     const preference = consumeGoogleLoginPreference(googleCallback);
     if (googleCallback) {
       url.searchParams.delete("login");
+      if (returnPath !== undefined) url.pathname = returnPath;
       const guard = navigationGuardFor(window);
       if (guard) await guard.write(url, true);
       else history.replaceState(history.state, "", url);
@@ -1133,11 +1207,13 @@ export class DashboardApp extends LitElement {
   /** The server matches Accept-Language against the installed UI languages. A late response must
    * not overwrite a person's explicit language choice or repaint a disconnected app. */
   async #seedLocale(): Promise<void> {
+    const generation = this.sessionGeneration;
     const choice = this.#loginLocaleChoice;
     try {
       const { loginDefault, venueDefault, venueName, onboardingIntent } =
         await this.api.getLocales();
-      if (!this.isConnected || this.screen !== "login") return;
+      if (!this.isConnected || generation !== this.sessionGeneration || this.screen !== "login")
+        return;
       this.#venueLocale = venueDefault;
       this.#loginLocale = loginDefault;
       this.venueName = venueName;
@@ -1216,6 +1292,22 @@ export class DashboardApp extends LitElement {
     mayApplyLocale: boolean,
   ): void {
     if (!this.isConnected) return;
+    const changedAccount = this.myPersonId !== me.personId;
+    const changedIdentity =
+      changedAccount ||
+      this.sessionRole !== me.role ||
+      this.#sessionPermissions.length !== me.permissions.length ||
+      this.#sessionPermissions.some((permission) => !me.permissions.includes(permission)) ||
+      this.#enabledModules.length !== me.modules.length ||
+      this.#enabledModules.some((module) => !me.modules.includes(module));
+    if (changedIdentity) {
+      this.sessionEpoch.advance();
+      this.#moduleAccountEpoch = this.sessionGeneration;
+      if (changedAccount) {
+        this.#screenAccountEpoch = this.sessionGeneration;
+        if (this.sessionRole !== undefined) this.#suspendIdentity();
+      }
+    }
     this.sessionNoticeCode = null;
     this.myPersonId = me.personId;
     if (preference !== undefined && typeof me.email === "string") {
@@ -1227,8 +1319,9 @@ export class DashboardApp extends LitElement {
       );
     }
     this.sessionRole = me.role;
-    this.liveUpdates?.start();
+    this.#startLiveUpdates();
     this.#sessionPermissions = me.permissions;
+    this.#permissionContinuation.notify();
     // A plain field: redraw so the screens given a permission see the change.
     this.requestUpdate();
     this.onboardingIntent = me.onboardingIntent;
@@ -1263,6 +1356,12 @@ export class DashboardApp extends LitElement {
         { passive: true },
       )
       .catch(() => undefined);
+  }
+
+  #startLiveUpdates(): void {
+    if (this.#liveAccountEpoch === this.sessionGeneration) return;
+    this.#liveAccountEpoch = this.sessionGeneration;
+    this.liveUpdates?.start();
   }
 
   #watchVenueTheme(): void {
@@ -1400,8 +1499,17 @@ export class DashboardApp extends LitElement {
 
   #scheduleSessionExpiry(seconds: number): void {
     clearTimeout(this.sessionExpiryTimer);
+    this.#sessionDeadline = Date.now() + Math.max(0, seconds * 1000);
+    const generation = this.sessionGeneration;
     this.sessionExpiryTimer = setTimeout(
-      () => this.#returnToLogin("management_session.expired"),
+      () => {
+        if (generation === this.sessionGeneration)
+          this.#onSessionInvalid(
+            new CustomEvent("waitron-session-invalid", {
+              detail: { code: "management_session.expired", generation },
+            }),
+          );
+      },
       Math.max(0, seconds * 1000),
     );
   }
@@ -1415,6 +1523,21 @@ export class DashboardApp extends LitElement {
   }
 
   #returnToLogin(code: string | null, next: ScreenId | null = null): void {
+    this.sessionEpoch.advance();
+    this.#suspendIdentity();
+    this.#permissionContinuation.reset();
+    this.sessionNoticeCode = code;
+    this.screen = "login";
+    this.#broadcastSessionDeadline(0);
+    this.#url.write({ dashboard: next }, true);
+    this.#permissionContinuation.notify();
+    if (this.isConnected) {
+      setLocale(this.#loginLocale ?? this.#venueLocale);
+      void this.#seedLocale();
+    }
+  }
+
+  #suspendIdentity(): void {
     setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
@@ -1426,12 +1549,11 @@ export class DashboardApp extends LitElement {
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;
     this.liveUpdates?.stop();
-    this.sessionGeneration += 1;
+    this.#liveAccountEpoch = undefined;
     clearTimeout(this.sessionExpiryTimer);
     this.sessionExpiryTimer = undefined;
-    this.sessionNoticeCode = code;
-    this.screen = "login";
     this.sessionRole = undefined;
+    this.screen = "login";
     this.myPersonId = "";
     this.#sessionPermissions = [];
     this.#enabledModules = [];
@@ -1440,12 +1562,7 @@ export class DashboardApp extends LitElement {
     this.#activePanels = [];
     this.drawerOpen = false;
     this.navSearch = "";
-    this.#broadcastSessionDeadline(0);
-    this.#url.write({ dashboard: next }, true);
-    if (this.isConnected) {
-      setLocale(this.#loginLocale ?? this.#venueLocale);
-      void this.#seedLocale();
-    }
+    this.profileOpen = false;
   }
 
   /**
@@ -1488,6 +1605,7 @@ export class DashboardApp extends LitElement {
       registerCatalogue(c.strings);
       const ctx = {
         request: this.request,
+        permissionContinuation: this.#permissionContinuation,
         liveData: this.api.liveData,
         renderPanel: (panel: string, subject: { id: string; name: string }) =>
           panel === "department-receipt" && this.#sessionPermissions.includes("layout.configure")
@@ -1555,6 +1673,7 @@ export class DashboardApp extends LitElement {
    */
   async #onLoggedIn(event: Event): Promise<void> {
     event.stopPropagation();
+    this.sessionEpoch.advance();
     const detail = (
       event as CustomEvent<{
         accountSetup?: boolean;
@@ -1639,11 +1758,61 @@ export class DashboardApp extends LitElement {
     });
   }
 
+  #permissionDialog(): TemplateResult | typeof nothing {
+    if (!this.#permissionContinuation.open) return nothing;
+    const generation = this.sessionGeneration;
+    return html`<wt-dialog
+      data-test="permission-sign-in"
+      .open=${true}
+      .heading=${t("permission_sign_in.heading")}
+      @wt-close=${(event: Event) => {
+        if (event.target === event.currentTarget && generation === this.sessionGeneration)
+          this.#permissionContinuation.stop();
+      }}
+    >
+      <p>${t("permission_sign_in.explanation")}</p>
+      <p>${t("permission_sign_in.stop_explanation")}</p>
+      <dashboard-login-screen
+        .api=${this.api}
+        .continuation=${true}
+        .sessionGeneration=${this.sessionEpoch.current}
+        .authenticationSubmitted=${(settlement: Promise<unknown>) => this.#permissionContinuation.trackAuthentication(settlement)}
+        @logged-in=${(event: Event) => {
+          event.stopPropagation();
+          this.#permissionContinuation.complete();
+        }}
+      ></dashboard-login-screen>
+      <wt-form-actions slot="footer"
+        ><wt-button
+          variant="secondary"
+          data-test="permission-stop"
+          @click=${() => this.#permissionContinuation.stop()}
+          >${t("permission_sign_in.stop")}</wt-button
+        ></wt-form-actions
+      >
+    </wt-dialog>`;
+  }
+
   override render(): TemplateResult {
+    return html`${this.leaveConfirmation()} ${this.#permissionDialog()} ${this.#renderPage()}`;
+  }
+
+  #renderPage(): TemplateResult {
+    if (
+      this.sessionRole === undefined &&
+      (this.#permissionContinuation.open || this.#permissionContinuation.unresolved)
+    ) {
+      return html`<div class="login-page">
+        ${this.#banner(false, false)}
+        <div class="body">
+          <p role="status">${t("permission_sign_in.unresolved")}</p>
+          ${this.#permissionContinuation.open ? nothing : html`<wt-button data-test="permission-read-again" variant="secondary" @click=${() => void this.#permissionContinuation.readAgain()}>${t("permission_sign_in.read_again")}</wt-button>`}
+        </div>
+      </div>`;
+    }
     if (this.screen === "login") {
       // The login controller repaints translated text without discarding credentials or account setup.
       return html`
-        ${this.leaveConfirmation()}
         <div
           class="login-page"
           @wt-locale-selected=${(e: CustomEvent<{ code: string }>) => void this.#onLocaleSelected(e)}
@@ -1653,6 +1822,11 @@ export class DashboardApp extends LitElement {
             <dashboard-login-screen
               .api=${this.api}
               .noticeCode=${this.sessionNoticeCode}
+              .sessionGeneration=${this.sessionEpoch.current}
+              .authenticationSubmitted=${() => {
+                this.sessionEpoch.advance();
+                this.#permissionContinuation.notify();
+              }}
               @logged-in=${(event: Event) => void this.#onLoggedIn(event)}
             ></dashboard-login-screen>
             ${this.#poweredBy()}
@@ -1661,7 +1835,6 @@ export class DashboardApp extends LitElement {
       `;
     }
     return html`
-      ${this.leaveConfirmation()}
       <div
         class="shell"
         @focusin=${(e: FocusEvent) => this.#onShellFocusIn(e)}
@@ -1714,15 +1887,13 @@ export class DashboardApp extends LitElement {
                   </div>`
                 : nothing
             }
-            <!-- keyed on the active locale: a switch changes the key, so Lit discards and rebuilds the
-                 screen subtree, repainting every child in the new language (screens hold no controller). -->
             <div
               class=${classMap({ body: true, fill: this.screen === "catalogue" })}
               @wt-edit-product=${this.#onEditProduct}
             >
               ${
                 this.contentLanguagesReady
-                  ? keyed(currentLocale(), this.#renderScreen())
+                  ? keyed(`${currentLocale()}/${this.#screenAccountEpoch}`, this.#renderScreen())
                   : this.contentLanguageError === null
                     ? html`<p role="status" data-test="content-language-loading">
                         ${t("content_languages.loading")}
@@ -2064,7 +2235,8 @@ export class DashboardApp extends LitElement {
         key: panel.id,
         tab: panel.tab as VenueSettingsTab,
         order: panel.order ?? 0,
-        render: () => handle.render(!this.#sessionPermissions.includes(panel.requiresPermission)),
+        render: () =>
+          html`${keyed(this.#moduleAccountEpoch, handle.render(!this.#sessionPermissions.includes(panel.requiresPermission)))}`,
       }));
     return [...core, ...modules].sort((a, b) => a.order - b.order);
   }
@@ -2632,7 +2804,7 @@ export class DashboardApp extends LitElement {
   #renderScreen(): TemplateResult {
     const mod = this.#activeScreens.get(this.screen);
     if (mod)
-      return mod.handle.render(!this.#sessionPermissions.includes(mod.screen.requiresPermission));
+      return html`${keyed(this.#moduleAccountEpoch, mod.handle.render(!this.#sessionPermissions.includes(mod.screen.requiresPermission)))}`;
     switch (this.screen) {
       case "my-schedule":
         return html`<dashboard-my-schedule-screen

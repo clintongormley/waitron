@@ -1,6 +1,71 @@
 import { makeT, registerCatalogue, registerCodeMessages } from "@waitron/dashboard-kit";
 
 const en = {
+  "aeat_certificate.diagnosis.title": "Diagnose connection",
+  "aeat_certificate.diagnosis.source": "Certificate to inspect",
+  "aeat_certificate.diagnosis.installed": "Installed certificate",
+  "aeat_certificate.diagnosis.candidate": "Selected replacement, not installed",
+  "aeat_certificate.diagnosis.confirm": "Confirm selected source",
+  "aeat_certificate.diagnosis.inspect": "Read again",
+  "aeat_certificate.diagnosis.check": "Run check",
+  "aeat_certificate.diagnosis.again": "Check again",
+  "aeat_certificate.diagnosis.stop": "Stop",
+  "aeat_certificate.diagnosis.revision_changed":
+    "The installed certificate changed. Stop and reload the saved card, then reopen diagnosis and confirm the source. Nothing was changed by this check.",
+  "aeat_certificate.diagnosis.reload_card": "Stop and reload saved card",
+  "aeat_certificate.diagnosis.edit": "Edit selected file or type",
+  "aeat_certificate.diagnosis.sign_in": "Sign in with permission to manage the system",
+  "aeat_certificate.diagnosis.authority":
+    "Sign in to inspect this certificate. Sign-in can change the dashboard account. You will need to choose the file and enter its passphrase again.",
+  "aeat_certificate.diagnosis.missing_authority": "This account cannot inspect certificates.",
+  "aeat_certificate.diagnosis.unread": "Not yet read",
+  "aeat_certificate.diagnosis.environment": "Configured environment",
+  "aeat_certificate.diagnosis.destination": "Configured destination",
+  "aeat_certificate.diagnosis.kind": "Current material type",
+  "aeat_certificate.diagnosis.saved": "Saved installation record",
+  "aeat_certificate.diagnosis.unverified":
+    "This saved record has not been verified against the current material.",
+  "aeat_certificate.diagnosis.verified":
+    "The current material matches the saved installation record.",
+  "aeat_certificate.diagnosis.no_saved": "No saved installation record.",
+  "aeat_certificate.diagnosis.observed": "Observed",
+  "aeat_certificate.diagnosis.cause": "Cause",
+  "aeat_certificate.diagnosis.choices": "Available choices",
+  "aeat_certificate.diagnosis.cause_unknown": "The cause is not established. Nothing was changed.",
+  "aeat_certificate.diagnosis.http":
+    "The check received HTTP {status}. The cause is not established. Nothing was changed.",
+  "aeat_certificate.diagnosis.query":
+    "This query completed at {time} using the selected material. Nothing was installed. This does not establish whether a future filing will succeed.",
+  "aeat_certificate.diagnosis.repair": "Repair is not available in this panel.",
+  "aeat_certificate.diagnosis.intro":
+    "Opening this panel sends no query. Read again inspects the selected material locally. Run check sends one read-only query; it files no invoice and installs nothing.",
+  "aeat_certificate.diagnosis.busy": "Inspecting selected material…",
+  "aeat_certificate.diagnosis.unavailable":
+    "The result is unavailable. No remote cause has been established. Choose Read again for a new inspection.",
+  "aeat_certificate.diagnosis.copy": "Copy evidence",
+  "aeat_certificate.diagnosis.copied": "Evidence copied.",
+  "aeat_certificate.diagnosis.copy_failed": "The browser could not copy the evidence.",
+  "aeat_certificate.diagnosis.preproduction": "Preproduction",
+  "aeat_certificate.diagnosis.production": "Production",
+  "aeat_certificate.diagnosis.no_candidate":
+    "Choose the replacement file and enter its passphrase. Installed material is never substituted.",
+  "aeat_certificate.diagnosis.local-ready":
+    "The selected material passed the local checks. No network query was sent.",
+  "aeat_certificate.diagnosis.local-finding":
+    "The local checks found a problem with the selected material.",
+  "aeat_certificate.diagnosis.name-lookup-failed": "The destination name could not be resolved.",
+  "aeat_certificate.diagnosis.connection-refused": "The connection was refused.",
+  "aeat_certificate.diagnosis.deadline-elapsed": "The check reached its time limit.",
+  "aeat_certificate.diagnosis.connection-closed":
+    "The connection closed before the check completed.",
+  "aeat_certificate.diagnosis.tls-protocol-failed": "The secure connection failed.",
+  "aeat_certificate.diagnosis.http-response": "An HTTP response was received.",
+  "aeat_certificate.diagnosis.soap-fault": "A structured SOAP refusal was received.",
+  "aeat_certificate.diagnosis.reply-unparseable": "The reply could not be read.",
+  "aeat_certificate.diagnosis.reply-too-large": "The reply exceeded the size limit.",
+  "aeat_certificate.diagnosis.cancelled": "The check was cancelled.",
+  "aeat_certificate.diagnosis.unknown": "The check did not establish an observation.",
+
   "aeat_certificate.title": "AEAT certificate",
   "aeat_certificate.issued_to": "Issued to",
   "aeat_certificate.tax_id": "Tax ID",
@@ -86,6 +151,74 @@ const en = {
 export type AeatCertificateKey = keyof typeof en;
 
 const es: Record<AeatCertificateKey, string> = {
+  "aeat_certificate.diagnosis.title": "Diagnosticar conexión",
+  "aeat_certificate.diagnosis.source": "Certificado que se va a inspeccionar",
+  "aeat_certificate.diagnosis.installed": "Certificado instalado",
+  "aeat_certificate.diagnosis.candidate": "Sustitución elegida, sin instalar",
+  "aeat_certificate.diagnosis.confirm": "Confirmar el certificado elegido",
+  "aeat_certificate.diagnosis.inspect": "Volver a leer",
+  "aeat_certificate.diagnosis.check": "Comprobar",
+  "aeat_certificate.diagnosis.again": "Comprobar de nuevo",
+  "aeat_certificate.diagnosis.stop": "Parar",
+  "aeat_certificate.diagnosis.revision_changed":
+    "El certificado instalado ha cambiado. Para y recarga la ficha guardada; después, abre el diagnóstico y confirma el origen. Esta comprobación no ha cambiado nada.",
+  "aeat_certificate.diagnosis.reload_card": "Parar y recargar la ficha guardada",
+  "aeat_certificate.diagnosis.edit": "Cambiar archivo o tipo",
+  "aeat_certificate.diagnosis.sign_in": "Iniciar sesión con permiso para gestionar el sistema",
+  "aeat_certificate.diagnosis.authority":
+    "Inicia sesión para inspeccionar este certificado. Esto puede cambiar la cuenta del panel. Tendrás que elegir de nuevo el archivo e introducir su contraseña.",
+  "aeat_certificate.diagnosis.missing_authority": "Esta cuenta no puede inspeccionar certificados.",
+  "aeat_certificate.diagnosis.unread": "Aún no se ha leído",
+  "aeat_certificate.diagnosis.environment": "Entorno configurado",
+  "aeat_certificate.diagnosis.destination": "Destino configurado",
+  "aeat_certificate.diagnosis.kind": "Tipo del certificado actual",
+  "aeat_certificate.diagnosis.saved": "Registro de instalación guardado",
+  "aeat_certificate.diagnosis.unverified":
+    "Este registro guardado no se ha verificado con el certificado actual.",
+  "aeat_certificate.diagnosis.verified":
+    "El certificado actual coincide con el registro de instalación guardado.",
+  "aeat_certificate.diagnosis.no_saved": "No hay un registro de instalación guardado.",
+  "aeat_certificate.diagnosis.observed": "Observado",
+  "aeat_certificate.diagnosis.cause": "Causa",
+  "aeat_certificate.diagnosis.choices": "Opciones",
+  "aeat_certificate.diagnosis.cause_unknown":
+    "No se ha determinado la causa. No se ha cambiado nada.",
+  "aeat_certificate.diagnosis.http":
+    "La comprobación recibió HTTP {status}. No se ha determinado la causa. No se ha cambiado nada.",
+  "aeat_certificate.diagnosis.query":
+    "Esta consulta terminó a las {time} con el certificado elegido. No se ha instalado nada. Esto no determina si un envío futuro tendrá éxito.",
+  "aeat_certificate.diagnosis.repair": "La reparación no está disponible en este panel.",
+  "aeat_certificate.diagnosis.intro":
+    "Abrir este panel no envía ninguna consulta. Volver a leer inspecciona el certificado localmente. Comprobar envía una consulta de solo lectura; no registra facturas ni instala nada.",
+  "aeat_certificate.diagnosis.busy": "Inspeccionando el certificado elegido…",
+  "aeat_certificate.diagnosis.unavailable":
+    "El resultado no está disponible. No se ha determinado ninguna causa remota. Elige Volver a leer para iniciar otra inspección.",
+  "aeat_certificate.diagnosis.copy": "Copiar datos observados",
+  "aeat_certificate.diagnosis.copied": "Datos copiados.",
+  "aeat_certificate.diagnosis.copy_failed": "El navegador no ha podido copiar los datos.",
+  "aeat_certificate.diagnosis.preproduction": "Preproducción",
+  "aeat_certificate.diagnosis.production": "Producción",
+  "aeat_certificate.diagnosis.no_candidate":
+    "Elige el archivo de sustitución e introduce su contraseña. Nunca se sustituye por el certificado instalado.",
+  "aeat_certificate.diagnosis.local-ready":
+    "El certificado elegido ha pasado las comprobaciones locales. No se ha enviado ninguna consulta de red.",
+  "aeat_certificate.diagnosis.local-finding":
+    "Las comprobaciones locales han encontrado un problema con el certificado elegido.",
+  "aeat_certificate.diagnosis.name-lookup-failed":
+    "No se ha podido resolver el nombre del destino.",
+  "aeat_certificate.diagnosis.connection-refused": "Se ha rechazado la conexión.",
+  "aeat_certificate.diagnosis.deadline-elapsed":
+    "La comprobación ha alcanzado su límite de tiempo.",
+  "aeat_certificate.diagnosis.connection-closed":
+    "La conexión se ha cerrado antes de terminar la comprobación.",
+  "aeat_certificate.diagnosis.tls-protocol-failed": "Ha fallado la conexión segura.",
+  "aeat_certificate.diagnosis.http-response": "Se ha recibido una respuesta HTTP.",
+  "aeat_certificate.diagnosis.soap-fault": "Se ha recibido un rechazo SOAP estructurado.",
+  "aeat_certificate.diagnosis.reply-unparseable": "No se ha podido leer la respuesta.",
+  "aeat_certificate.diagnosis.reply-too-large": "La respuesta superó el límite de tamaño.",
+  "aeat_certificate.diagnosis.cancelled": "Se ha cancelado la comprobación.",
+  "aeat_certificate.diagnosis.unknown": "La comprobación no ha establecido ninguna observación.",
+
   "aeat_certificate.title": "Certificado de la AEAT",
   "aeat_certificate.issued_to": "Emitido a",
   "aeat_certificate.tax_id": "NIF",

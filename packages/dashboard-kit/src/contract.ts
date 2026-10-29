@@ -10,11 +10,20 @@ import type { DashboardRequest } from "./request.js";
  * known ids. */
 export type NavGroupId = string;
 
+export interface DashboardPermissionContinuation {
+  snapshot(): { accountGeneration: number; authenticated: boolean; permissions: readonly string[] };
+  subscribe(
+    listener: (snapshot: ReturnType<DashboardPermissionContinuation["snapshot"]>) => void,
+  ): () => void;
+  signIn(input: { permission: string; signal: AbortSignal }): Promise<"signed-in" | "stopped">;
+}
+
 /** What a contributed screen is handed at construction. */
 export interface DashboardModuleContext {
   request: DashboardRequest;
   liveData?: LiveData;
   renderPanel?: DashboardPanelRenderer;
+  permissionContinuation?: DashboardPermissionContinuation;
   /** The enabled modules' Calendar views the person may read, ordered by `order`, each with whether
    * the person holds its `requiresPermission`. */
   calendarViews?: readonly CalendarViewEntry[];

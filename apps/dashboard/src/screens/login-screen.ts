@@ -28,6 +28,7 @@ import { codeMessage, codeOf } from "../i18n/codes.js";
 import { classifyPasskeyRegistrationError, classifyPasskeySignInError } from "../passkey-errors.js";
 import type { DashboardApi, PasskeyOptions } from "../api/client.js";
 import { signalUnknownPasskey } from "../passkey-signals.js";
+import { preparePermissionReturn } from "../permission-continuation.js";
 import {
   forgetLoginPreference,
   readLoginPreference,
@@ -241,6 +242,9 @@ export class LoginScreen extends LitElement {
   ];
 
   @property({ attribute: false }) api!: DashboardApi;
+  @property({ type: Boolean }) continuation = false;
+  @property({ attribute: false }) authenticationSubmitted?: (settlement: Promise<unknown>) => void;
+  @property({ attribute: false }) sessionGeneration?: () => number;
   @property({ attribute: false }) navigate: (url: string) => void = (url) =>
     window.location.assign(url);
   @property({ attribute: false }) noticeCode: string | null = null;
@@ -290,7 +294,15 @@ export class LoginScreen extends LitElement {
   }
 
   readonly #onSessionInvalid = (event: Event): void => {
-    const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
+    const detail = (event as CustomEvent<{ code?: unknown; generation?: number }>).detail;
+    const code = detail?.code;
+    if (
+      code !== "node.reset" &&
+      this.sessionGeneration !== undefined &&
+      detail?.generation !== undefined &&
+      detail.generation !== this.sessionGeneration()
+    )
+      return;
     // Neither `node.reset` nor any refusal while the reset view shows resets the form: that view
     // offers only Reload, and a form reset would start a passkey autofill behind it.
     if (this.noticeCode === "node.reset") return;
@@ -645,7 +657,7 @@ export class LoginScreen extends LitElement {
     const generation = this.#generation;
     this.busy = true;
     try {
-      const { personId, offerPasskey } = await this.api.login({
+      const authentication = this.api.login({
         email: this.email,
         password: this.password,
         ...(this.secondFactor === ""
@@ -654,6 +666,8 @@ export class LoginScreen extends LitElement {
             ? { totp: this.secondFactor }
             : { recoveryCode: this.secondFactor }),
       });
+      this.authenticationSubmitted?.(authentication);
+      const { personId, offerPasskey } = await authentication;
       if (!this.#current(generation)) return;
       // Named apart from the rest of the response rather than spread: `offerPasskey` answers this
       // screen's question about which step comes next, and is not part of what a completed sign-in
@@ -664,7 +678,7 @@ export class LoginScreen extends LitElement {
         loginMethod: "password",
         ...this.#preferenceDetail(),
       };
-      if (this.offerAfterLogin || offerPasskey) this.#offerPasskey(detail);
+      if (!this.continuation && (this.offerAfterLogin || offerPasskey)) this.#offerPasskey(detail);
       else this.#announceLogin(detail);
     } catch (error) {
       if (!this.#current(generation)) return;
@@ -922,7 +936,9 @@ export class LoginScreen extends LitElement {
   ): Promise<{ personId: string } | null> {
     let out: { personId: string };
     try {
-      out = await this.api.passkeyAuthVerify({ challengeHandle, response });
+      const authentication = this.api.passkeyAuthVerify({ challengeHandle, response });
+      this.authenticationSubmitted?.(authentication);
+      out = await authentication;
     } catch (error) {
       if (codeOf(error) !== "passkey.not_registered") throw error;
       const forgotten = await signalUnknownPasskey(
@@ -1000,6 +1016,7 @@ export class LoginScreen extends LitElement {
       if (!this.#current(generation)) return;
       this.#clearSecrets();
       prepareGoogleLoginPreference(this.rememberEmail, this.rememberedEmail);
+      if (this.continuation) preparePermissionReturn(window.location.pathname);
       this.navigate(authorizationUrl);
     } catch (error) {
       if (!this.#current(generation)) return;

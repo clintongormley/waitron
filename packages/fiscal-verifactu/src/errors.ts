@@ -24,6 +24,8 @@ export interface LineaParams extends FacturaParams {
  * atop packages/shared/src/errors.ts). */
 declare module "@waitron/shared" {
   interface ErrorParams {
+    "fiscal.certificate_diagnosis_busy": Record<string, never>;
+    "fiscal.certificate_diagnosis_unavailable": Record<string, never>;
     /**
      * Thrown by ./aeat-transport.ts when a decrypted `fiscal.aeat` payload's `certKind`,
      * `pfxBase64` or `passphrase` is absent or unusable. `apps/server/src/errors.ts` declares it

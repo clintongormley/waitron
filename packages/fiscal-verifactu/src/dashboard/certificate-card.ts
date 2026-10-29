@@ -3,11 +3,18 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-notice.js";
-import { codeMessage, codeOf, subscribeLocale } from "@waitron/dashboard-kit";
+import {
+  codeMessage,
+  codeOf,
+  subscribeLocale,
+  type DashboardPermissionContinuation,
+} from "@waitron/dashboard-kit";
 import type { AeatCertificateClient, CertificateCardView, CertificateKind } from "./client.js";
 import { t, type AeatCertificateKey } from "./strings.js";
 import { day, time } from "./dates.js";
 import "./certificate-dialog.js";
+import "./certificate-diagnosis.js";
+import { consumeDiagnosisReturn } from "./certificate-diagnosis-state.js";
 
 type Installed = NonNullable<CertificateCardView["installed"]>;
 
@@ -146,6 +153,9 @@ export class AeatCertificateCard extends LitElement {
 
   @property({ attribute: false }) client!: AeatCertificateClient;
   @property({ attribute: false }) readOnly = false;
+  @property({ attribute: false }) permissionContinuation?: DashboardPermissionContinuation;
+  @state() private diagnosing = false;
+  #diagnosisSource: "installed" | "candidate" = "installed";
   @state() private card?: CertificateCardView;
   @state() private loadError = "";
   @state() private dialog?: { revision: string | null; kind: CertificateKind };
@@ -159,6 +169,13 @@ export class AeatCertificateCard extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.#unsubscribeLocale = subscribeLocale(() => this.requestUpdate());
+    if (this.permissionContinuation) {
+      const source = consumeDiagnosisReturn(this.permissionContinuation);
+      if (source !== undefined) {
+        this.#diagnosisSource = source;
+        this.diagnosing = true;
+      }
+    }
     void this.#load();
   }
 
@@ -277,7 +294,21 @@ export class AeatCertificateCard extends LitElement {
     return html`<section aria-labelledby="aeat-certificate-title" data-state=${state}>
       <header>
         <h2 id="aeat-certificate-title">${t("aeat_certificate.title")}</h2>
-        ${state === "loaded" ? this.#action(card!) : nothing}
+        ${
+          state === "loaded"
+            ? html`<div>
+                ${this.#action(card!)}<wt-button
+                  data-test="certificate-diagnose"
+                  variant="secondary"
+                  @click=${() => {
+                    this.#diagnosisSource = "installed";
+                    this.diagnosing = true;
+                  }}
+                  >${t("aeat_certificate.diagnosis.title")}</wt-button
+                >
+              </div>`
+            : nothing
+        }
       </header>
       ${
         state === "failed"
@@ -294,6 +325,8 @@ export class AeatCertificateCard extends LitElement {
           : html`<dashboard-aeat-certificate-dialog
               .client=${this.client}
               .revision=${this.dialog.revision}
+              .savedCard=${card!}
+              .permissionContinuation=${this.permissionContinuation}
               .kind=${this.dialog.kind}
               @aeat-certificate-installed=${(event: CustomEvent<{ checkedAt: string }>) => {
                 event.stopPropagation();
@@ -311,6 +344,35 @@ export class AeatCertificateCard extends LitElement {
                 void this.#load();
               }}
             ></dashboard-aeat-certificate-dialog>`
+      }
+      ${
+        this.diagnosing && card
+          ? html`<dashboard-aeat-certificate-diagnosis
+              .client=${this.client}
+              .savedCard=${card}
+              .source=${this.#diagnosisSource}
+              .readOnly=${this.readOnly}
+              .permissionContinuation=${this.permissionContinuation}
+              @diagnosis-reload-card=${(event: Event) => {
+                event.stopPropagation();
+                void this.#load();
+              }}
+              @diagnosis-edit=${(event: Event) => {
+                event.stopPropagation();
+                if (!this.readOnly && card.filing)
+                  this.dialog = { revision: card.revision, kind: card.installed?.kind ?? "sello" };
+              }}
+              @wt-close=${(event: Event) => {
+                event.stopPropagation();
+                this.diagnosing = false;
+                void this.updateComplete.then(() =>
+                  this.shadowRoot
+                    ?.querySelector<HTMLElement>("[data-test=certificate-diagnose]")
+                    ?.focus(),
+                );
+              }}
+            ></dashboard-aeat-certificate-diagnosis>`
+          : nothing
       }
     </section>`;
   }

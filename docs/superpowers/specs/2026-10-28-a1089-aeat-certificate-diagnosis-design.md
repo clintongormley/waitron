@@ -1,5 +1,57 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 qualification checkpoint: both guide twins now explain diagnosis and
+its limits. Local built-browser tests connect the module through HTTP and an
+isolated native child, checking both material sources, safe copy and unchanged
+database snapshots and write counts. Stale revisions require an explicit exit and
+ordinary card reload; suspended accounts must sign in again. The focused process
+coverage gap is closed. Whole-candidate review, the push hook and current-head CI
+remain pending, as does persistent repair. Earlier checkpoints retain their state._
+
+_2026-10-29 screen checkpoint: Task 7 adds separate local inspection and an explicit
+query from the certificate card and failed editor. Local browser checks cover native
+source/file/passphrase/type edits, stale reads and answers, account-secret clearing,
+separate Save, safe evidence copy and the actual shell/module sign-in handoff. English
+and Spanish views were inspected in both themes at desktop and phone widths. Guide
+integration, complete built-flow qualification, the earlier process-helper coverage gap
+and persistent repair remain open. This partial branch has not been reviewed or qualified
+for landing. Earlier checkpoints below retain their publication state._
+
+_2026-10-29 browser-support checkpoint: the branch adds opt-in request cancellation
+and in-place permission sign-in using one shared session generation. Local tests
+hold real password/passkey login responses across Stop, apply their cookies and
+re-read the actual account's rights without a diagnostic request; authenticator
+cryptography is synthetic. Browser checks cover native password clearing,
+old-account callbacks, idle expiry, keyboard focus and both themes. The diagnosis
+screen, complete coverage and whole-flow qualification remain open, as does
+persistent repair. Earlier checkpoints below retain their publication state._
+
+_2026-10-29 HTTP checkpoint: Tasks 1–5 now include the optional diagnostic route
+and a runner owned by boot. Local tests exercise no-touch authorization, filtered
+error details, both material kinds, expiry and revocation, plus real HTTP socket
+disconnects during child opening, response reading and cleanup. Permission
+continuation, the screen, complete coverage and whole-flow qualification remain
+open. Persistent repair remains open; earlier checkpoints retain their state._
+
+_2026-10-29 parent checkpoint: Tasks 1–4 now include authorization before and after
+work, selected-material binding, expiry cancellation and stale-result refusal. Local
+tests compare every table and the writer's change count after actual child exit;
+separate held-query cases exercise sale and installation completion. The route,
+screen, complete coverage and whole-flow qualification remain open, as does
+persistent repair. Earlier checkpoints below retain their publication state._
+
+_2026-10-29 process checkpoint: the branch now includes isolated process supervision
+and a built entry. Local tests exercise both certificate kinds, one selected query,
+held response bodies and held cleanup. Parent authorization, material binding, the
+route and the screen remain unbuilt; complete coverage and runtime qualification
+remain open. Persistent repair remains open._
+
+_2026-10-29 implementation update: the owner's 08:07 instruction approves the
+reviewed read-only build. Contracts and the local query adapter are on
+`feat/a1089-certificate-diagnosis`; process supervision, authorization, the route
+and the screen remain unbuilt. Persistent repair remains open. The earlier
+proposal and planning-only statements below describe their publication state._
+
 _2026-10-29: the owner approved option A for planning only at 01:58. The
 [implementation plan](../plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
 keeps persistent repair open; its build needs separate approval. The proposal and its

@@ -186,12 +186,11 @@ under `docs/backlog/`.
   distinct serving-node and data-node contexts, including practice marking. The A1156 review's
   print-delivery override survived the reprint-only controls; existing delivery/PDF suites remain.
 
-- **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
-  connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
-  failure.
-  The owner approved evidence-first planning on 2026-10-29. The
-  [implementation plan](superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
-  awaits build approval. Persistent connection/configuration and external-refusal repair remain open.
+- **A1089: repair persistent AEAT certificate-check failures in the app.** Read-only
+  diagnosis distinguishes saved facts, current material and observed query results, with
+  sign-in, Stop and explicit copy at the action. It does not repair network/configuration
+  problems or a persistent external refusal. Design the applicable repair choices without
+  treating an HTTP status, another check or a completed query as proof of the cause.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The
