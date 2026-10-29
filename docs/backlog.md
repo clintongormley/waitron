@@ -5459,8 +5459,7 @@ Not in any track until the standalone primary is done.
   and prices only once connected, because Cloud's "Venue billing display, version 1" answers a
   paired installation alone; whether Cloud publishes a price list anyone can read is an open owner
   question (2026-10-29). Until then the screen offers only "Create a Cloud
-  account". The production billing calendar is Cloud's to set: the box reads each reply's own
-  `calendarTimeZone` (`apps/server/src/cloud-billing.ts`). Left open by A1185.
+  account". Left open by A1185.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and
