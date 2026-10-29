@@ -278,11 +278,12 @@ async function readUnlocked(hostRoot, diskUuid, io, publishing = false) {
     throw failure("layout-mismatch");
   const layout = parse(await io.read("layout.json"));
   if (
-    !exactRecord(layout, ["version", "diskUuid", "layoutDigest", "rootId"]) ||
+    !exactRecord(layout, ["version", "diskUuid", "layoutDigest", "rootId", "attemptId"]) ||
     layout.version !== 1 ||
     layout.diskUuid !== diskUuid ||
     layout.layoutDigest !== observed.layoutDigest ||
-    layout.rootId !== observed.rootId
+    layout.rootId !== observed.rootId ||
+    !(layout.attemptId === null || token(layout.attemptId))
   )
     throw failure("layout-mismatch");
   const names = await io.list();
@@ -298,12 +299,18 @@ async function readUnlocked(hostRoot, diskUuid, io, publishing = false) {
   const markerBytes = await io.read("attempt.json");
   const headBytes = await io.read("head.json");
   const records = names.filter((name) => /^\d{16}\.json$/.test(name)).sort();
-  if (markerBytes === null && headBytes === null && records.length === 0)
+  if (markerBytes === null && headBytes === null && records.length === 0) {
+    if (layout.attemptId !== null) throw failure("journal-invalid");
     return { kind: "idle", layout };
+  }
   const marker = parse(markerBytes);
   if (!exactRecord(marker, ["binding"])) throw failure("journal-invalid");
   const binding = parseBinding(marker.binding);
-  if (binding.diskUuid !== diskUuid || binding.layoutDigest !== layout.layoutDigest)
+  if (
+    binding.diskUuid !== diskUuid ||
+    binding.layoutDigest !== layout.layoutDigest ||
+    binding.attemptId !== layout.attemptId
+  )
     throw failure("layout-mismatch");
   const head = parse(headBytes);
   if (
@@ -381,6 +388,12 @@ export async function transitionAttempt(expectedSequence, value, io) {
       await io.sync(".publishing");
       await io.syncDirectory();
       if (previous === null) {
+        await publish(
+          "layout.json",
+          ".layout-pending",
+          { ...read.layout, attemptId: event.binding.attemptId },
+          io,
+        );
         await io.create("attempt.json", bytes({ binding: event.binding }));
         await io.sync("attempt.json");
         await io.syncDirectory();

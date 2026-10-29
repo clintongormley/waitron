@@ -57,6 +57,7 @@ async function state(phase, changes = {}) {
     diskUuid: "disk-1",
     layoutDigest: "a".repeat(64),
     rootId: "mount:inode",
+    attemptId: null,
   };
   const files = new Map([["layout.json", JSON.stringify(layout) + "\n"]]);
   const io = {

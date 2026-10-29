@@ -116,7 +116,7 @@ async function fixture() {
   };
   const { diskUuid, layoutDigest, rootId } = await identity();
   const layout = { diskUuid, layoutDigest, rootId };
-  await io.create("layout.json", JSON.stringify({ version: 1, ...layout }) + "\n");
+  await io.create("layout.json", JSON.stringify({ version: 1, ...layout, attemptId: null }) + "\n");
   return { root, io, read: () => readAttempt(root, "disk-1", io) };
 }
 
@@ -145,6 +145,13 @@ describe("attempt journal", () => {
       kind: "inspection-required",
       reason: "layout-unqualified",
     });
+  });
+  it("never treats loss of every attempt record as a freshly initialised idle root", async () => {
+    const { root, io, read } = await fixture();
+    await advance(io, "close");
+    for (const name of await fs.readdir(root))
+      if (name !== "layout.json") await fs.unlink(join(root, name));
+    expect(await read()).toMatchObject({ kind: "inspection-required" });
   });
   it("accepts only an explicitly initialised matching root as idle", async () => {
     const { root, io, read } = await fixture();
@@ -212,8 +219,10 @@ describe("attempt journal", () => {
     async (name) => {
       const { root, io, read } = await fixture();
       await transitionAttempt(0, prepare(), io);
-      await fs.rename(join(root, name), join(root, "saved"));
-      await fs.symlink(join(root, "saved"), join(root, name));
+      const saved = root + "-target";
+      roots.push(saved);
+      await fs.rename(join(root, name), saved);
+      await fs.symlink(saved, join(root, name));
       expect(await read()).toMatchObject({ kind: "inspection-required" });
     },
   );
