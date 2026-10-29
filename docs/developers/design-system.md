@@ -1025,6 +1025,12 @@ redraws it when a table starts to warn and each minute while it warns. While the
 is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent and Served toasts by
 the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it.
 
+On the Order screen the unsent order's button bar (Move to…, Fire, Send all; `.draft-bar`,
+`apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` at the foot of the till's
+scroll area, beside the menu and on the phone's Review view alike, with a line along its top and
+the order pane's own colour behind it, so a long order scrolls under it and never pushes it out of
+the window. Guard: `till-table-order-screen.action-bar.test.ts`.
+
 When the zones read offers another layout (`layoutDue`), a device that can change today shows a
 `role="status"` line above the map or the list, "{period} layout is ready." or, with no new period
 to name, "A newer layout is ready.", beside an Update layout button (`#layoutBanner`,
