@@ -217,6 +217,117 @@ describe("lowSpaceBackupDeletion", () => {
     expect(installationStartedAt).not.toHaveBeenCalled();
   });
 
+  it.each([
+    ["backups stop running", () => []],
+    ["the folder's destination moves to another folder", () => [{ id: "local", localDir: "/x" }]],
+  ])(
+    "deletes nothing when %s while it reads the installation start",
+    async (_, changed: () => { id: string; localDir?: string }[]) => {
+      const f = await fixture();
+      const d = disk(f.paths, GIB);
+      let backends: () => { id: string; localDir?: string }[] = () => [
+        { id: "local", localDir: f.dir },
+      ];
+      let answer!: (at: Date) => void;
+      const { deps: args, onArchivesDeleted } = deps(f, d.statfs, {
+        backends: () => backends(),
+        installationStartedAt: () => new Promise<Date>((resolve) => (answer = resolve)),
+      });
+
+      const step = lowSpaceBackupDeletion(args)(signal());
+      await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+      backends = changed;
+      answer(T);
+      await step;
+
+      expect(f.paths.some(gone)).toBe(false);
+      expect(onArchivesDeleted).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still deletes when a change while it reads the installation start leaves its folders' destinations as they were", async () => {
+    const f = await fixture();
+    const d = disk(f.paths, GIB);
+    let backends: { id: string; localDir?: string }[] = [{ id: "local", localDir: f.dir }];
+    let answer!: (at: Date) => void;
+    const { deps: args } = deps(f, d.statfs, {
+      backends: () => backends,
+      installationStartedAt: () => new Promise<Date>((resolve) => (answer = resolve)),
+    });
+
+    const step = lowSpaceBackupDeletion(args)(signal());
+    await vi.waitFor(() => expect(answer).toBeTypeOf("function"));
+    backends = [{ id: "bucket" }, { id: "local", localDir: f.dir }];
+    answer(T);
+    await step;
+
+    expect(f.paths.map(gone)).toEqual([true, true, false, false]);
+  });
+
+  it("deletes nothing when free space rose to 2 GiB or more while it waited for the turn", async () => {
+    const f = await fixture();
+    let base = SPACE_LOW_BYTES - 0.1 * GIB;
+    let reads = 0;
+    const statfs: Statfs = async () => {
+      reads += 1;
+      return { bavail: base + f.paths.filter(gone).length * GIB, frsize: 1 };
+    };
+    const staging = createStagingTurn();
+    const { deps: args, installationStartedAt } = deps(f, statfs, { staging });
+    let release!: () => void;
+    const holding = staging.ifNoBackup(() => new Promise<void>((resolve) => (release = resolve)));
+
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const step = lowSpaceBackupDeletion(args)(signal());
+    await vi.waitFor(() => expect(reads).toBe(1));
+    await new Promise((resolve) => setImmediate(resolve));
+    base = SPACE_LOW_BYTES + 0.2 * GIB;
+    release();
+    await Promise.all([holding, step]);
+
+    expect(f.paths.some(gone)).toBe(false);
+    expect(installationStartedAt).not.toHaveBeenCalled();
+  });
+
+  it("deletes nothing when free space cannot be read again once it holds the turn", async () => {
+    const f = await fixture();
+    let reads = 0;
+    const statfs: Statfs = async () => {
+      reads += 1;
+      // Only the reading taken once the turn is held fails; later ones would answer 1 GiB.
+      if (reads === 2) throw Object.assign(new Error("gone"), { code: "ENOENT" });
+      return { bavail: GIB + f.paths.filter(gone).length * GIB, frsize: 1 };
+    };
+    const { deps: args, installationStartedAt } = deps(f, statfs);
+
+    await lowSpaceBackupDeletion(args)(signal());
+
+    expect(f.paths.some(gone)).toBe(false);
+    expect(installationStartedAt).not.toHaveBeenCalled();
+  });
+
+  it("deletes nothing when the venue folder's disk cannot be read, and logs why", async () => {
+    const f = await fixture();
+    const d = disk(f.paths, GIB);
+    const {
+      deps: args,
+      log,
+      installationStartedAt,
+    } = deps(f, d.statfs, {
+      deviceOf: async () => {
+        throw Object.assign(new Error("denied"), { code: "EACCES" });
+      },
+    });
+
+    await expect(lowSpaceBackupDeletion(args)(signal())).resolves.toBeUndefined();
+
+    expect(f.paths.some(gone)).toBe(false);
+    expect(installationStartedAt).not.toHaveBeenCalled();
+    expect(log.mock.calls).toEqual([
+      ["warn", "backup.staging_disk_unreadable", { errorCode: "unknown", errno: "EACCES" }],
+    ]);
+  });
+
   it("does nothing once it holds the turn if it was stopped while it waited", async () => {
     const f = await fixture();
     const d = disk(f.paths, GIB);
@@ -335,7 +446,7 @@ describe("lowSpaceBackupDeletion", () => {
     const statfs: Statfs = async () => {
       reads += 1;
       // The reading after the first deletion aborts, so the second is never made.
-      if (reads === 3) controller.abort(new Error("stopping"));
+      if (reads === 4) controller.abort(new Error("stopping"));
       return { bavail: f.paths.filter(gone).length * GIB, frsize: 1 };
     };
     const { deps: args, onArchivesDeleted } = deps(f, statfs);

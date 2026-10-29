@@ -4586,11 +4586,15 @@ first runs `lowSpaceBackupDeletion` (`apps/server/src/low-space-backups.ts`), be
 write-back and the reading itself. Under `SPACE_LOW_BYTES` (2 GiB) free on the venue folder's disk,
 while the backup duty runs (`runningLocalBackends`: `BackupSupervisor.current().enabled`, so not
 when backups are off, keyless, on a standby or mirror, or when the supervisor could not open the
-venue) with a local folder, it takes the staging turn's `ifNoBackup`. Holding it, it reads those
-folders again and stops if the watch was stopped meanwhile; then it runs the same room step with
+venue) with a local folder, it takes the staging turn's `ifNoBackup`. Holding it, it stops if
+the watch was stopped meanwhile, reads free space again and stops unless it is still readable and
+under 2 GiB, and reads those folders again; a venue folder whose disk cannot be read is logged
+`backup.staging_disk_unreadable` and deletes nothing. Then it runs the same room step with
 `dir` the venue folder, no need, no floor, the aim `SPACE_OK_BYTES` (2.5 GiB) and `outOfReach:
 "aim"`: when old backups cannot reach 2.5 GiB it deletes every one it may (design §2; a backup
-run's step instead falls back to the floor, `outOfReach: "floor"`). Each deletion logs
+run's step instead falls back to the floor, `outOfReach: "floor"`). Once the installation start
+is read, which can wait on the write lock, it deletes nothing unless each listed folder's
+destination is still one backups run to, with the same folder setting. Each deletion logs
 `reason: "space_low"`; the report and alert are the run's. While a backup run holds or waits for
 the turn it deletes nothing and logs nothing; the next reading tries again. A step that throws is
 logged `backup.low_space_delete_failed` (unless the watch is stopping) and the reading goes on. A

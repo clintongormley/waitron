@@ -1,5 +1,7 @@
+import { codeOf } from "@waitron/server-kit";
 import {
   foldersOnDisk,
+  type BackupFolder,
   installationStartOrNull,
   makeRoom,
   reportArchivesDeleted,
@@ -8,6 +10,7 @@ import {
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { DeviceOf } from "./disk-usage.js";
+import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { SPACE_LOW_BYTES, SPACE_OK_BYTES } from "./free-space-watch.js";
 import type { Logger } from "./logger.js";
@@ -33,7 +36,10 @@ export interface LowSpaceBackupDeps {
  * The free-space watch's step: under `SPACE_LOW_BYTES` free, deletes the oldest backups the box may
  * delete in local folders on `dir`'s disk until `SPACE_OK_BYTES` is free, or every one it may when
  * they cannot reach it. Deletes nothing while a backup run holds or waits for the staging turn; the
- * next reading tries again.
+ * next reading tries again. Once it holds the turn it reads free space and the folders again, and
+ * after reading the installation start it deletes nothing unless each listed folder's destination
+ * is still among `backends()` with the same `localDir`. A venue folder whose disk cannot be read
+ * is logged `backup.staging_disk_unreadable` and deletes nothing.
  */
 export function lowSpaceBackupDeletion(
   deps: LowSpaceBackupDeps,
@@ -43,12 +49,36 @@ export function lowSpaceBackupDeletion(
     if (free === null || free >= SPACE_LOW_BYTES) return;
     if (!deps.backends().some((b) => b.localDir !== undefined)) return;
     await deps.staging.ifNoBackup(async () => {
-      // Read again once the turn is held: settings can change, or the watch stop, while it waits.
+      // Read again once the turn is held: settings can change, the watch stop, or a holder free
+      // space, while it waits.
       if (signal.aborted) return;
+      const freeNow = await freeBytes(deps.dir, deps.statfs);
+      if (freeNow === null || freeNow >= SPACE_LOW_BYTES) return;
       const backends = deps.backends().filter((b) => b.localDir !== undefined);
       if (backends.length === 0) return;
-      const { folders } = await foldersOnDisk(backends, deps.dir, deps.deviceOf);
+      let folders: BackupFolder[];
+      try {
+        ({ folders } = await foldersOnDisk(backends, deps.dir, deps.deviceOf));
+      } catch (err) {
+        deps.log("warn", "backup.staging_disk_unreadable", {
+          errorCode: codeOf(err),
+          errno: errnoOf(err),
+        });
+        return;
+      }
       if (folders.length === 0) return;
+      const listedDirs = new Map(
+        folders.map((f) => [f.destination, backends.find((b) => b.id === f.destination)?.localDir]),
+      );
+      // The installation start can wait on the write lock, and settings can change meanwhile; null
+      // offers nothing to delete.
+      const installationStartedAt = async () => {
+        const at = await installationStartOrNull(deps.installationStartedAt, deps.log);
+        const current = deps.backends();
+        for (const [id, localDir] of listedDirs)
+          if (!current.some((b) => b.id === id && b.localDir === localDir)) return null;
+        return at;
+      };
       await makeRoom({
         neededBytes: 0,
         floorBytes: 0,
@@ -56,7 +86,7 @@ export function lowSpaceBackupDeletion(
         dir: deps.dir,
         statfs: deps.statfs,
         folders,
-        installationStartedAt: () => installationStartOrNull(deps.installationStartedAt, deps.log),
+        installationStartedAt,
         signal,
         log: deps.log,
         reason: "space_low",
