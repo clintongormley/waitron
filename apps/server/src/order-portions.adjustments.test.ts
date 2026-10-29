@@ -15,6 +15,7 @@ import {
   orderPortionEvents,
   parties,
   printJobs,
+  products,
   saleLines,
   sales,
   tenants,
@@ -24,6 +25,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
 import {
   centsToDecimal,
   decimal,
@@ -64,6 +66,7 @@ import { send } from "./testing/bill-venue.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import { createTable } from "./testing/live-table.js";
 import { addPortionRound } from "./testing/portion-bill.js";
+import { offerProducts } from "./testing/zone-offers.js";
 import { splitPartyBill } from "./testing/serve-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
@@ -3499,4 +3502,105 @@ describe("A803 portions: a whole-bill discount that prices a row two ways record
 
     expect(invoiceRows(await outcome(await portionsBill(lines)))).toEqual(invoiceRows(today));
   });
+});
+
+describe("A803 portions: the extras of a row of identical portions", () => {
+  /** A Focaccia offering the Olives, at one price, from two extras lists, and the two lists. */
+  async function focacciaWithTwoLists() {
+    return inTx(venue, async (tx) => {
+      const [pizza] = await tx
+        .select({ catalogueId: products.catalogueId, categoryId: products.categoryId })
+        .from(products)
+        .where(eq(products.name, "Pizza"));
+      const focaccia = await createProduct(tx, {
+        catalogueId: pizza!.catalogueId,
+        categoryId: pizza!.categoryId,
+        name: `Focaccia ${randomUUID()}`,
+        pricingUnit: "each",
+        unitPrice: "6.00",
+        vatClass: "general",
+      });
+      const list = (name: string) =>
+        createExtraList(
+          tx,
+          {
+            name,
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [
+              { productId: venue.olivesId, maxQuantity: 2, preselected: false, price: "1.50" },
+            ],
+          },
+          venue.cfg.locale,
+        );
+      const toppings = await list(`Toppings ${randomUUID()}`);
+      const sides = await list(`Sides ${randomUUID()}`);
+      await writeProductModifiers(tx, focaccia.id, [
+        { kind: "extras", id: toppings.id },
+        { kind: "extras", id: sides.id },
+      ]);
+      const offers = await offerProducts(tx, venue.cfg, { zone: "tables" });
+      return { menuItemId: offers.offerFor(focaccia.id), lists: [toppings.id, sides.id] };
+    });
+  }
+
+  it.each([false, true])(
+    "A803 portions: one list's olives on a row of two held focaccias, each with the olives of both lists, are discounted together, one focaccia's re-added=%s",
+    async (readded) => {
+      const { menuItemId, lists } = await focacciaWithTwoLists();
+      const olives = (listIds: string[]) =>
+        listIds.map((listId) => ({
+          listId,
+          picks: [{ productId: venue.olivesId, quantity: 1 }],
+        }));
+      const billId = await inTx(venue, async (tx) => {
+        const bill = await seated(tx);
+        await addPortionRound(tx, venue.cfg, bill.billId, [
+          { menuItemId, quantity: "2", extras: olives(lists) },
+        ]);
+        return bill.billId;
+      });
+      if (readded) {
+        // Taking the first list's olives off the second focaccia and putting them back stores
+        // them after the other list's.
+        const second = (await rowsOf(venue, billId)).filter((row) => row.parentLineId === null)[1]!;
+        for (const extras of [olives([lists[1]!]), olives(lists)])
+          await inTx(venue, async (tx) =>
+            updateOrderLine(
+              tx,
+              venue.cfg,
+              billId,
+              second.lineNo,
+              { extras },
+              await readOrderRevision(tx, billId),
+              { operatorId: venue.staffId, expectedEdit: await readBillEditState(tx, billId) },
+            ),
+          );
+      }
+      const stored = await inTx(venue, (tx) =>
+        tx
+          .select({ id: workingOrderLines.id, listId: workingOrderLines.extraListId })
+          .from(workingOrderLines)
+          .where(
+            and(
+              eq(workingOrderLines.workingOrderId, billId),
+              eq(workingOrderLines.productId, venue.olivesId),
+            ),
+          )
+          .orderBy(asc(workingOrderLines.lineNo)),
+      );
+      expect(stored.map((row) => lists.indexOf(row.listId!))).toEqual(
+        readded ? [0, 1, 1, 0] : [0, 1, 0, 1],
+      );
+      const toppings = stored.filter((row) => row.listId === lists[0]).map((row) => row.id);
+
+      expect(
+        await refusalOf(billId, { ...tenOff, lineId: toppings[0]!, lineIds: toppings }),
+      ).toBeNull();
+      expect(await recordedOn(billId)).toMatchObject([{ lineId: toppings[0] }]);
+    },
+  );
 });

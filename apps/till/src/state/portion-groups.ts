@@ -43,7 +43,8 @@ function wholePortion(line: TabLine): boolean {
   );
 }
 
-function lineFacts(line: TabLine) {
+/** What tells two bill lines apart for {@link tabLinePortionKey}, the line's own fields only. */
+export function portionLineFacts(line: TabLine) {
   return [
     line.productId,
     line.parentProductId,
@@ -74,10 +75,10 @@ export function tabLinePortionKey(
   if (!wholePortion(dish)) return null;
   const extras = lines
     .filter((line) => line.parentLineNo === dish.lineNo)
-    .map((extra) => JSON.stringify(lineFacts(extra)))
+    .map((extra) => JSON.stringify(portionLineFacts(extra)))
     .sort();
   return JSON.stringify([
-    lineFacts(dish),
+    portionLineFacts(dish),
     dish.courseId,
     dish.groupId,
     dish.stationId,

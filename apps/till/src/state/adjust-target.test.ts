@@ -125,4 +125,33 @@ describe("A803 portion grouping: rowAdjustTarget", () => {
       },
     ]);
   });
+
+  it("pairs one product offered by two lists list by list, whatever order each member stores them in", () => {
+    const dishes = [pizza(1), pizza(2)];
+    const fromList = (n: number, listId: string, lineNo: number) =>
+      line({
+        ...sent,
+        id: `olives-${n}-${listId}`,
+        lineNo,
+        productId: "p-olives",
+        parentLineNo: n,
+        unitPriceGross: "1.50",
+        listId,
+      });
+    const target = rowAdjustTarget(
+      dishes,
+      [
+        ...dishes,
+        fromList(1, "list-1", 11),
+        fromList(1, "list-2", 12),
+        fromList(2, "list-2", 13),
+        fromList(2, "list-1", 14),
+      ],
+      "Pizza",
+    );
+    expect(target.extras!.map((extra) => extra.lineIds)).toEqual([
+      ["olives-1-list-1", "olives-2-list-1"],
+      ["olives-1-list-2", "olives-2-list-2"],
+    ]);
+  });
 });

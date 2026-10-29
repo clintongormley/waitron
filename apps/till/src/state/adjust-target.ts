@@ -9,6 +9,7 @@ import {
   toScale,
 } from "@waitron/shared";
 import { trimQuantity } from "../widgets/dish-format.js";
+import { portionLineFacts } from "./portion-groups.js";
 import type { TabLine } from "../api/client.js";
 import type { AdjustTarget } from "../widgets/adjustment-dialog.js";
 import type { StoredLines } from "../widgets/basket.js";
@@ -142,7 +143,8 @@ export function rowAdjustTarget(
   };
 }
 
-/** The order identical portions' extras are paired in: one product, name and count per extra. */
+/** The order identical portions' extras are paired in: every fact their grouping compares, so the
+ * n-th extra of each portion is the same extra. */
 function extraOrder(extra: TabLine): string {
-  return JSON.stringify([extra.productId, extra.name ?? null, trimQuantity(extra.quantity)]);
+  return JSON.stringify(portionLineFacts(extra));
 }

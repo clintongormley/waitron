@@ -161,6 +161,8 @@ interface Row {
   id: string;
   lineNo: number;
   parentLineId: string | null;
+  productId: string | null;
+  extraListId: string | null;
   name: string;
   variantName: string | null;
   note: string | null;
@@ -251,6 +253,8 @@ async function readRows(tx: Transaction, orderId: string): Promise<Row[]> {
       id: workingOrderLines.id,
       lineNo: workingOrderLines.lineNo,
       parentLineId: workingOrderLines.parentLineId,
+      productId: workingOrderLines.productId,
+      extraListId: workingOrderLines.extraListId,
       name: workingOrderLines.name,
       variantName: workingOrderLines.variantName,
       note: workingOrderLines.note,
@@ -633,7 +637,18 @@ async function standInRow(
   }
 
   const dishes = members.sort((a, b) => a.lineNo - b.lineNo);
-  const extraOrder = (row: Row) => canonical([row.name, row.variantName, row.unit, row.quantity]);
+  // Product and extras list too: one product can come from two lists at one price.
+  const extraOrder = (row: Row) =>
+    canonical([
+      row.productId,
+      row.extraListId,
+      row.name,
+      row.variantName,
+      row.unit,
+      row.list,
+      row.priceQuantity,
+      row.quantity,
+    ]);
   const families = dishes.map((dish) => ({
     dish,
     extras: rows
