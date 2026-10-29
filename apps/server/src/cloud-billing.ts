@@ -247,13 +247,12 @@ export function billingEnvelope(
   };
 }
 
-function refusal(status: number, value: unknown, retryAfter: string | null): BillingRefusal {
+function refusal(status: number, retryAfter: string | null): BillingRefusal {
   if (status === 400 || status === 405 || status === 413 || status === 415)
     return new AppError("cloud.request_invalid", {});
   const error: BillingRefusal = new AppError("cloud.unavailable", {});
   const seconds = retryAfter !== null && /^\d+$/.test(retryAfter) ? Number(retryAfter) : NaN;
-  if (status === 429 && object(value) && Number.isSafeInteger(seconds))
-    error.retryAfterMs = seconds * 1000;
+  if (status === 429 && Number.isSafeInteger(seconds)) error.retryAfterMs = seconds * 1000;
   return error;
 }
 
@@ -293,7 +292,7 @@ export async function fetchBillingDisplay(
         new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(chunks, size)),
       );
     } catch {
-      unavailable();
+      if (response.ok) unavailable();
     }
     if (!response.ok) {
       const code = object(value) ? value.error : undefined;
@@ -301,7 +300,7 @@ export async function fetchBillingDisplay(
         await options.onRefusal?.("revoked", used, state.publicKey);
       if (response.status === 401 && code === "invalid_proof")
         await options.onRefusal?.("invalid_proof", used, state.publicKey);
-      throw refusal(response.status, value, response.headers.get("retry-after"));
+      throw refusal(response.status, response.headers.get("retry-after"));
     }
     return readBillingDisplay(
       value,

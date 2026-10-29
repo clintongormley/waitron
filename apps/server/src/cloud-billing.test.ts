@@ -4,7 +4,12 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import { billingEnvelope, fetchBillingDisplay, readBillingDisplay } from "./cloud-billing.js";
+import {
+  billingEnvelope,
+  type BillingRefusal,
+  fetchBillingDisplay,
+  readBillingDisplay,
+} from "./cloud-billing.js";
 import type { SavedCloudState } from "./cloud-client.js";
 
 const vector = JSON.parse(
@@ -543,6 +548,44 @@ describe("the exchange with Cloud", () => {
       vi.setSystemTime(NOW);
       expect(await at(Date.parse("2025-11-10T12:00:00.000Z"), yearOld)).toBe("cloud.unavailable");
     });
+  });
+
+  const plain = (res: ServerResponse, status: number, text: string, headers = {}) => {
+    res.writeHead(status, { "content-type": "text/plain", ...headers });
+    res.end(text);
+  };
+  it("maps a refusal whose body is not JSON by its status", async () => {
+    for (const [status, code] of [
+      [415, "cloud.request_invalid"],
+      [400, "cloud.request_invalid"],
+      [503, "cloud.unavailable"],
+    ] as const) {
+      const c = await cloud((_req, res) => plain(res, status, "Unsupported Media Type"));
+      expect(await codeOfAsync(fetchBillingDisplay(c.state))).toBe(code);
+    }
+  });
+  it("reports the Retry-After hint of a 429 whose body is not JSON", async () => {
+    const c = await cloud((_req, res) =>
+      plain(res, 429, "Too many requests", { "retry-after": "120" }),
+    );
+    const error = await fetchBillingDisplay(c.state).catch((e: unknown) => e);
+    expect([(error as AppError).code, (error as BillingRefusal).retryAfterMs]).toEqual([
+      "cloud.unavailable",
+      120_000,
+    ]);
+  });
+  it("tells the connection nothing about a 403 or 401 whose body is not the JSON error code", async () => {
+    for (const [status, text] of [
+      [403, "revoked"],
+      [401, "invalid_proof"],
+    ] as const) {
+      const c = await cloud((_req, res) => plain(res, status, text));
+      const onRefusal = vi.fn(async () => {});
+      expect(await codeOfAsync(fetchBillingDisplay(c.state, { onRefusal }))).toBe(
+        "cloud.unavailable",
+      );
+      expect(onRefusal).not.toHaveBeenCalled();
+    }
   });
 
   it("refuses a redirect", async () => {

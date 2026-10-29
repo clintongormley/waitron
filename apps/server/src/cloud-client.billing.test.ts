@@ -115,6 +115,26 @@ it("waits for a 429's Retry-After hint before reading again, and one minute with
   }
 });
 
+it("waits for the Retry-After hint of a 429 whose body is not JSON", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((_v, _s, res) => {
+    res.writeHead(429, { "content-type": "text/plain", "retry-after": "120" });
+    res.end("Too many requests");
+  });
+  try {
+    const start = Date.now();
+    expect(await codeOf(f.client.billing())).toBe("cloud.unavailable");
+    vi.setSystemTime(start + 119_000);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(1);
+    vi.setSystemTime(start + 120_000);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(2);
+  } finally {
+    await f.close();
+  }
+});
+
 it("refuses without a connection, sending nothing", async () => {
   const f = await cloudFixture();
   try {
