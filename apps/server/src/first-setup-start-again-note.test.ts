@@ -11,7 +11,6 @@ import {
   rmdir,
   writeFile,
 } from "node:fs/promises";
-import * as fsPromises from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -71,6 +70,7 @@ vi.mock("@waitron/provisioning", async (importOriginal) => {
   return {
     ...actual,
     raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote),
+    writeStartAgainMarker: vi.fn(actual.writeStartAgainMarker),
     readWellFormedModulePreparations: vi.fn(actual.readWellFormedModulePreparations),
   };
 });
@@ -240,13 +240,13 @@ async function claimedWithoutName() {
   return { folders, host, startRequest };
 }
 
-it("an attempt whose module never chose a name starts again without a note", async () => {
+it("an attempt whose module never chose a name starts again", async () => {
   const { folders, host, startRequest } = await claimedWithoutName();
   await createFirstSetupResolutionActions({
     ...folders,
     host,
   }).startAgainFirstSetup(startRequest);
-  expect(await readStartAgainNote(folders.stateDir)).toBeNull();
+  await expectStartAgainDeleted(folders);
 });
 
 it("an attempt naming a module is refused when the host was given no modules to ask", async () => {
@@ -261,8 +261,8 @@ it("an attempt naming a module is refused when the host was given no modules to 
   expect(await readStartAgainNote(folders.stateDir)).toBeNull();
 });
 
-it("two Start again requests at once raise the note once", async () => {
-  const { f, name, floorMs, actions, startRequest } = await abandonedAttempt();
+it("two Start again requests at once delete the attempt once", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
   const exclusion = f.host.resolution.withVenueExclusion.bind(f.host.resolution);
   let arrived = 0;
   let releaseBoth!: () => void;
@@ -273,7 +273,6 @@ it("two Start again requests at once raise the note once", async () => {
     await bothArrived;
     return exclusion(run);
   });
-  vi.mocked(raiseStartAgainNote).mockClear();
   const results = await Promise.allSettled([
     actions.startAgainFirstSetup(startRequest),
     actions.startAgainFirstSetup(startRequest),
@@ -282,13 +281,23 @@ it("two Start again requests at once raise the note once", async () => {
   expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
   const refusal = results.find((result) => result.status === "rejected");
   expect(refusal?.reason).toMatchObject({ code: "setup.attempt_conflict" });
-  expect(vi.mocked(raiseStartAgainNote)).toHaveBeenCalledTimes(1);
-  expect(await readStartAgainNote(f.stateDir)).toEqual({
-    version: 1,
-    floorMs,
-    lastName: name,
-    module: "fiscal-verifactu",
-  });
+});
+
+it("Start again writes no start-again note", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await actions.startAgainFirstSetup(startRequest);
+  expect(await exists(join(f.stateDir, "first-setup-start-again.json"))).toBe(false);
+});
+
+it("Start again leaves a leftover note file byte for byte", async () => {
+  const { f, name, actions, startRequest } = await abandonedAttempt();
+  const path = join(f.stateDir, "first-setup-start-again.json");
+  const leftover = Buffer.from(
+    `{ "version": 1, "floorMs": ${EPOCH_MS}, "lastName": "${name}", "module": "fiscal-verifactu" }\n`,
+  );
+  await writeFile(path, leftover);
+  await actions.startAgainFirstSetup(startRequest);
+  expect(await readFile(path)).toEqual(leftover);
 });
 
 const CONFIRMATIONS = "first-setup-start-again-confirmations";
@@ -442,7 +451,7 @@ it("a confirmed Start again writes the confirmation record with who, when and wh
   });
 });
 
-it("an attempt that finished activation shows it and can be started again on confirmation, and the note holds its name", async () => {
+it("an attempt that finished activation shows it and can be started again on confirmation", async () => {
   const { f, name, actions, owner, ids, request } = await missingDatabase([
     { kind: "activation-started" },
     { kind: "committed", result: {} },
@@ -455,7 +464,7 @@ it("an attempt that finished activation shows it and can be started again on con
     ...request,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
-  expect(await readStartAgainNote(f.stateDir)).toMatchObject({ lastName: name });
+  await expectStartAgainDeleted(f);
 });
 
 it("the summary route refuses when the database is present", async () => {
@@ -531,14 +540,14 @@ const exists = (path: string) =>
     () => false,
   );
 
-it("on a missing database, the confirmation record is on disk before the note, the note before the marker, and all three before the first deletion", async () => {
+it("on a missing database, the confirmation record is on disk before the marker, and both before the first deletion", async () => {
   const { f, name, request } = await missingDatabase();
   const confirmations = join(f.stateDir, CONFIRMATIONS);
   const marker = join(f.venueDir, START_AGAIN_MARKER_FILE);
-  const atNote: boolean[] = [];
-  const actual = vi.mocked(raiseStartAgainNote).getMockImplementation()!;
-  vi.mocked(raiseStartAgainNote).mockImplementation(async (...args) => {
-    atNote.push(await exists(confirmations), await exists(marker));
+  const atMarker: boolean[] = [];
+  const actual = vi.mocked(writeStartAgainMarker).getMockImplementation()!;
+  vi.mocked(writeStartAgainMarker).mockImplementationOnce(async (...args) => {
+    atMarker.push(await exists(confirmations), await exists(marker));
     return actual(...args);
   });
   const atDeletion: boolean[] = [];
@@ -546,11 +555,7 @@ it("on a missing database, the confirmation record is on disk before the note, t
     ...f,
     host: f.host,
     remove: async () => {
-      atDeletion.push(
-        await exists(confirmations),
-        await exists(join(f.stateDir, "first-setup-start-again.json")),
-        await exists(marker),
-      );
+      atDeletion.push(await exists(confirmations), await exists(marker));
       throw new Error("removal refused");
     },
   });
@@ -564,8 +569,8 @@ it("on a missing database, the confirmation record is on disk before the note, t
       },
     }),
   ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
-  expect(atNote).toEqual([true, false]);
-  expect(atDeletion).toEqual([true, true, true]);
+  expect(atMarker).toEqual([true, false]);
+  expect(atDeletion).toEqual([true, true]);
   expect(await readdir(confirmations)).toHaveLength(1);
   expect(await readStartAgainMarker(f.venueDir)).not.toBeNull();
   expect(await attemptFiles(f)).toEqual(before);
@@ -754,7 +759,6 @@ it("Start again past a damaged recovery record goes ahead once the summary showi
   expect(
     JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8")).shown,
   ).toEqual({ reached: "named", lastName: name, recoveryRecordDamaged: true });
-  expect((await readStartAgainNote(f.stateDir))?.lastName).toBe(name);
   await expectStartAgainDeleted(f);
 });
 
@@ -1145,7 +1149,6 @@ it("start again leaves no workspace and none of the attempt's files, node.db inc
   expect(before.state["first-fiscal-documents/"]).toBeDefined();
   await actions.startAgainFirstSetup(startRequest);
   await expectAttemptGone(f);
-  expect(await readStartAgainNote(f.stateDir)).not.toBeNull();
 });
 
 it("start again is refused when node.db holds a table", async () => {
@@ -1414,17 +1417,11 @@ it("a repair-page inspection read between deletions, then a cut, still lets the 
   await expectAttemptGone(f);
 });
 
-it("Start again leaves the note and the confirmation folder in place", async () => {
-  const { f, floorMs, actions, startRequest } = await abandonedAttempt();
-  await raiseStartAgainNote(f.stateDir, {
-    floorMs: floorMs + 60 * MINUTE_MS,
-    lastName: "LATER",
-    module: "fiscal-verifactu",
-  });
+it("Start again leaves the confirmation folder in place", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
   await mkdir(join(f.stateDir, CONFIRMATIONS));
   await writeFile(join(f.stateDir, CONFIRMATIONS, "1-earlier.json"), "{}");
   const kept = async () => ({
-    note: await readFile(join(f.stateDir, "first-setup-start-again.json")),
     confirmations: await tree(join(f.stateDir, CONFIRMATIONS)),
   });
   const before = await kept();
@@ -1720,59 +1717,21 @@ async function emptyFolders() {
   return folders;
 }
 
-it("lifetime: Start again with the database present leaves the note and the confirmation record unchanged", async () => {
+it("lifetime: Start again with the database present leaves the confirmation record unchanged", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   const kept = await seedKept(f.stateDir);
   await actions.startAgainFirstSetup(startRequest);
   await expectAttemptGone(f);
-  expect(await kept.bytes()).toEqual(kept.before);
+  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
 });
 
-it("lifetime: a confirmed Start again on a missing database whose attempt chose no name does not rewrite the note", async () => {
-  const { folders, host } = await claimedWithoutName();
-  const kept = await seedKept(folders.stateDir);
-  await rm(join(folders.venueDir, "venue.db"));
-  const inspected = await host.resolution.inspectFirstSetupResolution();
-  const recovered = await host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
-  const current = await host.resolution.inspectFirstSetupResolution();
-  const ids = {
-    inspectionId: current.inspectionId,
-    revision: current.revision!,
-    ownerGeneration: current.ownerGeneration!,
-  };
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
-  const actions = createFirstSetupResolutionActions({ ...folders, host });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
-  expect(shown).toEqual({ reached: "claimed", lastName: null });
-  vi.mocked(raiseStartAgainNote).mockClear();
-  await actions.startAgainFirstSetup({
-    ...ids,
-    owner,
-    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
-  });
-  expect(vi.mocked(raiseStartAgainNote)).not.toHaveBeenCalled();
-  expect(await readdir(join(folders.stateDir, CONFIRMATIONS))).toHaveLength(2);
-  expect(await kept.bytes()).toEqual(kept.before);
-});
-
-it("lifetime: a start that finishes an interrupted deletion leaves the note and the confirmation record unchanged", async () => {
+it("lifetime: a start that finishes an interrupted deletion leaves the confirmation record unchanged", async () => {
   const { f } = await pendingDeletion();
   const kept = await seedKept(f.stateDir);
   await finishStartAgainDeletion(f);
   await expectAttemptGone(f);
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
-  expect(await kept.bytes()).toEqual(kept.before);
+  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
 });
 
 it.each([
@@ -1810,7 +1769,7 @@ it.each([
   },
 );
 
-it("lifetime: the in-app reset leaves the note and the confirmation record unchanged", async () => {
+it("lifetime: the in-app reset leaves the confirmation record unchanged", async () => {
   const folders = await emptyFolders();
   const kept = await seedKept(folders.stateDir);
   const operations = createSetupOperationStore(folders.stateDir);
@@ -1823,10 +1782,10 @@ it("lifetime: the in-app reset leaves the note and the confirmation record uncha
   await stageResetRequest(folders.stateDir, (await operations.read())!.id);
   expect(await runStagedReset({ ...folders, log: () => {} })).toBe(true);
   expect(await operations.read()).toBeNull();
-  expect(await kept.bytes()).toEqual(kept.before);
+  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
 });
 
-it("lifetime: a restart of the repair listener leaves the note and the confirmation record unchanged", async () => {
+it("lifetime: a restart of the repair listener leaves the confirmation record unchanged", async () => {
   const { f } = await abandonedAttempt();
   await rm(join(f.venueDir, "venue.db"));
   const kept = await seedKept(f.stateDir);
@@ -1854,35 +1813,5 @@ it("lifetime: a restart of the repair listener leaves the note and the confirmat
   expect(closes).toHaveLength(2);
   for (const { app } of served)
     expect((await app.request("/setup-api/first-setup/resolution")).status).toBe(200);
-  expect(await kept.bytes()).toEqual(kept.before);
-});
-
-it("lifetime: a later name raises the note, and the old note is whole until the rename", async () => {
-  const { f } = await abandonedAttempt();
-  const kept = await seedKept(f.stateDir);
-  const [oldNote] = kept.before;
-  const seenAtRename: (Buffer | null)[] = [];
-  const io = {
-    ...fsPromises,
-    rename: async (from: string, to: string) => {
-      seenAtRename.push(await readFile(join(f.stateDir, NOTE)).catch(() => null));
-      await fsPromises.rename(from, to);
-    },
-  };
-  const later = Date.parse("2026-12-02T00:00:00Z");
-  await raiseStartAgainNote(
-    f.stateDir,
-    { floorMs: later, lastName: "LATEST", module: "fiscal-verifactu" },
-    io,
-  );
-  expect(seenAtRename).toEqual([oldNote]);
-  const [note, confirmation] = await kept.bytes();
-  expect(note).not.toEqual(oldNote);
-  expect(confirmation).toEqual(kept.before[1]);
-  expect(await readStartAgainNote(f.stateDir)).toEqual({
-    version: 1,
-    floorMs: later,
-    lastName: "LATEST",
-    module: "fiscal-verifactu",
-  });
+  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
 });

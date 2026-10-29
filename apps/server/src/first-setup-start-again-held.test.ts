@@ -252,11 +252,11 @@ async function expectStartAgainRefused(f: Held, send: () => Promise<void>, refus
   );
 }
 
-// What Start again leaves: the anchor's lock files, the note and its confirmation record, and the
-// discarded recovery's journal pointer, records and its target's lock files.
+// What Start again leaves: the anchor's lock files, the confirmation record, and the discarded
+// recovery's journal pointer, records and its target's lock files.
 const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holder\.json$/;
 const LEFT_STATE =
-  /^(first-setup-start-again\.json|first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
+  /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
 
 it("in the held state, Start again confirming the summary deletes the setup, and keeps who chose it", async () => {
   const f = await heldSetup();

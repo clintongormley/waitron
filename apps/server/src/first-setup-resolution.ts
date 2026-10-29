@@ -7,7 +7,6 @@ import {
   emptyAbandonedBackupRecovery,
   firstSetupModuleContext,
   isEmptiedTombstone,
-  raiseStartAgainNote,
   readModulePreparationHistory,
   readFirstSetupRecoveryDeliverySnapshot,
   startAgainSummary,
@@ -624,7 +623,6 @@ export function createFirstSetupResolutionActions(
             holdings?.history,
           );
           if (held && gathered.recoveryRecordDamaged !== damagedShown) conflict();
-          const { floor } = gathered;
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";
@@ -658,8 +656,8 @@ export function createFirstSetupResolutionActions(
             if (activity === null) unavailable();
             throw inProgress(activity);
           };
-          // No await between this check and the first write: the record and the note change the
-          // recovery's originals, so an open that began during the checks could never resume it.
+          // No await between this check and the first write: the record changes the recovery's
+          // originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
           if ((missing || discardsStopped || presentUnreadable) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
@@ -672,7 +670,6 @@ export function createFirstSetupResolutionActions(
               shown: shown!,
             });
           }
-          if (floor !== null) await raiseStartAgainNote(box.stateDir, floor);
           if (found !== undefined) {
             // No await between this check and the seal: an open that began during the writes
             // above would otherwise be sealed while it runs.
