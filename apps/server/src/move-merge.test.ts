@@ -39,7 +39,7 @@ import { kitchenNotices, setRoutingCell } from "@waitron/venue-service";
 import { createStation, updateStation } from "./kitchen.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { attachPrinterToStation } from "./station-printers.js";
 import { printedLines } from "./testing/decode-ticket.js";
 import {
@@ -572,21 +572,21 @@ describe("a MOVED slip per order per station", () => {
     const { partyId, tabId } = await seat(v, mesa11);
     await nameParty(v, partyId, "Ana");
     await inTx(v, (tx) =>
-      placeGroups(tx, v.cfg, partyId, {
-        groups: [
-          {
-            lines: [
-              { menuItemId: v.item("Burger"), quantity: "2" },
-              { menuItemId: v.item("Paella"), quantity: "1" },
-              { menuItemId: v.item("Flan"), quantity: "1" },
-              { menuItemId: v.item("Burger"), quantity: "1" },
-            ],
-            release: "fire",
-          },
-        ],
-        operatorId: OPERATOR,
-        billId: tabId,
-      }),
+      placeGroupedRound(
+        tx,
+        v.cfg,
+        { partyId, tabId },
+        {
+          lines: [
+            { menuItemId: v.item("Burger"), quantity: "2" },
+            { menuItemId: v.item("Paella"), quantity: "1" },
+            { menuItemId: v.item("Flan"), quantity: "1" },
+            { menuItemId: v.item("Burger"), quantity: "1" },
+          ],
+          release: "fire",
+        },
+        OPERATOR,
+      ),
     );
     const checkId = await split(v, partyId, tabId, [4]);
     const numbers = await db

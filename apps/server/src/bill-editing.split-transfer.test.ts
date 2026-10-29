@@ -9,7 +9,7 @@ import { splitBill, transferItems } from "./bill-actions.js";
 import { readBillEditState } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 
-import { submitGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, submitGroups } from "./testing/group-submit-fixture.js";
 import {
   readDrafts,
   saveDraft,
@@ -52,15 +52,14 @@ async function fixture() {
       })
       .returning();
     await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
-    await submitGroups(tx, venue.cfg, p.partyId, {
-      allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      expectedPartyRevision: p.revision,
-      operatorId: venue.operatorId,
-      submissionId: randomUUID(),
-      groups: [
-        { release: "fire", lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "2" }] },
-      ],
-    });
+    await placeGroupedRound(
+      tx,
+      venue.cfg,
+      p,
+      { release: "fire", lines: [{ menuItemId: venue.offerFor("Tarta"), quantity: "2" }] },
+      venue.operatorId,
+      { party: { answer: "none", guests: [] }, ticks: [] },
+    );
     const [dish] = await tx
       .select()
       .from(workingOrderLines)
