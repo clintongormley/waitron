@@ -770,7 +770,7 @@ async function sellAt(instant: string) {
   );
 }
 
-describe("a backup's own floors", () => {
+describe("a backup whose newest record and creation time are near or past the clock", () => {
   const asBrowser = { onBox: false };
   const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
     createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
@@ -787,7 +787,7 @@ describe("a backup's own floors", () => {
     });
   });
 
-  it("waits and then selects once both clocks are past both floors", async () => {
+  it("waits the ordinary settle time and then selects when the clock is past the backup's record and creation time", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-24T09:00:00Z"));
     const f = await host();
