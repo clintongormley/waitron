@@ -357,7 +357,7 @@ describe("Orders routes", () => {
     expect(rows.find((row) => row.id === full)?.invoiceType).toBe("F1");
   });
   it.each([false, true])(
-    "uses its trading context for printer and write location while reading the data node's invoice (practice %s)",
+    "reprints a saved invoice with its trading context's printer, write location and practice marking (%s)",
     async (practiceMode) => {
       const billId = await placedIssuedBill(venue, "Paella");
       const ownNode = nodeId(randomUUID());
@@ -433,4 +433,73 @@ describe("Orders routes", () => {
       expect(job!.saleId).toBe(sale!.id);
     },
   );
+});
+
+describe("Orders data node clock", () => {
+  let scopedVenue: OrderVenue;
+  useVenueDb({
+    migrations: migrationOptionsFor(manifestSets(), null),
+    timeoutMs: 60_000,
+    setup: async (db) => {
+      scopedVenue = await provisionOrderVenue(db);
+    },
+  });
+
+  it("dates reads and staff reprint visibility by the data node, keeping writes at the own location", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-06-10T08:00:00.000Z"));
+    try {
+      const billId = await placedIssuedBill(scopedVenue, "Paella");
+      expect((await collect(scopedVenue, billId, "35.00")).status).toBe(200);
+      vi.setSystemTime(new Date("2026-06-10T12:00:00.000Z"));
+      const ownNode = nodeId(randomUUID());
+      const ownLocation = locationId(randomUUID());
+      const printer = await withTransaction(scopedVenue.db, async (tx) => {
+        await tx.insert(locations).values({
+          id: ownLocation,
+          name: "Own location",
+          invoiceLocales: ["en-GB"],
+          operationDescription: "Hospitality",
+          timeZone: "Pacific/Kiritimati",
+          dayCutover: "00:00:00",
+        });
+        await tx.insert(nodes).values({ id: ownNode, locationId: ownLocation, name: "Own box" });
+        return createPrinter(
+          tx,
+          { locationId: ownLocation },
+          { name: "Own printer", transport: "network_tcp", host: "127.0.0.1" },
+        );
+      });
+      const app = new Hono();
+      mountOrdersApi(
+        app,
+        {
+          db: scopedVenue.db,
+          backend: scopedVenue.backend,
+          cfg: { nodeId: scopedVenue.cfg.nodeId },
+          tradingContext: { ...scopedVenue.cfg, nodeId: ownNode, locationId: ownLocation },
+          invoiceEmailAvailable: () => Promise.resolve(false),
+        },
+        () => {},
+      );
+      const read = await send(app, scopedVenue.staffDashboard, "GET", "/management-api/orders");
+      expect(read.status).toBe(200);
+      expect(read.json).toMatchObject({ from: "2026-06-10", to: "2026-06-10" });
+      const copy = await send(
+        app,
+        scopedVenue.staffDashboard,
+        "POST",
+        `/management-api/orders/${billId}/reprint`,
+        { printerId: printer.id },
+      );
+      expect(copy.status).toBe(202);
+      const [job] = await scopedVenue.db
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.id, (copy.json as { jobId: string }).jobId));
+      expect(job).toMatchObject({ locationId: ownLocation, printerId: printer.id });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

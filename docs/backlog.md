@@ -182,6 +182,10 @@ under `docs/backlog/`.
   to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
+- **Invoice context qualification:** Exercise full-invoice print delivery and PDF downloads with
+  distinct serving-node and data-node contexts, including practice marking. The A1156 review's
+  print-delivery override survived the reprint-only controls; existing delivery/PDF suites remain.
+
 - **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
   connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
   failure.
