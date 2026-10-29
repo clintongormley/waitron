@@ -182,7 +182,7 @@ export interface MakeRoomOptions {
   neededBytes: number;
   floorBytes: number;
   aimBytes: number;
-  /** The folder whose disk is read: the run's working folder, or the venue folder for the watch. */
+  /** The folder whose disk is read. */
   dir: string;
   statfs?: Statfs;
   folders: readonly BackupFolder[];
@@ -193,8 +193,7 @@ export interface MakeRoomOptions {
   /** Logged with each deletion. */
   reason: "backup_room" | "space_low" | "start_room";
   /** What to delete toward when free space plus every deletable archive falls short of the aim:
-   * the floor (a backup run), or the aim anyway, which deletes every deletable archive (the
-   * free-space watch, whose every deletion is room the tills can use). */
+   * the floor, or the aim anyway, which deletes every deletable archive. */
   outOfReach: "floor" | "aim";
   /** Called once, before the step returns or throws, whenever it deleted anything. Its failure is
    * the caller's to log; it never replaces the step's own outcome. */
