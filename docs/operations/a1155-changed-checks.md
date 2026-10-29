@@ -39,3 +39,11 @@ The fresh branch review found a full-disk fixture added on main during this bran
 trading and full-disk assertions remain. New boot coverage pins the missing-node refusal, and
 the archive-reader case now contains two distinct nodes and locations so an unrelated location
 cannot satisfy the expected result.
+
+
+The crash-recovery archive and stream cases in
+`apps/server/src/restore-emergency-crash.e2e.test.ts` previously expected the location’s UUID
+inside the trading file. They now assert the removed setting is absent and check that exact
+UUID on the restored database node. Their process-kill, replay, allocation, counter, record,
+invoice-number and no-network assertions remain unchanged. This follows the same 29 October
+location-setting removal decision.

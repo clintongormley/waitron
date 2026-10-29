@@ -5,7 +5,13 @@ import { cp, readFile, readdir, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
-import { openVenueDatabase, readStandardSeriesId, sales, withTransaction } from "@waitron/db";
+import {
+  openVenueDatabase,
+  readStandardSeriesId,
+  sales,
+  nodes,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import {
@@ -225,12 +231,20 @@ it.each(["archive", "stream"] as const)(
     await expect(f.run()).resolves.toBe(true);
     expect(await f.snapshot()).toEqual(advanced);
     expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.nodeId);
-    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).toContain(f.node.locationId);
+    expect(await readFile(join(f.stateDir, "trading.env"), "utf8")).not.toContain(
+      ["WAITRON", "LOCATION", "ID"].join("_") + "=",
+    );
     expect(await readFile(join(f.stateDir, "trading.env.replaced"), "utf8")).toBe(previousIdentity);
     expect(await f.run()).toBe(false);
     const selling = await openVenueDatabase(f.venueDir);
     let networkCalls = 0;
     try {
+      expect(
+        await selling.venue
+          .select({ locationId: nodes.locationId })
+          .from(nodes)
+          .where(eq(nodes.id, f.node.nodeId)),
+      ).toEqual([{ locationId: f.node.locationId }]);
       const backend = new VerifactuBackend({
         db: selling.venue,
         deploymentEnvironment: "preproduction",
