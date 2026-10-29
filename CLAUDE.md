@@ -809,7 +809,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   differing only in it must leave hashes identical.
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
   after another machine's clock agrees within 30 seconds (no confirmation), strictly later than
-  all readable historical names (a restored or surviving database, a backup's newest record or creation time).
+  all readable historical names (a restored or surviving database, a backup's newest record or creation time;
+  unchanged by A1206, and retired by A1207 for "refuse only if this minute's name exists", owner 2026-10-29).
   Start again keeps no record of the names it deletes (owner, 2026-10-29, A1206, retiring A1042's
   start-again note): two clocks wrong by the same amount can repeat a name. Setup/restore wait
   90–150 seconds; promotion does not. [Detail](docs/developers/conventions-data.md). Only preproduction throwaway

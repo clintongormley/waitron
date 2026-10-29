@@ -660,9 +660,12 @@ reading when it places the recovery. Next step: measure that on a box.
 deletes.** The owner: "I think we must remove this concept of storing the used series name on
 disk. It introduces too many complications. We use the current minute, with confirmed clock times,
 and the latest invoice numbers if we have any." A new installation name is the box's current UTC
-minute, taken only after a second clock on another machine agrees within 30 seconds, strictly later
-than every name in the history the box can still read (a restored or surviving database, a backup's
-newest record or creation time), after setup's and restore's 90–150 second wait. The start-again
+minute, taken only after a second clock on another machine agrees within 30 seconds, after setup's
+and restore's 90–150 second wait. A1206 leaves the existing "strictly later than every name in the
+history the box can still read" check as it was; the owner retired it at ~10:52 the same day ("If
+later invoices exist then they are wrong, we should flag them up … but it doesn't stop us from
+issuing the correct series based on the current minute, just as long as that minute series doesn't
+exist in the database already"), and A1207 replaces it. The start-again
 note, its floor, A1098's Move floor, A1099's damaged-name-record floor and A1131's counting of a
 held setup database's names are gone. A leftover note file is ignored; a plain `waitron.sh reset`
 deletes it. The trade-off the owner accepts: a name an abandoned attempt used is forgotten once

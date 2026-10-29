@@ -5082,7 +5082,9 @@ against a clock on another machine (within 30 seconds, no confirmation) and stri
 every name in the history it can read: a restored or surviving database
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
 the surviving database") and a backup's newest record or creation time
-(`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"). A setup or restore waits
+(`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"). That later-than-history
+check is the one A1206 leaves unchanged: the owner retired it on 2026-10-29 (~10:52), and A1207
+replaces it with "refuse only if this minute's name already exists". A setup or restore waits
 90 to 150 seconds first (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits
 until a minute start 90 to 150 seconds after its check"); a promotion does not
 (`packages/fiscal-verifactu/src/hour-selection.ts`, `settles` is setup and restore only).
