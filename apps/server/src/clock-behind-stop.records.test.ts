@@ -13,6 +13,7 @@ import { readBillEditState } from "./bill-editing.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
+  groupedTabWith,
   inTx,
   partyRevisionOf,
   placedCounterBillMovedTo,
@@ -264,9 +265,12 @@ describe("a line edit", () => {
     });
   }
 
-  /** A bill of two beers with one of them paid, so cutting the line to one completes it. */
+  /**
+   * A bill of two beers with one of them paid, so cutting the line to one completes it. Grouped, as
+   * a bill written before portions holds it: the case cuts part of a line in place.
+   */
   async function halfPaidBeers(now: number): Promise<string> {
-    const billId = await tabWith(venue, "Caña");
+    const billId = await groupedTabWith(venue, "Caña");
     expect((await setQuantity(at(now), billId, "2")).status).toBe(200);
     const paid = await send(
       at(now),

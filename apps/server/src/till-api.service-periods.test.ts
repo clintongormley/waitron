@@ -236,7 +236,8 @@ const linesOf = (tx: Transaction, workingOrderId: string) =>
       workingLineContexts,
       eq(workingLineContexts.workingOrderLineId, workingOrderLines.id),
     )
-    .where(eq(workingOrderLines.workingOrderId, workingOrderId));
+    .where(eq(workingOrderLines.workingOrderId, workingOrderId))
+    .orderBy(workingOrderLines.lineNo);
 
 async function replacePeriodMembership(
   tx: Transaction,
@@ -449,6 +450,30 @@ async function editMealLine(v: Venue, id: string, patch: { quantity?: string; no
       quantity,
       ...(note === null ? {} : { note }),
       ...patch,
+    })),
+  });
+}
+
+/**
+ * Save the held order, all of one dish, as one row lowered to `count` with `note`, as plan A1208's
+ * D8 has the till save a row: one line of several is sent at `count`; portions keep the first `count`
+ * at 1 each and leave the rest out, which removes them.
+ */
+async function lowerMealRow(v: Venue, id: string, count: number, note: string) {
+  const read = await sendAsTill(v, "GET", `/api/working-orders/${id}`);
+  expect(read.status).toBe(200);
+  const order = read.body as {
+    revision: number;
+    lines: { workingOrderLineId: string; menuItemId: string }[];
+  };
+  const one = order.lines.length === 1;
+  return sendAsTill(v, "PUT", `/api/working-orders/${id}`, {
+    revision: order.revision,
+    lines: order.lines.slice(0, one ? 1 : count).map(({ workingOrderLineId, menuItemId }) => ({
+      workingOrderLineId,
+      menuItemId,
+      quantity: one ? String(count) : "1",
+      note,
     })),
   });
 }
@@ -771,12 +796,22 @@ describe("service periods gate only added dishes and added stored quantities", (
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     at(mondayAt("13:55"));
     expect((await editMealLine(v, held.id, { quantity: "2" })).status).toBe(200);
-    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
+    const after = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
+    expect(before).toHaveLength(1);
+    const { id: keptId, ...stored } = before[0]!;
+    // One line raised in place, or a portion and its copy: the stored line keeps its id and price,
+    // and a copy carries the same price and Lunch context.
+    expect(after.filter((line) => line.id === keptId)).toEqual(before);
+    expect(after.filter((line) => line.id !== keptId)).toEqual(
+      Array.from({ length: after.length - 1 }, () => ({ ...stored, id: expect.any(String) })),
+    );
     const rows = await suite.db
       .select({ quantity: workingOrderLines.quantity })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, held.id));
-    expect(rows).toEqual([{ quantity: 2000 }]);
+    // Every line has its context: a copy without one would drop out of `linesOf`'s join.
+    expect(after).toHaveLength(rows.length);
+    expect(rows.reduce((sum, row) => sum + row.quantity, 0)).toBe(2000);
   });
 
   it.each(["14:00", "14:05", "19:05"])(
@@ -938,8 +973,8 @@ describe("service periods gate only added dishes and added stored quantities", (
       ),
     );
     at(mondayAt("15:00"));
-    expect((await editMealLine(v, held.id, { quantity: "1", note: "No salt" })).status).toBe(200);
-    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual(before);
+    expect((await lowerMealRow(v, held.id, 1, "No salt")).status).toBe(200);
+    expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([before[0]]);
     expect(
       await suite.db
         .select({ quantity: workingOrderLines.quantity, note: workingOrderLines.note })
