@@ -14,8 +14,12 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { BACKUP_ROOM_NOTE_FILE, BACKUP_ROOM_START_DELETED_FILE } from "@waitron/provisioning";
+import { basename, join } from "node:path";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  isBackupRoomFileName,
+} from "@waitron/provisioning";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deleteBackupRoomNote,
@@ -116,6 +120,19 @@ describe("writeBackupRoomNote", () => {
     expect(log.mock.calls).toEqual([
       ["warn", "backup.room_note_write_failed", { errno: "ENOSPC" }],
     ]);
+  });
+
+  it("writes under a temporary name the recovery's originals walk leaves out", async () => {
+    const seen: string[] = [];
+    await write({
+      rename: async (from, to) => {
+        seen.push(basename(from));
+        await rename(from, to);
+      },
+    });
+    expect(seen).toHaveLength(1);
+    expect(isBackupRoomFileName(seen[0]!)).toBe(true);
+    expect(seen[0]).not.toBe(BACKUP_ROOM_NOTE_FILE);
   });
 
   it("never throws, and logs a failure that carries no errno as null", async () => {

@@ -209,6 +209,8 @@ export {
   BACKUP_ROOM_START_DELETED_FILE,
   SPARE_SPACE_FILE,
   SPARE_SPACE_RELEASED_FILE,
+  backupRoomNoteTemporaryName,
+  isBackupRoomFileName,
 } from "./spare-space-name.js";
 export {
   START_AGAIN_CHOICES_DIR,

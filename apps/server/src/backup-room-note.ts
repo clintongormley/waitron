@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { lstat, readFile, rename as renameFile, unlink, writeFile } from "node:fs/promises";
 import { isAbsolute, join, normalize } from "node:path";
-import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
+import { BACKUP_ROOM_NOTE_FILE, backupRoomNoteTemporaryName } from "@waitron/provisioning";
 import type { BackupFolder } from "./backup-room.js";
 import { errnoOf } from "./errno.js";
 import type { Logger } from "./logger.js";
@@ -68,10 +68,7 @@ export async function writeBackupRoomNote(options: {
   rename?: Rename;
 }): Promise<void> {
   const { stateDir, log, rename = renameFile } = options;
-  const temporary = join(
-    stateDir,
-    `${BACKUP_ROOM_NOTE_FILE}.${randomBytes(6).toString("hex")}.tmp`,
-  );
+  const temporary = join(stateDir, backupRoomNoteTemporaryName(randomBytes(6).toString("hex")));
   try {
     let venueDb: VenueDbIdentity;
     try {
