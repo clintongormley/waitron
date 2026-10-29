@@ -153,7 +153,7 @@ status before that lookup. These errors name the setting without echoing its val
 
 The server combines that node identity, till preferences and fiscal runtime values in
 `TradingContext` (`apps/server/src/trading-context.ts`). Its invoicing backend belongs to the
-node; each request adds its own device origin and recording effects.
+node.
 
 ### A no-browser check
 
