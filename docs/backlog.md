@@ -182,8 +182,8 @@ under `docs/backlog/`.
   to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
-- **A1156: split the server's `TillConfig` (`config.till`) into box identity and till-app
-  settings.** Left open by A1154; after A1155, as a separate change (owner, 2026-10-27). Queued in
+- **A1156: replace the server's mixed `TillConfig` runtime type and name its node
+  dependencies.** Left open by A1154; after A1155, as a separate change (owner, 2026-10-27). Queued in
   lane E. [Implementation plan](superpowers/plans/2026-10-29-a1156-node-configuration.md): separate
   environment inputs, replace the mixed runtime type, then rename runtime dependencies. The
   environment inputs are separated. Replacing the mixed runtime type and renaming runtime

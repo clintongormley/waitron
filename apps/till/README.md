@@ -147,8 +147,9 @@ there is no fallback to the old names.
 The server reads box identity through `tryLoadNodeIdentity` (`apps/server/src/node-config.ts`)
 and till preferences through `loadTillAppSettings` (`apps/server/src/till-config.ts`). With
 `WAITRON_NODE_ID` unset or empty, you get setup mode even when you supply till preferences.
-A malformed node identity, or a configured node missing from the database after pending adoption,
-refuses trading with `server.node_config_invalid`. The error names the setting without echoing its value.
+A malformed node identity refuses startup with `server.node_config_invalid`. Ordinary trading
+refuses the same way if the configured node has no database row. Pending adoption serves its
+status before that lookup. These errors name the setting without echoing its value.
 
 ### A no-browser check
 

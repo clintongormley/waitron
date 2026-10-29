@@ -4,7 +4,21 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Agent } from "undici";
 import { sql } from "drizzle-orm";
-import { locations, nodes, tenants } from "@waitron/db";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  sales,
+  setDeploymentMode,
+  stampDeployment,
+  tenants,
+  withTransaction,
+  writeMirrorConfig,
+} from "@waitron/db";
+import { persons, startManagementSession } from "@waitron/identity";
+import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
+import { stringToCents } from "@waitron/shared";
+import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import type { TillConfig } from "./till-config.js";
@@ -92,26 +106,34 @@ async function environment(ownNode: boolean, pending = false) {
   };
 }
 
-it("settings-only input serves setup without establishing node identity", async () => {
-  const env = await environment(false);
-  const server = await startServer({ ...env, WAITRON_TILL_LOCALE: "ca-ES" });
-  let dispatcher: Agent | undefined;
-  try {
-    dispatcher = new Agent({
-      connect: { ca: await readFile(join(env.WAITRON_STATE_DIR, "tls", "ca.crt")) },
+it.each([undefined, ""])(
+  "settings-only input serves setup without establishing node identity (%s)",
+  async (node) => {
+    const env = await environment(false);
+    const server = await startServer({
+      ...env,
+      WAITRON_NODE_ID: node,
+      WAITRON_TILL_LOCALE: "ca-ES",
     });
-    const via = { dispatcher } as RequestInit;
-    const setup = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
-    expect(setup.status).toBe(200);
-    await setup.body?.cancel();
-    const till = await fetch(`https://127.0.0.1:${httpPort()}/api/till`, via);
-    expect(till.headers.get("content-type")).toContain("text/html");
-    expect(await till.text()).toContain("setup");
-  } finally {
-    await dispatcher?.close();
-    await server.close();
-  }
-}, 60_000);
+    let dispatcher: Agent | undefined;
+    try {
+      dispatcher = new Agent({
+        connect: { ca: await readFile(join(env.WAITRON_STATE_DIR, "tls", "ca.crt")) },
+      });
+      const via = { dispatcher } as RequestInit;
+      const setup = await fetch(`https://127.0.0.1:${httpPort()}/setup-api/status`, via);
+      expect(setup.status).toBe(200);
+      await setup.body?.cancel();
+      const till = await fetch(`https://127.0.0.1:${httpPort()}/api/till`, via);
+      expect(till.headers.get("content-type")).toContain("text/html");
+      expect(await till.text()).toContain("setup");
+    } finally {
+      await dispatcher?.close();
+      await server.close();
+    }
+  },
+  60_000,
+);
 
 it("pending adoption without an own node serves status and help before location resolution", async () => {
   const env = await environment(true, true);
@@ -177,6 +199,113 @@ it.each([
         operationDescriptionRequired: false,
       });
       expect((await fetch(`http://127.0.0.1:${httpPort()}/setup-api/status`)).status).toBe(404);
+    } finally {
+      await server.close();
+    }
+  },
+  60_000,
+);
+
+it.each(["mirror", "primary"] as const)(
+  "%s reads the correct node's rows while retaining its own box identity",
+  async (mode) => {
+    const originNode = "77777777-7777-4777-8777-777777777777";
+    await source.db
+      .insert(tenants)
+      .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
+    await source.db.insert(locations).values({
+      id: LOCATION,
+      name: "Counter",
+      province: "London",
+      timeZone: "Europe/London",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    await source.db.insert(nodes).values([
+      { id: NODE, locationId: LOCATION, name: "Own box" },
+      { id: originNode, locationId: LOCATION, name: "Origin box" },
+    ]);
+    for (const [nodeId, amount] of [
+      [NODE, "90.00"],
+      [originNode, "10.00"],
+    ] as const) {
+      const [series] = await source.db
+        .insert(invoiceSeries)
+        .values({ nodeId, code: "A" })
+        .returning();
+      await source.db.insert(sales).values({
+        source: "demo_seed",
+        nodeId,
+        seriesId: series!.id,
+        invoiceNumber: 1,
+        issuedAt: "2026-06-10T12:00:00.000Z",
+        issuedOffsetMinutes: 60,
+        total: stringToCents(amount),
+        vatBreakdown: [{ rate: "0.00", base: amount, tax: "0.00" }],
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        fiscalBackend: "none",
+        fiscalState: "not_applicable",
+      });
+    }
+    const [person] = await source.db
+      .insert(persons)
+      .values({ displayName: "Administrator", role: "admin" })
+      .returning();
+    const session = await withTransaction(source.db, (tx) =>
+      startManagementSession(tx, { personId: person!.id }),
+    );
+    await stampDeployment(source.db, "preproduction");
+    if (mode === "mirror") {
+      await setDeploymentMode(source.db, NODE, "mirror");
+      await writeMirrorConfig(source.db, NODE, {
+        relayUrl: "http://127.0.0.1:1/",
+        boxHostname: "origin-box.local",
+        boxCaPem: mintSelfSignedServerCert({
+          hostnames: ["origin-box.local"],
+          ipAddresses: [],
+          now: new Date(),
+        }).caCertPem,
+        originNodeId: originNode,
+      });
+    }
+    const server = await startServer(await environment(true));
+    try {
+      const base = `http://127.0.0.1:${httpPort()}`;
+      const headers = { cookie: `${MANAGEMENT_COOKIE}=${session.token}` };
+      const response = await fetch(
+        `${base}/management-api/reports/period?from=2026-06-10&to=2026-06-10`,
+        { headers },
+      );
+      expect(response.status).toBe(200);
+      const amount = mode === "mirror" ? "10.00" : "90.00";
+      expect(await response.json()).toStrictEqual({
+        from: "2026-06-10",
+        to: "2026-06-10",
+        vat: {
+          byRate: [{ rate: "0.00", base: amount, tax: "0.00" }],
+          baseTotal: amount,
+          taxTotal: "0.00",
+          grossTotal: amount,
+        },
+        topSellers: [],
+      });
+      const probe = await fetch(`${base}/api/node`);
+      expect(probe.status).toBe(200);
+      expect(await probe.json()).toMatchObject({
+        nodeId: NODE,
+        acceptingSales: mode === "primary",
+      });
+      expect(observed.cfg).toMatchObject({ nodeId: NODE, locationId: LOCATION });
+      if (mode === "mirror") {
+        const write = await fetch(`${base}/management-api/catalogues`, {
+          method: "POST",
+          headers,
+          body: "{}",
+        });
+        expect(write.status).toBe(403);
+        expect(await write.json()).toStrictEqual({ error: { code: "node.read_only", params: {} } });
+      }
     } finally {
       await server.close();
     }
