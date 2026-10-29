@@ -1011,6 +1011,43 @@ to submission state and acknowledgements; it needs the fiscal review and landing
 than being treated as a wording repair. The caller search is source inspection, not a runtime
 reachability proof.
 
+**2026-10-29 caller and evidence recheck**, against `9f57a8af1dfe85118e9887747c905efaa8119094`:
+
+The scoped TypeScript/JavaScript search under `apps/`, `packages/`, `scripts/`, `bench/`
+and `deploy/` still found direct imports of the fiscal reconciliation function only in its three
+library test files. The module-selection function and Stripe payment duty in
+`apps/server/src/boot.ts:92`, `:1716` and `:2875` are separate functions.
+`packages/fiscal/src/contribution.ts:128` declares the fiscal contribution and its submission
+seat, not a reconciliation seat. This source search does not establish runtime unreachability.
+
+`packages/fiscal-verifactu/src/reconcile.ts:140` takes a local period snapshot, then queries
+through the client outside the transaction and applies decisions from that snapshot at `:153`.
+This is a state-changing operation: `:343` corrects submission state and writes acknowledgements;
+`:376` resets a missing accepted row to waiting, clears response metadata, stamps the reset and
+`:388` deletes its acknowledgement. The reset stamp is **not evidence that another submission
+actually occurred**. The later-missing fixture at
+`packages/fiscal-verifactu/src/reconcile.test.ts:284` supplies an accepted state and marker; it does
+not exercise a complete reset, send and second-lookup journey. The earlier inventory's “after one
+resubmission” description must not be used as proof of that journey.
+
+The query at `reconcile.ts:248` filters by invoice expedition month, not by node or environment.
+The result map at `:298` matches references; absent references are skipped. These code observations
+leave identity scope, snapshot freshness and concurrent execution to qualify before adding a caller.
+The incident payloads at `:413` and `:446` retain a record ID and invoice identity, without the full
+query response or local/reported-state snapshots. An alert is a saved classification, not evidence
+of the authority's current state. Existing acknowledgement remains separate from recovery.
+
+Unchanged local checks passed: 61 fiscal cases across `reconcile.test.ts`,
+`reconcile.period.test.ts`, `acks.test.ts`, `write-path.e2e.test.ts` and `inmutabilidad.test.ts`,
+including the 20 protected cases; 64 server cases across alert, alert-API and payment-duty suites.
+They exercise fake-authority library behavior and separate alert/payment adapters. They do not
+qualify a production fiscal caller, live AEAT, a new inspection screen or persistent repair.
+
+The [concrete inspection and caller-scope proposal](../superpowers/specs/2026-10-29-a1089-fiscal-reconcile-recovery-design.md)
+asks whether to plan inspection of already-recorded evidence first, keeping a live fiscal caller
+and persistent recovery OPEN, or design an active operator audit and complete decision route first.
+Both choices concern planning only. Neither support referral is fixed by this documentation.
+
 ### payments
 
 **Charged-but-unsettled and repeated payment-check failures need a recovery route.** Trace the existing pending-payment recovery and reason-specific messages, then offer only confirmed-outcome actions. Never retry a charge or unlock an unknown outcome.
