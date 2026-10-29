@@ -353,6 +353,10 @@ export class AeatCertificateCard extends LitElement {
               .source=${this.#diagnosisSource}
               .readOnly=${this.readOnly}
               .permissionContinuation=${this.permissionContinuation}
+              @diagnosis-reload-card=${(event: Event) => {
+                event.stopPropagation();
+                void this.#load();
+              }}
               @diagnosis-edit=${(event: Event) => {
                 event.stopPropagation();
                 if (!this.readOnly && card.filing)

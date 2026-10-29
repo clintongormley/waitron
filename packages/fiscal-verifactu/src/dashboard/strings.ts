@@ -10,6 +10,9 @@ const en = {
   "aeat_certificate.diagnosis.check": "Run check",
   "aeat_certificate.diagnosis.again": "Check again",
   "aeat_certificate.diagnosis.stop": "Stop",
+  "aeat_certificate.diagnosis.revision_changed":
+    "The installed certificate changed. Stop and reload the saved card, then reopen diagnosis and confirm the source. Nothing was changed by this check.",
+  "aeat_certificate.diagnosis.reload_card": "Stop and reload saved card",
   "aeat_certificate.diagnosis.edit": "Edit selected file or type",
   "aeat_certificate.diagnosis.sign_in": "Sign in with permission to manage the system",
   "aeat_certificate.diagnosis.authority":
@@ -157,6 +160,9 @@ const es: Record<AeatCertificateKey, string> = {
   "aeat_certificate.diagnosis.check": "Comprobar",
   "aeat_certificate.diagnosis.again": "Comprobar de nuevo",
   "aeat_certificate.diagnosis.stop": "Parar",
+  "aeat_certificate.diagnosis.revision_changed":
+    "El certificado instalado ha cambiado. Para y recarga la ficha guardada; después, abre el diagnóstico y confirma el origen. Esta comprobación no ha cambiado nada.",
+  "aeat_certificate.diagnosis.reload_card": "Parar y recargar la ficha guardada",
   "aeat_certificate.diagnosis.edit": "Cambiar archivo o tipo",
   "aeat_certificate.diagnosis.sign_in": "Iniciar sesión con permiso para gestionar el sistema",
   "aeat_certificate.diagnosis.authority":

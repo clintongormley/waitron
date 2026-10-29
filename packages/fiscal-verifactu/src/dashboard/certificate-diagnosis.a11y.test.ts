@@ -33,6 +33,7 @@ describe.each(["light", "dark"] as const)("diagnosis accessibility %s", (theme) 
           "local",
           "success",
           "stale",
+          "revision",
         ] as const) {
           await mountThemed("<div></div>", theme);
           const auth = permission(mode === "reader" ? ["fiscal.view"] : ["system.manage"]);
@@ -46,6 +47,7 @@ describe.each(["light", "dark"] as const)("diagnosis accessibility %s", (theme) 
           ) => {
             const body = raw as CertificateDiagnosisRequest;
             if (mode === "unavailable") throw new Error("PRIVATE_FAULT");
+            if (mode === "revision") throw { code: "fiscal.certificate_changed", params: {} };
             if (mode === "busy") return new Promise(() => {});
             return evidence(
               body,
@@ -78,6 +80,11 @@ describe.each(["light", "dark"] as const)("diagnosis accessibility %s", (theme) 
               auth.change();
               await panel.updateComplete;
               expect(q("diagnosis-copy")).toBeNull();
+            }
+            if (mode === "revision") {
+              await vi.waitFor(() => expect(q("diagnosis-reload-card")).not.toBeNull());
+              expect(q("diagnosis-inspect").disabled).toBe(true);
+              expect(q("diagnosis-check").disabled).toBe(true);
             }
           }
           expect(panel.shadowRoot!.querySelector("[role=status][aria-live=polite]")).not.toBeNull();

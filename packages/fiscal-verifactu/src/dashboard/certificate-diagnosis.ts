@@ -294,7 +294,7 @@ export class AeatCertificateDiagnosis extends LitElement {
           </dd>
         </dl>
         <div role="status" aria-live="polite">
-          ${busy ? t("aeat_certificate.diagnosis.busy") : view?.resultUnavailable ? t("aeat_certificate.diagnosis.unavailable") : nothing}
+          ${busy ? t("aeat_certificate.diagnosis.busy") : view?.revisionChanged ? t("aeat_certificate.diagnosis.revision_changed") : view?.resultUnavailable ? t("aeat_certificate.diagnosis.unavailable") : nothing}
         </div>
         ${
           result
@@ -319,6 +319,26 @@ export class AeatCertificateDiagnosis extends LitElement {
               : nothing
           }
           <div class="actions">
+            ${
+              view?.revisionChanged
+                ? html`<wt-button
+                    data-test="diagnosis-reload-card"
+                    variant="secondary"
+                    @click=${async () => {
+                      const closed =
+                        await this.shadowRoot!.querySelector("wt-dialog")!.requestClose("cancel");
+                      if (closed && this.isConnected)
+                        this.dispatchEvent(
+                          new CustomEvent("diagnosis-reload-card", {
+                            bubbles: true,
+                            composed: true,
+                          }),
+                        );
+                    }}
+                    >${t("aeat_certificate.diagnosis.reload_card")}</wt-button
+                  >`
+                : nothing
+            }
             ${view?.needsSourceConfirmation ? html`<wt-button data-test="diagnosis-confirm" variant="secondary" @click=${() => controller?.confirmSource()}>${t("aeat_certificate.diagnosis.confirm")}</wt-button>` : nothing}
             <wt-button
               data-test="diagnosis-inspect"

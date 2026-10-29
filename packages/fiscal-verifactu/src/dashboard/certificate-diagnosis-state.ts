@@ -37,12 +37,14 @@ export class DiagnosisState {
     result: CertificateDiagnosisResult | null;
     needsSourceConfirmation: boolean;
     resultUnavailable: boolean;
+    revisionChanged: boolean;
   } = {
     source: "installed",
     busy: false,
     result: null,
     needsSourceConfirmation: true,
     resultUnavailable: false,
+    revisionChanged: false,
   };
   #card?: CertificateCardView;
   #candidate: DiagnosisCandidate | null = null;
@@ -76,6 +78,7 @@ export class DiagnosisState {
       !this.view.busy &&
       this.authorized &&
       this.#card?.filing === true &&
+      !this.view.revisionChanged &&
       !this.view.needsSourceConfirmation &&
       (this.view.source === "installed" ||
         (this.#candidate !== null &&
@@ -92,6 +95,8 @@ export class DiagnosisState {
     savedCard: CertificateCardView;
     candidate: DiagnosisCandidate | null;
   }): void {
+    const revisionChanged =
+      this.view.revisionChanged && input.savedCard.revision === this.#card?.revision;
     this.stop();
     this.#opened = true;
     this.#opening++;
@@ -104,6 +109,7 @@ export class DiagnosisState {
       result: null,
       needsSourceConfirmation: true,
       resultUnavailable: false,
+      revisionChanged,
     };
     this.#unsubscribe = this.deps.permissionContinuation?.subscribe((snapshot) => {
       if (snapshot.accountGeneration !== this.#account) {
@@ -214,18 +220,23 @@ export class DiagnosisState {
           answer.endpointLabel !== null;
     } catch (error) {
       if (current()) {
+        if (codeOf(error) === "fiscal.certificate_changed") {
+          this.#preview = false;
+          this.view.revisionChanged = true;
+        }
         if (
           [
             "management_session.required",
             "management_session.expired",
             "authorization.not_permitted",
+            "person.suspended",
           ].includes(codeOf(error))
         ) {
           this.#denied = true;
           this.invalidateSource();
         }
         this.view.result = null;
-        this.view.resultUnavailable = true;
+        this.view.resultUnavailable = !this.view.revisionChanged;
       }
     } finally {
       bytes?.fill(0);
