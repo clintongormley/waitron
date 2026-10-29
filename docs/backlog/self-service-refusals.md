@@ -1127,6 +1127,14 @@ These existing tests qualify the named local fixtures, installation preservation
 boundaries. They do not exercise a proposed diagnostic screen, live AEAT, or a host-network
 repair. No production code or test assertion changed in this audit.
 
+_2026-10-29 update: the owner approved the read-only build at 08:07. The
+certificate-diagnosis branch now includes the module panel, optional route,
+isolated child, in-place sign-in and guide twins. Local qualification covers
+both material sources and compares database snapshots and write counts after
+child exit. Whole-branch review and current-head CI remain pending; persistent
+network/configuration and external-refusal repair remain open. The audit and
+proposal below retain their original publication state._
+
 The [proposed diagnostic cut](../superpowers/specs/2026-10-28-a1089-aeat-certificate-diagnosis-design.md)
 separates observed failures from unproved causes. It awaits the owner's choice between a partial
 evidence-first workflow and designing complete recovery first. Persistent repair stays open.

@@ -276,3 +276,30 @@ After settlement, including an unavailable response, perform an epoch-guarded `g
 For **this documentation publication**, inspect the completed plan against every spec section, Review Focus R1–R5 and acceptance groups 1–6; check exact existing paths/interfaces from source, mark every new API as proposed, run `git diff --check` and inspect status for only this plan file. The author writes only the plan. The driver separately checks existing suites, updates the dated spec pointer and backlog, then commits and publishes through the docs-only workflow. These publication checks do not qualify diagnostic runtime behavior.
 
 For **future implementation**, every task's red/green commands and the final built-process, no-write, privacy, browser, deletion-control, review and current-head CI receipts remain required. No live AEAT requests or external policy assertions are part of qualification. The APIs above are proposed implementation decisions, not existing capabilities: the remaining gates are owner build approval, actual reservation release/rebase, and demonstrating the specified bounds and behavior on the execution candidate. Persistent repair remains separately open.
+
+
+## 2026-10-29 local execution checkpoint
+
+The owner approved the reviewed read-only build at 08:07. Tasks 1–8 are implemented on
+`feat/a1089-certificate-diagnosis`; the planning-only statements above retain their publication
+state. Whole-candidate review, the normal push hook and current-head CI remain pending.
+Persistent network/configuration and external-refusal repair remain open.
+
+| Acceptance group | Local receipt and limits |
+| --- | --- |
+| Material, route and no writes | `fiscal-certificate-diagnosis-api.verifactu.test.ts` and `certificate-diagnosis.browser.test.ts` use the real seat, local mutual TLS and a built isolated child. The browser cases inspect and query installed and candidate material, compare all-table snapshots and writer change counts, check the peer fingerprint and observe the child's exit. Local fixtures establish no live AEAT outcome. |
+| Transport and targets | The child/transport suites retain fixed destination, redirect, body-cap, HTTP/parse and injected-error controls. The bundle suite runs without source or loaders. |
+| Authority and continuation | Parent/route suites cover initial/final no-touch authority, expiry and revocation; the built cookie suite and actual shell suites cover in-place sign-in and Stop. Suspended accounts now clear inspection authority. |
+| Native lifetime and sales | Process/route suites hold opening, bodies and cleanup; existing concurrency cases retain sale/install progress. New edge cases exercise synchronous startup failures, framed-channel failure, late rejection and shutdown supervision. |
+| Generations and privacy | Existing response/finally/file/account guards are retained. A stale revision disables further inspection; its separate explicit exit reloads the ordinary saved card before reopen/source confirmation. Copy and logs exclude secret material and raw failures. |
+| UI and guides | Both guide twins have shared diagnosis anchors and a served Box status link. Browser/a11y cases cover EN/ES, both themes and phone/desktop widths; the stale-revision state and guide start/end views were inspected. |
+
+The focused process report for runner/runtime/dispatcher passes 66 cases at
+99.66% statements, 95.26% branches, 100% functions and 100% lines. The UI state/panel
+report passes at 99.14/95/100/100. These are focused reports, not package-wide coverage.
+New guards are text scans only; they detect literal regime imports, diagnosis references in
+selected protected/migration paths, and missing child/image-notice entries. They do not prove
+unchanged history, read-only execution, indirect imports or actual shipping. The base-to-tip
+audit and runtime/bundle cases supply separate evidence. Fourteen independent installed-copy
+omissions failed their intended assertions and passed after restoration; earlier unchanged
+protection-control receipts were retained rather than repeated.

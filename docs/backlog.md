@@ -206,8 +206,13 @@ under `docs/backlog/`.
   Stop and evidence copy. Browser tests exercise native file/type edits, account changes,
   secret clearing, stale file reads and answers, separate Save and the actual shell/module
   sign-in handoff. English and Spanish views were inspected in both themes at desktop and
-  phone widths. Guide integration, complete built-flow qualification and the earlier
-  process-helper coverage gap remain open; this partial branch is not ready to land.
+  phone widths. Guide twins and shared anchors now explain the separate actions and limits.
+  A built browser/module/HTTP/native-child check exercises installed and candidate material,
+  one local mutual-TLS query each, safe copy and unchanged table snapshots and write counts.
+  A changed certificate requires an explicit exit and card reload before a fresh inspection;
+  that ordinary card read is separate from diagnosis. Suspended accounts must sign in again.
+  The focused process-helper coverage gap is closed by failure and cleanup cases. The branch
+  still needs whole-candidate review, the normal push hook and current-head package CI.
   Persistent connection/configuration and external-refusal repair remain open.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 

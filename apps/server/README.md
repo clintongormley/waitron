@@ -409,6 +409,21 @@ install. The dashboard card, the expiry alerts and the reminder emails read the 
 record, so after a write from the command line they go on describing the previous certificate. Use
 the dashboard unless you have no other way in.
 
+You can also open **Diagnose connection** from the card or a refused replacement. **Read again**
+inspects the selected material locally; **Run check** sends one read-only query. Both use
+`POST /management-api/fiscal-certificate/diagnose`, mounted only when the seat supplies both
+diagnostic methods and boot supplies its runner. This route requires `system.manage` and filing
+eligibility, checks authority before admission and before releasing evidence, and does not update
+the session's last-seen stamp. The ordinary card GET remains a separate read.
+
+The diagnostic child has 30 seconds for opening, connecting and reading, a 1 MiB reply cap and two
+seconds for cleanup. Stop, disconnect and session expiry cancel the attempt. The runner keeps
+admission until the recorded child exits; a second attempt is refused rather than queued.
+Diagnosis does not install material, drain fiscal records or repair network settings. Copy returns
+a fixed diagnostic summary without raw errors, certificate subjects or secret material. An HTTP
+status or a completed query does not establish the cause of a refusal or a later filing's outcome.
+Use the separate editor's Save to install; it still runs its own checks.
+
 To check a real certificate against AEAT with the same code an install runs, without installing it,
 run the operator harness `src/aeat-certificate-check.preprod.test.ts`. It sends one read-only
 `consultar` and files nothing. Set:

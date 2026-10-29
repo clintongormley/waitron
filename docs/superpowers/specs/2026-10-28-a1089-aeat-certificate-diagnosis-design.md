@@ -1,5 +1,13 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 qualification checkpoint: both guide twins now explain diagnosis and
+its limits. Local built-browser tests connect the module through HTTP and an
+isolated native child, checking both material sources, safe copy and unchanged
+database snapshots and write counts. Stale revisions require an explicit exit and
+ordinary card reload; suspended accounts must sign in again. The focused process
+coverage gap is closed. Whole-candidate review, the push hook and current-head CI
+remain pending, as does persistent repair. Earlier checkpoints retain their state._
+
 _2026-10-29 screen checkpoint: Task 7 adds separate local inspection and an explicit
 query from the certificate card and failed editor. Local browser checks cover native
 source/file/passphrase/type edits, stale reads and answers, account-secret clearing,
