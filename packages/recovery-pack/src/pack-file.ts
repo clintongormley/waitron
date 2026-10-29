@@ -5,7 +5,8 @@ export const MAX_PACK_FILE = 16 * 1024;
 export const BUCKET_CODE_PREFIX = "WAITRON-RECOVERY-KIT-1:";
 export const ARCHIVE_CODE_PREFIX = "WAITRON-ARCHIVE-PACK-1:";
 
-export type RecoveryPackFileRefusal = "size" | "encoding" | "shape" | "noncanonical" | "not_a_pack";
+export type RecoveryPackFileRefusal =
+  "size" | "encoding" | "shape" | "noncanonical" | "not_a_pack" | "carrier" | "digest";
 
 export class RecoveryPackFileError extends Error {
   constructor(readonly reason: RecoveryPackFileRefusal) {
