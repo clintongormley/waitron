@@ -4,6 +4,8 @@ import { baseStyles } from "../base-styles.js";
 import { delegatesFocusShadowRootOptions } from "../interactive.js";
 import "./wt-button.js";
 
+export type WtBannerTone = "info" | "error";
+
 /** A full-width strip with one message and, when given an action label, one action. */
 @customElement("wt-banner")
 export class WtBanner extends LitElement {
@@ -18,6 +20,11 @@ export class WtBanner extends LitElement {
         color: var(--wt-color-text);
         border-block-end: 1px solid var(--wt-color-border);
         border-inline-start: var(--wt-space-1) solid var(--wt-color-primary);
+      }
+
+      :host([tone="error"]) {
+        border-inline-start-color: var(--wt-color-danger);
+        border-block-end-color: var(--wt-color-danger);
       }
 
       .bar {
@@ -35,6 +42,7 @@ export class WtBanner extends LitElement {
     `,
   ];
 
+  @property({ reflect: true }) tone: WtBannerTone = "info";
   @property() message = "";
   @property({ attribute: "action-label" }) actionLabel = "";
 

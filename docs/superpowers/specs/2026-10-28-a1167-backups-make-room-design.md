@@ -8,6 +8,9 @@ _2026-10-29: slice 2 is built by [the slice 2 plan](../plans/2026-10-29-a1167-2-
 §1's "never deletes toward a goal it cannot reach" binds a backup run's room step only: as §2 says,
 the watch deletes every backup §1 allows when they cannot reach 2.5 GiB._
 
+_2026-10-29: A1127 slice 3 builds Q3 A's bar by [its plan](../plans/2026-10-29-a1127-3-full-disk-bar.md).
+The bar does not say the box deleted every old backup it may (the plan's decision 7)._
+
 The owner, 2026-10-28 ~08:35 CET (`~/waitron-campaign/questions.md`, "WATCHER … A1167 queued for
 you"):
 

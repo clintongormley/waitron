@@ -63,7 +63,8 @@ import { es } from "./i18n/strings.js";
 import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
-import type { AlertView, DashboardApi, PersonSummary } from "./api/client.js";
+import { DashboardApi, type AlertView, type PersonSummary } from "./api/client.js";
+import { createSessionSignals } from "./session-signals.js";
 import type { WtInput } from "@waitron/ui";
 import { venueDetailsFixture } from "./testing/venue-details-fixture.js";
 
@@ -186,6 +187,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listOrderPages: vi.fn().mockResolvedValue({ rows: [], next: null, from: null, to: null }),
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
     passkeySignals: vi.fn().mockResolvedValue({
@@ -4731,6 +4733,26 @@ describe("dashboard URL navigation", () => {
     await flush(el);
     expect(login(el)).not.toBeNull();
   });
+
+  it("keeps a protected destination behind login when the real client reports the signed-out probe", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const signals = createSessionSignals();
+    const refusal = (code: string, status: number) =>
+      new Response(JSON.stringify({ error: { code } }), { status });
+    const api = new DashboardApi(
+      "",
+      async (path) =>
+        String(path).endsWith("/session/me")
+          ? refusal("management_session.required", 401)
+          : refusal("connection.failed", 503),
+      signals.reportError,
+      signals.reportActivity,
+    );
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await expect.poll(() => login(el)).not.toBeNull();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/staff");
+  });
 });
 
 /**
@@ -5154,6 +5176,35 @@ describe("the floor plan editor inside the real page", () => {
             expect(box.top).toBeGreaterThanOrEqual(dialog.top);
             expect(notice.closest(".banner-row")).toBeNull();
           }
+        } finally {
+          await unmount();
+        }
+      },
+    );
+
+    it.each([1280, 390])(
+      "draws the full-disk bar inside the editor's modal at %i px, on top at its centre",
+      async (width) => {
+        const getDiskStop = vi.fn().mockResolvedValue({ stopped: true, deleted: null });
+        const { el, editor, unmount } = await openEditor("en-GB", width, { getDiskStop });
+        try {
+          const diskBar = await vi.waitFor(() => {
+            const found = el.shadowRoot!.querySelector<HTMLElement>(
+              "wt-banner[data-test=disk-stop-bar]",
+            );
+            expect(found).not.toBeNull();
+            return found!;
+          });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          expect(diskBar.closest(".banner-row")).toBeNull();
+          expect(diskBar.slot).toBe("notices");
+          const [x, y] = centreOf(diskBar);
+          expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(diskBar);
+          const dialog = dialogBox(editor);
+          const box = diskBar.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+          expect(box.right).toBeLessThanOrEqual(dialog.right);
+          expect(box.top).toBeGreaterThanOrEqual(dialog.top);
         } finally {
           await unmount();
         }
@@ -6461,6 +6512,83 @@ describe("dashboard-app: session signals", () => {
     expect(overview(el)).toBeNull();
     expect(notice(el)).toBe(codeMessage("node.reset"));
   });
+
+  it("shows the reset notice when the box was reset while signed out", async () => {
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({ getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }) }),
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    sessionInvalid("node.reset");
+    await flush(el);
+    expect(notice(el)).toBe(codeMessage("node.reset"));
+  });
+
+  it("keeps the sign-in page's address when a no-session refusal arrives while signed out", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      }),
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    sessionInvalid("management_session.required");
+    await flush(el);
+    expect(notice(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/staff");
+  });
+
+  it("returns to login on a no-session refusal in a session signed into after a sign-out", async () => {
+    const { el } = await signedIn();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    sessionInvalid("management_session.required");
+    await flush(el);
+    expect(overview(el)).toBeNull();
+    expect(login(el)).not.toBeNull();
+  });
+
+  it.each(["management_session.expired", "person.suspended"])(
+    "explains a %s refusal that ends the session while the add-a-passkey offer shows",
+    async (code) => {
+      const signals = createSessionSignals();
+      const real = new DashboardApi(
+        "",
+        async () => new Response(JSON.stringify({ error: { code } }), { status: 401 }),
+        signals.reportError,
+        signals.reportActivity,
+      );
+      const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+        api: stubApi({
+          getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+          login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+          passkeyOfferSeen: vi.fn(() => real.passkeyOfferSeen()),
+        }),
+      });
+      await flush(el);
+      const screen = login(el)!;
+      Object.assign(screen, {
+        email: "manager@example.com",
+        step: "password",
+        password: "correct horse battery",
+      });
+      await flush(el);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+      await flush(el);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(login(el)).toBe(screen);
+      expect(notice(el)).toBe(codeMessage(code));
+    },
+  );
 
   it.each(["management_session.required", "management_session.expired", "person.suspended"])(
     "keeps the reset notice when %s arrives after it",

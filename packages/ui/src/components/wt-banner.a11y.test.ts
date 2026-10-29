@@ -39,3 +39,32 @@ describe.each(["light", "dark"] as const)("wt-banner a11y (%s theme)", (theme) =
     await expectNoA11yViolations(host);
   });
 });
+
+describe.each(["light", "dark"] as const)("wt-banner a11y, error tone (%s theme)", (theme) => {
+  test("message only", async () => {
+    await shown(
+      await mountThemed('<wt-banner tone="error" message="Disk full."></wt-banner>', theme),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("message and action", async () => {
+    await shown(
+      await mountThemed(
+        '<wt-banner tone="error" message="Disk full." action-label="Open Box status"></wt-banner>',
+        theme,
+      ),
+    );
+    await expectNoA11yViolations(host);
+  });
+
+  test("action focused", async () => {
+    const el = (await mountThemed(
+      '<wt-banner tone="error" message="Disk full." action-label="Open Box status"></wt-banner>',
+      theme,
+    )) as WtBanner;
+    await shown(el);
+    el.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!.focus();
+    await expectNoA11yViolations(host);
+  });
+});

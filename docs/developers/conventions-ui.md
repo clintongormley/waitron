@@ -33,6 +33,10 @@ bell and in their emails (`backup.archives_deleted` and the `spaceLow` variant o
 and `BACKUP_REFUSED_EMAIL_WORDS` in `apps/server/src/i18n/box-emails.ts`). The owner's reason: “the
 more you say, the less people will read”, so no tips and no rule explanations in the alerts.
 
+The dashboard's full-disk bar follows the rule: to a person who cannot open Box status it offers
+**Sign in as a manager** in place, saying that this signs them out (`#diskStopBar` in
+`apps/dashboard/src/dashboard-app.ts`).
+
 The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
 administrator or installer. Their passing tests exercised those messages and existing retries;
 they did not establish a self-service remedy for a persistent refusal. All four need separate

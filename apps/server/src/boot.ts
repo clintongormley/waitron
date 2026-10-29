@@ -169,6 +169,7 @@ import { stripeAccountResolver, defaultMakeStripe } from "./stripe-account.js";
 import { mountWebhook } from "./webhook.js";
 import { mountTillApi } from "./till-api.js";
 import { createDiskFullState, noteFullAtStart, watchForDiskFull } from "./disk-full-state.js";
+import { mountDiskStopApi } from "./disk-stop-api.js";
 import { isUnset } from "./env-value.js";
 import { SPARE_SPACE_BYTES, spareReleased, spareRestorer } from "./spare-space.js";
 import {
@@ -2425,18 +2426,12 @@ async function bootServer(
       }),
     );
   }
-  mountAlertsApi(
-    app,
-    {
-      db,
-      registry: createAlertRegistry({
-        claims: ALL_ALERT_CLAIMS,
-        sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
-      }),
-      now,
-    },
-    log,
-  );
+  const alertRegistry = createAlertRegistry({
+    claims: ALL_ALERT_CLAIMS,
+    sources: [...enabledAlertSources(setsToMigrate), ...serverAlertSources],
+  });
+  mountAlertsApi(app, { db, registry: alertRegistry, now }, log);
+  mountDiskStopApi(app, { db, disk: diskFull, registry: alertRegistry, now }, log);
 
   mountBoxStatusApi(
     app,

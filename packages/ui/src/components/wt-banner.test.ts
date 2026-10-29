@@ -126,3 +126,25 @@ test("paints the strip and its action from tokens", async () => {
   expect(painted.color).toBe("rgb(13, 14, 15)");
   expect(painted.minHeight).toBe("51px");
 });
+
+test("the error tone paints its edge and bottom border from the danger token, words unchanged", async () => {
+  const el = (await mount(
+    '<wt-banner tone="error" message="Disk full." action-label="Open Box status"></wt-banner>',
+  )) as WtBanner;
+  host.style.setProperty("--wt-color-text", "rgb(4, 5, 6)");
+  host.style.setProperty("--wt-color-border", "rgb(7, 8, 9)");
+  host.style.setProperty("--wt-color-primary", "rgb(10, 11, 12)");
+  host.style.setProperty("--wt-color-danger", "rgb(21, 22, 23)");
+  const strip = getComputedStyle(el);
+  expect(strip.borderLeftColor).toBe("rgb(21, 22, 23)");
+  expect(strip.borderBottomColor).toBe("rgb(21, 22, 23)");
+  expect(strip.color).toBe("rgb(4, 5, 6)");
+});
+
+test("tone defaults to info and reflects to its attribute", async () => {
+  const el = (await mount('<wt-banner message="Waitron was updated."></wt-banner>')) as WtBanner;
+  expect(el.tone).toBe("info");
+  el.tone = "error";
+  await el.updateComplete;
+  expect(el.getAttribute("tone")).toBe("error");
+});

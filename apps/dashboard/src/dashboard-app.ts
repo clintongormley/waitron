@@ -113,7 +113,14 @@ import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { alertMessage } from "./i18n/alerts.js";
 import { AlertArrivals } from "./state/alert-arrivals.js";
 import { markAlertHandled } from "./widgets/alert-format.js";
-import type { AlertView, AlertsResponse, DashboardApi, PersonRole } from "./api/client.js";
+import type {
+  AlertView,
+  AlertsResponse,
+  DashboardApi,
+  DiskStopResponse,
+  PersonRole,
+} from "./api/client.js";
+import { diskStopMessage } from "./i18n/disk-stop-words.js";
 import {
   consumeGoogleLoginPreference,
   rememberSuccessfulLogin,
@@ -973,6 +980,12 @@ export class DashboardApp extends LitElement {
     () => this.api,
     (error) => diag.record("warn", "alerts.load_failed", { code: codeOf(error) }),
   );
+  @state() private diskStop: DiskStopResponse | null = null;
+  readonly #diskStopQueries = new DashboardQueries(
+    this,
+    () => this.api,
+    (error) => diag.record("warn", "disk_stop.load_failed", { code: codeOf(error) }),
+  );
   readonly #venueThemeQueries = new DashboardQueries(
     this,
     () => this.api,
@@ -984,11 +997,20 @@ export class DashboardApp extends LitElement {
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
   private sessionIdleTimeoutSeconds = 30 * 60;
   private sessionGeneration = 0;
+  #signingOut = false;
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
+    // An ended or absent session answers `required`: while signed out, or while signing out (which
+    // returns to login itself), it must not rewrite the address. Expiry and suspension can still end
+    // a session the login screen holds unannounced.
+    if (
+      code === "management_session.required" &&
+      (this.sessionRole === undefined || this.#signingOut)
+    )
+      return;
     if (
       code === "management_session.expired" ||
       code === "management_session.required" ||
@@ -1226,7 +1248,21 @@ export class DashboardApp extends LitElement {
     if (mayApplyLocale) setLocale(resolveActiveLocale(me.locale, me.sessionDefault));
     this.#loadContentLanguages();
     this.#watchAlerts();
+    this.#watchDiskStop();
     this.#watchVenueTheme();
+  }
+
+  #watchDiskStop(): void {
+    void this.#diskStopQueries
+      .watch(
+        "getDiskStop",
+        [],
+        (answer) => {
+          this.diskStop = answer;
+        },
+        { passive: true },
+      )
+      .catch(() => undefined);
   }
 
   #watchVenueTheme(): void {
@@ -1378,12 +1414,14 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  #returnToLogin(code: string | null): void {
+  #returnToLogin(code: string | null, next: ScreenId | null = null): void {
     setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
     this.#languageQueries.release("getContentLanguages");
     this.#venueThemeQueries.release("getVenueTheme");
+    this.#diskStopQueries.release("getDiskStop");
+    this.diskStop = null;
     this.#clearAlerts();
     this.contentLanguagesReady = false;
     this.contentLanguageError = null;
@@ -1403,7 +1441,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
-    this.#url.write({ dashboard: null }, true);
+    this.#url.write({ dashboard: next }, true);
     if (this.isConnected) {
       setLocale(this.#loginLocale ?? this.#venueLocale);
       void this.#seedLocale();
@@ -1541,18 +1579,22 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  async #onLogout(): Promise<void> {
+  async #onLogout(next?: ScreenId): Promise<void> {
     const generation = this.sessionGeneration;
     await this.leave.coordinator.request({
       scopes: "all",
       reason: "signout",
       proceed: async () => {
+        this.#signingOut = true;
         try {
           await this.api.logout();
         } catch {
           // The local session is cleared even when the logout request is refused.
+        } finally {
+          this.#signingOut = false;
         }
-        if (this.isConnected && generation === this.sessionGeneration) this.#returnToLogin(null);
+        if (this.isConnected && generation === this.sessionGeneration)
+          this.#returnToLogin(null, next);
       },
     });
   }
@@ -1702,7 +1744,7 @@ export class DashboardApp extends LitElement {
   }
 
   #notices(slot?: string): TemplateResult {
-    return html`${this.#updateBar(slot)}
+    return html`${this.#diskStopBar(slot)} ${this.#updateBar(slot)}
       <wt-toast
         class="alert-toast"
         data-test="alert-toast"
@@ -1720,6 +1762,28 @@ export class DashboardApp extends LitElement {
         @wt-activate=${(e: Event) => this.#onToastActivate(e)}
         @wt-close=${(e: Event) => this.#onToastClose(e)}
       ></wt-toast>`;
+  }
+
+  #diskStopBar(slot?: string): TemplateResult | typeof nothing {
+    if (this.diskStop?.stopped !== true) return nothing;
+    const canFree = this.#sessionPermissions.includes("system.manage");
+    const canOpenBoxStatus = this.#canOpenScreen("box-status");
+    const actionLabel = !canOpenBoxStatus
+      ? t("disk_stop.sign_in_as_manager")
+      : this.screen === "box-status"
+        ? ""
+        : t("disk_stop.open_box_status");
+    return html`<wt-banner
+      data-test="disk-stop-bar"
+      slot=${slot ?? nothing}
+      tone="error"
+      message=${diskStopMessage(canFree ? this.diskStop.deleted : null, canOpenBoxStatus)}
+      action-label=${actionLabel}
+      @wt-banner-action=${() =>
+        canOpenBoxStatus
+          ? this.#selectScreen("box-status", () => this.#focusMain())
+          : void this.#onLogout("box-status")}
+    ></wt-banner>`;
   }
 
   #updateBar(slot?: string): TemplateResult | typeof nothing {
@@ -1944,7 +2008,7 @@ export class DashboardApp extends LitElement {
     void navigationGuardFor(window)?.write(url);
   };
 
-  #selectScreen(screen: ScreenId): void {
+  #selectScreen(screen: ScreenId, proceeded?: () => void): void {
     const destination = this.#permittedScreen(screen);
     const navigation =
       destination === "venue-operations"
@@ -1955,8 +2019,18 @@ export class DashboardApp extends LitElement {
         this.#openGroupOf(destination);
         this.drawerOpen = false;
         this.navSearch = "";
+        proceeded?.();
       }
     });
+  }
+
+  /** For a control that its own navigation takes away, which would drop focus to the page. */
+  #focusMain(): void {
+    const main = this.renderRoot.querySelector<HTMLElement>(".main");
+    if (main === null) return;
+    main.tabIndex = -1;
+    main.addEventListener("blur", () => main.removeAttribute("tabindex"), { once: true });
+    main.focus();
   }
 
   /** A screen (the units in-use modal) asks to open a product's editor; navigate to the catalogue

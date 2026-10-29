@@ -135,6 +135,7 @@ async function mount(
         listOrderStaff: async () => ({ staff: [] }),
         listOrderPages: async () => ({ rows: [], next: null, from: null, to: null }),
         listAlerts: async () => ({ visible: false, alerts: [] }),
+        getDiskStop: async () => ({ stopped: false, deleted: null }),
         passkeySignals: async () => ({
           rpId: "localhost",
           userId: "cDE",

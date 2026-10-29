@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   alertMessage,
+  alertWords,
   formatBytes,
   hasAlertMessage,
   registerAlertMessages,
@@ -265,5 +266,27 @@ describe("a message with its own words for one", () => {
       "Found one. The count may be short.",
     );
     expect(alertMessage("test.variants", { count: 1, unknown: true }, "es")).toBe("ES unknown.");
+  });
+});
+
+describe("words that are not a registered alert", () => {
+  it("are filled as an alert's are, dates included, in the language asked for", () => {
+    const entry = { en: "On {when:date}.", es: "ES {when:date}." };
+    expect(alertWords(entry, { when: "2026-10-28" }, "en")).toBe("On 28 Oct 2026.");
+    expect(alertWords(entry, { when: "2026-10-28" }, "es")).toBe("ES 28 oct 2026.");
+  });
+
+  it("choose the words for one and a replacing variant as a registered alert does", () => {
+    const entry = {
+      en: "Found {count}.",
+      es: "ES found {count}.",
+      one: { param: "count", en: "Found one.", es: "ES found one." },
+      variants: {
+        unknown: { mode: "replace" as const, en: "Found some.", es: "ES some." },
+      },
+    };
+    expect(alertWords(entry, { count: 1 }, "en")).toBe("Found one.");
+    expect(alertWords(entry, { count: 3 }, "es")).toBe("ES found 3.");
+    expect(alertWords(entry, { count: 1, unknown: true }, "en")).toBe("Found some.");
   });
 });

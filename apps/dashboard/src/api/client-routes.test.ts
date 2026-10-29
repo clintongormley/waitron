@@ -1848,3 +1848,57 @@ it("downloads an invoice customer's data by tax number with the server's file na
   expect(init.method).toBe("GET");
   expect(new Headers(init.headers).has("x-waitron-live")).toBe(false);
 });
+
+describe("DashboardApi.getDiskStop", () => {
+  const deleted = { count: 2, date: "2026-10-27", lastDate: "2026-10-28", severalDays: true };
+
+  it("reads whether the full-disk stop holds, with the deleted backups", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ stopped: true, deleted }));
+    const api = new DashboardApi("", fetchImpl);
+    expect(await api.getDiskStop()).toEqual({ stopped: true, deleted });
+    expect(callsOf(fetchImpl)).toEqual([["/management-api/disk-stop", "GET", undefined]]);
+  });
+
+  it.each<[label: string, body: unknown, expected: unknown]>([
+    ["a list", [], { stopped: false, deleted: null }],
+    ["an empty object", {}, { stopped: false, deleted: null }],
+    ["null", null, { stopped: false, deleted: null }],
+    [
+      "a stop that is not true and an incomplete deletion",
+      { stopped: "yes", deleted: { count: 1 } },
+      { stopped: false, deleted: null },
+    ],
+    ["a deletion that is a list", { stopped: true, deleted: [] }, { stopped: true, deleted: null }],
+    [
+      "a count that is not a number",
+      { stopped: true, deleted: { ...deleted, count: "2" } },
+      { stopped: true, deleted: null },
+    ],
+    [
+      "a date that is not a string",
+      { stopped: true, deleted: { ...deleted, date: 20261027 } },
+      { stopped: true, deleted: null },
+    ],
+    [
+      "a last date that is not a string",
+      { stopped: true, deleted: { ...deleted, lastDate: null } },
+      { stopped: true, deleted: null },
+    ],
+    [
+      "a several-days flag that is not a boolean",
+      { stopped: true, deleted: { ...deleted, severalDays: "true" } },
+      { stopped: true, deleted: null },
+    ],
+  ])("treats %s as no stop or no deletion", async (_label, body, expected) => {
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(jsonResponse(body)));
+    expect(await api.getDiskStop()).toEqual(expected);
+  });
+
+  it("keeps only the deletion's four facts", async () => {
+    const api = new DashboardApi(
+      "",
+      vi.fn().mockResolvedValue(jsonResponse({ stopped: true, deleted: { ...deleted, extra: 1 } })),
+    );
+    expect(await api.getDiskStop()).toEqual({ stopped: true, deleted });
+  });
+});

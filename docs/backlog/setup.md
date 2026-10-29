@@ -435,15 +435,6 @@ given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d
 `packages/registration/migrations/011_managed_backups.sql`, `expires_at` default;
 `packages/backups/src/recovery.ts`, `recovery_active`).
 
-## A1127 slice 3: a red bar on every dashboard page while the full-disk stop holds
-
-A1127's design §3 ([the design](../superpowers/specs/2026-10-28-a1127-full-boot-and-old-backups-design.md))
-puts a bar under the banner of every dashboard page, for everyone signed in, while the till's
-full-disk stop holds (which slice 2's marker now keeps across restarts). A1167's answer Q3 A
-(`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167", 2026-10-28 ~14:10) dropped the
-"Delete old backups…" dialog and its Box status button and kept the bar, which then says the box has
-already deleted what it may; its button goes to Box status. The bar's words are still to be written.
-
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
 The owner's 2026-10-28 answers covered the till strip («Tell a manager», a stated exception, Q4) and

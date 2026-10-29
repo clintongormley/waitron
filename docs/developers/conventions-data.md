@@ -2736,6 +2736,11 @@ one list's download (`GET /api/box/clock-misdated/:incidentId/download`), both i
 the change waiting" and "downloads a list on a full disk with a change waiting, and leaves the
 change waiting" in `apps/server/src/clock-confirm.route.test.ts`.
 
+Since A1127 slice 3, the full-disk bar's read (`GET /management-api/disk-stop`,
+`apps/server/src/disk-stop-api.ts`) resolves the session with `touch: false` and reads in one
+`withWriteLock` turn with no drain. The case is "the disk-stop read answers on a full disk with a
+change waiting, for a cashier and a manager" in `apps/server/src/start-full-disk.e2e.test.ts`.
+
 **What refused them.**
 
 - **The last-seen stamp.** A device-checked request writes the device's `last_seen_at` when a

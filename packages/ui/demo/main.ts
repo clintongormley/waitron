@@ -100,6 +100,7 @@ const panel = (theme: "light" | "dark") => `
     <wt-toast open message="2 new alerts" close-label="Close" duration="0"></wt-toast>
     <wt-toast open tone="error" message="The tax agency rejected an invoice record" close-label="Close" duration="0"></wt-toast>
     <wt-banner message="Waitron was updated." action-label="Reload"></wt-banner>
+    <wt-banner tone="error" message="Disk full: the tills cannot save anything." action-label="Open Box status"></wt-banner>
     <p><wt-notice duration="0">Unpaired</wt-notice></p>
     <p>
       Updated

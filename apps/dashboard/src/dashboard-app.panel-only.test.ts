@@ -91,6 +91,7 @@ function stubApi(modules: string[]): DashboardApi {
     getContentLanguages: vi.fn().mockResolvedValue({ defaultLanguage: "es", languages: ["es"] }),
     getSalesOverview: pending(),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     getVenueDetails: vi.fn().mockResolvedValue(venueDetailsFixture()),
     getVenueDefaults: vi.fn().mockResolvedValue({
       receiptLanguage: "es-ES",

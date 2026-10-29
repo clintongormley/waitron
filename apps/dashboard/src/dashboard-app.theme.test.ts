@@ -140,6 +140,7 @@ function signedInApi(locale: Locale = "en-GB"): DashboardApi {
     listMySwaps: vi.fn().mockResolvedValue([]),
     listMyAbsences: vi.fn().mockResolvedValue([]),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
+    getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
     logout: vi.fn().mockResolvedValue(undefined),
   } as unknown as DashboardApi;
 }
