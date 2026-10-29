@@ -445,9 +445,11 @@ describe("makeRoom", () => {
         neededBytes: NEED,
         floorBytes: FLOOR,
         aimBytes: AIM,
-        stagingDir: f.staging,
+        dir: f.staging,
         statfs: d.statfs,
         folders: [{ destination: "da", dir: f.dir }],
+        reason: "backup_room" as const,
+        outOfReach: "floor" as const,
         installationStartedAt: async () => T,
         signal: new AbortController().signal,
         log,
@@ -873,6 +875,45 @@ describe("makeRoom", () => {
     expect(f.keys.map((k) => exists(join(moved, k)))).toEqual([false, true, true, true]);
     expect(log.mock.calls.map(([, event]) => event)).toEqual(["backup.archive_deleted"]);
     expect(deletedKeys(onDeleted)).toEqual([[f.keys[0]]]);
+  });
+
+  it("logs the reason it is given on each deletion", async () => {
+    const f = await backups();
+    const d = disk(f.paths, NEED + AIM - 150);
+    const { args, log } = base(f, d);
+
+    await makeRoom({ ...args, reason: "space_low" });
+
+    expect(log.mock.calls).toEqual([
+      [
+        "info",
+        "backup.archive_deleted",
+        { destination: "da", key: f.keys[0], bytes: SIZE, reason: "space_low" },
+      ],
+    ]);
+  });
+
+  it("with outOfReach 'aim', deletes every deletable archive when the aim cannot be reached, refusing nothing", async () => {
+    const f = await backups();
+    // 100 + 600 falls short of an aim of 2000; every deletable archive goes, the newest stays.
+    const d = disk(f.paths, 100);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom({ ...args, neededBytes: 0, floorBytes: 0, aimBytes: 2000, outOfReach: "aim" });
+
+    expect(f.paths.map(exists)).toEqual([false, false, false, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0], f.keys[1], f.keys[2]]]);
+  });
+
+  it("with outOfReach 'aim', still stops at the aim when it can be reached", async () => {
+    const f = await backups();
+    const d = disk(f.paths, AIM - 350);
+    const { args, onDeleted } = base(f, d);
+
+    await makeRoom({ ...args, neededBytes: 0, floorBytes: 0, outOfReach: "aim" });
+
+    expect(f.paths.map(exists)).toEqual([false, false, true, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[0], f.keys[1]]]);
   });
 
   it("refuses a size that is not a finite number or is below zero, before reading or deleting anything", async () => {

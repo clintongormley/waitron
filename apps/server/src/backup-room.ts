@@ -10,7 +10,7 @@ import type { Logger } from "./logger.js";
 import type { StorageBackend } from "./storage-backend.js";
 import "./errors.js";
 
-/** A local backup folder on the disk that holds the run's working folder, by its real path. */
+/** A local backup folder on the disk being made room on, by its real path. */
 export interface BackupFolder {
   destination: string;
   dir: string;
@@ -81,7 +81,7 @@ async function archivesIn(
 }
 
 /**
- * The local backup folders on the working folder's disk. `folders` holds each folder once (by device
+ * The local backup folders on `dir`'s disk. `folders` holds each folder once (by device
  * and inode, so two real paths to one folder are one), for listing archives; `copies` counts every
  * local destination on the disk, because the run copies to all of them at once and each copy holds a
  * whole working copy before its rename. A destination whose real path or disk cannot be read is
@@ -89,10 +89,10 @@ async function archivesIn(
  */
 export async function foldersOnDisk(
   backends: readonly Pick<StorageBackend, "id" | "localDir">[],
-  stagingDir: string,
+  dir: string,
   deviceOf?: DeviceOf,
 ): Promise<{ folders: BackupFolder[]; copies: number }> {
-  const staging = await realOrNearest(stagingDir);
+  const staging = await realOrNearest(dir);
   const stagingDevice = deviceOf
     ? await deviceOf(staging.existing)
     : (await fs.stat(staging.existing)).dev;
@@ -145,13 +145,20 @@ export interface MakeRoomOptions {
   neededBytes: number;
   floorBytes: number;
   aimBytes: number;
-  stagingDir: string;
+  /** The folder whose disk is read: the run's working folder, or the venue folder for the watch. */
+  dir: string;
   statfs?: Statfs;
   folders: readonly BackupFolder[];
   /** Asked only when free space is under the aim, so a step with room never waits for it. */
   installationStartedAt: () => Promise<Date | null>;
   signal: AbortSignal;
   log: Logger;
+  /** Logged with each deletion. */
+  reason: "backup_room" | "space_low";
+  /** What to delete toward when free space plus every deletable archive falls short of the aim:
+   * the floor (a backup run), or the aim anyway, which deletes every deletable archive (the
+   * free-space watch, whose every deletion is room the tills can use). */
+  outOfReach: "floor" | "aim";
   /** Called once, before the step returns or throws, whenever it deleted anything. Its failure is
    * the caller's to log; it never replaces the step's own outcome. */
   onDeleted: (deleted: readonly DeletableArchive[]) => Promise<void>;
@@ -160,8 +167,9 @@ export interface MakeRoomOptions {
 }
 
 /**
- * Makes `neededBytes` plus `aimBytes` free at `stagingDir` by deleting the oldest deletable archives,
- * or plus `floorBytes` when the aim cannot be reached (an aim below the floor counts as the floor).
+ * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting the oldest deletable archives, or
+ * plus `floorBytes` when the aim cannot be reached and `outOfReach` is `"floor"` (an aim below the
+ * floor counts as the floor).
  * Refuses with `backup.staging_space_low`, deleting nothing, when free space plus every deletable
  * archive's size falls short of the floor. Free space is read again after each deletion or skipped
  * entry, and deleting stops when that reading reaches the goal or the deleted archives' sizes cover
@@ -181,13 +189,13 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
       );
   const floor = opts.neededBytes + opts.floorBytes;
   const aim = opts.neededBytes + Math.max(opts.aimBytes, opts.floorBytes);
-  let free = await freeBytes(opts.stagingDir, opts.statfs);
+  let free = await freeBytes(opts.dir, opts.statfs);
   if (free === null || free >= aim) return;
   const archives = await listDeletableArchives(opts.folders, await opts.installationStartedAt());
   const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
   if (free + offered < floor)
     throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
-  const goal = free + offered >= aim ? aim : floor;
+  const goal = free + offered >= aim || opts.outOfReach === "aim" ? aim : floor;
   const shortfall = goal - free;
   const unlink = opts.unlink ?? fs.unlink;
   const deleted: DeletableArchive[] = [];
@@ -204,7 +212,7 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
             destination: archive.destination,
             key: archive.key,
             bytes: archive.bytes,
-            reason: "backup_room",
+            reason: opts.reason,
           });
         }
       } catch (error) {
@@ -214,10 +222,10 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
           errorCode: codeOf(error),
           errno: errnoOf(error) ?? null,
         });
-        free = await freeBytes(opts.stagingDir, opts.statfs);
+        free = await freeBytes(opts.dir, opts.statfs);
         break;
       }
-      free = await freeBytes(opts.stagingDir, opts.statfs);
+      free = await freeBytes(opts.dir, opts.statfs);
       if (free === null) return;
     }
     if (free !== null && free < floor)
