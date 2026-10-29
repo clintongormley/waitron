@@ -176,7 +176,15 @@ describe("configuration", () => {
   it("excludes the dashboard i18n translation catalogues by exact suffix, and nothing wider", () => {
     // A module's `src/dashboard/strings.ts` holds `{ en, es }` UI copy: its `es` values are
     // translation, not vocabulary (the dashboard-kit exclusion's principle, one file down).
-    expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts"]);
+    expect([...I18N_CATALOGUES]).toEqual(["dashboard/strings.ts", "i18n/pack-words.ts"]);
+  });
+
+  it("drops the recovery pack's word catalogue from the scan, which its Spanish would fail", () => {
+    const files = sourceFilesIn("recovery-pack");
+    expect(files.some((f) => f.endsWith("i18n/pack-words.ts"))).toBe(false);
+    expect(files.length).toBeGreaterThan(0);
+    const catalogue = join(PACKAGES_ROOT, "recovery-pack", "src", "i18n", "pack-words.ts");
+    expect(findSpanish(readSource(catalogue), FORBIDDEN).length).toBeGreaterThan(0);
   });
 
   it("drops each payment provider's dashboard catalogue from the scan while keeping its other files", () => {

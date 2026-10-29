@@ -96,7 +96,7 @@ export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const
  * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so a `dashboard/*.ts` widget
  * that is NOT the catalogue is still scanned.
  */
-export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
+export const I18N_CATALOGUES = ["dashboard/strings.ts", "i18n/pack-words.ts"] as const;
 
 /**
  * A package's starter-content translations: the words its seed writes into a new venue in

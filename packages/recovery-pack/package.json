@@ -12,13 +12,20 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "pdf-lib": "1.17.1"
+    "fontkit": "2.0.4",
+    "pdf-lib": "1.17.1",
+    "pdfkit": "0.20.2",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@napi-rs/canvas": "^1.0.13",
+    "@types/fontkit": "^2.0.9",
     "@types/node": "^26.6.5",
     "@types/pdfkit": "^0.17.7",
+    "@types/qrcode": "^1.5.5",
     "@vitest/coverage-v8": "^4.1.12",
-    "pdfkit": "0.20.2",
+    "jsqr": "^1.4.0",
+    "pdfjs-dist": "6.4.299",
     "typescript": "^7.0.0",
     "vitest": "^4.1.12"
   }
