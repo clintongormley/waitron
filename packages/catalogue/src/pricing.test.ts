@@ -53,7 +53,7 @@ describe("priceBasket — difference method", () => {
         quantity: "0.150",
         priceQuantity: "0.050",
         vatClass: "reduced",
-        name: "Jamón",
+        name: "Ham slices",
         descriptions: { en: "Ham" },
         category: "Food",
         unitName: { en: "kg" },
@@ -243,7 +243,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
         quantity: "2",
         options: [
           {
-            name: "Jamón",
+            name: "Ham slices",
             descriptions: { en: "Ham" },
             priceDelta: "0.01",
             vatClass: "general",
@@ -276,7 +276,7 @@ describe("grossBasketWithOptions — the gross figures, which take no date", () 
     ]);
     const gross = grossBasketWithOptions(items);
     expect(gross.lines.map((line) => line.lineGross)).toEqual([decimal("3.00"), decimal("7.97")]);
-    // The per-UNIT gross is NOT multiplied by quantity: café 1.50 (not 3.00) and jamón 24.90/kg
+    // The per-UNIT gross is NOT multiplied by quantity: coffee 1.50 (not 3.00) and ham 24.90/kg
     // (not 7.97).
     expect(gross.lines.map((line) => line.grossUnitPrice)).toEqual([
       decimal("1.50"),
@@ -386,10 +386,10 @@ describe("a VAT class", () => {
           product: each("11.00", "reduced"),
           quantity: "1",
           options: [
-            { name: "Hielo", descriptions: { es: "Hielo" }, priceDelta: "1.10", vatClass: null },
+            { name: "Ice", descriptions: { es: "Ice" }, priceDelta: "1.10", vatClass: null },
             {
-              name: "Tapa",
-              descriptions: { es: "Tapa" },
+              name: "Small plate",
+              descriptions: { es: "Small plate" },
               priceDelta: "1.04",
               vatClass: "super_reduced",
             },
@@ -412,17 +412,17 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
   const opt = (
     priceDelta: string,
     vatClass: SelectedOption["vatClass"],
-    name = "opción",
-    descriptions: Record<string, string> = { es: "opción" },
+    name = "Option",
+    descriptions: Record<string, string> = { es: "Option" },
   ): SelectedOption => ({ name, descriptions, priceDelta, vatClass });
 
-  it("prices a dish with options as parent + child lines (brief verbatim example)", () => {
+  it("prices a dish with options as parent + child lines", () => {
     const priced = rateLines(
       grossBasketWithOptions([
         {
           product: {
-            name: "Café",
-            descriptions: { es: "Café" },
+            name: "Coffee",
+            descriptions: { es: "Coffee" },
             unit: {
               staffName: "Staff unit",
               staffAbbreviation: "su",
@@ -436,10 +436,10 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
           },
           quantity: "1",
           options: [
-            { name: "Grande", descriptions: { es: "Grande" }, priceDelta: "0.50", vatClass: null },
+            { name: "Large", descriptions: { es: "Large" }, priceDelta: "0.50", vatClass: null },
             {
-              name: "Leche avena",
-              descriptions: { es: "Leche avena" },
+              name: "Oat milk",
+              descriptions: { es: "Oat milk" },
               priceDelta: "0.40",
               vatClass: null,
             },
@@ -461,8 +461,8 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
           quantity: "1",
           options: [
             {
-              ...opt("4.50", "general", "Vino staff", { es: "Vino customer" }),
-              kitchenName: "Vino kitchen",
+              ...opt("4.50", "general", "Wine staff", { es: "Wine customer" }),
+              kitchenName: "Wine kitchen",
             },
           ],
         },
@@ -470,7 +470,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
       ON,
     );
     // The dish's own kitchen name is absent here, so a child reading the parent's would read null.
-    expect(priced.lines[1]!.kitchenName).toBe("Vino kitchen");
+    expect(priced.lines[1]!.kitchenName).toBe("Wine kitchen");
   });
 
   it("emits THREE lines; both children carry the dish's lineNo as parentLineNo, and a free option bases to 0", () => {
@@ -480,8 +480,8 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
           product: each("2.50", "reduced", "Drinks"),
           quantity: "1",
           options: [
-            opt("0.00", null, "Sin azúcar", { es: "Sin azúcar" }),
-            opt("0.50", null, "Grande", { es: "Grande" }),
+            opt("0.00", null, "No sugar", { es: "No sugar" }),
+            opt("0.50", null, "Large", { es: "Large" }),
           ],
         },
       ]),
@@ -589,8 +589,8 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
         quantity: "2",
         options: [
           {
-            name: "Grande",
-            descriptions: { es: "Grande" },
+            name: "Large",
+            descriptions: { es: "Large" },
             priceDelta: "1.30",
             vatClass: null,
             ...(quantity !== undefined ? { quantity } : {}),
@@ -623,7 +623,7 @@ describe("rateLines over grossBasketWithOptions — parent + child lines", () =>
 // live catalogue.
 describe("rateLines over grossLockedLines — a locked line rates as a walk-up does", () => {
   it("prices locked lines to the difference-method VAT breakdown (base 4.55 / tax 0.95), like a walk-up", () => {
-    // café×1 (gross 1.50) + agua×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
+    // coffee×1 (gross 1.50) + water×2 (gross unit 2.00, qty 2). Group base 4.55, gross 5.50, tax 0.95
     // (NOT round(4.55×21%)=0.96).
     const priced = rateLines(
       grossLockedLines([
@@ -631,16 +631,16 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
           grossUnitPrice: "1.50",
           quantity: "1",
           vatClass: "general",
-          name: "Café",
-          descriptions: { es: "Café" },
+          name: "Coffee",
+          descriptions: { es: "Coffee" },
           category: null,
         },
         {
           grossUnitPrice: "2.00",
           quantity: "2",
           vatClass: "general",
-          name: "Agua",
-          descriptions: { es: "Agua" },
+          name: "Water",
+          descriptions: { es: "Water" },
           category: null,
         },
       ]),
@@ -673,8 +673,8 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
           grossUnitPrice: "9.99",
           quantity: "0.333",
           vatClass: "reduced",
-          name: "Jamón",
-          descriptions: { es: "Jamón" },
+          name: "Ham slices",
+          descriptions: { es: "Ham" },
           category: null,
         },
       ]),
@@ -686,7 +686,7 @@ describe("rateLines over grossLockedLines — a locked line rates as a walk-up d
 
   it("is byte-identical to re-pricing the same products — mixed rates and a weighed line", () => {
     // Filing a retrieved order from the stored lock produces the SAME result as re-pricing the same
-    // product at the same gross, to the céntimo.
+    // product at the same gross, to the cent.
     const basket = [
       { product: each("8.50", "general"), quantity: "2" }, // 21% each
       { product: weight("24.90", "reduced"), quantity: "0.320" }, // 10% weighed

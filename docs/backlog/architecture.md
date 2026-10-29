@@ -501,6 +501,8 @@ until A977).
   UI-core field-label and input accessibility samples use English price and contact text.
   UI combobox and row-menu suites use English sample staff names; deliberate bilingual
   trigger labels and accented-search examples remain.
+  Catalogue pricing samples use English dish and modifier text; pricing checks retain
+  their existing amounts, quantities, dates and language keys.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
