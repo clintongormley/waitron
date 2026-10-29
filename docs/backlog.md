@@ -176,6 +176,19 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
+- **A1189. Remove Cloud's fiscal allocation registry, in both repositories (owner, 2026-10-29).**
+  "We no longer have the reservations because we use the time-based codes instead" — "the
+  registry can be removed." In Waitron: the server's registry client and module
+  (`apps/server/src/cloud-fiscal-allocation*.ts`), the first-fiscal-setup, recovery and
+  reconciliation paths and tests that call them, `docs/developers/cloud-fiscal-allocation.md`,
+  and whatever of `docs/developers/paper-custodian.md` exists only for the registry (check
+  first). In Waitron Cloud: the registry package, the account service's fiscal allocation
+  routes, the portal's fiscal allocation screens and their tests, and its migration 038;
+  how a shipped append-only migration is removed before Cloud is live is part of the work.
+  The [registry plan](superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md) stays
+  as history with its 2026-10-29 note. It touches first fiscal setup, so the Waitron pull
+  request probably waits for the owner to land it.
+
 - **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
   open by A1154 (#2172), which removed the till-registration command and kept the fiscal identity on
   the node. Drop `WAITRON_TILL_LOCATION_ID` too if the database can answer it. Its own PR; demo and
