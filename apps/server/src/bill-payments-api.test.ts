@@ -92,6 +92,8 @@ import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-dev
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { cancelBody } from "./testing/cancel-line.js";
+import { writeGroupedLines } from "./testing/grouped-counter-order.js";
+import { todayLine, todayLineNos } from "./testing/adjustment-venue.js";
 import { watchDerivationsAndLock, watchedOrder } from "./testing/watched-scrypt.js";
 import { disableDevice } from "./device-delete.js";
 
@@ -421,6 +423,24 @@ async function tabWith(...names: string[]): Promise<string> {
       tableId: table.id,
       lines: names.map((name) => ({ menuItemId: offer(name), quantity: "1" })),
     });
+    return tabId;
+  });
+}
+
+/** {@link tabWith}'s bill with its lines stored grouped: the line route cuts part of a line in place. */
+async function groupedTabWith(...names: string[]): Promise<string> {
+  return inTx(async (tx) => {
+    const table = await createTable(tx, venue.cfg, {
+      label: `M-${randomUUID().slice(0, 8)}`,
+      zoneId: venue.offers.zoneId,
+    });
+    const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+    await writeGroupedLines(
+      tx,
+      venue.cfg,
+      tabId,
+      names.map((name) => ({ menuItemId: offer(name), quantity: "1" })),
+    );
     return tabId;
   });
 }
@@ -1265,17 +1285,21 @@ describe("an item already paid for (design §8 test 5)", () => {
     });
     expect(paid.status).toBe(200);
 
-    const moved = await splitOff(billId, [{ lineNo: 2, quantity: "2" }]);
-    const cutTooFar = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2, "2"),
+    const beers = await todayLineNos(suite, billId, 2);
+    const moved = await splitOff(
+      billId,
+      beers.length === 1
+        ? [{ lineNo: 2, quantity: "2" }]
+        : beers.slice(-2).map((lineNo) => ({ lineNo })),
     );
-    const cut = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2, "1"),
-    );
+    const cutTooFar = await request("POST", `/api/working-orders/${billId}/adjustments`, {
+      ...(await cancelBody(suite.db, billId, 2, "2")),
+      ...(await todayLine(suite, billId, 2)),
+    });
+    const cut = await request("POST", `/api/working-orders/${billId}/adjustments`, {
+      ...(await cancelBody(suite.db, billId, 2, "1")),
+      ...(await todayLine(suite, billId, 2)),
+    });
 
     expect(moved.status).toBe(200);
     expect(cutTooFar.status).toBe(409);
@@ -3207,7 +3231,7 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   it("issues the invoice when a line edit leaves the bill exactly paid", async () => {
-    const billId = await tabWith("Chuletón", "Caña");
+    const billId = await groupedTabWith("Chuletón", "Caña");
     await raiseLine(billId, 2, "2");
     expect((await contribute(billId, "28.00")).status).toBe(200);
 
@@ -3240,7 +3264,10 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
   });
 
   async function savedF1WithReceivedMoney(route: "void" | "split" | "line edit" | "held edit") {
-    const billId = await tabWith("Chuletón", route === "line edit" ? "Caña" : "Tarta");
+    const billId =
+      route === "line edit"
+        ? await groupedTabWith("Chuletón", "Caña")
+        : await tabWith("Chuletón", "Tarta");
     if (route === "line edit") await raiseLine(billId, 2, "2");
     const amount = route === "line edit" ? 2800 : 2500;
     const choice = await request("PUT", `/api/working-orders/${billId}/invoice-choice`, {
@@ -3385,19 +3412,22 @@ describe("a line write that leaves the bill exactly paid (design §7)", () => {
     const billId = await tabWith("Paella", "Caña");
     await raiseLine(billId, 2, "3");
     expect((await contribute(billId, "42.00")).status).toBe(200);
+    const before = await lineTotals(billId);
 
-    const refused = await request(
-      "POST",
-      `/api/working-orders/${billId}/adjustments`,
-      await cancelBody(suite.db, billId, 2, "1"),
-    );
+    const refused = await request("POST", `/api/working-orders/${billId}/adjustments`, {
+      ...(await cancelBody(suite.db, billId, 2, "1")),
+      ...(await todayLine(suite, billId, 2)),
+    });
 
     expect(refused.status).toBe(409);
     expect(refused.json).toMatchObject({
       code: "bill.received_exceeds_total",
       params: { workingOrderId: billId, excess: "1.00" },
     });
-    expect(await lineTotals(billId)).toEqual(["35.00", "9.00"]);
+    expect(await lineTotals(billId)).toEqual(before);
+    expect(before).toEqual(
+      before.length === 2 ? ["35.00", "9.00"] : ["35.00", "3.00", "3.00", "3.00"],
+    );
   });
 
   it("voids a line of a bill with no payments for a session sent with no device cookie", async () => {

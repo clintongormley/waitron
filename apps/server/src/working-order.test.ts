@@ -108,6 +108,7 @@ import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { heldRow } from "./testing/held-row.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -2126,12 +2127,11 @@ describe("updateHeldOrder", () => {
     await withTransaction(db, (tx) =>
       catalogue.updateProduct(tx, extra.productId, { available: false }),
     );
+    const dishes = before.filter((line) => line.parent_line_id === null).map((line) => line.id);
     const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
         revision: await revisionOf(id),
-        lines: [
-          { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
-        ],
+        lines: heldRow(dishes, quantity, { menuItemId: premiumCafeOfferId, extras }),
       });
 
     await edit("2");
@@ -8736,14 +8736,18 @@ describe("editing a saved order prices only what the edit adds", () => {
     const { cfg, water } = await menuVenue();
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [{ productId: water, quantity: "2" }] });
-    const [before] = await storedRows(id);
+    const before = await storedRows(id);
     await db.execute(sql`update products set unit_price = 900 where id = ${water}`);
 
     await updateProducts(cfg, id, {
-      lines: [{ workingOrderLineId: before!.id, productId: water, quantity: "2", note: "Warm" }],
+      lines: heldRow(
+        before.map((row) => row.id),
+        "2",
+        { productId: water, note: "Warm" },
+      ),
     });
 
-    expect(await storedRows(id)).toEqual([{ ...before!, note: "Warm" }]);
+    expect(await storedRows(id)).toEqual(before.map((row) => ({ ...row, note: "Warm" })));
   });
 
   it("numbers a line that replaces another after the order's highest line number", async () => {

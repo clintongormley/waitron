@@ -11,6 +11,7 @@ import { deviceId as brandDeviceId } from "@waitron/shared";
 import type { Draft } from "./order-drafts.js";
 import { readBillEditState } from "./bill-editing.js";
 import { issueOrderInvoice } from "./testing/issue-order.js";
+import { heldRow } from "./testing/held-row.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {
   groupedTabWith,
@@ -304,6 +305,86 @@ describe("a line edit", () => {
     const answer = await setQuantity(at(now - INSIDE), billId, "1");
 
     expect(answer.status).toBe(200);
+    expect(registroCount(venue, billId)).toBe(1);
+  });
+});
+
+describe("a held-order save", () => {
+  function dishLines(billId: string) {
+    return venue.db.all<{ id: string; quantity: number }>(sql`
+      select id, quantity from working_order_lines
+      where working_order_id = ${billId} and parent_line_id is null order by line_no`);
+  }
+
+  function revisionOf(billId: string): number {
+    const [row] = venue.db.all<{ revision: number }>(
+      sql`select revision from working_orders where id = ${billId}`,
+    );
+    return row!.revision;
+  }
+
+  /** A bill of two beers, raised as the line route raises a beer, with 3.00 of it received. */
+  async function halfPaidBeers(now: number): Promise<string> {
+    const billId = await tabWith(venue, "Caña");
+    const raised = await send(
+      at(now),
+      venue.cookie,
+      "PUT",
+      `/api/working-orders/${billId}/lines/1`,
+      {
+        revision: revisionOf(billId),
+        expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+        quantity: "2",
+      },
+    );
+    expect(raised.status).toBe(200);
+    const paid = await send(
+      at(now),
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      cashPart("3.00"),
+    );
+    expect(paid.status).toBe(200);
+    return billId;
+  }
+
+  /** Save the bill keeping one of its two beers, which completes it. */
+  async function keepOneBeer(app: Hono, billId: string) {
+    return send(app, venue.cookie, "PUT", `/api/working-orders/${billId}`, {
+      revision: revisionOf(billId),
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, billId)),
+      lines: heldRow(
+        dishLines(billId).map((line) => line.id),
+        "1",
+        { menuItemId: venue.offerFor("Caña") },
+      ),
+    });
+  }
+
+  it("refuses a save that would complete a part-paid bill, and writes nothing", async () => {
+    const now = nowMs();
+    const billId = await halfPaidBeers(now);
+    const before = dishLines(billId);
+    const behind = now - 10 * MINUTE;
+
+    const answer = await keepOneBeer(at(behind), billId);
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toEqual(behindChain(behind));
+    expect(dishLines(billId)).toEqual(before);
+    expect(before.reduce((sum, line) => sum + line.quantity, 0)).toBe(2000);
+    expect(registroCount(venue, billId)).toBe(0);
+  });
+
+  it("takes the same save a minute inside the last record", async () => {
+    const now = nowMs();
+    const billId = await halfPaidBeers(now);
+
+    const answer = await keepOneBeer(at(now - INSIDE), billId);
+
+    expect(answer.status).toBe(200);
+    expect(dishLines(billId).map((line) => line.quantity)).toEqual([1000]);
     expect(registroCount(venue, billId)).toBe(1);
   });
 });
