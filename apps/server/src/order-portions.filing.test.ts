@@ -1657,6 +1657,26 @@ describe("A803 portions: raising a dish", () => {
     expect(linesOf(bill.billId)).toEqual(before);
   });
 
+  it("A803 portions: a held-order save raising a sent portion by 100 is refused and writes nothing; by 99 it adds 99 portions", async () => {
+    const bill = await billOf(croquetas("1"), { bound: true, fire: true });
+    const [croqueta] = bill.portions;
+    const before = linesOf(bill.billId);
+
+    await expect(
+      saveLines(bill.billId, [{ workingOrderLineId: croqueta!.lineId, ...croquetas("101")[0]! }]),
+    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+    expect(linesOf(bill.billId)).toEqual(before);
+
+    await saveLines(bill.billId, [
+      { workingOrderLineId: croqueta!.lineId, ...croquetas("100")[0]! },
+    ]);
+    const added = linesOf(bill.billId).filter((line) => line.lineNo !== before[0]!.lineNo);
+    expect(added).toHaveLength(99);
+    expect(added.every((line) => line.quantity === 1000 && line.cohortId !== null)).toBe(true);
+    expect(new Set(added.map((line) => line.cohortId)).size).toBe(1);
+    expect(added[0]!.cohortId).not.toBe(croqueta!.pricingCohortId);
+  });
+
   it("A803 portions: a new line on a counter order stays one line", async () => {
     const bill = await billOf(croquetas("1"), { bound: false });
     await toCounter(bill.billId, bill.partyId);
