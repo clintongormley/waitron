@@ -3474,7 +3474,8 @@ grants `actions: read` and `contents: read`; and that each helper call's report 
 its needed jobs upload.
 They recognise literal action names, step fields and the helper's quoted command arguments, not
 composite actions, external reusable workflows, YAML anchors or alternative shell commands.
-A matching cleanup string does not prove that it ran or removed a file.
+A matching cleanup string does not prove that it ran or removed a file. The permission check finds the two
+lines as text, so a job granting further permissions beside them still passes.
 
 ### A completed transfer can still leave the download action alive
 
