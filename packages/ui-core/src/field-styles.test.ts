@@ -36,16 +36,16 @@ test("a date or time type floats the label whatever the case it is written in, a
 
 test("the field label points at its control, holds its text in the part an ellipsis cuts, and stars only a required field", () => {
   const box = document.createElement("div");
-  render(fieldLabel("price", "Precio", true), box);
+  render(fieldLabel("price", "Price", true), box);
   const label = box.querySelector("label.field-label")!;
   expect(label.getAttribute("for")).toBe("price");
-  expect(label.querySelector(".field-label-text")?.textContent).toBe("Precio");
+  expect(label.querySelector(".field-label-text")?.textContent).toBe("Price");
   const star = label.querySelector(".required[data-required]");
   expect(star?.textContent).toBe("*");
   expect(star?.getAttribute("aria-hidden")).toBe("true");
-  expect(label.textContent).toBe("Precio*");
+  expect(label.textContent).toBe("Price*");
 
-  render(fieldLabel("price", "Precio", false), box);
+  render(fieldLabel("price", "Price", false), box);
   expect(box.querySelector("[data-required]")).toBeNull();
-  expect(box.querySelector("label")!.textContent).toBe("Precio");
+  expect(box.querySelector("label")!.textContent).toBe("Price");
 });

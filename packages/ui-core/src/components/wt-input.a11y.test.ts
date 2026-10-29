@@ -77,13 +77,13 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
   });
 
   test("disabled field holding a value", async () => {
-    await mountThemed('<wt-input label="Name" value="Ana" disabled></wt-input>', theme);
+    await mountThemed('<wt-input label="Name" value="Ann" disabled></wt-input>', theme);
     await expectNoA11yViolations(host);
   });
 
   test("invalid field with an error message", async () => {
     await mountThemed(
-      '<wt-input label="Email" value="ana@" error="Enter a valid email address"></wt-input>',
+      '<wt-input label="Email" value="ann@" error="Enter a valid email address"></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -91,7 +91,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("read-only field holding a value", async () => {
     await mountThemed(
-      '<wt-input label="Email" name="chosen-email" type="email" value="ana@example.com" readonly></wt-input>',
+      '<wt-input label="Email" name="chosen-email" type="email" value="ann@example.com" readonly></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);
@@ -101,7 +101,7 @@ describe.each(["light", "dark"] as const)("wt-input a11y (%s theme)", (theme) =>
 
   test("read-only field with an action at its end", async () => {
     await mountThemed(
-      '<wt-input label="Email" value="ana@example.com" readonly><button slot="end" aria-label="Use another account">✎</button></wt-input>',
+      '<wt-input label="Email" value="ann@example.com" readonly><button slot="end" aria-label="Use another account">✎</button></wt-input>',
       theme,
     );
     await expectNoA11yViolations(host);

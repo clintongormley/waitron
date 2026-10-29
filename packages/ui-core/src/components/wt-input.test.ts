@@ -331,7 +331,7 @@ test("invalid state paints the bottom line and the label from the danger token",
 });
 
 test("a disabled field paints its own paler fill, a dashed line and muted text, at full opacity", async () => {
-  const el = await mount('<wt-input label="Name" value="Ana" disabled></wt-input>');
+  const el = await mount('<wt-input label="Name" value="Ann" disabled></wt-input>');
   host.style.setProperty("--wt-opacity-disabled", "0.3");
   host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
   host.style.setProperty("--wt-color-text-muted", "rgb(24, 25, 26)");
@@ -508,7 +508,7 @@ test("a value set from code after the first render floats the label", async () =
   const el = await mount('<wt-input label="Name"></wt-input>');
   const { field } = parts(el);
   expect(field.getAttribute("data-label")).toBe("rest");
-  (el as HTMLElement & { value: string }).value = "Ana";
+  (el as HTMLElement & { value: string }).value = "Ann";
   await (el as LitElement).updateComplete;
   expect(field.getAttribute("data-label")).toBe("float");
 });
@@ -543,7 +543,7 @@ test("a focused invalid field keeps the danger line and label", async () => {
 });
 
 test("the value paints from the field-value token", async () => {
-  const el = await mount('<wt-input label="Name" value="Ana"></wt-input>');
+  const el = await mount('<wt-input label="Name" value="Ann"></wt-input>');
   host.style.setProperty("--wt-color-field-value", "rgb(31, 32, 33)");
   expect(getComputedStyle(parts(el).input).color).toBe("rgb(31, 32, 33)");
 });
@@ -615,9 +615,9 @@ test("a long label at phone width is cut with an ellipsis on one line", async ()
   const long = "Customer name as it will appear on the simplified invoice and on the receipt "
     .repeat(2)
     .slice(0, 120);
-  const el = await mount(`<wt-input label="${long}" value="Ana"></wt-input>`);
+  const el = await mount(`<wt-input label="${long}" value="Ann"></wt-input>`);
   host.style.width = "390px";
-  const short = await mount('<wt-input label="Name" value="Ana"></wt-input>');
+  const short = await mount('<wt-input label="Name" value="Ann"></wt-input>');
   host.style.width = "390px";
   const text = (input: HTMLElement) =>
     input.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
@@ -636,7 +636,7 @@ test("a long required label keeps its star visible at phone width", async () => 
   const long = "Customer name as it will appear on the simplified invoice and on the receipt "
     .repeat(2)
     .slice(0, 120);
-  const el = await mount(`<wt-input label="${long}" value="Ana" required></wt-input>`);
+  const el = await mount(`<wt-input label="${long}" value="Ann" required></wt-input>`);
   host.style.width = "390px";
   const labelBox = parts(el).label.getBoundingClientRect();
   const starBox = el.shadowRoot!.querySelector("[data-required]")!.getBoundingClientRect();
@@ -646,8 +646,8 @@ test("a long required label keeps its star visible at phone width", async () => 
 });
 
 test("a disabled field is as tall as an enabled one, and a compact disabled one is the tap-target height", async () => {
-  const enabled = await mount('<wt-input label="Name" value="Ana"></wt-input>');
-  const disabled = await mount('<wt-input label="Name" value="Ana" disabled></wt-input>');
+  const enabled = await mount('<wt-input label="Name" value="Ann"></wt-input>');
+  const disabled = await mount('<wt-input label="Name" value="Ann" disabled></wt-input>');
   const compact = await mount('<wt-input label="Search" hide-label disabled></wt-input>');
   host.style.setProperty("--wt-tap-min", "47px");
   expect(parts(disabled).field.getBoundingClientRect().height).toBe(
@@ -669,31 +669,31 @@ test("a disabled field's label stays muted even when the field is invalid", asyn
 
 test("a read-only field's native input is read-only, shows its value and floats its label", async () => {
   const el = await mount(
-    '<wt-input label="Email" name="chosen-email" value="ana@example.com" readonly></wt-input>',
+    '<wt-input label="Email" name="chosen-email" value="ann@example.com" readonly></wt-input>',
   );
   const { field, label, input } = parts(el);
   expect(input.readOnly).toBe(true);
   expect(input.disabled).toBe(false);
-  expect(input.value).toBe("ana@example.com");
+  expect(input.value).toBe("ann@example.com");
   expect(label.htmlFor).toBe(input.id);
   expect(field.getAttribute("data-label")).toBe("float");
   expect(field.hasAttribute("data-disabled")).toBe(false);
 });
 
 test("typing into a read-only field changes nothing and announces no change", async () => {
-  const el = await mount('<wt-input label="Email" value="ana@example.com" readonly></wt-input>');
+  const el = await mount('<wt-input label="Email" value="ann@example.com" readonly></wt-input>');
   let changes = 0;
   el.addEventListener("wt-change", () => changes++);
   const { input } = parts(el);
   input.focus();
   await userEvent.keyboard("xyz");
-  expect(input.value).toBe("ana@example.com");
-  expect((el as HTMLElement & { value: string }).value).toBe("ana@example.com");
+  expect(input.value).toBe("ann@example.com");
+  expect((el as HTMLElement & { value: string }).value).toBe("ann@example.com");
   expect(changes).toBe(0);
 });
 
 test("a read-only field paints the editable field's fill, line and value colour, not the disabled ones", async () => {
-  const el = await mount('<wt-input label="Email" value="ana@example.com" readonly></wt-input>');
+  const el = await mount('<wt-input label="Email" value="ann@example.com" readonly></wt-input>');
   host.style.setProperty("--wt-color-field-fill", "rgb(8, 8, 8)");
   host.style.setProperty("--wt-color-field-fill-disabled", "rgb(21, 22, 23)");
   host.style.setProperty("--wt-color-field-line", "rgb(7, 7, 7)");
@@ -710,7 +710,7 @@ test("a read-only field paints the editable field's fill, line and value colour,
 
 test("a read-only field holds an end action inside its box at the trailing end", async () => {
   const el = await mount(
-    '<wt-input label="Email" value="ana@example.com" readonly><button slot="end">Edit</button></wt-input>',
+    '<wt-input label="Email" value="ann@example.com" readonly><button slot="end">Edit</button></wt-input>',
   );
   await settle(el);
   const { field } = parts(el);

@@ -5993,6 +5993,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   UI-core input and textarea samples use English label and note text; phone-label checks
   retain their 120-character inputs and existing bounds.
   UI floor-model, table-token and floor-map suites use English sample zone and party names.
+  UI-core field-label and input accessibility samples use English price and contact text.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
