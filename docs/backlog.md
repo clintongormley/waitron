@@ -201,8 +201,13 @@ under `docs/backlog/`.
   Local route tests compare persistent rows and write counts after the isolated child exits,
   and disconnect real HTTP sockets during opening, response reading and cleanup. Boot tests
   cover runner shutdown and the existing read-only gates. Earlier tests exercise sales and
-  installation while a query waits. The diagnosis screen, complete coverage
-  and whole-flow qualification remain open.
+  installation while a query waits. The branch now includes diagnosis from the card
+  and failed editor, with separate local inspection, an explicit query, source confirmation,
+  Stop and evidence copy. Browser tests exercise native file/type edits, account changes,
+  secret clearing, stale file reads and answers, separate Save and the actual shell/module
+  sign-in handoff. English and Spanish views were inspected in both themes at desktop and
+  phone widths. Guide integration, complete built-flow qualification and the earlier
+  process-helper coverage gap remain open; this partial branch is not ready to land.
   Persistent connection/configuration and external-refusal repair remain open.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 

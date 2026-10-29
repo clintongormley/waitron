@@ -1,5 +1,14 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 screen checkpoint: Task 7 adds separate local inspection and an explicit
+query from the certificate card and failed editor. Local browser checks cover native
+source/file/passphrase/type edits, stale reads and answers, account-secret clearing,
+separate Save, safe evidence copy and the actual shell/module sign-in handoff. English
+and Spanish views were inspected in both themes at desktop and phone widths. Guide
+integration, complete built-flow qualification, the earlier process-helper coverage gap
+and persistent repair remain open. This partial branch has not been reviewed or qualified
+for landing. Earlier checkpoints below retain their publication state._
+
 _2026-10-29 browser-support checkpoint: the branch adds opt-in request cancellation
 and in-place permission sign-in using one shared session generation. Local tests
 hold real password/passkey login responses across Stop, apply their cookies and
