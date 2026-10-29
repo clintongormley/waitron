@@ -1086,7 +1086,7 @@ describe("restore hooks (identity phase)", () => {
   it("a note that cannot be deleted refuses the restore with the identity where it was", async () => {
     const existing = formatEnvFile({
       ...parseEnvFile(TRADING_ENV),
-      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+      WAITRON_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
     });
     await writeFile(join(stateDir, "trading.env"), existing);
     await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));

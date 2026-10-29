@@ -47,3 +47,14 @@ inside the trading file. They now assert the removed setting is absent and check
 UUID on the restored database node. Their process-kill, replay, allocation, counter, record,
 invoice-number and no-network assertions remain unchanged. This follows the same 29 October
 location-setting removal decision.
+
+
+Tests added by A1167 and A1127 on main now use the same node-only contract. The two
+backup-note promotion fixtures, disk-stop boot fixture, full-disk note fixture and
+restore-note fixture retain their original node values and behavioural assertions.
+The rejoin-note test keeps its exact retained-file equality under the renamed key.
+`start-backup-room.test.ts` removes its location fixture while retaining its local-only
+deletion, source binding, skipped reasons and no-bucket assertions. Its environment-managed
+case includes a bucket destination and still deletes only from the configured local folder.
+The startup parser uses the checked node id for bucket namespace validation, then discards
+every bucket destination; it does not need the database location for local deletion.

@@ -1,5 +1,10 @@
 # A1167 start slice: the start deletes old backups by itself before it releases the spare
 
+> 2026-10-29: A1155 replaces the identity settings named below with `WAITRON_NODE_ID` only.
+> Startup matches the note to that node and keeps only local archive destinations; the
+> discarded bucket namespace is validated with the checked node id, without opening `venue.db`.
+
+
 Design: [2026-10-28-a1167-backups-make-room-design.md](../specs/2026-10-28-a1167-backups-make-room-design.md)
 §1 and §6's last bullet, and the owner's Q4 A (2026-10-28 ~14:10): in place of the full-disk page's
 no-sign-in button, the start deletes old backups under §1's rules before it releases the spare file,

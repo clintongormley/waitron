@@ -102,7 +102,7 @@ function disk(freeAtStart: number | Error, folders: string[] = [usb]) {
   });
 }
 
-const dashboardEnv = { WAITRON_TILL_NODE_ID: "node-1", WAITRON_BACKUP_RECOVERY_KEY: KEY };
+const dashboardEnv = { WAITRON_NODE_ID: "node-1", WAITRON_BACKUP_RECOVERY_KEY: KEY };
 
 function setup(over: Partial<StartBackupRoomDeps> = {}) {
   const log = vi.fn();
@@ -257,8 +257,7 @@ describe("deleteOldBackupsAtStart", () => {
       baseEnv,
       loadBoxEnv: async (base) => ({
         ...base,
-        WAITRON_TILL_NODE_ID: "node-1",
-        WAITRON_TILL_LOCATION_ID: "venue-1",
+        WAITRON_NODE_ID: "node-1",
       }),
       statfs: disk(10 * MIB, [usb, envFolder]),
     });
@@ -368,7 +367,7 @@ describe("deleteOldBackupsAtStart", () => {
       await fs.symlink(moved, link);
       const { deps, log } = setup({
         baseEnv: { WAITRON_BACKUP_DIR: link, WAITRON_BACKUP_RECOVERY_KEY: KEY },
-        loadBoxEnv: async (base) => ({ ...base, WAITRON_TILL_NODE_ID: "node-1" }),
+        loadBoxEnv: async (base) => ({ ...base, WAITRON_NODE_ID: "node-1" }),
         statfs: disk(10 * MIB, [usb, moved]),
       });
 
@@ -470,12 +469,12 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("the note names another node", () =>
       expectSkip("node_mismatch", {
-        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_TILL_NODE_ID: "node-2" }),
+        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_NODE_ID: "node-2" }),
       }));
 
     it("the box env names no node", () =>
       expectSkip("node_mismatch", {
-        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_TILL_NODE_ID: "" }),
+        loadBoxEnv: async () => ({ ...dashboardEnv, WAITRON_NODE_ID: "" }),
       }));
 
     it("venue.db was replaced after the note was written", () =>
@@ -516,13 +515,13 @@ describe("deleteOldBackupsAtStart", () => {
 
     it("the recovery key is missing", () =>
       expectSkip("recovery_key_missing", {
-        loadBoxEnv: async () => ({ WAITRON_TILL_NODE_ID: "node-1" }),
+        loadBoxEnv: async () => ({ WAITRON_NODE_ID: "node-1" }),
       }));
 
     it("the recovery key cannot be used", () =>
       expectSkip("recovery_key_unusable", {
         loadBoxEnv: async () => ({
-          WAITRON_TILL_NODE_ID: "node-1",
+          WAITRON_NODE_ID: "node-1",
           WAITRON_BACKUP_RECOVERY_KEY: "short",
         }),
       }));

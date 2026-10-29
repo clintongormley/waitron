@@ -107,7 +107,7 @@ async function checks(
     stateDir: deps.stateDir,
     venueDir: deps.venueDir,
     // An unset or empty node id matches no note: a note's node id is never empty.
-    nodeId: merged.WAITRON_TILL_NODE_ID ?? "",
+    nodeId: merged.WAITRON_NODE_ID ?? "",
   });
   if ("skipped" in read) return read;
   const { note } = read;
@@ -131,7 +131,8 @@ async function checks(
         managedByEnvironment: true,
         env: merged,
         sealed: null,
-        venueId: merged.WAITRON_TILL_LOCATION_ID ?? "",
+        // Bucket namespaces are discarded below; use the checked node id without opening venue.db.
+        venueId: note.nodeId,
       }).flatMap((d) => (d.kind === "local-fs" ? [{ id: d.id, localDir: d.dir }] : []));
     } catch {
       return { skipped: "destinations_invalid" };

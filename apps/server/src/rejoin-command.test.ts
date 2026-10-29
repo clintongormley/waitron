@@ -517,7 +517,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await seeded.close();
       }
-      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_NODE_ID=old\n");
       await writeFile(join(stateDir, REBUILD_MARKER), marker);
       // Something at the note's path that no unlink removes.
       await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
@@ -537,9 +537,7 @@ describe("waitron-rejoin rejoin — default wiring", () => {
       } finally {
         await reopened.close();
       }
-      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
-        "WAITRON_TILL_NODE_ID=old\n",
-      );
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe("WAITRON_NODE_ID=old\n");
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

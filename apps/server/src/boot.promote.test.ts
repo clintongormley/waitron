@@ -499,8 +499,7 @@ describe("a mirror's promote and the backup room note", () => {
     const server = await startServer({
       ...KEY_ENV,
       ...TICK_ENV,
-      WAITRON_TILL_NODE_ID: seed.nodeId,
-      WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+      WAITRON_NODE_ID: seed.nodeId,
       WAITRON_VENUE_DIR: venueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -577,8 +576,7 @@ describe("a mirror's promote and the backup room note", () => {
       const server = await startServer({
         ...KEY_ENV,
         ...TICK_ENV,
-        WAITRON_TILL_NODE_ID: seed.nodeId,
-        WAITRON_TILL_LOCATION_ID: MIRROR_LOCATION_ID,
+        WAITRON_NODE_ID: seed.nodeId,
         WAITRON_VENUE_DIR: venueDir,
         WAITRON_HTTP_PORT: String(port),
         WAITRON_MIGRATIONS_DIR: migrationsRoot,
