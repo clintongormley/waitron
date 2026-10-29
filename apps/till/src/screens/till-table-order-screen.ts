@@ -902,10 +902,11 @@ export class TillTableOrderScreen extends LitElement {
         font-size: var(--wt-font-size-sm);
       }
 
+      /* No boxes of their own, so the draft bar's sticky limit is the whole order pane: a bar inside
+         a box that starts below the window cannot rise into it. The pane's gap spaces their parts. */
+      .round-control,
       .round-bar {
-        display: flex;
-        flex-direction: column;
-        gap: var(--wt-space-3);
+        display: contents;
       }
 
       .draft-routing-warning {
@@ -1044,8 +1045,11 @@ export class TillTableOrderScreen extends LitElement {
         align-self: stretch;
       }
 
-      /* A draft being sent takes no edit until the answer comes back; the status line says why. */
-      .round-control[inert] {
+      /* A draft being sent takes no edit until the answer comes back; the status line says why.
+         Faded part by part, as the wrapper draws no box, and the bar's contents rather than the bar
+         so the lines it covers do not show through it. */
+      .round-control[inert] .round-bar > :not(.draft-bar),
+      .round-control[inert] .draft-bar > * {
         opacity: var(--wt-opacity-disabled);
       }
 
