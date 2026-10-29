@@ -150,7 +150,9 @@ async function setupVenue(paidWhen: "prepay" | "ticket_then_pay" = "prepay") {
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, {
+      name: `Vat class at line add menu ${cfg.locationId}`,
+    });
     const product = (name: string, unitPrice: string) =>
       createProduct(tx, {
         catalogueId: menu.id,

@@ -140,7 +140,9 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, {
+      name: `Bill payments signed in menu ${cfg.locationId}`,
+    });
     const bebidas = await createCategory(tx, { name: "Bebidas" });
     const cana = await createProduct(tx, {
       catalogueId: cat.id,

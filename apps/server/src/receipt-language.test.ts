@@ -168,7 +168,7 @@ async function venueWith(
       sql`insert into content_languages (id, default_language, languages) values (1, 'es', '["es","ca","gl"]')
           on conflict (id) do update set default_language = excluded.default_language, languages = excluded.languages`,
     );
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, { name: `Receipt language menu ${cfg.locationId}` });
     const category = await createCategory(tx, { name: "Tapas" });
     // The staff, customer-facing and kitchen names all differ (docs/developers/products.md).
     const product = await createProduct(tx, {

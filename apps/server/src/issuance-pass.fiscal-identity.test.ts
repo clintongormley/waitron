@@ -144,7 +144,9 @@ async function fileOneSale(db: Database) {
     simplifiedInvoiceLimit: null,
   });
   const seeded = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, {
+      name: `Issuance pass fiscal identity menu ${cfg.locationId}`,
+    });
     const bebidas = await createCategory(tx, { name: "Drinks" });
     const cocteles = await createCategory(tx, {
       name: "Cocktails",

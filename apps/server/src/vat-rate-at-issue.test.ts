@@ -174,7 +174,7 @@ async function setupVenue(orderFlow: OrderFlow = "prepay") {
   });
 
   const products = await withTransaction(suite.db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, { name: `Vat rate at issue menu ${cfg.locationId}` });
     const product = (name: string, unitPrice: string, vatClass: "reduced" | "general") =>
       createProduct(tx, {
         catalogueId: menu.id,
