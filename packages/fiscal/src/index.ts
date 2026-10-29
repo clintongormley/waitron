@@ -17,6 +17,9 @@ export type { ClockWitness, ClockWitnessVerdict } from "./clock-witnesses.js";
 export type {
   FiscalBackendDeps,
   FiscalCertificateAnswer,
+  FiscalCertificateDiagnosisChildResult,
+  FiscalCertificateDiagnosisDeps,
+  FiscalCertificateJson,
   FiscalCertificateSeat,
   FiscalContribution,
   FiscalDutyDeps,

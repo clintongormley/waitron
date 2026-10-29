@@ -41,7 +41,48 @@ export interface FiscalCertificateAnswer {
   readonly details?: Readonly<Record<string, string | number>>;
 }
 
+export type FiscalCertificateJson =
+  | null
+  | boolean
+  | number
+  | string
+  | readonly FiscalCertificateJson[]
+  | { readonly [key: string]: FiscalCertificateJson };
+
+export type FiscalCertificateDiagnosisChildResult =
+  | { outcome: "completed"; value: FiscalCertificateJson }
+  | {
+      outcome: "interrupted";
+      reason: "deadline" | "cancelled" | "unavailable";
+      lastProgress: FiscalCertificateJson | null;
+    };
+
+export interface FiscalCertificateDiagnosisDeps {
+  readonly db: Database;
+  readonly ring: KeyRing;
+  readonly nodeId: string;
+  readonly locationId: string;
+  readonly environment: DeploymentEnvironment;
+  readonly signal: AbortSignal;
+  clock(): Date;
+  authorize(tx: Transaction): Promise<{ personId: string; expiresAt: string }>;
+  runChild(
+    input: FiscalCertificateJson,
+    signal: AbortSignal,
+  ): Promise<FiscalCertificateDiagnosisChildResult>;
+}
+
 export interface FiscalCertificateSeat {
+  diagnose?(
+    deps: FiscalCertificateDiagnosisDeps,
+    body: unknown,
+    now: Date,
+  ): Promise<FiscalCertificateJson>;
+  diagnoseInChild?(
+    input: FiscalCertificateJson,
+    signal: AbortSignal,
+    report: (progress: FiscalCertificateJson) => void,
+  ): Promise<FiscalCertificateJson>;
   /** The card, as JSON the host passes on unread. One transaction; `authorize` runs first in it. */
   read(
     deps: {
