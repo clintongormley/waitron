@@ -1,5 +1,5 @@
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
-import { observedGroupSubmitBody } from "./testing/group-submit-fixture.js";
+import { observedGroupSubmitBody, placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
@@ -18,7 +18,7 @@ import {
   createCategory,
   createProduct,
 } from "@waitron/catalogue";
-import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
+import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
@@ -398,7 +398,16 @@ describe("table + tab routes", () => {
       createTable(tx, cfg, { label: `V-${randomUUID().slice(0, 6)}`, zoneId: tablesZoneId }),
     );
     const { tabId, partyId } = await seat(id);
-    await sendRound(partyId, [{ menuItemId, quantity: "3" }]);
+    await withTransaction(suite.db, (tx) =>
+      placeGroupedRound(
+        tx,
+        { ...cfg, origin: jobOrigin("dashboard") },
+        { partyId, tabId },
+        { lines: [{ menuItemId, quantity: "3" }], release: "fire" },
+        ana.id,
+        { party: { answer: "none", guests: [] }, ticks: [] },
+      ),
+    );
 
     for (const quantity of ["0", "4", "abc"]) {
       const refused = await cancel(tabId, 1, quantity);

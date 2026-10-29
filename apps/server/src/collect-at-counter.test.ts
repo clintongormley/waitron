@@ -129,27 +129,27 @@ async function paidHeld() {
 }
 
 async function cancelKeepingCharge(partyId: string, billId: string) {
-  const [line] = await topLines([billId]);
-  await inTx(venue, async (tx) => {
-    const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
-    await cancelItem(
-      tx,
-      venue.cfg,
-      partyId,
-      line!.id,
-      {
-        expectedEdit: await readBillEditState(tx, billId),
-        expectedContext: await readCancellationContext(tx, partyId, line!.id),
-        expectedPartyRevision: await partyRevision(partyId),
-        expectedBillRevision: bill!.revision,
-        submissionId: randomUUID(),
-        quantity: (line!.quantity / 1000).toFixed(3),
-        outcome: "keep_charge",
-        reasonId: venue.reasonId.houseVoid,
-      },
-      venue.staffId,
-    );
-  });
+  for (const line of await topLines([billId]))
+    await inTx(venue, async (tx) => {
+      const [bill] = await tx.select().from(workingOrders).where(eq(workingOrders.id, billId));
+      await cancelItem(
+        tx,
+        venue.cfg,
+        partyId,
+        line.id,
+        {
+          expectedEdit: await readBillEditState(tx, billId),
+          expectedContext: await readCancellationContext(tx, partyId, line.id),
+          expectedPartyRevision: await partyRevision(partyId),
+          expectedBillRevision: bill!.revision,
+          submissionId: randomUUID(),
+          quantity: (line.quantity / 1000).toFixed(3),
+          outcome: "keep_charge",
+          reasonId: venue.reasonId.houseVoid,
+        },
+        venue.staffId,
+      );
+    });
 }
 
 describe("releaseHeldWorkOf", () => {
@@ -484,7 +484,10 @@ describe("moveSettledBillToCounter", () => {
   });
 
   it("tells the kitchen about a partly served dish", async () => {
-    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], { release: "fire" });
+    const p = await billWith(venue, [{ name: "Burger", quantity: "2" }], {
+      release: "fire",
+      shape: "grouped",
+    });
     await venue.db
       .update(workingOrderLines)
       .set({ servedQuantity: 1000 })

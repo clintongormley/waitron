@@ -109,7 +109,7 @@ import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound } from "./testing/group-submit-fixture.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
 const LOCALE = "es-ES";
@@ -6483,21 +6483,22 @@ describe("a cancel's extras cascade (FIX 2)", () => {
       const tableId = await makeTable(tx, cfg);
       const { tabId, partyId } = await openPartyTab(tx, cfg, { tableId });
       const offers = await tableOffers(tx, cfg);
-      await placeGroups(tx, cfg, partyId, {
-        operatorId: OPERATOR,
-        groups: [
-          {
-            release: "hold",
-            lines: offers.toOfferLines([
-              {
-                productId: cafeId,
-                quantity: "2",
-                extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
-              },
-            ]),
-          },
-        ],
-      });
+      await placeGroupedRound(
+        tx,
+        cfg,
+        { partyId, tabId },
+        {
+          release: "hold",
+          lines: offers.toOfferLines([
+            {
+              productId: cafeId,
+              quantity: "2",
+              extras: [{ listId: list.id, picks: [{ productId: extra.id, quantity: 3 }] }],
+            },
+          ]),
+        },
+        OPERATOR,
+      );
       const [{ revision }] = await tx
         .select({ revision: workingOrders.revision })
         .from(workingOrders)
