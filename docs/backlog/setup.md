@@ -645,8 +645,11 @@ belong to a recovery the box has been trading from (A1131 question, 2026-10-28).
 (2026-10-28 ~08:10) replaced the options: once a recovery is selected, and before anything writes to
 the restored database, it moves to the standard database path, so a damaged recovery record can no
 longer hide the venue the box trades from. Designed 2026-10-28 together with A1131c (a restore
-replaces the failed setup): `docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`,
-whose §8 says what is left of this case; nothing is built until the owner answers its questions.
+replaces the failed setup): `docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`.
+The owner sent that design back (2026-10-28 ~15:25); the revision of 2026-10-29 wipes the failed setup
+first and then uses the fresh-box restore, which writes into the usual folders and makes no recovery
+folder, so this case cannot arise on a box set up after it. Its slice 4 deletes the old recovery-folder
+code; its question 2 asks what happens to boxes that already have one.
 
 ## On a full disk, the repair page's password step needs room for a whole copy of the setup database
 
@@ -696,6 +699,13 @@ reading when it places the recovery. Next step: measure that on a box.
 
 ## Decisions and deliberate limits
 
+- **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
+  Recover from backup first wipes the failed setup, then restores.** Before the wipe the box adds the
+  setup's series names to its never-reuse note (one step, the existing helpers). Someone who only
+  opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
+  beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
+  needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
+  wipe.
 - **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
   setup database holds records; the page says what is there and what is lost.**
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's

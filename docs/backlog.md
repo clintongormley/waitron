@@ -619,21 +619,18 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   measured on a box. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
-- **A1131c: starting a restore from backup wipes what a failed setup left, and Start again's page
-  drops the item counts** (owner, 2026-10-28). A failed setup never starts trading, so nothing in its
-  database is anything that cannot be typed again; a restore should therefore remove it when it
-  starts, after recording every installation and invoice-series name it held in the start-again
-  note so none is reused. Start again then says only what it deletes ("what was entered in the
-  setup that stopped part way. Nothing was sent to AEAT."). The refusals for an invoice or a
-  never-deleted record, saved trading settings and a finished setup stay. Designed with A1131 below
-  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`); waits for the
-  owner's eight questions in it.
+- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item
+  counts** (owner, 2026-10-28). Both buttons on the repair page run one wipe, with no password: the
+  setup's series names go into the never-reuse note, then its files are deleted, and Recover from
+  backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
+  record, saved trading settings and a finished setup stay. Designed with A1131 below
+  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`, revised 2026-10-29);
+  waits for the owner's two questions in it. Slice 1 (Start again's words) does not depend on them.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
-  missing.** Only Reconnect is enabled today. Designed 2026-10-28 with A1131c: a recovered database
-  moves to the standard database path once the recovery is chosen
-  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`); waits for the
-  owner's questions in it.
+  missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore
+  writes straight into the usual folders and never makes a recovery folder, and its slice 4 deletes the
+  old recovery-folder code (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`).
   [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
 
 - **On a full disk, the repair page's password step needs room for a whole copy of the setup
