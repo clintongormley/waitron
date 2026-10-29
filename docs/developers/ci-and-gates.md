@@ -3458,7 +3458,8 @@ anything, checks each archive's digest and extracts each report with the host's 
 those jobs grants `actions: read` alongside `contents: read`; the token goes only to the API
 requests, not to the storage URL. A refused response's body is cancelled before the helper throws.
 The helper's entry in `ROOT_SCOPE_CONSUMERS` names every package whose merge job runs it, so a
-change to the helper selects those packages' jobs; the consumer guard recognises `test:merge` jobs
+change to the helper selects those packages' jobs and, through CI's dependents widening, every
+package that depends on one of them; the consumer guard recognises `test:merge` jobs
 as well as test shards.
 
 Only `mutation.yml`'s three report downloads still use `actions/download-artifact`. That is a scope
@@ -3501,7 +3502,7 @@ Mac; that is not a measurement of a GitHub-hosted runner.
 On 29 October 2026, pull request #2245's run `40939360740`, job `123685605032`
 (`test-till-merge`), showed the same signature in both attempts of the action. In the first, six
 of the seven till archives verified by 19:37:19.47 and the seventh at 19:37:24.30. In the second,
-five verified by 19:38:19.43 and two at 19:38:24.35. Each attempt printed
+five verified by 19:38:19.44 and two at 19:38:24.35. Each attempt printed
 "Download artifact has finished successfully" and then stayed alive until its one-minute limit. A
 five-second gap matches the retry delay the local probe measured after a refused response whose
 body stayed open; the runner's socket state was not captured, so the cause is still an inference.
@@ -3510,7 +3511,8 @@ within 0.07 seconds with no five-second gap. Both logs print the same `DEP0005` 
 deprecation warning, so the warning does not tell the two apart; the gap does. `@v8` resolved to
 v8.0.2, the bundle the local probe ran, and no newer release existed on 29 October 2026.
 
-Over the last 60 completed main CI runs before that date, 27 ran all seven coverage merge jobs.
+The 60 most recent completed main CI runs, created 03:12–19:27 UTC on 29 October 2026, include 27
+that ran all seven coverage merge jobs.
 In those 27, the action's first attempt hit its one-minute limit three times (run `40910679143`'s
 venue-service and provisioning merges, run `40811624914`'s dashboard merge), and the second attempt
 succeeded each time. The helper's 27 server first attempts took 7 to 13 seconds, and none needed a
@@ -3519,9 +3521,9 @@ second attempt. That is why every coverage merge now uses the helper.
 The helper spends one REST request listing artifacts and one per report it downloads, so one run
 with all seven merge jobs makes 56 requests. GitHub's rate-limit page says "The rate limit for
 `GITHUB_TOKEN` is 1,000 requests per hour per repository". Summing the merge jobs that ran in the
-three busiest hours of 27–29 October 2026 gives 168, at least 380 and at least 304 requests: "at
+three hours of 27–29 October 2026 with the most CI runs started gives 168, at least 380 and at least 304 requests: "at
 least" because GitHub answered 502 for some runs' job lists. The busiest of those hours would use
-about 40% of that limit. A listing GitHub refuses makes the helper fail with an error, and its count
+at least 38% of that limit. A listing GitHub refuses makes the helper fail with an error, and its count
 check refuses a short listing, so either way the merge job fails rather than merging part of the
 reports.
 

@@ -5619,7 +5619,7 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   `*-upgrade.test.ts` files with no shared helper.
 
 - **`mutation.yml`'s three report downloads still use `actions/download-artifact`** (left open by
-  A1216). The ui-core, ui and db score jobs fetch `mutation-report-*-shard-*` directories, which
+  A1216). The `mutation-ui-core-aggregate`, `mutation-ui-aggregate` and `mutation-db-aggregate` jobs fetch `mutation-report-*-shard-*` directories, which
   `scripts/download-coverage-blobs.mjs` cannot read: it handles only one-file artifacts. They run
   nightly and on manual dispatch only; their download times have not been measured. See
   [the download receipt](developers/ci-and-gates.md#a-completed-transfer-can-still-leave-the-download-action-alive).
