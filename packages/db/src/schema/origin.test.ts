@@ -3,7 +3,7 @@ import { SQLiteSyncDialect, getTableConfig } from "drizzle-orm/sqlite-core";
 import type { SQL } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { id, table } from "./columns.js";
-import { originChecks, saleSourceColumn, sourceColumn } from "./origin.js";
+import { incidentSourceColumn, originChecks, saleSourceColumn, sourceColumn } from "./origin.js";
 
 const probe = table(
   "origin_probe",
@@ -15,11 +15,16 @@ const saleProbe = table(
   { source: saleSourceColumn("source").notNull(), deviceId: id("device_id") },
   (t) => originChecks("sale_origin_probe", t.source, t.deviceId),
 );
+const incidentProbe = table(
+  "incident_origin_probe",
+  { source: incidentSourceColumn("source").notNull(), deviceId: id("device_id") },
+  (t) => originChecks("incident_origin_probe", t.source, t.deviceId),
+);
 
 const render = (fragment: SQL) => new SQLiteSyncDialect().sqlToQuery(fragment).sql;
 
 /** The table's DDL with its checks as drizzle renders them (the way `columns.test.ts` renders one). */
-function ddl(t: typeof probe | typeof saleProbe): string {
+function ddl(t: typeof probe | typeof saleProbe | typeof incidentProbe): string {
   const config = getTableConfig(t);
   const checks = config.checks.map(
     (c) => `constraint "${c.name}" check (${render(c.value).replaceAll(`"${config.name}".`, "")})`,
@@ -52,5 +57,26 @@ describe("originChecks", () => {
     const insert = db.prepare("insert into sale_origin_probe (source, device_id) values (?, ?)");
     insert.run("demo_seed", null);
     expect(() => insert.run("dashboard", null)).toThrow(/sale_origin_probe_source_ck/);
+  });
+
+  it("only an incident table accepts the backup job", () => {
+    const db = new DatabaseSync(":memory:");
+    db.exec(ddl(probe));
+    db.exec(ddl(saleProbe));
+    db.exec(ddl(incidentProbe));
+    expect(() =>
+      db.prepare("insert into origin_probe (source, device_id) values ('backup', null)").run(),
+    ).toThrow(/origin_probe_source_ck/);
+    expect(() =>
+      db.prepare("insert into sale_origin_probe (source, device_id) values ('backup', null)").run(),
+    ).toThrow(/sale_origin_probe_source_ck/);
+    db.prepare(
+      "insert into incident_origin_probe (source, device_id) values ('backup', null)",
+    ).run();
+    expect(() =>
+      db
+        .prepare("insert into incident_origin_probe (source, device_id) values ('backup', 'd1')")
+        .run(),
+    ).toThrow(/incident_origin_probe_source_device_ck/);
   });
 });

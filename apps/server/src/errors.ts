@@ -1333,9 +1333,16 @@ declare module "@waitron/shared" {
      * secret). Built as data by the backups alert source, never thrown. */
     "backup.destination_failed": { destination: string };
     /** The most recent backup run stopped before reaching any destination; `errorCode` is the code
-     * it threw, `unknown` for an error that is not an AppError. Built as data by the backups alert
-     * source, never thrown. */
-    "backup.run_stopped": { errorCode: string };
+     * it threw, `unknown` for an error that is not an AppError. `spaceLow` is set only when
+     * `errorCode` is `backup.staging_space_low`; `neededBytes` and `availableBytes` only then too,
+     * from that error's params.
+     * Built as data by the backups alert source, never thrown. */
+    "backup.run_stopped": {
+      errorCode: string;
+      spaceLow?: true;
+      neededBytes?: number;
+      availableBytes?: number;
+    };
     /** A small object put to a bucket destination, or read from any destination, is larger than
      * `maxBytes` (`SMALL_OBJECT_MAX_BYTES`, `storage-backend.ts`). */
     "backup.destination_object_too_large": { maxBytes: number };
@@ -1344,8 +1351,13 @@ declare module "@waitron/shared" {
      * (`STATUS_READ_TIMEOUT_MS`, `backup-status.ts`). */
     "backup.destination_timed_out": { timeoutMs: number };
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
-     * stopped before writing more there; `availableBytes` is what it reported. */
+     * stopped before writing more there. `neededBytes` is what the step needed: from a room step
+     * (before the copy, and after encrypting), the need plus the free-space floor; from the check
+     * right after the copy, the copy's size. `availableBytes` is what it reported. */
     "backup.staging_space_low": { neededBytes: number; availableBytes: number };
+    /** A backup run deleted `count` of its oldest backups to make room for itself; `date` is the
+     * venue's calendar day of the deletion, `YYYY-MM-DD`. Recorded as an incident, never thrown. */
+    "backup.archives_deleted": { count: number; date: string };
     /** A destination's work was stopped because the backup duty stopped or reloaded. A
      * cancellation, never recorded as the destination failing. */
     "backup.destination_cancelled": Record<string, never>;

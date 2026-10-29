@@ -25,6 +25,14 @@ in-place sign-in that would have given them one (A1127's slice 4) was declined. 
 strip's words, `FIXED` in `apps/till/src/i18n/staff-notices.ts`. The till's other full-disk refusal
 words also say «Tell a manager» and are not covered by this answer (backlog).
 
+A third exception, the owner's of 2026-10-28 (A1167 slice 1): the two backup-room alerts name no
+next step. They are «Low disk space: the box deleted its oldest backup ({date}).» (or its {count}
+oldest backups) and «Backup not made: it needs {needed} free and the disk has {available}.», on the
+bell and in their emails (`backup.archives_deleted` and the `spaceLow` variant of
+`backup.run_stopped` in `apps/dashboard/src/i18n/alert-messages.ts`; `BACKUP_DELETED_EMAIL_WORDS`
+and `BACKUP_REFUSED_EMAIL_WORDS` in `apps/server/src/i18n/box-emails.ts`). The owner's reason: “the
+more you say, the less people will read”, so no tips and no rule explanations in the alerts.
+
 The first A1089 wording fixes (#2054, #2055, #2056 and #2058) referred the person to an
 administrator or installer. Their passing tests exercised those messages and existing retries;
 they did not establish a self-service remedy for a persistent refusal. All four need separate
@@ -37,6 +45,8 @@ For example, `setup.not_ready` can mean an absent Cloud recovery service
 (`apps/server/src/first-setup-backup-source.ts:40`), yet the shell says to wait. A backup's
 `backup.staging_space_low` comes from an explicit free-space comparison
 (`apps/server/src/backup-sweep.ts:108`), yet its alert substitution says to contact support.
+_2026-10-28, A1167 slice 1: those staging-space words are gone; the bell now draws the owner's
+«Backup not made: …» sentence with the sizes (the third exception above)._
 Those reads demonstrate why wording must follow the actual cause; they do not qualify a recovery
 procedure. Its [14:02 correction](../backlog/self-service-refusals.md#owner-correction-2026-10-25)
 reopens the referrals and applies the sharpened rule to every area. The audit grants no bug-only

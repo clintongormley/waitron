@@ -1,5 +1,6 @@
 import { eq, isNull, ne, or } from "drizzle-orm";
 import { tableExists } from "@waitron/db";
+import { hasCode, isAppError } from "@waitron/shared";
 import { envios } from "./schema/envios.js";
 import { registrosFacturacion } from "./schema/registros.js";
 import type { FiscalBackendDeps, FiscalContribution } from "@waitron/fiscal";
@@ -12,6 +13,7 @@ import { readCertificateCard } from "./certificate-card.js";
 import { installCertificate } from "./certificate-install.js";
 import { drain as runDrain, resetInFlightClaims } from "./drain.js";
 import { readOutbox } from "./outbox.js";
+import { currentSif } from "./registro-sif.js";
 import { parseAeatCert, sealAeatSecret, validateSetupAeatCert } from "./provisioning-secret.js";
 import {
   validateLegalName,
@@ -115,4 +117,12 @@ export const FISCAL_SLOT: FiscalContribution = {
     reminders: { claim: claimReminder, report: reportReminder },
   },
   outbox: { read: readOutbox },
+  installationStartedAt: async (tx, nodeId) => {
+    try {
+      return (await currentSif(tx, nodeId)).registradoEn;
+    } catch (error) {
+      if (isAppError(error) && hasCode(error, "sif.not_registered")) return null;
+      throw error;
+    }
+  },
 };

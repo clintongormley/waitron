@@ -210,7 +210,7 @@ called weaker than its name, the topic file lists what it does not see.
 
 ### Screens, forms and the dashboard — [conventions-ui.md](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26)
 
-- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), and the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
+- **A refusal explains what happened and what each choice does; offer any needed administrator or owner sign-in there, and a safe Stop for destructive choices. Never send the person to somebody else.** The only exceptions are a state only a bug can produce, identified at the site as a fault in Waitron (owner, 2026-10-25), the till's full-disk strip, «Tell a manager» (owner, 2026-10-28, A1127 Q4), and the two backup-room alerts, which name no next step (owner, 2026-10-28, A1167). Nothing guards it. Receipt: [conventions-ui.md](docs/developers/conventions-ui.md#refusals-name-a-self-service-next-step).
 - **New or changed forms use [design-system.md](docs/developers/design-system.md) → Forms.**
   Required fields are marked; invalid fields get inline errors and one localized bottom message on its
   own line above buttons, never a top summary, with the action disabled until fixed. Request refusals alone never disable it; field refusals
@@ -603,10 +603,11 @@ browser test** — most of these rules exist because a test passed while proving
   `node scripts/setup-litestream.mjs && node scripts/setup-s3-test-server.mjs`. S3 rehearsal/send-gate/
   interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
-- **Full-disk start tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN` and
-  `WAITRON_FULL_DISK_DIR_FROM_SPARE` for the second and third files: two files filling one
-  filesystem could fail each other, as the server's `maxWorkers: 4` can run them at once), otherwise skips locally and fails CI. Interrupted
+- **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
+  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE` and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` for the second to fourth
+  files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  run them at once), otherwise skips locally and fails CI. Interrupted
   macOS images can remain attached; `pnpm reap` does not detach them. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the

@@ -1022,8 +1022,8 @@ jobs:
       # coverage gate lives. The per-shard `--shard`/`--outputFile` are appended with NO `--` separator
       # (see test-heavy's shard step for why a bare `--` silently drops both flags). The two stream
       # tests, the S3 rehearsal scenarios, the send gate's and the rehearsal interrupt's versitygw
-      # suites, the suite of the S3 test server they start, and the full-disk start tests, run in
-      # test-server-stream instead; `--exclude` adds to the config's own excludes.
+      # suites, the suite of the S3 test server they start, the full-disk start tests and the backup-room
+      # real-disk cases run in test-server-stream instead; `--exclude` adds to the config's own excludes.
       - name: Run the server shard
         run: |
           set -euo pipefail
@@ -1038,6 +1038,7 @@ jobs:
             --exclude src/start-full-disk.e2e.test.ts \
             --exclude src/start-again-full-disk.e2e.test.ts \
             --exclude src/start-from-spare.e2e.test.ts \
+            --exclude src/backup-room.e2e.test.ts \
             --outputFile=.vitest-reports/blob-${{ matrix.shard }}.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 
@@ -1141,6 +1142,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/full-disk-from-spare"
           sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-from-spare"
           sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-from-spare"
+          mkdir -p "$RUNNER_TEMP/full-disk-backup-room"
+          sudo mount -t tmpfs -o size=32m tmpfs "$RUNNER_TEMP/full-disk-backup-room"
+          sudo chown "$(id -u):$(id -g)" "$RUNNER_TEMP/full-disk-backup-room"
 
       # Not named "Run the … shard": scripts/ci-workflow.test.mjs would count @waitron/server twice.
       # TMPDIR in memory: in a probe reproducing a main failure, a stall on the runner's disk held one
@@ -1152,6 +1156,7 @@ jobs:
           WAITRON_FULL_DISK_DIR: ${{ runner.temp }}/full-disk
           WAITRON_FULL_DISK_DIR_START_AGAIN: ${{ runner.temp }}/full-disk-start-again
           WAITRON_FULL_DISK_DIR_FROM_SPARE: ${{ runner.temp }}/full-disk-from-spare
+          WAITRON_FULL_DISK_DIR_BACKUP_ROOM: ${{ runner.temp }}/full-disk-backup-room
         run: |
           set -euo pipefail
           pnpm --filter "@waitron/server" test:shard \
@@ -1164,6 +1169,7 @@ jobs:
             src/start-full-disk.e2e.test.ts \
             src/start-again-full-disk.e2e.test.ts \
             src/start-from-spare.e2e.test.ts \
+            src/backup-room.e2e.test.ts \
             --outputFile=.vitest-reports/blob-stream.json \
             --reporter="$GITHUB_WORKSPACE/scripts/vitest-file-progress.mjs"
 

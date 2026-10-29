@@ -1,7 +1,9 @@
-import { formatMoney } from "@waitron/shared";
+import { formatBytes, formatMoney } from "@waitron/shared";
 import { formatIsoMinute } from "./date-format.js";
 import { currentLocale, pickLocale } from "./i18n.js";
 import { GENERIC_ALERT } from "./strings.js";
+
+export { formatBytes };
 
 /** `{name}` is filled with the param as it is; `{name:money}` writes a decimal-string param as
  * euros, the way the alert's language writes them; `{name:date}` writes a `YYYY-MM-DD` param as
@@ -65,23 +67,6 @@ function formatMinute(value: unknown): string {
   const at = new Date(value);
   if (Number.isNaN(at.getTime()) || at.toISOString() !== value) return "—";
   return formatIsoMinute(value);
-}
-
-export function formatBytes(value: unknown, l: string): string {
-  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return "—";
-  const v = Math.max(0, value);
-  const locale = pickLocale(DAY_LOCALES, l);
-  return Math.round(v / 1e6) >= 1000
-    ? new Intl.NumberFormat(locale, {
-        style: "unit",
-        unit: "gigabyte",
-        maximumFractionDigits: 1,
-      }).format(v / 1e9)
-    : new Intl.NumberFormat(locale, {
-        style: "unit",
-        unit: "megabyte",
-        maximumFractionDigits: 0,
-      }).format(v / 1e6);
 }
 
 function formatParam(value: unknown): string {

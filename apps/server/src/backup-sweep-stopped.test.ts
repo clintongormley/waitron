@@ -1,12 +1,15 @@
 import { mkdirSync, readdirSync, rmSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import type { Database } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
+import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
 import { runBackupSweep, type BackupSweepDeps } from "./backup-sweep.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import { RECOVERY_FILES } from "./state-secrets.js";
 
 const dirs: string[] = [];
@@ -73,6 +76,8 @@ it("records the code a run stopped on before reaching any destination, with the 
   expect(outcomes.runStopped).toEqual({
     code: "backup.staging_space_low",
     at: STAMP.toISOString(),
+    since: STAMP.toISOString(),
+    sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
   });
   expect(outcomes.failed.size).toBe(0);
 });
@@ -93,14 +98,21 @@ it("clears the stopped run once a later run reaches its destinations", async () 
         return;
       }
       seen.push(outcomes.runStopped);
-      free = 10_000_000;
+      free = 3000 + START_FREE_SPACE_FLOOR + 1000;
       nowMs += chunk;
     },
   });
 
   await runBackupSweep(deps);
 
-  expect(seen).toEqual([{ code: "backup.staging_space_low", at: STAMP.toISOString() }]);
+  expect(seen).toEqual([
+    {
+      code: "backup.staging_space_low",
+      at: STAMP.toISOString(),
+      since: STAMP.toISOString(),
+      sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
+    },
+  ]);
   expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
   expect(outcomes.runStopped).toBeUndefined();
 });
@@ -133,7 +145,30 @@ it("records a failure that is not an AppError as unknown", async () => {
 
   await runBackupSweep(deps);
 
-  expect(outcomes.runStopped).toEqual({ code: "unknown", at: STAMP.toISOString() });
+  expect(outcomes.runStopped).toEqual({
+    code: "unknown",
+    at: STAMP.toISOString(),
+    since: STAMP.toISOString(),
+  });
+});
+
+it("records no sizes for a run that stops on an AppError other than staging_space_low", async () => {
+  const controller = new AbortController();
+  const { deps, outcomes } = await loopDeps({
+    signal: controller.signal,
+    sleep: async () => controller.abort(),
+    buildManifest: async () => {
+      throw new AppError("backup.archive_invalid", { reason: "test" });
+    },
+  });
+
+  await runBackupSweep(deps);
+
+  expect(outcomes.runStopped).toStrictEqual({
+    code: "backup.archive_invalid",
+    at: STAMP.toISOString(),
+    since: STAMP.toISOString(),
+  });
 });
 
 it("clears the stopped run once a later run stores, even when that run's clean-up then fails", async () => {
@@ -153,7 +188,7 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
         return;
       }
       seen.push(outcomes.runStopped);
-      free = 10_000_000;
+      free = 3000 + START_FREE_SPACE_FLOOR + 1000;
       nowMs += chunk;
     },
     // An empty directory in place of the staged copy makes the clean-up's non-recursive `rm`
@@ -169,9 +204,115 @@ it("clears the stopped run once a later run stores, even when that run's clean-u
 
   await runBackupSweep(deps);
 
-  expect(seen).toEqual([{ code: "backup.staging_space_low", at: STAMP.toISOString() }]);
+  expect(seen).toEqual([
+    {
+      code: "backup.staging_space_low",
+      at: STAMP.toISOString(),
+      since: STAMP.toISOString(),
+      sizes: { neededBytes: 3000 + START_FREE_SPACE_FLOOR, availableBytes: 1999 },
+    },
+  ]);
   expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
   expect(outcomes.failed.size).toBe(0);
   expect(outcomes.runStopped).toBeUndefined();
   expect(deps.log).toHaveBeenCalledWith("warn", "backup.failed", { errorCode: "unknown" });
+});
+
+it("a run keeps the earlier runStopped while its second check runs; a refusal there replaces it, and a pass clears it", async () => {
+  const controller = new AbortController();
+  let run = 0;
+  let calls = 0;
+  let nowMs = STAMP.getTime();
+  const atSecondCheck: unknown[] = [];
+  const after: unknown[] = [];
+  let stagingDir = "";
+  const { deps, outcomes, backend } = await loopDeps({
+    signal: controller.signal,
+    now: () => new Date(nowMs),
+    stagingEstimateBytes: async () => 10,
+    spaceFloorBytes: 10,
+    spaceAimBytes: 0,
+    // Run 1 is refused at the first check; run 2 passes the first check and the after-copy check
+    // and is refused at the second; run 3 passes all three.
+    statfs: async () => {
+      calls += 1;
+      if (run === 0) return { bavail: 0, frsize: 1 };
+      if (calls < 3) return { bavail: 10_000, frsize: 1 };
+      atSecondCheck.push(outcomes.runStopped);
+      const dir = readdirSync(stagingDir).find((n) => n.startsWith(BACKUP_ENCRYPT_DIR_PREFIX));
+      const encrypted = (await stat(join(stagingDir, dir!, "artifact"))).size;
+      return { bavail: run === 1 ? encrypted + 9 : encrypted + 10, frsize: 1 };
+    },
+    sleep: async (chunk) => {
+      after.push(outcomes.runStopped);
+      if (run === 2) {
+        controller.abort();
+        return;
+      }
+      run += 1;
+      calls = 0;
+      nowMs += chunk;
+    },
+  });
+  stagingDir = deps.stagingDir;
+
+  await runBackupSweep(deps);
+
+  const first = {
+    code: "backup.staging_space_low",
+    at: STAMP.toISOString(),
+    since: STAMP.toISOString(),
+    sizes: { neededBytes: 40, availableBytes: 0 },
+  };
+  expect(atSecondCheck).toEqual([first, after[1]]);
+  expect(after[0]).toEqual(first);
+  expect(after[1]).toMatchObject({ code: "backup.staging_space_low" });
+  expect(after[1]).not.toEqual(first);
+  expect(after[2]).toBeUndefined();
+  expect(await backend.list("", { signal: new AbortController().signal })).toHaveLength(1);
+  expect(readdirSync(stagingDir)).toEqual([]);
+});
+
+it("a string of stops on one code keeps the first stop's time as since; a pass or another code starts a new one", async () => {
+  const controller = new AbortController();
+  // Each run's free space, and whether its copy fails on a plain error.
+  const runs = [
+    { free: 1999 },
+    { free: 1999 },
+    { free: 10_000_000_000 },
+    { free: 1999 },
+    { free: 10_000_000_000, archiveFails: true },
+    { free: 1999 },
+  ];
+  let run = 0;
+  let nowMs = STAMP.getTime();
+  const after: (BackupOutcomeHolder["runStopped"] | undefined)[] = [];
+  const { deps, outcomes } = await loopDeps({
+    signal: controller.signal,
+    now: () => new Date(nowMs),
+    stagingEstimateBytes: async () => 1000,
+    statfs: async () => freeSpace(runs[run]!.free)(),
+    archive: async (path: string) => {
+      if (runs[run]!.archiveFails) throw new Error("plain error");
+      await writeFile(path, "D".repeat(1000));
+    },
+    sleep: async () => {
+      after.push(outcomes.runStopped);
+      run += 1;
+      nowMs += 60_000;
+      if (run === runs.length) controller.abort();
+    },
+  });
+
+  await runBackupSweep(deps);
+
+  const minute = (n: number) => new Date(STAMP.getTime() + n * 60_000).toISOString();
+  expect(after.map((stopped) => stopped && [stopped.code, stopped.at, stopped.since])).toEqual([
+    ["backup.staging_space_low", minute(0), minute(0)],
+    ["backup.staging_space_low", minute(1), minute(0)],
+    undefined,
+    ["backup.staging_space_low", minute(3), minute(3)],
+    ["unknown", minute(4), minute(4)],
+    ["backup.staging_space_low", minute(5), minute(5)],
+  ]);
 });

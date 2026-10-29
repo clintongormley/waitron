@@ -1319,6 +1319,25 @@ its 4 MiB change log leaves about 23.18 MiB free, so the real 24 MiB write-back 
 The two cases that rest on free space being above 16 MiB (the restart and the no-release case)
 assert it while the server is up, so a run on the edge fails rather than passing on free space alone. These figures are HFS+; CI's tmpfs is the first Linux run.
 
+**A fourth real-disk file checks that a backup run makes room for itself.** `apps/server/src/backup-room.e2e.test.ts`
+(A1167 slice 1) calls `runOnce` with a real `LocalFsBackend` on a small disk: with room for between
+two and three copies it deletes the older archive and stores; when even every deletable archive
+cannot meet the need it deletes nothing and is refused before copying; and a copy larger than the
+estimate is refused before the folder copy. It fills its disk, so it has one of its own: it calls
+`openSmallDisk("WAITRON_FULL_DISK_DIR_BACKUP_ROOM")`, and CI mounts a fourth 32 MiB tmpfs at
+`$RUNNER_TEMP/full-disk-backup-room` in the same step. On a 32 MiB disk the product's 256 MiB floor
+and 2 GiB aim can never be met, so the file passes `spaceFloorBytes` 1 MiB and `spaceAimBytes`
+4 MiB with a 6 MiB estimate. Its measured figures are HFS+; CI's tmpfs is its first Linux run.
+
+**A test that runs a backup through the supervisor or boot depends on the machine's free disk.**
+The supervisor passes the run no floor or aim, so the product's defaults apply: below the need plus
+2 GiB free, a run deletes old archives in local folders on that disk (only where an installation
+start is readable), and it is refused when even deleting every deletable archive cannot reach the
+need plus 256 MiB. With both defaults raised past any free disk, 23 tests failed
+in `backup-api.route.test.ts`, `backup-supervisor.test.ts`, `backup-supervisor.network.test.ts`
+and `boot.backup-network.test.ts` (A1167 slice 1, Task 8 review). A supervisor case that needs a
+set free figure passes the supervisor's test-only `statfs`; a `runOnce` case can pass the margins.
+
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for
 it. Find it, detach it by its mount path, then remove its folder:

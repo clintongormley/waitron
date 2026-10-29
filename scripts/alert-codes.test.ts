@@ -22,6 +22,7 @@ const root = join(import.meta.dirname, "..");
 
 /** Files that name, as a string literal, the code of an incident that gets recorded. */
 const INCIDENT_CODE_SOURCES = [
+  "apps/server/src/backup-deletion-alert.ts",
   "apps/server/src/bill-payments-loop.ts",
   "apps/server/src/bill-refund-alerts.ts",
   "apps/server/src/closed-station-alert.ts",

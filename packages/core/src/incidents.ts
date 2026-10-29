@@ -3,8 +3,16 @@ import "./errors.js";
 import { and, desc, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
 import { devices, incidents, newId, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
-import { AppError, isAppError, readOrigin } from "@waitron/shared";
-import type { DeviceId, ErrorCode, ErrorParams, Origin, SaleId, Source } from "@waitron/shared";
+import { AppError, isAppError, readIncidentOrigin } from "@waitron/shared";
+import type {
+  DeviceId,
+  ErrorCode,
+  ErrorParams,
+  IncidentOrigin,
+  IncidentSource,
+  Origin,
+  SaleId,
+} from "@waitron/shared";
 
 export class IssuanceRefusal<C extends ErrorCode = ErrorCode> extends AppError<C> {
   declare readonly incident: { readonly origin: Origin; readonly detectedAt: Date };
@@ -68,7 +76,7 @@ export type IncidentSeverity = "warning" | "error";
 
 export interface RecordIncidentInput {
   /** The device the problem arose on, or the job that found it. */
-  origin: Origin;
+  origin: IncidentOrigin;
   saleId?: SaleId;
   /** `code` and `params` are taken from it, never re-derived. */
   error: AppError;
@@ -78,7 +86,7 @@ export interface RecordIncidentInput {
 
 export interface Incident {
   id: string;
-  source: Source;
+  source: IncidentSource;
   deviceId: DeviceId | null;
   saleId: SaleId | null;
   code: string;
@@ -144,7 +152,7 @@ export async function recordIncidentOnce(
 }
 
 /** Unacknowledged incidents for one source and device, newest first. Only tests call it. */
-export async function openIncidents(tx: Transaction, origin: Origin): Promise<Incident[]> {
+export async function openIncidents(tx: Transaction, origin: IncidentOrigin): Promise<Incident[]> {
   const rows = await tx
     .select({
       id: incidents.id,
@@ -170,7 +178,7 @@ export async function openIncidents(tx: Transaction, origin: Origin): Promise<In
 
   return rows.map((row) => ({
     id: row.id,
-    ...readOrigin(row.source, row.deviceId),
+    ...readIncidentOrigin(row.source, row.deviceId),
     saleId: row.saleId as SaleId | null,
     code: row.code,
     params: row.params,
@@ -218,7 +226,7 @@ type TenantIncidentRow = {
 function toTenantIncident(row: TenantIncidentRow): TenantIncident {
   return {
     id: row.id,
-    ...readOrigin(row.source, row.deviceId),
+    ...readIncidentOrigin(row.source, row.deviceId),
     deviceName: row.deviceName,
     saleId: row.saleId as SaleId | null,
     code: row.code,
@@ -267,7 +275,7 @@ export async function findIncident(tx: Transaction, id: string): Promise<TenantI
 
 export async function currentIncidentsOf(
   tx: Transaction,
-  input: { origin: Origin; code: string },
+  input: { origin: IncidentOrigin; code: string },
 ): Promise<{ open: TenantIncident | null; lastHandled: TenantIncident | null }> {
   const ofCode = and(
     eq(incidents.source, input.origin.source),

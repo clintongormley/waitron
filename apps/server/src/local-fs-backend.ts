@@ -22,6 +22,10 @@ export class LocalFsBackend implements StorageBackend {
     private readonly dir: string,
   ) {}
 
+  get localDir(): string {
+    return this.dir;
+  }
+
   #path(key: string): string {
     return join(this.dir, checkedKey(key));
   }

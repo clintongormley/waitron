@@ -402,9 +402,11 @@ configuración para poner en marcha otro local.
   esa carpeta.
 - Plazo de conservación: la copia del bucket guarda una semana de historial. Cada vez que Waitron
   guarda una copia programada en un destino, borra de ese destino las copias que pasen de las 7 más
-  recientes y las de más de 30 días, salvo que cambies esos ajustes. Desactivar la copia del bucket
-  o las copias programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la
-  carpeta, cuando ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
+  recientes y las de más de 30 días, salvo que cambies esos ajustes. Antes de una copia, si al
+  equipo le falta espacio en el disco, también puede borrar sus copias más antiguas de las carpetas
+  de ese disco, nunca la más reciente de cada una. Desactivar la copia del bucket o las copias
+  programadas deja lo que ya está guardado, así que bórralo en tu proveedor, o de la carpeta, cuando
+  ya no lo necesites. Todo lo demás: _fijar con tu asesor_.
 - Seguridad: Waitron no cifra la copia del bucket, pero las contraseñas y claves que guarda para tus
   proveedores van cifradas dentro de ella. Cada copia programada va cifrada con la clave de
   recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la

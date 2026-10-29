@@ -14,7 +14,7 @@ import type { DeploymentEnvironment } from "./config.js";
 import { errnoOf } from "./errno.js";
 import { freeBytes, type Statfs } from "./free-bytes.js";
 import { codeOf } from "@waitron/server-kit";
-import { AppError } from "@waitron/shared";
+import { AppError, hasCode, isAppError } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import {
   BACKUP_ENCRYPT_DIR_PREFIX,
@@ -24,6 +24,15 @@ import {
   parseBackupArchiveKey,
 } from "./backup-keys.js";
 import { withDestinationCall } from "./backup-destination-call.js";
+import {
+  foldersOnDisk,
+  makeRoom,
+  type BackupFolder,
+  type DeletableArchive,
+} from "./backup-room.js";
+import type { DeviceOf } from "./disk-usage.js";
+import { SPACE_LOW_BYTES } from "./free-space-watch.js";
+import { START_FREE_SPACE_FLOOR } from "./start-space.js";
 import type { StagingTurn } from "./backup-staging-turn.js";
 import type { StorageBackend, StorageCall } from "./storage-backend.js";
 import "./errors.js";
@@ -91,12 +100,31 @@ export interface BackupSweepDeps {
   buildManifest?: ManifestBuilder;
   now?: () => Date;
   /**
-   * The venue database's current size. The staged copy and its ciphertext sit side by side in
-   * `stagingDir`, so a tick refuses when free space there is under twice this before the copy, and
-   * under the copy's own size after it. Advisory: nothing is reserved, and without this there is no
-   * check.
+   * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
+   * staged copy and its ciphertext) plus this once more for each local destination counted as on
+   * the same disk (each folder copy's working file). When free space there is short, it first
+   * deletes old backups, oldest first and only those `installationStartedAt` allows, and refuses
+   * only when that cannot bring free space to the need plus `spaceFloorBytes`. After the copy it
+   * refuses when free space is under the copy's own size. After encrypting, when at least one
+   * local destination is counted as on that disk (one whose disk could not be read is counted), a
+   * second check does the same with the encrypted file's size once per such destination.
+   * Advisory: nothing is reserved, and without this there is no check.
    */
   stagingEstimateBytes?: () => Promise<number>;
+  /** Free space a tick keeps beyond its need; defaults to `START_FREE_SPACE_FLOOR`. */
+  spaceFloorBytes?: number;
+  /** Free space a tick makes room toward beyond its need; defaults to `SPACE_LOW_BYTES`. */
+  spaceAimBytes?: number;
+  /** When the current installation began; an archive taken at or before it is never deleted to
+   * make room. Read at most once a run, and only when free space is under the aim. Absent, null or
+   * throwing: nothing is deleted. */
+  installationStartedAt?: () => Promise<Date | null>;
+  /** Told what a run deleted to make room, before the run goes on or is refused; `at` is the time
+   * of the report, just after the deleting. Its failure is logged and never changes the run's
+   * outcome. */
+  onArchivesDeleted?: (deleted: readonly DeletableArchive[], at: Date) => Promise<void>;
+  /** DI for tests; which disk a folder is on. */
+  deviceOf?: DeviceOf;
   /** DI for tests; defaults to `node:fs/promises`'s `statfs`. */
   statfs?: Statfs;
   /** Held by each tick, so nothing else in this process touches `stagingDir` while it runs. */
@@ -115,6 +143,40 @@ async function checkStagingSpace(
     throw new AppError("backup.staging_space_low", { neededBytes, availableBytes });
 }
 
+/** The local destinations on the working folder's disk. When that disk cannot be read, every local
+ * destination is counted as on it and none is offered for deletion. */
+async function localFoldersOnDisk(
+  deps: Pick<BackupSweepDeps, "backends" | "stagingDir" | "deviceOf" | "log">,
+): Promise<{ folders: BackupFolder[]; copies: number }> {
+  try {
+    return await foldersOnDisk(deps.backends, deps.stagingDir, deps.deviceOf);
+  } catch (err) {
+    deps.log("warn", "backup.staging_disk_unreadable", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+    return {
+      folders: [],
+      copies: deps.backends.filter((b) => b.localDir !== undefined).length,
+    };
+  }
+}
+
+async function readInstallationStart(
+  deps: Pick<BackupSweepDeps, "installationStartedAt" | "log">,
+): Promise<Date | null> {
+  if (!deps.installationStartedAt) return null;
+  try {
+    return await deps.installationStartedAt();
+  } catch (err) {
+    deps.log("warn", "backup.installation_start_unreadable", {
+      errorCode: codeOf(err),
+      errno: errnoOf(err),
+    });
+    return null;
+  }
+}
+
 /**
  * One backup. A failure to build the manifest or collect state throws before the database copy, and
  * no partial archive is ever put to a destination.
@@ -122,14 +184,26 @@ async function checkStagingSpace(
 export async function runOnce(
   deps: Omit<BackupSweepDeps, "schedule" | "sleep" | "jitterSeed" | "readClock">,
 ): Promise<void> {
-  const nowMs = (deps.now ?? (() => new Date()))().getTime();
+  const now = deps.now ?? (() => new Date());
+  const nowMs = now().getTime();
   const buildBackupManifest = deps.buildManifest ?? buildManifest;
-  const stamp = (deps.now ?? (() => new Date()))();
+  const stamp = now();
   const dumpName = dumpFileName(stamp);
   const staged = join(deps.stagingDir, dumpName);
   let dumped = false;
   let encryptedDir: string | undefined;
   const budget = new ArchiveReadBudget();
+  const reportDeleted = async (deleted: readonly DeletableArchive[]) => {
+    if (!deps.onArchivesDeleted) return;
+    try {
+      await deps.onArchivesDeleted(deleted, now());
+    } catch (err) {
+      deps.log("warn", "backup.archives_deleted_alert_failed", {
+        errorCode: codeOf(err),
+        errno: errnoOf(err),
+      });
+    }
+  };
   try {
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
@@ -154,8 +228,29 @@ export async function runOnce(
     budget.addEntry("manifest.json", Buffer.byteLength(JSON.stringify(manifest)));
     budget.addEntry("db.dump", 0);
     await mkdir(deps.stagingDir, { recursive: true, mode: 0o700 });
-    if (deps.stagingEstimateBytes)
-      await checkStagingSpace(deps, 2 * (await deps.stagingEstimateBytes()));
+    let room: ((neededBytes: number) => Promise<void>) | undefined;
+    let copies = 0;
+    if (deps.stagingEstimateBytes) {
+      let installationStart: Promise<Date | null> | undefined;
+      const installationStartedAt = () => (installationStart ??= readInstallationStart(deps));
+      const estimate = await deps.stagingEstimateBytes();
+      const onDisk = await localFoldersOnDisk(deps);
+      copies = onDisk.copies;
+      room = (neededBytes) =>
+        makeRoom({
+          neededBytes,
+          floorBytes: deps.spaceFloorBytes ?? START_FREE_SPACE_FLOOR,
+          aimBytes: deps.spaceAimBytes ?? SPACE_LOW_BYTES,
+          stagingDir: deps.stagingDir,
+          statfs: deps.statfs,
+          folders: onDisk.folders,
+          installationStartedAt,
+          signal: deps.signal,
+          log: deps.log,
+          onDeleted: reportDeleted,
+        });
+      await room(2 * estimate + estimate * copies);
+    }
     await deps.archive(staged);
     dumped = true;
     // The whole venue database in plaintext, created under the process umask.
@@ -175,6 +270,9 @@ export async function runOnce(
       deps.recoveryKey,
       deps.signal,
     );
+    // The encrypted file can be larger than the estimate; each folder copy on the disk writes it
+    // whole before its rename.
+    if (room && copies > 0) await room((await stat(ciphertext)).size * copies);
     const key = backupArchiveKey(stamp);
     if (deps.outcomes) delete deps.outcomes.runStopped;
     // Every destination call has settled before `finally` removes the ciphertext they read.
@@ -215,8 +313,20 @@ export async function runOnce(
     );
   } catch (err) {
     // Only a step before the destination calls lands here: `Promise.allSettled` never rejects.
-    if (!deps.signal.aborted && deps.outcomes)
-      deps.outcomes.runStopped = { code: codeOf(err), at: stamp.toISOString() };
+    if (!deps.signal.aborted && deps.outcomes) {
+      const code = codeOf(err);
+      const at = stamp.toISOString();
+      const previous = deps.outcomes.runStopped;
+      deps.outcomes.runStopped = {
+        code,
+        at,
+        since: previous?.code === code ? previous.since : at,
+      };
+      if (isAppError(err) && hasCode(err, "backup.staging_space_low")) {
+        const { neededBytes, availableBytes } = err.params;
+        deps.outcomes.runStopped.sizes = { neededBytes, availableBytes };
+      }
+    }
     throw err;
   } finally {
     if (encryptedDir) await rm(encryptedDir, { recursive: true, force: true });

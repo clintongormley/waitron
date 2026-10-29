@@ -306,13 +306,34 @@ describe("a backup that stopped before reaching any destination", () => {
   const LEAD_ES =
     "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan.";
 
-  it("says the box is short of disk space", () => {
-    const params = { errorCode: "backup.staging_space_low" };
+  it("says how much room the backup needs and how much the disk has", () => {
+    const params = {
+      errorCode: "backup.staging_space_low",
+      spaceLow: true,
+      neededBytes: 6_300_000_000,
+      availableBytes: 1_900_000_000,
+    };
     expect(alertMessage("backup.run_stopped", params, "en")).toBe(
-      `${LEAD_EN} The box does not have enough free disk space to prepare it. On Box status, use Free if available to delete leftover working files, old logs and crash reports. Leave without pressing Free to skip cleanup. If that is not enough, Free cannot remove other files for you.`,
+      "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB.",
     );
     expect(alertMessage("backup.run_stopped", params, "es")).toBe(
-      `${LEAD_ES} ${ALERT_WORDS.backup_stop!.words["backup.staging_space_low"]!.es}`,
+      "Copia no hecha: necesita 6,3 GB libres y el disco tiene 1,9 GB.",
+    );
+  });
+
+  it("keeps no staging-space words in the backup stop word list", () => {
+    expect(Object.hasOwn(ALERT_WORDS["backup_stop"]!.words, "backup.staging_space_low")).toBe(
+      false,
+    );
+  });
+
+  it("draws a dash for each size a space refusal does not carry", () => {
+    const params = { errorCode: "backup.staging_space_low", spaceLow: true };
+    expect(alertMessage("backup.run_stopped", params, "en")).toBe(
+      "Backup not made: it needs — free and the disk has —.",
+    );
+    expect(alertMessage("backup.run_stopped", params, "es")).toBe(
+      "Copia no hecha: necesita — libres y el disco tiene —.",
     );
   });
 
@@ -333,6 +354,23 @@ describe("a backup that stopped before reaching any destination", () => {
       `${LEAD_ES} Contacta con soporte.`,
     );
   });
+});
+
+it("says the box deleted its oldest backups for low disk space, and on which day", () => {
+  const one = { count: 1, date: "2026-10-28" };
+  const three = { count: 3, date: "2026-10-28" };
+  expect(alertMessage("backup.archives_deleted", one, "en")).toBe(
+    "Low disk space: the box deleted its oldest backup (28 Oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", three, "en")).toBe(
+    "Low disk space: the box deleted its 3 oldest backups (28 Oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", one, "es")).toBe(
+    "Poco espacio en disco: el equipo borró su copia de seguridad más antigua (28 oct 2026).",
+  );
+  expect(alertMessage("backup.archives_deleted", three, "es")).toBe(
+    "Poco espacio en disco: el equipo borró sus 3 copias más antiguas (28 oct 2026).",
+  );
 });
 
 it("says how many Translate all suggestions wait, and how many could not be done", () => {

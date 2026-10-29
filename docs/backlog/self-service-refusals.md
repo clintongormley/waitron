@@ -404,6 +404,8 @@ Wording: `apps/dashboard/src/i18n/alert-messages.ts:448` and `apps/dashboard/src
 
 State: Free space in the staging filesystem is below the estimated need. A full filesystem does not require a Waitron bug. Receipt: `apps/server/src/backup-sweep.ts:108`.
 
+_2026-10-28, A1167 slice 1: these words are gone. The bell now draws the owner's «Backup not made: it needs {needed} free and the disk has {available}.» (the `spaceLow` variant of `backup.run_stopped`), and a run first deletes its oldest deletable backups on the disk before it is refused; see [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies). The rest of this entry records the earlier tree._
+
 Route: Existing: Box status shows disk use; the boot recovery wording names an installer freeing space or fitting a bigger disk. (2026-10-28, A1127: the full-disk page's action now names nobody; it says what fills the disk, that Waitron cannot free more by itself, and what reinstalling costs. The `storage.disk_full` email in `apps/server/src/i18n/box-emails.ts` still names the installer.) Missing: a supported self-service cleanup path for a person without a terminal. Never delete fiscal data or unrelated shared state.
 
 ### `recovery.state_incomplete`
@@ -826,6 +828,13 @@ on Backups, that older archives are removed only after a new backup succeeds, an
 changes. It names the database, recovery keys and saved backups to preserve. The installer
 referral is removed in both languages; the guides state that moving to a larger disk is not an
 action this page provides.
+
+_2026-10-28, A1167 slice 1: the staging-space words above were replaced by the owner's «Backup
+not made: …» sentence, and the Box status guide's "older archives are removed only after a new
+backup succeeds" sentence by one saying a backup run can delete its oldest backups on the disk to
+make room. The Box status page's own footer (`box_status.fillers` in
+`apps/dashboard/src/i18n/strings.ts`) now says older archives are removed only after a new backup
+succeeds "or before a backup that is short of room", in both languages._
 
 **Still open: space beyond the supported cleanup.** When no reclaimable files remain and a new
 backup cannot fit, there is no supported in-app disk-recovery workflow. Add an authenticated

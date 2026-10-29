@@ -1,11 +1,12 @@
 import { sql } from "drizzle-orm";
 import type { AnyColumn } from "drizzle-orm";
 import { check } from "drizzle-orm/sqlite-core";
-import { SALE_SOURCES, SOURCES } from "@waitron/shared";
+import { INCIDENT_SOURCES, SALE_SOURCES, SOURCES } from "@waitron/shared";
 import { enumCheck, enumType } from "./columns.js";
 
 export const sourceColumn = enumType(SOURCES);
 export const saleSourceColumn = enumType(SALE_SOURCES);
+export const incidentSourceColumn = enumType(INCIDENT_SOURCES);
 
 /**
  * The source is in its column's list, and a device is named exactly when the source is `device`.

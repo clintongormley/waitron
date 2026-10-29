@@ -522,8 +522,8 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
 - **A1127 slice 3: a red bar on every dashboard page while the full-disk stop holds.** The owner
-  kept the bar when A1167's answers dropped slice 3's dialog and Box status button; its words now
-  say what the box already deleted. Build with or after A1167. Left open by A1127.
+  kept the bar when A1167's answers dropped slice 3's dialog and Box status button; its words, still
+  to be written, say what the box already deleted. Build with or after A1167 slice 2. Left open by A1127.
   [Detail](backlog/setup.md#a1127-slice-3-a-red-bar-on-every-dashboard-page-while-the-full-disk-stop-holds)
 
 - **Other full-disk words still send the person elsewhere or end with the short reinstall
@@ -4701,13 +4701,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
   [Audit](backlog/self-service-refusals.md#backup-settings).
 
-- **A1167: backups make room for themselves.** When the disk runs short the box deletes its oldest
-  backups (never the newest, never one from before the last restore) and tells an administrator; a
-  backup that still has no room is refused before it copies anything and a manager is told. Also closes
-  the measured gap where a backup to a folder on the box's own disk passes its space check and then
-  fills the disk. Designed; the owner answered its four questions on 2026-10-28
-  (`~/waitron-campaign/questions.md`, "OWNER ANSWERS — A1167").
+- **A1167 slice 2: the free-space watch deletes old backups when the disk runs short.**
   [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
+
+- **A1167: the start deletes old backups by itself** in place of the full-disk page's button (owner's
+  Q4 answer). [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
 
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real

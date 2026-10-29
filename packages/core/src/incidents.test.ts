@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AppError, deviceOrigin, jobOrigin } from "@waitron/shared";
+import { AppError, backupOrigin, deviceOrigin, jobOrigin } from "@waitron/shared";
 import type { DeviceId, NodeId, Origin, SeriesId } from "@waitron/shared";
 import { FakeFiscalBackend } from "@waitron/fiscal/src/testing/fake-backend.js";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
@@ -305,6 +305,23 @@ describe("recordIncident — origin", () => {
       .select({ source: incidents.source, deviceId: incidents.deviceId })
       .from(incidents);
     expect(rows).toEqual([{ source: "operator_script", deviceId: null }]);
+  });
+
+  it("keeps a backup job's warning attributed to the backup job", async () => {
+    await withTransaction(suite.db, (tx) =>
+      recordIncidentOnce(tx, {
+        origin: backupOrigin(),
+        error: new AppError("clock.degraded", { deviceId, anchorAgeSeconds: 999 }),
+        severity: "warning",
+        detectedAt: BASE,
+      }),
+    );
+    const [open] = await withTransaction(suite.db, (tx) => openIncidents(tx, backupOrigin()));
+    expect(open).toMatchObject({ source: "backup", deviceId: null, code: "clock.degraded" });
+    const listed = await withTransaction(suite.db, (tx) => listOpenIncidents(tx));
+    expect(listed.map((incident) => [incident.source, incident.deviceId])).toEqual([
+      ["backup", null],
+    ]);
   });
 
   it("refuses a job source that names a device", async () => {

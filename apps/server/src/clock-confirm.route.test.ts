@@ -25,7 +25,7 @@ import {
   type BoxHealthReaders,
   type ClockStopView,
 } from "./box-health.js";
-import { readOpenClockIncidents } from "./box-alert-email.js";
+import { readOpenEmailedIncidents } from "./box-alert-email.js";
 import { mountBoxHealthApi } from "./box-health-api.js";
 import { CLOCK_WATCH_MS, startClockWatch } from "./clock-watch.js";
 import { createClockWitnessStore, type ClockWitnessStore } from "./clock-witnesses.js";
@@ -1603,7 +1603,7 @@ it("lists a later closing's wrongly dated sales beside an open alert that cannot
   ]);
   // The managers' email duty reads the same open alerts.
   expect(
-    (await readOpenClockIncidents(venue.db))
+    (await readOpenEmailedIncidents(venue.db))
       .filter((incident) => incident.code === "clock.records_misdated")
       .map((incident) => incident.params["confirmationId"]),
   ).toEqual([confirmationId, cannotTell.confirmation!.id]);

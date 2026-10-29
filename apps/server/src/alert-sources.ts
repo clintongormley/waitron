@@ -127,8 +127,16 @@ export interface BackupOutcomeHolder {
    * after a restart until the next sweep tick. */
   failed: Map<string, { at: string }>;
   /** Set while the most recent backup run stopped before any destination call; `code` is the error
-   * code it stopped on. In memory only, like `failed`. */
-  runStopped?: { code: string; at: string };
+   * code it stopped on, and `sizes` the free space it needed and found when that code is
+   * `backup.staging_space_low`. In memory only, like `failed`. */
+  runStopped?: {
+    code: string;
+    at: string;
+    /** The `at` of the first of the unbroken string of runs that stopped on `code`, so a reader
+     * that misses a run in between can tell a new string from the same one. */
+    since: string;
+    sizes?: { neededBytes: number; availableBytes: number };
+  };
 }
 
 export function recordBackupOutcome(
@@ -187,7 +195,10 @@ export function backupAlertSource(deps: {
         alerts.push({
           key: "backup.run_stopped",
           code: "backup.run_stopped",
-          params: { errorCode: stopped.code },
+          params:
+            stopped.code === "backup.staging_space_low"
+              ? { errorCode: stopped.code, spaceLow: true, ...stopped.sizes }
+              : { errorCode: stopped.code },
           severity: "error",
           since: stopped.at,
           screen: BACKUP_SCREEN,

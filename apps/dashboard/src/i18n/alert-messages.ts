@@ -80,6 +80,22 @@ export const ALERT_MESSAGES: Readonly<
   "backup.run_stopped": {
     en: "The last backup stopped before reaching any destination, so no new copy was saved. Sales continue. {errorCode:backup_stop}",
     es: "La última copia de seguridad se detuvo antes de llegar a ningún destino, así que no se ha guardado ninguna copia nueva. Las ventas continúan. {errorCode:backup_stop}",
+    variants: {
+      spaceLow: {
+        mode: "replace",
+        en: "Backup not made: it needs {neededBytes:bytes} free and the disk has {availableBytes:bytes}.",
+        es: "Copia no hecha: necesita {neededBytes:bytes} libres y el disco tiene {availableBytes:bytes}.",
+      },
+    },
+  },
+  "backup.archives_deleted": {
+    en: "Low disk space: the box deleted its {count} oldest backups ({date:date}).",
+    es: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas ({date:date}).",
+    one: {
+      param: "count",
+      en: "Low disk space: the box deleted its oldest backup ({date:date}).",
+      es: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua ({date:date}).",
+    },
   },
   "backup.disabled": {
     en: "No copy of your data is being kept: there are no scheduled backups, and the bucket copy is off or not up to date. Set one up on the Backups page.",
@@ -444,10 +460,6 @@ export const ALERT_WORDS: Readonly<
   },
   backup_stop: {
     words: {
-      "backup.staging_space_low": {
-        en: "The box does not have enough free disk space to prepare it. On Box status, use Free if available to delete leftover working files, old logs and crash reports. Leave without pressing Free to skip cleanup. If that is not enough, Free cannot remove other files for you.",
-        es: "El equipo no tiene espacio libre suficiente en disco para prepararla. En Estado del equipo, pulsa Liberar si está disponible para borrar archivos de trabajo sobrantes, registros antiguos e informes de fallos. Sal sin pulsar Liberar para no hacer la limpieza. Si no basta, Liberar no puede borrar otros archivos por ti.",
-      },
       "recovery.state_incomplete": {
         en: "Some of the box's own files that every backup must include are missing. Contact support.",
         es: "Faltan algunos archivos propios del equipo que toda copia debe incluir. Contacta con soporte.",

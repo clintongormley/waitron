@@ -1,5 +1,15 @@
 // The supervisor's lifecycle against a REAL migrated venue directory.
-import { chmod, cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rm,
+  truncate,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -10,13 +20,17 @@ import {
   type VenueDatabase,
 } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { backupAlertSource } from "./alert-sources.js";
+import { backupAlertSource, type BackupOutcomeHolder } from "./alert-sources.js";
 import { decryptArtifact } from "./artifact-cipher.js";
 import { unpackArchive } from "./backup-archive.js";
 import type { BackupConfig } from "./backup-config.js";
 import { backupArchiveKey } from "./backup-keys.js";
 import { createStagingTurn } from "./backup-staging-turn.js";
-import { BackupSupervisor, keyFingerprint } from "./backup-supervisor.js";
+import {
+  BackupSupervisor,
+  keyFingerprint,
+  type BackupSupervisorDeps,
+} from "./backup-supervisor.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
 import type { BackupDestination } from "./storage-backend.js";
 import { ALL_MODULES } from "./modules.js";
@@ -1093,4 +1107,104 @@ describe("BackupSupervisor with a switched-off record or a bucket destination", 
       await sup.stop();
     }
   });
+});
+
+describe("BackupSupervisor hands each run the room hooks", () => {
+  const HOUR = 60 * 60 * 1000;
+
+  async function folderWithOldAndNewest(): Promise<{
+    dest: string;
+    oldKey: string;
+    newestKey: string;
+  }> {
+    const dest = await makeDestDir();
+    const oldKey = backupArchiveKey(new Date(Date.now() - 2 * HOUR));
+    const newestKey = backupArchiveKey(new Date(Date.now() - HOUR));
+    // Sparse, so it is large enough to cover the run's need without filling the disk.
+    await writeFile(join(dest, oldKey), "");
+    await truncate(join(dest, oldKey), 3 * 1024 ** 3);
+    await writeFile(join(dest, newestKey), "newest");
+    return { dest, oldKey, newestKey };
+  }
+
+  function supervisorFor(
+    refs: Refs,
+    stateDir: string,
+    extra: Partial<BackupSupervisorDeps>,
+  ): BackupSupervisor {
+    return new BackupSupervisor({
+      buildConfig: async () => refs.config,
+      isManagedByEnvironment: () => refs.managed,
+      readSingletonRole: () => refs.role,
+      venueDir: refs.venueDir,
+      modules: ALL_MODULES,
+      environment: "production",
+      stateDir,
+      jitterSeed: "seed",
+      readClock: async () => ({ timeZone: "UTC", dayCutover: "00:00", cutoverChanges: [] }),
+      log: (level, event) => refs.logs.push({ level, event }),
+      ...extra,
+    });
+  }
+
+  it("deletes the old archive on its first run when the disk is short, and records the alert", async () => {
+    const { dest, oldKey, newestKey } = await folderWithOldAndNewest();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const recordArchivesDeleted = vi.fn(async () => {});
+    // No room while the old archive is there; plenty once it is gone.
+    const statfs = async () => ({
+      bavail: (await listArchives(dest)).includes(oldKey) ? 0 : 2 ** 40,
+      frsize: 1,
+    });
+    const sup = supervisorFor(refs, await makeStateDir(), {
+      readInstallationStart: async () => new Date(Date.now() - 24 * HOUR),
+      recordArchivesDeleted,
+      statfs,
+    });
+    try {
+      await sup.reload();
+      await waitForArchiveUnderCurrentKey(sup);
+    } finally {
+      await sup.stop();
+    }
+    const archives = await listArchives(dest);
+    expect(archives).not.toContain(oldKey);
+    expect(archives).toContain(newestKey);
+    expect(archives).toHaveLength(2);
+    expect(recordArchivesDeleted).toHaveBeenCalledOnce();
+    expect(recordArchivesDeleted).toHaveBeenCalledWith(
+      [expect.objectContaining({ destination: "primary", key: oldKey })],
+      expect.any(Date),
+    );
+  }, 60_000);
+
+  it("deletes nothing without the two hooks, and the run is refused", async () => {
+    const { dest, oldKey, newestKey } = await folderWithOldAndNewest();
+    const refs: Refs = {
+      config: localFsConfig([dest], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const outcomes: BackupOutcomeHolder = { failed: new Map() };
+    const sup = supervisorFor(refs, await makeStateDir(), {
+      outcomes,
+      statfs: async () => ({ bavail: 0, frsize: 1 }),
+    });
+    try {
+      await sup.reload();
+      await poll(async () => outcomes.runStopped);
+    } finally {
+      await sup.stop();
+    }
+    expect(outcomes.runStopped?.code).toBe("backup.staging_space_low");
+    expect(await listArchives(dest)).toEqual([oldKey, newestKey].sort());
+  }, 60_000);
 });

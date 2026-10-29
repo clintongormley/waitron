@@ -1,6 +1,6 @@
 import { page, userEvent } from "vitest/browser";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fill, setLocale, t } from "../i18n/t.js";
+import { setLocale } from "../i18n/t.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { formatIsoMinute } from "../date-utils.js";
 import { registerIcons } from "@waitron/ui";
@@ -425,9 +425,9 @@ describe("dashboard-alerts-bell", () => {
   });
 });
 
-describe("backup preparation space guidance", () => {
+describe("backup refused for lack of room", () => {
   it.each(["en", "es"])(
-    "names the existing cleanup choice in %s and opens Backups",
+    "says how much room a backup needs and how much the disk has, in %s, and opens Backups",
     async (locale) => {
       setLocale(locale);
       const stopped: AlertView = {
@@ -435,21 +435,23 @@ describe("backup preparation space guidance", () => {
         key: "backup.run_stopped",
         code: "backup.run_stopped",
         severity: "error",
-        params: { errorCode: "backup.staging_space_low" },
+        params: {
+          errorCode: "backup.staging_space_low",
+          spaceLow: true,
+          neededBytes: 6_300_000_000,
+          availableBytes: 1_900_000_000,
+        },
       };
       const { el } = await mountWidget<AlertsBell>("dashboard-alerts-bell", {
         alerts: [stopped],
         canOpen: (screen) => screen === "backup",
       });
       const message = q(el, "li")!.textContent!;
-      expect(message).toContain(t("box_status.title"));
-      expect(message).toContain(fill("box_status.free", { size: "" }).trim());
-      if (locale === "en") {
-        expect(message).toContain("leftover working files, old logs and crash reports");
-        expect(message).toContain("Free cannot remove other files");
-        expect(message).toContain("Leave without pressing Free");
-        expect(message).not.toContain("Contact support");
-      }
+      expect(message).toContain(
+        locale === "en"
+          ? "Backup not made: it needs 6.3 GB free and the disk has 1.9 GB."
+          : "Copia no hecha: necesita 6,3 GB libres y el disco tiene 1,9 GB.",
+      );
       const navigate = vi.fn();
       el.addEventListener("wt-alert-go-to", navigate);
       el.open();

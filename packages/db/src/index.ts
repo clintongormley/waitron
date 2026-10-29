@@ -72,7 +72,12 @@ export * from "./schema/tenants.js";
 export { readTenant } from "./read-tenant.js";
 export type { Tenant } from "./read-tenant.js";
 export { nodes } from "./schema/nodes.js";
-export { originChecks, saleSourceColumn, sourceColumn } from "./schema/origin.js";
+export {
+  incidentSourceColumn,
+  originChecks,
+  saleSourceColumn,
+  sourceColumn,
+} from "./schema/origin.js";
 export { invoiceSeries } from "./schema/series.js";
 export {
   workingOrderLines,

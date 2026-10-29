@@ -27,10 +27,16 @@ export const SALE_SOURCES = [
 ] as const satisfies readonly Source[];
 export type SaleSource = (typeof SALE_SOURCES)[number];
 
+/** The sources the incidents table accepts: every source, plus the backup job, which writes only incidents. */
+export const INCIDENT_SOURCES = [...SOURCES, "backup"] as const;
+export type IncidentSource = (typeof INCIDENT_SOURCES)[number];
+
 export type JobSource = Exclude<Source, "device">;
 export type DeviceOrigin = { readonly source: "device"; readonly deviceId: DeviceId };
 export type JobOrigin = { readonly source: JobSource; readonly deviceId: null };
 export type Origin = DeviceOrigin | JobOrigin;
+export type BackupOrigin = { readonly source: "backup"; readonly deviceId: null };
+export type IncidentOrigin = Origin | BackupOrigin;
 export type SaleOrigin =
   DeviceOrigin | { readonly source: Exclude<SaleSource, "device">; readonly deviceId: null };
 
@@ -43,6 +49,8 @@ export const jobOrigin = <S extends JobSource>(source: S): JobOrigin & { readonl
   source,
   deviceId: null,
 });
+
+export const backupOrigin = (): BackupOrigin => ({ source: "backup", deviceId: null });
 
 const isSource = (value: string): value is Source => (SOURCES as readonly string[]).includes(value);
 
@@ -63,4 +71,10 @@ export function readSaleOrigin(source: string, deviceId: string | null): SaleOri
   const origin = readOrigin(source, deviceId);
   if (isSaleOrigin(origin)) return origin;
   throw new AppError("origin.invalid", { source, deviceId });
+}
+
+/** An incident's stored source and optional device. */
+export function readIncidentOrigin(source: string, deviceId: string | null): IncidentOrigin {
+  if (source === "backup" && deviceId === null) return backupOrigin();
+  return readOrigin(source, deviceId);
 }
