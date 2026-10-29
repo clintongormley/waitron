@@ -48,7 +48,8 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   with no countdown (`first-hour.browser.test.ts`, "a minute in use names its time and does not
   count down").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
-  name this attempt already chose; it can finish once the box's clock reaches that minute
+  name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
+  its name
   (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
   refuses before writing anything").
 

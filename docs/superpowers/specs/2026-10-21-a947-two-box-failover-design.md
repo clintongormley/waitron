@@ -1,4 +1,4 @@
-> **A1207, 29 October 2026:** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused only when its minute is already in use, and a minute in use gets new words (the 'a later minute is already in use' words remain only for a clock behind the attempt's own pick) ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Q4).
+> **A1207, 29 October 2026:** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused when its minute is already in use, or while the box's clock is behind this attempt's own pick, and a minute in use gets new words (the 'a later minute is already in use' words remain only for a clock behind the attempt's own pick) ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Q4).
 
 # A947 — Go-live on two local boxes: a spare box that takes over
 

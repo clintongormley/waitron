@@ -3779,7 +3779,7 @@ seconds of the box"). A minute a name in the history it can read already holds i
 restore's first choice is then refused with the time it can carry on from
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at the settle
 target in the surviving database"), and one that already recorded a wait moves to the next free
-minute (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
+minute when that starts within 150 seconds, and is otherwise refused with that time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
 %s, in use, at %s waits for the next free minute"). A later name, the backup's newest record and its creation
 time no longer refuse or move the minute (the same file's "selected although a later name is
 known" cases; `apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although
@@ -5097,7 +5097,7 @@ against a clock on another machine (within 30 seconds, no confirmation). The min
 when a name in the history the box reads already holds it: the module's own record of the names it
 has chosen, earlier abandoned attempts of the same setup, a restored or surviving database and a
 backup's record of names. A later name or a later record is never a reason to refuse or to pick a
-later minute (owner, 2026-10-29 ~10:52, A1207: "If later invoices exist then they are wrong, we
+later minute, except the one named below (owner, 2026-10-29 ~10:52, A1207: "If later invoices exist then they are wrong, we
 should flag them up to be dealt with (how?) but it doesn't stop us from issuing the correct series
 based on the current minute, just as long as that minute series doesn't exist in the database
 already."). The one later name that still refuses is the attempt's own pick when the box's clock
@@ -5128,8 +5128,8 @@ real time and their first and last time (`apps/server/src/hour-recovery-host.tes
 below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop,
 and a confirmation lists the later sale"). A later name held only in a database a restore replaces
 is in no history the box reads afterwards (the placement case above). A box and the machine
-confirming its clock, both behind by the same amount, now name a minute below the backup's creation
-time (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "W: the box and another
+confirming its clock, both behind by the same amount, can name a minute in the past, even one below the
+backup's creation time (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "W: the box and another
 device wrong together, below the backup's creation"); only that exact minute being in use refuses
 it. No alert names a later installation name with no invoices under it, or the series names (A1207
 plan, review experiment #7, a promotion only). A setup or restore waits

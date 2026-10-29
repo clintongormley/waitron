@@ -700,7 +700,7 @@ held only in a database a restore replaces is forgotten (Q6); a box whose clock 
 its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
 longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
 minute in the past; and, until the flag (A1207 Part 2, the owner's Q1) is built, no alert names a
-later name with no invoices under it or the series names (A1207 plan, review experiment #7), while later invoices are listed
+later name with no invoices under it or the series names (A1207 plan, review experiment #7, a promotion only), while later invoices are listed
 by `clock.records_misdated` once a clock confirmation lifts the stop
 (`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names its
 minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale").
