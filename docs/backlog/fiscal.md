@@ -414,19 +414,11 @@ guard or claiming the two checks are equivalent for every input. No combined-fau
 
 Conditional automatic conflict recovery,
 corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
-old-backup/new-hardware operational exercise remain queued. Cloud allocation production
-enablement still needs qualified custody, signing, subscription and continuity policies; the
-[manual recovery and explicit report adapters](../developers/cloud-fiscal-allocation.md) select
-none of those defaults. Paper allocation does not require a subscription.
+old-backup/new-hardware operational exercise remain queued.
 
-**2026-10-15 implementation boundary:** C3 supplies the signed consumed-receipt verifier,
-configured manual recovery preparation, public receipt retention and explicit report APIs. The
-report journal publishes complete files, checks the encoded proof
-before binding a new operation and checks the expected receipt in live and cached replies.
-The operator-contract correction is Cloud #132. Source and acceptance checks are documented in
-[the adapter guide](../developers/cloud-fiscal-allocation.md). Production custody/signing/continuity
-policy and a running host reporting caller remain separate work. Cloud's separately scheduled
-joint test still gates completion.
+**2026-10-29 (owner):** the Cloud allocation registry is dropped — "We no longer have the
+reservations because we use the time-based codes instead." Waitron's unused client and report
+journal were removed by A1189.
 
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
@@ -1070,14 +1062,6 @@ a sale's operation date writes none without a customer tax identity
 `toDetalleDesglose`. Safe seam: a helper taking the assembled `Omit<AltaInput,"Encadenamiento">`;
 needs a huella-invariance re-run across all three.
 Fiscal: each behind its own review, owner sign-off at land.
-
-## Cloud fiscal reporting has no running host caller yet.
-
-The adapter can collect a committed
-activation and send its retained report, but reporting is an explicit API call. Choose an
-authenticated operator entry point or background duty before promising unattended reconciliation.
-The calls are qualified in `apps/server/src/cloud-fiscal-allocation.test.ts` and the separately
-owned Cloud joint suite; neither starts a production reporting worker.
 
 ## Rename the `hour-*` names to minute names
 

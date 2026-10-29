@@ -176,19 +176,14 @@ under `docs/backlog/`.
 
 ### Fiscal records, invoices and the asesor
 
-- **A1189. Remove Cloud's fiscal allocation registry, in both repositories (owner, 2026-10-29).**
-  "We no longer have the reservations because we use the time-based codes instead" — "the
-  registry can be removed." In Waitron: the server's registry client and module
-  (`apps/server/src/cloud-fiscal-allocation*.ts`), the first-fiscal-setup, recovery and
-  reconciliation paths and tests that call them, `docs/developers/cloud-fiscal-allocation.md`,
-  and whatever of `docs/developers/paper-custodian.md` exists only for the registry (check
-  first). Waitron Cloud's side has its own
-  [removal design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
-  and plan; it keeps migration 038 and stored records pending a separate decision, and it
-  lands only after this Waitron removal has landed.
-  The [registry plan](superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md) stays
-  as history with its 2026-10-29 note. It touches first fiscal setup, so the Waitron pull
-  request probably waits for the owner to land it.
+- **Retire the historical allocation formats from `fiscal-verifactu`.** Signed paper, Cloud
+  receipts and emergency names are still read by historical code: the activation check
+  (`allocation-envelope.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical
+  setup contribution (`initial-setup.ts`), which also reads the now-undocumented settings
+  `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_TRUST_FINGERPRINT` and
+  `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY`. Removing them changes activation and several tests'
+  assertions, so it is its own fiscal change for the owner to land. Left by A1189, which removed
+  only the server's unused registry client.
 
 - **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
   open by A1154 (#2172), which removed the till-registration command and kept the fiscal identity on
@@ -379,10 +374,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **W41s. Fiscal prevention and offline recovery** — conditional automatic conflict recovery, corrective-record resolution,
   filing investigation, outside evidence and fencing, and the complete old-backup/new-hardware operational exercise remain queued.
   [Detail](backlog/fiscal.md#w41s-fiscal-prevention-and-offline-recovery--design-and-revised-plan-approved-2026-10-04).
-
-- **Cloud fiscal reporting has no running host caller yet.**
-  Choose an authenticated operator entry point or background duty before promising unattended reconciliation.
-  [Detail](backlog/fiscal.md#cloud-fiscal-reporting-has-no-running-host-caller-yet).
 
 - **Allocated standby adoption still needs the primary's venue copy and fresh establishment
   authority.** Complete the copy and authenticated establishment path before presenting a successful fiscal
