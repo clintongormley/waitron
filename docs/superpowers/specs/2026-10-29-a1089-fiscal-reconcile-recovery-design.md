@@ -138,3 +138,15 @@ themes, 390/1280 widths, keyboard/axe and guide twins with shared heading IDs. N
 
 **One owner scope choice: A, recommended, authorise a PLAN for read-only inspection first, leaving persistent repair and the production caller OPEN; or B, design the complete active caller/recovery route first.**
 Both choices authorise planning only. A build requires separate approval.
+
+## Owner decisions and implementation plan, 2026-10-29
+
+The owner selected evidence-first scope A at 01:58. The newer 08:07 instruction authorizes
+read-only evidence screens to be built after their fresh plan review, with sign-in, Read again
+and Stop only. It supersedes the planning-only and separate-build-approval statements above for
+this scope. The historical proposal and its source audit remain intact.
+
+Follow the [implementation plan](../plans/2026-10-29-a1089-fiscal-reconcile-evidence.md) after its
+fresh review and coordination of actual shared files. The screen remains to be built and
+qualified. Production reconciliation activation, caller authority and cadence, and persistent
+repair remain open; the read-only approval authorizes none of them.

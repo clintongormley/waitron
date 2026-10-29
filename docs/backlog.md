@@ -200,7 +200,10 @@ under `docs/backlog/`.
   periodic check. [Audit and remaining work](backlog/self-service-refusals.md#fiscal-reconcile).
 
   The [inspection and caller-scope proposal](superpowers/specs/2026-10-29-a1089-fiscal-reconcile-recovery-design.md)
-  awaits an owner decision. A local queue-reset marker does not prove a repeat submission;
+  and [implementation plan](superpowers/plans/2026-10-29-a1089-fiscal-reconcile-evidence.md)
+  follow the owner's 29 October evidence-first decision. The 08:07 instruction approves the
+  read-only build after fresh plan review and coordination of shared files. The screen and its
+  qualification remain open. A local queue-reset marker does not prove a repeat submission;
   production activation and persistent recovery remain open.
 
 - **A1089: fiscal environment refusals need safe configuration or recovery guidance.** Separate a wrong host environment from missing immutable metadata. Never relabel records, promote test data or reset invoice numbering.
