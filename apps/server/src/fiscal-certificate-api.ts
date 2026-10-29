@@ -141,6 +141,21 @@ export function mountFiscalCertificateApi(
         try {
           const managementSessionId = requireManagementSession(c);
           const body = await readJsonBody<unknown>(c);
+          const authorize = async (tx: Transaction) => {
+            const session = await authorizeManager(tx, {
+              managementSessionId,
+              permission: "system.manage",
+              touch: false,
+            });
+            const { expiresAt } = await resolveManagementSession(tx, managementSessionId, {
+              touch: false,
+            });
+            if (!deps.filing()) throw new AppError("fiscal.certificate_not_used", {});
+            return { personId: session.authorizedBy, expiresAt };
+          };
+          // Admission can refuse without calling the seat, so it needs its own no-drain
+          // authorization turn; the seat still rechecks both material snapshots.
+          await deps.db.withWriteLock(() => authorize(deps.db));
           const answer = await runner.attempt(
             (runChild, signal) =>
               diagnose(
@@ -153,18 +168,7 @@ export function mountFiscalCertificateApi(
                   signal,
                   clock: deps.now,
                   runChild,
-                  authorize: async (tx) => {
-                    const session = await authorizeManager(tx, {
-                      managementSessionId,
-                      permission: "system.manage",
-                      touch: false,
-                    });
-                    const { expiresAt } = await resolveManagementSession(tx, managementSessionId, {
-                      touch: false,
-                    });
-                    if (!deps.filing()) throw new AppError("fiscal.certificate_not_used", {});
-                    return { personId: session.authorizedBy, expiresAt };
-                  },
+                  authorize,
                 },
                 body,
                 deps.now(),

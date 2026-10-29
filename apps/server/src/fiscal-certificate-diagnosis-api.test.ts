@@ -16,6 +16,7 @@ import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { AppError } from "@waitron/shared";
 import { mountFiscalCertificateApi } from "./fiscal-certificate-api.js";
 import type { CertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
+import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 
 const suite = useVenueDb({ migrations: TEST_MIGRATIONS });
 const path = "/management-api/fiscal-certificate/diagnose";
@@ -104,6 +105,20 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
       endpointLabel: "preproduction-sello",
     });
     expect(f.children()).toBe(1);
+    expect(await rawState(suite.db)).toEqual(before);
+  });
+
+  it("the admission authorization preserves pending change-log rows", async () => {
+    const f = await fixture();
+    await suite.db.withWriteLock(async () => {
+      suite.db.run(
+        sql`insert into change_log (id, payload) values (${"diagnosis-pending"}, ${JSON.stringify({ resources: [{ type: "venue", id: "1" }] })})`,
+      );
+    });
+    const before = await rawState(suite.db);
+    expect(before.tables.change_log).toHaveLength(1);
+    const response = await f.post();
+    expect(response.status).toBe(200);
     expect(await rawState(suite.db)).toEqual(before);
   });
 
@@ -334,4 +349,69 @@ describe("authorized certificate diagnosis HTTP boundary", () => {
     expect(await response.text()).toBe("");
     expect(f.logs).toEqual([]);
   });
+
+  it.each(["unknown-session", "permission", "not-filing"] as const)(
+    "%s still gets its authority refusal while another attempt is busy",
+    async (mode) => {
+      const f = await fixture();
+      if (mode === "permission")
+        await withTransaction(suite.db, async (tx) => {
+          await tx
+            .update(persons)
+            .set({ role: "supervisor" })
+            .where(eq(persons.id, f.session.personId));
+        });
+      const runner = createCertificateDiagnosisRunner({ fiscalId: "fixture" });
+      let release!: () => void;
+      const hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const active = runner.attempt(async () => {
+        await hold;
+        return null;
+      }, new AbortController().signal);
+      const app = new Hono();
+      mountFiscalCertificateApi(
+        app,
+        {
+          ...f.deps,
+          seat: FISCAL_SLOT.certificate!,
+          diagnosisRunner: runner,
+          filing: () => mode !== "not-filing",
+          now: () => new Date(),
+        },
+        () => {},
+      );
+      const before = await rawState(suite.db);
+      try {
+        const response = await app.request(path, {
+          method: "POST",
+          headers: {
+            cookie: `${MANAGEMENT_COOKIE}=${mode === "unknown-session" ? "11111111-1111-4111-8111-111111111111" : f.session.token}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(f.request),
+        });
+        expect(response.status).toBe(
+          mode === "unknown-session" ? 401 : mode === "permission" ? 403 : 409,
+        );
+        expect(await response.json()).toEqual({
+          error: {
+            code:
+              mode === "unknown-session"
+                ? "management_session.required"
+                : mode === "permission"
+                  ? "authorization.not_permitted"
+                  : "fiscal.certificate_not_used",
+            params: {},
+          },
+        });
+        expect(await rawState(suite.db)).toEqual(before);
+      } finally {
+        release();
+        await active;
+        await runner.stop();
+      }
+    },
+  );
 });

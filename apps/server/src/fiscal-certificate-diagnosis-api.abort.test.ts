@@ -147,9 +147,11 @@ describe("diagnosis HTTP disconnect and admission", () => {
           error: { code: "fiscal.certificate_diagnosis_busy", params: {} },
         });
         const closed = once(socket, "close");
+        const disconnectedAt = performance.now();
         socket.destroy();
         await closed;
         await done;
+        expect(performance.now() - disconnectedAt).toBeLessThan(3000);
         const pid = Number(await readFile(marker, "utf8"));
         expect(() => process.kill(pid, 0)).toThrowError(expect.objectContaining({ code: "ESRCH" }));
         if (endpoint.requests()) await endpoint.connectionClosed;
