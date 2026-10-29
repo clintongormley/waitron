@@ -144,6 +144,7 @@ views. The [sliced implementation plan](../superpowers/plans/2026-10-29-a950-aut
 has owner approval (option A). Cut 1 adds isolated settings, dated-window and bounded-discovery libraries. Their verifier and hold boundaries have no production adapter; no installed updater or timer calls them. Remaining work includes the production close/report receipt
 producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
 qualification, A799 historical evidence, and released A947 stream/spare/membership interfaces.
+Host binding also needs diagnostics for missing Temporal, canonical zone handling and an explicit policy for an already-installed candidate.
 Application stays disabled until its exact release and platform pass every required gate.
 All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
 

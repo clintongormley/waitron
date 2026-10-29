@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setImmediate as nextTurn } from "node:timers/promises";
+import { setTimeout as timerTurn } from "node:timers/promises";
 import { discoverRelease } from "./discovery.mjs";
 
 const old = "a".repeat(64);
@@ -75,6 +77,38 @@ function harness(overrides = {}) {
 afterEach(() => vi.useRealTimers());
 
 describe("bounded release discovery without application", () => {
+  it.each(["async-wrapper", "two-awaits", "next-turn", "timer-turn"])(
+    "retries timed-out adapters after %s cancellation settles",
+    async (kind) => {
+      vi.useFakeTimers();
+      let attempts = 0;
+      const stopOnAbort = (signal) =>
+        new Promise((resolve) => signal.addEventListener("abort", resolve, { once: true }));
+      const h = harness({
+        fetchManifest: async (signal) => {
+          attempts++;
+          await stopOnAbort(signal);
+          if (kind === "two-awaits") {
+            await Promise.resolve();
+            await Promise.resolve();
+          }
+          if (kind === "next-turn") await nextTurn();
+          if (kind === "timer-turn") await timerTurn();
+          throw new Error("aborted");
+        },
+      });
+      const pending = discoverRelease(h.input, h.deps, h.signal);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await vi.advanceTimersByTimeAsync(30_000);
+        await timerTurn();
+      }
+      expect(await pending).toMatchObject({ kind: "deferred", reason: "manifest-unavailable" });
+      expect(attempts).toBe(3);
+      expect(vi.getTimerCount()).toBe(0);
+      await timerTurn();
+    },
+  );
+
   it.each([
     null,
     {},
@@ -356,7 +390,12 @@ describe("bounded release discovery without application", () => {
     await vi.advanceTimersByTimeAsync(budget - 1);
     expect(attempts).toBe(1);
     expect(completed).toBe(false);
-    await vi.advanceTimersByTimeAsync(2 * budget + 1);
+    await vi.advanceTimersByTimeAsync(1);
+    await timerTurn();
+    await vi.advanceTimersByTimeAsync(budget);
+    await timerTurn();
+    await vi.advanceTimersByTimeAsync(budget);
+    await timerTurn();
     expect(await pending).toMatchObject({ kind: "deferred" });
     expect(attempts).toBe(3);
     expect(vi.getTimerCount()).toBe(0);

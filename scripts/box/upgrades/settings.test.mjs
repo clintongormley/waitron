@@ -17,6 +17,12 @@ const settings = () => ({
 const draft = () => ({ automatic: true, start: "01:30", end: "08:00", reviewedClockDigest: clock });
 
 describe("update settings", () => {
+  it("refuses an older expected revision after settings have advanced", () => {
+    expect(() => saveUpdateSettings({ ...settings(), revision: 2 }, draft(), 1)).toThrowError(
+      expect.objectContaining({ reason: "settings-revision" }),
+    );
+  });
+
   it("initialises the editable automatic window without an initial save", () => {
     expect(initialUpdateSettings("Europe/Madrid", clock)).toEqual(settings());
   });
