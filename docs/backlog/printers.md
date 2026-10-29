@@ -75,7 +75,10 @@ Owner, 2026-10-29, on the questions the router answer raised:
   proposed, not agreed and none tried: read the router's own status, which works only for routers
   Waitron knows (so it pairs with recommending one); or notice that the venue's public address, as
   Cloud sees it, has changed to one belonging to a mobile network, a hint rather than proof, since
-  an operator may serve fibre and mobile from the same address blocks.
+  an operator may serve fibre and mobile from the same address blocks. Owner, 2026-10-29, after
+  hearing both: "It'd be a nice to have." Proposed with it, not agreed: the notice may matter more
+  to a manager (turn off guest Wi-Fi, streaming) than to staff, since Waitron's own data use is
+  thought small but not measured.
 
 Still to ask: whether kiosk mode
 replaces the Fully Kiosk resale; whether a second device takes over
