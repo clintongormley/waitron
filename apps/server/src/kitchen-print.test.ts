@@ -42,7 +42,7 @@ import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
-import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
+import { createOpenOrder, fireOrderLines, fireLines, listStationQueue } from "./working-order.js";
 import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";
 import { setStationPrinting } from "./testing/station-printing.js";
 
@@ -1424,6 +1424,45 @@ describe("dish extras on kitchen tickets", () => {
     expect(ticket).not.toContain("CA-g");
   });
 
+  it("gives the station queue a measured extra's amount on each dish, and no count", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const items = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "gramo" },
+          abbreviation: { es: "g" },
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, productIds[0]!, gram!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
+        where list_id = ${listId} and product_id = ${productIds[0]}`);
+      const ham = (count: number) => ({
+        productId: dish,
+        quantity: "1",
+        extras: [{ listId, picks: [{ productId: productIds[0]!, quantity: count }] }],
+      });
+      await fireNewOrder(tx, cfg, [ham(1), ham(3)]);
+      return (await listStationQueue(tx, station.id)).flatMap((group) => group.items);
+    });
+
+    expect(
+      items.map((item) => item.modifiers.map(({ perDish, amount }) => ({ perDish, amount }))),
+    ).toEqual([
+      [{ perDish: undefined, amount: "50.000" }],
+      [{ perDish: undefined, amount: "150.000" }],
+    ]);
+  });
+
   it("prints split chips once on Fryer paper and cross-references both station and pass paper", async () => {
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers } = venue;
@@ -2689,6 +2728,31 @@ describe("A803 portion grouping", () => {
     expect(lines[lines.indexOf(two) + 1]).toMatch(/^\s*\+ Cheese x2$/u);
     expect(lines.filter((line) => /\+ Cheese$/u.test(line))).toHaveLength(1);
     expect(lines.filter((line) => /\* No onion$/u.test(line))).toHaveLength(1);
+  });
+
+  it("A803 portion grouping: the station queue gives each portion's extra its own count", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const items = await asApp(cfg, async (tx) => {
+      const k = await portionKitchen(tx, cfg, catalogueId);
+      const burger = k.offer(k.ids.burger);
+      await addPortionRound(
+        tx,
+        cfg,
+        k.tabId,
+        [
+          { menuItemId: burger, quantity: "1", extras: k.cheese(1) },
+          { menuItemId: burger, quantity: "1", extras: k.cheese(2) },
+        ],
+        { fire: true },
+      );
+      const queue = await listStationQueue(tx, k.cocina);
+      return queue.filter((group) => group.orderId === k.tabId).flatMap((group) => group.items);
+    });
+
+    expect(items.map((item) => item.modifiers.map((modifier) => modifier.perDish))).toEqual([
+      [1],
+      [2],
+    ]);
   });
 
   it("A803 portion grouping: measured portions never merge, on the ticket, in Also on order or on a slip", async () => {

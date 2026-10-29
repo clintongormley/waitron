@@ -4818,6 +4818,26 @@ describe("A803 portion grouping: the station queue", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
   });
 
+  it("A803 portion grouping: a portion whose extra has another count shows apart, each row with its own count", async () => {
+    const cheese = (perDish: number) => [{ descriptions: { "es-ES": "Queso" }, perDish }];
+    const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
+      groups: [
+        order([
+          portion("p1", { modifiers: cheese(1) }),
+          portion("p2", { modifiers: cheese(2) }),
+          portion("p3", { modifiers: cheese(1) }),
+        ]),
+      ],
+      stationId: "st-1",
+    });
+    expect(lineTexts(el)).toEqual(["2× Burger", "1× Burger"]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Queso", "+ Queso x2"]);
+  });
+
   it("A803 portion grouping: a portion in another state shows apart", async () => {
     const { el } = await mountWidget<TillStationQueue>("till-station-queue", {
       groups: [order([portion("p1"), portion("p2", { state: "preparing" })])],

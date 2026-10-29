@@ -1859,10 +1859,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   slips print one line for identical portions: `printMovedSlips` (`apps/server/src/kitchen-print.ts`)
   lays out each line alone. Decide whether MOVED slips should group them too.
 
-- **A1202. The kitchen screen draws a dish with one lime and with two limes alike, and now as one
-  row (left open by A803 slice 1).** The queue's extras carry no count (`QueueModifier`,
-  `apps/server/src/working-order.ts`), so slice 1's grouping draws the two as one row of 2. Give the
-  queue's extras their count and group by it.
+- **A1202. The kitchen screen draws no amount for a measured extra (left open by A803 slice 1).**
+  Kitchen paper prints "+ Jamón 150.000 g"; the station queue and the pass draw "+ Jamón". The
+  queue sends the amount (`QueueModifier.amount`, `apps/server/src/working-order.ts`) and two
+  portions with different amounts already show as separate rows, but each row reads the same. Draw
+  the amount in its unit, as paper does.
 
 ### The till, devices and table service
 

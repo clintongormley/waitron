@@ -138,6 +138,7 @@ import {
   locationId as brandLocationId,
   partyDisplayName,
   MONEY_SCALE,
+  QUANTITY_SCALE,
   multiplyDecimal,
   perDishOptionQuantity,
   rawCentsToDecimal,
@@ -7653,6 +7654,11 @@ export interface StationQueueCourse {
 /** A child without its own ticket item, shown beneath its dish. */
 export interface QueueModifier {
   descriptions: Record<string, string>;
+  /** How many of a counted extra each dish has, as `QueueCrossRef.perDish` counts it. */
+  perDish?: number;
+  /** A measured extra's amount on each dish, in its unit; not drawn, but two dishes with
+   *  different amounts are not the same portion. */
+  amount?: string;
   /** The extra's OWN allergens, shown beside the dish's own, never folded into them. */
   addAllergens?: ProductAllergens | null;
 
@@ -7802,7 +7808,9 @@ async function readQueueSubItems(
   // LEFT join, so a child whose product row has gone still renders its frozen text.
   const childRows = await tx
     .select({
+      id: workingOrderLines.id,
       parentLineId: workingOrderLines.parentLineId,
+      unitName: workingOrderLines.unitName,
       descriptions: workingOrderLines.descriptions,
       name: workingOrderLines.name,
       kitchenName: workingOrderLines.kitchenName,
@@ -7821,6 +7829,10 @@ async function readQueueSubItems(
     .leftJoin(childStation, eq(childStation.id, childTicket.stationId))
     .where(inArray(workingOrderLines.parentLineId, lineIds))
     .orderBy(workingOrderLines.lineNo);
+  const counted = await VENUE_SERVICE.readLinesSoldInEach(
+    tx,
+    childRows.flatMap((child) => (child.ticketId === null ? [child.id] : [])),
+  );
   for (const child of childRows) {
     if (child.ticketId !== null) {
       const refs = crossRefsByLine.get(child.parentLineId!) ?? [];
@@ -7839,8 +7851,13 @@ async function readQueueSubItems(
       continue;
     }
     const mods = modifiersByParent.get(child.parentLineId!) ?? [];
+    const quantity = thousandthsToDecimal(child.quantity);
+    const dishes = thousandthsToDecimal(parentQuantities.get(child.parentLineId!)!);
     mods.push({
       descriptions: child.descriptions,
+      ...(child.unitName == null || counted.has(child.id)
+        ? { perDish: perDishOptionQuantity(quantity, dishes) }
+        : { amount: divideDecimal(quantity, dishes, QUANTITY_SCALE) }),
       addAllergens: (child.addAllergens as ProductAllergens | null) ?? null,
       suitableFor: expandDietaryDeclarations(child.dietaryDeclarations as DietaryLabel[]),
     });

@@ -445,6 +445,30 @@ describe("A803 portion grouping: a card's rows", () => {
     expect(rows(card)).toEqual([[["a", "b"]]]);
   });
 
+  it("A803 portion grouping: the same extra in another count shows apart", () => {
+    const cheese = (perDish: number) => ({ descriptions: { "en-GB": "Cheese" }, perDish });
+    const card = one(
+      bill("o-1", [
+        portion("a", { modifiers: [cheese(1)] }),
+        portion("b", { modifiers: [cheese(2)] }),
+        portion("c", { modifiers: [cheese(1)] }),
+      ]),
+    );
+    expect(rows(card)).toEqual([[["a", "c"], ["b"]]]);
+  });
+
+  it("A803 portion grouping: the same measured extra in another amount shows apart", () => {
+    const ham = (amount: string) => ({ descriptions: { "en-GB": "Ham" }, amount });
+    const card = one(
+      bill("o-1", [
+        portion("a", { modifiers: [ham("50.000")] }),
+        portion("b", { modifiers: [ham("150.000")] }),
+        portion("c", { modifiers: [ham("50.000")] }),
+      ]),
+    );
+    expect(rows(card)).toEqual([[["a", "c"], ["b"]]]);
+  });
+
   it("A803 portion grouping: answers in another order still group", () => {
     const card = one(
       bill("o-1", [

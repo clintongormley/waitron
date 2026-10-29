@@ -3142,6 +3142,25 @@ describe("A803 portion grouping: the pass", () => {
     expect(el.shadowRoot!.querySelectorAll("[data-item]")).toHaveLength(2);
   });
 
+  it("A803 portion grouping: a portion whose extra has another count shows apart, each row with its own count", async () => {
+    const cheese = (perDish: number) => [{ descriptions: { "en-GB": "Cheese" }, perDish }];
+    const el = await mount({
+      api: stubApi([
+        withItems([
+          portion("p1", { modifiers: cheese(1) }),
+          portion("p2", { modifiers: cheese(2) }),
+          portion("p3", { modifiers: cheese(1) }),
+        ]),
+      ]),
+    });
+    expect(names(el)).toEqual(["2× Burger", "1× Burger"]);
+    expect(
+      [...el.shadowRoot!.querySelectorAll<HTMLElement>("[data-item] .modifier")].map((modifier) =>
+        modifier.textContent!.trim(),
+      ),
+    ).toEqual(["+ Cheese", "+ Cheese x2"]);
+  });
+
   it("A803 portion grouping: portions queued a millisecond apart still show as one row", async () => {
     const el = await mount({
       api: stubApi([

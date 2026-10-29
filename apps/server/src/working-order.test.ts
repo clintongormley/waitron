@@ -4722,15 +4722,25 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
       // Each option declared no allergens/diet, so its own list is empty (`addAllergens: null`,
       // `suitableFor: []`) — the shape the KDS renders per extra beside the dish's own.
       expect(group!.items[0]!.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
-        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        {
+          descriptions: { [LOCALE]: "Leche avena" },
+          perDish: 1,
+          addAllergens: null,
+          suitableFor: [],
+        },
       ]);
 
       const expo = await listExpoQueue(tx, cfg);
       const expoItem = expo[0]!.courses[0]!.items[0]!;
       expect(expoItem.modifiers).toEqual([
-        { descriptions: { [LOCALE]: "ES large" }, addAllergens: null, suitableFor: [] },
-        { descriptions: { [LOCALE]: "Leche avena" }, addAllergens: null, suitableFor: [] },
+        { descriptions: { [LOCALE]: "ES large" }, perDish: 1, addAllergens: null, suitableFor: [] },
+        {
+          descriptions: { [LOCALE]: "Leche avena" },
+          perDish: 1,
+          addAllergens: null,
+          suitableFor: [],
+        },
       ]);
     });
   });

@@ -4,7 +4,7 @@ import {
   kitchenAllergyStyles,
 } from "../widgets/kitchen-allergy-block.js";
 import { groupName } from "../widgets/group-name.js";
-import { queueCrossRefs } from "../widgets/queue-crossrefs.js";
+import { extraCount, queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
@@ -985,7 +985,7 @@ export class TillExpoScreen extends LitElement {
       ${modifiers.map(
         (modifier, i) =>
           html`<span class="modifier"
-            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}`}${extraNutrition(
+            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
               modifier,
               `item-modifier-allergens-${item.id}-${i}`,
               `item-modifier-diet-${item.id}-${i}`,

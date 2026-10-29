@@ -4,7 +4,7 @@ import {
   kitchenAllergyStyles,
 } from "./kitchen-allergy-block.js";
 import { groupName } from "./group-name.js";
-import { queueCrossRefs } from "./queue-crossrefs.js";
+import { extraCount, queueCrossRefs } from "./queue-crossrefs.js";
 import { optionAnswers } from "./option-snapshot.js";
 import { ContentLanguageController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
@@ -1563,7 +1563,7 @@ export class TillStationQueue extends LitElement {
       ${modifiers.map(
         (modifier, i) =>
           html`<span class="modifier"
-            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}`}${extraNutrition(
+            >${`+ ${snapshotDescriptionFor(modifier.descriptions, "")}${extraCount(modifier)}`}${extraNutrition(
               modifier,
               `item-modifier-allergens-${item.id}-${i}`,
               `item-modifier-diet-${item.id}-${i}`,

@@ -4,6 +4,11 @@ import type { QueueCrossRef } from "../api/client.js";
 import { t } from "../i18n/t.js";
 import { extraNutrition } from "./diet-badges.js";
 
+/** An extra's count per dish as the kitchen reads it, " x2", or nothing for one. */
+export function extraCount(extra: { perDish?: number }): string {
+  return extra.perDish !== undefined && extra.perDish > 1 ? ` x${extra.perDish}` : "";
+}
+
 export function queueCrossRefs(
   item: { id: string; crossRefs?: QueueCrossRef[] },
   surface: "line" | "item",
@@ -11,7 +16,7 @@ export function queueCrossRefs(
   if (!item.crossRefs?.length) return nothing;
   return html`<span class=${`${surface}-crossrefs`}
     >${item.crossRefs.map((ref, i) => {
-      const name = `${ref.name}${ref.perDish && ref.perDish > 1 ? ` x${ref.perDish}` : ""}`;
+      const name = `${ref.name}${extraCount(ref)}`;
       const key =
         ref.kind === "with"
           ? "station.crossref_with"
