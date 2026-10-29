@@ -107,7 +107,7 @@ type Stage = {
  * buffer only through `ensureBuffer`, and holds the stage it reads from in `stream`, so refusing
  * growth past a shared budget bounds the whole chain.
  */
-function boundedDecode(raw: PDFRawStream) {
+export function boundedDecode(raw: PDFRawStream) {
   const decoder = decodePDFRawStream(raw);
   const stages: Stage[] = [];
   for (

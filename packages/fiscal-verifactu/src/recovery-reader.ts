@@ -15,6 +15,7 @@ import {
   PACK_ATTACHMENT,
   parseRecoveryPackFile,
 } from "@waitron/recovery-pack/src/pack-file.js";
+import { boundedDecode } from "@waitron/recovery-pack/src/read-pack-pdf.js";
 import {
   MAX_RECOVERY_PDF,
   MAX_RECOVERY_ATTACHMENT,
@@ -75,8 +76,11 @@ async function checkCarrier(bytes: Uint8Array): Promise<{ contentDigest: string;
         if (unicodeStream && unicodeStream !== stream) refuseRecovery();
         const params = stream.dict.lookupMaybe(PDFName.of("Params"), PDFDict);
         const size = params?.get(PDFName.of("Size"));
-        if (size && Number(size.toString()) > ATTACHMENT_LIMITS.get(attachedName)!)
-          refuseRecovery();
+        const limit = ATTACHMENT_LIMITS.get(attachedName)!;
+        if (size && Number(size.toString()) > limit) refuseRecovery();
+        // pdfjs inflates the whole stream before its length can be checked, so it reads only a
+        // stream already found to inflate within the limit.
+        if (boundedDecode(stream).getBytes(limit + 1).length > limit) refuseRecovery();
       }
     }
   }
