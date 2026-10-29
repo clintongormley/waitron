@@ -505,6 +505,8 @@ until A977).
   Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
   Layouts' receipt, address and operation-description samples use English.
   Database zone and party-label suites use English sample zone, group and guest names.
+  UI-core input and textarea samples use English label and note text; phone-label checks
+  retain their 120-character inputs and existing bounds.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

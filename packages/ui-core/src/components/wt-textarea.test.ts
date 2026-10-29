@@ -146,10 +146,10 @@ test("a value set from code after the first render floats the label", async () =
   const el = await mount('<wt-textarea label="Note"></wt-textarea>');
   const { field } = parts(el);
   expect(field.getAttribute("data-label")).toBe("rest");
-  (el as Textarea).value = "Sin gluten";
+  (el as Textarea).value = "Gluten free";
   await (el as LitElement).updateComplete;
   expect(field.getAttribute("data-label")).toBe("float");
-  expect(parts(el).textarea.value).toBe("Sin gluten");
+  expect(parts(el).textarea.value).toBe("Gluten free");
 });
 
 test("focusing an empty textarea floats its label and draws the focus line and label colour", async () => {
@@ -345,12 +345,12 @@ test("sends wt-change once per input with the new value, and updates its own val
     received.push((e as CustomEvent<{ value: string }>).detail.value);
   });
   const { textarea, field } = parts(el);
-  textarea.value = "Sin";
+  textarea.value = "No";
   textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  textarea.value = "Sin sal";
+  textarea.value = "No salt";
   textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  expect(received).toEqual(["Sin", "Sin sal"]);
-  expect((el as Textarea).value).toBe("Sin sal");
+  expect(received).toEqual(["No", "No salt"]);
+  expect((el as Textarea).value).toBe("No salt");
   await (el as LitElement).updateComplete;
   expect(field.getAttribute("data-label")).toBe("float");
 });
@@ -366,9 +366,9 @@ test("wt-change bubbles and crosses shadow boundaries", async () => {
     { once: true },
   );
   const textarea = el.shadowRoot!.querySelector("textarea")!;
-  textarea.value = "Hola";
+  textarea.value = "Hello";
   textarea.dispatchEvent(new Event("input", { bubbles: true, composed: true }));
-  expect(received?.detail).toEqual({ value: "Hola" });
+  expect(received?.detail).toEqual({ value: "Hello" });
 });
 
 test("does not leak the native input event outside the component", async () => {
