@@ -110,9 +110,9 @@ after go-live, not at it: "The remote access is the bottleneck for most of these
 need to get that working soon." This repository's part is **A951**, the box's lasting tunnel and
 public-certificate client (_Replication, failover and the cloud_).
 **A1175 — an Android app for venues run from Waitron Cloud** joins this group (owner, 2026-10-28):
-its first job is the local print server a cloud-run venue needs, and what else it provides is
-still to be decided. It starts with a brainstorm with the owner (_Printers, the print agent and
-receipts_).
+its first job is the local print server a cloud-run venue needs. The brainstorm started on
+2026-10-29 and waits for a device test the owner runs on 3 November (_Printers, the print agent
+and receipts_).
 
 **Lower priority (owner, 2026-10-16).** These were the top of the list ranked 2026-09-27; they now
 come after the list above:
@@ -3489,8 +3489,9 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
   need none.
 
 - **A1175: an Android app that runs the local print server when the venue runs from Waitron
-  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm with the owner first; nothing is
-  decided yet. [Detail](backlog/printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
+  Cloud**, and possibly more (owner, 2026-10-28). Brainstorm started 2026-10-29; it waits for a
+  device test on 3 November: can one Android device reach the printers over the venue's Wi-Fi and
+  Cloud over mobile data at once? [Detail](backlog/printers.md#a1175-an-android-app-for-venues-run-from-waitron-cloud)
 
 - **A department's Receipts preview shows the theme's logo, for a readable department whose draft names
   no logo, with no words saying it is the venue's** (A841 slice 9, D7 of

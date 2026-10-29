@@ -19,12 +19,63 @@ locally and hosts the print agent (et al)". It is the Waitron-owned outbound age
 design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
 started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
 
-Open, for the brainstorm: what else the app provides; which printers and connections it must
-reach (network, USB, Bluetooth); whether it is a dedicated device or a till that also prints; and
-how it compares with printers that fetch jobs from the cloud themselves
-([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
+**Brainstorm started 2026-10-29; paused until the owner can run a device test on 3 November.**
+
+The owner's answers (2026-10-29):
+
+- The app is needed for the print agent, "but not for card readers (over the internet) not for
+  cash drawers (connected to printers)". This differs from the
+  [A1188 design](../superpowers/specs/2026-10-29-a1188-cloud-emergency-start-design.md) (§12 and
+  answer 11), which says card readers do not follow a cloud start until this app exists; the two
+  need reconciling.
+- When a cloud-run venue's internet fails: "We should keep selling using mobile internet to talk to
+  the cloud server." No local server holds sales while the line is down.
+- The owner's concern with that: "If the mobile is using mobile internet, then it isn't connected to
+  the LAN. If it is connected to the LAN then it won't be able to reach the internet."
+
+Proposed in the brainstorm, not agreed:
+
+- Handhelds need no local network: every print goes through the server to the print agent
+  (cloud-compatibility rule 5), so only the device running the print agent must reach both the
+  printers and Cloud.
+- That device holds both connections at once. As read from Android's documentation and developer
+  write-ups, NOT run: an installed app can ask for the Wi-Fi network without requiring internet
+  from it, ask for mobile data as well, and tie each connection to one of them
+  (`ConnectivityManager.requestNetwork`, `Network.bindSocket`/`openConnection`). A web page has no
+  such choice. The test below settles it.
+- The alternative needs no app work: a venue router with a mobile-data backup (its own SIM), so
+  every device stays on Wi-Fi. Its cost is equipment the venue buys and sets up.
+- The print agent runs on a device that stays in the venue (the counter tablet), never a waiter's
+  phone, which leaves at the end of a shift.
+- The same app shows Waitron's screens. On fixed tablets it locks the tablet to Waitron (kiosk
+  mode), perhaps replacing the planned Fully Kiosk resale. Android's lock that staff cannot escape
+  needs the tablet set up from a factory reset; screen pinning needs none but can be undone.
+- On phones it runs the handheld, adding what a browser cannot: taking cards on the phone itself
+  (Tap to Pay, offered by Stripe and SumUp to native apps only, as understood, not checked) and
+  alerts while the phone is in a pocket.
+- A venue with a box already has its print agent there; for it the app is optional.
+
+Still to ask: whether kiosk mode replaces the Fully Kiosk resale; whether a second device takes over
+printing automatically when the print-agent tablet is off; which printer connections it must reach
+(network, USB, Bluetooth); and how it compares with printers that fetch jobs from the cloud
+themselves ([Star CloudPRNT](../superpowers/specs/2026-08-17-printing-cloud-poll-transport-design.md),
 [Epson Server Direct Print](../superpowers/specs/2026-08-17-printing-epson-server-direct-print-design.md)).
-Nothing is decided.
+
+**The device test, queued for 3 November (owner, 2026-10-29: "Perhaps queue it instead").** A
+throwaway Android app, then a run at the owner's home:
+
+- An Android tablet or phone with a SIM and mobile data, on a Wi-Fi in `192.168.10.x` whose internet
+  is cut (block the device's internet in UniFi, or unplug the gateway's fibre).
+- The app shows whether Android believes that Wi-Fi has internet. If it says yes, the run proves
+  nothing and the cut has to be fixed first.
+- It prints to the Epson TM-T88III at `192.168.10.81:9100` over Wi-Fi a ticket carrying the public
+  address it fetched over mobile data at the same moment. That ticket is the proof.
+- Controls: the same fetch tied to the Wi-Fi must fail, and a printer connection tied to no network
+  may fail (the owner's concern, shown).
+- It keeps both connections for some minutes, since Android may drop a Wi-Fi that has no internet.
+
+Java 21 (`openjdk@21`) and Google's command-line Android tools (`android-commandlinetools`) were
+installed through Homebrew on 2026-10-29 for building it; nothing else is built yet.
 
 ## A790: document and printer routing plan
 
