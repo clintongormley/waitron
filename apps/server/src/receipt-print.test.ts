@@ -1,3 +1,5 @@
+import { writeContentLanguages } from "@waitron/catalogue";
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { deletePrinter } from "./printer-delete.js";
 import { receiptLabelsFor } from "@waitron/country-packs";
 import { placeOrder } from "./testing/order-writer-fixture.js";
@@ -521,7 +523,7 @@ describe("the words around a receipt's QR come from the venue's fiscal backend",
 });
 
 it.each(["en-GB", "ca-ES"])(
-  "A965 labels preserves the collection caption for config %s",
+  "A964 collection caption follows saved content instead of formatter %s",
   async (locale) => {
     const { cfg: original, each, zoneId } = await setupVenue("ticket_then_pay");
     const cfg = { ...original, locale };
@@ -542,7 +544,7 @@ it.each(["en-GB", "ca-ES"])(
     const jobs = (await printJobsFor(cfg)).filter((job) => job.printerId === printerId);
     expect(jobs).toHaveLength(1);
     const ticket = decodeTicket(new Uint8Array(jobs[0]!.payload));
-    expect(ticket).toContain(receiptLabelsFor(locale === "en-GB" ? "es-ES" : locale).order);
+    expect(ticket).toContain(kitchenTicketWords("es").collectionOrder);
     expect(ticket).toContain(String(orderNumber));
     expect(ticket).not.toContain("INVOICE");
     expect(opensDrawer(new Uint8Array(jobs[0]!.payload))).toBe(false);
@@ -709,9 +711,9 @@ it("a prepaid cash sale reads the device's printers once for its collection tick
   const receiptOnly = await readsOfSale(undefined);
 
   expect(await drawerOpensFor(cfg)).toHaveLength(2);
-  // Each extra job adds only its enqueue's own check that the printer is switched on.
+  // The collection document also reads the saved frame language; the device-printer lookup stays cached.
   expect(all - noDrawer).toBe(1);
-  expect(noDrawer - receiptOnly).toBe(1);
+  expect(noDrawer - receiptOnly).toBe(2);
 });
 
 it("a cash bill payment that pays the bill in full reads the device's printers once for its drawer and receipt", async () => {
@@ -4109,4 +4111,61 @@ it("keeps the original history after printer deletion and prints a marked copy o
   expect(decodeTicket(copies[0]!.payload)).toContain(ticket.invoiceNumber);
   expect(await suite.db.select().from(registrosFacturacion)).toEqual(fiscal);
   expect(await suite.db.select().from(drawerOpens)).toEqual(drawer);
+});
+
+describe("A964 collection language", () => {
+  it.each(["ticket_then_pay", "prepay"] as const)(
+    "uses current venue frame for %s, keeping one slip on replay",
+    async (mode) => {
+      const v = await setupVenue(mode);
+      const cfg = { ...v.cfg, locale: "de-DE" };
+      const printerId = await makePrinter(cfg);
+      await configureReceipt(cfg, { printerId });
+      await suite.db.execute(
+        sql`update department_sale_policies set order_start = 'counter', paid_when = ${mode}, collection_number = 'numbered' where department_id = (select department_id from zone_service_policies where zone_id = ${v.zoneId})`,
+      );
+      for (const language of ["en", "es"] as const) {
+        await withTransaction(suite.db, (tx) =>
+          writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] }),
+        );
+        const before = await suite.db.select().from(printJobs);
+        const id = randomUUID();
+        const { orderNumber } = await parkOrder({ db: suite.db }, cfg, {
+          id,
+          zoneId: v.zoneId,
+          lines: [{ menuItemId: v.each.menuItemId, quantity: "1" }],
+        });
+        const submit = () =>
+          mode === "ticket_then_pay"
+            ? placeOrder(deps(), cfg, id, OPERATOR)
+            : recordTillSale(
+                deps(),
+                cfg,
+                { workingOrderId: id, lines: [], tender: { method: "cash", amount: "2.00" } },
+                OPERATOR,
+              );
+        await submit();
+        const added = (await suite.db.select().from(printJobs)).filter(
+          (j) => !before.some((old) => old.id === j.id) && j.printerId === printerId,
+        );
+        const slip = added.filter(
+          (j) =>
+            printedLines(j.payload)
+              .map((l) => l.trim())
+              .join("\n") === `${kitchenTicketWords(language).collectionOrder}\n${orderNumber}\n`,
+        );
+        expect(slip).toHaveLength(1);
+        expect(added.filter((j) => !opensDrawer(j.payload))).toHaveLength(
+          mode === "prepay" ? 2 : 1,
+        );
+        expect(added.filter((j) => opensDrawer(j.payload))).toHaveLength(mode === "prepay" ? 1 : 0);
+        expect(opensDrawer(slip[0]!.payload)).toBe(false);
+        const after = await suite.db.select().from(printJobs);
+        await submit();
+        expect(await suite.db.select().from(printJobs)).toEqual(after);
+        for (const old of before)
+          expect(after.find((j) => j.id === old.id)?.payload).toEqual(old.payload);
+      }
+    },
+  );
 });
