@@ -34,7 +34,6 @@ import {
   START_AGAIN_CONFIRMATIONS_DIR,
   isEmptiedTombstone,
   readStartAgainMarker,
-  readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 
@@ -125,7 +124,6 @@ async function expectNothingWritten(
   await expect(
     access(join(f.roots.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
 // A discarded recovery's folder keeps its records and its target's lock files, nothing else.
@@ -329,7 +327,6 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
   expect(opening).toBeDefined();
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   await access(join(f.roots.stateDir, "first-setup.json"));
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
   await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
     { code: "ENOENT" },
   );

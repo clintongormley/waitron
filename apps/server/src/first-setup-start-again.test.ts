@@ -25,9 +25,7 @@ import { ALL_MODULES } from "@waitron/composition";
 import {
   START_AGAIN_MARKER_FILE,
   finishStartAgainDeletion,
-  raiseStartAgainNote,
   readStartAgainMarker,
-  readStartAgainNote,
   startAgainMarkerFor,
   writeStartAgainMarker,
   writeStartAgainConfirmation,
@@ -69,9 +67,7 @@ vi.mock("@waitron/provisioning", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@waitron/provisioning")>();
   return {
     ...actual,
-    raiseStartAgainNote: vi.fn(actual.raiseStartAgainNote),
     writeStartAgainMarker: vi.fn(actual.writeStartAgainMarker),
-    readWellFormedModulePreparations: vi.fn(actual.readWellFormedModulePreparations),
   };
 });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
@@ -116,7 +112,6 @@ async function abandonedAttempt() {
   const abandoned = (await f.store.read())!;
   const name = (firstSetupModuleContext(abandoned, f.module).request as { identity: string })
     .identity;
-  const floorMs = EPOCH_MS + (decodeMinuteIdentity(name) + 1) * MINUTE_MS;
   const actions = createFirstSetupResolutionActions({ ...f, host: f.host });
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   const startRequest = {
@@ -131,7 +126,7 @@ async function abandonedAttempt() {
       consultedAt: "2026-10-16T12:20:00.000Z",
     },
   };
-  return { f, clock, name, floorMs, actions, startRequest };
+  return { f, clock, name, actions, startRequest };
 }
 
 async function startedAgain() {
@@ -215,7 +210,7 @@ it("a clock past the abandoned name chooses a later name at once", async () => {
 });
 
 async function claimedWithoutName() {
-  const root = await mkdtemp(join(tmpdir(), "start-again-note-"));
+  const root = await mkdtemp(join(tmpdir(), "start-again-"));
   roots.push(root);
   const folders = { stateDir: join(root, "state"), venueDir: join(root, "venue") };
   await mkdir(folders.venueDir, { recursive: true });
@@ -258,7 +253,6 @@ it("an attempt naming a module is refused when the host was given no modules to 
       startRequest,
     ),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
-  expect(await readStartAgainNote(folders.stateDir)).toBeNull();
 });
 
 it("two Start again requests at once delete the attempt once", async () => {
@@ -410,7 +404,6 @@ it("a missing database: Start again without the confirmation is refused, and not
   });
   expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 it("a confirmation whose summary differs from the box's own is refused, and nothing is written", async () => {
@@ -426,7 +419,6 @@ it("a confirmation whose summary differs from the box's own is refused, and noth
   }
   expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 it("a confirmed Start again writes the confirmation record with who, when and what the record showed", async () => {
@@ -659,7 +651,6 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     expect(await passed.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
   }
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 it("the Start again route takes confirmRecoveryDiscard only in its exact shape, with a shown recovery", async () => {
@@ -774,7 +765,6 @@ it("a confirmation that did not show the damaged recovery record is refused, and
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 it("a confirmation that shows a damaged recovery record the box does not find is refused", async () => {
@@ -791,7 +781,6 @@ it("a confirmation that shows a damaged recovery record the box does not find is
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   expect(await attemptFiles(f)).toEqual(before);
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 it("the Start again route takes recoveryRecordDamaged only as true", async () => {
@@ -899,7 +888,6 @@ async function expectRefusedUnchanged(
   await expect(run()).rejects.toMatchObject({ code });
   expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 }
 
@@ -1226,7 +1214,6 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
     ).rejects.toMatchObject({ code: "setup.not_ready" });
     expect(await folderTrees(f)).toEqual(before);
     expect(before.venue[START_AGAIN_MARKER_FILE]).toBeUndefined();
-    expect(await readStartAgainNote(f.stateDir)).toBeNull();
   },
 );
 
@@ -1468,7 +1455,6 @@ it("a marker over its limit refuses Start again before anything is written", asy
   expect(await folderTrees(f)).toEqual(before);
   expect(before.state[`${CONFIRMATIONS}/`]).toBeUndefined();
   expect(before.venue[START_AGAIN_MARKER_FILE]).toBeUndefined();
-  expect(await readStartAgainNote(f.stateDir)).toBeNull();
 });
 
 async function pendingDeletion() {
@@ -1707,16 +1693,10 @@ it.each([
   },
 );
 
-const NOTE = "first-setup-start-again.json";
 const KEPT_ATTEMPT = "11111111-1111-4111-8111-111111111111";
 
-/** A note far above any name these cases choose, and one earlier confirmation record. */
+/** One earlier confirmation record. */
 async function seedKept(stateDir: string) {
-  await raiseStartAgainNote(stateDir, {
-    floorMs: Date.parse("2026-12-01T00:00:00Z"),
-    lastName: "LATER",
-    module: "fiscal-verifactu",
-  });
   const record = await writeStartAgainConfirmation(stateDir, {
     at: "2026-10-01T00:00:00.000Z",
     attemptId: KEPT_ATTEMPT,
@@ -1725,8 +1705,8 @@ async function seedKept(stateDir: string) {
     ownerGeneration: 1,
     shown: { reached: "named" },
   });
-  const paths = [join(stateDir, NOTE), join(stateDir, CONFIRMATIONS, record)];
-  const bytes = () => Promise.all(paths.map((path) => readFile(path)));
+  const path = join(stateDir, CONFIRMATIONS, record);
+  const bytes = () => readFile(path);
   return { before: await bytes(), bytes };
 }
 
@@ -1744,7 +1724,7 @@ it("lifetime: Start again with the database present leaves the confirmation reco
   const kept = await seedKept(f.stateDir);
   await actions.startAgainFirstSetup(startRequest);
   await expectAttemptGone(f);
-  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
+  expect(await kept.bytes()).toEqual(kept.before);
 });
 
 it("lifetime: a start that finishes an interrupted deletion leaves the confirmation record unchanged", async () => {
@@ -1753,7 +1733,7 @@ it("lifetime: a start that finishes an interrupted deletion leaves the confirmat
   await finishStartAgainDeletion(f);
   await expectAttemptGone(f);
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
-  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
+  expect(await kept.bytes()).toEqual(kept.before);
 });
 
 it.each([
@@ -1766,7 +1746,7 @@ it.each([
     false,
   ],
 ] as const)(
-  "lifetime: a staged restore %s, with placement stubbed, leaves the note and the confirmation record unchanged",
+  "lifetime: a staged restore %s, with placement stubbed, leaves the confirmation record unchanged",
   async (_name, placement, placed) => {
     const folders = await emptyFolders();
     const kept = await seedKept(folders.stateDir);
@@ -1804,7 +1784,7 @@ it("lifetime: the in-app reset leaves the confirmation record unchanged", async 
   await stageResetRequest(folders.stateDir, (await operations.read())!.id);
   expect(await runStagedReset({ ...folders, log: () => {} })).toBe(true);
   expect(await operations.read()).toBeNull();
-  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
+  expect(await kept.bytes()).toEqual(kept.before);
 });
 
 it("lifetime: a restart of the repair listener leaves the confirmation record unchanged", async () => {
@@ -1835,5 +1815,5 @@ it("lifetime: a restart of the repair listener leaves the confirmation record un
   expect(closes).toHaveLength(2);
   for (const { app } of served)
     expect((await app.request("/setup-api/first-setup/resolution")).status).toBe(200);
-  expect((await kept.bytes())[1]).toEqual(kept.before[1]);
+  expect(await kept.bytes()).toEqual(kept.before);
 });
