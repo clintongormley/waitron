@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import {
+  chmod,
   lstat,
   mkdir,
   mkdtemp,
@@ -494,6 +495,31 @@ describe("deleteOldBackupsAtStart", () => {
     });
     expect(skipped(log)).toEqual([]);
     expect((await readRecord()).deleted.map((a) => a.key)).toEqual([oldest]);
+  });
+
+  it("logs the free space, not out_of_reach, when the first deletion fails and nothing is deleted", async () => {
+    await note();
+    const oldest = await archive(usb, days(1), 15);
+    const newest = await archive(usb, days(2), 15);
+    // 10 MiB free plus the 15 MiB archive reaches the floor (24 MiB), but the folder refuses the
+    // deletion.
+    await chmod(usb, 0o555);
+    try {
+      const { deps, log } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readdir(usb)).toEqual([oldest, newest].sort());
+      expect(codes(log)).toContain("backup.archive_delete_failed");
+      expect(log).toHaveBeenCalledWith("warn", "backup.start_room_short", {
+        freeBytes: 10 * MIB,
+        floorBytes: SPARE + FULL_DISK_BYTES,
+      });
+      expect(skipped(log)).toEqual([]);
+      expect(existsSync(join(stateDir, BACKUP_ROOM_START_DELETED_FILE))).toBe(false);
+    } finally {
+      await chmod(usb, 0o755);
+    }
   });
 
   describe("a record an earlier start left", () => {

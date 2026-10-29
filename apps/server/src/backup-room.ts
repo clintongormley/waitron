@@ -207,11 +207,13 @@ export interface MakeRoomOptions {
  * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting the oldest deletable archives, or
  * plus `floorBytes` when the aim cannot be reached and `outOfReach` is `"floor"` (an aim below the
  * floor counts as the floor).
- * Refuses with `backup.staging_space_low`, deleting nothing, when free space plus every deletable
- * archive's size falls short of the floor. Free space is read again after each deletion or skipped
- * entry, and deleting stops when that reading reaches the goal or the deleted archives' sizes cover
- * the shortfall first read, whichever comes first. An archive can free less than its size (a hard
- * link, a sparse file), so a step can delete and still be refused: only the reading decides success.
+ * Refuses with `backup.staging_space_low` (`afterDeleting: false`), deleting nothing, when free
+ * space plus every deletable archive's size falls short of the floor. Free space is read again after
+ * each deletion or skipped entry, and deleting stops when that reading reaches the goal or the
+ * deleted archives' sizes cover the shortfall first read, whichever comes first. An archive can free
+ * less than its size (a hard link, a sparse file), so a step can delete and still be refused: only
+ * the reading decides success. A refusal on the reading after deleting, or after a failed deletion
+ * stopped it, carries `afterDeleting: true`.
  * Free space that cannot be read is let through.
  */
 export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
@@ -231,7 +233,11 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
   const archives = await listDeletableArchives(opts.folders, await opts.installationStartedAt());
   const offered = archives.reduce((sum, a) => sum + a.bytes, 0);
   if (free + offered < floor)
-    throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
+    throw new AppError("backup.staging_space_low", {
+      neededBytes: floor,
+      availableBytes: free,
+      afterDeleting: false,
+    });
   const goal = free + offered >= aim || opts.outOfReach === "aim" ? aim : floor;
   const shortfall = goal - free;
   const unlink = opts.unlink ?? fs.unlink;
@@ -266,7 +272,11 @@ export async function makeRoom(opts: MakeRoomOptions): Promise<void> {
       if (free === null) return;
     }
     if (free !== null && free < floor)
-      throw new AppError("backup.staging_space_low", { neededBytes: floor, availableBytes: free });
+      throw new AppError("backup.staging_space_low", {
+        neededBytes: floor,
+        availableBytes: free,
+        afterDeleting: true,
+      });
   } finally {
     if (deleted.length > 0) {
       try {

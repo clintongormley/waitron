@@ -158,7 +158,6 @@ async function deleteToFloor(
   skip: (reason: string) => void,
 ): Promise<void> {
   const floorBytes = deps.spareBytes + FULL_DISK_BYTES;
-  let deletedAny = false;
   try {
     await makeRoom({
       neededBytes: 0,
@@ -172,14 +171,11 @@ async function deleteToFloor(
       log: deps.log,
       reason: "start_room",
       outOfReach: "floor",
-      onDeleted: async (deleted) => {
-        deletedAny = true;
-        await writeRecord(deps, note, deleted);
-      },
+      onDeleted: (deleted) => writeRecord(deps, note, deleted),
     });
   } catch (error) {
     if (!isAppError(error) || !hasCode(error, "backup.staging_space_low")) throw error;
-    if (!deletedAny) return skip("out_of_reach");
+    if (!error.params.afterDeleting) return skip("out_of_reach");
     deps.log("warn", "backup.start_room_short", {
       freeBytes: error.params.availableBytes,
       floorBytes,

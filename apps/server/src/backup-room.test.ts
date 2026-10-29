@@ -468,7 +468,11 @@ describe("makeRoom", () => {
 
     await expect(makeRoom(args)).rejects.toMatchObject({
       code: "backup.staging_space_low",
-      params: { neededBytes: NEED + FLOOR, availableBytes: NEED + FLOOR - 3 * SIZE - 1 },
+      params: {
+        neededBytes: NEED + FLOOR,
+        availableBytes: NEED + FLOOR - 3 * SIZE - 1,
+        afterDeleting: false,
+      },
     });
     expect(f.paths.every(exists)).toBe(true);
     expect(onDeleted).not.toHaveBeenCalled();
@@ -620,7 +624,7 @@ describe("makeRoom", () => {
 
     await expect(makeRoom(args)).rejects.toMatchObject({
       code: "backup.staging_space_low",
-      params: { neededBytes: NEED + FLOOR, availableBytes: free },
+      params: { neededBytes: NEED + FLOOR, availableBytes: free, afterDeleting: true },
     });
     expect(f.paths.map(exists)).toEqual([false, false, false, true]);
     expect(d.reads()).toBe(4);
@@ -659,7 +663,7 @@ describe("makeRoom", () => {
 
     await expect(makeRoom({ ...args, unlink: failingSecondUnlink() })).rejects.toMatchObject({
       code: "backup.staging_space_low",
-      params: { neededBytes: NEED + FLOOR, availableBytes: 850 + SIZE },
+      params: { neededBytes: NEED + FLOOR, availableBytes: 850 + SIZE, afterDeleting: true },
     });
     expect(f.paths.map(exists)).toEqual([false, true, true, true]);
     expect(d.reads()).toBe(3);
@@ -698,7 +702,7 @@ describe("makeRoom", () => {
       }),
     ).rejects.toMatchObject({
       code: "backup.staging_space_low",
-      params: { neededBytes: NEED + FLOOR, availableBytes: 850 },
+      params: { neededBytes: NEED + FLOOR, availableBytes: 850, afterDeleting: true },
     });
     expect(f.paths.every(exists)).toBe(true);
     expect(log.mock.calls).toEqual([
