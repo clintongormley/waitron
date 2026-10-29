@@ -958,7 +958,10 @@ describe("a sale prints its goods in the default content language its lines stor
         expect(startsWith(receipt!, label), label).toBe(true);
       }
       expectGoods(receipt!, "es");
-      expect(storedGoods(sale.id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+      expect(storedGoods(sale.id)).toEqual({
+        order: [SPANISH_LINE, SPANISH_LINE],
+        sale: [SPANISH_LINE],
+      });
     }
   });
 
@@ -1102,7 +1105,10 @@ describe("a sale prints its goods in the default content language its lines stor
         optionSnapshots,
       })),
     ).toEqual([SPANISH_LINE]);
-    expect(storedGoods(id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+    expect(storedGoods(id)).toEqual({
+      order: [SPANISH_LINE, SPANISH_LINE],
+      sale: [SPANISH_LINE],
+    });
     const [filed] = suite.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );

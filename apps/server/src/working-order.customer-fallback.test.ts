@@ -309,20 +309,25 @@ describe("future order customer fallback", () => {
         { zoneId: setup.offers.zoneId },
       );
     });
-    const [line] = await venue.db
+    const lines = await venue.db
       .select()
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, orderId));
-    const [context] = await venue.db
-      .select()
-      .from(workingLineContexts)
-      .where(eq(workingLineContexts.workingOrderLineId, line!.id));
-    expect(line!.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
-    expect(line!.unitName).toEqual({ en: "sp" });
-    expect(context!.unitName).toEqual({ en: "Staff portion" });
-    expect(line!.quantity).toBe(2000);
-    expect(line!.lineTotal).toBe(2400);
-    expect(line!.vatClass).toBe("general");
+      .where(eq(workingOrderLines.workingOrderId, orderId))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines.map((line) => [line.lineNo, line.quantity, line.lineTotal])).toEqual([
+      [1, 1000, 1200],
+      [2, 1000, 1200],
+    ]);
+    for (const line of lines) {
+      const [context] = await venue.db
+        .select()
+        .from(workingLineContexts)
+        .where(eq(workingLineContexts.workingOrderLineId, line.id));
+      expect(line.descriptions).toEqual({ "es-ES": "Staff dish", "en-GB": "Staff dish" });
+      expect(line.unitName).toEqual({ en: "sp" });
+      expect(context!.unitName).toEqual({ en: "Staff portion" });
+      expect(line.vatClass).toBe("general");
+    }
   });
 
   it("resolves an extra's frozen parent and variant independently after a default change", async () => {

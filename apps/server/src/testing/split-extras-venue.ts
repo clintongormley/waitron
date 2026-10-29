@@ -25,6 +25,7 @@ import { seatTable } from "../parties.js";
 import { OPERATOR } from "./party-venue.js";
 import { createOpenOrder, fireLines } from "../working-order.js";
 import { offerProducts } from "./zone-offers.js";
+import { openGroupedCounterOrder } from "./grouped-counter-order.js";
 import { seedLegacySellingUnits } from "./seed-units.js";
 
 const LOCALE = "es-ES";
@@ -264,6 +265,26 @@ export async function fireNewOrder(
 ): Promise<string> {
   const id = randomUUID();
   await createOfferedOrder(tx, cfg, id, lines);
+  await fireEveryLine(tx, cfg, id);
+  return id;
+}
+
+/** `fireNewOrder` with each line stored once, as a counter order written before portions holds it. */
+export async function fireGroupedOrder(
+  tx: Transaction,
+  cfg: OriginConfig,
+  lines: ProductLine[],
+): Promise<string> {
+  const id = randomUUID();
+  const offers = await offerProducts(tx, cfg);
+  await openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
+    zoneId: offers.zoneId,
+  });
+  await fireEveryLine(tx, cfg, id);
+  return id;
+}
+
+async function fireEveryLine(tx: Transaction, cfg: OriginConfig, id: string): Promise<void> {
   const fired = await tx
     .select({
       id: workingOrderLines.id,
@@ -277,7 +298,6 @@ export async function fireNewOrder(
     .where(eq(workingOrderLines.workingOrderId, id))
     .orderBy(workingOrderLines.lineNo);
   await fireLines(tx, cfg, id, fired);
-  return id;
 }
 
 /** Offer one optional, uncapped extras list on `dishId`, returning the list id and the offered
