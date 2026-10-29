@@ -1,3 +1,5 @@
+import { kitchenNotices } from "@waitron/venue-service";
+import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { nameParty } from "./testing/party-venue.js";
 import * as kitchenLanguage from "./kitchen-language.js";
@@ -6,6 +8,7 @@ import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order
 import { sql, eq } from "drizzle-orm";
 import {
   kitchenPrintJobs,
+  printers,
   printJobs,
   ticketItems,
   withTransaction,
@@ -98,6 +101,9 @@ describe("A964 venue language", () => {
       return fireNewOrder(tx, cfg, [{ productId: v.products.burger, quantity: "2" }]);
     });
     const original = await jobs();
+    await withTransaction(suite.db, (tx) =>
+      VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, "Recorded order note"),
+    );
     const [fired] = await suite.db
       .select()
       .from(ticketItems)
@@ -139,6 +145,13 @@ describe("A964 venue language", () => {
         papers.filter((p) => p[0]?.startsWith(`*** ${w.reprint.split("{time}")[0]}`)),
       ).toHaveLength(2);
       expect(papers.flat()).toContain("1.000 x BURG");
+      for (const heading of [w.void, `${w.movedTo} FRYER`, w.moved]) {
+        const paper = papers.find((p) => p[0] === `*** ${heading} ***`)!;
+        expect(paper).toContain(`${w.forKitchen}Recorded order note`);
+      }
+      const moved = papers.find((p) => p[0] === `*** ${w.moved} ***`)!;
+      expect(moved).toContain(`${w.fromPlace}${w.counter}`);
+      expect(moved).toContain(`${w.toPlace}${w.counter}`);
     }
     const after = await jobs();
     for (const j of original) expect(after.find((p) => p.id === j.id)?.payload).toEqual(j.payload);
@@ -316,3 +329,48 @@ it.each(["en", "es"] as const)(
     }
   },
 );
+
+it("A964 venue language leaves no-printer reads and counter notices independent of the frame fallback", async () => {
+  const v = await setupSplitExtrasVenue();
+  const cfg = { ...v.cfg, locale: "de-DE" };
+  const id = await withTransaction(suite.db, (tx) =>
+    fireNewOrder(tx, cfg, [{ productId: v.products.burger, quantity: "1" }]),
+  );
+  const [fired] = await suite.db
+    .select()
+    .from(ticketItems)
+    .where(eq(ticketItems.workingOrderId, id));
+  const target = {
+    workingOrderLineId: fired!.workingOrderLineId,
+    stationId: fired!.stationId!,
+    quantity: 1000,
+    wasStarted: false,
+  };
+  const beforeJobs = await jobs();
+  await withTransaction(suite.db, (tx) => tx.update(printers).set({ active: false }));
+  const reader = vi.spyOn(kitchenLanguage, "readKitchenLanguage");
+  for (const language of ["en", "es"] as const) {
+    await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
+      await enqueueKitchenTickets(tx, cfg, id, [target]);
+      await enqueueCorrectionSlips(tx, cfg, id, [target], "VOID");
+      const sent = (await readSentWork(tx, id))!;
+      await enqueueMovedSlips(
+        tx,
+        cfg,
+        { ...sent, places: { ...sent.places, orderNumber: sent.places.orderNumber + 1 } },
+        id,
+      );
+    });
+    expect(reader).not.toHaveBeenCalled();
+    const notices = await suite.db
+      .select({ kind: kitchenNotices.kind, movedTo: kitchenNotices.movedTo })
+      .from(kitchenNotices)
+      .where(eq(kitchenNotices.workingOrderId, id));
+    expect(notices.slice(-2)).toEqual([
+      { kind: "void", movedTo: null },
+      { kind: "moved", movedTo: null },
+    ]);
+    expect(await jobs()).toEqual(beforeJobs);
+  }
+});

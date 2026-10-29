@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { asc, eq, sql } from "drizzle-orm";
@@ -136,7 +137,7 @@ describe("corrections through order actions on a station's printers", () => {
               .where(eq(printJobs.printerId, printerId))
           ).map((job) => printedLines(job.payload).join(" ")),
         );
-      expect((await papers())[0]).toContain("HOLD");
+      expect((await papers())[0]).toContain(kitchenTicketWords("es").hold);
       const changed = await send(
         venue.app,
         venue.cookie.staff,
@@ -149,7 +150,9 @@ describe("corrections through order actions on a station's printers", () => {
         },
       );
       expect(changed.status).toBe(200);
-      expect((await papers()).slice(1)).toEqual([expect.stringContaining("HOLD CHANGED")]);
+      expect((await papers()).slice(1)).toEqual([
+        expect.stringContaining(kitchenTicketWords("es").holdChanged),
+      ]);
       expect((await papers())[1]).toContain("CHULETA");
       const removed = await send(
         venue.app,
@@ -169,7 +172,9 @@ describe("corrections through order actions on a station's printers", () => {
         },
       );
       expect(removed.status, JSON.stringify(removed.json)).toBe(200);
-      expect((await papers()).slice(2)).toEqual([expect.stringContaining("HOLD CANCELLED")]);
+      expect((await papers()).slice(2)).toEqual([
+        expect.stringContaining(kitchenTicketWords("es").holdCancelled),
+      ]);
       expect((await papers())[2]).toContain("CHULETA");
     } finally {
       await inTx(venue, async (tx) => {
@@ -248,7 +253,9 @@ describe("corrections through order actions on a station's printers", () => {
       );
       expect(beerSlips[0]).toHaveLength(1);
       expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain("CANA");
-      expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain("VOID");
+      expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain(
+        kitchenTicketWords("es").void,
+      );
       expect(beerSlips[1]).toHaveLength(0);
       const steakVoid = await post(billId, {
         action: "cancel",
@@ -262,7 +269,7 @@ describe("corrections through order actions on a station's printers", () => {
         );
         expect(slips).toHaveLength(1);
         expect(printedLines(slips[0]!.payload).join(" ")).toContain("CHULETA");
-        expect(printedLines(slips[0]!.payload).join(" ")).toContain("VOID");
+        expect(printedLines(slips[0]!.payload).join(" ")).toContain(kitchenTicketWords("es").void);
       }
     } finally {
       await inTx(venue, async (tx) => {

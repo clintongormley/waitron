@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedOrderWriteBody } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -2051,7 +2052,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     expect(await printed(c.downstairs.printerId)).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("13:00"))}\\nGROUP 1\\n1\\.000 x Mojito\\n$`,
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("13:00"))}\\n${kitchenTicketWords("es").group} 1\\n1\\.000 x Mojito\\n$`,
         ),
       ),
     ]);
@@ -2082,7 +2083,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     expect((await printed(c.downstairs.printerId)).slice(before)).toEqual([
       expect.stringMatching(
         new RegExp(
-          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("14:10"))}\\nGROUP 2\\n1\\.000 x Mojito\\n$`,
+          `^Downstairs bar\\n[^]*\\n${ticketClock(mondayAt("14:10"))}\\n${kitchenTicketWords("es").group} 2\\n1\\.000 x Mojito\\n$`,
         ),
       ),
     ]);
@@ -2138,7 +2139,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     at(mondayAt("14:05"));
     await lateGroup(c, "fire");
     expect(await printed(c.upstairs.printerId)).toEqual([
-      expect.stringMatching(new RegExp(`\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`)),
+      expect.stringMatching(
+        new RegExp(`\\n${kitchenTicketWords("es").group} 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`),
+      ),
     ]);
   });
 
@@ -2215,7 +2218,9 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     const answer = await lateMintGroup(c, { listId, mintId });
     expect(answer.status).toBe(200);
     expect(await printed(c.downstairs.printerId)).toEqual([
-      expect.stringMatching(new RegExp(`\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mint\\n`)),
+      expect.stringMatching(
+        new RegExp(`\\n${kitchenTicketWords("es").group} 1\\n${lunchMark}\\n1\\.000 x Mint\\n`),
+      ),
     ]);
   });
 
@@ -2263,7 +2268,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
     expect((await printed(c.upstairs.printerId)).slice(before)).toEqual([
       expect.stringMatching(
         new RegExp(
-          `\\n${ticketClock(mondayAt("14:10"))}\\nGROUP 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`,
+          `\\n${ticketClock(mondayAt("14:10"))}\\n${kitchenTicketWords("es").group} 1\\n${lunchMark}\\n1\\.000 x Mojito\\n$`,
         ),
       ),
     ]);

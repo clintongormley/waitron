@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { readBillEditState } from "./bill-editing.js";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
@@ -1007,7 +1008,7 @@ describe("Cancel item service command", () => {
         );
         expect(jobs).toHaveLength(1);
         const lines = printedLines(jobs[0]!.payload).join("\n");
-        expect(lines).toContain("HOLD CANCELLED");
+        expect(lines).toContain(kitchenTicketWords("es").holdCancelled);
         expect(lines).toContain("3.000 x PIZZA");
         const notices = await inTx(venue, (tx) =>
           listStationNotices(tx, venue.cfg, venue.stationId),
@@ -1144,7 +1145,7 @@ describe("Cancel item service command", () => {
         printed.filter((job) => job.printerId === barPrinterId).map((job) => job.lines),
       ).toEqual([]);
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
-      expect(printed[0]!.lines).toContain("*** HOLD CANCELLED ***");
+      expect(printed[0]!.lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
       expect(printed[0]!.lines.join("\n")).toContain("1.000 x CHULETA");
       const told = async (stationId: string) =>
         (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId)))

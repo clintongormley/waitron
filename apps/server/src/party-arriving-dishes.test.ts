@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { deleteCourse } from "./course-delete.js";
@@ -936,10 +937,17 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const held = await heldGroupOf(luis.partyId);
     const header = await head("Aviso 2", ana.tabId);
     const atMove = (await jobs()).slice(before);
-    expect(atMove.filter((job) => job.lines[0] === "*** HOLD ***")).toEqual([
+    expect(
+      atMove.filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`),
+    ).toEqual([
       {
         kind: "document",
-        lines: ["*** HOLD ***", ...header, "GROUP 2", "1.000 x FLAN"],
+        lines: [
+          `*** ${kitchenTicketWords("es").hold} ***`,
+          ...header,
+          `${kitchenTicketWords("es").group} 2`,
+          "1.000 x FLAN",
+        ],
       },
     ]);
     expect(held.holdPrintedAt).not.toBeNull();
@@ -951,7 +959,12 @@ describe("an arriving held group's advance HOLD ticket", () => {
     expect((await jobs()).slice(fired)).toEqual([
       {
         kind: "document",
-        lines: ["*** FIRE ***", ...header, "GROUP 2", "1.000 x FLAN"],
+        lines: [
+          `*** ${kitchenTicketWords("es").fire} ***`,
+          ...header,
+          `${kitchenTicketWords("es").group} 2`,
+          "1.000 x FLAN",
+        ],
       },
     ]);
   });
@@ -966,11 +979,18 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const result = await move(ana.tabId, { tableId: mesa }, { bills: "merge" });
 
     expect(result).toMatchObject({ billId: luis.tabId, merged: true });
-    const holds = (await jobs()).slice(before).filter((job) => job.lines[0] === "*** HOLD ***");
+    const holds = (await jobs())
+      .slice(before)
+      .filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`);
     expect(holds).toEqual([
       {
         kind: "document",
-        lines: ["*** HOLD ***", ...(await head("Aviso 8", luis.tabId)), "GROUP 2", "1.000 x FLAN"],
+        lines: [
+          `*** ${kitchenTicketWords("es").hold} ***`,
+          ...(await head("Aviso 8", luis.tabId)),
+          `${kitchenTicketWords("es").group} 2`,
+          "1.000 x FLAN",
+        ],
       },
     ]);
   });
@@ -1019,10 +1039,19 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const result = await inTx(v, (tx) => splitTable(tx, v.cfg, ana.partyId, m5, b2, splitting));
 
     const held = await heldGroupOf(result.partyId);
-    expect((await jobs()).slice(before).filter((job) => job.lines[0] === "*** HOLD ***")).toEqual([
+    expect(
+      (await jobs())
+        .slice(before)
+        .filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`),
+    ).toEqual([
       {
         kind: "document",
-        lines: ["*** HOLD ***", ...(await head("Aviso 6", b2)), "GROUP 2", "1.000 x FLAN"],
+        lines: [
+          `*** ${kitchenTicketWords("es").hold} ***`,
+          ...(await head("Aviso 6", b2)),
+          `${kitchenTicketWords("es").group} 2`,
+          "1.000 x FLAN",
+        ],
       },
     ]);
     expect(held.holdPrintedAt).not.toBeNull();

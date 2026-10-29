@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { readBillEditState } from "./bill-editing.js";
 import { updateHeldOrder } from "./testing/order-writer-fixture.js";
@@ -274,7 +275,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       expect(added).toHaveLength(1);
       expect(printedLines(added[0]!.payload).join(" ")).toContain("HAMB");
       expect(printedLines(added[0]!.payload).join(" ")).toContain("Gherkins");
-      expect(printedLines(added[0]!.payload).join(" ")).toContain("CHANGED");
+      expect(printedLines(added[0]!.payload).join(" ")).toContain(kitchenTicketWords("es").changed);
     } finally {
       await inTx(venue, (tx) =>
         detachPrinterFromStation(
@@ -294,11 +295,11 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
     const [slip] = printed;
     expect(slip!.printerId).toBe(venue.printerId);
     expect(slip!.kind).toBe("document");
-    expect(slip!.lines[0]).toBe("*** CHANGED ***");
+    expect(slip!.lines[0]).toBe(`*** ${kitchenTicketWords("es").changed} ***`);
     expect(slip!.lines).toContain("1.000 x HAMB");
     expect(slip!.lines).toContain("  + Fries");
     expect(slip!.lines).toContain("  + Salad");
-    expect(slip!.lines).toContain("  CANCEL: Gherkins");
+    expect(slip!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins`);
     expect(slip!.lines).not.toContain("  + Gherkins");
     const text = slip!.lines.join("\n");
     expect(text).not.toContain("Hamburger");
@@ -416,7 +417,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
     expect(printed).toHaveLength(1);
     expect(printed[0]!.lines).toContain("2.000 x HAMB");
-    expect(printed[0]!.lines).toContain("  CANCEL: Gherkins x2");
+    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
     expect(recorded).toEqual([
       expect.objectContaining({ quantity: "2.000", cancelledExtra: "Gherkins x2" }),
     ]);
@@ -439,7 +440,7 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
 
     expect(printed).toHaveLength(1);
     expect(printed[0]!.lines).toContain("1.000 x HAMB");
-    expect(printed[0]!.lines).toContain("  CANCEL: Gherkins x2");
+    expect(printed[0]!.lines).toContain(`  ${kitchenTicketWords("es").cancel} Gherkins x2`);
     expect(recorded).toEqual([
       expect.objectContaining({ quantity: "1.000", cancelledExtra: "Gherkins x2" }),
     ]);
@@ -465,7 +466,9 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
                 .orderBy(sql`rowid`)
             ).slice(jobsBefore);
             expect(written).toHaveLength(1);
-            expect(printedLines(written[0]!.payload)).toContain("  CANCEL: Gherkins");
+            expect(printedLines(written[0]!.payload)).toContain(
+              `  ${kitchenTicketWords("es").cancel} Gherkins`,
+            );
             expect(
               (await listStationNotices(tx, venue.cfg, venue.stationId)).slice(noticesBefore),
             ).toEqual([expect.objectContaining({ cancelledExtra: "Gherkins" })]);
@@ -553,13 +556,13 @@ describe("cancelling an extra of a held dish (B11g)", () => {
 
       expect(printed).toHaveLength(1);
       const lines = printed[0]!.lines;
-      expect(lines[0]).toBe("*** HOLD CHANGED ***");
-      expect(lines).toContain("GROUP 1");
+      expect(lines[0]).toBe(`*** ${kitchenTicketWords("es").holdChanged} ***`);
+      expect(lines).toContain(`${kitchenTicketWords("es").group} 1`);
       expect(lines.slice(lines.indexOf("1.000 x HAMB"))).toEqual([
         "1.000 x HAMB",
         "  + Fries",
         "  + Salad",
-        "  CANCEL: Gherkins",
+        `  ${kitchenTicketWords("es").cancel} Gherkins`,
       ]);
       expect(recorded).toEqual([
         expect.objectContaining({
@@ -680,7 +683,7 @@ describe("cancelling an extra of a held dish (B11g)", () => {
       });
 
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
-      expect(printed[0]!.lines[0]).toBe("*** HOLD CHANGED ***");
+      expect(printed[0]!.lines[0]).toBe(`*** ${kitchenTicketWords("es").holdChanged} ***`);
       expect(printed[0]!.lines).toContain("1.000 x HAMB");
       expect(printed.some((job) => job.printerId === barPrinterId)).toBe(false);
       expect(await noticesOf(barId)).toEqual([

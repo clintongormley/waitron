@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { updateOrderLine as updateOrderLineCommand } from "./working-order.js";
 import { updateHeldOrder } from "./working-order.js";
@@ -4661,11 +4662,11 @@ describe("advance HOLD tickets (Task 6)", () => {
       const checkNumber = (await billHead(v, s, checkId))[2];
       expect(await printedSince(v, 5)).toEqual([
         [
-          "*** MOVIDO ***",
+          `*** ${kitchenTicketWords("en").moved} ***`,
           station,
-          `Pedido ${tabNumber} -> ${checkNumber}`,
-          `De: ${table}`,
-          `A:  ${table}`,
+          `${kitchenTicketWords("en").order} ${tabNumber} -> ${checkNumber}`,
+          `${kitchenTicketWords("en").fromPlace}${table}`,
+          `${kitchenTicketWords("en").toPlace}${table}`,
           at,
           "HOLD",
           "GROUP 4",

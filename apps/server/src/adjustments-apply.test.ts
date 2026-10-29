@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -1247,7 +1248,9 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
       // Each prints one HOLD CHANGED slip adding one Burger, and no new HOLD ticket.
       const shape = (jobs: string[][]) =>
         jobs.map((job) => [job[0]!.trim(), job.find((line) => line.includes("x BURG"))!.trim()]);
-      expect(shape(plainJobs)).toEqual([["*** HOLD CHANGED ***", "+1.000 x BURG"]]);
+      expect(shape(plainJobs)).toEqual([
+        [`*** ${kitchenTicketWords("es").holdChanged} ***`, "+1.000 x BURG"],
+      ]);
       expect(shape(compedJobs)).toEqual(shape(plainJobs));
     } finally {
       await inTx(venue, (tx) => setStationPrinting(tx, { printHeldWork: false }));
@@ -3214,7 +3217,7 @@ describe("part of a dish with extras (B11d)", () => {
     expect(await printJobCount()).toBe(jobs + 1);
     const slip = await lastKitchenSlip();
     const dish = slip.indexOf("1.000 x PIZZA");
-    expect(slip).toContain("*** VOID ***");
+    expect(slip).toContain(`*** ${kitchenTicketWords("es").void} ***`);
     expect(dish).toBeGreaterThanOrEqual(0);
     expect(slip[dish + 1]).toBe("  + Olives");
   });
@@ -3860,7 +3863,7 @@ describe("a counter order (B11c)", () => {
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining(["*** VOID ***", "1.000 x CHULETA"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x CHULETA"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       {
@@ -3889,7 +3892,7 @@ describe("a counter order (B11c)", () => {
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining(["*** VOID ***", "1.000 x CHULETA"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x CHULETA"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       { action: "cancel", quantity: 1000, reduction: 2500 },

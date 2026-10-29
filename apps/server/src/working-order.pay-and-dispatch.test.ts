@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { abandonHeldOrder, addTabRound } from "./testing/order-writer-fixture.js";
 import {
   recallLines,
@@ -2752,9 +2753,6 @@ async function printJobIds(): Promise<Set<string>> {
   return new Set(rows.map((r) => r.id));
 }
 
-/** Count the RECALLED correction slips a tenant gained since `before` — a print job whose decoded ESC/POS
- *  payload carries the "RECALLED" header `formatCorrectionSlip` writes. A `sendLines` fire enqueues a
- *  plain kitchen ticket (no such header); only a `recallLines` of a fired line enqueues a RECALLED slip. */
 async function recalledSlipsSince(before: Set<string>): Promise<number> {
   // `payload` is a BLOB, which this engine's driver hands back as a plain `Uint8Array`
   // (`packages/db/src/schema/columns.ts`'s `bytes` custom type records the same measurement);
@@ -2762,8 +2760,9 @@ async function recalledSlipsSince(before: Set<string>): Promise<number> {
   const { rows } = await suite.db.execute<{ id: string; payload: Uint8Array }>(
     sql`select id, payload from print_jobs `,
   );
-  return rows.filter((r) => !before.has(r.id) && decodeTicket(r.payload).includes("RECALLED"))
-    .length;
+  return rows.filter(
+    (r) => !before.has(r.id) && decodeTicket(r.payload).includes(kitchenTicketWords("es").recalled),
+  ).length;
 }
 
 describe("coursing editing verbs — sendLines racing recallLines (Task B1, two concurrent callers)", () => {

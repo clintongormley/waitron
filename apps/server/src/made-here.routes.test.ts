@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { observedRelocationSender } from "./testing/table-action-fixture.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { observedOrderSender } from "./testing/order-writer-fixture.js";
@@ -370,7 +371,7 @@ describe("made-here route wiring", () => {
       tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinterId)),
     );
     expect(grillAfter).toHaveLength(grillBefore.length + 1);
-    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("HOLD");
+    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain(kitchenTicketWords("es").hold);
     expect(group!.holdPrintedAt).not.toBeNull();
     const current = await send(
       venue.app,
@@ -440,7 +441,7 @@ describe("made-here route wiring", () => {
     const firedGrill = await inTx(venue, (tx) =>
       tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinterId)),
     );
-    expect(decodeTicket(firedGrill.at(-1)!.payload)).toContain("FIRE");
+    expect(decodeTicket(firedGrill.at(-1)!.payload)).toContain(kitchenTicketWords("es").fire);
   });
   it("keeps a drink-only held group off HOLD paper and shows it ready", async () => {
     const party = await seatedWith(venue);
@@ -533,7 +534,9 @@ describe("made-here route wiring", () => {
       tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinterId)),
     );
     expect(reprintedGrill).toHaveLength(grillBefore.length + 1);
-    expect(decodeTicket(reprintedGrill.at(-1)!.payload)).toContain("REPRINT");
+    expect(decodeTicket(reprintedGrill.at(-1)!.payload)).toContain(
+      kitchenTicketWords("es").reprint.replace("{time}", "").trim(),
+    );
   });
   it("an edit after a made-here send fires its new Grill dish", async () => {
     const party = await seatedWith(venue);
@@ -1133,7 +1136,9 @@ describe("made-here route wiring", () => {
       tx.select().from(printJobs).where(eq(printJobs.printerId, grillPrinterId)),
     );
     expect(grillAfter).toHaveLength(grillBefore.length + 1);
-    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("HOLD CHANGED");
+    expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain(
+      kitchenTicketWords("es").holdChanged,
+    );
     expect(decodeTicket(grillAfter.at(-1)!.payload)).toContain("+1.000 x PAELLA");
     expect(
       await inTx(venue, (tx) =>
@@ -1770,10 +1775,12 @@ describe("made-here route wiring", () => {
     const fresh = jobsAfter
       .filter((job) => !jobsBefore.some((old) => old.id === job.id))
       .map((job) => decodeTicket(job.payload));
-    expect(fresh.some((ticket) => ticket.includes("RECALLED"))).toBe(true);
-    expect(fresh.some((ticket) => ticket.includes("CANA") && !ticket.includes("RECALLED"))).toBe(
-      true,
-    );
+    expect(fresh.some((ticket) => ticket.includes(kitchenTicketWords("es").recalled))).toBe(true);
+    expect(
+      fresh.some(
+        (ticket) => ticket.includes("CANA") && !ticket.includes(kitchenTicketWords("es").recalled),
+      ),
+    ).toBe(true);
   });
 
   it("units raised on an ordinary dish follow its first made-here decision", async () => {

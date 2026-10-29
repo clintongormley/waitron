@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -165,7 +166,7 @@ describe("releaseHeldWorkOf", () => {
     expect((await groupsOf(p.partyId)).map((group) => group.state)).toEqual(["fired"]);
     const jobs = jobsByPrinterAfter(before).map((job) => job.lines);
     expect(jobs).toHaveLength(1);
-    expect(jobs[0]![0]).toBe("*** FIRE ***");
+    expect(jobs[0]![0]).toBe(`*** ${kitchenTicketWords("es").fire} ***`);
     expect(jobs[0]!.join("\n")).toContain("2.000 x BURG");
   });
 

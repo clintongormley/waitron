@@ -1,3 +1,4 @@
+import { kitchenTicketWords } from "./i18n/kitchen-ticket.js";
 import { createOpenOrder } from "./working-order.js";
 import { observedDraftCommandBody } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -811,8 +812,12 @@ describe("party Recall to draft", () => {
         .where(eq(printJobs.printerId, printer.id));
       expect(after.length).toBe(before.length + 1);
       const text = after.flatMap((job) => printedLines(job.payload));
-      expect(text).toContain("*** HOLD CANCELLED ***");
-      expect(text).toContain(collision ? `GROUP 7 · ${p.tableLabel}` : "GROUP 7");
+      expect(text).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
+      expect(text).toContain(
+        collision
+          ? `${kitchenTicketWords("es").group} 7 · ${p.tableLabel}`
+          : `${kitchenTicketWords("es").group} 7`,
+      );
       expect(text.some((line) => line.includes("2") && line.includes("TARTA"))).toBe(true);
       expect(
         await venue.db.select().from(ticketItems).where(eq(ticketItems.workingOrderId, p.tabId)),
@@ -1364,7 +1369,7 @@ describe("party Recall to draft", () => {
 
       const cancelled = (await paperAt(kitchenPrinterId)).slice(kitchenBefore);
       expect(cancelled).toHaveLength(1);
-      expect(cancelled[0]![0]).toBe("*** HOLD CANCELLED ***");
+      expect(cancelled[0]![0]).toBe(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
       expect(cancelled[0]!.at(-1)).toBe("1.000 x TARTA");
       expect(await paperAt(barPrinterId)).toEqual([]);
       const told = async (station: string) =>
