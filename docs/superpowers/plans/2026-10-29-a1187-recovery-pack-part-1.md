@@ -611,6 +611,12 @@ pdf-lib only when a PDF is chosen; keep the generation check at `restore-bucket-
   `apps/server/src/management-api.ts:1880-1905`) would also be accepted; a test pins that, so the
   limit is stated by a case rather than assumed, and that it still needs that person's own passkey
   and code. No schema change.
+  **Pointer, 2026-10-29 (PR B's review):** this limit was closed instead. The review showed that a
+  challenge from the fresh check's options route, which asks for no password, could finish a passkey
+  registration, so PR B adds `webauthn_challenges.purpose` (identity migrations 0008 to 0010) and a
+  challenge is now accepted only by the ceremony that issued it (and, for registration and the
+  check, only for its own person). PR B therefore
+  carries a migration too.
 - `verifyOwnFreshSignIn(tx, { managementSessionId, currentPassword, totp?, recoveryCode?, keyRing,
   checked? })`: the password form. A person with no password is refused `password.invalid` here
   (as `profile.ts:90`); the dashboard never sends this form for them (Task 15).

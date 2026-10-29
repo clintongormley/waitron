@@ -29,6 +29,7 @@ import { generateTotpSecret, totpAuthUri } from "./totp.js";
 import { totpEnrollments } from "./schema/totp-enrollments.js";
 import { recoveryCodes } from "./schema/recovery-codes.js";
 import {
+  consumeRecoveryCode,
   decryptTotpSecret,
   encryptTotpSecret,
   replaceRecoveryCodes,
@@ -51,8 +52,8 @@ interface Credentials {
 /**
  * Checks `personId`'s current password. Opens no transaction, so a caller holding none leaves the
  * write lock free while the key is derived, and writes nothing. Pass the result to the change inside
- * the transaction, which trusts it only for the person its own session names; the authenticator
- * code is still checked there.
+ * the transaction, which trusts it only for the person its own session names; any code the person's
+ * authenticator setup needs is checked there.
  */
 export async function checkOwnPassword(
   db: Database,
@@ -83,26 +84,66 @@ async function ownPerson(tx: Transaction, input: Owner) {
   return (await ownSession(tx, input)).person;
 }
 
+async function checkCurrentPassword(
+  person: typeof persons.$inferSelect,
+  input: { currentPassword?: string; checked?: SecretCheck },
+): Promise<void> {
+  if (person.passwordHash === null) throw new AppError("password.invalid", {});
+  const secret = input.currentPassword ?? "";
+  const matches =
+    trustedVerdict(input.checked, person.id, secret, person.passwordHash) ??
+    (await verifyPassword(secret, person.passwordHash));
+  if (!matches) throw new AppError("password.invalid", {});
+}
+
+/**
+ * Asks nothing of a person with no authenticator. Otherwise accepts their authenticator code, or
+ * else consumes one of their recovery codes, in the order sign-in tries them.
+ */
+export async function requireEnrolledCode(
+  tx: Transaction,
+  person: Pick<typeof persons.$inferSelect, "id" | "totpSecret">,
+  codes: { totp?: string; recoveryCode?: string },
+  keyRing: TotpKeyRing,
+): Promise<void> {
+  if (person.totpSecret === null) return;
+  const secret = decryptTotpSecret(person.totpSecret, keyRing);
+  if (codes.totp !== undefined && secret !== null && verifyTotp(codes.totp, secret.secret)) return;
+  if (
+    codes.recoveryCode !== undefined &&
+    (await consumeRecoveryCode(tx, person.id, codes.recoveryCode))
+  )
+    return;
+  throw new AppError("totp.invalid", {});
+}
+
 async function verifyCurrent(
+  tx: Transaction,
   person: typeof persons.$inferSelect,
   credentials: Credentials,
 ): Promise<void> {
-  if (person.passwordHash === null) throw new AppError("password.invalid", {});
-  const secret = credentials.currentPassword ?? "";
-  const matches =
-    trustedVerdict(credentials.checked, person.id, secret, person.passwordHash) ??
-    (await verifyPassword(secret, person.passwordHash));
-  if (!matches) throw new AppError("password.invalid", {});
-  if (
-    person.totpSecret !== null &&
-    (credentials.totp === undefined ||
-      !verifyTotp(
-        credentials.totp,
-        decryptTotpSecret(person.totpSecret, credentials.keyRing)?.secret ?? "",
-      ))
-  ) {
-    throw new AppError("totp.invalid", {});
-  }
+  await checkCurrentPassword(person, credentials);
+  // No recovery code here: these changes need the authenticator itself.
+  await requireEnrolledCode(tx, person, { totp: credentials.totp }, credentials.keyRing);
+}
+
+/**
+ * The signed-in person's password, and their authenticator or a recovery code when one is set up,
+ * checked afresh for an action that needs a recent sign-in. Starts no session.
+ */
+export async function verifyOwnFreshSignIn(
+  tx: Transaction,
+  input: Owner & Credentials & { recoveryCode?: string },
+): Promise<typeof persons.$inferSelect> {
+  const person = await ownPerson(tx, input);
+  await checkCurrentPassword(person, input);
+  await requireEnrolledCode(
+    tx,
+    person,
+    { totp: input.totp, recoveryCode: input.recoveryCode },
+    input.keyRing,
+  );
+  return person;
 }
 
 /** Resolve the signed-in person and require their current login factors before a sensitive change. */
@@ -111,7 +152,7 @@ export async function verifyOwnCredentials(
   input: Owner & Credentials,
 ): Promise<typeof persons.$inferSelect> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   return person;
 }
 
@@ -120,7 +161,7 @@ export async function beginOwnTotpEnrollment(
   input: Owner & Credentials,
 ): Promise<{ enrollmentId: string; secret: string; uri: string; expiresAt: string }> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   const secret = generateTotpSecret();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
@@ -172,13 +213,13 @@ export async function regenerateOwnRecoveryCodes(
   input: Owner & Credentials,
 ): Promise<{ codes: string[] }> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   return { codes: await replaceRecoveryCodes(tx, person.id) };
 }
 
 export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   await tx.update(persons).set({ totpSecret: null }).where(eq(persons.id, person.id));
   await tx.delete(recoveryCodes).where(eq(recoveryCodes.personId, person.id));
   await tx.delete(totpEnrollments).where(eq(totpEnrollments.personId, person.id));
@@ -186,7 +227,7 @@ export async function disableOwnTotp(tx: Transaction, input: Owner & Credentials
 
 export async function unlinkOwnGoogle(tx: Transaction, input: Owner & Credentials): Promise<void> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   await tx.update(persons).set({ googleSubject: null }).where(eq(persons.id, person.id));
 }
 
@@ -264,7 +305,7 @@ export async function saveOwnProfile(
   const email = normalizeAndValidateEmail(input.email);
   const locale = assertSupportedLocale(input.locale);
   const changedEmail = email !== person.email;
-  if (changedEmail) await verifyCurrent(person, input);
+  if (changedEmail) await verifyCurrent(tx, person, input);
   await assertDisplayNameAvailable(tx, displayName, person.id);
   await assertEmailAvailable(tx, email, person.id);
   try {
@@ -317,7 +358,7 @@ export async function changeOwnPin(
   input: Owner & Credentials & { pin: string },
 ): Promise<void> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   assertPinLength(input.pin);
   await tx
     .update(persons)
@@ -334,7 +375,7 @@ export async function changeOwnPassword(
   input: Owner & Credentials & { password: string },
 ): Promise<void> {
   const { person, sessionRowId } = await ownSession(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   assertPasswordLength(input.password);
   await tx
     .update(persons)
@@ -358,7 +399,7 @@ export async function removeOwnPasskey(
   input: Owner & Credentials & { id: string },
 ): Promise<void> {
   const person = await ownPerson(tx, input);
-  await verifyCurrent(person, input);
+  await verifyCurrent(tx, person, input);
   const removed = await tx
     .delete(webauthnCredentials)
     .where(and(eq(webauthnCredentials.id, input.id), eq(webauthnCredentials.personId, person.id)))

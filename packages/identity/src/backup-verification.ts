@@ -213,7 +213,11 @@ async function checkIdentity(query: BackupQuery, ring: TotpKeyRing) {
             data = merge(data, "invalid");
           break;
         case "webauthn_challenges":
-          if (base64url(row.challenge) === null) data = merge(data, "invalid");
+          if (
+            base64url(row.challenge) === null ||
+            (row.purpose === "login" ? row.person_id !== null : row.person_id === null)
+          )
+            data = merge(data, "invalid");
           break;
         case "google_oidc_states":
           if (

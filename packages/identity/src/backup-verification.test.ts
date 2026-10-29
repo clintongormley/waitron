@@ -130,7 +130,7 @@ beforeEach(async () => {
     });
     await suite.db
       .insert(schema.webauthnChallenges)
-      .values({ id: person, personId: null, challenge: "AQID", createdAt: old });
+      .values({ id: person, personId: null, challenge: "AQID", createdAt: old, purpose: "login" });
     await suite.db.insert(schema.googleOidcStates).values({
       id: person,
       personId: null,
@@ -360,7 +360,13 @@ describe("identity offline backup owner", () => {
     "webauthn_challenges",
     "google_oidc_states",
   ])("checks logical person references absent from SQL foreign keys: %s", async (table) => {
-    damage(`update ${table} set person_id='10000000-0000-4000-8000-999999999999'`);
+    // A kind that names a person, so only the missing-person check can refuse the row.
+    const kind =
+      {
+        webauthn_challenges: "purpose='registration',",
+        google_oidc_states: "mode='link',",
+      }[table] ?? "";
+    damage(`update ${table} set ${kind}person_id='10000000-0000-4000-8000-999999999999'`);
     expect(await run()).toEqual(verdict("invalid", "passed"));
   });
   it("accepts explicitly absent optional authenticators and empty ceremony tables", async () => {
@@ -482,8 +488,16 @@ it("permits an absent optional email code", async () => {
 });
 it("retains a legitimate pending Google link to a suspended person", async () => {
   damage(`update google_oidc_states set mode='link',person_id='${second}'`);
-  damage(`update webauthn_challenges set person_id='${second}'`);
+  damage(`update webauthn_challenges set purpose='registration',person_id='${second}'`);
   expect(await run()).toEqual(passed);
+});
+it.each([
+  ["a sign-in challenge naming a person", (p: string) => `purpose='login',person_id='${p}'`],
+  ["a registration challenge naming no person", () => "purpose='registration',person_id=null"],
+  ["a fresh check challenge naming no person", () => "purpose='check',person_id=null"],
+])("refuses %s", async (_name, change) => {
+  damage(`update webauthn_challenges set ${change(second)}`);
+  expect(await run()).toEqual(verdict("invalid", "passed"));
 });
 it("refuses a Google link without its person", async () => {
   damage("update google_oidc_states set mode='link'");

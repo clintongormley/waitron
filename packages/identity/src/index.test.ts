@@ -80,15 +80,15 @@ describe("webauthn_credentials constraint declarations (forces the lazy extraCon
 });
 
 /**
- * webauthn_challenges declares no constraints of its own beyond its primary key: `person_id` is
- * nullable (a discoverable-login ceremony has no known person yet) and has no key to `persons`.
- * Nothing refuses a row naming a missing person; only `staff.ts`'s deletes read the column.
+ * `person_id` is nullable (a discoverable-login ceremony has no known person yet) and has no key to
+ * `persons`, so nothing refuses a row naming a missing person.
  */
-describe("webauthn_challenges constraint declarations", () => {
-  it("declares its primary key and no foreign keys or indexes", () => {
+describe("webauthn_challenges constraint declarations (forces the lazy extraConfig callback)", () => {
+  it("declares its primary key, its purpose check, and no foreign keys or indexes", () => {
     const config = getTableConfig(api.webauthnChallenges);
 
     expect(config.columns.find((c) => c.name === "id")?.primary).toBe(true);
+    expect(config.checks.map((c) => c.name)).toEqual(["webauthn_challenges_purpose_ck"]);
     expect(config.foreignKeys).toEqual([]);
     expect(config.indexes).toEqual([]);
   });

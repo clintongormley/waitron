@@ -14,7 +14,9 @@ import { deactivatePerson, resetPersonLogin } from "./staff.js";
 import { managementSessions } from "./schema/management-sessions.js";
 import { persons } from "./schema/persons.js";
 import { webauthnChallenges, webauthnCredentials } from "./schema/webauthn.js";
-import { codeOf, openManagementSession, seedPerson } from "../test/fixtures.js";
+import { generateSync } from "otplib";
+import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
+import { codeOf, openManagementSession, seedPerson, TOTP_KEY_RING } from "../test/fixtures.js";
 
 // Only the two VERIFY calls are mocked, because a genuine authenticator response cannot be
 // synthesised in a unit test — so this suite asserts OUR wiring around them, not the crypto.
@@ -27,11 +29,13 @@ vi.mock("@simplewebauthn/server", async (orig) => ({
 import { verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
 import {
   beginPasskeyAuthentication,
+  beginOwnPasskeyCheck,
   beginPasskeyRegistration,
   CHALLENGE_TTL_MS,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
   readPasskeySignals,
+  verifyOwnPasskey,
 } from "./passkey.js";
 
 const mockVerify = vi.mocked(verifyRegistrationResponse);
@@ -143,6 +147,7 @@ describe("passkey registration", () => {
     );
     expect(stored).toHaveLength(1);
     expect(stored[0]!.personId).toBe(personId);
+    expect(stored[0]!.purpose).toBe("registration");
 
     const done = await finish(token, begun.challengeHandle);
     expect(done.credentialId).toBe("cred-abc");
@@ -481,6 +486,7 @@ describe("passkey authentication", () => {
       tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
     );
     expect(chalRow!.personId).toBeNull();
+    expect(chalRow!.purpose).toBe("login");
 
     const session = await authenticate(begun.challengeHandle, "cred-abc");
     expect(session.personId).toBe(personId);
@@ -803,5 +809,265 @@ describe("what the browser's password manager is told about a signed-in person's
         .where(eq(managementSessions.personId, personId)),
     );
     expect(row!.lastSeenAt).toBe(aged);
+  });
+});
+
+describe("checking the signed-in person's own passkey", () => {
+  const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+
+  const beginCheck = (token: string) =>
+    run((tx) => beginOwnPasskeyCheck(tx, { managementSessionId: token, rpId: "localhost" }));
+
+  const check = (
+    token: string,
+    challengeHandle: string,
+    credentialId: string,
+    codes: { totp?: string; recoveryCode?: string } = {},
+  ) =>
+    run((tx) =>
+      verifyOwnPasskey(tx, {
+        managementSessionId: token,
+        challengeHandle,
+        response: { id: credentialId } as never,
+        rpId: "localhost",
+        origin: "http://localhost",
+        keyRing: TOTP_KEY_RING,
+        ...codes,
+      }),
+    );
+
+  const sessionCount = async () => (await run((tx) => tx.select().from(managementSessions))).length;
+
+  async function enrolTotp(personId: string): Promise<string[]> {
+    await run((tx) =>
+      tx
+        .update(persons)
+        .set({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) })
+        .where(eq(persons.id, personId)),
+    );
+    return run((tx) => replaceRecoveryCodes(tx, personId));
+  }
+
+  it("binds the challenge to the session's person and offers only that person's passkeys, user verification required", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const other = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    await seedCredential(other.personId, "cred-theirs", 0);
+
+    const begun = await beginCheck(token);
+
+    const [row] = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(row!.personId).toBe(personId);
+    expect(row!.purpose).toBe("check");
+    expect(row!.challenge).toBe(begun.options.challenge);
+    expect(begun.options.allowCredentials?.map((c) => c.id)).toEqual(["cred-mine"]);
+    expect(begun.options.userVerification).toBe("required");
+  });
+
+  it("refuses a person who holds no passkey as passkey.not_registered, storing no challenge", async () => {
+    const { token } = await openManagementSession(suite.db, "admin");
+    expect(await codeOf(() => beginCheck(token))).toBe("passkey.not_registered");
+    expect(await run((tx) => tx.select().from(webauthnChallenges))).toHaveLength(0);
+  });
+
+  it("accepts the person's own passkey, starting no session and updating the passkey's counter and last use", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 3);
+    mockVerifyAuth.mockResolvedValue(authVerified(4));
+    const begun = await beginCheck(token);
+    const sessionsBefore = await sessionCount();
+    const before = new Date().toISOString();
+
+    await check(token, begun.challengeHandle, "cred-abc");
+
+    expect(await sessionCount()).toBe(sessionsBefore);
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(4);
+    expect(cred!.lastUsedAt! >= before).toBe(true);
+    expect(mockVerifyAuth.mock.calls[0]![0]).toMatchObject({
+      expectedChallenge: begun.options.challenge,
+      expectedOrigin: "http://localhost",
+      expectedRPID: "localhost",
+      requireUserVerification: true,
+      credential: { id: "cred-abc", counter: 3 },
+    });
+    const chal = await run((tx) =>
+      tx.select().from(webauthnChallenges).where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+    expect(chal).toHaveLength(0);
+  });
+
+  it("never lowers the stored counter", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const credRowId = await seedCredential(personId, "cred-abc", 10);
+    mockVerifyAuth.mockResolvedValue(authVerified(2));
+    const begun = await beginCheck(token);
+    await check(token, begun.challengeHandle, "cred-abc");
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(10);
+  });
+
+  it("refuses another person's passkey as passkey.verification_failed, without verifying it", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const other = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    await seedCredential(other.personId, "cred-theirs", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const begun = await beginCheck(token);
+
+    expect(await codeOf(() => check(token, begun.challengeHandle, "cred-theirs"))).toBe(
+      "passkey.verification_failed",
+    );
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("refuses a challenge issued to another person's session", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const other = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    await seedCredential(other.personId, "cred-theirs", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const theirs = await beginCheck(other.token);
+
+    expect(await codeOf(() => check(token, theirs.challengeHandle, "cred-mine"))).toBe(
+      "passkey.verification_failed",
+    );
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("refuses a sign-in challenge, which names no person", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const login = await run((tx) => beginPasskeyAuthentication(tx, { rpId: "localhost" }));
+
+    expect(await codeOf(() => check(token, login.challengeHandle, "cred-mine"))).toBe(
+      "passkey.verification_failed",
+    );
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("refuses a challenge a second time once it has been used", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+    const begun = await beginCheck(token);
+    await check(token, begun.challengeHandle, "cred-mine");
+
+    expect(await codeOf(() => check(token, begun.challengeHandle, "cred-mine"))).toBe(
+      "passkey.verification_failed",
+    );
+  });
+
+  it("refuses a challenge older than CHALLENGE_TTL_MS as passkey.challenge_expired", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    const begun = await beginCheck(token);
+    await run((tx) =>
+      tx
+        .update(webauthnChallenges)
+        .set({ createdAt: new Date(Date.now() - CHALLENGE_TTL_MS - 60_000).toISOString() })
+        .where(eq(webauthnChallenges.id, begun.challengeHandle)),
+    );
+
+    expect(await codeOf(() => check(token, begun.challengeHandle, "cred-mine"))).toBe(
+      "passkey.challenge_expired",
+    );
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
+  });
+
+  it("refuses an assertion that does not verify, or that the library throws on, leaving the counter alone", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    const credRowId = await seedCredential(personId, "cred-mine", 0);
+    mockVerifyAuth.mockResolvedValueOnce({ ...authVerified(5), verified: false });
+    const first = await beginCheck(token);
+    expect(await codeOf(() => check(token, first.challengeHandle, "cred-mine"))).toBe(
+      "passkey.verification_failed",
+    );
+    mockVerifyAuth.mockRejectedValueOnce(new Error("bad signature"));
+    const second = await beginCheck(token);
+    expect(await codeOf(() => check(token, second.challengeHandle, "cred-mine"))).toBe(
+      "passkey.verification_failed",
+    );
+    const [cred] = await run((tx) =>
+      tx.select().from(webauthnCredentials).where(eq(webauthnCredentials.id, credRowId)),
+    );
+    expect(cred!.counter).toBe(0);
+  });
+
+  it("refuses a non-string or missing credential id as passkey.verification_failed", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    for (const id of [42, undefined]) {
+      const begun = await beginCheck(token);
+      expect(await codeOf(() => check(token, begun.challengeHandle, id as never))).toBe(
+        "passkey.verification_failed",
+      );
+    }
+  });
+
+  it("refuses a missing assertion as passkey.verification_failed", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    const begun = await beginCheck(token);
+    const missing = run((tx) =>
+      verifyOwnPasskey(tx, {
+        managementSessionId: token,
+        challengeHandle: begun.challengeHandle,
+        response: undefined as never,
+        rpId: "localhost",
+        origin: "http://localhost",
+        keyRing: TOTP_KEY_RING,
+      }),
+    );
+    expect(await codeOf(() => missing)).toBe("passkey.verification_failed");
+  });
+
+  it("asks an enrolled person for their authenticator code, or a recovery code that is spent once", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    const codes = await enrolTotp(personId);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const noCode = await beginCheck(token);
+    expect(await codeOf(() => check(token, noCode.challengeHandle, "cred-mine"))).toBe(
+      "totp.invalid",
+    );
+
+    const withTotp = await beginCheck(token);
+    await check(token, withTotp.challengeHandle, "cred-mine", { totp: generateSync({ secret }) });
+
+    const withRecovery = await beginCheck(token);
+    await check(token, withRecovery.challengeHandle, "cred-mine", { recoveryCode: codes[0] });
+
+    const reused = await beginCheck(token);
+    expect(
+      await codeOf(() =>
+        check(token, reused.challengeHandle, "cred-mine", { recoveryCode: codes[0] }),
+      ),
+    ).toBe("totp.invalid");
+  });
+
+  it("refuses the same person's registration challenge, without verifying it", async () => {
+    const { personId, token } = await openManagementSession(suite.db, "admin");
+    await seedCredential(personId, "cred-mine", 0);
+    await enrolTotp(personId);
+    mockVerifyAuth.mockResolvedValue(authVerified(1));
+
+    const registration = await begin(token);
+    expect(
+      await codeOf(() =>
+        check(token, registration.challengeHandle, "cred-mine", {
+          totp: generateSync({ secret }),
+        }),
+      ),
+    ).toBe("passkey.verification_failed");
+    expect(mockVerifyAuth).not.toHaveBeenCalled();
   });
 });
