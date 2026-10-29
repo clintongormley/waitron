@@ -274,6 +274,10 @@ function composedParent(node: Element): Element | null {
   return node.assignedSlot ?? node.parentElement ?? (root instanceof ShadowRoot ? root.host : null);
 }
 
+function barSize(bar: HTMLElement, height: number): void {
+  bar.parentElement!.style.setProperty("--draft-bar-size", `${Math.ceil(height)}px`);
+}
+
 /** `fire-group`: a held group the waiter confirmed firing. */
 export interface FireGroupDetail {
   groupId: string;
@@ -1069,6 +1073,12 @@ export class TillTableOrderScreen extends LitElement {
       .round-bar till-basket::part(name) {
         overflow-wrap: anywhere;
       }
+
+      /* A line revealed at the scroll area's foot stops above the stuck bar rather than under it.
+         The bar's height depends on how its buttons lay out, so the screen measures it. */
+      .round-bar till-basket::part(entry) {
+        scroll-margin-block-end: var(--draft-bar-size);
+      }
     `,
     segmentedOptionStyles,
     signalChipStyles,
@@ -1168,6 +1178,9 @@ export class TillTableOrderScreen extends LitElement {
   /** Below that width, the draft is open on its Review view in place of browsing. */
   @state() private reviewing = false;
   #resizing?: ResizeObserver;
+  #barSizing?: ResizeObserver;
+  #sizedBar?: HTMLElement;
+  #sizedBarShown = false;
   /** Where browsing was scrolled when Review opened, put back on Back. */
   #browsingScroll?: { scroller: Element; top: number };
 
@@ -1983,6 +1996,7 @@ export class TillTableOrderScreen extends LitElement {
    * even when the line is gone, for the same reason. */
   override updated(): void {
     this.#watchAutomaticRouting();
+    this.#sizeDraftBar();
     if (!this.#offerTaken) return;
     this.#offerTaken = false;
     const offered = this.#offeredCancel;
@@ -1991,6 +2005,26 @@ export class TillTableOrderScreen extends LitElement {
     this.dispatchEvent(
       new CustomEvent("cancel-offer-taken", { detail: {}, bubbles: true, composed: true }),
     );
+  }
+
+  /** Copies the draft bar's height to `--draft-bar-size` on its row, where the basket's lines read
+   * it. Measured at once when the bar is drawn or shown, because the basket reveals a line in the
+   * next frame, before a ResizeObserver would report; the observer follows later changes. */
+  #sizeDraftBar(): void {
+    const bar = this.renderRoot.querySelector<HTMLElement>(".draft-bar") ?? undefined;
+    const shown = this.wide || this.reviewing;
+    if (bar === this.#sizedBar && shown === this.#sizedBarShown) return;
+    this.#sizedBarShown = shown;
+    this.#barSizing ??= new ResizeObserver((entries) => {
+      const entry = entries.at(-1)!;
+      barSize(entry.target as HTMLElement, entry.borderBoxSize[0]!.blockSize);
+    });
+    if (bar !== this.#sizedBar) {
+      if (this.#sizedBar !== undefined) this.#barSizing.unobserve(this.#sizedBar);
+      this.#sizedBar = bar;
+      if (bar !== undefined) this.#barSizing.observe(bar);
+    }
+    if (bar !== undefined) barSize(bar, bar.getBoundingClientRect().height);
   }
 
   #offerTaken = false;

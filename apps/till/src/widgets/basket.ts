@@ -874,7 +874,7 @@ export class TillBasket extends LitElement {
           const ended = line.blocked === undefined ? line.endedPeriod : undefined;
           return html`
             <slot name=${`before-${index}`}></slot>
-            <div class=${ended === undefined ? "entry" : "entry period-ended-entry"}>
+            <div class=${ended === undefined ? "entry" : "entry period-ended-entry"} part="entry">
               <div class="entry-body">
                 <div
                   class="line"

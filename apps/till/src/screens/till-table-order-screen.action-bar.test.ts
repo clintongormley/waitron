@@ -260,3 +260,78 @@ describe("till-table-order-screen: the unsent order's action bar under the shell
     });
   }
 });
+
+/** Waits until the scroll area has stopped moving, so a smooth reveal has finished. */
+async function scrollSettled(host: HTMLElement): Promise<void> {
+  let still = 0;
+  let last = host.scrollTop;
+  for (let frame = 0; frame < 300 && still < 10; frame++) {
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)));
+    still = host.scrollTop === last ? still + 1 : 0;
+    last = host.scrollTop;
+  }
+}
+
+/** The basket row of the line added last. */
+function newestEntry(el: TillTableOrderScreen): HTMLElement {
+  const store = el.draftStore!;
+  const index = store.lines.indexOf(store.lastAdded!);
+  for (const basket of el.shadowRoot!.querySelectorAll("till-basket")) {
+    const entry = basket
+      .shadowRoot!.querySelector(`[data-line-detail="${index}"]`)
+      ?.closest<HTMLElement>(".entry");
+    if (entry) return entry;
+  }
+  throw new Error(`No row for line ${index}`);
+}
+
+function expectClearOfBar(el: TillTableOrderScreen, host: HTMLElement): void {
+  const line = newestEntry(el).getBoundingClientRect();
+  const sendAll = el.shadowRoot!.querySelector('[data-draft-action="send-all"]')!;
+  const bar = el.shadowRoot!.querySelector(".draft-bar")!.getBoundingClientRect();
+  const area = host.getBoundingClientRect();
+  expect(line.height).toBeGreaterThan(0);
+  expect(line.top).toBeGreaterThanOrEqual(area.top);
+  expect(line.bottom).toBeLessThanOrEqual(sendAll.getBoundingClientRect().top);
+  expect(line.bottom).toBeLessThanOrEqual(bar.top);
+}
+
+describe("till-table-order-screen: a newly added line is not hidden behind the action bar", () => {
+  it("shows the newest line above the bar at 1024 × 768 when it is added below the window's foot", async () => {
+    const { el, host } = await orderedInWindow(1024, 768);
+    await linesRendered(el);
+    await scrollSettled(host);
+
+    expect(host.scrollTop).toBeGreaterThan(0);
+    expectClearOfBar(el, host);
+  });
+
+  it("shows the newest line above the bar after the bar grows while drawn", async () => {
+    const { el, host } = await orderedInWindow(1024, 768, {}, dishes.slice(0, -1));
+    const bar = el.shadowRoot!.querySelector(".draft-bar")!;
+    const before = bar.getBoundingClientRect().height;
+    // Stands in for the bar's buttons wrapping onto another row: the bar's padding reads this.
+    host.style.setProperty("--wt-space-2", "40px");
+    await resized(el);
+    expect(bar.getBoundingClientRect().height).toBeGreaterThan(before + 50);
+
+    await tap(el, dishes.at(-1)!.name);
+    await linesRendered(el);
+    await scrollSettled(host);
+
+    expect(host.scrollTop).toBeGreaterThan(0);
+    expectClearOfBar(el, host);
+  });
+
+  it("shows the newest line above the bar when the phone's Review view opens on a long order", async () => {
+    const { el, host } = await orderedInWindow(390, 700);
+    // A real press, so the basket's reveal runs in the frame the press lands in, as on a till.
+    await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
+    await el.updateComplete;
+    await linesRendered(el);
+    await scrollSettled(host);
+
+    expect(host.scrollTop).toBeGreaterThan(0);
+    expectClearOfBar(el, host);
+  });
+});
