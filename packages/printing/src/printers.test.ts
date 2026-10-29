@@ -117,7 +117,7 @@ describe("createPrinter", () => {
     expect(
       (
         await asTx(cfg, (tx) =>
-          createPrinter(tx, cfg, { name: "Cocina", transport: "usb", localKey: "SN-1" }),
+          createPrinter(tx, cfg, { name: "Pantry", transport: "usb", localKey: "SN-1" }),
         )
       ).id,
     ).toBeDefined();

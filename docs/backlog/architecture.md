@@ -493,7 +493,9 @@ until A977).
   sample location, operation, contact and note text. Remaining helper and screen fixtures stay
   with this item; continue package by package from A977's list. UI switch behavior and accessibility
   suites use English sample labels and descriptions. Disclosure accessibility samples use English
-  headings, summaries and body text; deliberate EN/ES summary examples remain.
+  headings, summaries and body text; deliberate EN/ES summary examples remain. Printing layout
+  and printer samples use English; layout samples keep their character counts and word boundaries.
+  Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
   `scripts/cloud-cost/fixtures/remote-browser-backend.mjs` and `remote-waitron-backend.mjs` still

@@ -5877,8 +5877,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **A976. Finish the server's English test-venue defaults.** Bookings’ native suites use English
   sample location, operation, contact and note text. UI switch behavior and accessibility suites
   use English sample labels and descriptions. Disclosure accessibility samples use English headings,
-  summaries and body text; deliberate EN/ES summary examples remain. Other helpers and screen
-  expectations remain.
+  summaries and body text; deliberate EN/ES summary examples remain. Printing layout and printer
+  samples use English, with the layout samples retaining their character counts and word boundaries.
+  Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
   glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
