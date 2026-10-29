@@ -28,6 +28,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
@@ -614,6 +615,36 @@ it("a promotion beside a leftover start-again note file names its minute as a bo
   expect(
     await s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
   ).toMatchObject({ status: "selected" });
+});
+
+it("refuses a promotion minute no later than a recorded installation name, writing nothing", async () => {
+  const s = await service();
+  await admit(s);
+  const [live] = await suite.db.select().from(registroSif);
+  const nameMs = Date.now() + 10 * 60_000;
+  await suite.db.insert(registroSif).values({
+    nodeId: primary.nodeId,
+    nif: live!.nif,
+    idSistemaInformatico: live!.idSistemaInformatico,
+    numeroInstalacion: encodeMinuteIdentity(nameMs),
+    registradoEn: new Date(Date.now() - 60 * 60_000),
+    revocadoEn: new Date(Date.now() - 30 * 60_000),
+  });
+  await compare(s);
+  const before = await rows();
+  await expect(
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      { action: "select", comparisonId },
+      { onBox: true },
+    ),
+  ).rejects.toMatchObject({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_not_later", allowedFromMs: nameMs + 60_000 },
+  });
+  expect(await rows()).toEqual(before);
 });
 
 it("a key-only operation service refuses administrator credentials without a credential key ring", async () => {

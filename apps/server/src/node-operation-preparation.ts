@@ -95,7 +95,7 @@ export function createNodeOperationPreparation(options: {
       check();
       return {
         ...current,
-        history: [...current.history],
+        history: current.history,
         oldMachineOffline: true,
         oldMachineAbsent: false,
         noParallelRecovery: true,
