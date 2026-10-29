@@ -6,7 +6,7 @@ import { hashSessionToken, loginWithPin, sessions } from "@waitron/identity";
 import { CAPABILITY_FLAGS, type ProfileAction } from "@waitron/layouts";
 import { deviceOrigin, locationId as brandLocationId } from "@waitron/shared";
 import type { DeviceOrigin } from "@waitron/shared";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
 
 /** Taking orders, a card keyed on a separate terminal, preparing and handing over: what a profile
@@ -65,7 +65,7 @@ export async function revokedDeviceSessionCookie(
 }
 
 /** `cfg` as a till-app request from a device seeded at its location, allowed every capability. */
-export async function deviceRequestCfg<C extends TillConfig>(
+export async function deviceRequestCfg<C extends TradingContext>(
   db: Database,
   cfg: C,
 ): Promise<C & { origin: DeviceOrigin }> {

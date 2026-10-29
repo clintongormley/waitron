@@ -36,7 +36,7 @@ import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { overridePinAttempts, parseOverrideField, STATUS, type TillApiDeps } from "./till-api.js";
 import { assertStillSignedIn, requireSession } from "./till-session.js";
 import { assertSubjectZones } from "./zone-access.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { enqueuePrintJob } from "@waitron/printing";
 import { resolveReceiptPrinter } from "./receipt-print.js";
 import {

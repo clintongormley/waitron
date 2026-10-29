@@ -36,13 +36,13 @@ import {
 } from "./join-requests.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 
 /** `pairingMode` must be the SAME holder `boot.ts` hands the device mount: one window per venue. */
 export interface JoinApiDeps {
   db: Database;
-  cfg: TillConfig;
+  cfg: TradingContext;
   pairingMode: PairingMode;
   deviceAddress: string;
 }

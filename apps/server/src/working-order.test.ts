@@ -58,7 +58,8 @@ import {
   nodeId as brandNodeId,
   seriesId as brandSeriesId,
 } from "@waitron/shared";
-import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -7288,7 +7289,7 @@ describe("priceOrderLines course-override validation (KDS-2 A1)", () => {
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
       });
-      const cfg2: TillConfig = { ...cfg, locationId: brandLocationId(location2Id) };
+      const cfg2: TradingContext = { ...cfg, locationId: brandLocationId(location2Id) };
       const foreign = await createCourse(tx, cfg2, { name: "Entrantes", displayOrder: 0 });
       await expect(
         addRound(tx, cfg, tabId, [{ productId: cafe, quantity: "1", courseId: foreign.id }]),

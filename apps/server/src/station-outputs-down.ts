@@ -15,7 +15,7 @@ import { printJobInTrouble } from "./print-job-trouble.js";
 import { locationId as brandLocationId, compareStationNames } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { firedPassDishes, passScopeOf, passSees } from "./pass-board.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 export interface DownPrinter {
   stationId: string;
@@ -203,7 +203,7 @@ export async function stationScreensDark(
  *  firing time, so it never counts. */
 export async function passScreensDark(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   now: Date,
 ): Promise<DarkPass[]> {
   const darkBefore = new Date(now.getTime() - SCREEN_DARK_MS).toISOString();

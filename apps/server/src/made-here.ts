@@ -10,7 +10,7 @@ import {
 } from "@waitron/db";
 import { staffPresentationName } from "@waitron/catalogue";
 import { AppError, thousandthsToDecimal, type OptionSnapshot } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { RequestEffects, TradingContext } from "./trading-context.js";
 import { requireLiveStation } from "./kitchen.js";
 import { extraLabel } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -34,7 +34,7 @@ export interface MadeHereItem {
 }
 
 /** A request's configuration as the device sending its work to the kitchen. */
-export function sendingCfg<C extends TillConfig>(
+export function sendingCfg<C extends TradingContext>(
   cfg: C,
   c: Context,
   device: { deviceId: string },
@@ -198,7 +198,7 @@ export async function storePrepayMadeHere(
 
 export async function replayPrepayMadeHere(
   tx: Transaction,
-  cfg: Pick<TillConfig, "madeHereSink">,
+  cfg: Pick<RequestEffects, "madeHereSink">,
   orderId: string,
 ): Promise<void> {
   if (cfg.madeHereSink === undefined) return;
@@ -247,7 +247,7 @@ export async function listMadeHereStations(tx: Transaction): Promise<Map<string,
 /** Replace one device's list after checking every station belongs to this location and is live. */
 export async function setMadeHereStations(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   deviceId: string,
   stationIds: readonly string[],
 ): Promise<void> {

@@ -20,7 +20,7 @@ import { assertProductWritable, productWithId, type ProductScope } from "@waitro
 export { COURSE_REFERENCES, coursesInUse } from "./course-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { replaceStationPrinters } from "./station-printers.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { assertStationTiming } from "./kitchen-timing.js";
 import type { StationTimingPatch } from "./kitchen-timing.js";
 
@@ -57,7 +57,7 @@ export interface Station {
  */
 export async function requireLiveStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   stationId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
@@ -74,7 +74,7 @@ export async function requireLiveStation(
  * Clear the venue's current default station. A new default is always clear-then-set, because
  * `kitchen_stations_default_key` allows only one default per location.
  */
-async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
+async function clearDefault(tx: Transaction, cfg: TradingContext): Promise<void> {
   await tx
     .update(kitchenStations)
     .set({ isDefault: false })
@@ -85,7 +85,7 @@ async function clearDefault(tx: Transaction, cfg: TillConfig): Promise<void> {
 
 export async function createStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: {
     name: string;
     isDefault?: boolean;
@@ -131,7 +131,7 @@ export async function createStation(
   }
 }
 
-export async function listStations(tx: Transaction, cfg: TillConfig): Promise<Station[]> {
+export async function listStations(tx: Transaction, cfg: TradingContext): Promise<Station[]> {
   const stations = await tx
     .select({
       id: kitchenStations.id,
@@ -159,7 +159,7 @@ export async function listStations(tx: Transaction, cfg: TillConfig): Promise<St
 }
 
 /** The active stations, each with how it stands today. */
-export async function listStationsToday(tx: Transaction, cfg: TillConfig) {
+export async function listStationsToday(tx: Transaction, cfg: TradingContext) {
   const listed = await listStations(tx, cfg);
   const states = await VENUE_SERVICE.stationStates(tx, { locationId: cfg.locationId }, new Date());
   return listed.map((station) => {
@@ -176,7 +176,7 @@ export async function listStationsToday(tx: Transaction, cfg: TillConfig) {
 
 export async function updateStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   patch: {
     name?: string;
@@ -237,7 +237,7 @@ export async function updateStation(
 
 export async function setDefaultStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<void> {
   await requireLiveStation(tx, cfg, id);
@@ -262,7 +262,7 @@ export interface Course {
  */
 export async function requireLiveCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   courseId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
@@ -283,7 +283,7 @@ export async function requireLiveCourse(
  */
 export async function requireCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   courseId: string,
 ): Promise<void> {
   const { rows } = await tx.execute<{ active: boolean | null }>(
@@ -299,7 +299,7 @@ export async function requireCourse(
 /** Create a kitchen course in `cfg.locationId`. A duplicate live `(location, name)` is `course.name_taken`. */
 export async function createCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: { name: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<{ id: string }> {
   try {
@@ -322,7 +322,7 @@ export async function createCourse(
 }
 
 /** Active courses in firing order: lowest `display_order` first, then `name`. */
-export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Course[]> {
+export async function listCourses(tx: Transaction, cfg: TradingContext): Promise<Course[]> {
   return tx
     .select({
       id: kitchenCourses.id,
@@ -343,7 +343,7 @@ export async function listCourses(tx: Transaction, cfg: TillConfig): Promise<Cou
  */
 export async function moveCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   to: number,
 ): Promise<Course[]> {
@@ -371,7 +371,7 @@ export async function moveCourse(
  */
 export async function updateCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   patch: { name?: string; displayOrder?: number; heldUntilFired?: boolean },
 ): Promise<void> {
@@ -406,7 +406,7 @@ export async function updateCourse(
 
 export async function setProductCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   productId: string,
   courseId: string | null,
   scope: ProductScope = "top-level",

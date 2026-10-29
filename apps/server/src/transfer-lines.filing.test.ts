@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -78,7 +78,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),

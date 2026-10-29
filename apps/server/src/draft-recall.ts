@@ -33,7 +33,7 @@ import { requireLiveCourse } from "./kitchen.js";
 import { requireMakeAtStation } from "./dead-ends.js";
 import type { PartyCommandArgs } from "./order-groups.js";
 import { checkAndBumpParty, requireBillOfParty, runServiceCommand } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { assertBillInvariant, refusePaidLines } from "./bill-payments.js";
 import {
   bumpRevision,
@@ -57,7 +57,7 @@ import "./errors.js";
 
 export async function saveRecalledLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   sourceLineId: string,
   input: DraftLineInput,
@@ -207,7 +207,7 @@ export async function saveRecalledLine(
 
 export async function recallToDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   lineId: string,
   args: PartyCommandArgs & { expectedEdit: BillEditExpected },

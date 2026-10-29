@@ -29,7 +29,7 @@ import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { setOrderInvoiceChoice } from "./testing/order-writer-fixture.js";
 import { readSettledTicket } from "./testing/whole-payment-fixture.js";
 import "./errors.js";

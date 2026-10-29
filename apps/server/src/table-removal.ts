@@ -15,7 +15,7 @@ import type { TableRemoval } from "@waitron/module";
 import type { AppError, DeleteImpactRefusal } from "@waitron/shared";
 import { foodOnItsWay, releaseDeliveries } from "./delivery-release.js";
 import { leaveMerges } from "./floor-today-merges.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** Those of `tableIds` an open party holds or used earlier in its meal, or that an unpaid order, or one with food on its way, is delivered to. */
 export async function tablesTied(
@@ -48,7 +48,7 @@ export async function tablesTied(
 /** Each of `tableIds` some module refuses to let go of, with the first module's refusal. */
 export async function refusedByAModule(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,
@@ -71,7 +71,7 @@ export async function refusedByAModule(
  */
 export async function removeLiveTables(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,
@@ -135,7 +135,7 @@ async function deleteWithItsSplit(tx: Transaction, tableId: string): Promise<boo
 
 export async function tableDeleteRefusals(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   removals: readonly TableRemoval[],
   tableIds: readonly string[],
   now: Date,

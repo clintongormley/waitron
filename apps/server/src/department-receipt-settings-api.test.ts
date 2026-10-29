@@ -36,7 +36,7 @@ import { mountDepartmentReceiptSettingsApi } from "./department-receipt-api.js";
 import * as logoModule from "./receipt-logo.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
   migrations: [
@@ -79,7 +79,7 @@ async function fixture(
       province: "Madrid",
     })
     .returning();
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(location!.id),
     nodeId: nodeId(randomUUID()),
     locale: "es-ES",

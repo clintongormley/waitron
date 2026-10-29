@@ -21,7 +21,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";

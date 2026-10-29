@@ -42,7 +42,7 @@ import {
   readMainBill,
   setMainBill,
 } from "./parties.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { serviceModesMatch } from "./working-order.js";
 import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
@@ -84,7 +84,7 @@ export interface CombineResult {
  */
 export async function moveGuests(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   toTableId: string,
   options: TableActionOptions,
@@ -158,7 +158,7 @@ async function leaveMergeOf(
  */
 export async function joinTables(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   tableId: string,
   options: TableActionOptions,
@@ -197,7 +197,7 @@ export async function joinTables(
 /** {@link combineParties} as a table action. */
 async function combineAt(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   from: string,
   into: string,
   tables: "leave" | "join",
@@ -245,7 +245,7 @@ function combinedGuests(from: number | null, into: number | null): number | null
  */
 export async function combineParties(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   args: {
     from: string;
     into: string;
@@ -496,7 +496,7 @@ async function billsTaking(
  */
 async function retargetUnsettledBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   zoneId: string,
 ): Promise<void> {

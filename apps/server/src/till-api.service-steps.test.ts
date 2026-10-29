@@ -10,14 +10,14 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { locationId, nodeId } from "@waitron/shared";
 import { serviceStepCompletions } from "@waitron/venue-service";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 import { departmentOf, setSteps } from "./testing/service-steps.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: TillConfig;
+let cfg: TradingContext;
 let personId: string;
 let token: string;
 let partyId: string;

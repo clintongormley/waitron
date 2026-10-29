@@ -1,10 +1,10 @@
 import { createDepartment, createServiceZone, listDepartments } from "@waitron/venue-service";
 import type { Transaction } from "@waitron/db";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 
 export async function createZone(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   input: { name: string; displayOrder?: number },
 ): Promise<{ id: string }> {
   const existing = (await listDepartments(tx, cfg)).find((department) => department.active);

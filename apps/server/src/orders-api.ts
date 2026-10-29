@@ -37,7 +37,7 @@ import {
   type OrderCursor,
   type OrderListFilter,
 } from "./orders-list.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { reprintOrderReceipt } from "./orders-reprint.js";
 import { readInvoiceForDownload } from "./orders-invoice-pdf.js";
@@ -135,7 +135,7 @@ export interface OrdersApiDeps {
   db: Database;
   backend: FiscalBackend;
   cfg: { nodeId: string };
-  till: TillConfig;
+  till: TradingContext;
   devMode?: boolean;
   /** Whether a mail transport is set up to email invoices. */
   invoiceEmailAvailable: () => Promise<boolean>;

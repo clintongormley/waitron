@@ -9,7 +9,7 @@ import { findTransactionsRelation, readFindTransactions } from "./find-bill-tran
 import { parseBillsQuery, parseTransactionsQuery } from "./find-bill-query.js";
 import type { FindBillOptions } from "./find-bill-types.js";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { requireSession } from "./till-session.js";
 import { checkZones, orderZoneCondition, type OrderZoneCondition } from "./zone-access.js";
@@ -17,7 +17,7 @@ import "./errors.js";
 
 export async function readFindBillOptions(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillOptions> {
   const bills = findBillsRelation(cfg, inZones);

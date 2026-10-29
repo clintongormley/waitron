@@ -44,7 +44,7 @@ import { renderInvoicePage } from "./page-print-api.js";
 import { FULL_INVOICE_DOCUMENT_FIXTURE } from "./testing/full-invoice-fixture.js";
 import { createPairingMode } from "./pairing-mode.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -93,7 +93,7 @@ async function venue(opts: { render?: Render; realClock?: true } = {}) {
     enabledModules(ALL_MODULES, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat")),
     null,
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locationId: brandLocation(locationId),
     locale: "es-ES",

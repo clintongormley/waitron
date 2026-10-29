@@ -26,7 +26,7 @@ import {
   jobOrigin,
   MEDIA_FILENAME,
 } from "@waitron/shared";
-import type { OriginConfig } from "../../src/till-config.js";
+import type { OriginConfig } from "../../src/trading-context.js";
 import { getHeldOrder, parkOrder } from "../../src/working-order.js";
 import { readImageBytes } from "@waitron/media";
 import { getCountryPack } from "@waitron/country-packs";

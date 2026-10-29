@@ -19,7 +19,7 @@ import {
   type Decimal,
 } from "@waitron/shared";
 import { resolveTransactionScope } from "./find-bill-transactions.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { RefundableTender } from "./tender-refund-types.js";
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 
@@ -31,7 +31,7 @@ const minimum = (left: Decimal, right: Decimal) =>
 
 export async function readRefundableTenders(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   saleId: string,
 ): Promise<RefundableTender[]> {
   await resolveTransactionScope(tx, cfg, saleId);

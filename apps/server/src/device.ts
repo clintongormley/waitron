@@ -32,7 +32,7 @@ import type {
 import { settleDevice } from "./device-equipment.js";
 import { KITCHEN_SCREEN_KINDS } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** A device's kind is DERIVED from its profile's form factor via `kindOfFormFactor`. */
 export type { DeviceKind };
@@ -401,7 +401,7 @@ export function parseProfileKitchenScreens(value: unknown): ProfileKitchenScreen
 
 export async function resolveDeviceKitchenScreens(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: {
     profileId: string;
     kitchenScreens?: readonly DeviceKitchenScreen[];

@@ -14,7 +14,7 @@ import {
 } from "@waitron/catalogue";
 import type { ExtraSelection, OptionSelection } from "@waitron/shared";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, OriginConfig, TillConfig } from "../till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TradingContext } from "../trading-context.js";
 import { deviceRequestCfg } from "./session-device.js";
 import { createStation } from "../kitchen.js";
 import { createPrinter } from "@waitron/printing";
@@ -66,7 +66,7 @@ export async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TillConfig);
+  } satisfies TradingContext);
   return { cfg, catalogueId };
 }
 
@@ -293,7 +293,7 @@ type NamedExtraItem = ExtraItem & { customerName: string; kitchenName: string };
 
 export function addExtras(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   catalogueId: string,
   dishId: string,
   items: NamedExtraItem[],
@@ -301,7 +301,7 @@ export function addExtras(
 /** Use only when a kitchen-print case asserts the fixture's exact staff name on paper. */
 export function addExtras(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   catalogueId: string,
   dishId: string,
   items: ExtraItem[],
@@ -309,7 +309,7 @@ export function addExtras(
 ): Promise<{ listId: string; productIds: string[] }>;
 export async function addExtras(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   catalogueId: string,
   dishId: string,
   items: ExtraItem[],

@@ -11,7 +11,7 @@ import {
 } from "../order-groups.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { partyMainBill } from "../parties.js";
-import type { OriginConfig } from "../till-config.js";
+import type { OriginConfig } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
 

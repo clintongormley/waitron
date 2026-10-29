@@ -8,7 +8,7 @@ import {
   type BillCommand,
 } from "../bill-actions.js";
 import type { BillEditExpected } from "../order-drafts.js";
-import type { OriginConfig, TillConfig } from "../till-config.js";
+import type { OriginConfig, TradingContext } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 export * from "../bill-actions.js";
 
@@ -54,7 +54,7 @@ export async function splitBill(
 
 export async function transferItems(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   from: string,
   into: string,
   transfers: Parameters<typeof transfer>[4],
@@ -73,7 +73,7 @@ export async function transferItems(
 // Content fixtures provide current expectations; ownership/race tests call the writer directly.
 export async function mergeBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   into: string,
   from: string,
   command: BillCommand & { expectedEdits?: BillEditExpected[] },
@@ -95,7 +95,7 @@ export async function mergeBills(
 
 export async function mergeCheckedBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   into: string,
   from: string,

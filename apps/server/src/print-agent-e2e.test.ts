@@ -37,7 +37,7 @@ import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { freePorts } from "./testing/free-ports.js";
 import "./errors.js";
 
@@ -56,7 +56,7 @@ const BASE = "http://waitron.e2e";
 const USB_SERIAL = "USB-SN-E2E";
 
 let locationId: string;
-let cfg: TillConfig;
+let cfg: TradingContext;
 let managerCookie: string;
 
 const suite = useVenueDb({

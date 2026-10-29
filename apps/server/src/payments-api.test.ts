@@ -39,7 +39,7 @@ import { mountPaymentsApi } from "./payments-api.js";
 import { deleteDevice } from "./device-delete.js";
 import { systemClock } from "./till-backend.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -198,7 +198,7 @@ function saleDeps() {
   return { backend: new FakeFiscalBackend(suite.db), clock: systemClock() };
 }
 
-function cfgOf(venue: Venue): TillConfig {
+function cfgOf(venue: Venue): TradingContext {
   return {
     nodeId: brandNodeId(randomUUID()),
     locationId: brandLocationId(venue.locationId),

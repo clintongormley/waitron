@@ -11,7 +11,7 @@ import { withTransaction, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import { persons } from "@waitron/identity";
 import { applyAdjustment } from "../adjustments-apply.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { send, type BillVenue } from "./bill-venue.js";
 
 const OPERATOR = "cccccccc-0000-4000-8000-0000000000c1";
@@ -133,7 +133,7 @@ export async function cancelBody(
  */
 export async function cancelLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   lineNo: number,
   quantity?: string,

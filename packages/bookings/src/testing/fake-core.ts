@@ -28,7 +28,6 @@ declare module "@waitron/shared" {
   }
 }
 
-/** The `TillConfig` fields the real `seatTable` stamps on a `working_orders` row. */
 export interface FakeCoreConfig {
   locationId: string;
   nodeId: string;

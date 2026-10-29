@@ -13,7 +13,7 @@ import { resumeCardRefund } from "./bill-refunds.js";
 import type { RefundProviderFor } from "./bill-refunds.js";
 import { perDatabase } from "./live-in-process.js";
 import { alertOrigin, type AlertOrigin } from "./request-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
 import "./errors.js";
 
@@ -46,7 +46,7 @@ const lastLookupsOf = perDatabase(() => new Map<string, number>());
 
 export interface BillPaymentsLoopDeps extends BillPaymentDeps {
   /** The box's till configuration; an invoice is recorded on the bill payment's node. */
-  cfg: TillConfig;
+  cfg: TradingContext;
   /** The card providers pending refunds are looked up at; without it none is looked up. */
   refundProviderFor?: RefundProviderFor;
 }

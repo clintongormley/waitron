@@ -1,5 +1,5 @@
 import { withTransaction } from "@waitron/db";
-import type { DeviceRequestConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
 import type { TillSaleDeps } from "../working-order.js";
 import { issueUnpaidInvoice, priceForIssuance } from "../working-order.js";
 

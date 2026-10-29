@@ -37,7 +37,7 @@ import { mountManagementApi } from "./management-api.js";
 import { mountTillApi } from "./till-api.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 import { createPairingMode, type PairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import "./errors.js";
@@ -96,7 +96,7 @@ const noopLog: Logger = () => {};
 const USE_DEFAULT_RECEIPT = { role: "receipt", selection: "default", via: "list" };
 
 /** `devMode` is left unset, so the real admin-approval flow runs rather than the dev auto-accept. */
-function mountBoth(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
+function mountBoth(cfg: TradingContext, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
   mountDeviceApi(app, { db: suite.db, cfg, secureCookies: false, pairingMode }, noopLog);
   mountJoinApi(

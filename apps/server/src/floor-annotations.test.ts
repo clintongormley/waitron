@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { bookings } from "@waitron/bookings";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { listTablesWithState } from "./working-order.js";
 import { ALL_MODULES, enabledFloorAnnotators } from "./modules.js";
@@ -28,7 +28,7 @@ beforeAll(() => {
 
 const LOCALE = "es-ES";
 
-async function setupVenue(): Promise<TillConfig> {
+async function setupVenue(): Promise<TradingContext> {
   await seedTenant(db);
   // Through the table definition: `locations.id` is a NOT NULL `$defaultFn` generator a raw insert
   // never reaches.
@@ -53,14 +53,14 @@ async function setupVenue(): Promise<TillConfig> {
   };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
 }
 
-async function insertBooking(cfg: TillConfig, tableId: string, time: string): Promise<void> {
+async function insertBooking(cfg: TradingContext, tableId: string, time: string): Promise<void> {
   // Through the table definition for the same reason as the venue row above.
   await asApp(cfg, (tx) =>
     tx.insert(bookings).values({

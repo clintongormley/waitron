@@ -18,7 +18,7 @@ import { NEW_TABLE_SIZE, compareLabels } from "@waitron/shared";
 import type { LaidPart } from "./joined-split-layout.js";
 import { withMovedSlips } from "./moved-slips.js";
 import { checkAndBumpParty, holderOf, leaveTables, partyRevision } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 export interface Part extends LaidPart {
   label: string;
@@ -101,7 +101,7 @@ export async function partsOf(tx: Transaction, tableId: string): Promise<Part[]>
  */
 export async function passGuests(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromTableId: string,
   toTableIds: readonly string[],
   slips: "now" | "caller",

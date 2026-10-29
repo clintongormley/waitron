@@ -24,7 +24,7 @@ import type { Logger, LogLevel } from "./logger.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
@@ -36,7 +36,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // The HTTP wiring of the table/tab routes: session guard, isUuid screens and STATUS mapping. The verbs
 // are pinned in `tabs.filing.test.ts`, `move-merge.filing.test.ts` and packages/db's schema suites.
 // The schema is the whole manifest: the tables here span modules that FK into core.
-let cfg: TillConfig;
+let cfg: TradingContext;
 let ana: { id: string };
 /** A supervisor, who holds the refund permission a sent dish's cancel needs. */
 let sara: { id: string };
@@ -130,7 +130,7 @@ function collect(
 }
 
 /** `seriesId` is unused by these routes (no fiscal write on the tab/table path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

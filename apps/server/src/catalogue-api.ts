@@ -117,7 +117,7 @@ import { readJsonBody, requireEnum, requireString } from "@waitron/server-kit";
 import { requireManagementSession } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import { setProductCourse } from "./kitchen.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readLocationClock } from "@waitron/reporting";
@@ -132,7 +132,7 @@ export interface CatalogueApiDeps {
   contentLanguageRules?: ContentLanguageRules;
   db: Database;
   /** Required by the routes that read the venue's location; `requireVenueCfg` throws without it. */
-  venueCfg?: TillConfig;
+  venueCfg?: TradingContext;
   venueLocale?: string;
 }
 
@@ -1623,7 +1623,7 @@ export function mountCatalogueApi(app: Hono, deps: CatalogueApiDeps, log: Logger
 }
 
 /** A misconfiguration guard, not a request fault: `boot.ts` always supplies `venueCfg`. */
-function requireVenueCfg(deps: CatalogueApiDeps): TillConfig {
+function requireVenueCfg(deps: CatalogueApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads a venueCfg; only a harness that omits it AND calls a route
      that reads the venue's location reaches this, which no suite does — surfaced as a 500 by `run`. */
   if (deps.venueCfg === undefined) {

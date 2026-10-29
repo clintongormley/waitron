@@ -72,7 +72,7 @@ import { createJoinRequest, readAgentJoinStatus } from "./join-requests.js";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import type { PairingMode } from "./pairing-mode.js";
 import { isUuid } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { requireBodyUuid, requireEnum, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import { previewPrintJob } from "./print-job-preview.js";
@@ -92,7 +92,7 @@ import type { ReceiptDocumentInput } from "./receipt-document.js";
 
 export interface PrintApiDeps {
   db: Database;
-  cfg: TillConfig;
+  cfg: TradingContext;
   readMembership: () => Promise<SignedMembershipDocument | null>;
   pairingMode: PairingMode;
   /** Injected by tests over a controllable clock; production gets the default limiter. */

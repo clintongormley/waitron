@@ -8,7 +8,7 @@ import {
   type PartyCommandArgs,
 } from "../order-groups.js";
 import type { BillEditExpected } from "../order-drafts.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 import { observedGroupSubmitBody } from "./group-submit-fixture.js";
 export * from "../order-groups.js";
@@ -120,7 +120,7 @@ export async function observedGroupCompositionBody(
 }
 export async function moveLinesToGroup(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   moves: Parameters<typeof move>[3],
   target: Parameters<typeof move>[4],
@@ -149,7 +149,7 @@ export async function moveLinesToGroup(
 }
 export async function splitHeldLineIntoUnits(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   lineId: string,
   args: PartyCommandArgs & { expectedEdit?: BillEditExpected },

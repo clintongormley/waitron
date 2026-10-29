@@ -167,7 +167,7 @@ import {
 import { seedSessionDevice } from "./testing/session-device.js";
 import { setDefaultStation } from "./kitchen.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { deletePrinter } from "./printer-delete.js";
 import { stageConfigurationImport } from "./configuration-import.js";
 
@@ -3455,7 +3455,7 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
     nodeId: string;
     seriesIds: string[];
     locationId: string;
-  }): TillConfig => ({
+  }): TradingContext => ({
     nodeId: nodeId(venue.nodeId),
     locationId: locationId(venue.locationId),
     locale: "es-ES",
@@ -3749,7 +3749,7 @@ async function shortNamedBundle(taxId: string) {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7159,7 +7159,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7296,7 +7296,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7432,7 +7432,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",
@@ -7518,7 +7518,7 @@ it("carries a kept size, naming the imported table", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(source.locationId),
     nodeId: nodeId(source.nodeId),
     locale: "es-ES",

@@ -30,7 +30,7 @@ import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { DEV_DEVICE_HEADER, DEVICE_COOKIE } from "./device-session.js";
@@ -82,7 +82,7 @@ function nextNif(): string {
   return nifWithControlLetter(61_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
@@ -97,7 +97,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  *  known PIN. Returns the cfg, the venue's `locationId`,
  *  the sellable product, and the operator to attribute the sale to. */
 async function setupVenue(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   locationId: string;
   product: AvailableProduct & { menuItemId: string };
   operatorId: string;
@@ -217,7 +217,7 @@ async function seedHandheldProfile(): Promise<string> {
  * Enrol a REAL sale-capable device named `name` through the production join-and-accept path, and
  * return its `waitron_device=<id>.<token>` cookie.
  */
-async function enrolTillCookie(cfg: TillConfig, name: string): Promise<string> {
+async function enrolTillCookie(cfg: TradingContext, name: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, { name, profileId });
   return `${DEVICE_COOKIE}=${dev.deviceId}.${dev.token}`;
@@ -227,13 +227,13 @@ async function enrolTillCookie(cfg: TillConfig, name: string): Promise<string> {
  * Enrol a REAL device named `name` and return its raw `deviceId` — the id the dev-override header
  * (`x-waitron-dev-device`) carries in place of the cookie.
  */
-async function enrolTillDeviceId(cfg: TillConfig, name: string): Promise<string> {
+async function enrolTillDeviceId(cfg: TradingContext, name: string): Promise<string> {
   const profileId = await seedHandheldProfile();
   const dev = await enrolDeviceForTest(suite.db, cfg, { name, profileId });
   return dev.deviceId;
 }
 
-function apiDeps(cfg: TillConfig): TillApiDeps {
+function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
     db: suite.db,
     backend,
@@ -295,7 +295,7 @@ interface Registro {
 }
 
 /** Every fiscal record filed for the tenant, oldest first — one per sale, this tenant's alone. */
-async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
+async function registrosFor(cfg: TradingContext): Promise<Registro[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx
@@ -315,7 +315,7 @@ async function registrosFor(cfg: TillConfig): Promise<Registro[]> {
 
 /** Each sale's stored `sales.device_id`, ordered by the per-series `invoice_number` (1, 2, …) so it
  *  lines up with the registros ordered by `secuencia`. */
-async function saleDeviceIds(cfg: TillConfig): Promise<(string | null)[]> {
+async function saleDeviceIds(cfg: TradingContext): Promise<(string | null)[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     const rows = await tx

@@ -19,11 +19,11 @@ import { insertDevice, resolveDeviceKitchenScreens, updateDeviceSettings } from 
 import { VENUE_SERVICE } from "./modules.js";
 import { settleDevice } from "./device-equipment.js";
 import type { PairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** The predicate every statement here carries: a pending request belongs to the node that received
  * it (`join_requests.node_id`). */
-const ownedBy = (cfg: Pick<TillConfig, "nodeId">) => eq(joinRequests.nodeId, cfg.nodeId);
+const ownedBy = (cfg: Pick<TradingContext, "nodeId">) => eq(joinRequests.nodeId, cfg.nodeId);
 
 /** Both surfaces' pending joins live in one table; this is which one a row is for. */
 export type JoinRequestKind = "device" | "print_agent";
@@ -40,7 +40,7 @@ const lapseCutoff = () => new Date(Date.now() - JOIN_TTL_MS).toISOString();
 
 /** Delete every lapsed request this node holds, so a lapsed row never occupies the cap, never
  * blocks a number, and never appears in the pending list. */
-async function sweepLapsed(tx: Transaction, cfg: TillConfig): Promise<void> {
+async function sweepLapsed(tx: Transaction, cfg: TradingContext): Promise<void> {
   await tx.delete(joinRequests).where(and(ownedBy(cfg), lt(joinRequests.createdAt, lapseCutoff())));
 }
 
@@ -56,7 +56,7 @@ export type DeviceRequestWindow = Pick<PairingMode, "openSince" | "orphanedClaim
  */
 export async function discardLapsedDeviceRequests(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   window: DeviceRequestWindow,
 ): Promise<string[]> {
   const since = window.openSince();
@@ -75,7 +75,7 @@ export async function discardLapsedDeviceRequests(
  * never show the same number, or an admin comparing across two screens can be honestly misled. */
 export async function pendingNumbers(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
 ): Promise<{ reals: Set<string>; decoys: Set<string> }> {
   const rows = await tx
     .select({ n: joinRequests.verificationNumber, d: joinRequests.decoyNumbers })
@@ -105,7 +105,7 @@ function twoDigits(n: number): string {
  */
 export async function createJoinRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: {
     kind: JoinRequestKind;
     label: string;
@@ -260,7 +260,7 @@ export interface ReturningDetails {
  */
 export async function returningDevicesOf(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ids: readonly string[],
 ): Promise<Map<string, ReturningDetails>> {
   if (ids.length === 0) return new Map();
@@ -294,7 +294,7 @@ export async function returningDevicesOf(
  * it is a stronger guarantee than a `select` that happens not to ask for it. */
 export async function listPendingJoinRequests(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   kind: JoinRequestKind,
 ): Promise<{ id: string; kind: JoinRequestKind; label: string; createdAt: string }[]> {
   await sweepLapsed(tx, cfg);
@@ -313,7 +313,7 @@ export async function listPendingJoinRequests(
 /** Fetch one of this node's pending requests by id, or throw `join_request.not_found`. */
 async function requirePending(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<{
   id: string;
@@ -353,7 +353,7 @@ async function requirePending(
  */
 export async function findJoinRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<{ kind: JoinRequestKind; createdAt: string } | undefined> {
   await sweepLapsed(tx, cfg);
@@ -377,7 +377,7 @@ export async function findJoinRequest(
  */
 export async function challengeFor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<{ choices: string[] }> {
   const row = await requirePending(tx, cfg, id);
@@ -419,7 +419,7 @@ async function statusFor(token: string, stored: StoredJoinHash): Promise<JoinSta
  */
 export async function readJoinStatus(
   db: Database,
-  cfg: TillConfig,
+  cfg: TradingContext,
   joinId: string,
   token: string,
   window: DeviceRequestWindow & Pick<PairingMode, "dropClaim">,
@@ -452,7 +452,7 @@ export async function readJoinStatus(
  */
 export async function checkDeviceJoinNumber(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ask: { id: string; createdAt: string },
   choice: string,
 ): Promise<{ ok: boolean }> {
@@ -497,7 +497,7 @@ export async function checkDeviceJoinNumber(
  */
 export async function acceptDeviceJoinRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   input: {
     label: string;
@@ -575,7 +575,7 @@ export type AgentAcceptResult =
  */
 export async function acceptPrintAgentJoinRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   input: { choice: string },
 ): Promise<AgentAcceptResult> {
@@ -613,7 +613,7 @@ export async function acceptPrintAgentJoinRequest(
  */
 export async function readAgentJoinStatus(
   db: Database,
-  cfg: TillConfig,
+  cfg: TradingContext,
   joinId: string,
   token: string,
 ): Promise<JoinStatus> {
@@ -639,7 +639,7 @@ export async function readAgentJoinStatus(
  * until the row is read, so a `kind` parameter would either be vacuous or force a second read. */
 export async function denyJoinRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<JoinRequestKind> {
   const row = await requirePending(tx, cfg, id);
@@ -647,7 +647,7 @@ export async function denyJoinRequest(
   return row.kind;
 }
 
-const returningOf = (cfg: TillConfig, deviceId: string) =>
+const returningOf = (cfg: TradingContext, deviceId: string) =>
   and(
     ownedBy(cfg),
     eq(joinRequests.id, deviceId),
@@ -658,7 +658,7 @@ const returningOf = (cfg: TillConfig, deviceId: string) =>
 /** Whether this node holds a pending request from the device to come back. */
 export async function hasReturningRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   deviceId: string,
 ): Promise<boolean> {
   const [row] = await tx
@@ -671,7 +671,7 @@ export async function hasReturningRequest(
 /** Deletes this node's pending request from the device to come back; false when there was none. */
 export async function endReturningRequest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   deviceId: string,
 ): Promise<boolean> {
   const ended = await tx
@@ -689,7 +689,7 @@ export async function endReturningRequest(
  */
 export async function selfEnrolNodeAgent(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: { nodeId: string; name: string },
 ): Promise<{ agentId: string; token: string }> {
   const [existing] = await tx

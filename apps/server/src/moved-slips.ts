@@ -6,7 +6,7 @@ import {
   readSentWorkAt,
   type SentWork,
 } from "./kitchen-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 // Function declarations and types only: this module sits in import loops, so top-level code
 // calling an import could run first.
@@ -34,7 +34,7 @@ export type MovedSlipsReach =
  */
 export async function withMovedSlips<T>(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   reach: MovedSlipsReach | null,
   write: (slips: SlipsLater) => Promise<T>,
 ): Promise<T> {

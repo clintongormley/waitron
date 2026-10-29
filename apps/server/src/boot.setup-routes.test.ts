@@ -48,7 +48,7 @@ import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity, readNodeLocation } from "./node-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { loadBoxEnv } from "./box-env.js";
@@ -571,7 +571,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
       );
       expect(deviceRows.rows[0]!.n).toBe(0);
 
-      const cfg: TillConfig = {
+      const cfg: TradingContext = {
         ...loadNodeIdentity(trading),
         ...loadTillAppSettings(trading),
         locationId: (await readNodeLocation(venue.store.venue, loadNodeIdentity(trading).nodeId))!,

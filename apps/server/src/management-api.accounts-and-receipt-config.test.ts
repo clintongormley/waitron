@@ -38,7 +38,7 @@ import { planVenue, savePrivacyContact } from "@waitron/provisioning";
 import { WorkforceBackend } from "@waitron/workforce";
 import { jobOrigin, locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { AccountEmailSender } from "./account-email.js";
 import type { exchangeGoogleCode } from "./google-oidc.js";
 import {
@@ -93,7 +93,7 @@ function invitationBody(
   };
 }
 
-let venueCfg: TillConfig | undefined;
+let venueCfg: TradingContext | undefined;
 
 async function setupTenant(): Promise<{ managerId: string; staffId: string }> {
   const venue = await applyVenue(

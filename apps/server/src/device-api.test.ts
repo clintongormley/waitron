@@ -26,7 +26,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu";
 import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { deploymentEnvironment } from "./config.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { deleteStation } from "./station-delete.js";
 import { parkOrder } from "./working-order.js";
@@ -149,7 +149,7 @@ async function moveItemToStation(itemId: string, stationId: string): Promise<voi
 /** Seed a `cloud_poll` printer for the venue — needs only a poll id, so no print agent has to be
  *  seeded to satisfy the transport CHECK. Through the table definition: `printers.id` comes from a
  *  `$defaultFn` raw SQL never reaches. */
-async function seedPrinter(cfg: TillConfig): Promise<string> {
+async function seedPrinter(cfg: TradingContext): Promise<string> {
   const [row] = await suite.db
     .insert(printers)
     .values({
@@ -186,7 +186,7 @@ async function deviceBindings(deviceId: string): Promise<{
   return row!;
 }
 
-async function seedNamedPrinters(cfg: TillConfig, names: string[]): Promise<string[]> {
+async function seedNamedPrinters(cfg: TradingContext, names: string[]): Promise<string[]> {
   const rows = await suite.db
     .insert(printers)
     .values(
@@ -202,7 +202,7 @@ async function seedNamedPrinters(cfg: TillConfig, names: string[]): Promise<stri
 }
 
 /** An office (page) printer at the venue's location; its id is never a receipt printer's. */
-async function seedPagePrinter(cfg: TillConfig): Promise<string> {
+async function seedPagePrinter(cfg: TradingContext): Promise<string> {
   const [row] = await suite.db
     .insert(pagePrinters)
     .values({
@@ -237,7 +237,7 @@ async function openTillSession(deviceId: string): Promise<string> {
 const windows = new WeakMap<Hono, PairingMode>();
 
 function mountApp(
-  cfg: TillConfig,
+  cfg: TradingContext,
   enrolRateLimiter?: EnrolRateLimiter,
   pairingMode: PairingMode = createPairingMode(),
 ): Hono {
@@ -254,7 +254,7 @@ function mountApp(
 }
 
 /** A device API mounted with an explicit `devMode` flag. */
-function mountDevApp(cfg: TillConfig, devMode: boolean): Hono {
+function mountDevApp(cfg: TradingContext, devMode: boolean): Hono {
   const app = new Hono();
   const pairingMode = createPairingMode();
   windows.set(app, pairingMode);
@@ -3357,7 +3357,7 @@ describe("a device's current printers", () => {
 
 describe("PUT /api/device/battery", () => {
   /** A device API whose clock reads `clock.at`, so a test can move time past the one-minute limit. */
-  function mountClockedApp(cfg: TillConfig, clock: { at: Date }): Hono {
+  function mountClockedApp(cfg: TradingContext, clock: { at: Date }): Hono {
     const app = new Hono();
     const pairingMode = createPairingMode();
     windows.set(app, pairingMode);
@@ -4524,7 +4524,7 @@ describe("while a save refused for a full disk stands", () => {
     return disk;
   }
 
-  function mountWithDisk(cfg: TillConfig, disk: DiskFullState): Hono {
+  function mountWithDisk(cfg: TradingContext, disk: DiskFullState): Hono {
     const app = new Hono();
     const pairingMode = createPairingMode();
     windows.set(app, pairingMode);

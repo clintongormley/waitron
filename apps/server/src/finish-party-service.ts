@@ -11,7 +11,7 @@ import {
 } from "./line-cancel-context.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
 import { cancelItem, type CancelItemAsk, type RefundLink } from "./line-cancel.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { moveSettledBillToCounter } from "./move-bill.js";
 import { releaseHeldWorkOf } from "./order-groups.js";
 import { invalid } from "./bill-allocation.js";

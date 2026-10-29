@@ -31,7 +31,7 @@ import {
   nodeId as brandNodeId,
   jobOrigin,
 } from "@waitron/shared";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { listStationQueues, moveOrderLines } from "./working-order.js";
 import { createPrinter } from "@waitron/printing";

@@ -1,9 +1,9 @@
 import { AppError, deviceOrigin, readOrigin } from "@waitron/shared";
 import type { DeviceOrigin, Origin } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 
 /** The venue's configuration, recording as the given device. */
-export function requestCfg(cfg: TillConfig, device: { deviceId: string }): DeviceRequestConfig {
+export function requestCfg(cfg: TradingContext, device: { deviceId: string }): DeviceRequestConfig {
   return { ...cfg, origin: deviceOrigin(device.deviceId) };
 }
 

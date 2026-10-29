@@ -24,7 +24,7 @@ import {
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { resendInvoicePrintJob } from "./invoice-print.js";
 import { enqueueInvoiceReceipt, enqueueOriginalReceipt } from "./receipt-print.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { readSettledTicket } from "./till-sale.js";
 
 type Request = { requestKey: string; personId: string };
@@ -57,7 +57,7 @@ export async function requestPrintDelivery(
   tx: Transaction,
   deps: {
     backend: FiscalBackend;
-    cfg: TillConfig;
+    cfg: TradingContext;
     onReceiptCopy?: (copy: { saleId: string; printJobId: string }) => Promise<void>;
   },
   sale: { id: string; workingOrderId: string },

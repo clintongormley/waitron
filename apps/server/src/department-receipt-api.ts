@@ -14,7 +14,7 @@ import { AppError, untranslatedLanguages } from "@waitron/shared";
 import type { Logger } from "./logger.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { drawLogoRasters } from "./receipt-logo.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readLocationAddress } from "./venue-address.js";
 import { departmentReceiptLanguages } from "./department-receipt-languages.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
@@ -58,7 +58,7 @@ export function mountDepartmentReceiptSettingsApi(
   app: Hono,
   deps: {
     db: Database;
-    venueCfg: () => TillConfig;
+    venueCfg: () => TradingContext;
     validateOperationDescription?: (description: string) => void;
   },
   log: Logger,

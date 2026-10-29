@@ -30,7 +30,7 @@ import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/s
 import { mountPrintApi } from "./print-api.js";
 import { acceptPrintAgentJoinRequest } from "./join-requests.js";
 import { createPairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import type { Logger } from "./logger.js";
 import "./errors.js";
@@ -106,7 +106,7 @@ beforeAll(async () => {
  * same node. */
 const venueNodeId = brandNodeId(randomUUID());
 
-function cfgOf(tenant: Tenant): TillConfig {
+function cfgOf(tenant: Tenant): TradingContext {
   return {
     nodeId: venueNodeId,
     locationId: brandLocationId(tenant.locationId),

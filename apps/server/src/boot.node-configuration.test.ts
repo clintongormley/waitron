@@ -21,7 +21,7 @@ import { stringToCents } from "@waitron/shared";
 import { mintSelfSignedServerCert } from "./self-signed-cert.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 
 vi.mock("@hono/node-server", async () => {
@@ -35,7 +35,7 @@ vi.mock("undici", async (original) => ({
   ),
 }));
 
-const observed = vi.hoisted(() => ({ cfg: undefined as TillConfig | undefined }));
+const observed = vi.hoisted(() => ({ cfg: undefined as TradingContext | undefined }));
 vi.mock("./till-api.js", async (original) => {
   const actual = await original<typeof import("./till-api.js")>();
   return {

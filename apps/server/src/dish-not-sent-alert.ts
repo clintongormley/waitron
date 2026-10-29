@@ -11,7 +11,7 @@ import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError, saleId as brandSaleId } from "@waitron/shared";
 import type { Logger } from "./logger.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import "./errors.js";
 
 /** The dishes of a paid order that no prep station could take. */

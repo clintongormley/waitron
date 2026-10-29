@@ -3,7 +3,7 @@ import { and, count, eq, gt, inArray, isNull, ne } from "drizzle-orm";
 import { ticketItems, workingOrderLines, workingOrders, type Transaction } from "@waitron/db";
 import { invalid } from "./bill-allocation.js";
 import { moveDishesToStation, stillMovable, type StationMoveActor } from "./station-move.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { firedQuantity } from "./kitchen-print.js";
 
 export async function openDishCount(
@@ -41,7 +41,7 @@ export function openDishesChoice(value: unknown): OpenDishesChoice | undefined {
 
 export async function withStationDishes(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   destination: string | undefined,
   choice: OpenDishesChoice | undefined,

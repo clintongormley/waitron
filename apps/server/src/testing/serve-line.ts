@@ -6,7 +6,7 @@ import { thousandthsToDecimal } from "@waitron/shared";
 import { writePartyAllergy } from "@waitron/venue-service";
 import { splitBill } from "./bill-action-fixture.js";
 import { partyRevisionOfOrder, setMainBill } from "../parties.js";
-import type { OriginConfig, TillConfig } from "../till-config.js";
+import type { OriginConfig, TradingContext } from "../trading-context.js";
 import {
   fireLines,
   fireableLineColumns,
@@ -61,7 +61,11 @@ export async function splitPartyBill(
 
 /** Fire every line of the bill, as `tables.test.ts` fires `openTab`'s lines: only released work can be
  * served. */
-export async function fireAll(tx: Transaction, cfg: TillConfig, orderId: string): Promise<void> {
+export async function fireAll(
+  tx: Transaction,
+  cfg: TradingContext,
+  orderId: string,
+): Promise<void> {
   const lines = await tx
     .select(fireableLineColumns)
     .from(workingOrderLines)
@@ -92,7 +96,7 @@ async function partyLine(tx: Transaction, orderId: string, lineNo: number) {
 /** Mark the rest of line `lineNo` of a party's bill served, as a command of its own. */
 export async function serveLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   lineNo: number,
 ): Promise<{ revision: number }> {
@@ -109,7 +113,7 @@ export async function serveLine(
 /** Take back everything marked served on line `lineNo` of a party's bill. */
 export async function unserveLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   lineNo: number,
 ): Promise<{ revision: number }> {

@@ -2,7 +2,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { kitchenStations, products } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 
 export interface DeadEnd {
@@ -23,7 +23,7 @@ export interface DeadEndAnswer {
 
 export async function requireMakeAtStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   stationId: string,
 ): Promise<void> {
   const [station] = await tx
@@ -41,7 +41,7 @@ export async function requireMakeAtStation(
 
 export async function availableStations(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   at: Date,
 ): Promise<DeadEndAnswer["stations"]> {
   const states = await VENUE_SERVICE.stationStates(tx, cfg, at);
@@ -52,7 +52,7 @@ export async function availableStations(
 
 export async function findDeadEnds(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   zoneId: string | null,
   lines: readonly { key: string; productId: string; quantity: string; makeAt: string | null }[],
   at: Date,

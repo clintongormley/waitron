@@ -49,7 +49,7 @@ import { endDeactivatedInvoicePrintDeliveries } from "./invoice-print.js";
 import { resolveDevicePrinterId } from "@waitron/layouts";
 import { deletePrinter, readPrinterDeleteImpact } from "./printer-delete.js";
 import { deleteDevice } from "./device-delete.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
@@ -605,7 +605,7 @@ describe("the printer delete impact", () => {
   it("names a disabled device inheriting the printer as its profile's default, and not a deleted one", async () => {
     const v = await seedVenue();
     const [series] = await suite.db.select().from(invoiceSeries);
-    const tillCfg: TillConfig = {
+    const tillCfg: TradingContext = {
       nodeId: brandNodeId(series!.nodeId),
       locationId: brandLocationId(v.cfg.locationId),
       locale: "es-ES",

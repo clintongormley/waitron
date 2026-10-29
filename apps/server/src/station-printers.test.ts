@@ -14,7 +14,7 @@ import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { createPrinter, updatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { eq } from "drizzle-orm";
 import { deletePrinter } from "./printer-delete.js";
@@ -33,7 +33,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(): Promise<TillConfig> {
+async function setupVenue(): Promise<TradingContext> {
   await seedTenant(db);
   // Inserted through the table definitions: the ids and `created_at` are `$defaultFn` generators,
   // which a raw SQL insert never reaches.
@@ -57,23 +57,23 @@ async function setupVenue(): Promise<TillConfig> {
   };
 }
 
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: TradingContext): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
   });
 }
 
-function station(cfg: TillConfig, name: string): Promise<string> {
+function station(cfg: TradingContext, name: string): Promise<string> {
   return asApp(cfg, (tx) => createStation(tx, cfg, { name })).then((r) => r.id);
 }
 
 /** `cloud_poll` needs only a `poll_id`, no agent to seed. */
-function printer(cfg: TillConfig, name: string): Promise<string> {
+function printer(cfg: TradingContext, name: string): Promise<string> {
   return asApp(cfg, (tx) =>
     createPrinter(tx, printCfg(cfg), { name, transport: "cloud_poll", pollId: `poll-${name}` }),
   ).then((r) => r.id);

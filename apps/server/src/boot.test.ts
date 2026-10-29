@@ -92,7 +92,7 @@ import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { createHourTestClock } from "./testing/hour-test-clock.js";
@@ -2951,7 +2951,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   let deviceId2: string;
 
   beforeAll(async () => {
-    const cfg: TillConfig = {
+    const cfg: TradingContext = {
       ...loadNodeIdentity(TILL_ENV),
       ...loadTillAppSettings(TILL_ENV),
       locationId: brandLocationId(TILL_LOCATION_ID),

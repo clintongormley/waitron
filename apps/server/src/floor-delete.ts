@@ -28,7 +28,7 @@ import {
 import { foodOnItsWay } from "./delivery-release.js";
 import { deletePlans, removeSets } from "./floor-plan-sets.js";
 import { removeLiveTables, tableDeleteRefusals } from "./table-removal.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 function sorted(targets: DeleteTarget[]): DeleteTarget[] {
@@ -50,7 +50,7 @@ function joins(
     })),
   );
 }
-async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly string[]) {
+async function inventory(tx: Transaction, cfg: TradingContext, zoneIds: readonly string[]) {
   const zones = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
@@ -91,7 +91,7 @@ async function inventory(tx: Transaction, cfg: TillConfig, zoneIds: readonly str
 }
 async function refusalsFor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   tables: (typeof diningTables.$inferSelect)[],
   now: Date,
@@ -145,7 +145,7 @@ async function refusalsFor(
   return refusals;
 }
 export function floorDeletionFor(
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
 ): FloorDeletion {
   return {

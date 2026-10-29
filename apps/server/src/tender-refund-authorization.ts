@@ -30,7 +30,7 @@ import { overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead
 import { matchTenderRefundCapture } from "./tender-refund-capture.js";
 import { assertStillSignedIn, canonicaliseUuid } from "./till-session.js";
 import { assertSubjectZones } from "./zone-access.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import "./errors.js";
 

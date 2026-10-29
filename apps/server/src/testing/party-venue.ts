@@ -37,7 +37,7 @@ import { placeGroups } from "./group-submit-fixture.js";
 import { memberTables, seatTable, setPartyName } from "../parties.js";
 import { joinTables } from "./table-action-fixture.js";
 import { createTable } from "./live-table.js";
-import type { DeviceRequestConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
 import { systemClock } from "../till-backend.js";
 import { payWorkingOrder } from "./whole-payment-fixture.js";
 import { listTablesWithState, parkOrder } from "../working-order.js";

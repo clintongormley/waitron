@@ -18,7 +18,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { createProduct } from "@waitron/catalogue";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { createPrinter, updatePrinter } from "@waitron/printing";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createStation, updateStation } from "./kitchen.js";
 import { reprintOrderTickets } from "./kitchen-print.js";
 import { setStationPrinting } from "./testing/station-printing.js";

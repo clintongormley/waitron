@@ -18,7 +18,7 @@ import type { BillEditExpected } from "./order-drafts.js";
 import { readIssuedSales } from "./sale-due.js";
 import type { Logger } from "./logger.js";
 import { pinnedAt } from "./issue-moment.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { refusePlacedPaymentInFlight, settleIssuedOwingNothing } from "./till-sale.js";
 import {
   issueUnpaidInvoice,

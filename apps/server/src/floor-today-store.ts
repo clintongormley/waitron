@@ -63,7 +63,7 @@ import {
   todayOf,
 } from "./floor-today-table.js";
 import { refusedByAModule, removeLiveTables, tablesTied } from "./table-removal.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 type Placed = {
@@ -104,7 +104,7 @@ function targetRow(target: Target) {
 
 export async function todayBusinessDay(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   now: Date,
 ): Promise<string | null> {
   return venueMomentAt(now, await readLocationClock(tx, cfg.locationId))?.businessDay ?? null;
@@ -124,7 +124,7 @@ export interface ResetOnto {
  */
 export async function resetZone(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
@@ -145,7 +145,7 @@ export async function resetZone(
 /** `resetZone` onto `onto` on business day `day`, for a caller that has read the day. */
 export async function resetZoneOn(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   day: string,
@@ -163,7 +163,7 @@ export async function resetZoneOn(
  */
 export async function updateLayout(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   day: string | null,
@@ -205,7 +205,7 @@ interface ResetOptions {
 /** Answers the room's new revision. */
 async function resetZoneFor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   businessDay: string,
@@ -330,7 +330,7 @@ const joinedReset = alias(floorResetTables, "taken_back_joined");
 const partReset = alias(floorResetTables, "taken_back_part");
 const groupPart = alias(floorResetTables, "group_part");
 
-function zoneTables(tx: Transaction, cfg: TillConfig, zoneId: string) {
+function zoneTables(tx: Transaction, cfg: TradingContext, zoneId: string) {
   return tx
     .select({
       id: diningTables.id,
@@ -352,7 +352,7 @@ export interface CatchUp {
 /** Applies the zone's PENDING reset rows that can be applied now, repeating while a pass changes something. */
 export async function catchUpZone(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
@@ -368,7 +368,7 @@ export async function catchUpZone(
  */
 async function catchUpPass(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   zoneId: string,
   now: Date,
@@ -985,7 +985,7 @@ function mergedWith(
  */
 export async function ensureToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
 ): Promise<string | null> {
@@ -1177,7 +1177,7 @@ function placeTaken(r: ResetAlias): SQL {
 /** Moves the table's top-left corner to `at`; a merge's members all move by the same distance. */
 export async function moveToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   at: { x: number; y: number },
 ): Promise<void> {
@@ -1199,7 +1199,7 @@ export async function moveToday(
 /** Turns the table 15° clockwise about its centre: its corner, `x` and `y`, does not change. */
 export async function rotateToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
 ): Promise<void> {
   const today = await todayOf(tx, cfg, tableId);
@@ -1214,7 +1214,7 @@ export async function rotateToday(
 /** Puts a spare on the map with its top-left corner at `at`; a table with a place is left alone. */
 export async function placeSpareToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   at: { x: number; y: number },
 ): Promise<void> {
@@ -1270,7 +1270,7 @@ async function refuseSplitOff(tx: Transaction, tableId: string): Promise<void> {
 /** Takes a free table off today's plan, keeping its place; one already taken off is left as it is. */
 export async function takeOffToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
 ): Promise<void> {
   const today = await todayOf(tx, cfg, tableId);
@@ -1288,7 +1288,7 @@ export async function takeOffToday(
 
 export async function putBackToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
 ): Promise<void> {
   const { row } = await todayOf(tx, cfg, tableId);
@@ -1298,7 +1298,7 @@ export async function putBackToday(
 /** Today's seats for the table, or for its merge when it is in one. */
 export async function seatsToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   seats: number,
 ): Promise<void> {
@@ -1322,7 +1322,7 @@ export async function seatsToday(
  */
 export async function backToSaved(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   tableId: string,
   now: Date,

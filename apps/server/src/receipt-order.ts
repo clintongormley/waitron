@@ -9,7 +9,7 @@ import {
   type Transaction,
 } from "@waitron/db";
 import { AppError, partyReceiptLabel } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /**
  * Resolve the commercial grouping shown on receipts and payment slips. A party bill shows the party's
@@ -18,7 +18,7 @@ import type { TillConfig } from "./till-config.js";
  */
 export async function readReceiptOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   opts: { atIssuance?: boolean } = {},
 ): Promise<{ orderLabel: string | null; orderNumber: number }> {

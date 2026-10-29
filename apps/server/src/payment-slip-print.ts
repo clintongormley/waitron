@@ -7,7 +7,7 @@ import { enqueuePrintJob } from "@waitron/printing";
 import { formatPaymentSlip } from "./payment-slip.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { resolvePaymentSlipPrinter } from "./receipt-print.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 
 export async function printSalePaymentSlip(
   db: Database,

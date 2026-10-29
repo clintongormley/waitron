@@ -49,7 +49,7 @@ import {
 import { persons } from "@waitron/identity";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
 import type { OptionSelection } from "@waitron/shared";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createCourse } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";

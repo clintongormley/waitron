@@ -20,7 +20,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { deviceOrigin, locationId } from "@waitron/shared";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import type { TenderRefundRequest } from "./tender-refund-types.js";
 import { reserveTenderRefund } from "./tender-refund-reservation.js";
 

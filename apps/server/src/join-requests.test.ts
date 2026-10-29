@@ -51,7 +51,7 @@ import { nodeId as brandNodeId } from "@waitron/shared";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { createStation } from "./kitchen.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { offerOnProfile } from "./testing/enrol.js";
 import { deleteDevice } from "./device-delete.js";
 import type { DeviceKitchenScreen } from "@waitron/module";
@@ -126,7 +126,7 @@ async function codeOf(fn: () => Promise<unknown>): Promise<string | undefined> {
 describe("pending joins belong to the node that received them", () => {
   it("does not list or challenge another node's pending request", async () => {
     const venue = await setupVenue(suite.db);
-    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const otherNode: TradingContext = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
     const made = await withTransaction(suite.db, (tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
     );
@@ -148,7 +148,7 @@ describe("pending joins belong to the node that received them", () => {
 
   it("tells another node's poller not_approved, and reads no kind for it", async () => {
     const venue = await setupVenue(suite.db);
-    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const otherNode: TradingContext = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
     const window = openWindow();
     const device = await asApp((tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
@@ -178,7 +178,7 @@ describe("pending joins belong to the node that received them", () => {
 
   it("does not let another node accept a pending request, of either kind", async () => {
     const venue = await setupVenue(suite.db);
-    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const otherNode: TradingContext = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
     const profileId = await seedProfile("till");
     const device = await asApp((tx) =>
       createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" }),
@@ -210,7 +210,7 @@ describe("pending joins belong to the node that received them", () => {
 
   it("counts neither the cap nor the spoken-for numbers across nodes", async () => {
     const venue = await setupVenue(suite.db);
-    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const otherNode: TradingContext = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
     const always47 = () => 47;
     await asApp(async (tx) => {
       await createJoinRequest(tx, otherNode, { kind: "device", label: "d0", numbers: always47 });
@@ -228,7 +228,7 @@ describe("pending joins belong to the node that received them", () => {
 
   it("leaves another node's lapsed request for that node to sweep", async () => {
     const venue = await setupVenue(suite.db);
-    const otherNode: TillConfig = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
+    const otherNode: TradingContext = { ...venue.cfg, nodeId: brandNodeId(randomUUID()) };
     const theirs = await asApp((tx) =>
       createJoinRequest(tx, otherNode, { kind: "device", label: "theirs" }),
     );
@@ -808,7 +808,7 @@ describe("acceptDeviceJoinRequest", () => {
 
 describe("a returning disabled device", () => {
   /** A till enrolled through create and accept under `profileId`, then disabled. */
-  async function disabledDevice(venue: { cfg: TillConfig }, profileId: string) {
+  async function disabledDevice(venue: { cfg: TradingContext }, profileId: string) {
     const made = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });
@@ -838,7 +838,7 @@ describe("a returning disabled device", () => {
   }
 
   async function comeBack(
-    venue: { cfg: TillConfig },
+    venue: { cfg: TradingContext },
     deviceId: string,
     input: { label: string; profileId: string },
   ): Promise<Accepted> {
@@ -1287,7 +1287,7 @@ describe("a returning disabled device", () => {
   });
 
   /** A disabled till's knock, so a pending request carries the device's own id. */
-  async function returningKnock(venue: { cfg: TillConfig }): Promise<string> {
+  async function returningKnock(venue: { cfg: TradingContext }): Promise<string> {
     const deviceId = await disabledDevice(venue, await seedProfile("till"));
     const tokenHash = await storedHash(deviceId);
     await withTransaction(suite.db, (tx) =>
@@ -1421,7 +1421,7 @@ describe("a returning disabled device", () => {
   /** A till enrolled and then deleted through `deleteDevice`, with a REAL hash of its token written
    * back onto the row. The delete itself blanks the hash, which refuses every proof on its own; the
    * write puts the conditions on `deleted_at` alone between a deleted row and a match. */
-  async function deletedWithRealHash(venue: { cfg: TillConfig }, profileId: string) {
+  async function deletedWithRealHash(venue: { cfg: TradingContext }, profileId: string) {
     const made = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, { label: "Bar till", profileId });

@@ -55,7 +55,7 @@ import { readSettledTicket } from "./till-sale.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { deletePrinter } from "./printer-delete.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createOpenOrder } from "./working-order.js";
 import { decodeTicket, opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -109,8 +109,8 @@ interface Venue {
   /** Whether the till's mail transport check answers available; true unless a case says. */
   email: { transport: boolean | Error };
   logged: unknown[][];
-  cfg: TillConfig;
-  scriptCfg: TillConfig & { origin: ReturnType<typeof jobOrigin> };
+  cfg: TradingContext;
+  scriptCfg: TradingContext & { origin: ReturnType<typeof jobOrigin> };
   app: Hono;
   cookie: string;
   menuItemId: string;
@@ -158,7 +158,7 @@ async function venue(): Promise<Venue> {
     ),
     { db: suite.db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(result.nodeId),
     locationId: brandLocationId(result.locationId),
     locale: LOCALE,

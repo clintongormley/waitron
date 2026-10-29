@@ -25,7 +25,7 @@ import {
 } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
@@ -76,7 +76,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
@@ -167,7 +167,7 @@ async function setupVenue(): Promise<SeededVenue> {
 }
 
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
-const offersByCfg = new WeakMap<TillConfig, ZoneOffers>();
+const offersByCfg = new WeakMap<TradingContext, ZoneOffers>();
 function offersOf(cfg: DeviceRequestConfig): ZoneOffers {
   return offersByCfg.get(cfg)!;
 }

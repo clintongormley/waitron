@@ -21,7 +21,7 @@ import {
   resolveReceiptTrim,
 } from "@waitron/shared";
 import { readReceiptLanguage } from "@waitron/catalogue";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -33,7 +33,7 @@ import { VENUE_SERVICE } from "./modules.js";
 export async function readInvoiceDocument(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   saleId: string,
 ): Promise<ReceiptDocumentInput> {
   const [issued] = await tx

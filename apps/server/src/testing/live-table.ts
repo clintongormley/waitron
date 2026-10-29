@@ -8,11 +8,11 @@ import {
   type Database,
   type Transaction,
 } from "@waitron/db";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 
 export async function createTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: { label: string; zoneId: string; shortName?: string },
   options: { today?: boolean } = {},
 ): Promise<{ id: string }> {

@@ -30,7 +30,7 @@ import { invalid } from "./bill-allocation.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { listOrderGroups, placeGroups } from "./order-groups.js";
 import type { GroupLine, GroupRelease, SubmittedGroups, PartyCommandArgs } from "./order-groups.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   checkAndBumpParty,
   partyZone,
@@ -352,7 +352,7 @@ export interface UnsentDraft {
 
 export async function readDrafts(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
 ): Promise<Draft[]> {
   return readOpenDrafts(tx, cfg, partyId);
@@ -360,7 +360,7 @@ export async function readDrafts(
 
 export async function appendRecalledLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   billId: string,
   operatorId: string,
@@ -412,7 +412,7 @@ export async function appendRecalledLine(
 
 async function recalledPlace(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   sourceLineId: string,
   own: readonly DraftLine[],
@@ -468,7 +468,7 @@ async function recalledPlace(
 
 export async function saveDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   operatorId: string,
   input: SaveDraftInput,
@@ -696,7 +696,7 @@ export async function saveDraft(
 
 export async function takeOverDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,
@@ -753,7 +753,7 @@ export async function takeOverDraft(
 
 export async function moveDraftsToBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromBillId: string,
   intoBillId: string,
   operatorId: string,
@@ -922,7 +922,7 @@ export interface DiscardDraftInput {
 
 export async function discardDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,
@@ -1429,7 +1429,7 @@ function parseDraftLines(value: unknown): DraftLineInput[] {
 
 async function requireCourses(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   lines: readonly FreshDraftLineInput[],
   previous: readonly FreshDraftLine[],
 ): Promise<void> {
@@ -1518,7 +1518,7 @@ async function discardDrafts(tx: Transaction, draftIds: readonly string[]): Prom
  */
 async function addDiscardedDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromDraftId: string,
   into: { id: string; revision: number },
   ownerId: string,
@@ -1597,7 +1597,7 @@ function isFresh<T extends DraftLine | DraftLineInput>(
 
 async function storedLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   draftIds: readonly string[],
 ): Promise<{ draftId: string; position: number; line: DraftLine }[]> {
   const rows = await tx
@@ -1786,7 +1786,7 @@ async function replaceLines(
 /** One open draft of the party, which the caller knows is there. */
 async function readOpenDraft(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   draftId: string,
   offers?: Map<string, ZoneMenuOffer>,
@@ -1797,7 +1797,7 @@ async function readOpenDraft(
 /** `known` is the offers of every line the drafts hold, when the caller has already read them. */
 async function readOpenDrafts(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   draftId?: string,
   known?: Map<string, ZoneMenuOffer>,
@@ -1890,7 +1890,7 @@ async function takenOverFrom(
 /** The live offers for the menu items in the zone of {@link partyZone}; none when there is no zone. */
 async function offersFor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   menuItemIds: readonly string[],
 ): Promise<Map<string, ZoneMenuOffer>> {

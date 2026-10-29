@@ -10,7 +10,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import type { FormFactor } from "@waitron/layouts";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { insertDevice, resolveDeviceKitchenScreens } from "./device.js";
@@ -27,7 +27,7 @@ const suite = useVenueDb({
 });
 
 interface SeededVenue {
-  cfg: TillConfig;
+  cfg: TradingContext;
   stationId: string;
 }
 
@@ -47,7 +47,7 @@ async function setupVenue(): Promise<SeededVenue> {
     .returning({ id: locations.id });
   const locationId = loc!.id;
   const nodeId = await seedNode(admin, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
@@ -206,7 +206,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
 });
 
 describe("accepting a device writes its kitchen screens", () => {
-  async function offering(cfg: TillConfig, formFactor: FormFactor, name: string) {
+  async function offering(cfg: TradingContext, formFactor: FormFactor, name: string) {
     const profileId = await seedProfile(formFactor, name);
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
@@ -218,7 +218,7 @@ describe("accepting a device writes its kitchen screens", () => {
   }
 
   async function accept(
-    cfg: TillConfig,
+    cfg: TradingContext,
     profileId: string,
     kitchenScreens: readonly DeviceKitchenScreen[],
   ) {
@@ -234,7 +234,7 @@ describe("accepting a device writes its kitchen screens", () => {
     );
   }
 
-  const shown = (cfg: TillConfig, deviceId: string) =>
+  const shown = (cfg: TradingContext, deviceId: string) =>
     withTransaction(suite.db, (tx) => VENUE_SERVICE.readDeviceKitchenScreens(tx, cfg, deviceId));
 
   it("a kitchen display's station screen on two stations is stored", async () => {
@@ -350,7 +350,7 @@ describe("accepting a device writes its kitchen screens", () => {
     ]);
   });
 
-  async function offeringMonitor(cfg: TillConfig) {
+  async function offeringMonitor(cfg: TradingContext) {
     const profileId = await seedProfile("till", "Perfil Caja");
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
@@ -440,7 +440,7 @@ describe("device names among a location's active devices", () => {
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
-    const otherCfg: TillConfig = { ...cfg, locationId: brandLocationId(other!.id) };
+    const otherCfg: TradingContext = { ...cfg, locationId: brandLocationId(other!.id) };
 
     await enrolDeviceForTest(suite.db, otherCfg, { name: "Barra", profileId });
 

@@ -13,13 +13,13 @@ import { formatMoney } from "./receipt-money.js";
 import { toTenderRefundView } from "./tender-refunds.js";
 import type { TenderRefundAcknowledgment } from "./tender-refund-types.js";
 import type { TillSaleResult } from "./till-sale.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export async function readTenderRefundAcknowledgment(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   refundId: string,
 ): Promise<TenderRefundAcknowledgment> {
   const [row] = await tx.select().from(tenderRefunds).where(eq(tenderRefunds.id, refundId));

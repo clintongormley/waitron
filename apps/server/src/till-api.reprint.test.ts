@@ -20,7 +20,7 @@ import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { attachPrinterToStation } from "./station-printers.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -31,7 +31,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 // that `reprintOrderTickets` re-enqueues through the SAME outbox path the fire uses. The verb's logic
 // is pinned in `kitchen-print.test.ts`.
 const CAFE = "Cafe con leche";
-let cfg: TillConfig;
+let cfg: TradingContext;
 let ana: { id: string };
 let stationId: string;
 let cafeOffer: string;
@@ -79,7 +79,7 @@ const suite = useVenueDb({
   },
 });
 
-function makeCfg(locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

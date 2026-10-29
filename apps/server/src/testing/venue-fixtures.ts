@@ -18,7 +18,7 @@ import {
 } from "@waitron/shared";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { ALL_MODULES } from "../modules.js";
-import type { OriginConfig } from "../till-config.js";
+import type { OriginConfig } from "../trading-context.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { fixturePasswordHash, fixturePinHash } from "./known-secret-hashes.js";
 

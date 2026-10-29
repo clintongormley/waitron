@@ -19,7 +19,7 @@ import { floorZones } from "@waitron/db";
 import { writePartyAllergy } from "@waitron/venue-service";
 import type { Logger } from "./logger.js";
 import { createTable } from "./testing/live-table.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { mountTillApi } from "./till-api.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
@@ -80,7 +80,7 @@ useVenueDb({
         productIds,
       });
     });
-    const cfg: TillConfig = {
+    const cfg: TradingContext = {
       ...venue.cfg,
       simplifiedInvoiceLimit: venue.backend.simplifiedInvoiceLimit,
     };

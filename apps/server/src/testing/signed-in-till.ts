@@ -22,7 +22,7 @@ import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { systemClock } from "../till-backend.js";
 import { mountTillApi } from "../till-api.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { BASIC_ACTIONS } from "./session-device.js";
@@ -37,7 +37,7 @@ export interface TillSeed {
 }
 
 export interface SignedInTill {
-  cfg: TillConfig;
+  cfg: TradingContext;
   app: Hono;
   cookie: string;
   personId: string;
@@ -54,7 +54,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
   options: {
     taxId: string;
     dayCutover: string;
-    seed: (tx: Transaction, cfg: TillConfig) => Promise<S>;
+    seed: (tx: Transaction, cfg: TradingContext) => Promise<S>;
     simulatorCard?: boolean;
   },
 ): Promise<SignedInTill & S> {
@@ -90,7 +90,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
     ),
     { db, modules: ALL_MODULES },
   );
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
     locale: SIGNED_IN_TILL_LOCALE,
@@ -176,7 +176,7 @@ export async function provisionSignedInTill<S extends TillSeed>(
 /** A counter department with no periods and an empty week, for a seed that paints its own. */
 export async function createBareDepartment(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   name: string,
   at: Date,
 ): Promise<string> {

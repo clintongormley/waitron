@@ -26,7 +26,7 @@ import {
 } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
 import { joinedPlaceAfter, partPlaces } from "./joined-split-layout.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 interface SplitArgs {
@@ -38,7 +38,7 @@ interface SplitArgs {
 /** Split tables… on `tableId`: a joined table with tables still joined splits as one, else a table in a group splits the group, else the joined table's split answers. */
 export async function splitOff(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   args: SplitArgs,
@@ -73,7 +73,7 @@ interface Rejoin {
  */
 async function splitGroup(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   { zoneId, merge }: { zoneId: string; merge: Merge },
@@ -132,7 +132,7 @@ async function splitGroup(
 /** `partIds` leave the group and `rejoin`'s joined table is put back over `staying`. */
 async function putBack(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   {

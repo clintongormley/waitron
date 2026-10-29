@@ -6,7 +6,7 @@ import { leaveMergesRestoring } from "./floor-today-merges.js";
 import { placementColumns, placementOf, refuseDeliveryPending } from "./floor-today-store.js";
 import { partPlaces, remainingPlace } from "./joined-split-layout.js";
 import { partsOf, passGuests, type Part } from "./floor-today-parts.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -15,7 +15,7 @@ import "./errors.js";
  */
 export async function splitJoinedTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   args: { tableId: string; partIds: string[]; seats: number | null },
   read?: { today: Today; parts: Part[] },
 ): Promise<void> {

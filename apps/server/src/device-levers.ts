@@ -15,7 +15,7 @@ import { isUuid } from "./till-session.js";
 import { orderWatchZones, partyWatchZones } from "./watch-zones.js";
 import { bumpCourseReady } from "./working-order.js";
 import { bumpGroupReady } from "./order-groups.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 
 type Run = (c: Context, log: Logger, fn: () => Promise<Response>) => Promise<Response>;
@@ -34,7 +34,7 @@ export async function requireKitchenDisplay(
 
 async function orderZone(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
 ): Promise<string | null> {
   const [order] = await tx
@@ -54,7 +54,7 @@ async function orderZone(
 /** A kitchen display's Ready actions use its pass screen's zones. */
 export function mountDeviceLevers(
   app: Hono,
-  deps: { db: Database; cfg: TillConfig; devMode?: boolean },
+  deps: { db: Database; cfg: TradingContext; devMode?: boolean },
   log: Logger,
   run: Run,
 ): void {

@@ -38,7 +38,7 @@ import { createPairingMode } from "./pairing-mode.js";
 import { createPageTestPages } from "./page-test-pages.js";
 import { sampleSale } from "./sample-receipt.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 const suite = useVenueDb({
@@ -88,7 +88,7 @@ async function venue(opts: { render?: Render } = {}) {
     enabledModules(ALL_MODULES, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat")),
     null,
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locationId: brandLocation(locationId),
     locale: "es-ES",

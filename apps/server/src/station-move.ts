@@ -23,7 +23,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { heldPaperStations, printedHeldGroups, recordHeldPaper } from "./order-groups.js";
 import { readLineCancellations } from "./line-service-state.js";
 import { runServiceCommand } from "./parties.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { bumpRevision, readOrderRevision } from "./working-order.js";
 import type { RoutingOnce } from "./working-order.js";
 import "./errors.js";
@@ -288,7 +288,7 @@ export interface StationMoveOptions {
 
 export async function moveDishesToStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   request: StationMoveRequest,
   mover: StationMover,

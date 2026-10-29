@@ -10,7 +10,7 @@ import { AppError } from "@waitron/shared";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { mountNodeEnrolApi } from "./node-enrol-api.js";
 import type { EnrolRateLimiter } from "./enrol-rate-limit.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import "./errors.js";
 
@@ -56,7 +56,7 @@ beforeAll(async () => {
 
 /** A fresh nodeId per call keeps each mounted app's enrol row independent, because this suite does
  * not reset between tests. */
-function cfgOf(tenant: Tenant): TillConfig {
+function cfgOf(tenant: Tenant): TradingContext {
   return {
     nodeId: brandNodeId(randomUUID()),
     locationId: brandLocationId(tenant.locationId),
@@ -69,7 +69,7 @@ function cfgOf(tenant: Tenant): TillConfig {
 
 function buildApp(opts: { isPrimary?: boolean; limiter?: EnrolRateLimiter } = {}): {
   app: Hono;
-  cfg: TillConfig;
+  cfg: TradingContext;
 } {
   const cfg = cfgOf(tenantA);
   const app = new Hono();
@@ -116,7 +116,7 @@ async function authenticate(token: string): Promise<{ agentId: string }> {
 
 /** Read straight off the table, so the assertion is about what landed, not what the route
  *  returned. */
-async function agentRowCount(cfg: TillConfig): Promise<number> {
+async function agentRowCount(cfg: TradingContext): Promise<number> {
   const { rows } = await suite.db.execute<{ n: number }>(
     sql`select cast(count(*) as int) as n from print_agents where node_id = ${cfg.nodeId}`,
   );

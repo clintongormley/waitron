@@ -17,7 +17,7 @@ import {
   serviceSteps,
 } from "@waitron/venue-service";
 import { idsInUse, type Reference } from "./in-use.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** Retention references; `in-use-references.test.ts` checks declared foreign keys only. */
 export const COURSE_REFERENCES: readonly Reference[] = [
@@ -34,7 +34,7 @@ export function coursesInUse(tx: Transaction, ids: readonly string[]): Promise<S
 
 async function courseDeleteRules(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<{ impact: DeleteImpact; retained: boolean; settings: CourseDeleteSettings }> {
   const [target] = await tx
@@ -74,7 +74,7 @@ async function courseDeleteRules(
 
 export async function readCourseDeleteImpact(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<DeleteImpact> {
   return (await courseDeleteRules(tx, cfg, id)).impact;
@@ -82,7 +82,7 @@ export async function readCourseDeleteImpact(
 
 export async function deleteCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<DeleteImpact> {
   const { impact, retained, settings } = await courseDeleteRules(tx, cfg, id);

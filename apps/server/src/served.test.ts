@@ -40,7 +40,7 @@ import {
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
 import { createTable } from "./testing/live-table.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import {

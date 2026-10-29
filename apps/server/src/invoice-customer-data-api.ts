@@ -20,12 +20,12 @@ import { requiredInvoiceTaxId } from "./invoice-customer-tax-id.js";
 import type { Logger } from "./logger.js";
 import { toLanguage, venuePlace, withPersonalDataErrors } from "./personal-data-export-api.js";
 import { invoiceCustomerReadme } from "./personal-data-readme.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 export interface InvoiceCustomerDataDeps {
   db: Database;
   backend: FiscalBackend;
-  till: TillConfig;
+  till: TradingContext;
   /** The node whose time zone dates the download. */
   nodeId: string;
   venueLocale: string;

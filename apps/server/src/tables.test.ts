@@ -35,7 +35,7 @@ import {
   nodeId as brandNodeId,
   jobOrigin,
 } from "@waitron/shared";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { listTables, listZones, updateZone } from "./tables.js";
 import { saveLayout, type ZonePlanSave } from "./floor-plan.js";
 import { defaultLayout } from "./testing/floor-sets.js";

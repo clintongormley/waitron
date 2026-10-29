@@ -75,7 +75,7 @@ import { mountCatalogueApi } from "./catalogue-api.js";
 import type { TranslationItemPage } from "@waitron/catalogue/src/content-translation-types.js";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import { CAPABILITY_FLAGS, emptyPrinterLists, setProfilePrinterLists } from "@waitron/layouts";
@@ -147,7 +147,7 @@ function nextNif(): string {
   return nifWithControlLetter(64_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
@@ -158,7 +158,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
   };
 }
 
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: TradingContext): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
@@ -167,7 +167,7 @@ function printCfg(cfg: TillConfig): PrintConfig {
  *  holds `cash.drawer`; the staff person does not — the pair the gated drawer matrix is written
  *  against. */
 async function setupVenue(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   each: AvailableProduct & { menuItemId: string };
   operatorId: string;
   supervisorId: string;
@@ -264,7 +264,7 @@ async function setupVenue(): Promise<{
   return { cfg, each, operatorId, supervisorId };
 }
 
-function apiDeps(cfg: TillConfig): TillApiDeps {
+function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
     db: suite.db,
     backend,
@@ -276,7 +276,7 @@ function apiDeps(cfg: TillConfig): TillApiDeps {
 }
 
 /** Create a `cloud_poll` receipt printer (the enqueue is a pure INSERT, so no transport is touched). */
-async function makePrinter(cfg: TillConfig, hasCashDrawer = true): Promise<string> {
+async function makePrinter(cfg: TradingContext, hasCashDrawer = true): Promise<string> {
   return withTransaction(suite.db, async (tx) => {
     const { id } = await createPrinter(tx, printCfg(cfg), {
       name: "Recibos",
@@ -295,7 +295,7 @@ let venueReceiptPrinter: string | null = null;
 /** Puts every device of the venue, and each one enrolled after, on `printerId` for receipts and
  *  payment slips; `null` leaves them with no printer. */
 async function configureReceipt(
-  cfg: TillConfig,
+  cfg: TradingContext,
   opts: { mode?: "auto" | "on_request"; printerId?: string | null },
 ): Promise<void> {
   await withTransaction(suite.db, async (tx) => {
@@ -340,7 +340,7 @@ async function startOnVenuePrinter(deviceId: string): Promise<void> {
 }
 
 async function printJobsFor(
-  cfg: TillConfig,
+  cfg: TradingContext,
 ): Promise<{ printerId: string; status: string; payload: Uint8Array }[]> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
@@ -354,7 +354,7 @@ async function printJobsFor(
   });
 }
 
-async function drawerOpensFor(cfg: TillConfig): Promise<
+async function drawerOpensFor(cfg: TradingContext): Promise<
   {
     reason: string;
     saleId: string | null;
@@ -381,14 +381,14 @@ async function drawerOpensFor(cfg: TillConfig): Promise<
   });
 }
 
-async function registroCount(cfg: TillConfig): Promise<number> {
+async function registroCount(cfg: TradingContext): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return (await tx.select().from(registrosFacturacion)).length;
   });
 }
 
-async function saleCount(cfg: TillConfig): Promise<number> {
+async function saleCount(cfg: TradingContext): Promise<number> {
   void cfg;
   return withTransaction(suite.db, async (tx) => {
     return (await tx.select({ id: sales.id }).from(sales)).length;
@@ -398,7 +398,7 @@ async function saleCount(cfg: TillConfig): Promise<number> {
 /** Log in as `operatorId` (PIN "5555") over HTTP. The login is device-gated, so it carries an
  *  enrolled `till` device cookie, on a profile allowed every capability but the drawer, so a cash
  *  sale there queues documents only. */
-async function login(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+async function login(app: Hono, cfg: TradingContext, operatorId: string): Promise<string> {
   const capabilities = CAPABILITY_FLAGS.filter((flag) => flag !== "open-cash-drawer");
   return loginOnDevice(app, await enrolTillCookie(cfg, capabilities), operatorId);
 }
@@ -417,7 +417,7 @@ async function loginOnDevice(app: Hono, deviceCookie: string, operatorId: string
 /** `POST /api/sales` resolves its till from the enrolled device. */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
-  cfg: TillConfig,
+  cfg: TradingContext,
   capabilities: string[] = ["take-cash"],
 ): Promise<string> {
   // A login plus a sale both enrol a till device in the SAME database, so the profile name AND the
@@ -441,7 +441,7 @@ async function enrolTillCookie(
 }
 
 /** A till device that may open a drawer. */
-async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
+async function enrolConfiguredTillCookie(cfg: TradingContext): Promise<string> {
   tillDeviceCounter += 1;
   const n = tillDeviceCounter;
   const [profile] = await suite.db
@@ -461,7 +461,7 @@ async function enrolConfiguredTillCookie(cfg: TillConfig): Promise<string> {
 }
 
 /** Log in as `operatorId` at the configured till's device; the cookie carries both. */
-async function loginAtTill(app: Hono, cfg: TillConfig, operatorId: string): Promise<string> {
+async function loginAtTill(app: Hono, cfg: TradingContext, operatorId: string): Promise<string> {
   const deviceCookie = await enrolConfiguredTillCookie(cfg);
   const res = await app.request("/api/session", {
     method: "POST",
@@ -480,7 +480,7 @@ function deviceIn(cookie: string): string {
 /** Ring a cash sale under a KNOWN client-minted `workingOrderId` (the reprint route keys on it). */
 async function ringSale(
   app: Hono,
-  cfg: TillConfig,
+  cfg: TradingContext,
   cookie: string,
   menuItemId: string,
   method: "cash" | "card" = "cash",
@@ -1031,7 +1031,7 @@ describe("POST /api/sales/:id/receipt/retry (failed original)", () => {
 });
 
 describe("an original receipt whose printer was deleted", () => {
-  async function deleteVia(cfg: TillConfig, printerId: string): Promise<void> {
+  async function deleteVia(cfg: TradingContext, printerId: string): Promise<void> {
     await withTransaction(suite.db, (tx) => deletePrinter(tx, printCfg(cfg), printerId));
   }
 
@@ -1048,7 +1048,7 @@ describe("an original receipt whose printer was deleted", () => {
 
   async function open(): Promise<{
     app: Hono;
-    cfg: TillConfig;
+    cfg: TradingContext;
     orderId: string;
     cookie: string;
     printerId: string;
@@ -1583,7 +1583,9 @@ describe("POST /api/drawer/open (manual, audited cash-drawer open over HTTP)", (
 
 describe("POST /api/drawer/open from a device opens its own chosen drawer", () => {
   /** A till device allowed to open a drawer, and its cookie. */
-  async function enrolDrawerTill(cfg: TillConfig): Promise<{ cookie: string; deviceId: string }> {
+  async function enrolDrawerTill(
+    cfg: TradingContext,
+  ): Promise<{ cookie: string; deviceId: string }> {
     tillDeviceCounter += 1;
     const n = tillDeviceCounter;
     const [profile] = await suite.db
@@ -2071,7 +2073,7 @@ describe("POST /api/drawer/open — authorization and supervisor override", () =
 
 describe("POST /api/drawer/open — the limit on wrong override PINs", () => {
   /** The drawer route with a wrong-PIN limit on a clock the case moves. */
-  function throttledApp(cfg: TillConfig) {
+  function throttledApp(cfg: TradingContext) {
     const clockAt = { now: 1_000_000 };
     const app = new Hono();
     mountTillApi(
@@ -2821,7 +2823,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
   /** A device on its own profile listing `receipt`, `slip` and `drawer`, the first of each its
    *  default. */
   async function enrolPrintingDevice(
-    cfg: TillConfig,
+    cfg: TradingContext,
     opts: {
       formFactor?: "till" | "phone-portrait";
       capabilities: string[];
@@ -2896,7 +2898,7 @@ describe("receipts, payment slips and the cash drawer follow the requesting devi
     return app.request(path, { method: "POST", headers: { cookie } });
   }
 
-  async function cardSaleWithCapture(app: Hono, cfg: TillConfig, cookie: string, item: string) {
+  async function cardSaleWithCapture(app: Hono, cfg: TradingContext, cookie: string, item: string) {
     const id = await ringSale(app, cfg, cookie, item, "card");
     await suite.db.execute(
       sql`update payments set provider = 'sumup', card_scheme = 'VISA', card_last4 = '5838', card_entry_mode = 'contactless', card_auth_code = '328600' where working_order_id = ${id}`,

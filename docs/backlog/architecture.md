@@ -303,7 +303,7 @@ run to install the new trigger. Owner question Q5 of A483.
 Scope these alongside the other by-id verbs when multi-location lands. All
    four are in `apps/server/src/working-order.ts`: `handOver`, which `POST /api/orders/:id/collect`
    reaches through `handOverOrder`, selects and updates on `eq(workingOrders.id, id)`, using its
-   `TillConfig` only to read a placed order's service mode, through `findOrderServiceContext`, which
+   `TradingContext` only to read a placed order's service mode, through `findOrderServiceContext`, which
    filters by `cfg.locationId`; without a stored context, the handover check uses the unscoped
    `prepay` default;
    `cancelPlacedOrder` selects and updates the same way and uses `cfg` only to stamp the amendment's

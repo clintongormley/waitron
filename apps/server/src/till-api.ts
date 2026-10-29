@@ -68,7 +68,7 @@ import type { OnboardingIntent } from "./trading-config.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { mountTillClockApi } from "./till-clock-api.js";
 import { mountTillAttendanceApi } from "./till-attendance-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { inPinTurn, overrideToCheck, withCheck, withPinCheckAhead } from "./pin-check-ahead.js";
 import { moveDishesToStation, type StationMoveRequest } from "./station-move.js";
 import { madeHereAnswer, sendingCfg } from "./made-here.js";
@@ -271,7 +271,7 @@ export interface TillApiDeps {
   db: Database;
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: TillConfig;
+  cfg: TradingContext;
   floorAnnotators?: readonly FloorAnnotator[];
   tableRemovals?: readonly TableRemoval[];
   secureCookies: boolean;
@@ -1224,7 +1224,7 @@ function refuseKitchenSignIn(device: DeviceBinding): void {
  */
 async function movingRooms<T extends object>(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableIds: readonly string[],
   check: { tableId: string; sent: number } | undefined,
   write: () => Promise<T>,

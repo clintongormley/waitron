@@ -34,7 +34,7 @@ import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES } from "./modules.js";
-import type { TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 
 import { createTable } from "./testing/live-table.js";
 import { advanceTicketItem, fireLines, type TicketState } from "./working-order.js";
@@ -135,7 +135,7 @@ function venueRequest(nif: string): VenueRequest {
   };
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),

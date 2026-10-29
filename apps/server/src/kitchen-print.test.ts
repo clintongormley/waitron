@@ -40,7 +40,7 @@ import {
 } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { thousandthsToDecimal } from "@waitron/shared";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { createCourse, createStation, setProductCourse, updateStation } from "./kitchen.js";
 import { createOpenOrder, fireOrderLines, fireLines } from "./working-order.js";
 import { kitchenNotices, listStationNotices, setStationToday } from "@waitron/venue-service";

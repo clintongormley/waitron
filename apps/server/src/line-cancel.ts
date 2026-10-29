@@ -26,7 +26,7 @@ import { staffPresentationName } from "@waitron/catalogue";
 import type { CancellationContext } from "./line-cancel-context.js";
 import { requireCancellationContext } from "./line-cancel-context.js";
 import { cancellationRefundValue } from "./cancellation-refund-value.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { applyAdjustment, reasonNameIn, type AdjustmentArgs } from "./adjustments-apply.js";
 import { invalid } from "./bill-allocation.js";
 import { refusePaidLines } from "./bill-payments.js";
@@ -74,7 +74,7 @@ export type CancelItemAnswer = { revision: number; refundLinks?: RefundLink[] };
 
 export async function cancelItem(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   lineId: string,
   ask: CancelItemAsk,

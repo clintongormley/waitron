@@ -2,7 +2,7 @@ import { inArray } from "drizzle-orm";
 import { products, type Transaction } from "@waitron/db";
 import type { GrossLines } from "@waitron/catalogue";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { GrossOrder } from "./working-order.js";
 
 /**
@@ -16,7 +16,7 @@ import type { GrossOrder } from "./working-order.js";
  */
 export async function issuancePass(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   order: GrossOrder,
 ): Promise<GrossLines> {

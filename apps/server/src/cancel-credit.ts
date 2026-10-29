@@ -14,7 +14,7 @@ import {
   thousandthsToDecimal,
 } from "@waitron/shared";
 import type { SaleId } from "@waitron/shared";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 
 /** The invoice a working order issued, as {@link creditWholeInvoice} credits it. */
 export interface IssuedInvoice {

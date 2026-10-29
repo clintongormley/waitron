@@ -17,7 +17,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import type { CapabilityFlag, FormFactor, ProfileAction } from "@waitron/layouts";
@@ -78,7 +78,7 @@ function asApp<T>(db: Database, fn: (tx: Transaction) => Promise<T>): Promise<T>
 /**
  * Each database-backed test seeds its own venue, so the device state each case reads is its own.
  */
-async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
+async function setupStation(): Promise<{ cfg: TradingContext; stationId: string }> {
   const admin = suite.db;
   await seedTenant(admin);
   const [loc] = await admin
@@ -91,7 +91,7 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
     .returning({ id: locations.id });
   const locationId = loc!.id;
   const nodeId = await seedNode(admin, brandLocationId(locationId));
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),
     locale: LOCALE,
@@ -109,7 +109,7 @@ async function setupStation(): Promise<{ cfg: TillConfig; stationId: string }> {
  * scrypt hash actually verifies. Returns the plaintext token the accept route would set in the
  * cookie, never at rest. */
 async function enrolDeviceFixture(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   deviceId: string;
   token: string;
   stationId: string;
@@ -151,7 +151,7 @@ async function seedDeviceProfile(
  * null so no printer fixture is needed.
  */
 async function enrolTillDeviceFixture(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   deviceId: string;
   token: string;
   deviceProfileId: string;
@@ -241,7 +241,7 @@ async function probeTry(cookieValue: string | null): Promise<DeviceBinding | nul
  * checks refuse integrated card payment and cash drawer access.
  */
 async function enrolHandheldFixture(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   deviceId: string;
   token: string;
 }> {
@@ -715,7 +715,7 @@ async function readWithHeaders(
  * Enrol device A with a cookie and device B as its override target in the same venue.
  */
 async function enrolDevDevices(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   deviceAId: string;
   deviceACookie: string;
   deviceBId: string;

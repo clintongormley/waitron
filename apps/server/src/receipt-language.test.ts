@@ -59,7 +59,7 @@ import { buildReceiptDocument } from "./receipt-document.js";
 import { mountPaymentsApi } from "./payments-api.js";
 import { loadTillAppSettings } from "./till-config.js";
 import { loadNodeIdentity } from "./node-config.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
   printSaleReceipt,

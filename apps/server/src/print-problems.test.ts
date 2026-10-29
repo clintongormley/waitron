@@ -32,7 +32,7 @@ import {
   updatePrinter,
 } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 import { createStation } from "./kitchen.js";
 import { attachPrinterToStation, detachPrinterFromStation } from "./station-printers.js";
@@ -118,7 +118,7 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TillConfig);
+  } satisfies TradingContext);
   return inTx(async (tx) => {
     const { id: barStationId } = await createStation(tx, cfg, { name: "Barra" });
     const catalogue = await createCatalogue(tx, { name: "Carta" });

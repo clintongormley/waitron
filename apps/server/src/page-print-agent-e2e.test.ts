@@ -41,7 +41,7 @@ import { mountPrintApi } from "./print-api.js";
 import { mountJoinApi } from "./join-api.js";
 import { mountNodeApi } from "./node-api.js";
 import { createPairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createZone } from "./testing/service-zone.js";
 import { mountTillApi } from "./till-api.js";
 import { createOpenOrder } from "./working-order.js";
@@ -273,7 +273,7 @@ async function venue() {
     enabledModules(ALL_MODULES, venueModuleConfig(parseModuleConfig({}, ALL_MODULES), "GB-vat")),
     null,
   ).makeBackend({ db: suite.db, clock, environment: "preproduction" });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNode(nodeId),
     locationId: brandLocation(locationId),
     locale: "es-ES",
@@ -352,7 +352,7 @@ async function venue() {
 
 /** A staff member signed in on a till whose profile may print receipts. */
 async function tillSession(
-  cfg: TillConfig,
+  cfg: TradingContext,
   app: Hono,
   personId: string,
 ): Promise<{ tillCookie: string; tillProfileId: string }> {

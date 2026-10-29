@@ -52,7 +52,8 @@ import {
 import type { Decimal } from "@waitron/shared";
 import { deploymentEnvironment } from "./config.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
-import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 import {
   advanceTicket,
   advanceTicketItem,
@@ -157,7 +158,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
