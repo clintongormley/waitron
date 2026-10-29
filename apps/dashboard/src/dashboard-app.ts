@@ -1405,7 +1405,7 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  #returnToLogin(code: string | null): void {
+  #returnToLogin(code: string | null, next: ScreenId | null = null): void {
     setHelpMode(false);
     this.leave.forceReset();
     navigationGuardFor(window)?.reset();
@@ -1432,7 +1432,7 @@ export class DashboardApp extends LitElement {
     this.drawerOpen = false;
     this.navSearch = "";
     this.#broadcastSessionDeadline(0);
-    this.#url.write({ dashboard: null }, true);
+    this.#url.write({ dashboard: next }, true);
     if (this.isConnected) {
       setLocale(this.#loginLocale ?? this.#venueLocale);
       void this.#seedLocale();
@@ -1570,7 +1570,7 @@ export class DashboardApp extends LitElement {
     }
   }
 
-  async #onLogout(): Promise<void> {
+  async #onLogout(next?: ScreenId): Promise<void> {
     const generation = this.sessionGeneration;
     await this.leave.coordinator.request({
       scopes: "all",
@@ -1581,7 +1581,8 @@ export class DashboardApp extends LitElement {
         } catch {
           // The local session is cleared even when the logout request is refused.
         }
-        if (this.isConnected && generation === this.sessionGeneration) this.#returnToLogin(null);
+        if (this.isConnected && generation === this.sessionGeneration)
+          this.#returnToLogin(null, next);
       },
     });
   }
@@ -1754,11 +1755,19 @@ export class DashboardApp extends LitElement {
   #diskStopBar(slot?: string): TemplateResult | typeof nothing {
     if (this.diskStop?.stopped !== true) return nothing;
     const canOpenBoxStatus = this.#sessionPermissions.includes("system.manage");
+    const actionLabel = !canOpenBoxStatus
+      ? t("disk_stop.sign_in_as_manager")
+      : this.screen === "box-status"
+        ? ""
+        : t("disk_stop.open_box_status");
     return html`<wt-banner
       data-test="disk-stop-bar"
       slot=${slot ?? nothing}
       tone="error"
       message=${diskStopMessage(canOpenBoxStatus ? this.diskStop.deleted : null, canOpenBoxStatus)}
+      action-label=${actionLabel}
+      @wt-banner-action=${() =>
+        canOpenBoxStatus ? this.#selectScreen("box-status") : void this.#onLogout("box-status")}
     ></wt-banner>`;
   }
 

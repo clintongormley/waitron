@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { LiveData } from "@waitron/dashboard-kit";
 import { BUILD_CHANGED_EVENT } from "@waitron/diagnostics";
-import type { WtBanner } from "@waitron/ui";
+import { leaveCoordinatorFor, type WtBanner } from "@waitron/ui";
+import { userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
 import "./dashboard-app.js";
 import type { DashboardApp } from "./dashboard-app.js";
@@ -121,6 +122,7 @@ function stubApi(overrides: Record<string, unknown> = {}): DashboardApi {
     listOrderStaff: vi.fn().mockResolvedValue({ staff: [] }),
     listAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     getDiskStop: vi.fn().mockResolvedValue({ stopped: false, deleted: null }),
+    getBoxHealth: vi.fn(() => new Promise(() => undefined)),
     listHandledAlerts: vi.fn().mockResolvedValue({ visible: false, alerts: [] }),
     markIncidentHandled: vi.fn().mockResolvedValue(undefined),
     passkeySignals: vi.fn().mockResolvedValue({
@@ -366,5 +368,116 @@ describe("the shell's full-disk bar", () => {
       (banner) => banner.dataset["test"],
     );
     expect(banners).toEqual(["disk-stop-bar", "update-bar"]);
+  });
+});
+
+describe("the full-disk bar's button", () => {
+  const pressButton = (el: DashboardApp) =>
+    userEvent.click(
+      diskBar(el)!.shadowRoot!.querySelector("wt-button")!.shadowRoot!.querySelector("button")!,
+    );
+  const question = (el: DashboardApp) => el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+
+  /** A changed draft on the page now showing, held by the shell's leave coordinator. */
+  function pageDraft(el: DashboardApp): void {
+    const page = el.shadowRoot!.querySelector(".body")!.firstElementChild!;
+    const input = document.createElement("input");
+    input.value = "saved";
+    page.shadowRoot!.append(input);
+    const scope = leaveCoordinatorFor(el)!.register({
+      id: input,
+      current: () => input.value,
+      snapshot: (value) => value,
+      equal: (a, b) => a === b,
+      restore: (value) => {
+        input.value = value;
+      },
+    });
+    input.value = "edited";
+    scope.changed();
+  }
+
+  async function mountAs(role: string, permissions: string[], overrides = {}) {
+    const { api } = shellApi(vi.fn().mockResolvedValue(stopped), {
+      getMe: vi.fn().mockResolvedValue(me(role, permissions)),
+      ...overrides,
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await expect.poll(() => diskBar(el)).not.toBeNull();
+    return { el, api };
+  }
+
+  it("opens Box status for a manager, and draws no button on Box status itself", async () => {
+    const { el } = await mountAs("manager", ["system.manage"]);
+    expect(diskBar(el)!.actionLabel).toBe("Open Box status");
+    await pressButton(el);
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("dashboard-box-status-screen"))
+      .not.toBeNull();
+    expect(location.pathname).toBe("/manage/box-status");
+    await el.updateComplete;
+    expect(diskBar(el)!.actionLabel).toBe("");
+  });
+
+  it("asks before Open Box status leaves unsaved changes, and Keep editing stays", async () => {
+    const { el } = await mountAs("manager", ["system.manage"]);
+    const before = location.pathname;
+    pageDraft(el);
+    await pressButton(el);
+    await expect.poll(() => question(el).open).toBe(true);
+    question(el).shadowRoot!.querySelector<HTMLElement>("[data-choice=keep]")!.click();
+    await expect.poll(() => question(el).open).toBe(false);
+    await flush(el);
+    expect(location.pathname).toBe(before);
+    expect(el.shadowRoot!.querySelector("dashboard-box-status-screen")).toBeNull();
+  });
+
+  it.each([
+    ["a manager", "manager", ["system.manage"], "dashboard-box-status-screen"],
+    ["a supervisor", "supervisor", [], "dashboard-overview-screen"],
+  ])(
+    "signs a supervisor out with Box status kept for the next sign-in; %s then lands on it or their usual page",
+    async (_who, role, permissions, landing) => {
+      const getMe = vi
+        .fn()
+        .mockResolvedValueOnce(me("supervisor", []))
+        .mockResolvedValue(me(role, permissions));
+      const logout = vi.fn().mockResolvedValue(undefined);
+      const { el } = await mountAs("supervisor", [], { getMe, logout });
+      expect(diskBar(el)!.actionLabel).toBe("Sign in as a manager");
+      await pressButton(el);
+      await expect.poll(() => login(el)).not.toBeNull();
+      expect(logout).toHaveBeenCalledOnce();
+      expect(diskBar(el)).toBeNull();
+      expect(location.pathname).toBe("/manage/box-status");
+      signIn(el);
+      await expect.poll(() => el.shadowRoot!.querySelector(landing)).not.toBeNull();
+    },
+  );
+
+  it("asks before Sign in as a manager signs out over unsaved changes", async () => {
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountAs("supervisor", [], { logout });
+    pageDraft(el);
+    await pressButton(el);
+    await expect.poll(() => question(el).open).toBe(true);
+    expect(logout).not.toHaveBeenCalled();
+    expect(login(el)).toBeNull();
+  });
+
+  it("leaves the staff screen's administrator sign-in clearing the address as before", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const logout = vi.fn().mockResolvedValue(undefined);
+    const { el } = await mountAs("manager", ["system.manage", "person.view"], { logout });
+    const staff = await vi.waitFor(() => {
+      const screen = el.shadowRoot!.querySelector("dashboard-staff-screen");
+      expect(screen).not.toBeNull();
+      return screen!;
+    });
+    staff.dispatchEvent(new CustomEvent("admin-sign-in", { bubbles: true, composed: true }));
+    await expect.poll(() => login(el)).not.toBeNull();
+    expect(logout).toHaveBeenCalledOnce();
+    expect(location.pathname).not.toContain("staff");
+    expect(location.pathname).not.toContain("box-status");
   });
 });

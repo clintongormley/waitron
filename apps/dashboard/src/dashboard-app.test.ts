@@ -5161,6 +5161,35 @@ describe("the floor plan editor inside the real page", () => {
       },
     );
 
+    it.each([1280, 390])(
+      "draws the full-disk bar inside the editor's modal at %i px, on top at its centre",
+      async (width) => {
+        const getDiskStop = vi.fn().mockResolvedValue({ stopped: true, deleted: null });
+        const { el, editor, unmount } = await openEditor("en-GB", width, { getDiskStop });
+        try {
+          const diskBar = await vi.waitFor(() => {
+            const found = el.shadowRoot!.querySelector<HTMLElement>(
+              "wt-banner[data-test=disk-stop-bar]",
+            );
+            expect(found).not.toBeNull();
+            return found!;
+          });
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+          expect(diskBar.closest(".banner-row")).toBeNull();
+          expect(diskBar.slot).toBe("notices");
+          const [x, y] = centreOf(diskBar);
+          expect(el.shadowRoot!.elementFromPoint(x, y)).toBe(diskBar);
+          const dialog = dialogBox(editor);
+          const box = diskBar.getBoundingClientRect();
+          expect(box.left).toBeGreaterThanOrEqual(dialog.left);
+          expect(box.right).toBeLessThanOrEqual(dialog.right);
+          expect(box.top).toBeGreaterThanOrEqual(dialog.top);
+        } finally {
+          await unmount();
+        }
+      },
+    );
+
     it("reloads from the update bar's Reload, pressed with a real pointer", async () => {
       const { el, reload, unmount } = await openWithNotices(1280);
       try {
