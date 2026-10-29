@@ -6,6 +6,12 @@ import {
 import { lockVenueDatabase } from "@waitron/db";
 import { open, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  looksLikePdf,
+  readRecoveryPackPdf,
+  RecoveryPackFileError,
+  type RecoveryPackFile,
+} from "@waitron/recovery-pack";
 import { AppError, hasCode } from "@waitron/shared";
 import {
   createS3ObjectStore,
@@ -447,13 +453,18 @@ async function runBucketRestore(
   args: Extract<ParsedArgs, { kitPath: string }>,
 ): Promise<number> {
   const { kitPath, confirmedTaxId, oldBoxGone, soleRecovery } = args;
-  let kitText: string;
+  let source: Source;
   try {
-    kitText = await readFile(kitPath, "utf8");
+    source = await sourceText(await readFile(kitPath), "bucketCode");
   } catch {
     deps.out(`cannot read kit file: ${kitPath}`);
     return 1;
   }
+  if ("refused" in source) {
+    deps.out(source.refused);
+    return 1;
+  }
+  const kitText = source.text;
   let kit: RecoveryKit;
   try {
     kit = parseRecoveryKit(kitText);
@@ -507,6 +518,36 @@ async function runBucketRestore(
   return 0;
 }
 
+type Source = { text: string } | { refused: string };
+
+const NO_CODE: Record<"bucketCode" | "archiveCode", string> = {
+  bucketCode:
+    "restore failed: the recovery pack holds no bucket copy code — this box had no bucket copy when the pack was made; give a pack made after the bucket copy was set up, or the recovery kit file",
+  archiveCode:
+    "restore failed: the recovery pack holds no archive code — this box kept no backup archive in a bucket when the pack was made; give a pack made after archives were set up, or the archive recovery pack file",
+};
+
+/**
+ * A kit or pack text file as it is; a recovery pack PDF answers the one code this path needs,
+ * read from its attached file — never from its drawn text, where a long code wraps.
+ */
+async function sourceText(bytes: Uint8Array, code: keyof typeof NO_CODE): Promise<Source> {
+  if (!looksLikePdf(bytes)) return { text: Buffer.from(bytes).toString("utf8") };
+  let pack: RecoveryPackFile;
+  try {
+    pack = await readRecoveryPackPdf(bytes);
+  } catch (err) {
+    return {
+      refused:
+        err instanceof RecoveryPackFileError && err.reason === "not_a_pack"
+          ? "restore failed: the PDF is not a Waitron recovery pack; give the venue's recovery pack PDF, or the kit or pack file saved for this venue"
+          : "restore failed: the recovery pack PDF is damaged, or was changed after it was made; use the pack PDF as it was saved",
+    };
+  }
+  const text = pack[code];
+  return text === null ? { refused: NO_CODE[code] } : { text };
+}
+
 /** The words for a refusal only the pack path words its own way; null for any other. */
 function packRefusal(err: AppError): string | null {
   const words: Partial<Record<string, string>> = {
@@ -539,13 +580,18 @@ async function runPackRestore(
   args: Extract<ParsedArgs, { packPath: string }>,
 ): Promise<number> {
   const { packPath, archiveKey, oldBoxGone, soleRecovery } = args;
-  let packText: string;
+  let source: Source;
   try {
-    packText = await readFile(packPath, "utf8");
+    source = await sourceText(await readFile(packPath), "archiveCode");
   } catch {
     deps.out(`cannot read pack file: ${packPath}`);
     return 1;
   }
+  if ("refused" in source) {
+    deps.out(source.refused);
+    return 1;
+  }
+  const packText = source.text;
   let pack: ArchiveRecoveryPack;
   try {
     pack = decodeArchiveRecoveryPack(packText);

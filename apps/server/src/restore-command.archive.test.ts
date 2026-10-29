@@ -41,6 +41,13 @@ import {
 } from "./restore.js";
 import { runRestore } from "./restore-command.js";
 import { readStreamSettings } from "./stream-host.js";
+import {
+  NOT_A_PACK,
+  PACK_DAMAGED,
+  plainPdf,
+  recoveryPackPdf,
+  withDigest,
+} from "../test/recovery-pack-pdf.js";
 
 const decodeFault = vi.hoisted(() => ({ error: undefined as unknown }));
 vi.mock("./archive-recovery-pack.js", async (importOriginal) => {
@@ -856,6 +863,51 @@ describe("waitron-restore restore --from-archive, the arguments it accepts", () 
     ]);
     expect(restore).not.toHaveBeenCalled();
     expect(restoreStream).not.toHaveBeenCalled();
+    expect(f.storeCalls).toEqual([]);
+  });
+});
+
+describe("waitron-restore restore --from-archive <recovery pack PDF>", () => {
+  async function withPdf(bytes: Uint8Array): Promise<Fixture> {
+    const f = await fixture();
+    await writeFile(f.packPath, bytes);
+    return f;
+  }
+
+  it("reads the archive code out of the pack's attached file and restores the archive", async () => {
+    const f = await withPdf(
+      await recoveryPackPdf({ bucketCode: null, archiveCode: encodeArchiveRecoveryPack(PACK) }),
+    );
+    const { code, out } = await run(f);
+    expect(code).toBe(0);
+    expect(out.at(-1)).toBe(`restored archive ${KEY} from the bucket named in ${f.packPath}`);
+    expect(f.storeCalls).toContain(`getFile:${KEY}`);
+  });
+
+  it("says a pack made with no archive holds no archive code, and downloads nothing", async () => {
+    const f = await withPdf(await recoveryPackPdf({ bucketCode: null, archiveCode: null }));
+    expect(await run(f)).toEqual({
+      code: 1,
+      out: [
+        "restore failed: the recovery pack holds no archive code — this box kept no backup archive in a bucket when the pack was made; give a pack made after archives were set up, or the archive recovery pack file",
+      ],
+    });
+    expect(f.storeCalls).toEqual([]);
+  });
+
+  it("says a PDF that is not a recovery pack is not one", async () => {
+    const f = await withPdf(await plainPdf());
+    expect(await run(f)).toEqual({ code: 1, out: [NOT_A_PACK] });
+    expect(f.storeCalls).toEqual([]);
+  });
+
+  it("says a pack whose attached file was changed is damaged", async () => {
+    const bytes = await recoveryPackPdf({
+      bucketCode: null,
+      archiveCode: encodeArchiveRecoveryPack(PACK),
+    });
+    const f = await withPdf(withDigest(bytes, "sha256-v1:" + "0".repeat(64)));
+    expect(await run(f)).toEqual({ code: 1, out: [PACK_DAMAGED] });
     expect(f.storeCalls).toEqual([]);
   });
 });

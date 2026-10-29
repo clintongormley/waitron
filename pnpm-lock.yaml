@@ -248,6 +248,9 @@ importers:
       '@waitron/recipes':
         specifier: workspace:*
         version: link:../../packages/recipes
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../../packages/recovery-pack
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../../packages/reporting

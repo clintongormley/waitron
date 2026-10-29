@@ -8,6 +8,13 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { AppError } from "@waitron/shared";
 import { encodeRecoveryKit, type ObjectStore, type RecoveryKit } from "@waitron/stream";
+import {
+  NOT_A_PACK,
+  PACK_DAMAGED,
+  plainPdf,
+  recoveryPackPdf,
+  withDigest,
+} from "../test/recovery-pack-pdf.js";
 import { describe, expect, it, vi } from "vitest";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
@@ -1055,5 +1062,68 @@ describe("waitron-restore restore, when the restored database could not be put i
 
   it.each(PLACEMENT_FAILED)("says which database the bucket path left: %s", async (error, line) => {
     expect(await refusedWith(error)).toEqual({ code: 1, out: [BUCKET_NOTICE, line] });
+  });
+});
+
+describe("waitron-restore restore --from-bucket <recovery pack PDF>", () => {
+  async function packFile(bytes: Uint8Array) {
+    const dir = await mkdtemp(join(tmpdir(), "waitron-cli-pack-"));
+    await writeFile(join(dir, "pack.pdf"), bytes);
+    return { dir, packPath: join(dir, "pack.pdf") };
+  }
+
+  async function run(packPath: string, dir: string) {
+    const out: string[] = [];
+    let received: StreamDeps | undefined;
+    const code = await runRestore({
+      argv: ["restore", "--from-bucket", packPath, "--confirm-venue", VENUE.taxId],
+      env: { WAITRON_ENV: "preproduction", WAITRON_STATE_DIR: dir },
+      out: (line) => out.push(line),
+      restoreStream: async (d) => {
+        received = d;
+      },
+    });
+    return { code, out, received };
+  }
+
+  it("reads the bucket copy code out of the pack's attached file and runs the bucket restore", async () => {
+    const { dir, packPath } = await packFile(
+      await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT), archiveCode: null }),
+    );
+    const { code, out, received } = await run(packPath, dir);
+    expect(code).toBe(0);
+    expect(received).toMatchObject({ kit: KIT });
+    expect(out).toEqual([BUCKET_NOTICE, `restored from the bucket named in ${packPath}`]);
+  });
+
+  it("says a pack made with no bucket copy holds no code, and restores nothing", async () => {
+    const { dir, packPath } = await packFile(
+      await recoveryPackPdf({ bucketCode: null, archiveCode: null }),
+    );
+    const { code, out, received } = await run(packPath, dir);
+    expect(received).toBeUndefined();
+    expect({ code, out }).toEqual({
+      code: 1,
+      out: [
+        "restore failed: the recovery pack holds no bucket copy code — this box had no bucket copy when the pack was made; give a pack made after the bucket copy was set up, or the recovery kit file",
+      ],
+    });
+  });
+
+  it("says a PDF that is not a recovery pack is not one", async () => {
+    const { dir, packPath } = await packFile(await plainPdf());
+    const { code, out, received } = await run(packPath, dir);
+    expect(received).toBeUndefined();
+    expect({ code, out }).toEqual({ code: 1, out: [NOT_A_PACK] });
+  });
+
+  it("says a pack whose attached file was changed is damaged", async () => {
+    const bytes = await recoveryPackPdf({ bucketCode: encodeRecoveryKit(KIT), archiveCode: null });
+    const { dir, packPath } = await packFile(
+      await withDigest(bytes, "sha256-v1:" + "0".repeat(64)),
+    );
+    const { code, out, received } = await run(packPath, dir);
+    expect(received).toBeUndefined();
+    expect({ code, out }).toEqual({ code: 1, out: [PACK_DAMAGED] });
   });
 });
