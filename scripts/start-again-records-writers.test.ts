@@ -18,6 +18,7 @@ const ROOT = join(import.meta.dirname, "..");
 const GIT_SPAWN_TIMEOUT_MS = 30_000;
 
 const ALLOWED = [
+  "apps/server/test/start-again-deleted.ts",
   "deploy/waitron.sh",
   "packages/provisioning/src/first-setup-backup-workspace.ts",
   "packages/provisioning/src/first-setup-start-again-choice.ts",
@@ -31,6 +32,7 @@ const ALLOWED = [
 const NAMES = new RegExp(
   [
     "first-setup-start-again-confirmations",
+    String.raw`\bSTART_AGAIN_CONFIRMATIONS_DIR\b`,
     "first-setup-start-again-choices",
     String.raw`\bSTART_AGAIN_CHOICES_DIR\b`,
     "first-setup-set-aside",

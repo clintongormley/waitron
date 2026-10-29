@@ -81,11 +81,6 @@ export async function readModulePreparationHistory(
     .filter((row) => row.binding.module === module)
     .map((row) => structuredClone(row.value));
 }
-/**
- * The module's well-formed revisions, kept even where the strict read refuses the whole ledger,
- * for a reader that must keep every name it can still read. `malformed` says some part would be
- * refused; a refused revision's module cannot be trusted, so it counts against every module.
- */
 export function createModulePreparationState(options: Options) {
   return {
     async withState<T>(
