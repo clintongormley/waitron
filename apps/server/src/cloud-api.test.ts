@@ -469,3 +469,122 @@ it("Stop access records the stop with the replacement after the permission reche
     await f.close();
   }
 });
+
+it("the plan read needs a live manager on the primary, is passive, and answers without ids", async () => {
+  const { installationFixture } = await import("../test/cloud-installation-fixture.js");
+  const f = await installationFixture(undefined, {
+    billing: async (values, saved, _req, res) => {
+      const r = (saved.view as { registration: Record<string, string> }).registration;
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(
+        JSON.stringify({
+          version: 1,
+          installationId: r.installationId,
+          venueId: r.venueId,
+          countryCode: "ES",
+          calendarTimeZone: "Europe/Madrid",
+          asOf: new Date().toISOString(),
+          billing: { status: "unavailable", reason: "state_not_ready" },
+          prices: { status: "unavailable", reason: "not_published" },
+          accountUrl: `${String(values[1])}/account`,
+        }),
+      );
+    },
+  });
+  try {
+    const manager = await person("manager"),
+      staff = await person("staff");
+    let primary = true;
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection: f.client,
+        managementOrigin: "https://venue.test",
+        isPrimary: () => primary,
+      },
+      () => {},
+    );
+    const read = (cookie = manager.cookie) =>
+      app.request("/management-api/cloud/billing", { headers: { cookie } });
+    expect((await read("")).status).toBe(401);
+    expect((await read(staff.cookie)).status).toBe(403);
+    primary = false;
+    const notPrimary = await read();
+    expect([notPrimary.status, (await notPrimary.json()).error.code]).toEqual([
+      409,
+      "cloud.not_primary",
+    ]);
+    primary = true;
+    const oldActivity = new Date(Date.now() - 60000).toISOString();
+    await suite.db
+      .update(managementSessions)
+      .set({ lastSeenAt: oldActivity })
+      .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)));
+    const answered = await read();
+    expect(answered.status).toBe(200);
+    expect(await answered.json()).toEqual({
+      asOf: expect.any(String),
+      calendarTimeZone: "Europe/Madrid",
+      billing: { status: "unavailable", reason: "state_not_ready" },
+      prices: { status: "unavailable", reason: "not_published" },
+      accountUrl: `${f.options.origin}/account`,
+    });
+    expect(
+      (
+        await suite.db
+          .select()
+          .from(managementSessions)
+          .where(eq(managementSessions.tokenHash, hashSessionToken(manager.session)))
+      )[0]!.lastSeenAt,
+    ).toBe(oldActivity);
+    const status = await (
+      await app.request("/management-api/cloud/status", { headers: { cookie: manager.cookie } })
+    ).json();
+    expect([status.accountUrl, status.signupUrl]).toEqual([
+      `${f.options.origin}/account`,
+      undefined,
+    ]);
+    const unconfigured = new Hono();
+    mountCloudApi(
+      unconfigured,
+      { db: suite.db, managementOrigin: "https://venue.test", isPrimary: () => true },
+      () => {},
+    );
+    const none = await unconfigured.request("/management-api/cloud/billing", {
+      headers: { cookie: manager.cookie },
+    });
+    expect([none.status, (await none.json()).error.code]).toEqual([409, "cloud.not_configured"]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("a box not yet connected links to Cloud's sign-up page, not to an account", async () => {
+  const f = await cloudFixture();
+  try {
+    const manager = await person("manager");
+    const app = new Hono();
+    mountCloudApi(
+      app,
+      {
+        db: suite.db,
+        connection: createCloudConnection(f.options),
+        managementOrigin: "https://venue.test",
+        isPrimary: () => true,
+      },
+      () => {},
+    );
+    const status = await (
+      await app.request("/management-api/cloud/status", { headers: { cookie: manager.cookie } })
+    ).json();
+    expect([status.state, status.signupUrl, status.accountUrl]).toEqual([
+      "not_connected",
+      `${f.options.origin}/signup`,
+      undefined,
+    ]);
+  } finally {
+    await f.close();
+  }
+});

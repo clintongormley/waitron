@@ -58,6 +58,8 @@ export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "s
   code: string;
   installation?: CloudInstallationStatus;
   openCloudUrl?: string;
+  signupUrl?: string;
+  accountUrl?: string;
 }
 export interface CloudChoice {
   requestId: string;
@@ -242,7 +244,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
-    if (!state) return { state: "not_connected", code: "" };
+    if (!state) return { state: "not_connected", code: "", signupUrl: `${options.origin}/signup` };
     return {
       state: "awaiting_cloud",
       requestId: state.requestId,
@@ -251,7 +253,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...state.view,
       code: state.view?.state === "complete" ? "" : state.code,
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
-      ...(state.view?.registration ? { installation: projectCloudInstallation(state) } : {}),
+      ...(state.view?.registration
+        ? {
+            installation: projectCloudInstallation(state),
+            accountUrl: `${options.origin}/account`,
+          }
+        : { signupUrl: `${options.origin}/signup` }),
     };
   }
   async function exchange(
