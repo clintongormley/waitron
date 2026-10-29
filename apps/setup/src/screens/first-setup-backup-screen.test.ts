@@ -280,6 +280,63 @@ it("keeps what was typed when a file chosen before it finishes reading later", a
   expect(kitValue(el)).toBe("typed-kit");
 });
 
+/** Chooses `file` through the input's real file list, so the input shows its name. */
+function pick(input: HTMLInputElement, file: File): void {
+  const files = new DataTransfer();
+  files.items.add(file);
+  input.files = files.files;
+  input.dispatchEvent(new Event("change"));
+}
+
+it("clears a pack refusal and the chosen pack file when reconnecting after a refused proof", async () => {
+  const { el } = await mount((action) =>
+    action === "open"
+      ? Response.json(
+          { error: { code: "promotion.break_glass_invalid", params: {} } },
+          { status: 422 },
+        )
+      : undefined,
+  );
+  await bucketProof(el);
+  await click(el, "prove");
+  await expect.poll(() => q(el, "reload-status")).not.toBeNull();
+  pick(q<HTMLInputElement>(el, "kit-file"), await plainPdf());
+  await expect.poll(() => q(el, "kit-file-error")).not.toBeNull();
+  await click(el, "reload-status");
+  await expect.poll(() => q<WtButton>(el, "prove")?.disabled).toBe(false);
+  expect(q(el, "kit-file-error")).toBeNull();
+  expect(q<HTMLInputElement>(el, "kit-file").files).toHaveLength(0);
+});
+
+it("clears the chosen pack file when the environment changes", async () => {
+  const { el } = await mount();
+  await bucketSource(el);
+  const input = q<HTMLInputElement>(el, "kit-file");
+  pick(input, await plainPdf());
+  await expect.poll(() => q(el, "kit-file-error")).not.toBeNull();
+  q(el, "environment").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "preproduction" } }),
+  );
+  await el.updateComplete;
+  expect(q(el, "kit-file-error")).toBeNull();
+  expect(q<HTMLInputElement>(el, "kit-file")).toBe(input);
+  expect(input.files).toHaveLength(0);
+});
+
+it("drops a pack read that finishes after the form was reset", async () => {
+  const { el } = await mount();
+  await bucketSource(el);
+  const late = heldFile("WAITRON-RECOVERY-KIT-1:late");
+  choose(q<HTMLInputElement>(el, "kit-file"), late.file);
+  q(el, "environment").dispatchEvent(
+    new CustomEvent("wt-change", { detail: { value: "preproduction" } }),
+  );
+  await el.updateComplete;
+  await late.release();
+  await el.updateComplete;
+  expect(kitValue(el)).toBe("");
+});
+
 it.each([
   ["en-GB", "Recovery pack or kit file"],
   ["es-ES", "Paquete de recuperación o archivo del kit"],

@@ -199,8 +199,11 @@ export class FirstSetupBackupScreen extends LitElement {
     }
   }
   #clearAuthority(): void {
-    const picker = this.shadowRoot?.querySelector<HTMLInputElement>("[data-test=artifact]");
-    if (picker) picker.value = "";
+    for (const name of ["artifact", "kit-file"]) {
+      const picker = this.shadowRoot?.querySelector<HTMLInputElement>(`[data-test=${name}]`);
+      if (picker) picker.value = "";
+    }
+    this.packRefusal = undefined;
     ++this.#generation;
     const session = this.#session;
     this.#session = undefined;
