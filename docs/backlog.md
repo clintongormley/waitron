@@ -182,9 +182,10 @@ under `docs/backlog/`.
   (`apps/server/src/cloud-fiscal-allocation*.ts`), the first-fiscal-setup, recovery and
   reconciliation paths and tests that call them, `docs/developers/cloud-fiscal-allocation.md`,
   and whatever of `docs/developers/paper-custodian.md` exists only for the registry (check
-  first). In Waitron Cloud: the registry package, the account service's fiscal allocation
-  routes, the portal's fiscal allocation screens and their tests, and its migration 038;
-  how a shipped append-only migration is removed before Cloud is live is part of the work.
+  first). Waitron Cloud's side has its own
+  [removal design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-remove-fiscal-registry-design.md)
+  and plan; it keeps migration 038 and stored records pending a separate decision, and it
+  lands only after this Waitron removal has landed.
   The [registry plan](superpowers/plans/2026-10-12-cloud-fiscal-allocation-registry.md) stays
   as history with its 2026-10-29 note. It touches first fiscal setup, so the Waitron pull
   request probably waits for the owner to land it.
