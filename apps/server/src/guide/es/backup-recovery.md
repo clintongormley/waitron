@@ -33,7 +33,7 @@ elegiste al configurar, y Empezar de nuevo la borra cuando marcas «No se envió
 vendió nada.» y vuelves a elegir **Empezar de nuevo**. Si no, la página muestra **Empezar de nuevo**
 junto a la recuperación detenida. Empezar de nuevo pide entonces la contraseña de administrador y
 vuelve a mostrar la recuperación. Si la base de datos de la configuración ya guarda elementos,
-también dice cuántos, y que ninguno es una factura. Lo borra todo cuando marcas «Borrar el intento
+también dice que no se envió ninguna factura a la AEAT. Lo borra todo cuando marcas «Borrar el intento
 anterior y empezar de nuevo.» y vuelves a elegir **Empezar de nuevo**. Empezar de nuevo no se ofrece
 si la configuración ya guardó los ajustes con los que vende el equipo. Si la base de datos tiene una
 factura u otro elemento que Waitron nunca borra, la página lo indica después de que introduzcas la

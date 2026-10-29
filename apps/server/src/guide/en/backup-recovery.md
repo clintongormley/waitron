@@ -31,7 +31,7 @@ the administrator password you chose during setup, and Start again deletes it on
 "Nothing was filed to AEAT and nothing was sold." and choose **Start again** once more. Otherwise
 the page shows **Start again** beside the stopped recovery. Start again then asks for the
 administrator password and shows the recovery again. If the setup's database already holds saved
-items, it also says how many, and that none is an invoice. It deletes them all once you tick
+items, it also says that no invoice was sent to AEAT. It deletes them all once you tick
 "Delete the old attempt and start again." and choose **Start again** once more. Start again is not
 offered if the setup already saved the settings the box trades with. If the database holds an
 invoice or another item Waitron never deletes, the page says so after you enter the password, and

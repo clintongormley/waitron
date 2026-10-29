@@ -88,6 +88,10 @@ for (const locale of ["en-GB", "es-ES"] as const)
             expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
             const section = q<HTMLElement>(app, "screen-first-owner")!;
             expect(section.getBoundingClientRect().right).toBeLessThanOrEqual(width);
+            if (import.meta.env.VITE_A1131BC_HELD_LOOK === "1")
+              await page.screenshot({
+                path: `__screenshots__/a1131bc-held/${locale}-${theme}-${width}-${state}.png`,
+              });
             const button = q<WtButton>(
               app,
               state === "confirmation" ? "confirm-start-again" : "start-again",
