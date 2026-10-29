@@ -249,10 +249,12 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const secret = (value: NonNullable<RecoveryPackPage["secret"]>) => {
     // A drawn space cannot be counted, and one at either end cannot be seen; a passphrase may
     // hold either. The QR code still carries the text itself.
-    const spaced = value.text.includes(" ");
-    const shown = Array.from(value.text, (c) =>
-      c === " " ? SPACE_MARK : c === SPACE_MARK || /\s/.test(c) ? codePoint(c) : c,
-    ).join("");
+    const spaced = value.exactSpaces === true && value.text.includes(" ");
+    const shown = value.exactSpaces
+      ? Array.from(value.text, (c) =>
+          c === " " ? SPACE_MARK : c === SPACE_MARK || /\s/.test(c) ? codePoint(c) : c,
+        ).join("")
+      : value.text;
     const top = pdf.y;
     const textWidth = width() - 24 - QR_SIZE - 16;
     pdf

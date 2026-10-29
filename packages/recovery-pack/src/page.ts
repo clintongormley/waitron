@@ -5,7 +5,13 @@ export type RecoveryPackPage = {
   title: string;
   intro?: string;
   rows: { label: string; value: string }[];
-  secret?: { label: string; text: string; qr: true };
+  secret?: {
+    label: string;
+    text: string;
+    qr: true;
+    /** The text's spaces are part of it, so each is drawn as a mark the reader can count. */
+    exactSpaces?: true;
+  };
   notes: string[];
 };
 

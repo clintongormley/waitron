@@ -416,7 +416,7 @@ describe("the secrets on the pages", () => {
       page: {
         title: "Archives",
         rows: [],
-        secret: { label: "Backup key", text: backupKey, qr: true },
+        secret: { label: "Backup key", text: backupKey, qr: true, exactSpaces: true },
         notes: [],
       },
     };
@@ -436,7 +436,7 @@ describe("the secrets on the pages", () => {
       page: {
         title: "Archives",
         rows: [],
-        secret: { label: "Key", text: backupKey, qr: true },
+        secret: { label: "Key", text: backupKey, qr: true, exactSpaces: true },
         notes: [],
       },
     };
@@ -449,6 +449,25 @@ describe("the secrets on the pages", () => {
 
   it("draws a code with no space without the space mark or its note", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
+    expect(pages[1]!.text).not.toContain("\u02fd");
+    expect(pages[1]!.text).not.toContain(PACK_WORDS.en.spaceMark);
+  });
+
+  it("draws a grouped key's spaces as plain spaces when its spaces carry no meaning", async () => {
+    const grouped = "ABCD EFGH IJKL";
+    const page: PackPart = {
+      kind: "server-key",
+      state: "included",
+      page: {
+        title: "Server key",
+        rows: [],
+        secret: { label: "Server key", text: grouped, qr: true },
+        notes: [],
+      },
+    };
+    const pages = await rendered(await renderRecoveryPack(input({ parts: [page] })), 3);
+    expect(pages[1]!.qr).toBe(grouped);
+    expect(pages[1]!.text).toContain(grouped);
     expect(pages[1]!.text).not.toContain("\u02fd");
     expect(pages[1]!.text).not.toContain(PACK_WORDS.en.spaceMark);
   });
