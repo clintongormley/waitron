@@ -93,11 +93,16 @@ export function alertMessage(
   params: Readonly<Record<string, unknown>>,
   l: string = currentLocale(),
 ): string {
-  const template = chooseTemplate(
-    hasAlertMessage(code) ? messages[code]! : GENERIC_ALERT,
-    params,
-    l,
-  );
+  return alertWords(hasAlertMessage(code) ? messages[code]! : GENERIC_ALERT, params, l);
+}
+
+/** Fills `entry` as `alertMessage` fills a registered alert's words. */
+export function alertWords(
+  entry: AlertMessageEntry,
+  params: Readonly<Record<string, unknown>>,
+  l: string = currentLocale(),
+): string {
+  const template = chooseTemplate(entry, params, l);
   return template.replace(
     /\{([A-Za-z0-9_]+)(?::([a-z_]+))?\}/g,
     (_match, name: string, kind: string | undefined) => {
