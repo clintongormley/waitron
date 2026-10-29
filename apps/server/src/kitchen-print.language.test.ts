@@ -1,7 +1,15 @@
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { eq } from "drizzle-orm";
-import { kitchenPrintJobs, printJobs, ticketItems, withTransaction } from "@waitron/db";
+import { fireLines, fireableLineColumns } from "./working-order.js";
+import { sql, eq } from "drizzle-orm";
+import {
+  kitchenPrintJobs,
+  printJobs,
+  ticketItems,
+  withTransaction,
+  workingOrderLines,
+  products,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { writeContentLanguages } from "@waitron/catalogue";
@@ -9,6 +17,7 @@ import {
   setupSplitExtrasVenue,
   useSplitExtrasDb,
   fireNewOrder,
+  createOfferedOrder,
 } from "./testing/split-extras-venue.js";
 import { updateStation } from "./kitchen.js";
 import {
@@ -171,4 +180,83 @@ it("A964 venue language reads once per rendering root, outside printer loops", a
     expect(reader).toHaveBeenCalledExactlyOnceWith(tx);
   });
   expect((await jobs()).length).toBeGreaterThan(2);
+});
+
+it("A964 language boundaries keep weighted units and all recorded presentation names independent of frame language", async () => {
+  const v = await setupSplitExtrasVenue();
+  const cfg = { ...v.cfg, locale: "de-DE" };
+  const id = await withTransaction(suite.db, async (tx) => {
+    await writeContentLanguages(tx, { defaultLanguage: "en", languages: ["en", "es"] });
+    const id = crypto.randomUUID();
+    const { lineRows } = await createOfferedOrder(tx, cfg, id, [
+      { productId: v.products.burger, quantity: "1" },
+    ]);
+    const lineId = lineRows[0]!.id!;
+    await tx
+      .update(workingOrderLines)
+      .set({
+        name: "Staff roast",
+        descriptions: { [cfg.invoiceLocales[0]!]: "Diner roast" },
+        kitchenName: "Pass roast",
+        variantName: "Staff size",
+        variantKitchenName: "Pass size",
+        variantDescriptions: { [cfg.invoiceLocales[0]!]: "Diner size" },
+        unitName: { "de-DE": "DE-unit", en: "EN-unit" },
+        optionSnapshots: [
+          {
+            listName: { en: "Staff list" },
+            listCustomerName: { en: "Diner list" },
+            listKitchenName: "Pass list",
+            labelName: { en: "Staff choice" },
+            labelCustomerName: { en: "Diner choice" },
+            labelKitchenName: "Pass choice",
+          },
+        ],
+      })
+      .where(eq(workingOrderLines.id, lineId));
+    await tx.execute(
+      sql`update working_line_contexts set sold_in_each = 0 where working_order_line_id = ${lineId}`,
+    );
+    const lines = await tx
+      .select(fireableLineColumns)
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.id, lineId));
+    await fireLines(tx, cfg, id, lines);
+    return id;
+  });
+  const before = await jobs();
+  expect(before).toHaveLength(2);
+  for (const j of before) {
+    expect(printedLines(j.payload)).toContain("1.000 DE-unit x Pass roast (Pass size)");
+    expect(printedLines(j.payload)).toContain("  + Pass list: Pass choice");
+  }
+  await withTransaction(suite.db, async (tx) => {
+    await tx
+      .update(products)
+      .set({ name: "New roast", kitchenName: "New pass" })
+      .where(eq(products.id, v.products.burger));
+    await writeContentLanguages(tx, { defaultLanguage: "es", languages: ["es"] });
+  });
+  await withTransaction(suite.db, (tx) => reprintOrderTickets(tx, cfg, id));
+  const added = (await jobs()).filter((j) => !before.some((old) => old.id === j.id));
+  expect(added).toHaveLength(2);
+  for (const j of added) {
+    const lines = printedLines(j.payload);
+    expect(lines[0]).toContain(kitchenTicketWords("es").reprint.split("{time}")[0]);
+    expect(lines).toContain("1.000 DE-unit x Pass roast (Pass size)");
+    expect(lines).toContain("  + Pass list: Pass choice");
+    for (const word of [
+      "Staff roast",
+      "Diner roast",
+      "Staff size",
+      "Diner size",
+      "Staff list",
+      "Diner list",
+      "Staff choice",
+      "Diner choice",
+      "EN-unit",
+      "New pass",
+    ])
+      expect(lines.join("\n")).not.toContain(word);
+  }
 });

@@ -205,6 +205,8 @@ describe("A964 complete paper frames", () => {
   it.each(["en", "es"])("renders every correction kind with exact fields in %s", (locale) => {
     const w = kitchenTicketWords(locale);
     const block = {
+      allergens: { milk: {} },
+      clashes: {},
       who: "Alex",
       note: null,
       labels: {
