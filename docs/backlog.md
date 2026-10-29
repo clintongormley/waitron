@@ -4765,8 +4765,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   the person has one set up: [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md),
   mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is planned
   ([plan](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md)); its first pull request, the
-  pack format and every reader, is #2250. Part 2 waits for A1188 part 1, part 3 for B3's retained
-  disk key.
+  pack format and every reader, landed as #2250; the next is PR B (fresh sign-in at the button).
+  Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
+  where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
+  field's help says "paste the kit"; the look images were taken before the review changed the
+  "not a pack" refusal and added the space mark, and nobody has looked at those two again. Part 2
+  waits for A1188 part 1, part 3 for B3's retained disk key.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
