@@ -1163,7 +1163,7 @@ describe("editing held groups", () => {
     );
   });
 
-  it("moves one Steak of two from the mains to the desserts, splitting the row and its ticket", async () => {
+  it("moves one Steak portion of two from the mains to the desserts with its own ticket", async () => {
     const v = await setupVenue();
     const s = await specExample(v);
     const [steak] = await linesIn(s.partyId, s.mains);
@@ -4850,6 +4850,39 @@ describe("advance HOLD tickets (Task 6)", () => {
       ]);
       expect(await noticesWithNotes(v)).toEqual([
         { kind: "changed", quantity: "1.000", direction: "removed", note: "rare" },
+        { kind: "changed", quantity: "1.000", direction: "added", note: "well done" },
+      ]);
+    });
+
+    it("A803 portions: raising a held portion to 2 with a new note prints the old dish taken away, then the edited and the added portion given apart", async () => {
+      const v = await setupVenue();
+      await printHeldWork(true);
+      const { s, steak } = await rareSteaks(v);
+      const header = await head(v, s);
+
+      await changeLine(v, s.tabId, steak.lineNo, { quantity: "2", note: "well done" }, MIA);
+
+      const given = [
+        "*** HOLD CHANGED ***",
+        ...header,
+        "GROUP 1",
+        `+1.000 x ${DISHES.steak.kitchen}`,
+        "  * well done",
+      ];
+      expect(await printedSince(v, 1)).toEqual([
+        [
+          "*** HOLD CHANGED ***",
+          ...header,
+          "GROUP 1",
+          `-1.000 x ${DISHES.steak.kitchen}`,
+          "  * rare",
+        ],
+        given,
+        given,
+      ]);
+      expect(await noticesWithNotes(v)).toEqual([
+        { kind: "changed", quantity: "1.000", direction: "removed", note: "rare" },
+        { kind: "changed", quantity: "1.000", direction: "added", note: "well done" },
         { kind: "changed", quantity: "1.000", direction: "added", note: "well done" },
       ]);
     });
