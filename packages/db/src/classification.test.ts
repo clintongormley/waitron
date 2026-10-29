@@ -48,4 +48,10 @@ describe("CORE_CHANGE_SOURCES", () => {
     expect(CORE_CLASSIFICATION.map((c) => c.table)).toContain("node_sealed_state");
     expect(CORE_CHANGE_SOURCES.map((s) => s.table)).not.toContain("node_sealed_state");
   });
+  it("is not a change source for the recovery pack record", () => {
+    expect(CORE_CLASSIFICATION).toContainEqual(
+      expect.objectContaining({ table: "recovery_packs", class: "local" }),
+    );
+    expect(CORE_CHANGE_SOURCES.map((s) => s.table)).not.toContain("recovery_packs");
+  });
 });
