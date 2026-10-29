@@ -324,7 +324,7 @@ describe("lowSpaceBackupDeletion", () => {
     expect(f.paths.some(gone)).toBe(false);
     expect(installationStartedAt).not.toHaveBeenCalled();
     expect(log.mock.calls).toEqual([
-      ["warn", "backup.staging_disk_unreadable", { errorCode: "unknown", errno: "EACCES" }],
+      ["warn", "backup.venue_disk_unreadable", { errorCode: "unknown", errno: "EACCES" }],
     ]);
   });
 

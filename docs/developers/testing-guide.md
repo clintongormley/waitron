@@ -1338,8 +1338,9 @@ in `backup-api.route.test.ts`, `backup-supervisor.test.ts`, `backup-supervisor.n
 and `boot.backup-network.test.ts` (A1167 slice 1, Task 8 review). A supervisor case that needs a
 set free figure passes the supervisor's test-only `statfs`; a `runOnce` case can pass the margins.
 A booted server's free-space watch also deletes old archives in a local backup folder on the venue
-folder's disk, toward 2.5 GiB, at any reading that finds under 2 GiB free while backups run
-(A1167 slice 2); a boot case that counts archives can pass `seams.freeSpaceWatch.statfs`.
+folder's disk, toward 2.5 GiB, at a reading that finds under 2 GiB free while backups run and no
+run holds or waits for the staging turn (again only where an installation start is readable;
+A1167 slice 2); a boot case that counts archives can pass `seams.freeSpaceWatch.statfs`.
 
 **A run you interrupt can leave its image attached.** A run stopped with Ctrl-C during the
 slice's review (2026-10-21) left its image still attached afterwards. `pnpm reap` does not look for

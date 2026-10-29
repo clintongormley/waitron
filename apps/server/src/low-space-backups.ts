@@ -36,10 +36,11 @@ export interface LowSpaceBackupDeps {
  * The free-space watch's step: under `SPACE_LOW_BYTES` free, deletes the oldest backups the box may
  * delete in local folders on `dir`'s disk until `SPACE_OK_BYTES` is free, or every one it may when
  * they cannot reach it. Deletes nothing while a backup run holds or waits for the staging turn; the
- * next reading tries again. Once it holds the turn it reads free space and the folders again, and
- * after reading the installation start it deletes nothing unless each listed folder's destination
- * is still among `backends()` with the same `localDir`. A venue folder whose disk cannot be read
- * is logged `backup.staging_disk_unreadable` and deletes nothing.
+ * next reading tries again. Once it holds the turn it reads free space and the backup settings again
+ * and lists the folders; once the installation start is read it checks that each listed folder's
+ * destination is still among `backends()` with the same `localDir`, and deletes nothing if not. A
+ * venue folder whose disk cannot be read is logged `backup.venue_disk_unreadable` and deletes
+ * nothing.
  */
 export function lowSpaceBackupDeletion(
   deps: LowSpaceBackupDeps,
@@ -60,7 +61,7 @@ export function lowSpaceBackupDeletion(
       try {
         ({ folders } = await foldersOnDisk(backends, deps.dir, deps.deviceOf));
       } catch (err) {
-        deps.log("warn", "backup.staging_disk_unreadable", {
+        deps.log("warn", "backup.venue_disk_unreadable", {
           errorCode: codeOf(err),
           errno: errnoOf(err),
         });
