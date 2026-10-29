@@ -78,6 +78,8 @@ export function createCertificateDiagnosisRunner(options: {
         timers.add(timer);
       };
       const startedAt = now();
+      const workEnd = startedAt + workMs;
+      const attemptEnd = workEnd + cleanupMs;
       let settled = false;
       let childUsed = false;
       let childExited = true;
@@ -120,13 +122,13 @@ export function createCertificateDiagnosisRunner(options: {
           fail();
           return;
         }
-        schedule(now() + cleanupMs, fail);
+        schedule(Math.min(now() + cleanupMs, attemptEnd), fail);
       }
       function cancelled() {
         interrupt("cancelled");
       }
       signal.addEventListener("abort", cancelled, { once: true });
-      schedule(startedAt + workMs, () => interrupt("deadline"));
+      schedule(workEnd, () => interrupt("deadline"));
 
       const runChild: FiscalCertificateDiagnosisDeps["runChild"] = async (input, childSignal) => {
         const interrupted = (): FiscalCertificateDiagnosisChildResult => ({
@@ -134,6 +136,7 @@ export function createCertificateDiagnosisRunner(options: {
           reason: interruption ?? "unavailable",
           lastProgress,
         });
+        if (now() >= workEnd && !abort.signal.aborted) interrupt("deadline");
         if (childUsed || settled || abort.signal.aborted || childSignal.aborted)
           return interrupted();
         childUsed = true;
@@ -186,13 +189,14 @@ export function createCertificateDiagnosisRunner(options: {
             1024,
           )!;
           if (notify && !channel.destroyed && channel.writable) channel.write(frame, () => {});
-          schedule(at + cleanupMs * 0.75, () => {
+          const reserve = Math.max(0, Math.min(at + cleanupMs, attemptEnd) - at);
+          schedule(at + reserve * 0.75, () => {
             if (!childExited) child.kill("SIGTERM");
           });
-          schedule(at + cleanupMs * 0.875, () => {
+          schedule(at + reserve * 0.875, () => {
             if (!childExited) child.kill("SIGKILL");
           });
-          schedule(at + cleanupMs, () => {
+          schedule(at + reserve, () => {
             fail();
             endSupervision();
           });
@@ -271,6 +275,11 @@ export function createCertificateDiagnosisRunner(options: {
       void workPromise.then(
         (value) => {
           if (settled) return;
+          if (now() >= attemptEnd || (now() >= workEnd && interruption === null)) {
+            interrupt("deadline");
+            fail();
+            return;
+          }
           if (!childExited || interruption === "cancelled" || signal.aborted || stopped) {
             cleanChild?.();
             fail();

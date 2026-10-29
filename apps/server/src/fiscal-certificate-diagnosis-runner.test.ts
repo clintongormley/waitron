@@ -118,6 +118,31 @@ describe("certificate diagnosis admission", () => {
     expect(remove).toHaveBeenCalledWith("abort", expect.any(Function));
   });
 
+  it("rejects work that crossed the total monotonic budget before the timer could run", async () => {
+    let now = 0;
+    const value = runner({ monotonicNow: () => now });
+    await expect(
+      value.attempt(async () => {
+        now = 32_001;
+        return { late: true };
+      }, signal()),
+    ).rejects.toMatchObject({ code: "fiscal.certificate_diagnosis_unavailable" });
+  });
+
+  it("does not spawn when synchronous parent work exhausted the work budget", async () => {
+    let now = 0;
+    const value = runner({ monotonicNow: () => now, entry: new URL("file:///unused.js") });
+    const spawning = vi.mocked(spawn).mockClear();
+    const result = await value.attempt(async (runChild, abort) => {
+      now = 30_001;
+      return { result: await runChild(null, abort) };
+    }, signal());
+    expect(result).toEqual({
+      result: { outcome: "interrupted", reason: "deadline", lastProgress: null },
+    });
+    expect(spawning).not.toHaveBeenCalled();
+  });
+
   it("preserves a domain refusal from work and releases admission", async () => {
     const value = runner();
     const refusal = new Error("domain refusal");

@@ -29,6 +29,7 @@ beforeAll(async () => {
       "node",
       "../../scripts/bundle-node.mjs",
       `src/fiscal-certificate-diagnosis-entry.ts=${entry.pathname}`,
+      `src/fiscal-certificate-diagnosis-runner.ts=${join(root, "host.js")}`,
     ],
     { cwd: resolve("."), timeout: 90_000, maxBuffer: 2_000_000 },
   );
@@ -90,11 +91,10 @@ describe("shipped certificate diagnosis entry", () => {
   it.each(["sello", "representante"] as const)(
     "inspects selected %s bytes with the composed real module and no source loader",
     async (kind) => {
-      const runner = createCertificateDiagnosisRunner({
-        fiscalId: "verifactu",
-        entry,
-        execArgv: [],
-      });
+      const host = (await import(pathToFileURL(join(root!, "host.js")).href)) as {
+        createCertificateDiagnosisRunner: typeof createCertificateDiagnosisRunner;
+      };
+      const runner = host.createCertificateDiagnosisRunner({ fiscalId: "verifactu" });
       try {
         const answer = await runner.attempt(
           async (child, abort) => ({ result: await child(input(kind), abort) }),
