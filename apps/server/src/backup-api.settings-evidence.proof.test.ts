@@ -551,6 +551,39 @@ describe("GET /api/backup/settings-evidence proofs", () => {
     }
   }, 60_000);
 
+  it("leaks nothing: a password in a saved bucket endpoint's URL is masked in the answer and the read's log lines", async () => {
+    const endpointPassword = "review-password-secret";
+    await write({
+      ...folderSettings(destDir()),
+      destinations: [
+        {
+          kind: "s3",
+          id: "bucket",
+          bucket: {
+            ...BUCKET,
+            endpoint: `https://backup-user:${endpointPassword}@s3.example.test`,
+          },
+          venueId: VENUE,
+        },
+      ],
+    });
+    const sc = await scenario();
+    await writeRecoveryKey(sc.stateDir, { recoveryKey: KEY_1, keyRotatedAt: undefined });
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    const app = buildApp(sup, sc);
+    sc.lines.length = 0;
+
+    const body = await evidence(app);
+    expect(body.now).toMatchObject({
+      state: "readable",
+      destinations: [{ kind: "bucket", endpoint: "https://backup-user:***@s3.example.test" }],
+    });
+    const said = JSON.stringify(body) + "\n" + sc.lines.join("\n");
+    expect(said).not.toContain(endpointPassword);
+    expect(said).toContain("s3.example.test");
+  }, 60_000);
+
   it("leaks nothing when the record does not read now: no param of the read's error in the answer or the read's log lines", async () => {
     await write(folderSettings(destDir()));
     const sc = await scenario();

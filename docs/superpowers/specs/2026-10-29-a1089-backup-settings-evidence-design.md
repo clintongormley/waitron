@@ -91,7 +91,8 @@ The panel has three parts:
      beside the key numbers this box holds now. When the record has been rewritten since the
      newest failure, the panel says so first: the facts below then describe the new record, not
      the one that failed.
-   - Only when the record reads cleanly now: the folder path and/or the bucket's address, region,
+   - Only when the record reads cleanly now: the folder path and/or the bucket's address (a
+     password in its URL masked as `user:***@host`, by `redactSecrets`), region,
      bucket name, access key id and archive folder (the status reply already shows the access key
      id, `apps/server/src/backup-supervisor.ts:66`, and the form needs it to keep a saved secret).
      For a folder, whether it exists and is a folder, or "could not be checked" when the look
