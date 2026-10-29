@@ -274,9 +274,7 @@ export class VerifactuBackend implements FiscalBackend {
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
-    // An F1 must name its recipient and an F2 must NOT carry one. `buildDestinatarios` is the one
-    // place that refuses a foreign recipient; no country test is repeated here, so "foreign
-    // customers are not supported yet" never reads as "an F1 with no recipient".
+    // Postal country does not determine the identifier type or its issuing country.
     const destinatarios =
       sale.counterparty !== null ? this.buildDestinatarios(sale.counterparty) : undefined;
 

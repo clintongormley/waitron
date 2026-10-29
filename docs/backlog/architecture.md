@@ -423,12 +423,6 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **Retire obsolete foreign-recipient restriction prose after scope approval.**
-  `packages/fiscal-verifactu/src/backend.ts:277–279` and `src/errors.ts:270–278` still describe the
-  old foreign-recipient restriction. The approved A963 builder now accepts explicit document
-  identity independently of postal country. Its narrow scope leaves those comments untouched;
-  the owner can approve their deletion or correction. The new path is checked locally, not by a
-  live AEAT submission. See the rework plan's protected-prose exception.
 - **A964 — point 3(3), and the first of point 2.** Kitchen tickets
   (`apps/server/src/kitchen-ticket.ts:166–464`, about 25 words) and the order-number slip move into
   the existing `apps/server/src/i18n/` (it holds `kitchen-allergy.ts` already), in English with translations, and follow the venue's language rather than

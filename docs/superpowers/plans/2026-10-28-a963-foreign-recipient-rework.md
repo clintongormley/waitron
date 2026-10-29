@@ -213,3 +213,13 @@ Receipts: `madrid-red.log`, `madrid-green.log`, `madrid-types.log` under the Tas
 The final prose audit also retires A1a's obsolete identifier-decision entry and its summary
 paraphrases. The owner chose explicit document type and issuer in A963; the existing F3
 route/qualification work stays under A231. No protected fiscal prose or test is edited.
+
+## Owner-approved protected-prose correction, 2026-10-29
+
+The owner's 29 October 02:15 ruling supersedes the protected-prose exception above for the two
+named backend/error comments and Q17(a). The comments now describe postal and identifier
+independence and the retained invalid-identity refusal. Q17 has a dated correction with the quoted
+AEAT sources; its historical question and unrelated open parts remain. No protected runtime,
+test or fixture changed in this correction. The migration-number collision with main was resolved
+by regeneration as `0197_recipient_identifier` and `0198_recipient_identifier_guards`, preserving
+the original column and custom SQL bytes.

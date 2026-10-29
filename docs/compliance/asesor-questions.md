@@ -2601,6 +2601,26 @@ only what is settled on primary source.
 
 ### Q17. F3 *canje* — recipient identity, series, and cross-SIF substitution (added 2026-08-26)
 
+**2026-10-29 correction to (a), A963.** The refusal described below is historical. The shared
+`buildDestinatarios` now accepts a Spanish NIF independently of the postal country, or an explicit
+document with its type and issuing country. The document types map to `IDOtro` values 02–06;
+Waitron does not offer 07. `fiscal.foreign_recipient_unsupported` remains for an invalid identity
+with a non-ES postal country and neither document field supplied. The backend and recipient-builder
+suites exercise these paths locally; they do not establish live AEAT acceptance. Questions (b)–(d)
+remain separate.
+
+Sources re-read on 29 October 2026:
+
+| Source | Quotation | What it establishes |
+| --- | --- | --- |
+| [AEAT validation 1.2.2, §13, pp. 9–10](https://www.agenciatributaria.es/static_files/AEAT_Desarrolladores/EEDD/IVA/VERI-FACTU/Validaciones_Errores_Veri-Factu.pdf) | “pero es obligatorio que se cumplimente uno de los dos” | A recipient must carry NIF or IDOtro; a foreign postal address does not remove the identifier requirement. |
+| [AEAT SuministroInformacion.xsd, PersonaFisicaJuridicaType and IDOtroType](https://prewww2.aeat.es/static_files/common/internet/dep/aplicaciones/es/aeat/tikeV1.0/cont/ws/SuministroInformacion.xsd) | `choice`: `NIF`, `IDOtro`; `CodigoPais`, `IDType`, `ID` | The schema separates the two identity representations and names the other-document fields. The mapping above describes Waitron's implementation, not a live filing result. |
+
+> **Actualización de (a), 29-10-2026.** Waitron admite NIF español con cualquier país postal,
+> o un documento con su tipo y país de expedición explícitos, mediante `IDOtro` (02–06).
+> No ofrece 07. La negativa general descrita abajo es histórica; las pruebas locales no acreditan
+> aceptación por el servicio de la AEAT. Los apartados (b)–(d) siguen separados.
+
 **Why it matters.** F3 (*factura expedida en sustitución de facturas simplificadas* — the *canje*)
 is built (`recordSubstitution`, #51): when a customer asks for a full invoice for a ticket already
 issued, we emit an F3 carrying a `Destinatarios` block with the recipient's identity. The shape was
