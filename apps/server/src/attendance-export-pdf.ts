@@ -1,6 +1,7 @@
 import { once } from "node:events";
 import PDFDocument from "pdfkit";
 import type { RecordExportDocument } from "@waitron/shared";
+import { ATTENDANCE_PDF_WORDS } from "./i18n/attendance-export-pdf.js";
 import { invoiceFont, invoiceFontBytes } from "./invoice-font.js";
 
 const PAGE_WIDTH = 595.28;
@@ -11,7 +12,7 @@ const BOTTOM = PAGE_HEIGHT - 52;
 type Text = { text: string; x: number; y: number; size: number };
 
 export async function renderAttendancePdf(document: RecordExportDocument): Promise<Buffer> {
-  const spanish = document.locale === "es";
+  const words = ATTENDANCE_PDF_WORDS[document.locale === "es" ? "es" : "en"];
   let escaped = false;
   const clean = (value: string): string =>
     Array.from(value.replace(/\r\n?/gu, "\n").replace(/\t/gu, "    "))
@@ -26,7 +27,7 @@ export async function renderAttendancePdf(document: RecordExportDocument): Promi
     autoFirstPage: false,
     font: invoiceFontBytes as unknown as string,
     info: {
-      Title: spanish ? "Registro de jornada" : "Working-time record",
+      Title: words.title,
       Author: "Waitron",
       Creator: "Waitron",
     },
@@ -68,16 +69,11 @@ export async function renderAttendancePdf(document: RecordExportDocument): Promi
   const newPage = () => {
     pages.push([]);
     y = MARGIN;
-    draw(spanish ? "Registro de jornada" : "Working-time record", MARGIN, 12);
-    draw(
-      `${spanish ? "Desde" : "From"} ${document.period.start}  /  ${spanish ? "Antes de (excluido)" : "Before (excluded)"} ${document.period.end}`,
-      MARGIN,
-      9,
-    );
+    draw(words.title, MARGIN, 12);
+    draw(words.period(document.period.start, document.period.end), MARGIN, 9);
     y += 10;
     if (heading)
-      for (const line of wrap(`${heading} (${spanish ? "continuación" : "continued"})`, WIDTH, 11))
-        draw(line, MARGIN, 11);
+      for (const line of wrap(words.continued(heading), WIDTH, 11)) draw(line, MARGIN, 11);
   };
   const room = (height: number) => {
     if (y + height > BOTTOM) newPage();
@@ -145,21 +141,15 @@ export async function renderAttendancePdf(document: RecordExportDocument): Promi
   if (escaped) {
     heading = "";
     y += 6;
-    paragraph(
-      spanish
-        ? "Caracteres no disponibles en la fuente: se muestran como [U+XXXX]."
-        : "Characters unavailable in the font are shown as [U+XXXX].",
-    );
+    paragraph(words.unavailableCharacters);
   }
   for (const [i, page] of pages.entries()) {
     pdf.addPage({ size: [PAGE_WIDTH, PAGE_HEIGHT], margin: 0 });
     for (const item of page)
       pdf.fontSize(item.size).text(item.text, item.x, item.y, { lineBreak: false });
-    pdf
-      .fontSize(8)
-      .text(`${spanish ? "Página" : "Page"} ${i + 1} / ${pages.length}`, MARGIN, PAGE_HEIGHT - 38, {
-        lineBreak: false,
-      });
+    pdf.fontSize(8).text(words.page(i + 1, pages.length), MARGIN, PAGE_HEIGHT - 38, {
+      lineBreak: false,
+    });
   }
   pdf.end();
   await ended;

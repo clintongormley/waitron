@@ -1,6 +1,7 @@
 import { esc, labelAmountLines, prepareText, wrapText, type EscSetting } from "@waitron/printing";
-import type { CategoryReport, CategoryReportMode, CategoryTotal } from "@waitron/reporting";
+import type { CategoryReport, CategoryTotal } from "@waitron/reporting";
 import type { SupportedLocale } from "@waitron/shared";
+import { CATEGORY_SALES_WORDS } from "./i18n/category-sales-page.js";
 import { formatMoney } from "./receipt-money.js";
 
 export interface CategorySalesPageInput {
@@ -12,58 +13,6 @@ export interface CategorySalesPageInput {
   locale: SupportedLocale;
   printer: EscSetting;
 }
-
-interface Strings {
-  heading: Record<CategoryReportMode, string>;
-  range: (from: string, to: string) => string;
-  day: (day: string) => string;
-  extrasIntoDish: string;
-  gross: string;
-  net: string;
-  uncategorised: string;
-  notRecorded: string;
-  /** Not recorded's own part: its lines that carry no free-text category either. */
-  noCategoryRecorded: string;
-  directlyIn: (name: string) => string;
-  total: string;
-  incomplete: (lines: number) => string;
-}
-
-const STRINGS: Readonly<Record<SupportedLocale, Strings>> = {
-  "en-GB": {
-    heading: { at_time_of_sale: "Categories at time of sale", current: "Current categories" },
-    range: (from, to) => `From ${from} to ${to}`,
-    day: (day) => `Business day ${day}`,
-    extrasIntoDish: "Extras rolled into their dish",
-    gross: "Gross",
-    net: "Net",
-    uncategorised: "No category",
-    notRecorded: "Not recorded",
-    noCategoryRecorded: "Category unknown",
-    directlyIn: (name) => `Directly in ${name}`,
-    total: "Total",
-    incomplete: (n) =>
-      `Gross total incomplete: ${n} ${n === 1 ? "line" : "lines"} recorded before classification began`,
-  },
-  "es-ES": {
-    heading: {
-      at_time_of_sale: "Categorías en el momento de la venta",
-      current: "Categorías actuales",
-    },
-    range: (from, to) => `Desde ${from} hasta ${to}`,
-    day: (day) => `Día ${day}`,
-    extrasIntoDish: "Extras contados con su plato",
-    gross: "Bruto",
-    net: "Neto",
-    uncategorised: "Sin categoría",
-    notRecorded: "No registrada",
-    noCategoryRecorded: "Categoría desconocida",
-    directlyIn: (name) => `Directamente en ${name}`,
-    total: "Total",
-    incomplete: (n) =>
-      `Total bruto incompleto: ${n} ${n === 1 ? "línea registrada" : "líneas registradas"} antes de que empezara la clasificación`,
-  },
-};
 
 const INDENT = 2;
 const PATH_GLUE = "\u00a0";
@@ -81,7 +30,7 @@ export function formatCategorySalesPage({
   locale,
   printer,
 }: CategorySalesPageInput): Uint8Array {
-  const s = STRINGS[locale];
+  const s = CATEGORY_SALES_WORDS[locale];
   const b = esc(printer);
   const { columns, widthDots } = b.grid;
   b.init().printArea(widthDots);
