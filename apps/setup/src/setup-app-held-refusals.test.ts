@@ -52,10 +52,9 @@ function expectStoppedRefused(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(text(app)).not.toContain(startAgainDeletesIt(t));
 }
 function expectNoHeldConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
-  expect(q(app, "held-database")).toBeNull();
+  expect(q(app, "start-again-deletes")).toBeNull();
   expect(text(app)).not.toContain(startAgainDeletesIt(t));
-  for (const words of [t.heldNoInvoices, t.heldNoInvoicesOne, t.heldLost])
-    expect(text(app)).not.toContain(words);
+  for (const words of [t.heldLost, t.noInvoiceSent]) expect(text(app)).not.toContain(words);
   expect(q(app, "retire-confirmed")).toBeNull();
   expect(q(app, "confirm-start-again")).toBeNull();
 }

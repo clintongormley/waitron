@@ -80,7 +80,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 venue.admin.password,
               );
               await click(app, "damaged-record-continue");
-              await expect.poll(() => q(app, "held-database")).not.toBeNull();
+              await expect.poll(() => q(app, "start-again-deletes")).not.toBeNull();
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
             }
             await app.updateComplete;

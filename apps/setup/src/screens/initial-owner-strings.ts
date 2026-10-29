@@ -39,7 +39,7 @@ export const initialOwnerStrings = {
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
     damagedRecordPassword:
       "To start again, enter the administrator password you chose during setup.",
-    startAgainHelp: "Deletes this attempt. This box will not use its invoice series names again.",
+    startAgainHelp: "This box will not use this setup's invoice series names again.",
     seriesPicksDamaged:
       "This box's record of the invoice series names it chose is damaged and cannot be read.",
     publicRecordDamaged: "This setup's public fiscal record is damaged and cannot be read.",
@@ -55,10 +55,8 @@ export const initialOwnerStrings = {
       "Start again is not available: this setup's database already holds records.",
     heldRows: "The setup database already holds {rows} saved items.",
     heldRowsOne: "The setup database already holds 1 saved item.",
-    heldNoInvoices: "None of them is an invoice, so no invoice was sent to AEAT.",
-    heldNoInvoicesOne: "It is not an invoice, so no invoice was sent to AEAT.",
-    heldLost:
-      "Start again deletes them with this attempt. You will enter this setup's details again.",
+    heldLost: "Start again deletes what was entered in the setup that stopped part way.",
+    noInvoiceSent: "No invoice was sent to AEAT.",
     heldKept: "It holds {kept} items that Waitron never deletes.",
     heldKeptOne: "It holds 1 item that Waitron never deletes.",
     heldInvoices: "{records} of them are invoices; AEAT accepted {accepted}.",
@@ -130,7 +128,7 @@ export const initialOwnerStrings = {
     damagedRecordPassword:
       "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
     startAgainHelp:
-      "Borra este intento. Este equipo no volverá a usar sus nombres de serie de facturas.",
+      "Este equipo no volverá a usar los nombres de serie de facturas de esta configuración.",
     seriesPicksDamaged:
       "El registro de los nombres de serie de facturas que eligió este equipo está dañado y no se puede leer.",
     publicRecordDamaged:
@@ -147,10 +145,9 @@ export const initialOwnerStrings = {
       "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros.",
     heldRows: "La base de datos de configuración ya guarda {rows} elementos.",
     heldRowsOne: "La base de datos de configuración ya guarda 1 elemento.",
-    heldNoInvoices: "Ninguno es una factura, así que no se envió ninguna factura a la AEAT.",
-    heldNoInvoicesOne: "No es una factura, así que no se envió ninguna factura a la AEAT.",
     heldLost:
-      "Empezar de nuevo los borra junto con este intento. Tendrás que volver a introducir los datos de esta configuración.",
+      "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
+    noInvoiceSent: "No se envió ninguna factura a la AEAT.",
     heldKept: "Tiene {kept} elementos que Waitron nunca borra.",
     heldKeptOne: "Tiene 1 elemento que Waitron nunca borra.",
     heldInvoices: "{records} son facturas; la AEAT aceptó {accepted}.",
