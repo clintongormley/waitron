@@ -327,6 +327,32 @@ describe("deleteOldBackupsAtStart", () => {
       expect(codes(log)).not.toContain("backup.archive_deleted");
     });
 
+    it("that now leads to another note folder's place does not hide that folder, which still qualifies", async () => {
+      const other = join(root, "other");
+      await mkdir(other);
+      // "a" was recorded at `other`, but its link now leads to `usb`, where "b" was recorded.
+      await note({
+        folders: [
+          { destination: "a", dir: other, configuredDir: link },
+          { destination: "b", dir: usb, configuredDir: usb },
+        ],
+      });
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const { deps, log } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readdir(usb)).not.toContain(oldest);
+      expect(log).toHaveBeenCalledWith("info", "backup.archive_deleted", {
+        destination: "b",
+        key: oldest,
+        bytes: 15 * MIB,
+        reason: "start_room",
+      });
+      expect(skipped(log)).toEqual([]);
+    });
+
     it("named by the environment is deleted from where the link leads now", async () => {
       await note({
         managedByEnvironment: true,
@@ -382,6 +408,27 @@ describe("deleteOldBackupsAtStart", () => {
 
     expect((await readdir(usb)).length).toBe(2);
     expect(lockVenue).not.toHaveBeenCalled();
+  });
+
+  it("with the venue folder gone reads, locks and logs nothing, as its free space cannot be read", async () => {
+    await note();
+    await archive(usb, days(1), 15);
+    await archive(usb, days(2), 15);
+    await rm(venueDir, { recursive: true });
+    const statfs = vi.fn(async (path: string) => {
+      if (path === venueDir) throw Object.assign(new Error("gone"), { code: "ENOENT" });
+      return { bavail: 10 * MIB, frsize: 1 };
+    });
+    const { deps, log, lockVenue, loadBoxEnv } = setup({ statfs });
+
+    await deleteOldBackupsAtStart(deps);
+
+    expect(statfs).toHaveBeenCalledWith(venueDir);
+    expect(lockVenue).not.toHaveBeenCalled();
+    expect(loadBoxEnv).not.toHaveBeenCalled();
+    expect(log).not.toHaveBeenCalled();
+    expect(existsSync(venueDir)).toBe(false);
+    expect((await readdir(usb)).length).toBe(2);
   });
 
   it("with no note returns without taking the lock or loading the env", async () => {
@@ -442,13 +489,17 @@ describe("deleteOldBackupsAtStart", () => {
         loadBoxEnv: async () => ({ WAITRON_BACKUP_RECOVERY_KEY: KEY }),
       }));
 
-    it("the venue folder is gone, which taking the lock would create", async () => {
+    it("the venue folder vanishes after its free space is read, which taking the lock would create", async () => {
       await note();
-      await rm(venueDir, { recursive: true });
-      const { deps, log, lockVenue } = setup();
+      const statfs = vi.fn(async () => {
+        await rm(venueDir, { recursive: true, force: true });
+        return { bavail: 10 * MIB, frsize: 1 };
+      });
+      const { deps, log, lockVenue, loadBoxEnv } = setup({ statfs });
       await deleteOldBackupsAtStart(deps);
       expect(skipped(log)).toEqual([{ reason: "venue_db_missing" }]);
       expect(lockVenue).not.toHaveBeenCalled();
+      expect(loadBoxEnv).not.toHaveBeenCalled();
       expect(existsSync(venueDir)).toBe(false);
     });
 

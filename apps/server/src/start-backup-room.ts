@@ -124,7 +124,7 @@ async function checks(
   // The raw environment, never `merged`: a dashboard box keeps its recovery key in backup.env.
   const managedByEnvironment = isBackupManagedByEnvironment(deps.baseEnv);
   if (note.managedByEnvironment !== managedByEnvironment) return { skipped: "management_changed" };
-  let candidates: { id: string; localDir: string }[];
+  let candidates: { id: string; localDir: string }[] = [];
   if (managedByEnvironment) {
     try {
       candidates = archiveDestinations({
@@ -136,20 +136,38 @@ async function checks(
     } catch {
       return { skipped: "destinations_invalid" };
     }
-  } else candidates = note.folders.map((f) => ({ id: f.destination, localDir: f.configuredDir }));
+  }
   let folders: BackupFolder[];
   try {
+    if (!managedByEnvironment) candidates = await stillConfigured(note, deps);
     ({ folders } = await foldersOnDisk(candidates, deps.venueDir, deps.deviceOf));
   } catch {
     return { skipped: "venue_disk_unreadable" };
   }
-  // A configured path that now leads elsewhere is not where backups go any more.
-  if (!managedByEnvironment)
-    folders = folders.filter((f) =>
-      note.folders.some((n) => n.destination === f.destination && n.dir === f.dir),
-    );
   if (folders.length === 0) return { skipped: "no_folders" };
   return { note, folders };
+}
+
+/**
+ * The note's folders whose configured path still leads to the folder it recorded; one that now
+ * leads elsewhere is not where backups go any more. Each is judged alone, before folders reaching
+ * the same place are merged, so one that leads elsewhere cannot hide one that still qualifies.
+ */
+async function stillConfigured(
+  note: BackupRoomNote,
+  deps: StartBackupRoomDeps,
+): Promise<{ id: string; localDir: string }[]> {
+  const kept: { id: string; localDir: string }[] = [];
+  for (const f of note.folders) {
+    const { folders } = await foldersOnDisk(
+      [{ id: f.destination, localDir: f.configuredDir }],
+      deps.venueDir,
+      deps.deviceOf,
+    );
+    if (folders.some((found) => found.dir === f.dir))
+      kept.push({ id: f.destination, localDir: f.configuredDir });
+  }
+  return kept;
 }
 
 async function deleteToFloor(
