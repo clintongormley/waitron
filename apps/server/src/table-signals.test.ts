@@ -38,7 +38,7 @@ import type { Logger } from "./logger.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
 
 import { fireGroup, readHeldCounts, snoozeReminder } from "./order-groups.js";
-import { placeGroups } from "./testing/group-submit-fixture.js";
+import { placeGroupedRound, placeGroups } from "./testing/group-submit-fixture.js";
 import { finishTable } from "./testing/party-close-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import {
@@ -710,20 +710,21 @@ describe("the floor's attention signals", () => {
   it("counts a held dish by what is left after a cancellation, a weighed dish as one, and no extra", async () => {
     const v = await setupPartyVenue(suite.db);
     const mesa2 = await v.table("Mesa 2");
-    const { partyId } = await seat(v, mesa2);
+    const seated = await seat(v, mesa2);
     const placed = await inTx(v, (tx) =>
-      placeGroups(tx, v.cfg, partyId, {
-        groups: [
-          {
-            lines: [
-              { menuItemId: v.item("Burger"), quantity: "2" },
-              { menuItemId: v.item("Paella"), quantity: "2" },
-            ],
-            release: "hold",
-          },
-        ],
-        operatorId: OPERATOR,
-      }),
+      placeGroupedRound(
+        tx,
+        v.cfg,
+        seated,
+        {
+          lines: [
+            { menuItemId: v.item("Burger"), quantity: "2" },
+            { menuItemId: v.item("Paella"), quantity: "2" },
+          ],
+          release: "hold",
+        },
+        OPERATOR,
+      ),
     );
     const groupId = placed.groups[0]!.id;
     const lines = await inTx(v, (tx) =>
