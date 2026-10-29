@@ -71,12 +71,13 @@ export function safeLoadDetail(error: unknown): LoadFailureDetail | null {
   return null;
 }
 
-// A symbol, non-enumerable: nothing that copies, lists or serialises the error's own fields carries it.
+// Non-enumerable symbol: a spread, `Object.keys` and `JSON.stringify` leave it out.
 const RECORD_META = Symbol("archiveRecordMeta");
 
 export function attachRecordMeta(error: unknown, meta: ArchiveRecordMeta | null): void {
   if (typeof error !== "object" || error === null) return;
-  Object.defineProperty(error, RECORD_META, { value: meta, enumerable: false });
+  // `Reflect` answers false on a frozen error instead of throwing over the error being rethrown.
+  Reflect.defineProperty(error, RECORD_META, { value: meta, enumerable: false });
 }
 
 export function recordMetaOf(error: unknown): ArchiveRecordMeta | null {

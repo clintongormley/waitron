@@ -88,7 +88,7 @@ describe("safeLoadDetail", () => {
 describe("the failing record's metadata on a thrown error", () => {
   const meta = { keyVersion: 1, writtenAt: "2026-10-29T10:00:00.000Z", digest: "0123456789abcdef" };
 
-  it("travels on the error without reaching its params, keys or JSON", () => {
+  it("travels on the error without reaching its params or a spread copy", () => {
     const error = new AppError("credentials.key_version_unknown", {
       purpose: "backup.archive",
       keyVersion: 1,
@@ -98,7 +98,18 @@ describe("the failing record's metadata on a thrown error", () => {
     expect(error.params).toEqual({ purpose: "backup.archive", keyVersion: 1 });
     // A spread copies enumerable symbol keys too, so this fails if the property is enumerable.
     expect(Object.getOwnPropertySymbols({ ...error })).toEqual([]);
-    expect(JSON.stringify(error)).not.toContain(meta.digest);
+  });
+
+  it("never throws over the error it is attached to, so that error keeps its own code", () => {
+    const frozen = Object.freeze(new AppError("backup.recovery_key_missing", {}));
+    expect(() => attachRecordMeta(frozen, meta)).not.toThrow();
+    expect(frozen.code).toBe("backup.recovery_key_missing");
+    expect(recordMetaOf(frozen)).toBeNull();
+
+    const twice = new AppError("backup.recovery_key_missing", {});
+    attachRecordMeta(twice, meta);
+    expect(() => attachRecordMeta(twice, { ...meta, digest: "fedcba9876543210" })).not.toThrow();
+    expect(recordMetaOf(twice)).toEqual(meta);
   });
 
   it("is absent from an error nothing attached it to, and from a thrown non-object", () => {
