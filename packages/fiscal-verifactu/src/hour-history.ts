@@ -10,6 +10,7 @@ export interface HourHistory {
   readonly scope: HourScope;
   readonly greatestSpentMinute: number | null;
   readonly recordedTimeFloorMs: number | null;
+  readonly usedMinutes: readonly number[];
   readonly references: readonly string[];
   readonly contradictions: readonly string[];
 }
@@ -53,6 +54,7 @@ export function projectHourHistory(evidence: unknown): HourHistory {
   const sources: unknown[] = evidence.sources;
   let greatestSpentMinute: number | null = null;
   let recordedTimeFloorMs: number | null = null;
+  const usedMinutes = new Set<number>();
   const references = new Set<string>();
   const contradictions = new Set<string>();
   const seen = new Map<string, string>();
@@ -107,6 +109,7 @@ export function projectHourHistory(evidence: unknown): HourHistory {
       seen.set(row.reference, fingerprint);
       const hour = decodeMinuteIdentity(row.identity);
       greatestSpentMinute = Math.max(greatestSpentMinute ?? hour, hour);
+      usedMinutes.add(hour);
       if (row.recordedAtMs !== null)
         recordedTimeFloorMs = Math.max(
           recordedTimeFloorMs ?? (row.recordedAtMs as number),
@@ -118,6 +121,7 @@ export function projectHourHistory(evidence: unknown): HourHistory {
     scope: Object.freeze({ ...scope }),
     greatestSpentMinute,
     recordedTimeFloorMs,
+    usedMinutes: Object.freeze([...usedMinutes].sort((a, b) => a - b)),
     references: Object.freeze([...references]),
     contradictions: Object.freeze([...contradictions]),
   });
