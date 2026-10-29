@@ -5103,6 +5103,19 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   commit.**
   [Detail](backlog/box.md#a-transaction-opened-outside-the-write-queue-can-let-a-bodys-writes-after-a-full-disk-commit)
 
+- **The full-disk bar waits for the owner's answers.** Its words; naming a deletion only from an
+  open alert under a day old (so a fresh deletion is not named while an older alert stays
+  unhandled); not saying "every backup it may"; a red edge and border rather than a filled bar; the
+  bar beside the bell's toast; and reading the queue's "no button" as the dropped Box status button.
+  The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
+
+- **After a Google sign-in, "Sign in as a manager" lands on the usual first page, not Box status.**
+  Google's redirect names no screen (`apps/server/src/management-api.ts`); keeping Box status needs
+  a server change. Left open by A1127 slice 3 (#2223).
+
+- **A second session expiry during the add-a-passkey offer may not show its message** to someone
+  who already saw "session expired" once. Read, not run; believed to predate A1127 slice 3 (#2223).
+
 - **Transactions opened outside the write queue at the same time get a wrong error message.**
   Next step: decide whether the store should refuse a second outside transaction outright, or only
   word the error for this case (`packages/store/src/node-sqlite-adapter.ts`).
