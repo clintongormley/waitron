@@ -34,9 +34,9 @@ describe("wrapText", () => {
   });
 
   it("wraps at spaces and indents continuation lines", () => {
-    expect(wrapText("Tostada con tomate y jamon iberico", 20, 2)).toEqual([
-      "Tostada con tomate y",
-      "  jamon iberico",
+    expect(wrapText("Toasted rye slices & smoky sausage", 20, 2)).toEqual([
+      "Toasted rye slices &",
+      "  smoky sausage",
     ]);
   });
 
@@ -56,15 +56,15 @@ describe("wrapText", () => {
   });
 
   it.each([30, 42])("keeps the leading-space indent of sub-lines at %i columns", (columns) => {
-    expect(wrapText("  + Grande", columns, 4)).toEqual(["  + Grande"]);
-    expect(wrapText("  Extra queso", columns, 2)).toEqual(["  Extra queso"]);
-    expect(wrapText("  * sin sal muy hecho", columns, 4)).toEqual(["  * sin sal muy hecho"]);
+    expect(wrapText("  + Bigger", columns, 4)).toEqual(["  + Bigger"]);
+    expect(wrapText("  Extra herbs", columns, 2)).toEqual(["  Extra herbs"]);
+    expect(wrapText("  * hot and not burnt", columns, 4)).toEqual(["  * hot and not burnt"]);
   });
 
   it("indents the continuation of a sub-line under its text", () => {
-    expect(wrapText("  + Salsa de setas silvestres con trufa negra", 30, 4)).toEqual([
-      "  + Salsa de setas silvestres",
-      "    con trufa negra",
+    expect(wrapText("  + Sauce of fresh vegetables and black spice", 30, 4)).toEqual([
+      "  + Sauce of fresh vegetables",
+      "    and black spice",
     ]);
   });
 
@@ -121,8 +121,8 @@ describe("wrapText", () => {
 
 describe("labelAmountLines", () => {
   it("puts the amount at the right of the last line when it fits", () => {
-    expect(labelAmountLines("1  Cafe con leche", "1,80 EUR", 30)).toEqual([
-      "1  Cafe con leche     1,80 EUR",
+    expect(labelAmountLines("1  Milk and honey", "1,80 EUR", 30)).toEqual([
+      "1  Milk and honey     1,80 EUR",
     ]);
   });
 
@@ -135,13 +135,13 @@ describe("labelAmountLines", () => {
 
   it("indents an item's continuation under its product name", () => {
     expect(
-      labelAmountLines("1  Tostada con tomate y jamón ibérico de bellota", "12,50 €", 30, 3),
-    ).toEqual(["1  Tostada con tomate y jamón", "   ibérico de bellota  12,50 €"]);
+      labelAmountLines("1  Toasted rye slices & smoky sausage in mustard", "12,50 €", 30, 3),
+    ).toEqual(["1  Toasted rye slices & smoky", "   sausage in mustard  12,50 €"]);
   });
 
   it.each([30, 42])("keeps an option's leading indent at %i columns", (columns) => {
-    const [line] = labelAmountLines("  Extra queso ×2", "1,50 €", columns, 2);
-    expect(line).toBe("  Extra queso ×2" + " ".repeat(columns - 22) + "1,50 €");
+    const [line] = labelAmountLines("  Extra herbs ×2", "1,50 €", columns, 2);
+    expect(line).toBe("  Extra herbs ×2" + " ".repeat(columns - 22) + "1,50 €");
   });
 
   it("wraps an amount wider than the paper onto right-aligned lines of its own", () => {
