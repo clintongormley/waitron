@@ -1,12 +1,15 @@
+import { addTabRound } from "./testing/order-writer-fixture.js";
+import { nameParty } from "./testing/party-venue.js";
 import * as kitchenLanguage from "./kitchen-language.js";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { fireLines, fireableLineColumns } from "./working-order.js";
+import { createOpenOrder, fireLines, fireableLineColumns } from "./working-order.js";
 import { sql, eq } from "drizzle-orm";
 import {
   kitchenPrintJobs,
   printJobs,
   ticketItems,
   withTransaction,
+  workingOrders,
   workingOrderLines,
   products,
 } from "@waitron/db";
@@ -260,3 +263,56 @@ it("A964 language boundaries keep weighted units and all recorded presentation n
       expect(lines.join("\n")).not.toContain(word);
   }
 });
+
+it.each(["en", "es"] as const)(
+  "A964 venue language keeps named-table and delivered-counter labels with %s frames",
+  async (language) => {
+    const v = await setupSplitExtrasVenue();
+    const cfg = { ...v.cfg, locale: "de-DE" };
+    await nameParty({ db: suite.db }, v.party.partyId, "Alex");
+    const ids = await withTransaction(suite.db, async (tx) => {
+      await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
+      await addTabRound(
+        tx,
+        cfg,
+        v.party.tabId,
+        v.tables.toOfferLines([{ productId: v.products.burger, quantity: "1" }]),
+      );
+      const [named] = await tx
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, v.party.tabId));
+      const counter = crypto.randomUUID();
+      await createOpenOrder(
+        tx,
+        cfg,
+        counter,
+        v.counter.toOfferLines([{ productId: v.products.burger, quantity: "1" }]),
+        null,
+        { zoneId: v.counter.zoneId, deliveryTableId: v.party.tableId },
+      );
+      const [delivered] = await tx
+        .select()
+        .from(workingOrders)
+        .where(eq(workingOrders.id, counter));
+      for (const id of [counter]) {
+        const lines = await tx
+          .select(fireableLineColumns)
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, id));
+        await fireLines(tx, cfg, id, lines);
+      }
+      return { named: named!.orderNumber, delivered: delivered!.orderNumber };
+    });
+    const papers = (await jobs()).map((j) => printedLines(j.payload));
+    expect(papers).toHaveLength(4);
+    expect(
+      papers.filter((p) => p.includes(`${kitchenTicketWords(language).order} ${ids.named} · Alex`)),
+    ).toHaveLength(2);
+    expect(papers.filter((p) => p.includes(String(ids.delivered)))).toHaveLength(2);
+    for (const paper of papers) {
+      expect(paper).toContain("Split extras");
+      expect(paper).toContain("1.000 x BURG");
+    }
+  },
+);

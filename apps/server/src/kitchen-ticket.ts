@@ -54,12 +54,6 @@ export interface OtherStationItem {
   held: boolean;
 }
 
-/**
- * `firedAt` prints as local HH:MM. A reprint opens with `*** REPRINT HH:MM ***`, `reprintedAt` in
- * the same clock; a `mark` opens with `*** HOLD ***` (held work printed in advance) or
- * `*** FIRE ***` (that work released). With a
- * `party`, the order number prints as a MOVED slip's order line does; without, it prints alone.
- */
 export type KitchenTicket = {
   locale: string;
   kitchenNote?: KitchenNoteHeading;

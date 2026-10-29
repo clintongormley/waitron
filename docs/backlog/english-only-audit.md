@@ -1,5 +1,7 @@
 # A913 — non-English text in general code: the audit
 
+_2026-10-29, A964: kitchen-ticket frames and collection-number captions now live in `apps/server/src/i18n/kitchen-ticket.ts` and read the saved default content language at rendering. Spanish selects Spanish; other defaults or missing settings select English. Recorded names, frozen allergy translations and unit selection keep their own inputs. The inline-wording and `WAITRON_TILL_LOCALE` findings below describe the earlier tree._
+
 _2026-10-28, A965: the owner answered the sample-name question. Both names now follow the sample receipt language; the sample identifier and character-probe footer retain their values. This supersedes the pending-question note below._
 
 _2026-10-27, A965: receipt resources now include English without adding it to Spain’s receipt choices. Card slips use the saved sale language; payment/refund/sample wording lives in Spain’s pack. Samples carry an explicit receipt language, captured at request for deferred office printing. The two internal sample names retain A754’s values while the owner question is unanswered. The findings below describe the earlier tree._
