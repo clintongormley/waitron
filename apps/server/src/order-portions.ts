@@ -122,23 +122,30 @@ export async function registerPortions(
     tx,
     portions.map((portion) => portion.lineId),
   );
-  for (const portion of portions) {
+  const fresh = portions.filter((portion) => {
     const held = bound.get(portion.lineId);
-    if (held?.portionId === portion.portionId) continue;
+    if (held?.portionId === portion.portionId) return false;
     if (held !== undefined)
       throw new Error(
         `registerPortions: line ${portion.lineId} already holds portion ${held.portionId}, not ${portion.portionId}`,
       );
-    await tx.insert(orderPortions).values({
+    return true;
+  });
+  if (fresh.length === 0) return;
+  await tx.insert(orderPortions).values(
+    fresh.map((portion) => ({
       id: portion.portionId,
       cohortId: portion.pricingCohortId,
       ordinal: portion.ordinal,
       measured: portion.measured,
-    });
-    await tx
-      .insert(workingLinePortions)
-      .values({ workingOrderLineId: portion.lineId, portionId: portion.portionId });
-  }
+    })),
+  );
+  await tx.insert(workingLinePortions).values(
+    fresh.map((portion) => ({
+      workingOrderLineId: portion.lineId,
+      portionId: portion.portionId,
+    })),
+  );
 }
 
 /** For each `{ from, to }`, a copy or a part split off `from`, give `to` every row of what a comp or

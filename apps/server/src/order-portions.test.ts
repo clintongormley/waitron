@@ -18,7 +18,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deletePortionBindings,
   expandPortionRows,
@@ -319,8 +319,9 @@ describe("A803 portions: recording portions", () => {
     return (await openPartyTab(tx, cfg, { tableId: table.id })).tabId;
   }
 
-  /** A round of two burgers with a cheese each and 200 ml of wine, split and written. */
-  async function writeRound(tx: Transaction, billId: string) {
+  /** A round of `burgers` burgers (two unless named) with a cheese each and 200 ml of wine, split and
+   * written. */
+  async function writeRound(tx: Transaction, billId: string, burgers = 2) {
     const round = await priceTabRound(
       tx,
       cfg,
@@ -328,7 +329,7 @@ describe("A803 portions: recording portions", () => {
       offers.toOfferLines([
         {
           productId: ids.burger,
-          quantity: "2",
+          quantity: String(burgers),
           extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
         },
         { productId: ids.wine, quantity: "200" },
@@ -412,6 +413,38 @@ describe("A803 portions: recording portions", () => {
           .sort((a, b) => a.lineId.localeCompare(b.lineId)),
       );
     });
+  });
+
+  it("A1208 registerPortions: six portions cost the statements two do", async () => {
+    const statementsFor = (burgers: number) =>
+      withTransaction(db, async (tx) => {
+        const { out } = await writeRound(tx, await bill(tx), burgers);
+        const session = (
+          tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        await registerPortions(tx, out.portions);
+        const count = prepared.mock.calls.length;
+        prepared.mockRestore();
+        expect(await registryRows(tx, out.portions)).toHaveLength(out.portions.length);
+        expect(
+          await tx
+            .select()
+            .from(workingLinePortions)
+            .where(
+              inArray(
+                workingLinePortions.portionId,
+                out.portions.map((portion) => portion.portionId),
+              ),
+            ),
+        ).toHaveLength(out.portions.length);
+        return { portions: out.portions.length, count };
+      });
+
+    const few = await statementsFor(1);
+    const many = await statementsFor(5);
+    expect([few.portions, many.portions]).toEqual([2, 6]);
+    expect(many.count).toBe(few.count);
   });
 
   it("A803 portions: registering again writes nothing, not even a registry row", async () => {
