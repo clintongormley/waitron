@@ -873,7 +873,7 @@ it("a minute in use names its time and does not count down", async () => {
           ?.textContent?.replace(/\s+/g, " ")
           .trim(),
       ).toBe(
-        "The series cannot be made yet: this box's records already hold a series for that minute. You can carry on from 22:04.",
+        "The series cannot be made yet: this box's records already hold a series for the minute this box would use. You can carry on from 22:04.",
       ),
     );
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
@@ -1066,6 +1066,25 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   );
   expect(text(el)).toContain("No hace falta hacer nada; deja esta página abierta.");
   expect(text(el)).toContain("Sigue en");
+});
+it("says in Spanish that a minute in use cannot be used yet", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+    },
+  ]);
+  const { el } = await mount(prepare);
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  await userEvent.click(button(el, "select"));
+  await vi.waitFor(() =>
+    expect(text(el)).toContain(
+      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo. Podrás seguir a partir de las 22:04.",
+    ),
+  );
 });
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([

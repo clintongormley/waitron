@@ -66,7 +66,7 @@ it.each([
   expect(
     target.querySelector("[data-test=minute-in-use]")?.textContent?.replace(/\s+/g, " ").trim(),
   ).toBe(
-    `The series cannot be made yet: this box's records already hold a series for that minute.${carryOn}`,
+    `The series cannot be made yet: this box's records already hold a series for the minute this box would use.${carryOn}`,
   );
 });
 

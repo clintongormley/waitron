@@ -49,7 +49,7 @@ export const clockWaitStrings = {
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
     inUse:
-      "The series cannot be made yet: this box's records already hold a series for that minute.",
+      "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
     laterFrom: (time: string) => `You can carry on from ${time}.`,
     laterFromDay: (date: string, time: string) => `You can carry on from ${date}, ${time}.`,
   },
@@ -65,7 +65,7 @@ export const clockWaitStrings = {
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     inUse:
-      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para ese minuto.",
+      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
     laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
     laterFromDay: (date: string, time: string) =>
       `Podrás seguir a partir del ${date} a las ${time}.`,
