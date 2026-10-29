@@ -3348,7 +3348,7 @@ deletes old backups toward the start's floor (256 MiB) when the deletable ones r
 toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
 release then reads free space again, so a step that made room releases nothing.
 
-`waitron.sh reset` deletes it too. It is never venue data: never backed up, exported or streamed,
+`waitron.sh reset` deletes the spare too. The spare is never venue data: never backed up, exported or streamed,
 and the backup recovery's originals walk (`packages/provisioning/src/first-setup-backup-workspace.ts`)
 leaves it and its marker out, so writing or deleting either cannot refuse a resume.
 
@@ -4656,13 +4656,14 @@ by `since` even when it missed the run that cleared it.
   was not built.
 
 **At start.** A start on a full disk deletes old backups too, before it releases the spare file,
-trusting the installation start the [backup room note](#the-backup-room-note) holds, because the
-database cannot be opened on a full disk.
+trusting the installation start the [backup room note](#the-backup-room-note) holds, because on a
+full disk the database may not open: on HFS+ the store's open failed at 0 B and 4 KiB free, and a
+read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
 ## The backup room note
 
 A1167's start slice (plan `docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md`). On a
-full disk the start cannot open `venue.db` to read when the installation began (the plan's
+full disk the start may not be able to open `venue.db` to read when the installation began (the plan's
 measurement), so the running server leaves that fact in `<state>/backup-room-note.json`
 (`BACKUP_ROOM_NOTE_FILE`, `@waitron/provisioning`) for the start to use.
 
@@ -4673,14 +4674,15 @@ is `{ destination, dir, configuredDir }`: `configuredDir` is the path backups ar
 write to, as given, and `dir` is the real path it led to when the note was written. No secret and
 no bucket.
 
-**Who writes it.** Only `BackupSupervisor.reload` (`apps/server/src/backup-supervisor.ts`). Every
-reload deletes the note first (`:211`); a failure of that deletion is logged
+**Who writes it.** Only `BackupSupervisor.reload` (`apps/server/src/backup-supervisor.ts`). Nothing
+guards who writes it. Every reload deletes the note first (`:211`); a failure of that deletion is logged
 `backup.room_note_delete_failed`, not thrown. The note is written again only at the end of a reload
 that started the backup run (`#writeNote`, `:311`), when the installation start reads as a date,
 through a temporary file and a rename. A null or failed read, a failed write or a `stop()` landing
 meanwhile leaves no note.
 
-**Who deletes it.** Every path that replaces or removes the live `venue.db`, before it does:
+**Who deletes it.** Every path that replaces or removes the live `venue.db`, before it does apart
+from the reset:
 
 - `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), and so every wipe;
 - `restoreDatabase` and `placeValidated` (`apps/server/src/restore.ts`), the latter before it sets
@@ -4693,7 +4695,8 @@ meanwhile leaves no note.
 - promotion (`promoteMirrorRun`, `apps/server/src/boot.ts`): before promoting, where a failed
   deletion refuses the promotion, and again after stopping the backup supervisor and before the
   restart, where a failed deletion is logged and the restart goes ahead;
-- `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files.
+- `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files in
+  one removal, taking the note and `venue/` in no set order.
 
 **What the start checks** (`deleteOldBackupsAtStart`, `apps/server/src/start-backup-room.ts`).
 Nothing at all at 16 MiB free or more on the venue folder's disk (a full state folder on another
@@ -4710,7 +4713,8 @@ refusal is logged once `backup.start_room_skipped` with a `reason`, `out_of_reac
 free space plus every deletable backup falls short of 24 MiB. A step still under 24 MiB after its
 deleting logs `backup.start_room_short`, whether or not any deletion succeeded; the refusal's
 `afterDeleting` tells the two apart. It throws nothing: a failure in the checks or the deleting is
-logged `backup.start_room_failed`.
+logged `backup.start_room_failed`. Each deletion logs `backup.archive_deleted` with
+`reason: "start_room"`.
 
 **The record and the alert.** A step that deleted anything writes
 `<state>/backup-room-start-deleted.json` (`BACKUP_ROOM_START_DELETED_FILE`) with `writeFileDurable`:

@@ -114,8 +114,9 @@ copia anterior a la última restauración o puesta en marcha desde cero del equi
 bucket. Si aun así no basta, la copia no se hace y la campana dice cuánto espacio necesita. Mientras
 las copias están activadas, el equipo también borra sus copias más antiguas de ese disco, con los mismos
 límites, cuando al disco le quedan menos de unos 2 GB libres, hasta tener unos 2,5 GB libres. Si
-el equipo arranca con el disco lleno, las borra de la misma forma para tener sitio para
-arrancar, y te avisa en la campana y por [correo](box-status.md#emails), igual que en los demás casos.
+el equipo arranca con el disco lleno, puede borrarlas de la misma forma para tener sitio para
+arrancar y, una vez en marcha, te avisa en la campana y por [correo](box-status.md#emails), igual
+que en los demás casos.
 
 Esta página no puede borrar otros archivos ni trasladar tus datos a un disco mayor.
 

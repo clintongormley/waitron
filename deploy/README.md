@@ -290,8 +290,9 @@ inside neither the state folder nor the database's folder):
   stay);
 - crash reports in the `logs` volume's `crash-reports` folder that are more than a week old.
 
-It deletes nothing else (apart from the spare file, below): never the database, the lock files, `recovery.json` or a finished backup,
-even one whose local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
+It deletes nothing else apart from old backups and the spare file, both below: never the database,
+the lock files or `recovery.json`, and no finished backup other than those old ones, even one whose
+local backup folder was set inside `backup-staging`. If `logs`, its `crash-reports`
 folder, `backup-staging` or `restore-staging` is a symbolic link, the start leaves it and what it
 points at alone.
 
@@ -306,6 +307,15 @@ as well, and deletes the same files before it records the failure.
 
 Free space on the disk, then press Retry. The page does not notice the freed space by itself: Retry
 restarts the app, and the next start tries again.
+
+Before it deletes the spare file (below), a start deletes old backups when the database's folder has
+under 16 MiB free and the state folder holds a `backup-room-note.json` that passes the start's
+checks, among them that it was written for the `venue.db` still in place. It deletes the oldest
+backups in local backup folders on the database's disk: never the newest in a folder, one taken at
+or before the moment the current installation began, or one in a bucket. It deletes toward 256 MiB
+free or, when that is out of reach, toward the spare plus 16 MiB (24 MiB), and deletes none when
+even that is out of reach. It never does this at a backup recovery's repair or selected stage. Once
+the server is running it raises the same alert a backup run raises.
 
 The box also keeps an 8 MiB spare file, `spare-space`, in the state folder. It is not venue data, and a
 backup recovery's check of the box's files leaves it out. Within the server, three steps delete it:

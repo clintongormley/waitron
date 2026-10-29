@@ -223,6 +223,8 @@ Files: `packages/provisioning/src/first-setup-start-again-deletion.ts` (`deleteM
   that matches the pattern and is on neither list fails. Prove it by deletion (remove one deletion
   call; the guard fails; and add an unlisted matching file; it fails). The header says it reads text
   and does not see a whole-folder `rm`, the `fs.`/`io.` aliases, `removeAndSync`, or shell.
+- 2026-10-29: the guard as built accepts only `deleteBackupRoomNote(` and sees `removeAndSync`; its
+  header in `scripts/backup-room-note.test.ts` is the current description.
 
 ### Task 4. The note stays out of archives, the sealed state and the recovery's originals digest
 
