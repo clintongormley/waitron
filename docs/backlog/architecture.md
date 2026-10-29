@@ -509,6 +509,8 @@ until A977).
   retain their 120-character inputs and existing bounds.
   UI floor-model, table-token and floor-map suites use English sample zone and party names.
   UI-core field-label and input accessibility samples use English price and contact text.
+  UI combobox and row-menu suites use English sample staff names; deliberate bilingual
+  trigger labels and accented-search examples remain.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

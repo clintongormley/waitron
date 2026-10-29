@@ -2050,8 +2050,8 @@ test("type-ahead in an open list without a search box moves onto a disabled opti
 });
 
 const GROUPED: ComboboxOption[] = [
-  { value: "ana", label: "Ana", group: "Staff" },
-  { value: "luis", label: "Luis", group: "Staff" },
+  { value: "ana", label: "Ann", group: "Staff" },
+  { value: "luis", label: "Lewis", group: "Staff" },
   { value: "bar", label: "Bar", group: "Stations" },
   { value: "grill", label: "Grill", group: "Stations" },
 ];
@@ -2075,7 +2075,7 @@ test("options sharing a group render under one heading, inside a group the headi
       [...group.querySelectorAll('[role="option"]')].map((row) => row.textContent!.trim()),
     ),
   ).toEqual([
-    ["Ana", "Luis"],
+    ["Ann", "Lewis"],
     ["Bar", "Grill"],
   ]);
 });
@@ -2088,21 +2088,21 @@ test("ungrouped options render without a group", async () => {
 
 test("a group split by an ungrouped option starts a new heading when it resumes", async () => {
   const el = await mountWith('<wt-combobox label="Members"></wt-combobox>', [
-    { value: "ana", label: "Ana", group: "Staff" },
+    { value: "ana", label: "Ann", group: "Staff" },
     { value: "none", label: "Nobody" },
-    { value: "luis", label: "Luis", group: "Staff" },
+    { value: "luis", label: "Lewis", group: "Staff" },
   ]);
   await userEvent.click(fieldParts(el).trigger);
   const groups = [...el.shadowRoot!.querySelectorAll('[role="group"]')];
   expect(groups.map((group) => group.textContent!.replace(/\s+/g, " ").trim())).toEqual([
-    "Staff Ana",
-    "Staff Luis",
+    "Staff Ann",
+    "Staff Lewis",
   ]);
-  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Ana", "Nobody", "Luis"]);
+  expect(optionRows(el).map((row) => row.textContent!.trim())).toEqual(["Ann", "Nobody", "Lewis"]);
 });
 
 const WITH_PRIMARY: ComboboxOption[] = [
-  { value: "ana", label: "Ana", group: "Staff" },
+  { value: "ana", label: "Ann", group: "Staff" },
   { value: "new-staff", label: "New member…", group: "Staff", icon: "check", primary: true },
   { value: "bar", label: "Bar", group: "Stations" },
 ];
@@ -2140,7 +2140,7 @@ test("a primary row sharing a group sits last inside that group", async () => {
     groups.map((group) =>
       [...group.querySelectorAll('[role="option"]')].map((row) => row.textContent!.trim()),
     ),
-  ).toEqual([["Ana", "New member…"], ["Bar"]]);
+  ).toEqual([["Ann", "New member…"], ["Bar"]]);
 });
 
 const WITH_ACTION: ComboboxOption[] = [
@@ -2782,7 +2782,7 @@ test("arrows step over group headings", async () => {
     await userEvent.keyboard("{ArrowDown}");
     seen.push(activeRowText(el, listbox(el)));
   }
-  expect(seen).toEqual(["Ana", "Luis", "Bar", "Grill"]);
+  expect(seen).toEqual(["Ann", "Lewis", "Bar", "Grill"]);
 });
 
 for (const search of ["always", "never"] as const) {
@@ -2893,7 +2893,7 @@ test("Enter on a row in the search box, in a form wired with submitOnEnter, pick
 
 test("a failed submission's focusFirstInvalid focuses an invalid combobox's trigger", async () => {
   await mount(`<form>
-      <wt-input label="Name" name="name" value="Ana"></wt-input>
+      <wt-input label="Name" name="name" value="Ann"></wt-input>
       <wt-combobox label="Unit" name="unit" error="Choose a unit"></wt-combobox>
     </form>`);
   const form = host.querySelector("form")!;

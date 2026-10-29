@@ -279,8 +279,8 @@ describe.each(["light", "dark"] as const)("wt-combobox a11y (%s theme)", (theme)
 
   test("open, with groups", async () => {
     await openThemed('<wt-combobox label="Members"></wt-combobox>', theme, [
-      { value: "ana", label: "Ana", group: "Staff" },
-      { value: "luis", label: "Luis", group: "Staff" },
+      { value: "ana", label: "Ann", group: "Staff" },
+      { value: "luis", label: "Lewis", group: "Staff" },
       { value: "bar", label: "Counter", group: "Stations" },
     ]);
     await expectNoA11yViolations(host);

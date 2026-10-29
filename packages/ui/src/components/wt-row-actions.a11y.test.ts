@@ -9,7 +9,7 @@ import "./wt-button.js";
 afterEach(cleanup);
 
 describe.each(["light", "dark"] as const)("wt-row-actions a11y (%s theme)", (theme) => {
-  test.each(["Ana: Working", "Ana: Trabajando"])(
+  test.each(["Ann: Working", "Ann: Trabajando"])(
     "a named trigger (%s), closed and open",
     async (label) => {
       const el = await mountThemed(
