@@ -103,6 +103,17 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
+/** Each stored dish line was fired once, at one unit; returns how many dishes there are. */
+async function expectOneTicketItemPerDish(): Promise<number> {
+  const dishes = await suite.db.execute<{ line: string }>(sql`
+    select id as line from working_order_lines where parent_line_id is null order by id`);
+  const fired = await suite.db.execute<{ line: string; quantity: number }>(sql`
+    select working_order_line_id as line, cast(quantity as integer) as quantity
+    from ticket_items order by working_order_line_id`);
+  expect(fired.rows).toEqual(dishes.rows.map(({ line }) => ({ line, quantity: 1000 })));
+  return dishes.rows.length;
+}
+
 /** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
@@ -581,10 +592,7 @@ describe("recordTillSale", () => {
       department_name: "Sala principal",
     };
     expect(snapshots.rows).toEqual([attribution, attribution]);
-    const prep = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as integer) as count from ticket_items
-      `);
-    expect(prep.rows).toEqual([{ count: 2 }]);
+    expect(await expectOneTicketItemPerDish()).toBe(2);
   });
 
   // A menu that sets no price sells the product at its own (1.50), never at the old menu price
@@ -621,10 +629,7 @@ describe("recordTillSale", () => {
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
-    const prep = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as integer) as count from ticket_items
-      `);
-    expect(prep.rows).toEqual([{ count: 2 }]);
+    expect(await expectOneTicketItemPerDish()).toBe(2);
 
     const rows = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);

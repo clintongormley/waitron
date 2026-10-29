@@ -7945,7 +7945,7 @@ describe("order path — extras and options", () => {
       expect(child.vatClass).toBe("general");
       // The list ITEM's price, not the wine's own 3.00; dish ×1 × pick ×1 = 1. All three columns
       // are read straight off the row, each at its own scale: 450 is that 4.50 in whole cents, and
-      // 1000 is the one pick in thousandths; the two children together are the order's 9.00.
+      // 1000 is the one pick in thousandths; the two children together are the 9.00 one wine line of two was.
       expect(child.unitPriceGross).toBe(450);
       expect(child.quantity).toBe(1000);
       expect(child.lineTotal).toBe(450);

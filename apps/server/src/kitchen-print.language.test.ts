@@ -333,8 +333,8 @@ it.each(["en", "es"] as const)(
 );
 
 // `grouped`: a counter line written before portions, which no no-printer path reads the language
-// for. `portions`: folding identical dishes (`foldPortionNotices`) reads it, as on a table's portions,
-// and every such read is the venue's language, never the frame's.
+// for. `portions`: folding identical dishes (`foldPortionNotices`) reads it once, as on a table's
+// portions, and gets the venue's language, never the frame's.
 it.each(["grouped", "portions"] as const)(
   "A964 venue language leaves no-printer reads and counter notices independent of the frame fallback (%s)",
   async (shape) => {
@@ -373,8 +373,8 @@ it.each(["grouped", "portions"] as const)(
       });
       if (shape === "grouped") expect(reader).not.toHaveBeenCalled();
       else {
-        const read = await Promise.all(reader.mock.results.map((result) => result.value));
-        expect(read).toEqual(read.map(() => language));
+        expect(reader).toHaveBeenCalledTimes(1);
+        expect(await reader.mock.results[0]!.value).toBe(language);
       }
       const notices = await suite.db
         .select({ kind: kitchenNotices.kind, movedTo: kitchenNotices.movedTo })
