@@ -1,10 +1,16 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import PDFKit from "pdfkit";
 import { PDFArray, PDFDict, PDFDocument, PDFName } from "pdf-lib";
-import { canonicalJson, PACK_ATTACHMENT, type RecoveryPackFile } from "@waitron/recovery-pack";
+import {
+  canonicalJson,
+  MAX_PACK_FILE,
+  PACK_ATTACHMENT,
+  type RecoveryPackFile,
+} from "@waitron/recovery-pack";
 import fontUrl from "./assets/register-noto-sans.ttf?url";
 import { openRecoveryPdf, readRecoveryPdf } from "./recovery-reader.js";
 import {
+  MAX_RECOVERY_ATTACHMENT,
   RECOVERY_ATTACHMENT,
   recoveryDocumentBytes,
   type RecoveryDocument,
@@ -108,7 +114,7 @@ describe("an attached file that inflates past its limit, with no declared size",
   );
 
   it.each([RECOVERY_ATTACHMENT, PACK_ATTACHMENT])(
-    "is still read as %s when it inflates to its limit or less",
+    "is still read as %s when it inflates to well within its limit",
     async (name) => {
       const content = vi.spyOn(proxy, "getAttachmentContent");
       const answer = await readRecoveryPdf(await withAttachment(name, attachments[name]!));
@@ -116,4 +122,26 @@ describe("an attached file that inflates past its limit, with no declared size",
       expect(content).toHaveBeenCalledTimes(1);
     },
   );
+
+  it.each([
+    [RECOVERY_ATTACHMENT, MAX_RECOVERY_ATTACHMENT],
+    [PACK_ATTACHMENT, MAX_PACK_FILE],
+  ])("reaches the second reader as %s at exactly its limit", async (name, limit) => {
+    const content = vi.spyOn(proxy, "getAttachmentContent");
+    await expect(
+      readRecoveryPdf(await withAttachment(name, new Uint8Array(limit))),
+    ).rejects.toThrow("Recovery PDF refused");
+    expect(content).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [RECOVERY_ATTACHMENT, MAX_RECOVERY_ATTACHMENT],
+    [PACK_ATTACHMENT, MAX_PACK_FILE],
+  ])("is refused as %s one byte past its limit", async (name, limit) => {
+    const content = vi.spyOn(proxy, "getAttachmentContent");
+    await expect(
+      readRecoveryPdf(await withAttachment(name, new Uint8Array(limit + 1))),
+    ).rejects.toThrow("Recovery PDF refused");
+    expect(content).not.toHaveBeenCalled();
+  });
 });
