@@ -1,15 +1,15 @@
 /**
  * Every file that replaces or removes the live `venue.db` deletes the backup room note first, so
  * the start never trusts a note written for a database that is gone. A file that names `venue.db`
- * beside a removal is either on REPLACES (it must call `deleteBackupRoomNote(`) or on CO_NAMERS
- * (with the reason it never touches the live database); any other such file fails.
+ * beside a removal or copy is either on REPLACES (it must call `deleteBackupRoomNote(`) or on
+ * CO_NAMERS (with the reason it never touches the live database); any other such file fails.
  *
  * Weaker than its name: it reads TEXT. A non-test `.ts` file under `apps/<app>/src` or
- * `packages/<package>/src` matches when it names `VENUE_FILE` or `"venue.db"` in any quotes and
- * also the word `rm`, `rename` or `unlink`. It does not see a whole-folder `rm` that takes
- * `venue.db` with it without naming it, removals through `fs.`/`io.` aliases or `removeAndSync`
- * in a file that names none of those words, or shell; and a REPLACES file passes on one call, not
- * one per path that changes the database.
+ * `packages/<package>/src` matches when it names `VENUE_FILE`, or `venue.db` right after a quote or
+ * a `/`, and also one of the words `rm`, `rename`, `unlink`, `copyFile`, `cp`, `removeAndSync` or
+ * `rmdir`. It does not see a whole-folder `rm` that takes `venue.db` with it without naming it, a
+ * copy-like write under another function name, a `venue.db` path built from pieces, or shell; and
+ * a REPLACES file passes on one call, not one per path that changes the database.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
@@ -17,8 +17,8 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = join(import.meta.dirname, "..");
 
-const NAMES_VENUE = /\bVENUE_FILE\b|["'`]venue\.db["'`]/;
-const REMOVES = /\b(rm|rename|unlink)\b/;
+const NAMES_VENUE = /\bVENUE_FILE\b|["'`/]venue\.db["'`]/;
+const REMOVES = /\b(rm|rename|unlink|copyFile|cp|removeAndSync|rmdir)\b/;
 const DELETES_NOTE = /\bdeleteBackupRoomNote\(/;
 
 /** Files that replace or remove the live venue.db. Matched or not, each must delete the note. */
@@ -29,7 +29,7 @@ const REPLACES: readonly string[] = [
   "packages/provisioning/src/first-setup-start-again-set-aside.ts",
 ];
 
-/** Files that name venue.db beside a removal without touching the live database. */
+/** Files that name venue.db beside a removal or copy without touching the live database. */
 const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/backup-archive-file.ts": "unlinks its own archive copy in a scratch folder",
   "apps/server/src/backup-supervisor.ts":
@@ -40,7 +40,7 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
     "places a backup in a scratch folder and removes that folder",
   "apps/server/src/cloud-snapshot-archive.ts": "removes its own staging folder",
   "apps/server/src/first-setup-backup-recovery.ts":
-    "copies backups into scratch folders and removes those",
+    "copies backups into scratch folders it removes; places one into the target only through restoreFromArtifact, whose restore.ts deletes that target's note",
   "apps/server/src/first-setup-backup-source.ts":
     "copies a backup into a scratch folder it removes",
   "apps/server/src/first-setup-database-holdings.ts":
@@ -56,6 +56,8 @@ const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/testing/staged-hour-crash.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/staged-hour-restore.ts": "test harness: a scratch box it removes",
   "apps/server/src/testing/stream-loop-scenario.ts": "test harness: scratch folders it removes",
+  "apps/server/src/testing/stream-pause-scenario.ts":
+    "test harness: copies migration folders into its scratch box and only opens its venue.db",
   "packages/provisioning/src/first-setup-backup-workspace.ts":
     "lists venue.db by name; renames and unlinks its own records",
   "packages/stream/src/restore.ts": "removes its own configuration file",
@@ -102,7 +104,7 @@ function problems(files: readonly Source[]): string[] {
       if (!DELETES_NOTE.test(text))
         found.push(`${path}: replaces venue.db, never deletes the note`);
     } else if (matches(text) && !(path in CO_NAMERS))
-      found.push(`${path}: names venue.db beside a removal, on neither list`);
+      found.push(`${path}: names venue.db beside a removal or copy, on neither list`);
   }
   for (const path of REPLACES)
     if (!files.some((file) => file.path === path)) found.push(`${path}: listed, not found`);
@@ -140,9 +142,20 @@ describe("the backup room note guard (weaker than its name: reads text)", () => 
       problems([
         ...real,
         { path: "apps/server/src/stray.ts", text: 'await rm(join(dir, "venue.db"));' },
+        { path: "apps/server/src/copies.ts", text: 'await copyFile(from, join(dir, "venue.db"));' },
+        {
+          path: "apps/server/src/syncs.ts",
+          text: 'await removeAndSync(join(dir, "venue.db"), "file");',
+        },
+        { path: "apps/server/src/template.ts", text: "await rm(`${dir}/venue.db`);" },
         { path: "apps/server/src/reads.ts", text: 'await lstat(join(dir, "venue.db"));' },
         { path: "apps/server/src/removes.ts", text: "await rm(dir);" },
       ]),
-    ).toEqual(["apps/server/src/stray.ts: names venue.db beside a removal, on neither list"]);
+    ).toEqual(
+      ["copies", "stray", "syncs", "template"].map(
+        (name) =>
+          `apps/server/src/${name}.ts: names venue.db beside a removal or copy, on neither list`,
+      ),
+    );
   });
 });
