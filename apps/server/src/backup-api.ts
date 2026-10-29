@@ -370,7 +370,7 @@ export function mountBackupApi(app: Hono, deps: BackupApiDeps, log: Logger): voi
     }),
   );
 
-  // Like status, no backup turn: it reads, so it never waits behind a Save or holds one up.
+  // Like status, it takes no backup turn, so it never queues behind a Save.
   app.get("/api/backup/settings-evidence", (c) =>
     run(c, log, async () => {
       await authorize(c);

@@ -114,9 +114,8 @@ export async function recoveryKeyFacts(
   loadedKey: () => string | undefined,
 ): Promise<RecoveryKeyFacts> {
   const fileKey = await readHeldKey(async () => loadRecoveryKey(env));
-  const { held, key } = fileKey.held
-    ? fileKey
-    : { held: loadedKey() !== undefined, key: loadedKey() };
+  const loaded = loadedKey();
+  const { held, key } = fileKey.held ? fileKey : { held: loaded !== undefined, key: loaded };
   return { held, tooShort: held && key === undefined, fileKey: fileKey.key };
 }
 
@@ -212,7 +211,8 @@ function evidenceDestinations(
   );
 }
 
-/** Reads only: the record's facts come from one transaction, and each folder is looked at after it. */
+/** Writes nothing of its own: the record's facts come from one transaction, and each folder is
+ * looked at after it. */
 export async function readSettingsEvidence(deps: SettingsEvidenceDeps): Promise<SettingsEvidence> {
   let record: ArchiveRecordMeta | null;
   let settings: ArchiveSettings | null = null;

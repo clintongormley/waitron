@@ -1,14 +1,25 @@
 // `GET /api/backup/settings-evidence` on a real venue database, one case per row of the design's
-// cause table: each failure is produced by a real supervisor loading the record as boot does.
+// cause table. Each failure is produced by a real supervisor loading the record as boot does, except
+// the `unknown` row: no real read fails without a code, so that case's read throws a plain error.
+import { createCipheriv, randomBytes } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { deleteCredential, loadKeyRing, putCredential, type KeyRing } from "@waitron/credentials";
+import { AppError } from "@waitron/shared";
+import {
+  deleteCredential,
+  loadKeyRing,
+  putCredential,
+  readCredentialMeta,
+  tenantCredentials,
+  type KeyRing,
+} from "@waitron/credentials";
 import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { planVenue } from "@waitron/provisioning";
@@ -83,6 +94,8 @@ interface Scenario {
   /** The box's key ring now; the record may have been written under another. */
   ring: KeyRing;
   clock: { at: Date };
+  /** Replaces how the supervisor reads the record; boot's read by default. */
+  readRecord?: () => ReturnType<typeof readArchiveSettingsWithMeta>;
 }
 
 async function scenario(over: Partial<Scenario> = {}): Promise<Scenario> {
@@ -103,7 +116,8 @@ function makeSupervisor(sc: Scenario): BackupSupervisor {
       loadBackupSettings({
         managedByEnvironment: isBackupManagedByEnvironment(sc.base),
         env: await loadBoxEnv(sc.base, sc.stateDir),
-        readSealedWithMeta: () => readArchiveSettingsWithMeta(suite.db, sc.ring),
+        readSealedWithMeta: () =>
+          (sc.readRecord ?? (() => readArchiveSettingsWithMeta(suite.db, sc.ring)))(),
         venueId: VENUE,
       }),
     isManagedByEnvironment: () => isBackupManagedByEnvironment(sc.base),
@@ -220,6 +234,27 @@ const recordNow = () => readArchiveSettingsWithMeta(suite.db, RING).then((r) => 
 
 const storeKey = (sc: Scenario, key: string) =>
   writeFile(join(sc.stateDir, "backup.env"), `WAITRON_BACKUP_RECOVERY_KEY=${key}\n`);
+
+/** Seals `plaintext` as the whole record under RING's key, as no writer here would: `putCredential`
+ * refuses a payload that is not the purpose's fields. */
+async function storeRaw(plaintext: string): Promise<void> {
+  await withTransaction(suite.db, (tx) =>
+    putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{}" } }),
+  );
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", Buffer.alloc(32, 7), iv);
+  cipher.setAAD(Buffer.from(ARCHIVE_PURPOSE, "utf8"));
+  const ciphertext = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
+  await withTransaction(suite.db, (tx) =>
+    tx
+      .update(tenantCredentials)
+      .set({ ciphertext, iv, authTag: cipher.getAuthTag() })
+      .where(eq(tenantCredentials.purpose, ARCHIVE_PURPOSE)),
+  );
+}
+
+const rowMeta = () =>
+  withTransaction(suite.db, (tx) => readCredentialMeta(tx, { purpose: ARCHIVE_PURPOSE }));
 
 const destDir = () => mkdtempSync(join(tmpdir(), "settings-evidence-dest-"));
 
@@ -500,6 +535,118 @@ describe("GET /api/backup/settings-evidence", () => {
     });
   }, 60_000);
 
+  for (const [plaintext, code] of [
+    ["not json", "credentials.malformed_payload"],
+    ["{}", "server.credential_unusable"],
+  ] as const) {
+    it(`a record that opens but is not backup settings (${code}): its written time survives`, async () => {
+      await storeRaw(plaintext);
+      const row = await rowMeta();
+      const sc = await scenario();
+      const sup = makeSupervisor(sc);
+      await sup.reload();
+
+      const body = await evidence(buildApp(sup, sc));
+      expect(body.failures).toEqual([
+        {
+          at: "2026-10-29T09:00:00.000Z",
+          code,
+          detail: null,
+          recordDigest: row!.digest,
+          recordWrittenAt: row!.updatedAt,
+        },
+      ]);
+      expect(body.record).toEqual({
+        keyVersion: 1,
+        writtenAt: row!.updatedAt,
+        digest: row!.digest,
+      });
+      expect(body.now).toEqual({ state: "unreadable", code, detail: null });
+    }, 60_000);
+  }
+
+  it("a failure the box has no code for is kept as unknown, and the record is read afresh", async () => {
+    const folder = destDir();
+    await write(RING, folderSettings(folder));
+    const sc = await scenario({
+      readRecord: () => Promise.reject(new Error("no code for this")),
+    });
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+
+    const body = await evidence(buildApp(sup, sc));
+    expect(body.failures).toEqual([
+      {
+        at: "2026-10-29T09:00:00.000Z",
+        code: "unknown",
+        detail: null,
+        recordDigest: null,
+        recordWrittenAt: null,
+      },
+    ]);
+    expect(body.now).toEqual({
+      state: "readable",
+      destinations: [{ kind: "folder", dir: folder, look: "folder" }],
+    });
+    expect(JSON.stringify(body)).not.toContain("no code for this");
+  }, 60_000);
+
+  it("no record now and none when the read failed: not rewritten", async () => {
+    const sc = await scenario({
+      readRecord: () => Promise.reject(new Error("no code for this")),
+    });
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+
+    expect(await evidence(buildApp(sup, sc))).toMatchObject({
+      failures: [{ code: "unknown", recordDigest: null }],
+      record: null,
+      rewrittenSinceLastFailure: false,
+      now: { state: "absent" },
+    });
+  }, 60_000);
+
+  it("a record deleted after a failure that saw one is not the record that failed", async () => {
+    await write(RING, folderSettings(destDir()));
+    const sc = await scenario();
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+    await withTransaction(suite.db, (tx) => deleteCredential(tx, { purpose: ARCHIVE_PURPOSE }));
+
+    const body = await evidence(buildApp(sup, sc));
+    expect(body).toMatchObject({
+      record: null,
+      rewrittenSinceLastFailure: true,
+      now: { state: "absent" },
+    });
+  }, 60_000);
+
+  it("a bucket on Amazon S3 itself has no address", async () => {
+    const amazon = { ...BUCKET };
+    delete (amazon as { endpoint?: string }).endpoint;
+    await write(RING, {
+      ...folderSettings(destDir()),
+      destinations: [{ kind: "s3", id: "bucket", bucket: amazon, venueId: VENUE }],
+    });
+    const sc = await scenario();
+    const sup = makeSupervisor(sc);
+    await sup.reload();
+
+    expect((await evidence(buildApp(sup, sc))).now).toEqual({
+      state: "readable",
+      destinations: [
+        {
+          kind: "bucket",
+          endpoint: null,
+          region: BUCKET.region,
+          bucket: BUCKET.bucket,
+          accessKeyId: BUCKET.accessKeyId,
+          archiveFolder: archiveNamespace(BUCKET.prefix, VENUE),
+        },
+      ],
+    });
+  }, 60_000);
+
   describe("readSettingsEvidence", () => {
     const depsFor = (sc: Scenario, sup: BackupSupervisor): SettingsEvidenceDeps => ({
       db: suite.db,
@@ -533,6 +680,18 @@ describe("GET /api/backup/settings-evidence", () => {
       const sc = await scenario();
       const sup = makeSupervisor(sc);
       const failure = new Error("the database went away");
+      const db = new Proxy(suite.db, {
+        get: () => {
+          throw failure;
+        },
+      });
+      await expect(readSettingsEvidence({ ...depsFor(sc, sup), db })).rejects.toBe(failure);
+    }, 60_000);
+
+    it("a coded failure that is not the record's own is thrown too", async () => {
+      const sc = await scenario();
+      const sup = makeSupervisor(sc);
+      const failure = new AppError("storage.disk_full", {});
       const db = new Proxy(suite.db, {
         get: () => {
           throw failure;
