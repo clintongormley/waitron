@@ -558,7 +558,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   filesystems, or a `logs` volume on another disk. Left open by A1127.
   [Detail](backlog/setup.md#the-spare-files-size-is-measured-on-hfs-and-linux-tmpfs-only)
 
-- **Measure the backup room note's `venue.db` identity on the box's filesystem** (ext4 in Docker),
+- **Measure the backup room note's `venue.db` identity on the box's filesystem** (likely ext4, inside Docker),
   including whether the birth time is reported. Left open by A1167.
 
 - **The repair page draws a Start-again error twice**, under the password and under the tick box.

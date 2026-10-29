@@ -3346,7 +3346,9 @@ or selected stage. It does anything only under `FULL_DISK_BYTES` (16 MiB) free o
 folder's disk, the one its deletions free, and only with a backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
 deletes old backups toward the start's floor (256 MiB) when the deletable ones reach it, otherwise
 toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
-release then reads free space again, so a step that made room releases nothing.
+release then reads free space again, so a step that brought the venue folder's disk to the spare
+plus 16 MiB releases nothing, unless the state folder is on another disk that is itself under
+16 MiB free.
 
 `waitron.sh reset` deletes the spare too. The spare is never venue data: never backed up, exported or streamed,
 and the backup recovery's originals walk (`packages/provisioning/src/first-setup-backup-workspace.ts`)
@@ -4700,7 +4702,7 @@ from the reset:
 
 **What the start checks** (`deleteOldBackupsAtStart`, `apps/server/src/start-backup-room.ts`).
 Nothing at all at 16 MiB free or more on the venue folder's disk (a full state folder on another
-disk is not one deleting could help), or with no note file (so no lock and no env read). Then it
+disk is left alone: the step deletes only in folders on the venue folder's disk), or with no note file (so no lock and no env read). Then it
 takes the venue lock, or, when that fails other than in use, goes on without it unless the holder
 file is fresh. It deletes nothing unless the note is a regular file of at most 64 KiB that parses,
 names the box env's node id, and matches `venue.db`'s device number, file number and birth time; no

@@ -8,7 +8,8 @@ no-sign-in button, the start deletes old backups under §1's rules before it rel
 Measurement (2026-10-29, `~/waitron-campaign/a1167-start-measure/REPORT.md`, probes beside it, macOS
 HFS+ small disk only): the store's open failed at the venue lock (code 14) at 0 B and 4 KiB free; a
 read-only open of a cleanly stopped database failed at 0 B and 4 KiB and worked at 64 KiB. So the
-start cannot open the database on a full disk. Only `activate()`
+start cannot open the database on a full disk (2026-10-29, review: "may not open"; the measurement
+shows failures at 0 B and 4 KiB free only). Only `activate()`
 (`packages/fiscal-verifactu/src/allocation.ts:432-442`) writes a new live installation; setup,
 restore and promotion reach it. A restore places a NEW file (`restoreDatabase`,
 `apps/server/src/restore.ts`: the new file is made while the old one still exists, so its inode
@@ -84,7 +85,7 @@ is its watch-side caller. This branch is rebased on it.
    when `backupEntry.kind` is neither `repair` nor `selected` and the lowest free space of the state
    and venue folders is under `FULL_DISK_BYTES` (the only region where `releaseSpareToStart` can
    release). (2026-10-29, review: the step reads the venue folder's free space alone, because `makeRoom`
-   frees only that disk; a full state folder on another disk deleted backups to no effect.) `runEntry` has not loaded the box env at that point, so the step loads it itself:
+   frees only that disk; a full state folder on another disk could delete backups on the venue folder's disk to no effect.) `runEntry` has not loaded the box env at that point, so the step loads it itself:
    `merged = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir)` (`EntryDeps.loadBoxEnv` is required,
    `node-entry.ts:102`), loaded after step 1, so a start with no note never reads the env files. Order:
    1. If no note file exists, return (cheap first check, so a box without a note never takes the
@@ -109,7 +110,8 @@ is its watch-side caller. This branch is rebased on it.
         error → skip), and the note must say `managedByEnvironment: true`. Not env-managed: the
         note's folders, and the note must say `false`. A mismatch → skip.
       - every candidate folder is passed through `foldersOnDisk(…, venueDir)` at start (map each to
-        `{ id, localDir: dir }`), so a folder on another disk is never used.
+        `{ id, localDir: dir }`), so a folder on another disk is never used. (2026-10-29: `localDir:
+        configuredDir` on a dashboard-managed box; see item 1's note.)
    4. `makeRoom({ neededBytes: 0, floorBytes: spareBytes + FULL_DISK_BYTES (24 MiB by default, the
       line `topUpSpare` writes the spare back at), aimBytes: the entry's floor
       (`deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR`, 256 MiB), dir: venueDir, reason:
@@ -122,7 +124,8 @@ is its watch-side caller. This branch is rebased on it.
       not `out_of_reach`, whether or not a deletion succeeded — `onDeleted` wrote the start-deleted
       record only if one did). The error's `afterDeleting` param tells the two apart. Both fall through.
    `releaseSpareToStart` then runs unchanged and re-reads free space, so a step that made room
-   releases nothing.
+   releases nothing (2026-10-29, review: unless the state folder is on another disk that is itself
+   under 16 MiB free).
 6. **The alert.** When the step deleted anything, `onDeleted` writes
    `<state>/backup-room-start-deleted.json` (`BACKUP_ROOM_START_DELETED_FILE`) holding each deleted
    archive's `destination`, `dir`, `key`, `bytes`, `takenAt` (so it reads back as
@@ -290,7 +293,8 @@ slice 1's `backup-deletion-alert.test.ts`.
   backup-room section.
 - Root `CLAUDE.md` §3: one rule line: every path that replaces or removes the live `venue.db` deletes
   `<state>/backup-room-note.json` first; guard `scripts/backup-room-note.test.ts`, weaker than its
-  name: reads text, two hand-kept lists.
+  name: reads text, two hand-kept lists. (2026-10-29: as landed, "every server path …; `waitron.sh
+  reset` removes both together".)
 - Guides (English and Spanish, same `{#id}`s): `apps/server/src/guide/{en,es}/box-status.md` and
   `data-protection.md` — the box also deletes old backups as it starts on a full disk, under the same
   rules. Run `apps/server/src/guide-content.test.ts`.
