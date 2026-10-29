@@ -1854,6 +1854,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (2026-10-15; open, owner decision).**
   [Detail](backlog/kitchen.md#a692--editing-a-sent-dish-decides-its-extras-made-here-again-by-the-device-that-edits)
 
+- **A1192. MOVED slips print each portion on its own line (left open by A803 slice 1, D16).**
+  Moving three identical croquetas prints three "1.000 x CROQ JAMON" lines, where the other kitchen
+  slips print one line for identical portions: `printMovedSlips` (`apps/server/src/kitchen-print.ts`)
+  lays out each line alone. Decide whether MOVED slips should group them too.
+
+- **A1202. The kitchen screen draws a dish with one lime and with two limes alike, and now as one
+  row (left open by A803 slice 1).** The queue's extras carry no count (`QueueModifier`,
+  `apps/server/src/working-order.ts`), so slice 1's grouping draws the two as one row of 2. Give the
+  queue's extras their count and group by it.
+
 ### The till, devices and table service
 
 - **A Spanish invoice recipient's locality or province holding a comma is refused only at the
@@ -1956,8 +1966,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   there. [Detail](backlog/till.md#a922-discard-on-a-tables-bill-from-parked-orders-fails)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
-  2026-10-18).** Owner-approved design; A773-1 has landed. Its portion, bill and picker slices
-  remain queued in lane G. Remaining slices: portions and current ticket/receipt grouping; named, stable-numbered bills;
+  2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
+  ticket/receipt grouping, is built on branch `feat/a803-1-portions` and waits for the owner's
+  sign-off; it has not landed. What it leaves open is A1190–A1202 and the store limit under
+  _Modules, data and code health_. Remaining slices: named, stable-numbered bills;
   always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
   courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
@@ -1972,6 +1984,55 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
   [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
+
+- **A1190. Counter orders keep one line for several of a dish (owner decision; left open by A803
+  slice 1, D1).** Walk-up sales and parked counter orders are not split into portions, because
+  fiscal control tests that must stay unedited pin their grouped lines.
+  [Detail](backlog/till.md#a1190-counter-orders-keep-one-line-for-several-of-a-dish)
+
+- **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
+  Croquetas" is twelve rows to tick, because A739's payment window holds those files
+  (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Once A739 releases them,
+  group the rows with a count that sends the members' line numbers.
+
+- **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
+  row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
+  portions, and Fire now fires only the row's first portion. Slice 4's picker is meant to choose.
+  [Detail](backlog/till.md#a1193-choosing-which-portions-of-a-grouped-row-an-action-takes-and-fire-now-on-a-grouped-row)
+
+- **A1194. Finish table cancels a grouped row one portion at a time (left open by A803 slice 1).**
+  Three identical unserved burgers give three keep-charge cancels of one and three "1 x" slips,
+  where one line of three gives one cancel and one "3 x" slip. Pinned as it is by the "Finish
+  table" case in `apps/server/src/order-portions.adjustments.test.ts`.
+
+- **A1195. A weighed or measured portion can still be cut in part (left open by A803 slice 1,
+  D13).** Spec §3.1 says such a line is never cut; refusing it waits for slice 4's picker. Until
+  then a partial split or transfer of a bound measured line moves the cut part with no portion of
+  its own and no portion event.
+
+- **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Partial
+  transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
+  adjustment and item payment stay for measured lines and grouped counter lines, and their tests
+  build grouped bills. Retire them once A1190 and A1195 are settled.
+
+- **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
+  test helpers call it (`apps/server/src/testing/party-venue.ts`,
+  `testing/order-writer-fixture.ts`), as a writer of the old shape. Expand it or retire it with
+  A1196.
+
+- **A1198. Owner question: should a portion moved to another bill and back rejoin its row? (left
+  open by A803 slice 1, D9).** On portions it rejoins its first row and files with it; on one line
+  per dish count the part carved off comes back as a row of its own.
+
+- **A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused.**
+  The counter sends no bill editor's expectation and the server refuses `management.request_invalid`
+  on `expectedEdit`; staff see "Check the form and try again". Same cause as A922.
+  [Detail](backlog/till.md#a1199-on-the-counter-cancel-and-comp-of-one-extra-on-a-retrieved-table-bill-are-refused)
+
+- **A1200. Raising a dish the kitchen has started, from the counter, says only "Could not park the
+  order, try again".** The server answers `ticket.already_started`, which the till has words for,
+  but the counter's park shows only the codes on `ACTIONABLE_REFUSALS` (`apps/till/src/till-app.ts`).
+  Seen in A803 slice 1's LOOK; by reading, main's list lacks it too (not run on main).
 
 - **A893. Owner review of every table state and its look, after A757 lands (owner, 2026-10-18).**
   Show the owner each state on the map and the card, both themes, with the pulses and zone tabs, and
@@ -3801,6 +3862,10 @@ _Formerly A3, A8 and B6; part of A9._ Detail: [backlog/printers.md](backlog/prin
 - **Loose ends left by A331 batch 3b (#1415).**
   [Detail](backlog/printers.md#loose-ends-left-by-a331-batch-3b-1415)
 
+- **A1201. Owner question: a receipt's extra prints no count beside a grouped dish (seen in A803
+  slice 1's LOOK).** Two Pollo asado with Padrón peppers print "2 Pollo asado con patatas 19.00"
+  then "Pimientos de Padrón 4.00", at 58 and 80 mm. What `main` prints for one line of two was not
+  checked. Decide whether the extra's row shows its count.
 
 ### Payments and card readers
 
@@ -5902,7 +5967,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#go-live-day-steps).
 
 - **A query with tens of thousands of bound values crashes before it reaches the database**
-  [Detail](backlog/architecture.md#a-query-with-tens-of-thousands-of-bound-values-crashes-before-it-reaches-the-database)
+  A803 slice 1's limit of 99 portions is per dish, so one table send of many dishes can still
+  reach it (not measured). [Detail](backlog/architecture.md#a-query-with-tens-of-thousands-of-bound-values-crashes-before-it-reaches-the-database)
 
 - **A760. Squash every migration set before go-live.**
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)

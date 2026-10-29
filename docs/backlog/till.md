@@ -2703,6 +2703,44 @@ Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says 
 table's bill for this reason. Done when the till either sends the bill's expectation or does not
 offer Discard on a table's bill, with a test through the till.
 
+## A1190. Counter orders keep one line for several of a dish
+
+A803 slice 1 splits a dish into portions only in the table-service writers (its plan's finding 1
+and D1, [plan](../superpowers/plans/2026-10-27-a803-1-portions.md)). `createOpenOrder` still
+writes one line for "2 ×" on walk-up sales and parked counter orders, because fiscal control tests
+that must stay byte-unedited pin that shape: `till-api.fiscal-sale-paths.test.ts` (a walk-up
+sale's stored lines, and a parked order's kitchen items after payment), `split-bill.fiscal.test.ts`
+and `bill-payments.test.ts` (both act on part of a line of several). So a counter order moved to a
+table still brings a line of several, and the grouped code paths stay (A1196). In slice 1's LOOK
+the counter also kept two separate adds of the same dish with extras as two lines of one, where a
+table's draft merges them. Expanding counter orders is the owner's decision, and would change
+those control tests.
+
+## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
+
+On a till row that groups identical portions, Comp and Void take a count and act on the last
+portions still active; Mark served (from the row's details) and Split by item's count take the
+first; Transfer items takes the whole row. A plain tap on a Sent row serves all of it without
+asking (seen in slice 1's LOOK; the guide says so). On the kitchen screen a grouped row's tap and
+Move act on every portion, so one of two identical portions cannot be bumped or moved alone there.
+Fire now on a grouped row fires only its first portion, because the server's fire route names one
+line and firing members one by one would start a fire group and a ticket for each. Choices the
+build review left for the owner: accept, word the button differently on a grouped row, or let the
+route take a list. Slice 4's picker is planned as the way to choose which portions.
+
+## A1199. On the counter, Cancel and Comp of one extra on a retrieved table bill are refused
+
+Seen in A803 slice 1's LOOK (2026-10-29): Counter → Parked orders → Retrieve a table's bill →
+Cancel on one extra (or Comp at 50%) → Continue shows "Check the form and try again" with no field
+marked, and the server logs `management.request_invalid` with `field: "expectedEdit"`. The same
+happened on a bill slice 1 does not change (one unbound line of a counter order moved to a table).
+The till builds the request in `#adjustAsk` (`apps/till/src/till-app.ts`) with
+`expectedEdit: open.bill === undefined ? null : …`, and the counter opens no bill there. I believe
+it predates slice 1: `git blame` dates that line to c9ad7a634 (2026-10-19), an ancestor of the
+branch's base, and `main` at 1891ed658 has the same line; the branch changes no server
+`expectedEdit` check. Not run on `main`. A922 is the same refusal for Discard. Done when the
+counter sends the bill's expectation for a table's bill, with a test through the till.
+
 ## A1007. The till's adjustment window keeps a give-away and a line discount nothing opens
 
 Since A758-5 a dish or extra is comped only through the Comp window
