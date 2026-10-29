@@ -3665,7 +3665,7 @@ Pinned by `apps/dashboard/src/dashboard-app.help.test.ts`.
 
 When the server reports a different build from the one the page first saw, an update bar
 (`wt-banner`, "Waitron was updated." / "Waitron se ha actualizado." with Reload / Recargar) appears
-directly under the banner (at the top of the floor plan editor's modal while that is open), signed
+under the banner, below the full-disk bar while that shows (at the top of the floor plan editor's modal while that is open), signed
 in and signed out, and stays until Reload. It never shows beside
 the box-reset notice, which has its own Reload. In Demo and Preparation `wt-demo-bar` stays above
 the banner. Looked at on 2026-10-11 in English and Spanish, both themes, at 390 and 1280 px wide
