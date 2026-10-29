@@ -39,7 +39,7 @@ import {
 } from "./backup-verification-secrets.js";
 import { buildBackupVerificationTarget } from "./backup-verification-target.js";
 import { errnoOf } from "./errno.js";
-import { readArtifactIdentity } from "./restore.js";
+import { readArtifactNode } from "./restore.js";
 
 export interface BackupVerificationDeps {
   artifactPath: string;
@@ -243,7 +243,7 @@ export async function verifyBackupArtifact(
         compatibility,
         compatibility === "invalid" ? "archive_invalid" : "target_incompatible",
       );
-    const { node } = readArtifactIdentity(validated.secretEntries);
+    const node = await readArtifactNode(validated);
     let sealedState: { sealed: Uint8Array; recoveryKey: string } | undefined;
     let hasSealedState = false;
     for await (const row of before.query.rows(

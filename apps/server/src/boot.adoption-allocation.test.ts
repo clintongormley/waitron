@@ -117,7 +117,6 @@ it("boot retains allocation-dependent adoption as pending without an ambient ses
       WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_NODE_ID: STANDBY,
-      WAITRON_LOCATION_ID: LOCATION,
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
       WAITRON_ENV: "dev",

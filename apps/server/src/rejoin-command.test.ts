@@ -26,14 +26,11 @@ const STATE_DIR = mkdtempSync(join(tmpdir(), "rejoin-cmd-"));
 const VENUE_DIR = join(STATE_DIR, "venue");
 
 const NODE = "33333333-3333-4333-8333-333333333333";
-const LOCATION = "55555555-5555-4555-8555-555555555555";
 
 const base: Record<string, string | undefined> = {
   WAITRON_STATE_DIR: STATE_DIR,
   WAITRON_VENUE_DIR: VENUE_DIR,
   WAITRON_NODE_ID: NODE,
-
-  WAITRON_LOCATION_ID: LOCATION,
 };
 
 type OpenedVenue = { db: Database; close(): Promise<void> };
@@ -109,19 +106,17 @@ describe("waitron-rejoin rejoin", () => {
   it("refuses when the box identity settings are absent (unprovisioned box)", async () => {
     const { code, out } = await run({
       WAITRON_NODE_ID: undefined,
-
-      WAITRON_LOCATION_ID: undefined,
     });
     expect(code).toBe(1);
     expect(out).toEqual([
-      "WAITRON_NODE_ID and WAITRON_LOCATION_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
+      "WAITRON_NODE_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
     ]);
   });
 
-  it("reports a partial till config by code (server.config_invalid) and returns 1", async () => {
-    const { code, out } = await run({ WAITRON_NODE_ID: undefined });
+  it("reports a malformed node by code and returns 1", async () => {
+    const { code, out } = await run({ WAITRON_NODE_ID: "bad" });
     expect(code).toBe(1);
-    expect(out.join("\n")).toContain("server.config_invalid");
+    expect(out.join("\n")).toContain("server.till_config_invalid");
   });
 
   it("returns 1 (never rejects raw) on an invalid WAITRON_ENV", async () => {

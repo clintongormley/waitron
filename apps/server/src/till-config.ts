@@ -2,16 +2,15 @@
 // throws its codes.
 import "./errors.js";
 import { eq } from "drizzle-orm";
-import { AppError, locationId, nodeId } from "@waitron/shared";
+import { AppError, locationId as brandLocationId, nodeId } from "@waitron/shared";
 import type { Decimal, DeviceOrigin, LocationId, NodeId, Origin } from "@waitron/shared";
-import { nodes, withTransaction } from "@waitron/db";
-import type { Database } from "@waitron/db";
+import { locations, nodes, withTransaction } from "@waitron/db";
+import type { Database, Transaction } from "@waitron/db";
 import { isUnset } from "./env-value.js";
 
 export type OrderFlow = "prepay" | "ticket_then_pay";
 
-/** The venue's identity on this node, resolved once at boot from the environment provisioning
- * stamped. */
+/** The node and its database-resolved location, with the till app settings. */
 export interface TillConfig {
   nodeId: NodeId;
   locationId: LocationId;
@@ -58,7 +57,7 @@ export interface DeviceRequestConfig extends TillConfig {
 
 /** What the environment alone says about the venue's identity on this node: boot adds the rest
  * from the database and the fiscal backend. */
-export type TillIdentityConfig = Omit<TillConfig, "simplifiedInvoiceLimit">;
+export type TillIdentityConfig = Omit<TillConfig, "simplifiedInvoiceLimit" | "locationId">;
 
 /** Only the variable NAME travels in the error, never the value. */
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -87,7 +86,6 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
 
   return {
     nodeId: brand("WAITRON_NODE_ID", nodeId, required(env, "WAITRON_NODE_ID")),
-    locationId: brand("WAITRON_LOCATION_ID", locationId, required(env, "WAITRON_LOCATION_ID")),
     locale,
     invoiceLocales: [locale],
     localeOverride: rawLocale === undefined || rawLocale === "" ? undefined : rawLocale,
@@ -95,24 +93,20 @@ export function loadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig {
   };
 }
 
-/** Order matters: a partial set names the FIRST missing variable in this order. */
-const TILL_ID_VARS = ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const;
-
-/**
- * Neither of the two ids set is setup mode (`undefined`), not a fault. Some but not all set is a
- * misconfiguration, refused rather than silently degraded to setup mode.
- */
 export function tryLoadTillConfig(env: NodeJS.ProcessEnv): TillIdentityConfig | undefined {
-  const present = TILL_ID_VARS.filter((v) => !isUnset(env[v]));
-  if (present.length === 0) return undefined;
-  if (present.length < TILL_ID_VARS.length) {
-    const missing = TILL_ID_VARS.find((v) => isUnset(env[v]))!;
-    throw new AppError("server.config_invalid", {
-      variable: missing,
-      reason: "till_config_partial",
-    });
-  }
-  return loadTillConfig(env);
+  return isUnset(env.WAITRON_NODE_ID) ? undefined : loadTillConfig(env);
+}
+
+export async function readNodeLocation(
+  db: Database | Transaction,
+  id: NodeId,
+): Promise<LocationId | null> {
+  const [row] = await db
+    .select({ locationId: locations.id })
+    .from(nodes)
+    .innerJoin(locations, eq(locations.id, nodes.locationId))
+    .where(eq(nodes.id, id));
+  return row === undefined ? null : brandLocationId(row.locationId);
 }
 
 /**

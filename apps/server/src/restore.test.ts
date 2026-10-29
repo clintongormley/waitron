@@ -54,6 +54,7 @@ import type { Logger } from "./logger.js";
 import {
   type RestoreDeps,
   readArtifactIdentity,
+  readArtifactNode,
   clearReplacedDatabases,
   restoreDatabase as placeDatabaseFile,
   restoreFromArtifact,
@@ -91,8 +92,6 @@ const T = {
 };
 const TRADING_ENV = formatEnvFile({
   WAITRON_NODE_ID: T.nodeId,
-
-  WAITRON_LOCATION_ID: T.locationId,
   DATABASE_URL: "postgres://app@localhost/waitron",
   WAITRON_MIGRATIONS_DATABASE_URL: "postgres://owner@localhost/waitron",
   WAITRON_ENV: "preproduction",
@@ -1037,7 +1036,6 @@ describe("restore hooks (identity phase)", () => {
       join(stateDir, "trading.env"),
       formatEnvFile({
         WAITRON_NODE_ID: "stale",
-        WAITRON_LOCATION_ID: "stale",
       }),
     );
     const hook = vi.fn(async () => ({ report: "ok" }));
@@ -1134,7 +1132,7 @@ describe("restore hooks (identity phase)", () => {
     });
   });
 
-  it("series returned → old retired + new opened in the SAME transaction, trading.env keeps its node and location identity", async () => {
+  it("series returned → old retired + new opened in the SAME transaction, trading.env keeps its node identity", async () => {
     const hook: RestoreHook = async () => ({
       report: "ok",
       series: [
@@ -1799,15 +1797,35 @@ describe("clearReplacedDatabases", () => {
 });
 
 describe("transactional series restore identity", () => {
-  it("requires only node and location from the sealed identity", () => {
+  it("requires only node from the sealed identity", () => {
     const env = formatEnvFile({
       WAITRON_NODE_ID: T.nodeId,
-      WAITRON_LOCATION_ID: T.locationId,
     });
     expect(
       readArtifactIdentity([{ name: "secrets/trading.env", bytes: Buffer.from(env) }]),
     ).toEqual({
-      node: { nodeId: T.nodeId, locationId: T.locationId },
+      node: { nodeId: T.nodeId },
     });
   });
+});
+
+it("resolves an archive node's own location through the read-only source database", async () => {
+  const path = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+  const entries = [{ name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) }];
+  await expect(readArtifactNode({ secretEntries: entries, databasePath: path })).resolves.toEqual({
+    nodeId: T.nodeId,
+    locationId: T.locationId,
+  });
+  const missing = "c0000000-0000-4000-8000-0000000000ff";
+  await expect(
+    readArtifactNode({
+      secretEntries: [
+        {
+          name: "secrets/trading.env",
+          bytes: Buffer.from(formatEnvFile({ WAITRON_NODE_ID: missing })),
+        },
+      ],
+      databasePath: path,
+    }),
+  ).rejects.toMatchObject({ code: "restore.identity_unknown", params: { nodeId: missing } });
 });

@@ -91,7 +91,6 @@ it("the actual trading listener downloads the named node key and signed register
       WAITRON_HTTP_PORT: String(port),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_NODE_ID: node.nodeId,
-      WAITRON_LOCATION_ID: node.locationId,
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
       WAITRON_CREDENTIALS_KEY_VERSION: "1",
       WAITRON_ENV: "dev",

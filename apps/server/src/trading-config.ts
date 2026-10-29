@@ -32,7 +32,6 @@ export async function writeTradingEnv(stateDir: string, cfg: TradingConfig): Pro
   const path = join(stateDir, "trading.env");
   const body = formatEnvFile({
     WAITRON_NODE_ID: cfg.nodeId,
-    WAITRON_LOCATION_ID: cfg.locationId,
     WAITRON_ENV: cfg.developmentMode === true ? "dev" : cfg.environment,
     ...(cfg.onboardingIntent === undefined
       ? {}

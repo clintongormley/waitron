@@ -336,7 +336,7 @@ import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readFilingModule } from "./till-config.js";
+import { readNodeLocation, readFilingModule } from "./till-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
@@ -974,7 +974,7 @@ async function bootServer(
     // Only once this process holds the venue folder: a second process must not delete the running
     // one's staged copy.
     await clearStagedRecoveries(join(config.stateDir, RESTORE_STAGING_DIR));
-    await reconcileFirstSetupBeforeMode(config, firstSetupHost.store);
+    await reconcileFirstSetupBeforeMode(config, firstSetupHost.store, stampProbe.venue);
     await assertDeploymentMatches(
       stampProbe.venue,
       config.environment,
@@ -1552,7 +1552,10 @@ async function bootServer(
     );
   }
 
-  assertSingleOperationalVenue(await readOperationalVenueIds(db), config.till.locationId);
+  const nodeLocationId = await readNodeLocation(db, config.till.nodeId);
+  if (nodeLocationId === null)
+    throw new AppError("server.till_config_invalid", { key: "WAITRON_NODE_ID" });
+  assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
 
   // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
   // the adoption-pending latch, and the branch above returns while it is set.
@@ -1770,6 +1773,7 @@ async function bootServer(
   );
   const till: TillConfig = {
     ...config.till,
+    locationId: nodeLocationId,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     operationDescriptionDefault,
@@ -2716,7 +2720,7 @@ async function bootServer(
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
-        designated: config.till,
+        designated: { ...config.till, locationId: nodeLocationId },
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
       },

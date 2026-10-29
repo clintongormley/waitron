@@ -87,7 +87,6 @@ export interface DevEnv {
   WAITRON_CREDENTIALS_KEY: string;
   WAITRON_CREDENTIALS_KEY_VERSION: string;
   WAITRON_NODE_ID: string;
-  WAITRON_LOCATION_ID: string;
   WAITRON_TILL_LOCALE: string;
 }
 
@@ -99,7 +98,6 @@ const ENV_KEYS: readonly (keyof DevEnv)[] = [
   "WAITRON_CREDENTIALS_KEY",
   "WAITRON_CREDENTIALS_KEY_VERSION",
   "WAITRON_NODE_ID",
-  "WAITRON_LOCATION_ID",
   "WAITRON_TILL_LOCALE",
 ];
 
@@ -157,7 +155,6 @@ export function buildDevEnv(input: {
     WAITRON_CREDENTIALS_KEY: credentialsKey,
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
     WAITRON_NODE_ID: ids.nodeId,
-    WAITRON_LOCATION_ID: ids.locationId,
     WAITRON_TILL_LOCALE: input.receiptLocale ?? SEED_INVOICE_LOCALE[seedLocale],
   };
 }
@@ -170,7 +167,7 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
 }
 
 /**
- * Whether the venue directory holds the location this `.env` names, and whether it holds a venue at
+ * Whether the venue directory holds the node this `.env` names, and whether it holds a venue at
  * all (the taxpayer row, which provisioning always writes).
  *
  * A virgin directory opens, so "no venue" is the absence of the tables, probed rather than caught:
@@ -179,7 +176,7 @@ function isCompleteDevEnv(rec: Record<string, string>): rec is Record<string, st
  */
 export async function inspectVenues(
   venueDir: string,
-  expectedLocationId: string | null,
+  expectedNodeId: string | null,
 ): Promise<{ hasExpected: boolean; hasAny: boolean }> {
   const store = await openVenueDatabase(venueDir);
   try {
@@ -191,7 +188,7 @@ export async function inspectVenues(
     // `exists(...)` answers 0 or 1 on this engine, not a boolean, so each is compared rather than
     // returned: handing a caller `0` where it expects `false` would make every `if` read true.
     const { rows } = await store.venue.execute<{ has_expected: number; has_any: number }>(
-      sql`select exists(select 1 from locations where id = ${expectedLocationId}) as has_expected,
+      sql`select exists(select 1 from nodes n join locations l on l.id = n.location_id where n.id = ${expectedNodeId}) as has_expected,
                  exists(select 1 from tenants) as has_any`,
     );
     return { hasExpected: rows[0]?.has_expected === 1, hasAny: rows[0]?.has_any === 1 };
@@ -363,9 +360,9 @@ export async function devSetup(opts: DevSetupOptions): Promise<DevSetupResult> {
   const preset = resolveDeveloperDemo(process.env.WAITRON_DEMO_REGION);
 
   const existing = existsSync(envPath) ? parseEnvFile(readFileSync(envPath, "utf8")) : undefined;
-  const expectedLocationId =
-    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_LOCATION_ID : null;
-  const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedLocationId);
+  const expectedNodeId =
+    existing !== undefined && isCompleteDevEnv(existing) ? existing.WAITRON_NODE_ID : null;
+  const { hasExpected, hasAny } = await inspectVenues(venueDir, expectedNodeId);
 
   if (existing !== undefined && isCompleteDevEnv(existing) && hasExpected) {
     log("dev-setup: reusing the already-provisioned venue (no new fiscal chain)");

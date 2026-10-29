@@ -187,7 +187,6 @@ async function fixture(environment: "preproduction" | "production" = "preproduct
     WAITRON_ENV: environment,
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
     WAITRON_CREDENTIALS_KEY_VERSION: "1",
-    WAITRON_LOCATION_ID: location!.id,
     WAITRON_NODE_ID: node,
 
     WAITRON_ONBOARDING_INTENT: "demo",

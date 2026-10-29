@@ -5,10 +5,8 @@ import { DEFAULTS } from "@waitron/scheduler";
 import { isAppError } from "@waitron/shared";
 import { deploymentEnvironment, isDevMode, loadConfig, loadTunnelConfig } from "./config.js";
 
-// Distinct per field so a mis-wired till mapping fails rather than passing by coincidence.
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 // A load with none of these set is setup mode, not a failure.
@@ -19,7 +17,6 @@ const STATE_ROOT = "/opt/waitron/state";
 
 const EXPECTED_TILL = {
   nodeId: TILL_ENV.WAITRON_NODE_ID,
-  locationId: TILL_ENV.WAITRON_LOCATION_ID,
   locale: "es-ES",
   invoiceLocales: ["es-ES"],
   // No card fields: `toEqual` fails if one is materialised.

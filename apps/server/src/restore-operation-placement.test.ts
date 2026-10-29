@@ -86,7 +86,7 @@ async function fixture(module: WaitronModule) {
     secretEntries: [
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\nWAITRON_LOCATION_ID=${LOCATION}\n`),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
       },
     ],
   };

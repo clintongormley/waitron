@@ -53,10 +53,9 @@ const db = {} as Record<VenueName, Database>;
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
 const MIRROR_STAFF_ID = "66666666-6666-4666-8666-666666666666";
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 // Disables `fiscal-none` so a mirror boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -97,7 +96,7 @@ async function seedIdentity(admin: Database): Promise<void> {
   await admin
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Loc",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -107,7 +106,7 @@ async function seedIdentity(admin: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Node",
     })
     .onConflictDoNothing();
@@ -285,7 +284,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     // A pending envío this node must NOT submit.
     const seeded = await seedFiscalRegistro(db.mirror, {
       ids: {
-        locationId: TILL_ENV.WAITRON_LOCATION_ID,
+        locationId: TILL_LOCATION_ID,
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         seriesId: SEEDED_SERIES_ID,
       },
@@ -516,7 +515,7 @@ describe("mirror-mode boot (node_roles.mode = 'mirror')", () => {
     writeFileSync(
       join(stateDir, "pending-adoption.json"),
       JSON.stringify({
-        locationId: TILL_ENV.WAITRON_LOCATION_ID,
+        locationId: TILL_LOCATION_ID,
         standby: {
           nodeId: "88888888-8888-4888-8888-888888888888",
           publicKey: "pub",

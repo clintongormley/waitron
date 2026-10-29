@@ -62,7 +62,7 @@ export async function runRejoin(deps: {
   }
   if (till === undefined) {
     deps.out(
-      "WAITRON_NODE_ID and WAITRON_LOCATION_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
+      "WAITRON_NODE_ID must be set: rejoin is for a provisioned node, not an unprovisioned box",
     );
     return 1;
   }

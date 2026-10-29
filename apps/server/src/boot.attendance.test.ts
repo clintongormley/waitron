@@ -98,7 +98,6 @@ for (const enabled of [true, false]) {
           WAITRON_STATE_DIR: scratch,
           WAITRON_VENUE_DIR: dirname(database),
           WAITRON_NODE_ID: venue.cfg.nodeId,
-          WAITRON_LOCATION_ID: venue.cfg.locationId,
           WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
           WAITRON_ENV: "preproduction",
         },
@@ -301,9 +300,7 @@ for (const enabled of [true, false]) {
             discoverSpy = vi.spyOn(discovery, "beginAttendanceDiscovery");
           try {
             server = await startServer(
-              mode === "setup"
-                ? { ...f.env, WAITRON_NODE_ID: undefined, WAITRON_LOCATION_ID: undefined }
-                : f.env,
+              mode === "setup" ? { ...f.env, WAITRON_NODE_ID: undefined } : f.env,
             );
             await awaitListening(httpPort());
             expect(loopSpy).not.toHaveBeenCalled();

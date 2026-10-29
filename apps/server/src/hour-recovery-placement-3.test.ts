@@ -428,7 +428,6 @@ describe("selected-hour admission before archive placement", () => {
         WAITRON_VENUE_DIR: f.roots.venueDir,
         WAITRON_MIGRATIONS_DIR: join(root, "boot-migrations"),
         WAITRON_NODE_ID: node.nodeId,
-        WAITRON_LOCATION_ID: node.locationId,
         WAITRON_CREDENTIALS_KEY: credentialKey,
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
         WAITRON_HTTP_HOST: "127.0.0.1",

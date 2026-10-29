@@ -45,7 +45,7 @@ vi.mock("./restore.js", async (original) => {
   return {
     ...actual,
     validateArtifact: vi.fn(actual.validateArtifact),
-    readArtifactIdentity: vi.fn(actual.readArtifactIdentity),
+    readArtifactNode: vi.fn(actual.readArtifactNode),
   };
 });
 const recordFloor = vi.hoisted(() => ({ reads: 0 }));
@@ -103,9 +103,7 @@ async function olderBackup() {
       { name: "db.dump", bytes: dump },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
@@ -342,7 +340,7 @@ describe("a staged backup for the restore's clock requests", () => {
 
     const { stagedId } = await h.ok(h.stage());
     const staged = await readdir(join(h.stagingDir, "staged-recovery"));
-    vi.mocked(restore.readArtifactIdentity).mockImplementationOnce(() => {
+    vi.mocked(restore.readArtifactNode).mockImplementationOnce(() => {
       throw new Error("thrown partway through a staged request");
     });
     expect((await h.send(stagedId, { action: "clock-challenge" })).status).toBe(500);

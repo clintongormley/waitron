@@ -167,9 +167,7 @@ export async function stagedHourCrash(
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\nWAITRON_ENV=preproduction\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\nWAITRON_ENV=preproduction\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },

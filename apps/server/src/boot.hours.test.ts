@@ -115,7 +115,6 @@ for (const enabled of [true, false]) {
             WAITRON_STATE_DIR: scratch,
             WAITRON_VENUE_DIR: dirname(database),
             WAITRON_NODE_ID: mode === "setup" ? undefined : venue.cfg.nodeId,
-            WAITRON_LOCATION_ID: mode === "setup" ? undefined : venue.cfg.locationId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });

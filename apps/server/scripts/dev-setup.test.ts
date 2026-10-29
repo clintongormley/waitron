@@ -5,6 +5,7 @@ import {
   CORE_MIGRATIONS,
   deviceProfiles,
   locations,
+  nodes,
   openVenueDatabase,
   runMigrations,
   tenants,
@@ -40,7 +41,6 @@ const sampleEnv: DevEnv = {
   WAITRON_CREDENTIALS_KEY: "c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
   WAITRON_NODE_ID: "33333333-3333-3333-3333-333333333333",
-  WAITRON_LOCATION_ID: "55555555-5555-5555-5555-555555555555",
   WAITRON_TILL_LOCALE: "en-GB",
 };
 
@@ -57,7 +57,6 @@ describe("renderEnvFile", () => {
       "WAITRON_CREDENTIALS_KEY=c2FtcGxlLTMyLWJ5dGUta2V5LWZvci10ZXN0aW5nLW9r",
       "WAITRON_CREDENTIALS_KEY_VERSION=1",
       "WAITRON_NODE_ID=33333333-3333-3333-3333-333333333333",
-      "WAITRON_LOCATION_ID=55555555-5555-5555-5555-555555555555",
       "WAITRON_TILL_LOCALE=en-GB",
     ]);
   });
@@ -202,7 +201,7 @@ describe("devSetup against a real venue directory", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     expect(written).toEqual({ ...first.env });
     expect(written).not.toHaveProperty("WAITRON_TILL_TILL_ID");
-    for (const key of ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const) {
+    for (const key of ["WAITRON_NODE_ID"] as const) {
       expect(first.env[key]).toMatch(/^[0-9a-f-]{36}$/);
     }
     expect(first.env.WAITRON_VENUE_DIR).toBe(venueDir);
@@ -290,7 +289,7 @@ describe("devSetup against a real venue directory", () => {
     expect(config.venueDir).toBe(venueDir);
     expect(config.till).toBeDefined();
     expect(config.till).not.toHaveProperty("seriesId");
-    expect(config.till?.locationId).toBe(first.env.WAITRON_LOCATION_ID);
+    expect(config.till).not.toHaveProperty("locationId");
     const ring = loadKeyRing(written);
     expect(ring.current.key).toHaveLength(32);
     expect(ring.current.version).toBe(1);
@@ -308,7 +307,7 @@ describe("devSetup against a real venue directory", () => {
     expect(await devicesCount()).toBe(5);
     expect(second.env.WAITRON_NODE_ID).toBe(first.env.WAITRON_NODE_ID);
     expect(second.env).not.toHaveProperty("WAITRON_TILL_SERIES_ID");
-    expect(second.env.WAITRON_LOCATION_ID).toBe(first.env.WAITRON_LOCATION_ID);
+    expect(second.env).toEqual(first.env);
   });
 
   it("provisioning seeds the starter profiles", async () => {
@@ -496,7 +495,7 @@ describe("devSetup under WAITRON_ENV=production", () => {
     const corrected = await devSetup({ venueDir, envPath, stateDir: workDir, log: () => {} });
     expect(corrected.reused).toBe(false);
     expect(existsSync(envPath)).toBe(true);
-    await expect(inspectVenues(venueDir, corrected.env.WAITRON_LOCATION_ID)).resolves.toEqual({
+    await expect(inspectVenues(venueDir, corrected.env.WAITRON_NODE_ID)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });
@@ -525,6 +524,7 @@ describe("resetVenueDir", () => {
 
 describe("inspectVenues reads a migrated venue directory", () => {
   const locationId = "11111111-2222-3333-4444-555555555555";
+  const nodeId = "22222222-2222-4222-8222-222222222222";
   let migrated: string;
 
   beforeAll(async () => {
@@ -541,6 +541,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
         invoiceLocales: ["es-ES"],
         operationDescription: "Hospitality",
       });
+      await store.venue.insert(nodes).values({ id: nodeId, locationId, name: "Inspection box" });
     } finally {
       await store.close();
     }
@@ -562,8 +563,8 @@ describe("inspectVenues reads a migrated venue directory", () => {
     }
   });
 
-  it("finds the expected location and refuses to overlook a different existing venue", async () => {
-    await expect(inspectVenues(migrated, locationId)).resolves.toEqual({
+  it("finds the expected node and refuses to overlook a different existing venue", async () => {
+    await expect(inspectVenues(migrated, nodeId)).resolves.toEqual({
       hasExpected: true,
       hasAny: true,
     });
@@ -571,6 +572,23 @@ describe("inspectVenues reads a migrated venue directory", () => {
       hasExpected: false,
       hasAny: true,
     });
+  });
+
+  it("refuses an existing venue with a missing node table instead of provisioning over it", async () => {
+    const broken = await mkdtemp(join(tmpdir(), "waitron-inspect-no-nodes-"));
+    try {
+      const file = new DatabaseSync(join(broken, "venue.db"));
+      try {
+        file.exec(
+          "create table locations (id text); create table tenants (id integer); insert into tenants values (1)",
+        );
+      } finally {
+        file.close();
+      }
+      await expect(inspectVenues(broken, null)).rejects.toThrow(/no such table/i);
+    } finally {
+      await rm(broken, { recursive: true, force: true });
+    }
   });
 
   it("propagates a failed read instead of reporting an empty directory", async () => {
@@ -581,6 +599,7 @@ describe("inspectVenues reads a migrated venue directory", () => {
       const file = new DatabaseSync(join(broken, "venue.db"));
       file.exec("create table locations (not_id text)");
       file.exec("create table tenants (id integer)");
+      file.exec("create table nodes (id text, location_id text)");
       file.close();
       await expect(inspectVenues(broken, null)).rejects.toThrow(/no such column/i);
     } finally {

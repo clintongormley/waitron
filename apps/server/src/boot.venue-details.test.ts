@@ -89,7 +89,6 @@ async function prepareBox(
     WAITRON_MANAGEMENT_RP_ID: "dashboard.example.com",
     WAITRON_MANAGEMENT_ORIGIN: ORIGIN,
     WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_LOCATION_ID: venue.cfg.locationId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     WAITRON_BACKUP_DIR: join(scratch, "backup-destination"),

@@ -92,7 +92,7 @@ it("previews a backup predating named keys by migrating only its private scratch
         { name: "db.dump", bytes: sourceBytes },
         {
           name: "secrets/trading.env",
-          bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\nWAITRON_LOCATION_ID=${locationId}\n`),
+          bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
         },
         { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
         { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
@@ -161,7 +161,7 @@ it("binds an older bucket copy before private preview migrations change its byte
       },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\nWAITRON_LOCATION_ID=${locationId}\n`),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },

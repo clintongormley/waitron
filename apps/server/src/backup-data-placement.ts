@@ -6,7 +6,7 @@ import { loadBackupConfig, loadRecoveryKey } from "./backup-config.js";
 import { OPTIONAL_BACKUP_STATE } from "./backup-optional-state.js";
 import type { Logger } from "./logger.js";
 import {
-  readArtifactIdentity,
+  readArtifactNode,
   restoreDatabase,
   restoreSecrets,
   type ValidatedArtifact,
@@ -53,7 +53,7 @@ export async function placeBackupData(
     if (!allowed.has(entry.name))
       throw new AppError("restore.unexpected_entry", { name: entry.name });
   }
-  const { node } = readArtifactIdentity(validated.secretEntries);
+  const node = await readArtifactNode(validated);
   const read = (name: string) =>
     validated.secretEntries.find((entry) => entry.name === "secrets/" + name)?.bytes;
   const secretsEnv = read("secrets.env");

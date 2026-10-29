@@ -194,8 +194,6 @@ function primaryEnv(venueDir: string, port: number, nodeId: string): Record<stri
   return {
     ...KEY_ENV,
     WAITRON_NODE_ID: nodeId,
-
-    WAITRON_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
@@ -209,8 +207,6 @@ function mirrorEnv(venueDir: string, port: number): Record<string, string> {
   return {
     ...KEY_ENV,
     WAITRON_NODE_ID: NODE_B,
-
-    WAITRON_LOCATION_ID: LOCATION,
     WAITRON_VENUE_DIR: venueDir,
     WAITRON_HTTP_PORT: String(port),
     WAITRON_MIGRATIONS_DIR: migrationsRoot,

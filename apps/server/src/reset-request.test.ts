@@ -280,10 +280,11 @@ describe("runStagedReset", () => {
       expect((await createSetupOperationStore(stateDir).read())?.phase).toBe("complete");
       const trading = parseEnvFile(await readFile(join(stateDir, "trading.env"), "utf8"));
       expect(trading.WAITRON_NODE_ID).toBe(standbyNodeId);
-      expect(trading.WAITRON_LOCATION_ID).toBe(BUNDLE.designated.locationId);
+      expect(trading).not.toHaveProperty(["WAITRON", "LOCATION", "ID"].join("_"));
       const pending = JSON.parse(
         await readFile(join(stateDir, PENDING_ADOPTION_FILE), "utf8"),
       ) as PendingAdoption;
+      expect(pending.locationId).toBe(BUNDLE.designated.locationId);
       expect(pending.standby.nodeId).toBe(standbyNodeId);
       expect(pending.originNodeId).toBe(PRIMARY_NODE_ID);
       expect(await readMirrorConfig(store.venue, standbyNodeId!)).toMatchObject({

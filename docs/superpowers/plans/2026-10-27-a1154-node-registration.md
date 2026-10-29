@@ -4,6 +4,10 @@
 [current identity settings](../../../apps/till/README.md#box-identity-and-till-settings);
 the original A1154 scope below remains unchanged.
 
+**2026-10-29 follow-up:** The owner approved dropping the location environment setting in
+A1155. Boot resolves the location from the node’s database row after the pending-adoption
+status path. The original scope below remains a historical plan.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:executing-plans` for inline execution. Read `superpowers:test-driven-development` before editing implementation or tests. Track the checkboxes below; no implementation delegation.
 
 **Goal:** Remove the obsolete operator registration path and the idea that a cash register owns fiscal identity, chain or invoice series; preserve setup, restore and promotion.

@@ -289,9 +289,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
       { name: "db.dump", bytes: await readFile(database) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("synthetic sealed node key") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },

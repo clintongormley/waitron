@@ -46,7 +46,7 @@ import { ensureBoxSecrets } from "./box-secrets.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { generateNodeKeyPair } from "@waitron/membership";
 import { encodeRecoveryKit, signPointer } from "@waitron/stream";
-import { loadTillConfig } from "./till-config.js";
+import { loadTillConfig, readNodeLocation } from "./till-config.js";
 import type { TillConfig } from "./till-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { DEVICE_COOKIE } from "./device-session.js";
@@ -572,6 +572,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
 
       const cfg: TillConfig = {
         ...loadTillConfig(trading),
+        locationId: (await readNodeLocation(venue.store.venue, loadTillConfig(trading).nodeId))!,
         simplifiedInvoiceLimit: null,
       };
       const [profile] = await venue.store.venue
@@ -933,12 +934,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           {
             name: "secrets/trading.env",
             bytes: Buffer.from(
-              [
-                "WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008",
-
-                "WAITRON_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
-                "",
-              ].join("\n"),
+              ["WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008", ""].join("\n"),
             ),
           },
         ]),
@@ -1278,12 +1274,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
             {
               name: "secrets/trading.env",
               bytes: Buffer.from(
-                [
-                  "WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008",
-
-                  "WAITRON_LOCATION_ID=c0000000-0000-4000-8000-000000000002",
-                  "",
-                ].join("\n"),
+                ["WAITRON_NODE_ID=c0000000-0000-4000-8000-000000000008", ""].join("\n"),
               ),
             },
           ]),

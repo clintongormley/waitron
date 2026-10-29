@@ -69,10 +69,9 @@ vi.mock("undici", async (importOriginal) => {
   };
 });
 
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 // Disables `fiscal-none` so a trading or mirror boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -117,7 +116,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Barra",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -127,7 +126,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Promote node",
     })
     .onConflictDoNothing();
@@ -192,7 +191,7 @@ async function seedFiscalWork(): Promise<{ registroIds: string[] }> {
   const seeded = await seedPendingEnvios(appDb, {
     count: 1,
     identity: {
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       nodeId: TILL_ENV.WAITRON_NODE_ID,
       nif: "90111111H",
     },
@@ -414,8 +413,6 @@ describe("historical promote: mirror → primary, in-process, restart-into-prima
       ...KEY_ENV,
       ...TICK_ENV,
       WAITRON_NODE_ID: seed.nodeId,
-
-      WAITRON_LOCATION_ID: MIRROR_LOCATION_ID,
       WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,

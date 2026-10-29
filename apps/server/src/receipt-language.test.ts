@@ -1,3 +1,4 @@
+import { locationId as brandLocationId } from "@waitron/shared";
 import { observedPaymentSender } from "./testing/bill-payment-fixture.js";
 import { placeOrder } from "./testing/order-writer-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
@@ -157,10 +158,9 @@ async function venueWith(
   const cfg = await deviceRequestCfg(suite.db, {
     ...loadTillConfig({
       WAITRON_NODE_ID: venue.nodeId,
-
-      WAITRON_LOCATION_ID: venue.locationId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),
+    locationId: brandLocationId(venue.locationId),
     simplifiedInvoiceLimit: null,
   });
   const { menuItemId, staffId, profileId, printerId } = await withTransaction(db, async (tx) => {

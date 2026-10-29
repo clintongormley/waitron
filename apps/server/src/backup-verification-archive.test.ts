@@ -42,9 +42,7 @@ async function fixture() {
     { name: "db.dump", bytes: await readFile(source) },
     {
       name: "secrets/trading.env",
-      bytes: Buffer.from(
-        `WAITRON_NODE_ID=${node}\nWAITRON_LOCATION_ID=10000000-0000-4000-8000-000000000001\nWAITRON_ENV=preproduction\n`,
-      ),
+      bytes: Buffer.from(`WAITRON_NODE_ID=${node}\nWAITRON_ENV=preproduction\n`),
     },
     { name: "secrets/secrets.env", bytes: Buffer.from("private-vault-input") },
   ];

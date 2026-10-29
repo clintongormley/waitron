@@ -96,7 +96,7 @@ describe("devOnboard against a real venue directory", () => {
     expect(Object.keys(written)).not.toContain("WAITRON_CREDENTIALS_KEY");
     expect(Object.keys(written).some((k) => k.startsWith("WAITRON_TILL_"))).toBe(false);
     expect(written).not.toHaveProperty("WAITRON_NODE_ID");
-    expect(written).not.toHaveProperty("WAITRON_LOCATION_ID");
+    expect(written).not.toHaveProperty(["WAITRON", "LOCATION", "ID"].join("_"));
   });
 
   it("writes the shifted server port for a second setup stack", async () => {

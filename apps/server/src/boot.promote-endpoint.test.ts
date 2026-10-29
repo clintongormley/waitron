@@ -88,10 +88,9 @@ const RING = loadKeyRing({
   WAITRON_CREDENTIALS_KEY_VERSION: "1",
 });
 
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 // The admin the endpoint authenticates by password in the primary and fenced cases.
@@ -134,7 +133,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Barra",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -144,7 +143,7 @@ async function seedTillIdentity(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Promote Endpoint node",
     })
     .onConflictDoNothing();
@@ -301,8 +300,6 @@ describe("boot promote endpoint: mounted on both modes, exempt from the read-onl
       ...KEY_ENV,
       ...TICK_ENV,
       WAITRON_NODE_ID: seed.nodeId,
-
-      WAITRON_LOCATION_ID: MIRROR_LOCATION_ID,
       WAITRON_VENUE_DIR: mirrorVenueDir,
       WAITRON_HTTP_PORT: String(port),
       WAITRON_MIGRATIONS_DIR: migrationsRoot,

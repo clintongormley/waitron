@@ -360,9 +360,7 @@ it("admits recovery from the real validated archive preview with its public spen
       { name: "db.dump", bytes: await readFile(database) },
       {
         name: "secrets/trading.env",
-        bytes: Buffer.from(
-          `WAITRON_NODE_ID=${node.nodeId}\nWAITRON_LOCATION_ID=${node.locationId}\n`,
-        ),
+        bytes: Buffer.from(`WAITRON_NODE_ID=${node.nodeId}\n`),
       },
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },

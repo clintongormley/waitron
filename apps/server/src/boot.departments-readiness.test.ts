@@ -71,7 +71,6 @@ it.each(["ES-common", "GB-vat"])(
         WAITRON_ENV: "dev",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
-        WAITRON_LOCATION_ID: venue.cfg.locationId,
         WAITRON_NODE_ID: venue.cfg.nodeId,
         WAITRON_ONBOARDING_INTENT: "demo",
       });

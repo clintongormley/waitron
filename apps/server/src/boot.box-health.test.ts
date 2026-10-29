@@ -108,7 +108,6 @@ async function start(
     WAITRON_VENUE_DIR: dirname(database),
     WAITRON_LOG_DIR: logDir,
     WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_LOCATION_ID: venue.cfg.locationId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
     ...(await extraEnv(scratch)),

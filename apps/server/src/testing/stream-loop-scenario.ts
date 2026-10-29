@@ -338,8 +338,6 @@ export async function runStreamLoopScenario(fixture: StreamLoopFixture): Promise
       join(dirsA.state, "trading.env"),
       formatEnvFile({
         WAITRON_NODE_ID: a.nodeId,
-
-        WAITRON_LOCATION_ID: a.locationId,
         WAITRON_ENV: "preproduction",
       }),
     );

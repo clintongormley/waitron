@@ -61,10 +61,9 @@ beforeEach(() => {
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 // Disables `fiscal-none` so a trading boot does not refuse `module.fiscal_slot_ambiguous`.
@@ -97,7 +96,7 @@ async function seedIdentity(db: Database): Promise<void> {
   await db
     .insert(locations)
     .values({
-      id: TILL_ENV.WAITRON_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Loc",
       invoiceLocales: ["en"],
       operationDescription: "Hospitality",
@@ -107,7 +106,7 @@ async function seedIdentity(db: Database): Promise<void> {
     .insert(nodes)
     .values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Node",
     })
     .onConflictDoNothing();

@@ -115,7 +115,6 @@ describe("A669 atomic fresh server processes", () => {
           WAITRON_STATE_DIR: scratch,
           WAITRON_VENUE_DIR: venueDir,
           WAITRON_NODE_ID: f.v.cfg.nodeId,
-          WAITRON_LOCATION_ID: f.v.cfg.locationId,
           WAITRON_MIGRATIONS_DIR: migrationsRoot,
           WAITRON_ENV: "preproduction",
           WAITRON_CLOUD_ORIGIN: "https://cloud.example",

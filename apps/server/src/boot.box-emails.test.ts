@@ -115,7 +115,6 @@ async function bootServer(
     WAITRON_STATE_DIR: booted.scratch,
     WAITRON_VENUE_DIR: dirname(database),
     WAITRON_NODE_ID: venue.cfg.nodeId,
-    WAITRON_LOCATION_ID: venue.cfg.locationId,
     WAITRON_MIGRATIONS_DIR: migrationsRoot,
     WAITRON_ENV: "preproduction",
   };

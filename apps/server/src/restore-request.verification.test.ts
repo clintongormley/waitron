@@ -433,9 +433,7 @@ describe("comparison immediately before real archive placement", () => {
         { name: "db.dump", bytes: await readFile(archivePath) },
         {
           name: "secrets/trading.env",
-          bytes: Buffer.from(
-            `WAITRON_NODE_ID=${nodeId}\nWAITRON_LOCATION_ID=${locationId}\nWAITRON_ENV=preproduction\n`,
-          ),
+          bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\nWAITRON_ENV=preproduction\n`),
         },
       ]),
       "test-key",

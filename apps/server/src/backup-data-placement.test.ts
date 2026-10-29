@@ -107,7 +107,7 @@ async function fixture() {
       name: "secrets/" + name,
       bytes: Buffer.from(
         name === "trading.env"
-          ? `WAITRON_NODE_ID=${node}\nWAITRON_LOCATION_ID=${location}\nWAITRON_ENV=preproduction\n`
+          ? `WAITRON_NODE_ID=${node}\nWAITRON_ENV=preproduction\n`
           : `private-${name}`,
       ),
     })),

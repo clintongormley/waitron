@@ -1,3 +1,5 @@
+import { locations } from "@waitron/db";
+import { locationId as brandLocationId } from "@waitron/shared";
 import { ownedHourSetup } from "../test/owned-hour-setup.js";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { uploadImage } from "@waitron/media";
@@ -100,6 +102,7 @@ import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
 import { freePort } from "./testing/free-ports.js";
 import { seedDevice } from "@waitron/db/testing/seed.js";
 import {
+  TILL_LOCATION_ID,
   TILL_ENV,
   TRADING_STATE_DIR,
   KEY_ENV,
@@ -347,7 +350,7 @@ async function assertPassiveManagementReads(port: number): Promise<void> {
     const [department] = await db
       .insert(departments)
       .values({
-        locationId: KEY_ENV.WAITRON_LOCATION_ID,
+        locationId: brandLocationId(TILL_LOCATION_ID),
         name: "Receipt mount probe",
         tradingName: "Probe",
       })
@@ -557,7 +560,7 @@ describe("startServer, against a migrated venue directory", () => {
       const { jobId } = await liveFixture(httpPort(), (tx) =>
         enqueuePrintJob(
           tx,
-          { locationId: TILL_ENV.WAITRON_LOCATION_ID },
+          { locationId: TILL_LOCATION_ID },
           printer!.id,
           esc().kick().bytes(),
           "drawer",
@@ -1513,7 +1516,7 @@ describe("startServer, against a migrated venue directory", () => {
 
           // Parsed, not substring-matched, so a missing key really fails.
           const trading = parseEnvLines(await readFile(join(stateDir, "trading.env"), "utf8"));
-          for (const key of ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"]) {
+          for (const key of ["WAITRON_NODE_ID"]) {
             expect(trading[key]).toBeTruthy();
           }
           expect(trading.WAITRON_ENV).toBe("preproduction");
@@ -2013,7 +2016,15 @@ describe("startServer, against a migrated venue directory", () => {
       expect(zone.status).toBe(201);
       const zoneId = ((await zone.json()) as { id: string }).id;
       const { setId } = await liveFixture(httpPort(), (db) =>
-        defaultLayout(db, { ...loadTillConfig(TILL_ENV), simplifiedInvoiceLimit: null }, zoneId),
+        defaultLayout(
+          db,
+          {
+            ...loadTillConfig(TILL_ENV),
+            locationId: brandLocationId(TILL_LOCATION_ID),
+            simplifiedInvoiceLimit: null,
+          },
+          zoneId,
+        ),
       );
       const planPath = `/floor-plan-sets/${setId}/zones/${zoneId}/floor-plan`;
       const table = {
@@ -2040,7 +2051,7 @@ describe("startServer, against a migrated venue directory", () => {
         db
           .insert(bookings)
           .values({
-            locationId: TILL_ENV.WAITRON_LOCATION_ID,
+            locationId: brandLocationId(TILL_LOCATION_ID),
             tableId: liveTableId,
             bookingDate: "2099-01-01",
             bookingTime: "20:00",
@@ -2483,16 +2494,26 @@ describe("startServer, against a migrated venue directory", () => {
     }, 60_000);
   });
 
-  it("refuses trading boot when its configured venue is not the database's sole venue", async () => {
-    const error = await startServer({
-      ...KEY_ENV,
-      WAITRON_LOCATION_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-      WAITRON_VENUE_DIR: sharedVenueDir,
-      WAITRON_HTTP_PORT: String(await freePort()),
-      WAITRON_MIGRATIONS_DIR: migrationsRoot,
-      WAITRON_ENV: "production",
-    }).catch((caught: unknown) => caught);
-    expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
+  it("refuses trading boot when the database holds a second venue", async () => {
+    const other = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    await sharedDb.insert(locations).values({
+      id: other,
+      name: "Other",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+    try {
+      const error = await startServer({
+        ...KEY_ENV,
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      }).catch((caught: unknown) => caught);
+      expect(isAppError(error) && error.code).toBe("provisioning.second_venue");
+    } finally {
+      await sharedDb.delete(locations).where(eq(locations.id, other));
+    }
   });
 
   // Pins which config field reaches the drain: a `config.minTickMs` passed as `skipRetryMs` would pass
@@ -2505,7 +2526,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_ENV.WAITRON_LOCATION_ID,
+        locationId: brandLocationId(TILL_LOCATION_ID),
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2560,7 +2581,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_ENV.WAITRON_LOCATION_ID,
+        locationId: brandLocationId(TILL_LOCATION_ID),
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2696,7 +2717,7 @@ describe("startServer, against a migrated venue directory", () => {
       id: orderId,
       source: "dashboard",
       deviceId: null,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: brandLocationId(TILL_LOCATION_ID),
       orderNumber: 990_001,
       paymentAttemptAt: new Date(Date.now() - 1_000).toISOString(),
     });
@@ -2736,11 +2757,11 @@ describe("startServer, against a migrated venue directory", () => {
       id: orderId,
       source: "dashboard",
       deviceId: null,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: brandLocationId(TILL_LOCATION_ID),
       orderNumber: 990_002,
     });
     const { deviceId } = await seedDevice(sharedDb, {
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: brandLocationId(TILL_LOCATION_ID),
     });
     const [payment] = await sharedDb
       .insert(billPayments)
@@ -2796,7 +2817,7 @@ describe("startServer, against a migrated venue directory", () => {
     const seeded = await seedPendingEnvios(sharedDb, {
       count: 1,
       identity: {
-        locationId: TILL_ENV.WAITRON_LOCATION_ID,
+        locationId: brandLocationId(TILL_LOCATION_ID),
         nodeId: TILL_ENV.WAITRON_NODE_ID,
         nif: "90000000K",
       },
@@ -2914,6 +2935,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   beforeAll(async () => {
     const cfg: TillConfig = {
       ...loadTillConfig(TILL_ENV),
+      locationId: brandLocationId(TILL_LOCATION_ID),
       simplifiedInvoiceLimit: null,
     };
     const enrolDevice = async (name: string): Promise<string> => {
@@ -3058,7 +3080,7 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("the equipment read names a stuck kitchen printer", async () => {
-    const cfg = loadTillConfig(TILL_ENV);
+    const cfg = { ...loadTillConfig(TILL_ENV), locationId: TILL_LOCATION_ID };
     const [printer] = await sharedDb
       .insert(printers)
       .values({

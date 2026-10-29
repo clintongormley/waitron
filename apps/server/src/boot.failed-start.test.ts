@@ -106,10 +106,9 @@ vi.mock("./pending-card-recovery.js", async (importOriginal) => {
 });
 
 const SEEDED_SERIES_ID = "44444444-4444-4444-8444-444444444444";
+const TILL_LOCATION_ID = "55555555-5555-4555-8555-555555555555";
 const TILL_ENV = {
   WAITRON_NODE_ID: "33333333-3333-4333-8333-333333333333",
-
-  WAITRON_LOCATION_ID: "55555555-5555-4555-8555-555555555555",
 };
 
 let migrationsRoot: string;
@@ -224,14 +223,14 @@ async function seedVenue(directory: string): Promise<void> {
       .insert(tenants)
       .values({ id: 1, country: "ES", taxId: "90444444J", legalName: "Failed Start SL" });
     await db.insert(locations).values({
-      id: TILL_ENV.WAITRON_LOCATION_ID,
+      id: TILL_LOCATION_ID,
       name: "Barra",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     });
     await db.insert(nodes).values({
       id: TILL_ENV.WAITRON_NODE_ID,
-      locationId: TILL_ENV.WAITRON_LOCATION_ID,
+      locationId: TILL_LOCATION_ID,
       name: "Node",
       filingModule: "verifactu",
     });

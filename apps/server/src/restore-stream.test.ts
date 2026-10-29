@@ -104,8 +104,6 @@ const ENTRIES: ArchiveEntry[] = [
     bytes: Buffer.from(
       formatEnvFile({
         WAITRON_NODE_ID: T.nodeId,
-
-        WAITRON_LOCATION_ID: T.locationId,
         WAITRON_ENV: "preproduction",
       }),
     ),

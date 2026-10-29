@@ -262,7 +262,6 @@ export function createFirstSetupCommandDeployment(options: {
               .digest("base64");
             const entries = {
               WAITRON_NODE_ID: result.nodeId,
-              WAITRON_LOCATION_ID: result.locationId,
               WAITRON_ENV: environment.WAITRON_ENV === "dev" ? "dev" : current.frozen.environment,
               WAITRON_ONBOARDING_INTENT: "live",
               WAITRON_ACCOUNT_KEY: accountKey,

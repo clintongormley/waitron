@@ -284,8 +284,6 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
         bytes: Buffer.from(
           formatEnvFile({
             WAITRON_NODE_ID: F.nodeId,
-
-            WAITRON_LOCATION_ID: F.locationId,
             WAITRON_ENV: "preproduction",
           }),
         ),
@@ -388,7 +386,10 @@ describe("fiscal restore, end to end", () => {
       expect(env.WAITRON_NODE_ID).toBe(F.nodeId);
       // The restored identity keeps the deployment environment.
       expect(env.WAITRON_ENV).toBe("preproduction");
-      expect(env.WAITRON_LOCATION_ID).toBe(F.locationId);
+      expect(env).not.toHaveProperty(["WAITRON", "LOCATION", "ID"].join("_"));
+      expect(
+        await db.select({ locationId: nodes.locationId }).from(nodes).where(eq(nodes.id, F.nodeId)),
+      ).toEqual([{ locationId: F.locationId }]);
       expect(await readFile(join(dirs.stateDir, "secrets.env"), "utf8")).toBe(
         "WAITRON_CREDENTIALS_KEY=deadbeef\n",
       );

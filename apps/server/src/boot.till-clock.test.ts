@@ -279,7 +279,6 @@ describe("read-only real boot clocking", () => {
           WAITRON_STATE_DIR: scratch,
           WAITRON_VENUE_DIR: dirname(database),
           WAITRON_NODE_ID: venue.cfg.nodeId,
-          WAITRON_LOCATION_ID: venue.cfg.locationId,
           WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
           WAITRON_ENV: "preproduction",
         });
@@ -351,7 +350,6 @@ for (const enabled of [true, false]) {
             WAITRON_STATE_DIR: scratch,
             WAITRON_VENUE_DIR: dirname(database),
             WAITRON_NODE_ID: venue.cfg.nodeId,
-            WAITRON_LOCATION_ID: venue.cfg.locationId,
             WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
             WAITRON_ENV: "preproduction",
           });

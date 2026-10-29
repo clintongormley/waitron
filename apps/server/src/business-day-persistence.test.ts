@@ -103,9 +103,7 @@ describe("business-day timeline through cold restore and reset", () => {
           },
           {
             name: "secrets/trading.env",
-            bytes: Buffer.from(
-              `WAITRON_NODE_ID=${venue.cfg.nodeId}\nWAITRON_LOCATION_ID=${venue.cfg.locationId}\n`,
-            ),
+            bytes: Buffer.from(`WAITRON_NODE_ID=${venue.cfg.nodeId}\n`),
           },
         ]),
         "a495-recovery-key",

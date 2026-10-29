@@ -60,6 +60,7 @@ export function inspectSource(path, source) {
     /\b(?:register|provision)(?:-|)till\b/gi,
     /\bre(?:-)register\b/g,
     /\bWAITRON_TILL_(?:SERIES|TILL|NODE|LOCATION)_ID\b/g,
+    /\bWAITRON_(?:LOCATION)_ID\b/g,
   ]) {
     for (const match of `${path}\n${source}`.matchAll(pattern)) {
       if (/^WAITRON_TILL_(?:SERIES|TILL)_ID$/.test(match[0]) && negativeSettingFiles.has(path))

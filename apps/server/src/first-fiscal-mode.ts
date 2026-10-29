@@ -1,3 +1,5 @@
+import type { Database } from "@waitron/db";
+import { readNodeLocation } from "./till-config.js";
 import { AppError } from "@waitron/shared";
 import type { FirstSetupStore } from "@waitron/provisioning";
 import { assertOtherSetupAllowed } from "@waitron/provisioning";
@@ -7,6 +9,7 @@ import "./errors.js";
 export async function reconcileFirstSetupBeforeMode(
   config: ServerConfig,
   store: FirstSetupStore,
+  db: Database,
 ): Promise<void> {
   const pair = await store.readResumable();
   if (pair === null) return;
@@ -20,8 +23,9 @@ export async function reconcileFirstSetupBeforeMode(
       result.venue === null ||
       !("nodeId" in result.venue) ||
       !("locationId" in result.venue) ||
-      config.till?.nodeId !== result.venue.nodeId ||
-      config.till?.locationId !== result.venue.locationId
+      config.till === undefined ||
+      config.till.nodeId !== result.venue.nodeId ||
+      (await readNodeLocation(db, config.till.nodeId)) !== result.venue.locationId
     )
       throw new AppError("setup.attempt_uncertain", {});
     return;

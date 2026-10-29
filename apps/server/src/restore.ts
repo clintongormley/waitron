@@ -1,3 +1,4 @@
+import { readNodeLocation } from "./till-config.js";
 import { assertVenueFirstSetupAllowed, isFirstSetupHostPath } from "@waitron/provisioning";
 import { lstatSync } from "node:fs";
 import { isDeepStrictEqual } from "node:util";
@@ -37,7 +38,7 @@ import {
   type VenueLock,
 } from "@waitron/db";
 import { applyMigrations, expectedSchemaVersion, migrationOptionsFor } from "@waitron/migrations";
-import { SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
+import { openBackupQuery, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
 import {
   orderedMigrationSets,
@@ -90,7 +91,7 @@ const TRADING_ENV_ENTRY = `${SECRETS_PREFIX}trading.env`;
 const TRADING_ENV_FILE = "trading.env";
 /** Retains only the last replaced identity, overwriting any prior copy; boot reads only `trading.env`. */
 const REPLACED_SUFFIX = ".replaced";
-const IDENTITY_KEYS = ["WAITRON_NODE_ID", "WAITRON_LOCATION_ID"] as const;
+const IDENTITY_KEYS = ["WAITRON_NODE_ID"] as const;
 /** Where the incoming database sits while it is still incoming — same directory, so the rename is atomic. */
 const INCOMING_SUFFIX = ".incoming";
 const ASIDE_PREFIX = `.${VENUE_FILE}-replaced-`;
@@ -321,16 +322,15 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
     log("info", "restore.identity.kept", {});
     return;
   }
-  // Completeness is a validation precondition; this pure read recovers the already-checked ids.
-  const identity = readArtifactIdentity(validated.secretEntries);
   const opened = await (deps.openDb ?? openVenue)(deps.venueDir);
   try {
-    const name = await readBreakGlassKeyName(opened.db, identity.node.nodeId);
+    const node = await resolveArtifactNode(opened.db, validated.secretEntries);
+    const name = await readBreakGlassKeyName(opened.db, node.nodeId);
     if (name !== null) log("info", "restore.recovery_key_selected", { name });
     await runRestoreHooks({
       db: opened.db,
       modules: deps.modules,
-      node: identity.node,
+      node,
       log,
       withModuleOperations: deps.withModuleOperations,
       resumeOperation: deps.resumeOperation,
@@ -380,7 +380,7 @@ export async function writeValidated(
       try {
         await check({
           db: opened.db,
-          node: readArtifactIdentity(validated.secretEntries).node,
+          node: await resolveArtifactNode(opened.db, validated.secretEntries),
           sourceId: validated.sourceId,
         });
       } finally {
@@ -715,7 +715,7 @@ export async function setAsideExistingIdentity(stateDir: string, log: Logger): P
  * checks this before set-aside or database restore unless `skipSecrets` keeps the target's identity.
  */
 export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
-  node: ProvisionedNode;
+  node: Pick<ProvisionedNode, "nodeId">;
 } {
   const entry = secretEntries.find((e) => e.name === TRADING_ENV_ENTRY);
   if (entry === undefined) {
@@ -727,10 +727,37 @@ export function readArtifactIdentity(secretEntries: readonly ArchiveEntry[]): {
   }
   return {
     node: {
-      locationId: brandLocationId(env.WAITRON_LOCATION_ID!),
       nodeId: brandNodeId(env.WAITRON_NODE_ID!),
     },
   };
+}
+
+export async function resolveArtifactNode(
+  db: Database | Transaction,
+  entries: readonly ArchiveEntry[],
+): Promise<ProvisionedNode> {
+  const { node } = readArtifactIdentity(entries);
+  const locationId = await readNodeLocation(db, node.nodeId);
+  if (locationId === null) throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+  return { ...node, locationId };
+}
+
+export async function readArtifactNode(
+  copy: Pick<ValidatedArtifact, "secretEntries" | "databasePath">,
+): Promise<ProvisionedNode> {
+  const { node } = readArtifactIdentity(copy.secretEntries);
+  const opened = await openBackupQuery(copy.databasePath);
+  try {
+    for await (const row of opened.query.rows(
+      "select l.id from nodes n join locations l on l.id = n.location_id where n.id = ?",
+      [node.nodeId],
+    )) {
+      if (typeof row.id === "string") return { ...node, locationId: brandLocationId(row.id) };
+    }
+    throw new AppError("restore.identity_unknown", { nodeId: node.nodeId });
+  } finally {
+    await opened.close();
+  }
 }
 
 function wrapHookError(module: string, err: unknown): unknown {

@@ -158,7 +158,6 @@ it.each(["account", "key"])(
         WAITRON_HTTP_PORT: String(port),
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_NODE_ID: NODE,
-        WAITRON_LOCATION_ID: LOCATION,
         WAITRON_CREDENTIALS_KEY: KEY,
         WAITRON_CREDENTIALS_KEY_VERSION: "1",
         WAITRON_ENV: "dev",

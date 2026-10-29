@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { createStaffCsr, installStaffCertificate } from "../src/cloud-remote.js";
 import { createCloudConnection } from "../src/cloud-client.js";
 import { cp, mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -123,7 +124,6 @@ if (savedEnv !== undefined) {
     WAITRON_MANAGEMENT_ORIGIN: `${process.env.CLOUD_TEST_BACKUP_STATE === "1" ? "https" : "http"}://127.0.0.1:${address.port}`,
     WAITRON_CREDENTIALS_KEY: boxSecrets.WAITRON_CREDENTIALS_KEY,
     WAITRON_CREDENTIALS_KEY_VERSION: boxSecrets.WAITRON_CREDENTIALS_KEY_VERSION,
-    WAITRON_LOCATION_ID: result.locationId,
     WAITRON_NODE_ID: result.nodeId,
     WAITRON_CLOUD_ORIGIN: process.env.CLOUD_TEST_ORIGIN,
     WAITRON_DASHBOARD_APP_DIR: isUnset(process.env.WAITRON_DASHBOARD_APP_DIR)
@@ -131,6 +131,17 @@ if (savedEnv !== undefined) {
       : process.env.WAITRON_DASHBOARD_APP_DIR,
   };
   await writeFile(envPath, JSON.stringify(env), { mode: 0o600 });
+}
+const identityStore = await openVenueDatabase(env.WAITRON_VENUE_DIR!);
+let localVenueId: string;
+try {
+  const result = await identityStore.venue.execute<{ location_id: string }>(
+    sql`select location_id from nodes where id = ${env.WAITRON_NODE_ID}`,
+  );
+  if (result.rows[0] === undefined) throw new Error("Fixture node missing");
+  localVenueId = result.rows[0].location_id;
+} finally {
+  await identityStore.close();
 }
 const server = await startServer(env);
 // Renamed into place so a poller never reads a half-written ready.json.
@@ -140,7 +151,7 @@ await writeFile(
   JSON.stringify({
     origin: env.WAITRON_MANAGEMENT_ORIGIN,
     port: Number(env.WAITRON_HTTP_PORT),
-    localVenueId: env.WAITRON_LOCATION_ID,
+    localVenueId,
   }),
   { mode: 0o600 },
 );
@@ -149,7 +160,7 @@ await rename(`${readyPath}.tmp`, readyPath);
 const cloud = createCloudConnection({
   stateDir: root,
   origin: env.WAITRON_CLOUD_ORIGIN!,
-  localVenueId: env.WAITRON_LOCATION_ID!,
+  localVenueId,
   environment: "test",
 });
 process.on("message", (message: unknown) => {
