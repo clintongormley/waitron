@@ -11,12 +11,12 @@ const overview: SalesOverview = {
   openTables: { open: 3, total: 12 },
   topSellers: [
     {
-      name: "Café con leche",
+      name: "Coffee with milk",
       quantity: "18",
       total: "36.00",
       variants: [
-        { name: "Café con leche grande", quantity: "10", total: "22.00" },
-        { name: "Café con leche pequeño", quantity: "8", total: "14.00" },
+        { name: "Large coffee with milk", quantity: "10", total: "22.00" },
+        { name: "Small coffee with milk", quantity: "8", total: "14.00" },
       ],
     },
     { name: "Croissant", quantity: "12", total: "24.00", variants: [] },
