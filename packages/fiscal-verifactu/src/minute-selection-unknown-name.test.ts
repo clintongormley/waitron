@@ -2,7 +2,8 @@
 // form (design §6.7): a restore from an old backup never reuses a name it cannot see, within the
 // clock errors these rows test; the ±45.5 s control shows a name repeated just past them. A failing
 // row selects a code at or below the unseen name, or (F1) takes a minute ahead of the true time; a
-// passing row is refused, or selects a later code.
+// passing row is refused, or selects a later code. "selected although a later name is known" is the
+// other rule: a name the box can read refuses only its own minute (owner, 2026-10-29, A1207).
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   withOperationAuthority,
@@ -263,14 +264,6 @@ afterEach(() => {
 });
 
 describe("refused", () => {
-  it("A: a clock before the backup's own floors", async () => {
-    const box = at("2026-10-16T10:00:00Z");
-    expect(await restore({ box })).toEqual({
-      refused: "minute_not_later",
-      allowedFromMs: "2026-10-22T23:00:00.000Z",
-    });
-  });
-
   it("A2: a clock before the running release", async () => {
     expect(await restore({ box: BEHIND, release: at("2026-10-21T00:00:00Z") })).toEqual({
       refused: "clock_unconfirmed",
@@ -391,13 +384,6 @@ describe("refused", () => {
     });
   });
 
-  it("W: the box and another device wrong together, below the backup's creation", async () => {
-    expect(await restore({ box: BEHIND, browser: BEHIND })).toEqual({
-      refused: "minute_not_later",
-      allowedFromMs: "2026-10-22T23:00:00.000Z",
-    });
-  });
-
   it("D4: a clock days behind the internet's, with no browser", async () => {
     expect(await restore({ box: BEHIND, browser: null, internet: TRUE_NOW })).toEqual({
       refused: "clock_disagreement",
@@ -418,6 +404,56 @@ describe("refused", () => {
         promote: true,
       }),
     ).toEqual({ refused: "clock_disagreement" });
+  });
+});
+
+describe("selected although a later name is known", () => {
+  const survivingLiveSeries: HourHistorySource = {
+    reference: "surviving-venue/live",
+    complete: true,
+    records: [row("surviving-venue/live/invoice_series/2", "series", SPARE, UNSEEN, null)],
+  };
+  const settled = (box: number) => ({
+    waitedMs: 120_000,
+    selected: encodeMinuteIdentity(box + 120_000),
+  });
+
+  it("D1: a known later name in the surviving database", async () => {
+    const box = at("2026-10-23T19:00:00Z");
+    expect(await restore({ box, surviving: [survivingWithSwitch] })).toEqual(settled(box));
+  });
+
+  it("D1v: a known later name on a live series, with no time", async () => {
+    const box = at("2026-10-23T19:00:00Z");
+    expect(await restore({ box, surviving: [survivingLiveSeries] })).toEqual(settled(box));
+  });
+
+  it("D2: the old database still on the disk, with a later record time", async () => {
+    const box = at("2026-10-23T17:00:00Z");
+    const surviving: HourHistorySource = {
+      reference: "surviving-venue/old",
+      complete: true,
+      records: [
+        row("surviving-venue/old/registro_sif/1", "activation", MAIN, KNOWN, MAIN_SETUP),
+        row(
+          "surviving-venue/old/invoice_series/1",
+          "series",
+          MAIN,
+          KNOWN,
+          at("2026-10-23T18:00:00Z"),
+        ),
+      ],
+    };
+    expect(await restore({ box, surviving: [surviving] })).toEqual(settled(box));
+  });
+
+  it("A: a clock before the backup's own floors", async () => {
+    const box = at("2026-10-16T10:00:00Z");
+    expect(await restore({ box })).toEqual(settled(box));
+  });
+
+  it("W: the box and another device wrong together, below the backup's creation", async () => {
+    expect(await restore({ box: BEHIND, browser: BEHIND })).toEqual(settled(BEHIND));
   });
 });
 

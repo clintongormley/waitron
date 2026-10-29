@@ -145,25 +145,6 @@ const historyRow = (identity = "0CNPG", change: Record<string, unknown> = {}) =>
   recordedAtMs: null,
   ...change,
 });
-it.each([
-  ["0CNPG", Date.parse("2026-10-16T12:01:00Z")],
-  ["ZZZZZ", undefined],
-])(
-  "refuses a minute far behind known %s instead of inventing maximum plus one",
-  async (identity, allowedFromMs) => {
-    const f = fixture();
-    f.facts = {
-      ...f.facts,
-      history: [{ reference: "retired", complete: true, records: [historyRow(identity)] }],
-    };
-    const refused = await f.run().catch((error: unknown) => error);
-    expect(refused).toMatchObject(refusal("minute_not_later"));
-    expect((refused as { params: Record<string, unknown> }).params.allowedFromMs).toBe(
-      allowedFromMs,
-    );
-    expect(f.writes).toEqual([]);
-  },
-);
 it("waits for the next minute when the current one is known", async () => {
   const f = fixture();
   f.facts = {
@@ -176,6 +157,126 @@ it("waits for the next minute when the current one is known", async () => {
     remainingMs: 60_000,
   });
 });
+const LATER = [
+  "a later name",
+  "a later record time on an earlier name",
+  "a source time floor",
+  "another event's later pick",
+] as const;
+it.each([binding, restore, setup].flatMap((base) => LATER.map((later) => ({ ...base, later }))))(
+  "$action selects as with an empty history beside $later",
+  async ({ later, ...base }) => {
+    const f = fixture();
+    const ahead = instant + 10 * 60_000;
+    if (later === "another event's later pick") {
+      f.at(instant + 20 * 60_000, 0);
+      expect(await f.run(event(binding, "other"))).toMatchObject({ identity: "0CNPG" });
+      f.at(instant, 0);
+    } else
+      f.facts = {
+        ...f.facts,
+        history: [
+          later === "a source time floor"
+            ? { reference: "venue", complete: true, records: [], timeFloorMs: ahead }
+            : {
+                reference: "venue",
+                complete: true,
+                records: [
+                  later === "a later name"
+                    ? historyRow("0CNPG")
+                    : historyRow("0CNNA", { recordedAtMs: ahead }),
+                ],
+              },
+        ],
+      };
+    if (base.action === "promote")
+      expect(await f.run(base)).toMatchObject({ status: "selected", identity: "0CNNW" });
+    else
+      expect(await f.run(base)).toEqual({
+        status: "waiting",
+        targetMs: Date.parse("2026-10-16T11:42:00Z"),
+        remainingMs: 120_000,
+      });
+  },
+);
+it.each(["a later name", "a later record time"])(
+  "a pick stands when %s appears after it",
+  async (later) => {
+    const f = fixture();
+    expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
+    f.facts = {
+      ...f.facts,
+      history: [
+        {
+          reference: "venue",
+          complete: true,
+          records: [
+            later === "a later name"
+              ? historyRow("0CNPG")
+              : historyRow("0CNNA", { recordedAtMs: instant + 200_000 }),
+          ],
+        },
+      ],
+    };
+    expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
+  },
+);
+it("a pick is refused when a record naming its own minute appears after it", async () => {
+  const f = fixture();
+  expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
+  f.facts = {
+    ...f.facts,
+    history: [{ reference: "venue", complete: true, records: [historyRow("0CNNW")] }],
+  };
+  await expect(f.run()).rejects.toMatchObject(refusal("minute_not_later"));
+});
+const used = (...identities: string[]) =>
+  identities.map((identity) => historyRow(identity, { reference: `used/${identity}` }));
+it("a promotion whose current minute and the next two are in use is refused from the first free one", async () => {
+  const f = fixture();
+  f.facts = {
+    ...f.facts,
+    history: [{ reference: "venue", complete: true, records: used("0CNNW", "0CNNX", "0CNNY") }],
+  };
+  await expect(f.run()).rejects.toMatchObject({
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
+  });
+  expect(f.writes).toEqual([]);
+});
+it("a setup whose settle-target minute is in use is refused from the minute after", async () => {
+  const f = fixture();
+  f.facts = {
+    ...f.facts,
+    history: [{ reference: "venue", complete: true, records: used("0CNNY") }],
+  };
+  await expect(f.run(setup)).rejects.toMatchObject({
+    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T11:43:00Z") },
+  });
+  expect(f.writes).toEqual([]);
+});
+it.each([
+  ["0CNNY", "2026-10-16T11:41:50Z", 110_000, "2026-10-16T11:43:00Z", 70_000],
+  ["0CNNZ", "2026-10-16T11:43:00Z", 180_000, "2026-10-16T11:44:00Z", 60_000],
+])(
+  "a restore's recorded wait meeting %s, in use, at %s waits for the next free minute",
+  async (identity, now, elapsed, target, remainingMs) => {
+    const f = fixture();
+    expect(await f.run(restore)).toMatchObject({
+      status: "waiting",
+      targetMs: Date.parse("2026-10-16T11:42:00Z"),
+    });
+    f.facts = {
+      ...f.facts,
+      history: [{ reference: "venue", complete: true, records: used(identity) }],
+    };
+    f.at(Date.parse(now), elapsed);
+    expect(await f.run(restore)).toEqual({
+      status: "waiting",
+      targetMs: Date.parse(target),
+      remainingMs,
+    });
+  },
+);
 it("allows the current hour strictly later than retained epoch hour zero", async () => {
   const f = fixture();
   f.facts = {
@@ -183,22 +284,6 @@ it("allows the current hour strictly later than retained epoch hour zero", async
     history: [{ reference: "old", complete: true, records: [historyRow("00000")] }],
   };
   expect(await f.run()).toMatchObject({ status: "selected", identity: "0CNNW" });
-});
-it("refuses before the recorded time floor even when the identity floor is lower", async () => {
-  const f = fixture();
-  f.facts = {
-    ...f.facts,
-    history: [
-      {
-        reference: "old",
-        complete: true,
-        records: [historyRow("00000", { recordedAtMs: instant + 200_000 })],
-      },
-    ],
-  };
-  await expect(f.run()).rejects.toMatchObject({
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T11:44:00Z") },
-  });
 });
 it("refuses incomplete history instead of treating it as empty", async () => {
   const f = fixture();
@@ -716,21 +801,6 @@ it("waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms 
   });
   expect(g.writes).toEqual([]);
 });
-it.each([
-  ["2026-10-24T09:02:10.500Z", "refused", "2026-10-24T09:03:00Z"],
-  ["2026-10-24T09:01:59.000Z", "waiting", "2026-10-24T09:02:00Z"],
-])("a backup floor at %s rounds up to a minute start: %s", async (floor, outcome, target) => {
-  const f = fixture();
-  withHistory(f, [activationRow("0CNNW", at(floor))]);
-  f.at(at("2026-10-24T09:00:10Z"), 0);
-  const result = f.run(binding);
-  if (outcome === "refused")
-    await expect(result).rejects.toMatchObject({
-      params: { reason: "minute_not_later", allowedFromMs: at(target) },
-    });
-  else
-    expect(await result).toEqual({ status: "waiting", targetMs: at(target), remainingMs: 110_000 });
-});
 it.each([binding])("$action with no later history selects at once", async (base) => {
   const f = fixture();
   withHistory(f, [activationRow("0CNNW", at("2026-10-16T11:40:00Z"))]);
@@ -957,22 +1027,6 @@ it("a resume under a clock behind its own pick refuses before writing anything",
     await expect(
       engine.resume({ binding: setup, authority, documentBinding: "a".repeat(64), validate() {} }),
     ).rejects.toMatchObject(refusal("minute_not_later"));
-  });
-  expect(replaced).toEqual([]);
-  expect(f.writes).toHaveLength(2);
-});
-it("a new pick under a clock behind a recorded pick refuses before writing anything", async () => {
-  const f = await setupPickedAt0902();
-  f.at(at("2026-10-24T08:52:00Z"), 0);
-  const { engine, replaced } = spiedEngine(f);
-  const other = event(setup, "other");
-  await withOperationAuthority(other, "administrator", async (authority) => {
-    await expect(
-      engine.select({ binding: other, authority, comparisonId: "comparison" }),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: at("2026-10-24T09:03:00Z") },
-    });
   });
   expect(replaced).toEqual([]);
   expect(f.writes).toHaveLength(2);

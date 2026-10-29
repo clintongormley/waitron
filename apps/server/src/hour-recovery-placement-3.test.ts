@@ -17,7 +17,7 @@ import {
   interactiveHost,
   clock,
 } from "../test/hour-recovery-host.js";
-import { recoverySelectPastWaits, selectPastWaits } from "./testing/hour-test-clock.js";
+import { selectPastWaits } from "./testing/hour-test-clock.js";
 import { Agent } from "undici";
 import { loadKeyRing } from "@waitron/credentials";
 import { establishNodeIdentity } from "./node-identity.js";
@@ -36,12 +36,7 @@ import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { TENANT_B } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
 import { createRecoveryRestoreRunner } from "./recovery-module-operation.js";
-import {
-  runRestoreHooks,
-  restoreFromArtifact,
-  restoreFromArtifactFile,
-  validateArtifact,
-} from "./restore.js";
+import { restoreFromArtifact, restoreFromArtifactFile, validateArtifact } from "./restore.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { packArchive, unpackArchive } from "./backup-archive.js";
 import { decryptArtifact, encryptArtifact } from "./artifact-cipher.js";
@@ -212,75 +207,6 @@ describe("selected-hour admission before archive placement", () => {
       }
     },
     120_000,
-  );
-
-  it.each(["archive", "stream"] as const)(
-    "refuses an older selected hour before replacing a newer surviving %s destination",
-    async (kind) => {
-      const f = await archiveHost(kind);
-      vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
-      const newerState = join(root, "newer-state");
-      await mkdir(newerState);
-      const newer = createSelectedRecoveryPreparation({
-        ...f.options,
-        stateDir: newerState,
-        binding: { ...f.options.binding, eventId: "newer-surviving-target" },
-      });
-      agreeInternet();
-      const selected = (await recoverySelectPastWaits(clock, newer, { onBox: true })) as {
-        identity: string;
-        input: unknown;
-      };
-      expect(selected.identity).toBe("0CNSP");
-      await runRestoreHooks({
-        db: suite.db,
-        node,
-        modules: newer.modules,
-        log: () => {},
-        withModuleOperations: newer.runner(selected.input),
-      });
-      const before = await suite.db.select().from(invoiceSeries);
-      const fresh = (await f.service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
-        id: string;
-      };
-      await f.service.prepare(
-        {
-          action: "compare-clocks",
-          browser: { challengeId: fresh.id, instantMs: Date.now() },
-        },
-        { onBox: true },
-      );
-      await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
-      await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
-      await expect(
-        kind === "archive"
-          ? restoreFromArtifact({
-              ...f.restore,
-              modules: f.service.modules,
-              withModuleOperations: f.service.runner(f.outcome.input),
-            })
-          : writeStreamRestore({
-              ...f.restore,
-              databasePath: f.database,
-              entries: f.entries,
-              modules: f.service.modules,
-              withModuleOperations: f.service.runner(f.outcome.input),
-            }),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "minute_not_later" },
-      });
-      const retained = await openVenueDatabase(f.roots.venueDir);
-      try {
-        expect(await retained.venue.select().from(invoiceSeries)).toEqual(before);
-        expect(await retained.venue.select().from(fiscalAllocations)).toHaveLength(2);
-      } finally {
-        await retained.close();
-      }
-      expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
-        "surviving destination identity",
-      );
-    },
   );
 
   it("refuses unreadable surviving history before changing the destination or its identity", async () => {

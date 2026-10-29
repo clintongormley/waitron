@@ -774,31 +774,6 @@ describe("a backup's own floors", () => {
   const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
     createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
 
-  it("refuses a minute before the backup's newest fiscal record, naming the record's time", async () => {
-    await sellAt("2026-10-22T20:15:00Z");
-    clock.set(Date.parse("2026-10-21T10:00:00Z"));
-    const f = await host();
-    await expect(
-      recoverySelectPastWaits(clock, restoreService(f), asBrowser),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-22T20:15:00Z") },
-    });
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
-  });
-
-  it("refuses a minute before the backup was created, naming its creation time", async () => {
-    clock.set(Date.parse("2026-10-23T07:50:00Z"));
-    const f = await host();
-    await expect(
-      recoverySelectPastWaits(clock, restoreService(f, "2026-10-23T08:00:00Z"), asBrowser),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-23T08:00:00Z") },
-    });
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
-  });
-
   it("waits and then selects once both clocks are past both floors", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-24T09:00:00Z"));

@@ -407,9 +407,7 @@ export function createHourSelection(options: {
       if (history.contradictions.length > 0) return refuse("history_invalid");
       if (
         intent !== undefined &&
-        ((history.greatestSpentMinute !== null &&
-          decodeMinuteIdentity(intent.identity) <= history.greatestSpentMinute) ||
-          (history.recordedTimeFloorMs !== null && now < history.recordedTimeFloorMs) ||
+        (history.usedMinutes.includes(decodeMinuteIdentity(intent.identity)) ||
           now < Date.parse(intent.issuedAt))
       )
         return refuse("minute_not_later");
@@ -449,14 +447,12 @@ export function createHourSelection(options: {
           : persist
             ? (Math.floor((now + SETTLE_MS) / MINUTE_MS) + 1) * MINUTE_MS
             : -Infinity;
-      const earliestMs = Math.max(
-        history.greatestSpentMinute === null
-          ? -Infinity
-          : EPOCH_MS + (history.greatestSpentMinute + 1) * MINUTE_MS,
-        history.recordedTimeFloorMs ?? -Infinity,
-        settleTarget,
+      let targetMs = Math.max(
+        Math.ceil(settleTarget / MINUTE_MS) * MINUTE_MS,
+        Math.floor(now / MINUTE_MS) * MINUTE_MS,
       );
-      const targetMs = Math.ceil(earliestMs / MINUTE_MS) * MINUTE_MS;
+      const used = new Set(history.usedMinutes);
+      while (used.has((targetMs - EPOCH_MS) / MINUTE_MS)) targetMs += MINUTE_MS;
       if (targetMs >= END_MS) return refuse("minute_not_later");
       if (targetMs - now > WAIT_BOUND_MS && targetMs !== settleTarget)
         return refuse("minute_not_later", targetMs);
