@@ -182,13 +182,6 @@ under `docs/backlog/`.
   to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
-- **A1156: name the server's node dependencies.** Left open by A1154; after A1155, as a separate
-  change (owner, 2026-10-27). Queued in lane E.
-  [Implementation plan](superpowers/plans/2026-10-29-a1156-node-configuration.md): separate
-  environment inputs, replace the mixed runtime type, then rename runtime dependencies. The
-  environment inputs and runtime constituent types are separated. Renaming runtime dependencies
-  remains open; recheck shared-file reservations before the remaining slice.
-
 - **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
   connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
   failure.

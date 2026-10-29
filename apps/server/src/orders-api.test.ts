@@ -1,13 +1,26 @@
 import { randomUUID } from "node:crypto";
+import { Hono } from "hono";
 import { describe, expect, it, vi } from "vitest";
 import { hashPin, deactivatePerson, persons } from "@waitron/identity";
-import { invoiceSeries, tenants, withTransaction } from "@waitron/db";
+import {
+  invoiceSeries,
+  locations,
+  nodes,
+  printJobs,
+  sales,
+  tenants,
+  withTransaction,
+} from "@waitron/db";
+import { createPrinter } from "@waitron/printing";
+import { receiptLabelsFor } from "@waitron/country-packs";
 import { recordSale } from "@waitron/core";
 import { and, eq } from "drizzle-orm";
-import { seriesId as brandSeriesId } from "@waitron/shared";
+import { locationId, nodeId, seriesId as brandSeriesId } from "@waitron/shared";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { seatedWith, send } from "./testing/bill-venue.js";
+import { mountOrdersApi } from "./orders-api.js";
+import { decodeTicket } from "./testing/decode-ticket.js";
 import {
   billlessSale,
   collect,
@@ -343,4 +356,81 @@ describe("Orders routes", () => {
     expect(rows.find((row) => row.id === simplified)?.invoiceType).toBe("F2");
     expect(rows.find((row) => row.id === full)?.invoiceType).toBe("F1");
   });
+  it.each([false, true])(
+    "uses its trading context for printer and write location while reading the data node's invoice (practice %s)",
+    async (practiceMode) => {
+      const billId = await placedIssuedBill(venue, "Paella");
+      const ownNode = nodeId(randomUUID());
+      const ownLocation = locationId(randomUUID());
+      const printer = await withTransaction(venue.db, async (tx) => {
+        await tx.insert(locations).values({
+          id: ownLocation,
+          name: "Copy room",
+          invoiceLocales: ["es-ES"],
+          operationDescription: "Hospitality",
+        });
+        await tx.insert(nodes).values({ id: ownNode, locationId: ownLocation, name: "Own box" });
+        return createPrinter(
+          tx,
+          { locationId: ownLocation },
+          {
+            name: "Own receipt printer",
+            transport: "network_tcp",
+            host: "127.0.0.1",
+          },
+        );
+      });
+      const app = new Hono();
+      mountOrdersApi(
+        app,
+        {
+          db: venue.db,
+          backend: venue.backend,
+          cfg: { nodeId: venue.cfg.nodeId },
+          tradingContext: { ...venue.cfg, nodeId: ownNode, locationId: ownLocation, practiceMode },
+          invoiceEmailAvailable: () => Promise.resolve(false),
+        },
+        () => {},
+      );
+      const choices = await send(
+        app,
+        venue.adminDashboard,
+        "GET",
+        "/management-api/orders/printers",
+      );
+      expect(choices.status).toBe(200);
+      expect(choices.json).toEqual([{ id: printer.id, name: "Own receipt printer" }]);
+      const detail = await send(
+        app,
+        venue.adminDashboard,
+        "GET",
+        `/management-api/orders/${billId}`,
+      );
+      expect(detail.status).toBe(200);
+      expect(detail.json).toMatchObject({ row: { id: billId, total: "35.00" } });
+      const answer = await send(
+        app,
+        venue.adminDashboard,
+        "POST",
+        `/management-api/orders/${billId}/reprint`,
+        { printerId: printer.id },
+      );
+      expect(answer.status).toBe(202);
+      const [job] = await venue.db
+        .select()
+        .from(printJobs)
+        .where(eq(printJobs.id, (answer.json as { jobId: string }).jobId));
+      expect(job).toMatchObject({
+        locationId: ownLocation,
+        printerId: printer.id,
+        kind: "document",
+      });
+      const text = decodeTicket(job!.payload);
+      expect(text).toContain("35,00");
+      expect(text.includes(receiptLabelsFor("es-ES").practice)).toBe(practiceMode);
+      const [sale] = await venue.db.select().from(sales).where(eq(sales.workingOrderId, billId));
+      expect(sale).toMatchObject({ nodeId: venue.cfg.nodeId });
+      expect(job!.saleId).toBe(sale!.id);
+    },
+  );
 });

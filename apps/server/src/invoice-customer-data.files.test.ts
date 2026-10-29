@@ -46,7 +46,7 @@ function deps(overrides: Partial<InvoiceCustomerFilesDeps> = {}): InvoiceCustome
   return {
     db: suite.db,
     backend: fixture.venue.backend,
-    till: fixture.venue.cfg,
+    tradingContext: fixture.venue.cfg,
     log: quiet,
     render: () => Promise.resolve(STUB_PDF),
     ...overrides,

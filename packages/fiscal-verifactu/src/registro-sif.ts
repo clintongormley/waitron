@@ -69,9 +69,8 @@ function resetChainHead(tx: Transaction, nodeId: NodeId): Promise<unknown> {
 /**
  * Persist a DORMANT reserved SIF on a standby's own database, keyed to the standby's
  * OWN nodeId with the number the PRIMARY allocated (`numeroInstalacion`) — NOT re-allocated here. It
- * is inert because no sale resolves this node (`config.till.nodeId` stays the primary's until a
- * promotion), and `currentSif` gates on the node. A fresh empty `cadenas` head (both-null
- * pointer) makes it a brand-new chain, never a resume of anyone's (CLAUDE.md §5). No prior identity to
+ * is inert because no sale resolves this node, and `currentSif` gates on the node. A fresh empty
+ * `cadenas` head (both-null pointer) makes it a brand-new chain, never a resume of anyone's (CLAUDE.md §5). No prior identity to
  * retire — a reserved node is new. The `registro_sif_instalacion_uq` unique on
  * (nif, id_sistema_informatico, numero_instalacion) is the never-reuse backstop.
  */

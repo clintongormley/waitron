@@ -460,7 +460,7 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       {
         db,
         backend: new FakeFiscalBackend(db),
-        till: {
+        tradingContext: {
           nodeId: brandNodeId(nodeId),
           locationId: brandLocationId(main!.id),
           locale: "en-GB",

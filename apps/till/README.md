@@ -151,6 +151,10 @@ A malformed node identity refuses startup with `server.node_config_invalid`. Ord
 refuses the same way if the configured node has no database row. Pending adoption serves its
 status before that lookup. These errors name the setting without echoing its value.
 
+The server combines that node identity, till preferences and fiscal runtime values in
+`TradingContext` (`apps/server/src/trading-context.ts`). Its invoicing backend belongs to the
+node; each request adds its own device origin and recording effects.
+
 ### A no-browser check
 
 There is no one-command in-process walk of the login → menu → cash-sale path. What covers that path

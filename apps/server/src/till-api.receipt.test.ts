@@ -3305,7 +3305,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
       await reportInvoiceDelivery(tx, claim!, { status: "sent" });
     });
     const { jobId } = await withTransaction(suite.db, (tx) =>
-      reprintOrderReceipt(tx, { backend, till: cfg }, orderId, printerId, supervisorId),
+      reprintOrderReceipt(tx, { backend, tradingContext: cfg }, orderId, printerId, supervisorId),
     );
     const [delivery] = await suite.db
       .select()
@@ -3327,7 +3327,7 @@ describe("explicit F1 receipt delivery enrollment", () => {
     await email();
     await expect(
       withTransaction(suite.db, (tx) =>
-        reprintOrderReceipt(tx, { backend, till: cfg }, orderId, printerId, supervisorId),
+        reprintOrderReceipt(tx, { backend, tradingContext: cfg }, orderId, printerId, supervisorId),
       ),
     ).rejects.toMatchObject({ code: "invoice_delivery.active" });
     expect(await suite.db.select().from(printJobs)).toEqual([]);

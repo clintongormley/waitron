@@ -206,6 +206,57 @@ it.each([
   60_000,
 );
 
+it.each([
+  ["demo", true],
+  ["prepare", true],
+  ["live", false],
+] as const)(
+  "%s retains app preferences and practice mode",
+  async (intent, practiceMode) => {
+    await source.db
+      .insert(tenants)
+      .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
+    await source.db
+      .insert(locations)
+      .values({
+        id: LOCATION,
+        name: "Counter",
+        province: "London",
+        timeZone: "Europe/London",
+        invoiceLocales: ["en-GB"],
+        operationDescription: "Hospitality",
+      });
+    await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
+    const server = await startServer({
+      ...(await environment(true)),
+      WAITRON_ENV: "dev",
+      WAITRON_ONBOARDING_INTENT: intent,
+      WAITRON_TILL_LOCALE: "en-GB",
+    });
+    try {
+      const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
+      expect(reply.status).toBe(200);
+      expect(await reply.json()).toMatchObject({
+        locale: "en-GB",
+        tipsEnabled: true,
+        simplifiedInvoiceLimit: null,
+      });
+      expect(observed.cfg).toMatchObject({
+        nodeId: NODE,
+        locationId: LOCATION,
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        tipsEnabled: true,
+        practiceMode,
+        operationDescriptionRequired: false,
+      });
+    } finally {
+      await server.close();
+    }
+  },
+  60_000,
+);
+
 it.each(["mirror", "primary"] as const)(
   "%s reads the correct node's rows while retaining its own box identity",
   async (mode) => {

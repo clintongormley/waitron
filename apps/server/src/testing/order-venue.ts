@@ -86,7 +86,7 @@ export async function provisionOrderVenue(db: Database): Promise<OrderVenue> {
       db,
       backend: venue.backend,
       cfg: { nodeId: venue.cfg.nodeId },
-      till: venue.cfg,
+      tradingContext: venue.cfg,
       invoiceEmailAvailable: () => Promise.resolve(false),
     },
     quiet,

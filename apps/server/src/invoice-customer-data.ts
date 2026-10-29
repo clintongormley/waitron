@@ -108,7 +108,7 @@ export async function findInvoiceCustomerSales(
 export interface InvoiceCustomerFilesDeps {
   db: Database;
   backend: FiscalBackend;
-  till: TradingContext;
+  tradingContext: TradingContext;
   log: Logger;
   /** Default `renderInvoicePdf`; a test passes a stub. */
   render?: (document: ReceiptDocumentInput) => Promise<Uint8Array>;
@@ -171,7 +171,7 @@ export async function buildInvoiceCustomerFiles(
     read.push(
       await made(sale.saleId, () =>
         deps.db.withWriteLock(async () => {
-          const document = await readDocument(deps.backend, tx, deps.till, sale.saleId);
+          const document = await readDocument(deps.backend, tx, deps.tradingContext, sale.saleId);
           // Decision 11: a filed record is what the box sends to the tax authority. A regime
           // that kept records without sending them would make this flag, and the README's line
           // it gates, wrong.

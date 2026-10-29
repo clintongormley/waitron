@@ -16,7 +16,7 @@ export function invoicePdfFileName(code: string, number: number): string {
 /** The bill's full invoice as a duplicate, with the download recorded; writes no delivery row. */
 export async function readInvoiceForDownload(
   tx: Transaction,
-  deps: { backend: FiscalBackend; till: TradingContext },
+  deps: { backend: FiscalBackend; tradingContext: TradingContext },
   billId: string,
   personId: string,
 ): Promise<{ document: ReceiptDocumentInput; fileName: string }> {
@@ -26,7 +26,7 @@ export async function readInvoiceForDownload(
     .innerJoin(invoiceSeries, eq(invoiceSeries.id, sales.seriesId))
     .where(eq(sales.workingOrderId, billId));
   if (sale === undefined) throw new AppError("working_order.not_found", { workingOrderId: billId });
-  const document = await readInvoiceDocument(deps.backend, tx, deps.till, sale.id);
+  const document = await readInvoiceDocument(deps.backend, tx, deps.tradingContext, sale.id);
   await tx.insert(invoicePdfDownloads).values({ saleId: sale.id, personId });
   return {
     document: { ...document, duplicate: true },
