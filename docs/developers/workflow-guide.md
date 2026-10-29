@@ -331,10 +331,9 @@ development box (`config.devMode`) takes it too (`apps/server/src/setup-api.thro
 and the terminal's, uses the owned flow: five symbols for the UTC minute, after a second clock on
 another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a
 name needs a second clock within 30 seconds of the box"), strictly later than every name in the
-history it can read (`apps/server/src/first-setup-retired-assignments.test.ts`, "the real hour
-candidate route protects a retired hour before freezing hour offset %s", which covers a retired
-name only), no earlier than the start-again note's floor and after a 90 to 150
-second wait
+history it can read (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "retains abandoned
+or uncertain intent and demands a later minute for its replacement"), and after a 90 to 150 second
+wait
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "every setup wait over a minute of box
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question
 (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the terminal asks nothing, prints

@@ -488,7 +488,7 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1089: a different-environment partial setup needs an applicable fresh-start route.** Distinguish this from the authenticated half-adopt reset. Establish the safe fresh-server/reinstall action before offering it.
   [Audit](backlog/self-service-refusals.md#setup-environment).
 
-- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1099 lets Start again past a damaged record of series names, after a warning; A1158–A1162 list what still refuses.
+- **A1089: setup state refusals need a usable resume or recovery route.** Read A1042's S7l change first. Handle retained-operation mismatch and damaged setup without directing the owner to support; keep operation ownership and fiscal evidence. A1158, A1159 and A1161 list what still refuses.
   [Audit](backlog/self-service-refusals.md#setup-state).
 
 - **A1158: a damaged setup record or claim marker still dead-ends Start again.** Left open by A1099.
@@ -498,17 +498,25 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   count as missing. Left open by A1099.
   [Audit](backlog/self-service-refusals.md#a1159-a-venue-database-that-is-present-but-cannot-be-read-refuses-setupnot_ready).
 
-- **A1160: a damaged start-again note is refused late and blocks every later naming.** Left open by
-  A1099.
-  [Audit](backlog/self-service-refusals.md#a1160-a-damaged-start-again-note-is-refused-late-and-blocks-every-later-naming).
-
 - **A1161: with the database present, a public record or documents file still dead-ends Start
-  again**, damaged or intact. Left open by A1099; needs an owner decision.
+  again**, damaged or intact, and since A1206 so does the summary beside a stopped recovery. Left
+  open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
-- **A1162: a recovery's damaged copy of the series-name record still dead-ends Start again.** Left
-  open by A1099.
-  [Audit](backlog/self-service-refusals.md#a1162-a-recoverys-damaged-copy-of-the-series-name-record-still-dead-ends-start-again).
+- **The Start again summary's `setup.not_ready` carries no cause.** With the venue database present
+  and a stopped backup recovery, the summary refuses `setup.not_ready` wherever Start again would
+  (`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
+  a stopped recovery, the summary refuses setup.not_ready when %s, as Start again would"). The setup
+  page has no words for that code there, so it shows "This box could not read the details of the
+  recovery from backup. Check again." (`#presentReadsFailed`, `apps/setup/src/setup-app.ts`), and
+  Check again gets the same refusal while nothing changes on the box. Wanted: a cause of its own
+  from the server and words for it. Left open by A1206.
+
+- **Owner approval for "did not start activation" / «no empezó la activación».** The
+  missing-database ask shows it when the attempt's record reached neither activation line, in
+  place of the retired series-name line (`reachedNotStarted`,
+  `apps/setup/src/screens/initial-owner-strings.ts`). Derived words, not yet approved. Left open by
+  A1206 (its question Q1).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
@@ -518,11 +526,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **Loose ends left by A496 (moving to a new tax ID).**
   [Detail](backlog/setup.md#loose-ends-left-by-a496-moving-to-a-new-tax-id)
-
-- **Move the start-again note whenever a series name is put into use, and when a plain reset ends
-  an unfinished setup.** Today only Start again writes it; a reset during an unfinished first setup
-  forgets that setup's series name. Left open by A1042 (owner, 2026-10-25).
-  [Detail](backlog/setup.md#move-the-start-again-note-whenever-a-series-name-is-put-into-use-and-when-a-plain-reset-ends-an-unfinished-setup)
 
 - **The first-setup record store still accepts the `retire` and `select-workspace` actions and
   `nextWorkspace`, which nothing writes since A1042.**
@@ -576,7 +579,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
   explanation.** A link, device or lock file, a finisher's `setup.start_again_incomplete` for any
-  other reason, more than 20,000 found entries, or a start-again note the box cannot read: no Keep
+  other reason, or more than 20,000 found entries: no Keep
   or Move (owner question Q2, built with A). Left open by A1098.
   [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
 
@@ -587,10 +590,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A1144: after Keep, the box stays on its page even if the files are later removed by hand.**
   Left open by A1098.
   [Detail](backlog/setup.md#a1144-after-keep-the-box-stays-on-its-page-even-if-the-files-are-later-removed-by-hand)
-
-- **A1145: a Move on a box with no start-again note raises no series-name floor.** A1099's
-  "name unknown" note now exists for the Move to write. Left open by A1098 (owner question Q3).
-  [Detail](backlog/setup.md#a1145-a-move-on-a-box-with-no-start-again-note-raises-no-series-name-floor)
 
 - **A1146: a found piece on another mount below a root fails after the choice is recorded.** The
   box then shows the unfinished-Move page at every start until the mount is changed. Left open by
@@ -631,7 +630,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item
   counts** (owner, 2026-10-28). Both buttons on the repair page run one wipe, with no password: the
-  setup's series names go into the never-reuse note, then its files are deleted, and Recover from
+  setup's files are deleted (2026-10-29, A1206: the never-reuse note step is retired), and Recover from
   backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
   record, saved trading settings and a finished setup stay. Designed with A1131 below
   (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
@@ -4962,7 +4961,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **B3. The bootable USB installer** — design approved with changes; [six-slice plan](superpowers/plans/2026-10-26-b3-usb-installer.md), no build.
   No setup codes: the owner closed W60's first-claim concern as not a concern; production-mode restrictions stay.
   Every sheet repeats the disk key. Owner ~13:45/~14:00 answers settle locked redirects and the minimal unencrypted normal Wi-Fi copy, with theft/password-change guidance and cable/local fallback; no recovery SSID/hotspot.
-Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. Owner, 2026-10-24 (A1042 Q3): a reinstall from the stick, and the dashboard's reinstall, keep the box's series-name note; the B3 plan's first task resolves that against A1042's released behaviour. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
+Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure holds the affected trust design/release for requalification. Build/API and hardware gates remain. [Detail](backlog/box.md#b3-the-bootable-usb-installer)
 
 - **The box image carries the WireGuard link.** [Detail](backlog/box.md#box-image-constraints-b3)
 

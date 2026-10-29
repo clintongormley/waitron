@@ -382,24 +382,6 @@ same way had no fiscal records and no fiscal alert. The alert is raised in
   not run; whether a real draft can reach that state has not been tested.
   [Detail](#in-demo-a-local-check-that-fails-only-on-a-field-demo-hides)
 
-## Move the start-again note whenever a series name is put into use, and when a plain reset ends an unfinished setup
-
-Left open by A1042 (owner, 2026-10-25: point 1 answered A). Today only Start again writes the
-start-again note (`first-setup-start-again.json` in the state folder, the floor below which no new
-invoice series name is taken). Wanted: the note also moves when setup's fiscal step finishes, when
-a restore finishes, at a promotion — designed so the name chooser never
-refuses its own request. Written at the moment a path picks its name, the note would make the
-chooser refuse that same request's pick until the next minute starts: it re-takes the request's
-existing pick (`packages/fiscal-verifactu/src/hour-selection.ts:326-328`) and refuses
-`minute_not_later` while the clock is before any recorded time floor (`:409-416`); A1042's
-round-4 reviewer ran the real chooser and saw exactly that. Also wanted: a plain `waitron.sh
-reset` raises the note from an unfinished setup's chosen name before it deletes that setup. Until
-then a reset during an unfinished first setup forgets the series name that setup chose, and only
-the box's clock check guards it (`deploy/README.md`, "Resetting a box"). The failover requirement
-that every node holds the current note
-([replication-cloud.md](replication-cloud.md#replication-membership--failover--residuals-afterwards))
-depends on this.
-
 ## A box on an older configuration format blames the export when it is the box that is out of date
 
 Given a newer export, it shows "This export is not compatible with this Waitron version. Export it
@@ -527,13 +509,10 @@ files include, at any depth, a symbolic link or special file, a lock file (`venu
 20,000 entries (`START_AGAIN_ENTRY_LIMIT`), or the finisher refuses `setup.start_again_incomplete`
 for a reason other than found files, the box shows A1042's `setup.start_again_incomplete` page:
 the explanation and what reinstalling would lose, with no choice (`surveyStartAgainLeftovers`,
-`packages/provisioning/src/first-setup-start-again-leftovers.ts`). The same page is shown when
-the start-again note (`<state>/first-setup-start-again.json`) cannot be read: the survey reads it
-to work out the Move's floor, and a note it cannot read makes it explain (the case run held bytes
-that are not JSON). In every one of these cases `classifyStartAgainRefusal` hands back the
-finisher's own refusal, so the survey's reason for explaining is dropped and the start's
-`recovery.serving_refused_start` log line carries the finisher's reason instead (in the run,
-`unlisted file: venue/venue.db` where the survey's was `setup.attempt_invalid`). A finisher refusal with any
+`packages/provisioning/src/first-setup-start-again-leftovers.ts`). In every one of these cases
+`classifyStartAgainRefusal` hands back the finisher's own refusal, so the survey's reason for
+explaining is dropped and the start's `recovery.serving_refused_start` log line carries the
+finisher's reason instead. A finisher refusal with any
 other code is not one of the start's refusals, so that start carries on past it instead
 (`refusedAtStart`, `apps/server/src/first-setup-entry.ts`; read, not run). Option B, offering Keep alone
 for these boxes, is still open to the owner.
@@ -553,18 +532,6 @@ before A1042's finisher runs (`assertStartAgainNotKept`,
 `apps/server/src/first-setup-entry.ts`), so removing the found files by hand does not let the box
 finish Start again. The page says it stays until Waitron is reinstalled. Wanted: a way out that
 does not need a reinstall, decided with the owner.
-
-## A1145: a Move on a box with no start-again note raises no series-name floor
-
-Left open by A1098 (owner question Q3, built with option A). A Move raises the start-again note's
-floor to the newest moved file's time plus 150 seconds, rounded up to the minute, through
-`raiseStartAgainNote`, which keeps the note's `lastName`. When the box has no note (no attempt on
-it ever chose a series name), there is no `lastName` to keep and nothing is raised
-(`raiseNoteToRecord`, `packages/provisioning/src/first-setup-start-again-set-aside.ts`). A moved
-venue whose names were chosen by a clock running ahead could then share a name with a later setup
-on this box. On such a box the survey's `noteFloorMs` is null, so the Move option names no floor
-either. Since A1099 the note can hold no name (`lastName: null`) with only a time floor, so the
-Move could write one here too; building that is this entry.
 
 ## A1146: a found piece on another mount below a root fails after the choice is recorded
 
@@ -689,9 +656,29 @@ reading when it places the recovery. Next step: measure that on a box.
 
 ## Decisions and deliberate limits
 
+**DECIDED (owner, 2026-10-29 ~10:38; A1206): Start again keeps no record of the names it
+deletes.** The owner: "I think we must remove this concept of storing the used series name on
+disk. It introduces too many complications. We use the current minute, with confirmed clock times,
+and the latest invoice numbers if we have any." A new installation name is the box's current UTC
+minute, taken only after a second clock on another machine agrees within 30 seconds, strictly later
+than every name in the history the box can still read (a restored or surviving database, a backup's
+newest record or creation time), after setup's and restore's 90–150 second wait. The start-again
+note, its floor, A1098's Move floor, A1099's damaged-name-record floor and A1131's counting of a
+held setup database's names are gone. A leftover note file is ignored; a plain `waitron.sh reset`
+deletes it. The trade-off the owner accepts: a name an abandoned attempt used is forgotten once
+Start again deletes the attempt, even one AEAT may already have seen. The 90-second wait keeps a
+later setup or restore from repeating it while each box's clock is within 30 seconds of the true
+time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a $action that has forgotten an
+earlier attempt's name still names a later minute when each clock was within 30 seconds"); if both
+clocks are wrong by the same amount, a repeated name is possible. A promotion has no wait
+(`settles` in `packages/fiscal-verifactu/src/hour-selection.ts` is setup and restore only), so it
+is safe only if it comes long enough after a Start again, up to 120 seconds with each box 30
+seconds off; that a promotion comes that late is reasoning about how long joining as a standby
+takes, not measured.
+
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
-  Recover from backup first wipes the failed setup, then restores.** Before the wipe the box adds the
-  setup's series names to its never-reuse note (one step, the existing helpers). Someone who only
+  Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the
+  never-reuse note is retired, so the wipe adds nothing first.) Someone who only
   opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
   beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
@@ -703,7 +690,7 @@ reading when it places the recovery. Next step: measure that on a box.
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
   confirmation in the PR):** Start again does not go ahead when the database holds an invoice or another
   row Waitron never deletes (said to be a fault), when the setup saved its trading settings, or
-  when it finished; the start-again note's floor also covers the database's own series names.
+  when it finished.
 
 **DECIDED (owner, 2026-10-26 ~15:45; built as A1130): a renewal from the open backup recovery page
 extends the recovery session's 15 minutes.** The page renews every 30 seconds while it is open
@@ -713,6 +700,8 @@ accepted that cost so that someone still filling in the recovery form at minute 
 recovery stopped. Without renewals or steps, the session still ends after 15 minutes
 (`apps/server/src/first-setup-backup-lease.test.ts`).
 
+(2026-10-29: superseded by A1206 above — the note is retired; Q1's confirmation records and Q4's
+reset rule for them remain.)
 **DECIDED (owner, 2026-10-24): neither — Start again deletes the attempt after its empty-database
 proof (or, with the database missing, after the person's recorded confirmation) and keeps one small
 note of the last series name, which nothing but `waitron.sh reset --all` deletes (A1042).** The

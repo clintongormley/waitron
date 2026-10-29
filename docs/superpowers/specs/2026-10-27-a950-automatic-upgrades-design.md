@@ -1,3 +1,5 @@
+> 2026-10-29, A1206: the start-again note is retired; §"The start-again floor must survive a rollback" no longer applies.
+
 **Execution authority, 29 October 2026:** the owner subsequently approved the complete implementation plan (option A), one eligible cut per pull request. This supersedes the pending-plan statements below; every prerequisite and real qualification gate remains. See the [plan](../plans/2026-10-29-a950-automatic-upgrades.md).
 
 <a id="a950-automatic-app-upgrades-with-a-recoverable-trial"></a>

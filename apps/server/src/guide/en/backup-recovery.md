@@ -41,15 +41,6 @@ If that recovery used a Waitron Cloud copy, its approval in Waitron Cloud closes
 hour of when it was given. Until then, Waitron Cloud cannot approve a new recovery for this box's
 venue.
 
-If one of the setup's records of its invoice series names is damaged, **Start again** still works,
-after a warning. If the page says the setup database is missing, the warning appears after you
-enter the administrator password you chose during setup. Otherwise this applies only to the box's
-record of the names it chose, and Start again asks for that password first. The page names
-each damaged record, for example "This box's record of the invoice series names it chose is damaged
-and cannot be read.", and says from when new series names can start: usually a few minutes after
-you entered the password. If you set up again before then, the setup waits until that time or, if
-it is more than two and a half minutes away, tells you when you can carry on.
-
 If the page says that Start again has not finished, reload it to see what is left to do. If the box
 is restarting, wait until it answers.
 

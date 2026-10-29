@@ -474,6 +474,10 @@ called weaker than its name, the topic file lists what it does not see.
   from before a restore or Start again, which can hold sales the live database lacks. Guard:
   `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
   [Detail](docs/developers/conventions-data.md#the-backup-room-note).
+- **Start again's confirmation and choice records and the set-aside folder are removed only by
+  `waitron.sh reset --all`** (A1042, A1098). Cost if not: the box forgets what a person confirmed,
+  or deletes files a Move set aside. Guard: `scripts/start-again-records-writers.test.ts`, weaker
+  than its name: reads text, never what a listed file does.
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
   `exclusive: false`; file-changing commands take `lockVenueDatabase` before changing anything.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.
@@ -804,10 +808,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
-  after another machine's clock agrees within 30 seconds (no confirmation) and strictly later than
-  all readable historical names and no earlier than the start-again note's floor (`first-setup-start-again.json` in the state
-  folder; a Start again Move or a Start again past a damaged name record raises it, if lower, to a minute taken from file times, A1098 and A1099, detail in [conventions-data.md](docs/developers/conventions-data.md)), which only `waitron.sh reset --all` removes (owner, 2026-10-24, A1042); guard
-  `scripts/start-again-records-writers.test.ts`, weaker than its name: reads which files name the note, its records or the set-aside folder. Setup/restore wait 90–150 seconds. Only preproduction throwaway
+  after another machine's clock agrees within 30 seconds (no confirmation), strictly later than
+  all readable historical names (a restored or surviving database, a backup's newest record or creation time).
+  Start again keeps no record of the names it deletes (owner, 2026-10-29, A1206, retiring A1042's
+  start-again note): two clocks wrong by the same amount can repeat a name. Setup/restore wait
+  90–150 seconds; promotion does not. [Detail](docs/developers/conventions-data.md). Only preproduction throwaway
   skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;
   working-time chain continues from its head. Guards: hour-selection/hour-clock/minute-selection-
   unknown-name suites (the last weaker than its name) and `packages/workforce/src/restore-continuation.test.ts`.

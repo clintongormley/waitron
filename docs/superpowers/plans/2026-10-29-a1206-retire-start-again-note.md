@@ -98,7 +98,7 @@ Class: **(a)** exists only for the note → delete; **(b)** mixed → named line
 | File | Class | What goes / what stays | Task |
 | --- | --- | --- | --- |
 | `packages/provisioning/src/first-setup-start-again-note.ts` | a | whole module | 8b |
-| `packages/provisioning/src/box-folders.ts` | b | `readStartAgainFloors` goes; `boxFolders` stays | 3 |
+| `packages/provisioning/src/box-folders.ts` | b | `readStartAgainFloors` goes (3); the whole file, `boxFolders` with it, goes in 8b once nothing else used it | 3, 8b |
 | `packages/provisioning/src/first-setup-runtime.ts` | b | `floors` in `readSetupFacts` (`:231-234`) | 3 |
 | `packages/provisioning/src/first-setup-state.ts` | b | `START_AGAIN_NOTE_FILE` in `FIRST_SETUP_HOST_FILES` (`:11`, `:153`) | 8b |
 | `packages/provisioning/src/index.ts` | b | note exports (`:178-185`), `attemptLastWriteMs` (`:202`), `START_AGAIN_FLOOR_MARGIN_MS`/`startAgainSetAsideFloorMs` (`:242-244`), `type StartAgainUnreadable`, `readWellFormedModulePreparations` (`:25`) | 5b, 6, 8b |

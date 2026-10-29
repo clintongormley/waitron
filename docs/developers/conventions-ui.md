@@ -1187,12 +1187,11 @@ can refuse the start four ways:
   are the marker's and that `parseFirstSetupState` accepts (`surveyStartAgainLeftovers`,
   `packages/provisioning/src/first-setup-start-again-leftovers.ts`).
 - `setup.start_again_incomplete`, unchanged, with A1042's explanation, for everything else: the
-  setup record gone, changed or unparseable, a start-again note the survey cannot read (the case
-  run held bytes that are not JSON), a found link, device file or lock file, any other reason the
-  finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries. For each of these
+  setup record gone, changed or unparseable, a found link, device file or lock file, any other
+  reason the finisher gives, or more than `START_AGAIN_ENTRY_LIMIT` found entries. For each of these
   `classifyStartAgainRefusal` hands back the finisher's own error, so the survey's reason for
-  explaining is dropped (for that note, `setup.attempt_invalid`) and the refusal carries the
-  finisher's reason, such as `unlisted file: venue/venue.db`.
+  explaining is dropped and the refusal carries the finisher's reason, such as
+  `unlisted file: venue/venue.db`.
 
 The form is drawn only for `setup.start_again_files_found`, and only when the request's socket is
 TLS (`isSecure`, `apps/server/src/recovery-start-again.ts`); over anything else the page shows the
@@ -1229,7 +1228,7 @@ change that keeps a file's inode, size and time is not seen.
 Each choice writes one record, never replaced and never deleted by the box:
 `<state>/first-setup-start-again-choices/<ms>-<attemptId>.json`, holding the choice, the
 administrator the setup record names, the listed units and digest, and for a Move its set-aside
-folders and note floor (`writeStartAgainChoice`,
+folders (`writeStartAgainChoice`,
 `packages/provisioning/src/first-setup-start-again-choice.ts`). A Move puts the files under
 `<state>/first-setup-set-aside/<stem>/state/` and `…/venue/` when the two roots report one
 filesystem, otherwise the venue files under `<venue>/first-setup-set-aside/<stem>/`
@@ -1237,7 +1236,7 @@ filesystem, otherwise the venue files under `<venue>/first-setup-set-aside/<stem
 the record it makes those folders and renames an empty probe folder from each source root into
 them; a probe that fails with `EXDEV` removes the empty folders it made and refuses
 `setup.start_again_set_aside_unavailable`, and Keep stays available. Then it writes the record,
-raises the note, renames the pieces (a database's main file last, never over anything) and runs
+renames the pieces (a database's main file last, never over anything) and runs
 A1042's finisher. Any failure after the record is written refuses
 `setup.start_again_move_unfinished`, keeping the cause as the error's `reason`: a Waitron
 error's own reason (or its code), otherwise `move failed:` with the system error code and the path
@@ -1247,11 +1246,8 @@ the record write, for example) keeps its own code. A plain `waitron.sh reset` ke
 --all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
 each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
 
-The note floor (owner question Q3, built with its option A): a Move raises the start-again note's
-floor to the newest found file's modification time plus 150 seconds, rounded up to the minute
-(`startAgainSetAsideFloorMs`), and only when the box has a note; with none, nothing is raised, and
-the survey's `noteFloorMs` is null. The Move option shows that time only when the survey has one
-and it is later than the box's clock.
+A Move raises no series-name floor (A1206, 2026-10-29: Start again keeps no record of the names
+it deletes), and the page no longer says from when new names can start.
 
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the

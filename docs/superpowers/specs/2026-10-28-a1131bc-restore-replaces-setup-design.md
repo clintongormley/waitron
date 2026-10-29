@@ -1,3 +1,5 @@
+> 2026-10-29, A1206: the start-again (never-reuse) note is retired, so the wipe adds nothing to a note.
+
 # A1131b and A1131c: Recover from backup first deletes the failed setup, then restores into the box's usual folders
 
 **Revised 2026-10-29 on the owner's answers of 2026-10-28 (15:25, 15:35, 15:40), then on its first
