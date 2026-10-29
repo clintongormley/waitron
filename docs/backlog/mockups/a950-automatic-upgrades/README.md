@@ -2,16 +2,22 @@
 
 # A950: checking a clean restart before rollback closes
 
-[Revised design proposal](../../../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md),
+[Approved design](../../../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md),
 §8, is the complete EN/ES screen contract.
 
-**Revised 28 October 2026; needs-owner-review for the whole design.** The owner's closing rule
-is resolved: successful restart, clean database upgrade and a running, answering system end
-rollback automatically, before normal requests and duties resume. No first order, first action
-or acceptance button ends it. The later owner instruction requires an administrator-chosen local
-closed window after close/reports/backup and before reopening. Automatic-on and spare-first
-remain proposals.
-No whole-design or build approval is recorded.
+**29 October 2026 supersession:** the owner approved the complete design, with automatic-on
+and an editable **03:00–05:00 local** default for every venue. You do not need to choose hours
+before updates become eligible. Close, reports, backup, quiet time and qualification still gate
+application. Pause preserves the saved window. Clearing both hours explicitly saves an unset
+window; it blocks both application paths while downloads and sales continue. Partial or
+invalid hours cannot be saved. Restarting never replaces an explicit unset choice with defaults.
+The implementation plan awaits owner approval before any build.
+
+The owner's closing rule remains: successful restart, clean database upgrade and a running,
+answering system end rollback automatically, before normal requests and duties resume.
+The **01:30–08:00** settings pictures show a customised saved example. Their older “proposed”
+badge records the illustration revision, not current approval status. These pictures remain
+historical custom-window examples; the current form/copy contract below takes precedence.
 
 These revised static illustrations use example data and theme tokens. They prove no updater,
 filesystem rollback, payment recovery, publication or two-box handover. Actual product
@@ -33,8 +39,8 @@ rendering/accessibility and runtime qualification remain build gates.
 The three short filenames are English, light theme, 390 px. Each also has
 `-<en|es>-<light|dark>-<390|1280>.png` variants for both themes and phone/desktop widths.
 Those existing 24 state views stay unchanged for this window revision. There is no separate
-healthy READY illustration. The eight new settings views below still need driver rendering and
-visual inspection; this brief does not claim that either has happened.
+healthy READY illustration. The 28 October design records rendering and visual inspection of the eight settings views.
+That historical illustration receipt does not establish product rendering or runtime qualification.
 
 | State | English copy | Texto en español |
 | --- | --- | --- |
@@ -54,24 +60,25 @@ journal or restore is uncertain. A spare completion says it is ready to follow, 
 [Spanish phone](04-window-settings-es-dark-390.png)
 
 The eight new views are `04-window-settings-<en|es>-<light|dark>-<390|1280>.png`.
-The existing 01–03 files are unchanged. This is a proposed Box settings form, with timeline
+The existing 01–03 files are unchanged. This is a Box settings design illustration, with timeline
 alongside at 1280 px and directly below at 390 px; keep labels and full status text readable.
 Use the established theme tokens, field primitives, draft handling and Save/Cancel conventions.
-Save is quiet and disabled for this unchanged saved example. A complete empty window is allowed
-as unset; a partial/invalid window gets field errors and the localized bottom correction sentence.
+Save is quiet and disabled for this unchanged saved example. Both empty hours can be saved as
+unset; partial or invalid hours get field errors and the localized bottom correction sentence.
+A fresh form starts at 03:00–05:00 local with automatic updates on.
 The updater does not use the venue's authored opening hours to fill these fields.
 
 Use the same **example**, viewed at **2026-10-29 06:46, Europe/Madrid, UTC+01:00**, in all eight.
 All times below are illustrative settings/results, not defaults, actual runs or duration proof.
-The completed report/backup times illustrate the proposed qualified receipts in design §3;
+The completed report/backup times illustrate the approved receipt contracts in design §3;
 today's source does not supply those update-admission receipts. Show a small visible
-“Design example” / «Ejemplo de diseño» label and automatic-on as a proposed setting. Do not
+“Design example” / «Ejemplo de diseño» label and automatic-on as an approved setting. Do not
 expose receipt hashes or internal revision jargon in the product illustration.
 
 | Element | Exact English copy | Texto exacto en español |
 | --- | --- | --- |
 | Title and introduction | **Update window**. “Choose a period when your venue is closed, after close, reports and backup, and before you reopen. Waitron waits for them to finish.” | **Horario de actualización**. «Elige un periodo en el que el local esté cerrado, después del cierre, los informes y la copia de seguridad, y antes de volver a abrir. Waitron espera a que terminen.» |
-| Automation | **Automatic updates**: **On (proposed)** | **Actualizaciones automáticas**: **Activadas (propuesta)** |
+| Automation | **Automatic updates**: **On** | **Actualizaciones automáticas**: **Activadas** |
 | Start field | **Window starts at** (required): **01:30** | **El periodo empieza a las** (obligatorio): **01:30** |
 | End field and hint | **Window ends at / reopen by** (required): **08:00**. “This is your latest reopening boundary. Leave time for all checks and a possible return to the previous version.” | **El periodo termina a las / reapertura límite** (obligatorio): **08:00**. «Esta es la hora límite para volver a abrir. Deja tiempo para todas las comprobaciones y una posible vuelta a la versión anterior.» |
 | Zone | **Time zone**: **Europe/Madrid · UTC+01:00** | **Zona horaria**: **Europe/Madrid · UTC+01:00** |
@@ -100,7 +107,9 @@ enough for this revision. Driver/product qualification must check the alternativ
 
 | State | Exact English copy | Texto exacto en español |
 | --- | --- | --- |
-| No chosen window | “Choose an update window. No update will be applied yet. Verified downloads can continue in the background, and you can keep taking orders.” | «Elige un horario de actualización. Todavía no se aplicará ninguna actualización. Las descargas verificadas pueden continuar en segundo plano y puedes seguir tomando pedidos.» |
+| Default window | “Automatic updates are on. Your update window is 03:00–05:00 local time. You can change it or pause automatic updates.” | «Las actualizaciones automáticas están activadas. El horario de actualización es de 03:00 a 05:00, hora local. Puedes cambiarlo o pausar las actualizaciones automáticas.» |
+| Explicitly cleared window | “You cleared the update window. No update will be applied until you save hours. Verified downloads can continue, and you can keep taking orders.” | «Has quitado el horario de actualización. No se aplicará ninguna actualización hasta que guardes un horario. Las descargas verificadas pueden continuar y puedes seguir tomando pedidos.» |
+| Paused | “Automatic updates are paused. Your saved hours are unchanged. Verified downloads can continue, and you can keep taking orders.” | «Las actualizaciones automáticas están en pausa. El horario guardado no ha cambiado. Las descargas verificadas pueden continuar y puedes seguir tomando pedidos.» |
 | Reports on demand, not done | “Finish the close and reports for business day {day}, then record their completion. No daily report job is scheduled.” **Record close and report completion** is offered only with the qualified workflow. | «Termina el cierre y los informes de la jornada del {day} y registra que han terminado. No hay ninguna tarea diaria de informes programada.» **Registrar cierre e informes completados** solo se ofrece con el proceso validado. |
 | Required reporting unavailable | “Required close/report completion cannot be confirmed. This update will wait. View details, or leave the current version running.” | «No se puede confirmar que el cierre y los informes necesarios hayan terminado. La actualización esperará. Consulta los detalles o deja la versión actual en funcionamiento.» |
 | Backup overlaps window | “Waiting for the backup scheduled for {due}. Its completion is not yet confirmed. Waitron will skip this window if there is not enough time left. Orders remain available.” | «Esperando la copia de seguridad programada para {due}. Aún no se ha confirmado que haya terminado. Waitron omitirá este periodo si no queda tiempo suficiente. Puedes seguir tomando pedidos.» |
@@ -114,8 +123,7 @@ enough for this revision. Driver/product qualification must check the alternativ
 
 Window preview errors belong beside the affected field, with the bottom correction sentence;
 request refusals preserve the draft. Authentication is offered on the same screen for authorised
-changes, with safe Cancel/Leave. A no-window state is a status, not an invalid untouched form.
-All eight new variants have been rendered and visually inspected. The fresh builder check
-precedes presentation of the full revision. Whole-design approval remains pending; no plan/build
-is allowed by this document. Runtime scheduling, receipts, rollback and paired-box behavior remain
-**UNVERIFIED**.
+changes, with safe Cancel/Leave. The untouched default form is valid, quiet and unchanged.
+A deliberately saved unset window is also a valid status, not an invalid untouched form.
+The 28 October design records rendering and visual inspection of all eight new variants. The design is approved; the plan still needs owner approval before any build. Runtime scheduling,
+receipts, rollback and paired-box behavior remain **UNVERIFIED / NOT RUN**.

@@ -49,9 +49,9 @@ supporting ancient buggy versions."
 
 Three parts:
 
-- **Upgrading takes no effort.** The automatic upgrade below (snapshot, upgrade, check, roll back
-  until the first order) is the mechanism. Still to decide: whether automatic upgrades are on by
-  default, and when they run (the quiet hour B3 gives A950).
+- **Upgrading takes no effort.** The approved A950 design below keeps rollback available until a clean,
+  running restart. Automatic updates start on, with an editable 03:00–05:00 local window
+  (owner, 2026-10-29). Its plan awaits owner approval; build and qualification remain open.
 - **Reasons not to fall behind.** Nothing defines how far behind a box may be. To decide: how many
   versions or months back are still supported; what a box beyond that is told, and where (the
   dashboard, the till, an email); and what it loses: Cloud services, new features, help with
@@ -98,8 +98,8 @@ Still open:
 
 ## Automatic upgrades with rollback until a clean, running restart
 
-**A950 revised proposal, 2026-10-28; needs-owner-review for the whole design, no build authority.**
-The [proposal](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
+**A950 design approved, 2026-10-29; plan awaiting owner approval, no build authority.**
+The [approved design](../superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md) follows the
 owner's 28 October answer: rollback closes automatically only after a successful restart of
 the new version, a confirmed clean database upgrade and confirmation that the system is running
 and answering. This supersedes the earlier “until the first order” title and sequence, including
@@ -113,20 +113,22 @@ does not wait overnight for staff. Sign-in, clock-ins, PIN changes, refunds, fil
 backup publication are no longer held by the updater after closure. A later failure preserves
 current state and needs repair; the saved old state is never offered after closure.
 
-Proposed clean-database checks cover the actual packaged enabled migration sets and dependencies,
+Approved clean-database requirements cover the actual packaged enabled migration sets and dependencies,
 no incomplete/ahead sets, database integrity, foreign keys, full protection definitions and
 identity/fiscal/workforce/history/allocation preservation. Running checks require fresh local
 TLS/listener and representative passive menu/config/history responses bound to the same candidate,
 boot and attempt. Health/setup/recovery 200 or a started process alone is insufficient. No venue
 test sale or forced staff login is required. These are **UNVERIFIED acceptance requirements**.
-The later 28 October owner instruction replaces the fixed overnight window with an explicit
-administrator-chosen local closed period, ending at the administrator’s latest reopening boundary.
-No chosen window means no automatic or manual application yet; verified downloads and ordinary
-sales can continue. Wait for actual close/report and archive completion for that day’s close
+The 29 October owner approval sets automatic-on with an editable **03:00–05:00 local**
+default for every venue. No initial administrator selection is needed. Both fields remain
+required as a valid pair when configured; clearing both explicitly saves an unset window,
+which blocks automatic and manual application without affecting downloads or sales. Defaults
+never overwrite that saved choice. Pause keeps the saved hours. The end is the latest reopening boundary.
+Verified downloads and ordinary sales continue while application waits. Wait for actual close/report and archive completion for that day’s close
 episode on the actual primary, then all quiet checks and the full trial plus rollback budgets.
 Late/failed/missing/unknown work defers application without cancelling it or gating sales.
 
-The proposed timeline distinguishes the configured business-day start and dated labels, reports
+The designed timeline distinguishes the configured business-day start and dated labels, reports
 on close with no fixed scheduled time, selected backup schedule, actual next due and completed
 status, update window and reopening boundary. Source-only inspection at
 `288213aef2b66189480c341954dc7dfaea256fdd` supplements the unchanged historical inventory in
@@ -135,12 +137,12 @@ it does not prove close/report completion. The inspected daily-report read is on
 frozen-close function has no production app caller in that inspection. No rollover report
 scheduler is assumed or proposed. The design cites source lines and the caller search.
 
-My-call proposals require qualified day/node/term/settings/data-bound completion receipts and a
+Approved contracts require qualified day/node/term/settings/data-bound completion receipts and a
 final admission fence, on-demand close/report completion where no job is scheduled, and deferral
 when required reporting or backups are disabled/unavailable. A local snapshot or standby’s
 disabled archive duty cannot stand in for the primary’s completed archive. Cross-midnight/DST,
 clock/cutover edits and stale-day evidence have explicit deferral rules. Automatic-on, bounded
-attempts/quarantine, spare-first and these receipt/policy choices still need full-design approval.
+attempts/quarantine, spare-first and these receipt/policy choices have whole-design approval.
 
 The design retains B3's five encrypted subvolumes, complete stopped-state inventory, old images
 by immutable digest plus container references, logs/host evidence outside rollback and the
@@ -154,7 +156,7 @@ gates. External outages do not block successful local closure or ordinary sales.
 
 App updates remain separate from B3 host/TPM updates. Signed manifest/A1049 Cloud hold checks
 precede freeze without putting Cloud on the sale path. Non-B3 disks need a separately qualified
-whole-state copy adapter. Failure reporting stays local with proposed existing authorised
+whole-state copy adapter. Failure reporting stays local with existing authorised
 notifications; A9/Cloud reporting and A1016 backup/support choices remain separate.
 
 **The series-name note** (owner, 2026-10-24, A1042 Q5): rollback keeps the newer floor. An ordinary
@@ -169,7 +171,12 @@ A950 behaviour. No A950 Linux, VM, TPM, btrfs, bucket or two-box runtime qualifi
 A799 historical qualification, B3 hardware/trust holds and separate build authority remain gates.
 The [mockup brief and EN/ES copy](mockups/a950-automatic-upgrades/README.md) retain the existing
 validation/restoration/completion views and add eight rendered and visually inspected window-settings
-views. The closing policy is resolved; whole-design approval remains, with no plan or build authority.
+views. The [sliced implementation plan](../superpowers/plans/2026-10-29-a950-automatic-upgrades.md)
+awaits owner approval before any build. Remaining work includes the production close/report receipt
+producer, archive completion integration, account-free Cloud hold contract, B3 host/image/trust
+qualification, A799 historical evidence, and released A947 stream/spare/membership interfaces.
+Application stays disabled until its exact release and platform pass every required gate.
+All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
 
 ## Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check
 

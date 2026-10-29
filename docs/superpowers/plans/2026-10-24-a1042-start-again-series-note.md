@@ -1,5 +1,12 @@
 # A1042: "Start again" keeps one small note, not an archive — implementation plan
 
+> **A950 pointer, 29 October 2026:** use the [approved A950 design](../specs/2026-10-27-a950-automatic-upgrades-design.md)
+> for current rollback scope. It restores the captured application volume set while retaining
+> logs, host evidence and the newest floor overlay; it closes rollback after a clean, running
+> restart. Earlier first-order titles and whole-volume descriptions below are historical.
+> The newer/unknown/damaged-floor requirements and A1042's owner decisions remain. The A950 plan
+> awaits owner approval before any build.
+
 > 2026-10-26 (A1137): the backup API checks referenced below now span
 > `setup-first-backup-api.test.ts` and `setup-first-backup-api-adapters.test.ts`.
 > Run both files to include the queued-commit and provider-adapter cases.

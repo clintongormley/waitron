@@ -2,10 +2,10 @@
 
 # A950: automatic app upgrades with rollback until a clean, running restart
 
-**PROPOSAL, revised 28 October 2026. Status: needs-owner-review for the whole design.
-No whole-design or build approval is recorded here.**
+**DESIGN APPROVED, 29 October 2026. The implementation plan awaits owner approval.
+No build authority is recorded here.**
 You need the box to update without losing yesterday's records or tonight's work. The
-proposed updater keeps the complete stopped state and exact previous images while it checks
+approved updater design keeps the complete stopped state and exact previous images while it checks
 the new version. Rollback closes automatically after a successful restart, a clean database
 upgrade and confirmation that the system is running and answering. Normal work then resumes.
 Rolling back keeps you trading; it does not fix the failed release. A950 is required before
@@ -13,14 +13,24 @@ go-live, by the owner's 21 October decision.
 
 **Dated supersession, 28 October:** the owner's answer replaces the earlier first-order and
 first-real-action boundaries, including any healthy READY wait or acceptance step. It settles
-the closing rule. The later 28 October window instruction replaces the fixed overnight window:
-you choose a local closed period, after close, reports and backup, ending before reopening.
-Automatic-on, spare-first and all choices labelled **my call** remain proposed and unapproved.
-The complete revised design still needs owner approval.
+the closing rule. The later 28 October instruction requires a local closed period, after close,
+reports and backup, ending before reopening.
+
+**Dated supersession, 29 October:** asked to approve the complete revision at `c0fbcd888`, the
+owner answered “Default the hours to 3-5, so upgrades are on by default.” Lane E's
+`questions.md`, “OWNER ANSWER (2026-10-29 ~02:00 CET)”, relays whole-design approval with that
+change. Every venue starts automatic-on with an editable **03:00–05:00 local** window.
+This replaces waiting for an initial administrator selection. An administrator can still
+explicitly clear both saved hours; that unset choice blocks automatic and manual application
+while verified downloads and sales continue. Restarting preserves it rather than reinstalling
+the default. Pause remains the separate switch and keeps the saved hours. All other design contracts, including the former **my call**
+choices, are approved. The [implementation plan](../plans/2026-10-29-a950-automatic-upgrades.md)
+needs owner approval before any build. Historical source tables and quotations remain evidence
+of their dated inspections only. All A950 runtime qualification remains **UNVERIFIED / NOT RUN**.
 
 ## 1. Contracts and evidence status
 
-This is a design, not an implementation plan. It changes no fiscal hash, chain, allocation,
+The plan linked above describes how to build this approved design. It changes no fiscal hash, chain, allocation,
 invoice writer or installation name. An ordinary upgrade continues the same node, keys,
 SIF, series, next number and fiscal/workforce heads. It performs no setup, restore-as-new or
 promotion. The ahead-of-image guard stays: rollback means the matching old complete state **and** old image, never an old image over migrated data or a downgrade
@@ -32,7 +42,7 @@ Read together:
 - [B3 approved-with-changes design](2026-10-21-b3-usb-installer-design.md), §§6, 7.4,
   7.5, 8 and 14; [B3 plan](../plans/2026-10-26-b3-usb-installer.md), Global Constraints
   and execution gates. Its six planned slices exclude slice 7 daily release polling;
-  A950 must obtain separate build authority for that integration. B3 is not built by this proposal.
+  A950 must obtain separate build authority for that integration. B3 remains a separate prerequisite.
 - [A947 two-box design](2026-10-21-a947-two-box-failover-design.md), §§3, 5–8:
   waiting spare, single primary, fencing and explicit takeover stay authoritative.
 - [A799 historical upgrade design](2026-10-19-a799-real-database-upgrade-testing-design.md)
@@ -41,7 +51,7 @@ Read together:
   Its approved build authority does not approve A950. Real historical qualification precedes
   enabling automatic upgrades; a rollback facility cannot replace it.
 - [A1016 and A1049](../../backlog/box.md): easy updating and off-box copies, and honouring
-  a Cloud-held release. This proposal changes no Cloud service or support-retirement policy.
+  a Cloud-held release. This design changes no Cloud service or support-retirement policy.
 
 **Historical source inventory: READ ONLY at `9d5853c310e691ed558d80a8a12d0dbddccab2e7`.**
 The following anchors describe source inspected at that SHA, not today's tree or executed
@@ -80,16 +90,16 @@ The owner's 28 October answer is: “After a successful restart of the new versi
 assume that the upgrade is ok. We just want to be sure that the database has upgraded cleanly.”
 The addition is: “And that we have a running system.” The receipt is Lane E's local
 `questions.md`, lines 743–752, relayed at about 01:50–01:52 CET. These are owner instructions,
-not an outside technical claim or whole-design approval.
+not an outside technical claim. Whole-design approval is recorded separately above.
 
 Rollback therefore ends only when **all three** hold for this attempt: the new version has
 successfully restarted, its database upgrade is confirmed clean, and fresh local checks
-confirm that the system is up and answering. Section 5 proposes the evidence for those checks;
+confirm that the system is up and answering. Section 5 specifies the evidence for those checks;
 none has been runtime-qualified for A950. The host durably closes rollback before releasing
 normal requests and duties. No first order, first real change, scheduled action or owner
 acceptance click closes it. There is no healthy reversible version waiting for morning.
 
-For example, Harbour Kitchen has finished service and meets the proposed quiet-window checks
+For example, Harbour Kitchen has finished service and meets the approved quiet-window checks
 at 06:50, inside its administrator-chosen window after the day’s close, reports and backup
 have completed (§3). The host stops all writers, saves the complete state and starts the new
 version in validation mode. At 06:52 the packaged migrations, database preservation checks and fresh local
@@ -108,14 +118,16 @@ Their own retry, publication and membership rules still apply.
 
 ## 3. Scheduling without putting a release server on the sale path
 
-**My call, still PROPOSED:** automatic app updates are on by default for qualified
-stick-installed boxes. Application waits until an administrator saves an explicit local start
-and end in Box settings. There is no preset window and no inference from opening hours or
-inactivity. With no chosen window, show “Choose an update window”; verified background downloads
-may continue, but neither automatic nor manual application can freeze service. Ordinary sales
-continue. You can pause automation or choose Update now; manual application meets the same
-window, close/report/backup, time-budget and quiet checks. No version-age policy disables sales.
-Off-box backup defaults and commercial support ages remain A1016 decisions.
+**Approved design:** automatic app updates are on by default for qualified stick-installed
+boxes. Every venue starts with an editable **03:00–05:00 local** window in its named time zone;
+no initial administrator selection is required. The default does not prove the venue is closed
+or waive close/report/backup, quiet or qualification gates. You can pause automation or choose
+Update now; manual application meets the same window, close/report/backup, time-budget and quiet
+checks. You can still save both hours empty to leave the window unset. A partial or invalid
+window cannot be saved; an explicit unset window blocks both application paths until you save
+valid hours. Defaults initialise missing first settings only and never overwrite that choice.
+No hours are inferred from opening hours or inactivity. No version-age policy disables
+sales. Off-box backup defaults and commercial support ages remain A1016 decisions.
 
 The saved end is your **latest reopening boundary**: admission must reserve enough time to restore normal work before it.
 Choose a period you intend the venue to be closed, with room for late reports, backups and the
@@ -150,7 +162,7 @@ and the day's reports” (`apps/dashboard/src/i18n/strings.ts:1780`) is not evid
 
 ### Completion means this closed day, on the actual primary
 
-**My call, PROPOSED:** obtain durable completion receipts from qualified close/report and backup
+**Approved design:** obtain durable completion receipts from qualified close/report and backup
 producers. These are new contracts, not existing status booleans. Producer receipts carry venue/location,
 actual primary node and membership term, closed business-day label D and resolved UTC bounds,
 close episode ID, relevant input/data generation, producer settings revisions (report/job
@@ -165,7 +177,7 @@ for D, plus completion of its required report outputs for that same data generat
 qualified close/report workflow declares that required output set; A950 cannot guess it from
 installed modules or accept an absent/unknown declaration as an empty set. Ten idle
 minutes, a closed station, midnight and rollover prove none of these. **For reports with no
-scheduled job, my call:** finish them on demand, then record close/report completion through an
+scheduled job:** finish them on demand, then record close/report completion through an
 authenticated workflow bound to those outputs. Show “On close; no fixed scheduled time” until
 there is an actual completion time. Merely opening a live Sales report is not a frozen close.
 Where a frozen close is required, use its real committed record; its absent production workflow
@@ -180,7 +192,7 @@ started, failed, overdue, missing and unknown outcomes are not complete. A cance
 cannot disappear from the accepted inventory mid-attempt. Work that is unrelated to closing still
 meets the quiet checks below. No updater cancellation makes a late job fit.
 
-**For backups, my call:** require a completed archive captured after the accepted close/report
+**Approved backup contract:** require a completed archive captured after the accepted close/report
 outputs, covering their committed data, stored successfully at every enabled configured archive
 destination, with the whole run and its cleanup settled. Record artifact identity/digest,
 capture point and per-destination storage/pruning outcomes under the same effective settings.
@@ -231,7 +243,7 @@ clock until the next backup cycle; do not promise an immediate backup move. Requ
 review/save of the update window after a clock change before application resumes, without
 restarting report or backup jobs merely to obtain a new receipt.
 
-**My call:** a cross-midnight window is one occurrence identified by its local start date,
+**Approved design:** a cross-midnight window is one occurrence identified by its local start date,
 zone and saved settings generation. Resolve both endpoints to UTC. If either local endpoint is
 missing or repeated at a daylight-saving change, skip that occurrence with an explanation; do
 not pick one offset silently. An internal offset change with unique endpoints uses the real
@@ -252,7 +264,7 @@ or uncertain at the latest safe start, skip the update and let it finish. These 
 settings/statuses, neither defaults nor measured durations. The timeline shows scheduled, actual
 and unknown times separately; §8's EN/ES settings brief gives the exact illustration copy.
 
-The proposed host service checks B3's signed release manifest daily with jitter, verifies
+The planned host service checks B3's signed release manifest daily with jitter, verifies
 signatures against its embedded current/spare public keys, platform, minimum host protocol,
 source and immutable app/agent/dependency digests. A1049 adds a fresh authenticated Cloud hold
 answer bound to that exact release; unknown/stale/unavailable status defers offering/applying
@@ -275,7 +287,7 @@ work to make a quiet window. Pending unsent fiscal/email work may be frozen, not
 to determine quiet status defers the upgrade, not current service. The fence stops a fresh order
 slipping between the final check and shutdown; a request already admitted makes that attempt defer.
 
-**My-call budgets:** release/download checks get three bounded attempts per daily check,
+**Approved budgets:** release/download checks get three bounded attempts per daily check,
 30-second metadata/hold attempts and 10-minute image attempts; no freeze before completion.
 Freeze/drain gets two minutes, migration/readiness five minutes and restoration/old-readiness
 five minutes each. Require strictly more than the full 17-minute total before freeze against
@@ -326,17 +338,17 @@ underlying `@rootfs` directories. Snapshot `@volumes` read-only and record its i
 inventory and release binding before launching candidate code. Check integrity and matching WAL/
 journal set without deleting side files. No promise of size-independent timing is made.
 
-**My call:** keep one rollback set and one active attempt, plus bounded failed-attempt evidence.
+**Approved design:** keep one rollback set and one active attempt, plus bounded failed-attempt evidence.
 Do not delete the rollback set to make its candidate fit. Disk-full during pull, journal write,
 snapshot or readiness means defer or restore, according to the phase. Snapshot success does not
 reserve enough blocks for migrations; preflight must measure data/metadata headroom and trial
 must handle exhaustion. No reserved disk allocation is introduced. After closure the snapshot is
 never offered as a rollback; remove only owned obsolete data after a durable completion record.
 
-For a manually installed/non-B3 disk, **my call:** defer automatic updates unless a separately
+For a manually installed/non-B3 disk, **approved design:** defer automatic updates unless a separately
 qualified stopped whole-state copy adapter provides the same inventory, capacity and atomic
 restoration contract. Do not silently repartition it or call a database-only copy a substitute.
-The historical install path (§1) supplies no A950 rollback contract; this proposal does not
+The historical install path (§1) supplies no A950 rollback contract; this design does not
 qualify it.
 
 ### The start-again floor must survive a rollback
@@ -365,7 +377,7 @@ refusal evidence; never clear refusal flags just to force the old app to trade. 
 
 ## 5. Trial startup and the durable no-return interlock
 
-The following checks and host protocol are **proposed acceptance requirements, UNVERIFIED**.
+The following checks and host protocol are **approved acceptance requirements, UNVERIFIED / NOT RUN**.
 They implement the resolved owner boundary without authorising a build.
 
 Add a dedicated upgrade-validation mode, checked at entry **before** recovery/reset/restore
@@ -481,7 +493,7 @@ completion answer was lost. Old-version work requires no per-operation host call
 
 ## 6. Crash and failure outcomes
 
-Every phase below is proposed host-journal state. Recovery is idempotent and records exact
+Every phase below specifies planned host-journal state. Recovery is idempotent and records exact
 substeps; partial replacement is never inferred complete from a directory name.
 
 | Durable phase when interrupted | Required recovery outcome |
@@ -512,7 +524,7 @@ consistent spare database and its store. Do not overwrite them with migrated tri
 prune their generations. The freeze is intentional protection unavailability, shown explicitly.
 
 Supervisor opening in the historical inventory (§1) does not qualify resuming an old local
-LTX/WAL position under a newer image. **My call:** use a fresh generation prefix after closure, and after rollback
+LTX/WAL position under a newer image. **Approved design:** use a fresh generation prefix after closure, and after rollback
 if continuity has not been independently qualified for that exact restored set/version. No
 in-place rewrite/reuse of a published prefix. At the same node/term, qualify the actual 0.5.17
 adapter, full-copy readiness and conditional pointer handoff, including crash/retry. A new
@@ -533,7 +545,7 @@ present it as containing postclosure work. Before rollback, a newer membership o
 another primary stops restoration/admission for reconciliation under A947. No update grants
 authority to promote, assume peer failure or start a new chain.
 
-**My call: upgrade the spare first, one box at a time.** A release must declare and qualify
+**Upgrade the spare first, one box at a time.** A release must declare and qualify
 the old-primary/new-spare and new-primary/new-spare combinations before automatic paired use:
 host protocol/journal, stored schema, Litestream/S3/LTX format, membership/fencing, tail transfer,
 takeover validation and print-agent protocol. A version label alone supplies no compatibility
@@ -566,7 +578,7 @@ name change occurs merely to update. A manager's separately authorised real take
 the upgrade attempt: new membership permanently bars stale primary admission/rollback until
 A947 reconciliation. The updater never undoes an acknowledged takeover.
 
-If the spare is missing/incompatible before starting, **my call:** defer automatic paired upgrades
+If the spare is missing/incompatible before starting, **approved design:** defer automatic paired upgrades
 and show that reason; an administrator can explicitly choose a qualified single-box attempt,
 accepting loss of the spare. If it is lost during primary validation, apply A947's authority
 checks. Loss of the peer alone is not a failed local running check: proven authority and
@@ -585,14 +597,17 @@ The eight `04-window-settings-<en|es>-<light|dark>-<390|1280>.png` settings view
 next to the fields on desktop and directly below them on phone. All eight new views have been
 rendered and visually inspected. PNGs are documentation illustrations, not product or runtime proof.
 
-The settings view shows automatic-on as proposed, start/end with the end labelled as latest
+The planned settings form starts automatic-on with the editable 03:00–05:00 local default, with the end labelled as latest
 reopening, the saved time zone and dated business-day boundaries, actual close/report status,
 each selected backup schedule/actual next due/completion status and why application waits.
-No chosen window says no automatic application yet, with downloads and sales available.
+The default needs no initial Save. Pausing automation preserves the saved hours, downloads and sales.
 Offer Save, Cancel, Pause automatic updates, Backups and the close/report completion workflow
 when qualified, with on-screen admin authentication where needed. Update now shares §3’s gates.
-Use the shared field/draft/Save/inline-error contract; an empty optional window can be saved as
-unset, while a partial/invalid window cannot be saved as configured. No inferred hours or hidden
+Use the shared field/draft/Save/inline-error contract. Both hours empty can be saved as unset;
+partial or invalid hours cannot be saved. An unset window blocks manual and automatic
+application while downloads and sales continue. The 01:30–08:00 illustrations show a
+custom saved window, not the default. Their older “proposed” badge is illustration history, not
+a pending design decision. No inferred hours or hidden
 acceptance of disabled backups is shown.
 
 | State | English | Español |
@@ -626,7 +641,7 @@ of the current state is qualified, offer it with its actual effect; otherwise re
 download of a redacted report and Stop. Do not promise retry will cure an unknown cause.
 
 Record failure locally on `@host-state` and retained logs before restoration; after old readiness,
-show a persistent Box alert and last-attempt details. **My call:** existing authorised notification
+show a persistent Box alert and last-attempt details. **Approved design:** existing authorised notification
 channels may send a redacted report after service returns, queued if offline. No automatic new
 support/Cloud upload or A9 bug-report capability is assumed. Show completed rollback only with
 positive containment/no-admission, complete-restore, old-readiness and RESTORED evidence. Show
@@ -649,11 +664,11 @@ SSID/hotspot. Stale/unjoinable Wi-Fi offers cable/local recovery, not a working-
 B3's actual Android trust hold and physical-device gates remain, unchanged.
 
 **All gates below are UNVERIFIED / NOT RUN for A950.** They are acceptance requirements for a
-later separately approved build, not a task plan or evidence that this design is ready to ship.
+later separately approved build, not execution evidence that this design is ready to ship.
 
 | Gate | Required discriminating evidence |
 | --- | --- |
-| Scheduling and completion | Prove an unset window admits no freeze while downloads/sales continue; manual has identical gates. Cover close/report on demand with no scheduler, actual scheduled jobs, disabled/missing producers, late/failed/unknown results, archive captured before close, every-destination storage versus early upload/pruning/cleanup, callbacks from replaced sweeps and startup/reload copies. Race new work/jobs/settings/term changes against final admission; reject wrong day/node/term/revision/data generation and a prior day’s receipt, while accepting the same unbroken D episode after rollover. Cover fixed/weekday/interval/auto next due, retained old-clock deadlines, pending cutover activation, cross-midnight and DST gap/fold/internal transition, clock jumps, reboot and revision-based duplicate attempts. Positive controls must admit the fully complete quiet case with full budgets, reject exactly-at-cutoff admission and preserve real jobs on deferral. Check both-box evidence comes from the primary and reserve sequential budgets/catch-up. Inspect all eight EN/ES timeline views and no-window/wait/skip/disabled statuses in the eventual product. |
+| Scheduling and completion | Prove a fresh venue starts automatic-on with an editable 03:00–05:00 local window and needs no initial Save; pause keeps the saved hours and blocks automation while downloads/sales continue. An explicitly cleared pair stays unset across restart and blocks both application paths while downloads/sales continue; partial/invalid edits refuse. Manual has identical prerequisites. Cover close/report on demand with no scheduler, actual scheduled jobs, disabled/missing producers, late/failed/unknown results, archive captured before close, every-destination storage versus early upload/pruning/cleanup, callbacks from replaced sweeps and startup/reload copies. Race new work/jobs/settings/term changes against final admission; reject wrong day/node/term/revision/data generation and a prior day’s receipt, while accepting the same unbroken D episode after rollover. Cover fixed/weekday/interval/auto next due, retained old-clock deadlines, pending cutover activation, cross-midnight and DST gap/fold/internal transition, clock jumps, reboot and revision-based duplicate attempts. Positive controls must admit the fully complete quiet case with full budgets, reject exactly-at-cutoff admission and preserve real jobs on deferral. Check both-box evidence comes from the primary and reserve sequential budgets/catch-up. Inspect all eight EN/ES timeline views and default/paused/unset/wait/skip/disabled statuses in the eventual product. |
 | Closure and host admission | Apply §2's resolved boundary. Race successful-check closure against explicit/failed-check rollback both ways; cut power before/after durable closure and release; lose check/completion answers; reject stale boot permits and unknown journals. Prove no effect before closure and no restore after closure or RESTORED, with negative controls. An idle overnight success must close without staff, first work or an acceptance click; normal operations need no ongoing updater roundtrip. |
 | Complete-state durability | Encrypted Linux btrfs rig, pinned Docker store, all writers stopped, exact mount/nested-subvolume inventory, side files and whole-state restoration. Cut every journal/restore phase; prove logs, host marker, key/UUID and newer/unknown/damaged floor survive. Refuse missing host/log mounts and unsupported old parsers. |
 | Capacity and images | Full-data and metadata exhaustion on an owned small throwaway filesystem during image/snapshot/migration/closure/restore. Exact old digests launch offline; supported cleanup cannot prune protected references. No test fills or cleans the real shared disk. |
@@ -662,10 +677,8 @@ later separately approved build, not a task plan or evidence that this design is
 | Stream and spare | Actual pinned Litestream/S3, old/new mixed versions, frozen store/follow/copy-up/prune, same-term conditional new-prefix handoff and failed CAS; crash before/after full copy/pointer switch; rollback restores old publication, spare loss/new membership never admits stale primary. Spare closure must precede follow; its primary keeps selling during validation. External outages must not delay successful local closure or ordinary sales; publication retries retain authority and old copies. |
 | Host/TPM and clients | B3's separately authorised real Linux/VM/TPM/firmware/disk/Android gates; startup reseal interruption and key-present exceptions. No source read, mock or app upgrade result substitutes for them. |
 
-**Status: needs-owner-review for the whole revised design.** Section 2's owner boundary is
-resolved; do not ask it again. The later owner instruction sets an administrator-chosen closed
-window after close/reports/backup and before reopening. Automatic-on, spare-first, the completion
-contracts and other labelled proposals remain for full approval. One fresh builder review precedes
-presentation of the full revision; the new static settings views have been rendered and inspected.
-Publication grants no plan, build, migration, runtime qualification, Cloud change or release
-authority.
+**Status: complete design approved on 29 October 2026, with automatic-on and an editable
+03:00–05:00 local default.** The clean-restart closing rule and all non-window contracts remain
+approved. The implementation plan awaits owner approval before any build. Publication grants no
+build, migration, runtime qualification, Cloud change or release authority. All runtime gates
+above remain **UNVERIFIED / NOT RUN**.

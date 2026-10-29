@@ -1,5 +1,11 @@
 # B3 — The bootable USB installer
 
+> **A950 pointer, 29 October 2026:** the [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md)
+> now owns application updates, exact image retention and rollback until a clean, running restart.
+> Every venue starts automatic-on with an editable 03:00–05:00 local window. References below to
+> A950 as undesigned, its earlier quiet hour or tag-only retention record the earlier revision.
+> B3's separate host/TPM and trust qualification gates remain; the A950 plan still needs owner approval.
+
 **Status:** APPROVED WITH CHANGES, owner 2026-10-26 ~12:15: “We don't need the configuration
 code. It's not a concern. The rest approved.” Revised by Lane F (B3r) to remove setup credentials,
 repeat the disk recovery key on every sheet, and replace the terminal unlock fallback with a

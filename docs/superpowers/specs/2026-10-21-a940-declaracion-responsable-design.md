@@ -1,5 +1,12 @@
 # A940 — The software's declaración responsable, inside the app and outside it
 
+> **A950 pointer, 29 October 2026:** the current update design is in the
+> [approved A950 design](2026-10-27-a950-automatic-upgrades-design.md). Its rollback closes after
+> a clean, running restart, before normal work resumes; older first-order references below are
+> historical. Ordinary A950 app upgrades choose no new installation name. A release requiring
+> that change remains a separately authorised exceptional operation; A940/A993's own decisions
+> are not amended here. The A950 plan still needs owner approval before any build.
+
 **Date:** 2026-10-21, revised the same day for the owner's answers, again on 2026-10-22 for his
 answers of about 22:25, and a third time on 2026-10-22 for his answers of 02:45 to 03:12.
 **Status:** approved by the owner (2026-10-22, about 02:45); A993's offline behaviour chosen (way

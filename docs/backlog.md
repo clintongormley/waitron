@@ -4857,9 +4857,9 @@ Android Chrome controls are UNVERIFIED / NOT RUN; historical constraint failure 
   monitor calls it every minute (design section 5). It must exercise the server, not only its
   front door, and must not write fiscal records. Defined jointly with Waitron Cloud.
 
-- **Automatic upgrades with rollback until a clean, running restart (A950)** — required before go-live; [revised design](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), needs-owner-review for full approval, no build authority.
-  Owner answer, 2026-10-28: successful new-version restart, clean database upgrade and a running, answering system close rollback automatically before normal work resumes. No first-order, first-action or acceptance step remains.
-  Later owner instruction: the admin chooses a local closed window ending before reopening; no chosen window means no application yet, while verified downloads and ordinary sales can continue. Wait for this close episode’s actual reports and primary backup completion, then quiet checks and full trial/rollback time. The timeline distinguishes rollover, on-demand reports and scheduled versus completed backups. Completion receipts, disabled-backup deferral, automatic-on and spare-first remain proposals; all runtime qualification is UNVERIFIED. B3/start-again, complete-state, A799, single-writer, Cloud hold and bucket/spare protections remain.
+- **Automatic upgrades with rollback until a clean, running restart (A950)**: required before go-live; [design approved 29 October](superpowers/specs/2026-10-27-a950-automatic-upgrades-design.md), [plan awaiting owner approval](superpowers/plans/2026-10-29-a950-automatic-upgrades.md), no build authority.
+  Every venue starts automatic-on with an editable **03:00–05:00 local** window. Both manual and automatic application wait for this close episode's actual reports and primary backup, 10 quiet minutes and strictly more than 17 minutes before reopening. Clean restart, database and local running checks close rollback before normal work resumes.
+  Build and all runtime qualification remain **UNVERIFIED / NOT RUN**, including close/report receipts, B3, A799, account-free Cloud hold and A947 stream/spare integration.
   [Detail](backlog/box.md#automatic-upgrades-that-can-be-undone-until-the-first-order)
 
 - **Every migrating path but boot and the bucket rebuild runs with no ahead-of-image check.** [Detail](backlog/box.md#every-migrating-path-but-boot-and-the-bucket-rebuild-runs-with-no-ahead-of-image-check)
