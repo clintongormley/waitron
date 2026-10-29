@@ -79,9 +79,13 @@ configuración inicial nueva.
 ## Elige tu copia {#source}
 
 Elige **Archivo de copia**, **Copia del bucket** o **Copia de Cloud** y el entorno correspondiente.
-Para un archivo, selecciónalo e introduce su clave. Para una copia del bucket, pega su kit de
-recuperación. Para Cloud, pide la aprobación, apruébala en Cloud y compruébala aquí. La recuperación
-de Cloud requiere un servicio compatible; esta opción no habilita la recuperación de Cloud en producción.
+Para un archivo, selecciónalo e introduce su clave. Para una copia del bucket, elige tu paquete de
+recuperación o el archivo del kit de recuperación, o pega el kit. El equipo lee el código de la copia
+del bucket del archivo adjunto dentro del PDF, no de la página impresa. Si el paquete se hizo antes
+de que el equipo tuviera copia en el bucket, el PDF no es un paquete de recuperación de Waitron o el
+paquete se modificó después de hacerse, la página lo dice bajo el campo y conserva lo que había.
+Para Cloud, pide la aprobación, apruébala en Cloud y compruébala aquí. La recuperación de Cloud
+requiere un servicio compatible; esta opción no habilita la recuperación de Cloud en producción.
 
 La clave del archivo, las credenciales del bucket y la aprobación de Cloud dan acceso a una copia.
 También necesitas la clave de recuperación de su nodo para identificarte. Mantén separados producción

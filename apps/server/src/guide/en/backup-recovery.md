@@ -72,9 +72,13 @@ finish moving them; the box then starts a new first setup.
 ## Choose your copy {#source}
 
 Choose **Backup file**, **Bucket copy** or **Cloud copy** and the matching environment.
-For an archive, choose the file and enter its archive key. For a bucket copy, paste its recovery
-kit. For Cloud, request approval, approve it in Cloud and check the approval here. Cloud recovery
-requires a supported recovery service; this route does not enable production Cloud recovery.
+For an archive, choose the file and enter its archive key. For a bucket copy, choose your recovery
+pack or recovery kit file, or paste the kit. The box reads the pack's bucket copy code from the file
+attached inside the PDF, not from the printed page. If the pack was made before the box had a bucket
+copy, the PDF is not a Waitron recovery pack, or the pack was changed after it was made, the page
+says so under the field and keeps what was there. For Cloud, request approval, approve it in Cloud
+and check the approval here. Cloud recovery requires a supported recovery service; this route does
+not enable production Cloud recovery.
 
 The archive key, bucket credentials and Cloud approval give access to a copy. You still need that
 copy's named node recovery key to authenticate recovery. Keep production and preproduction separate.
