@@ -1975,8 +1975,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   it. Full invoice is offered at payment per A739; the plan keeps an unpaid-bill menu shortcut,
   while paid correction waits for A802's known entry or an owner decision, with no A803 fiscal
   implementation. One payment pays one bill. Station modes, pass naming and grouped cross-bill
-  firing wait for pending A773-2, independently of S2. Slice 1 requires owner sign-off at land;
-  new Spanish wording requires approval during implementation. Each new seating starts at Bill 1
+  firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
+  during implementation. Each new seating starts at Bill 1
   (owner, 2026-10-19); bills staying at their table retain their numbers.
   [Spec](superpowers/specs/2026-10-18-a803-bills-and-tables-design.md);
   [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
