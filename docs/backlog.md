@@ -1849,9 +1849,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 ### The till, devices and table service
 
-- **A1171 part 3: the till's invoice recipient dialog offers the address search.** Waits for lane
-  E's A963 (#2145), which rebuilds `invoice-recipient-dialog.ts`; `scripts/address-lookup-forms.test.ts`
-  lists the dialog as waiting. Left open by A1171 parts 1–2.
+- **A1171 part 3: the till's invoice recipient dialog offers the address search.** A963 (#2145),
+  which rebuilt `invoice-recipient-dialog.ts`, has landed, so this can start;
+  `scripts/address-lookup-forms.test.ts` lists the dialog as waiting. Left open by A1171 parts 1–2.
 
 - **Legacy bill moves need a source-location check.** An unpaired `POST /api/bills/:id/move`
   accepted a counter bill from another location into an answered party. The new allergy move
