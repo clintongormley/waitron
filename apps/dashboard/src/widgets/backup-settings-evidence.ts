@@ -53,6 +53,10 @@ const NAMED_CAUSES = new Set([
   ...SHOWS_WRITTEN_TIME,
 ]);
 
+// The box's own environment, read on every load: saving again, replacing the key or restarting
+// fails the same way until the variable itself is changed.
+const EVERY_LOAD = new Set(["server.config_invalid"]);
+
 function failedSinceCleanLoad(e: BackupSettingsEvidence): boolean {
   const newest = e.failures[0];
   return (
@@ -364,7 +368,8 @@ export class BackupSettingsEvidenceDialog extends LitElement {
         e.now.state === "readable" &&
         usableKey &&
         !e.managedByEnvironment &&
-        failedSinceCleanLoad(e)
+        failedSinceCleanLoad(e) &&
+        !EVERY_LOAD.has(e.failures[0]!.code)
           ? html`<p data-test="reads-now">${t("backup_evidence.reads_now")}</p>`
           : nothing
       }
@@ -382,7 +387,10 @@ export class BackupSettingsEvidenceDialog extends LitElement {
       <h3>${t("backup_evidence.now_heading")}</h3>
       ${this.#recordNow(e)}
       <p data-test="evidence-choices">
-        ${fill("backup_evidence.turn_on", { apply: t("backup.apply") })}
+        ${fill(
+          e.now.state === "absent" ? "backup_evidence.turn_on_new" : "backup_evidence.turn_on",
+          { apply: t("backup.apply") },
+        )}
         ${fill("backup_evidence.choices", {
           read_again: t("backup_evidence.read_again"),
           stop: t("backup_evidence.stop"),

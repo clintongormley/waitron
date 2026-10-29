@@ -108,7 +108,8 @@ The panel has three parts:
    - **Stop / Parar** closes the panel. Nothing is sent.
    - The existing form below stays as it is: choosing the destinations again and **Turn on
      backups** replaces the saved record. The panel says so in one sentence; it does not offer
-     that button itself.
+     that button itself. With no saved record, the sentence says **Turn on backups** saves new
+     settings.
 
 ### What each cause says
 
@@ -129,7 +130,9 @@ explain what happened and what each choice does, and never send the person to so
 When **Read again** finds a record that reads and a usable key, the panel says: "The saved settings
 read correctly now. Backups stay off until the settings are saved again, the recovery key is
 replaced, or the box restarts. Nothing was changed." The build proves each of the three, and that
-the bucket copy's key write alone leaves backups off.
+the bucket copy's key write alone leaves backups off. The sentence is not shown when the newest
+failure is `server.config_invalid`: that variable is read from the box's environment on every load,
+so none of the three would turn backups on.
 
 If the read itself fails (a server error or a lost connection), the panel says it could not read
 the facts and keeps **Read again** and **Stop**. If backups are set by the box's environment

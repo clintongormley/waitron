@@ -296,6 +296,34 @@ const READS_NOW_CASES: [string, Partial<BackupSettingsEvidence>, boolean][] = [
     { now: READABLE, lastCleanLoadAt: "2026-10-29T09:30:00.000Z" },
     true,
   ],
+  [
+    "a newest failure from a box setting read on every load",
+    {
+      now: READABLE,
+      failures: [
+        failure({
+          code: "server.config_invalid",
+          detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
+        }),
+      ],
+    },
+    false,
+  ],
+  [
+    "a box-setting failure older than the newest failure",
+    {
+      now: READABLE,
+      failures: [
+        failure(),
+        failure({
+          at: "2026-10-29T08:00:00.000Z",
+          code: "server.config_invalid",
+          detail: { variable: "WAITRON_BACKUP_STALE_AFTER_MS" },
+        }),
+      ],
+    },
+    true,
+  ],
 ];
 for (const [name, overrides, shown] of READS_NOW_CASES)
   it(`${shown ? "says" : "does not say"} the settings read correctly now with ${name}`, async () => {
@@ -424,6 +452,22 @@ it("says what Turn on backups, Read again and Stop each do", async () => {
   await expect.poll(() => text(q(el, "[data-test=record-now]"))).not.toBe("");
   expect(text(q(el, "[data-test=evidence-choices]"))).toBe(
     `${words(en, "backup_evidence.turn_on", { apply: en["backup.apply"] })} ${words(
+      en,
+      "backup_evidence.choices",
+      { read_again: en["backup_evidence.read_again"], stop: en["backup_evidence.stop"] },
+    )}`,
+  );
+});
+
+it("with no saved record, says Turn on backups saves new settings rather than replacing one", async () => {
+  const el = await mount(
+    apiAnswering(async () =>
+      evidence({ rewrittenSinceLastFailure: true, record: null, now: { state: "absent" } }),
+    ),
+  );
+  await expect.poll(() => text(q(el, "[data-test=record-now]"))).not.toBe("");
+  expect(text(q(el, "[data-test=evidence-choices]"))).toBe(
+    `${words(en, "backup_evidence.turn_on_new", { apply: en["backup.apply"] })} ${words(
       en,
       "backup_evidence.choices",
       { read_again: en["backup_evidence.read_again"], stop: en["backup_evidence.stop"] },

@@ -1723,7 +1723,7 @@ export const en = {
   "backup_evidence.heading": "What the box recorded",
   "backup_evidence.happened": "What happened",
   "backup_evidence.no_failures":
-    "No failure to use the saved backup settings is recorded since the box last started.",
+    "No failure to use the saved backup settings has been recorded since the box last started.",
   "backup_evidence.again_rewritten":
     "This happened again after the settings were rewritten at {time}.",
   "backup_evidence.again_changed": "This happened again after the saved settings changed.",
@@ -1794,6 +1794,8 @@ export const en = {
     "The saved settings read correctly now. Backups stay off until the settings are saved again, the recovery key is replaced, or the box restarts. Nothing was changed.",
   "backup_evidence.turn_on":
     "Choosing the destinations again in the form below and using “{apply}” replaces the saved record.",
+  "backup_evidence.turn_on_new":
+    "Choosing the destinations in the form below and using “{apply}” saves new settings.",
   "backup_evidence.choices":
     "“{read_again}” reads these facts again and changes nothing; it does not turn backups on. “{stop}” closes this panel and sends nothing.",
   "backup_evidence.reading": "Reading what the box recorded…",
@@ -5431,6 +5433,8 @@ export const es: Record<StringKey, string> = {
     "Los ajustes guardados se leen bien ahora. Las copias siguen desactivadas hasta que se vuelvan a guardar los ajustes, se cambie la clave de recuperación o se reinicie el equipo. No se ha cambiado nada.",
   "backup_evidence.turn_on":
     "Elegir de nuevo los destinos en el formulario de abajo y usar «{apply}» sustituye el registro guardado.",
+  "backup_evidence.turn_on_new":
+    "Elegir los destinos en el formulario de abajo y usar «{apply}» guarda ajustes nuevos.",
   "backup_evidence.choices":
     "«{read_again}» vuelve a leer estos datos y no cambia nada; no activa las copias. «{stop}» cierra este panel y no envía nada.",
   "backup_evidence.reading": "Leyendo lo que ha registrado el equipo…",
