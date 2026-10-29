@@ -47,7 +47,7 @@ describe("row actions", () => {
     const { el, trigger, popup } = await mountActions();
     const name = document.createElement("span");
     name.slot = "trigger";
-    name.textContent = "Ana · Working";
+    name.textContent = "Ann · Working";
     el.append(name);
     await el.updateComplete;
     const slot = trigger.querySelector<HTMLSlotElement>('slot[name="trigger"]');

@@ -5991,6 +5991,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   retain their 120-character inputs and existing bounds.
   UI floor-model, table-token and floor-map suites use English sample zone and party names.
   UI-core field-label and input accessibility samples use English price and contact text.
+  UI combobox and row-menu suites use English sample staff names; deliberate bilingual
+  trigger labels and accented-search examples remain.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
