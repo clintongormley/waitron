@@ -1190,7 +1190,7 @@ describe("editing held groups", () => {
 
   it("answers the party's revision as stored after a move that splits a row and empties a group", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const fishOnly = (await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "fish")] }]))
       .groups[0]!.id;
     const [fish] = await linesIn(s.partyId, fishOnly);
@@ -1292,7 +1292,7 @@ describe("editing held groups", () => {
 
   it("splits Steak ×2 into two rows by moving one into a new held group at the end", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
 
     await move(v, s.partyId, [{ lineId: steak!.id, quantity: "1" }], "new");
@@ -1353,7 +1353,7 @@ describe("editing held groups", () => {
 
   it("writes one event naming the operator, and moves the party's revision on, for each change", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     let fishGroup = "";
     const changes: [string, () => Promise<unknown>][] = [
@@ -1573,7 +1573,7 @@ describe("retries (D8): each writes nothing the second time", () => {
 
   it("moves once when a move is repeated", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
     const moves = [{ lineId: steak!.id, quantity: "1" }];
@@ -1607,7 +1607,7 @@ describe("an id reused for a different request (D8) is submission.id_reused", ()
 
   it("refuses the same id on a move naming another target group", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [steak] = await linesIn(s.partyId, s.mains);
     const submissionId = randomUUID();
     const moves = [{ lineId: steak!.id, quantity: "1" }];
@@ -1651,7 +1651,7 @@ describe("stale screens (D19)", () => {
   it("fires a group whose lines sit on two bills of the party: every line, on both bills", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const { groups } = await submit(v, s.partyId, [
+    const { groups } = await submitGrouped(v, s, [
       { release: "hold", lines: [line(v, "water", "2"), line(v, "steak")] },
     ]);
     const groupId = groups[0]!.id;
@@ -2291,7 +2291,7 @@ describe("a line leaving its party", () => {
     "keeps the group of a held line (%s) transferred to another bill of the same party",
     async (_, quantity) => {
       const v = await setupVenue();
-      const s = await specExample(v);
+      const s = await specExample(v, quantity === undefined ? undefined : "grouped");
       const secondTab = randomUUID();
       await inTx(async (tx) => {
         await createOpenOrder(tx, v.cfg, secondTab, [], null, {
@@ -2407,7 +2407,7 @@ describe("a group split across bills of its party", () => {
   it("refuses device A's fire after device B moved the group's line onto another bill, then fires every line", async () => {
     const v = await setupVenue();
     const s = await seated(v);
-    const { groups } = await submit(v, s.partyId, [
+    const { groups } = await submitGrouped(v, s, [
       { release: "hold", lines: [line(v, "water", "2"), line(v, "steak")] },
     ]);
     const groupId = groups[0]!.id;
@@ -2438,7 +2438,7 @@ describe("a group split across bills of its party", () => {
 
   it("keeps the group and credit of a fired-group line split onto a check", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const [croquettes] = await linesIn(s.partyId, s.cold);
     const revision = await revisionOf(s.partyId);
 
@@ -2562,7 +2562,7 @@ describe("a group split across bills of its party", () => {
 
   it("refuses device A's fire after device B split the held group's line onto a check, then fires every line", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     const seenByA = await revisionOf(s.partyId);
     const [steak] = await linesIn(s.partyId, s.mains);
     const checkId = await splitToCheck(
@@ -4410,7 +4410,7 @@ describe("advance HOLD tickets (Task 6)", () => {
 
   it("setting off (the default): holding prints nothing, and firing prints the group's current contents, edits included", async () => {
     const v = await setupVenue();
-    const s = await specExample(v);
+    const s = await specExample(v, "grouped");
     expect(await printed(v)).toHaveLength(2);
     const steak = await lineOf(s, s.mains, "steak", v);
     const fish = await lineOf(s, s.mains, "fish", v);
@@ -4514,7 +4514,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("moves a Steak, removes the Fish and fires the mains: -1/+1 corrections, a HOLD cancellation, then one FIRE slip", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const header = await head(v, s);
       const steak = await lineOf(s, s.mains, "steak", v);
       const fish = await lineOf(s, s.mains, "fish", v);
@@ -4579,7 +4579,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints a MOVED slip listing the Steak under HOLD when one of the printed mains is split onto a check, then one FIRE slip from each bill for its own dishes", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const steak = await lineOf(s, s.mains, "steak", v);
       const holdJob = (await jobIds(v))[3]!;
       expect((await printedSince(v, 3))[0]).toEqual([
@@ -4673,7 +4673,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints a HOLD ticket for the new group a move makes, and -1 for the printed group it left", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const header = await head(v, s);
       const steak = await lineOf(s, s.mains, "steak", v);
 
@@ -4707,7 +4707,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints nothing for part of a line moved within its own printed group", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const steak = await lineOf(s, s.mains, "steak", v);
 
       await move(v, s.partyId, [{ lineId: steak.id, quantity: "1" }], { groupId: s.mains });
@@ -5454,7 +5454,7 @@ describe("advance HOLD tickets (Task 6)", () => {
     it("prints a repeated move's corrections once", async () => {
       const v = await setupVenue();
       await printHeldWork(true);
-      const s = await specExample(v);
+      const s = await specExample(v, "grouped");
       const steak = await lineOf(s, s.mains, "steak", v);
       const opts = { submissionId: randomUUID(), revision: await revisionOf(s.partyId) };
       const moves = [{ lineId: steak.id, quantity: "1" }];
@@ -5607,7 +5607,7 @@ describe("splitting a held line into units", () => {
     async (precision) => {
       const v = await setupVenue();
       const s = await seated(v);
-      await submit(v, s.partyId, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
+      await submitGrouped(v, s, [{ release: "hold", lines: [line(v, "steak", "2")] }]);
       const [source] = await linesOf(s.partyId);
       await db
         .update(workingOrderLines)
