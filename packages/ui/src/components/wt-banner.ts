@@ -20,6 +20,11 @@ export class WtBanner extends LitElement {
         border-inline-start: var(--wt-space-1) solid var(--wt-color-primary);
       }
 
+      :host([tone="error"]) {
+        border-inline-start-color: var(--wt-color-danger);
+        border-block-end-color: var(--wt-color-danger);
+      }
+
       .bar {
         display: flex;
         flex-wrap: wrap;
@@ -35,6 +40,7 @@ export class WtBanner extends LitElement {
     `,
   ];
 
+  @property({ reflect: true }) tone: "info" | "error" = "info";
   @property() message = "";
   @property({ attribute: "action-label" }) actionLabel = "";
 
