@@ -3928,10 +3928,40 @@ describe("the workflows' artifact downloads", () => {
     expect(found.every(({ bounded }) => bounded)).toBe(false);
   });
 
-  it("gives the server's REST download read access to artifacts and the checked-out code", () => {
-    const body = job("test-server-merge").body.join("\n");
-    expect(body).toContain("    permissions:\n      contents: read\n      actions: read");
+  it("gives every coverage helper's REST download read access to artifacts and the checked-out code", () => {
+    const helperJobs = jobs.filter(({ body }) =>
+      workflowSteps(body.join("\n")).some((step) =>
+        step.command.includes("scripts/download-coverage-blobs.mjs"),
+      ),
+    );
+    expect(helperJobs.map(({ id }) => id)).toContain("test-server-merge");
     expect(artifactDownloadBase(job("test-server-merge").body)).toBe("server-blob");
+    expect(
+      helperJobs
+        .filter(
+          ({ body }) =>
+            !body
+              .join("\n")
+              .includes("    permissions:\n      contents: read\n      actions: read"),
+        )
+        .map(({ id }) => id),
+    ).toEqual([]);
+  });
+
+  it("downloads no coverage blob in ci.yml with the download action", () => {
+    const blobDownloads = jobs.flatMap(({ id, body }) =>
+      workflowSteps(body.join("\n"))
+        .filter(isArtifactDownload)
+        .map((step) => ({ job: id, step, pattern: artifactDownloadInputs(step).pattern ?? "" }))
+        .filter(({ pattern }) => /-blob-\*$/.test(pattern)),
+    );
+    expect(blobDownloads.length).toBeGreaterThan(0);
+    expect(
+      blobDownloads
+        .filter(({ step }) => step.uses?.startsWith("actions/download-artifact@"))
+        .map(({ job: id, pattern }) => `${id}: ${pattern}`),
+      "download coverage blobs with scripts/download-coverage-blobs.mjs, as test-server-merge does",
+    ).toEqual([]);
   });
 
   const helperMerges = mergeJobs.flatMap(({ id, body }) => {
