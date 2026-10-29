@@ -218,7 +218,7 @@ describe("the recovery pack's attached file", () => {
   });
 });
 
-describe("the package runs in a browser", () => {
+describe("no source file in the package imports a Node built-in (its dependencies are not read)", () => {
   it("imports no Node built-in outside its tests", () => {
     const dir = new URL(".", import.meta.url).pathname;
     const sources = readdirSync(dir, { recursive: true, withFileTypes: true })
