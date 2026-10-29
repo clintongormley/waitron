@@ -27,14 +27,23 @@ export function createBackupRoomHooks(deps: {
     recordArchivesDeleted: (deleted, at) =>
       withTransaction(db, async (tx) => {
         const clock = await resolveVenueClock(tx, nodeId);
-        const date = businessDayAt(
-          { timeZone: clock.timeZone, dayCutover: "00:00", cutoverChanges: [] },
-          at,
-        );
+        const dayOf = (instant: Date) =>
+          businessDayAt(
+            { timeZone: clock.timeZone, dayCutover: "00:00", cutoverChanges: [] },
+            instant,
+          );
+        const taken = deleted.map((archive) => archive.takenAt.getTime());
+        const date = dayOf(new Date(Math.min(...taken)));
+        const lastDate = dayOf(new Date(Math.max(...taken)));
         // An alert still open keeps its first count: one run can delete at both of its checks.
         await recordIncidentOnce(tx, {
           origin: backupOrigin(),
-          error: new AppError("backup.archives_deleted", { count: deleted.length, date }),
+          error: new AppError("backup.archives_deleted", {
+            count: deleted.length,
+            date,
+            lastDate,
+            severalDays: date !== lastDate,
+          }),
           severity: "warning",
           detectedAt: at,
         });

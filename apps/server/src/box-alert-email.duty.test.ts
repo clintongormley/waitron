@@ -681,7 +681,7 @@ describe("startBoxEmailDuty", () => {
 const DELETED: EmailedIncident = {
   id: "i-deleted",
   code: "backup.archives_deleted",
-  params: { count: 3, date: "2026-10-28" },
+  params: { count: 3, date: "2026-10-28", lastDate: "2026-10-28", severalDays: false },
 };
 
 const REFUSED = {

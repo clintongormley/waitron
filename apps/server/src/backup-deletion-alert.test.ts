@@ -33,14 +33,8 @@ async function seedVenue(): Promise<NodeId> {
   return seedNode(db, brandLocationId(location!.id));
 }
 
-function archive(key: string): DeletableArchive {
-  return {
-    destination: "box",
-    dir: "/backups",
-    key,
-    bytes: 100,
-    takenAt: new Date("2026-10-01T12:00:00.000Z"),
-  };
+function archive(key: string, takenAt = "2026-10-01T12:00:00.000Z"): DeletableArchive {
+  return { destination: "box", dir: "/backups", key, bytes: 100, takenAt: new Date(takenAt) };
 }
 
 async function backupRows() {
@@ -60,25 +54,47 @@ async function backupRows() {
     .orderBy(incidents.detectedAt);
 }
 
+const ONE_ON_THE_FIRST = {
+  count: 1,
+  date: "2026-10-01",
+  lastDate: "2026-10-01",
+  severalDays: false,
+};
+
 describe("recordArchivesDeleted", () => {
-  it("records a backup warning with the count and the venue's calendar day of the deletion", async () => {
+  it("records a backup warning with the count and the venue's calendar days the oldest and newest deleted backups were taken", async () => {
     const nodeId = await seedVenue();
     const hooks = createBackupRoomHooks({ db, nodeId, fiscal: null });
-    // 00:30 on 28 October in Madrid: before the venue's 06:00 cutover, so its business day is
-    // still the 27th, and in UTC it is the 27th too.
     const at = new Date("2026-10-27T23:30:00.000Z");
-    await hooks.recordArchivesDeleted([archive("a"), archive("b")], at);
+    // Newest first, so the days come from the times rather than the order. 00:30 on 1 October in
+    // Madrid is still 30 September in UTC, and before the venue's 06:00 cutover.
+    await hooks.recordArchivesDeleted(
+      [archive("b", "2026-10-03T21:30:00.000Z"), archive("a", "2026-09-30T22:30:00.000Z")],
+      at,
+    );
     expect(await backupRows()).toEqual([
       {
         id: expect.any(String),
         source: "backup",
         deviceId: null,
         code: "backup.archives_deleted",
-        params: { count: 2, date: "2026-10-28" },
+        params: { count: 2, date: "2026-10-01", lastDate: "2026-10-03", severalDays: true },
         severity: "warning",
         detectedAt: at.toISOString(),
         acknowledgedAt: null,
       },
+    ]);
+  });
+
+  it("records one day when every deleted backup was taken on it", async () => {
+    const nodeId = await seedVenue();
+    const hooks = createBackupRoomHooks({ db, nodeId, fiscal: null });
+    await hooks.recordArchivesDeleted(
+      [archive("a", "2026-10-01T03:00:00.000Z"), archive("b", "2026-10-01T20:00:00.000Z")],
+      new Date("2026-10-27T10:00:00.000Z"),
+    );
+    expect((await backupRows()).map((row) => row.params)).toEqual([
+      { count: 2, date: "2026-10-01", lastDate: "2026-10-01", severalDays: false },
     ]);
   });
 
@@ -92,7 +108,7 @@ describe("recordArchivesDeleted", () => {
     );
     const open = await backupRows();
     expect(open).toHaveLength(1);
-    expect(open[0]!.params).toEqual({ count: 1, date: "2026-10-27" });
+    expect(open[0]!.params).toEqual(ONE_ON_THE_FIRST);
 
     await withTransaction(db, (tx) =>
       markIncidentHandled(tx, {
@@ -102,13 +118,13 @@ describe("recordArchivesDeleted", () => {
       }),
     );
     await hooks.recordArchivesDeleted(
-      [archive("e"), archive("f")],
+      [archive("e", "2026-10-05T12:00:00.000Z"), archive("f", "2026-10-05T13:00:00.000Z")],
       new Date("2026-10-29T10:00:00.000Z"),
     );
     const after = await backupRows();
     expect(after.map((row) => [row.params, row.acknowledgedAt === null])).toEqual([
-      [{ count: 1, date: "2026-10-27" }, false],
-      [{ count: 2, date: "2026-10-29" }, true],
+      [ONE_ON_THE_FIRST, false],
+      [{ count: 2, date: "2026-10-05", lastDate: "2026-10-05", severalDays: false }, true],
     ]);
   });
 });

@@ -93,27 +93,32 @@ export const CLOCK_MISDATED_EMAIL_WORDS = {
   },
 } as const;
 
-/** `one` for a single deleted backup, `text` for several. */
+/** `one` for a single deleted backup, `text` for several taken on one day, `severalDays` for
+ * several taken on different days. */
 export const BACKUP_DELETED_EMAIL_WORDS = {
   en: {
-    subject: "Old backups deleted: low disk space",
+    subject: "{venue}: Old backups deleted: low disk space",
     one: "Low disk space: the box deleted its oldest backup ({date}).",
     text: "Low disk space: the box deleted its {count} oldest backups ({date}).",
+    severalDays:
+      "Low disk space: the box deleted its {count} oldest backups ({date} to {lastDate}).",
   },
   es: {
-    subject: "Copias antiguas borradas: poco espacio en disco",
+    subject: "{venue}: Copias antiguas borradas: poco espacio en disco",
     one: "Poco espacio en disco: el equipo borró su copia de seguridad más antigua ({date}).",
     text: "Poco espacio en disco: el equipo borró sus {count} copias más antiguas ({date}).",
+    severalDays:
+      "Poco espacio en disco: el equipo borró sus {count} copias más antiguas (del {date} al {lastDate}).",
   },
 } as const;
 
 export const BACKUP_REFUSED_EMAIL_WORDS = {
   en: {
-    subject: "Backup not made: low disk space",
+    subject: "{venue}: Backup not made: low disk space",
     text: "Backup not made: it needs {needed} free and the disk has {available}.",
   },
   es: {
-    subject: "Copia no hecha: poco espacio en disco",
+    subject: "{venue}: Copia no hecha: poco espacio en disco",
     text: "Copia no hecha: necesita {needed} libres y el disco tiene {available}.",
   },
 } as const satisfies Record<"en" | "es", { subject: string; text: string }>;
