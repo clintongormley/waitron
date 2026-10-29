@@ -4723,8 +4723,8 @@ logged `backup.start_room_failed`. Each deletion logs `backup.archive_deleted` w
 each deleted archive and the time, for the note's `venue.db`. A record an earlier start left for the
 same `venue.db` keeps its entries and the earlier time. A failed write is logged
 `backup.start_room_record_failed` and the deletions stand. Boot reads it
-(`recordStartDeletions`, `apps/server/src/start-backup-room-record.ts`, at `boot.ts:2237`, before the
-backup supervisor's first reload at `:2274`) and records the same `backup.archives_deleted` alert a
+(`recordStartDeletions`, `apps/server/src/start-backup-room-record.ts`, at `boot.ts:2238`, before the
+backup supervisor's first reload at `:2275`) and records the same `backup.archives_deleted` alert a
 backup run raises, then deletes the record. A malformed record, or one for another `venue.db`
 (`other_venue_db`), is logged `backup.start_room_record_dropped` and deleted with no alert; an
 unreadable record, an unreadable `venue.db` or a failed alert keeps it for the next start.
