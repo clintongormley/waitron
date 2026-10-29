@@ -735,7 +735,7 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
     expect(tables()).toEqual(before);
   });
 
-  it("A803 portion lifecycle: a counter order moved to a table keeps its grouped lines, and a partial move of its dish with extras is still refused tab.transfer_modifier_line", async () => {
+  it("A1208 portion lifecycle: a counter order moved to a table holds portions, and one burger leaves with its cheese", async () => {
     const p = await submitted("1");
     const counter = await inTx(venue, (tx) =>
       offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
@@ -782,28 +782,42 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
           from working_order_lines where working_order_id = ${movedId} order by line_no`,
     );
     expect(lines.map((line) => [line.dish, line.quantity])).toEqual([
-      [1, 2000],
-      [0, 2000],
+      [1, 1000],
+      [0, 1000],
+      [1, 1000],
+      [0, 1000],
     ]);
-    expect(lines.flatMap((line) => bindingOf(line.id))).toEqual([]);
+    const [burger1, cheese1, burger2, cheese2] = lines;
+    const portion1 = bindingOf(burger1!.id);
+    expect(portion1).toHaveLength(1);
+    expect(bindingOf(burger2!.id)).toHaveLength(1);
+    expect(bindingOf(burger2!.id)).not.toEqual(portion1);
+    expect([...bindingOf(cheese1!.id), ...bindingOf(cheese2!.id)]).toEqual([]);
 
     const expectedEdits = [await edit(movedId), await edit(p.billId)].sort((x, y) =>
       x.billId.localeCompare(y.billId),
     );
     const command = { ...(await ask(p)), expectedEdits };
-    const before = { ...portionTables(), lines: await linesOf(movedId) };
-    await expect(
-      inTx(venue, (tx) =>
-        transferItems(
-          tx,
-          venue.cfg,
-          movedId,
-          p.billId,
-          [{ lineNo: lines[0]!.lineNo, quantity: "1" }],
-          command,
-        ),
+    const before = (await linesOf(p.billId)).map((line) => line.id);
+    await inTx(venue, (tx) =>
+      transferItems(tx, venue.cfg, movedId, p.billId, [{ lineNo: burger1!.lineNo }], command),
+    );
+
+    expect((await linesOf(movedId)).map((line) => line.id)).toEqual([burger2!.id, cheese2!.id]);
+    const arrived = (await linesOf(p.billId)).filter((line) => !before.includes(line.id));
+    expect(arrived).toHaveLength(2);
+    const [dish, extra] = arrived;
+    expect(dish!.parentLineId).toBeNull();
+    expect(extra!.parentLineId).toBe(dish!.id);
+    expect(bindingOf(dish!.id)).toEqual(portion1);
+    expect(
+      venue.db.all(
+        sql`select name, quantity, line_total as lineTotal from working_order_lines
+            where id in (${dish!.id}, ${extra!.id}) order by line_no`,
       ),
-    ).rejects.toMatchObject({ code: "tab.transfer_modifier_line" });
-    expect({ ...portionTables(), lines: await linesOf(movedId) }).toEqual(before);
+    ).toEqual([
+      { name: "Burger", quantity: 1000, lineTotal: 950 },
+      { name: "Cheese", quantity: 1000, lineTotal: 100 },
+    ]);
   });
 });

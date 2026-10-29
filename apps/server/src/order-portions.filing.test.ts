@@ -1677,7 +1677,7 @@ describe("A803 portions: raising a dish", () => {
     expect(added[0]!.cohortId).not.toBe(croqueta!.pricingCohortId);
   });
 
-  it("A803 portions: a new line on a counter order stays one line", async () => {
+  it("A1208 portions: a new line on a counter order is written as portions", async () => {
     const bill = await billOf(croquetas("1"), { bound: false });
     await toCounter(bill.billId, bill.partyId);
     const [croqueta] = linesOf(bill.billId);
@@ -1691,16 +1691,14 @@ describe("A803 portions: raising a dish", () => {
       ...burgersWithCheese("2"),
     ]);
 
-    expect(burgerLines(bill.billId)).toEqual([
-      {
-        name: "Burger",
-        quantity: 2000,
-        lineTotal: 666,
-        dishNo: null,
-        cohortId: null,
-        ordinal: null,
-      },
-      { name: "Cheese", quantity: 2000, lineTotal: 70, dishNo: 2, cohortId: null, ordinal: null },
+    const burgers = burgerLines(bill.billId);
+    const cohortId = burgers[0]!.cohortId;
+    expect(cohortId).not.toBeNull();
+    expect(burgers).toEqual([
+      { name: "Burger", quantity: 1000, lineTotal: 333, dishNo: null, cohortId, ordinal: 1 },
+      { name: "Cheese", quantity: 1000, lineTotal: 35, dishNo: 2, cohortId: null, ordinal: null },
+      { name: "Burger", quantity: 1000, lineTotal: 333, dishNo: null, cohortId, ordinal: 2 },
+      { name: "Cheese", quantity: 1000, lineTotal: 35, dishNo: 4, cohortId: null, ordinal: null },
     ]);
   });
 

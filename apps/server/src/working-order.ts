@@ -58,6 +58,7 @@ import {
   cancelPortions,
   carryLineReductions,
   expandPortionRows,
+  portionIdentities,
   refuseTooManyPortions,
   linkSalePortions,
   readGrowingPortions,
@@ -1698,9 +1699,17 @@ export async function createOpenOrder(
     "added",
     placement.lateSend,
   );
-  const { gross, identities, lineContexts, offers } = pricedLines;
+  const { gross, offers } = pricedLines;
   if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
-  const lineRows = pricedLines.lineRows.map((row) => ({
+  const expanded = expandPortionRows(
+    pricedLines.lineRows,
+    pricedLines.lineContexts,
+    pricedLines.portionable,
+    1,
+  );
+  const identities = portionIdentities(pricedLines.identities, pricedLines.lineRows, expanded);
+  const lineContexts = expanded.lineContexts;
+  const lineRows = expanded.rows.map((row) => ({
     ...row,
     creditedTo: placement.creditedTo ?? null,
   }));
@@ -1742,6 +1751,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
   }
   await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
+  await registerPortions(tx, expanded.portions);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, gross, identities, lineRows };
@@ -5849,7 +5859,7 @@ async function applyLineEdits(
         origin?: EditableParent;
         inheritMakeAt?: boolean;
         /** Written as portions of a cohort of their own: units added apart from a dish that is a
-         * portion, or a new line on a party bill. */
+         * portion, or any new line. */
         expand?: boolean;
       }
     | { kind: "extras" }
@@ -5857,7 +5867,7 @@ async function applyLineEdits(
   )[] = plan.fresh.map(() => ({
     kind: "line",
     kitchen: order.newWork,
-    expand: order.partyId !== null,
+    expand: true,
   }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];

@@ -1,0 +1,441 @@
+import { setImmediate as yieldTurn } from "node:timers/promises";
+import { randomUUID } from "node:crypto";
+import { eq, inArray, sql } from "drizzle-orm";
+import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
+import { locationCatalogues, saleLinePortions, saleLines, sales, workingOrders } from "@waitron/db";
+import { withTransaction } from "@waitron/db";
+import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
+import { decimal } from "@waitron/shared";
+import { afterEach, describe, expect, it } from "vitest";
+import { readBillEditState } from "./bill-editing.js";
+import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
+import { createTable } from "./testing/live-table.js";
+import { openPartyTab } from "./testing/serve-line.js";
+import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
+import {
+  payWorkingOrder,
+  payWorkingOrderIntegratedOrchestration,
+  type IntegratedPayDeps,
+} from "./till-sale.js";
+import {
+  createOpenOrder,
+  parkOrder,
+  readOrderRevision,
+  updateHeldOrder,
+  type TabRoundLine,
+} from "./working-order.js";
+
+afterEach(() => yieldTurn());
+
+let venue: BillVenue;
+let counter: ZoneOffers;
+let ids: { croqueta: string; burger: string; cheese: string; toppings: string };
+
+useVenueDb({
+  resetPerTest: false,
+  migrations: migrationOptionsFor(manifestSets(), null),
+  timeoutMs: 60_000,
+  setup: async (db) => {
+    venue = await provisionBillVenue(db);
+    ids = await inTx(venue, async (tx) => {
+      const [catalogue] = await tx
+        .select({ id: locationCatalogues.catalogueId })
+        .from(locationCatalogues)
+        .where(eq(locationCatalogues.locationId, venue.cfg.locationId));
+      const product = async (name: string, price: string) =>
+        (
+          await createProduct(tx, {
+            catalogueId: catalogue!.id,
+            categoryId: null,
+            name,
+            customerName: null,
+            kitchenName: null,
+            pricingUnit: "each",
+            unitPrice: price,
+            vatClass: "reduced",
+          })
+        ).id;
+      const croqueta = await product("Croqueta", "3.33");
+      const burger = await product("Burger", "3.33");
+      const cheese = await product("Cheese", "0.35");
+      const toppings = (
+        await createExtraList(
+          tx,
+          {
+            name: "Toppings",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [{ productId: cheese, maxQuantity: 2, preselected: false, price: null }],
+          },
+          venue.cfg.locale,
+        )
+      ).id;
+      await writeProductModifiers(tx, burger, [{ kind: "extras", id: toppings }]);
+      counter = await offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" });
+      return { croqueta, burger, cheese, toppings };
+    });
+  },
+});
+
+const croquetas = (quantity: string): TabRoundLine[] =>
+  counter.toOfferLines([{ productId: ids.croqueta, quantity }]);
+
+const burgersWithCheese = (quantity: string): TabRoundLine[] =>
+  counter.toOfferLines([
+    {
+      productId: ids.burger,
+      quantity,
+      extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
+    },
+  ]);
+
+/** The order's working lines in line order, each with the portion it is bound to. */
+function linesOf(orderId: string) {
+  return venue.db.all<{
+    id: string;
+    lineNo: number;
+    name: string;
+    quantity: number;
+    lineTotal: number;
+    parentLineId: string | null;
+    portionId: string | null;
+    cohortId: string | null;
+    ordinal: number | null;
+  }>(
+    sql`select l.id, l.line_no as lineNo, l.name, l.quantity, l.line_total as lineTotal,
+               l.parent_line_id as parentLineId, b.portion_id as portionId,
+               p.cohort_id as cohortId, p.ordinal
+        from working_order_lines l
+        left join working_line_portions b on b.working_order_line_id = l.id
+        left join order_portions p on p.id = b.portion_id
+        where l.working_order_id = ${orderId} order by l.line_no`,
+  );
+}
+
+/** The order's filed rows in line order, each with the portions linked to it. */
+async function filedRows(orderId: string) {
+  return inTx(venue, async (tx) => {
+    const rows = await tx
+      .select({
+        id: saleLines.id,
+        name: saleLines.name,
+        quantity: saleLines.quantity,
+        base: saleLines.lineTotal,
+        vatRate: saleLines.vatRate,
+      })
+      .from(saleLines)
+      .innerJoin(sales, eq(sales.id, saleLines.saleId))
+      .where(eq(sales.workingOrderId, orderId))
+      .orderBy(saleLines.lineNo);
+    const links = await tx
+      .select({ saleLineId: saleLinePortions.saleLineId, portionId: saleLinePortions.portionId })
+      .from(saleLinePortions)
+      .where(
+        inArray(
+          saleLinePortions.saleLineId,
+          rows.map((row) => row.id),
+        ),
+      );
+    return rows.map(({ id, ...row }) => ({
+      ...row,
+      portions: links
+        .filter((link) => link.saleLineId === id)
+        .map((link) => link.portionId)
+        .sort(),
+    }));
+  });
+}
+
+function saleOf(orderId: string) {
+  return venue.db.all<{ total: number; vatBreakdown: string }>(
+    sql`select total, vat_breakdown as vatBreakdown from sales where working_order_id = ${orderId}`,
+  );
+}
+
+async function walkUp(lines: TabRoundLine[], amount: string): Promise<string> {
+  const id = randomUUID();
+  await payWorkingOrder(
+    venue,
+    venue.cfg,
+    { id, expectedEdit: null, lines, zoneId: counter.zoneId, tender: { method: "cash", amount } },
+    venue.operatorId,
+  );
+  return id;
+}
+
+async function park(lines: TabRoundLine[]): Promise<{ id: string; orderNumber: number }> {
+  return parkOrder({ db: venue.db }, venue.cfg, {
+    id: randomUUID(),
+    lines,
+    zoneId: counter.zoneId,
+    operatorId: venue.operatorId,
+  });
+}
+
+async function payParked(id: string, amount: string): Promise<void> {
+  await payWorkingOrder(
+    venue,
+    venue.cfg,
+    {
+      id,
+      expectedEdit: await inTx(venue, (tx) => readBillEditState(tx, id)),
+      lines: [],
+      tender: { method: "cash", amount },
+    },
+    venue.operatorId,
+  );
+}
+
+/** A card reader that captures what it is asked for; `charge: false` refuses to charge at all. */
+function cardDeps(charge: boolean): IntegratedPayDeps {
+  const fail = () => Promise.reject(new Error("cardDeps: not used"));
+  const provider: PaymentProvider = {
+    provider: "stripe",
+    capabilities: { partialRefund: true },
+    async collect(params) {
+      if (!charge) throw new Error("cardDeps: this payment must not charge");
+      const paymentRef = `pi-${randomUUID()}`;
+      const settledAt = new Date();
+      await withTransaction(venue.db, (tx) =>
+        insertCapturedPayment(tx, {
+          origin: params.origin,
+          workingOrderId: params.workingOrderId,
+          provider: "stripe",
+          paymentRef,
+          amount: params.amount,
+          settledAt,
+          externalRef: paymentRef,
+        }),
+      );
+      return {
+        provider: "stripe",
+        paymentRef,
+        state: "captured",
+        amount: params.amount,
+        settledAt,
+      };
+    },
+    forward: fail,
+    resolvePending: fail,
+    void: fail,
+    refund: fail,
+    partialRefund: fail,
+  };
+  return { db: venue.db, backend: venue.backend, clock: venue.clock, provider, readerRef: "r1" };
+}
+
+const sorted = (values: (string | null)[]) => [...values].sort();
+
+describe("A1208 counter orders are written as portions", () => {
+  it("A1208 a walk-up of 2 × burger with cheese stores two portions of one cohort, each with its own cheese, and files one row of 2 linked to both", async () => {
+    const id = await walkUp(burgersWithCheese("2"), "7.36");
+
+    const lines = linesOf(id);
+    expect(
+      lines.map(({ name, quantity, lineTotal, ordinal }) => [name, quantity, lineTotal, ordinal]),
+    ).toEqual([
+      ["Burger", 1000, 333, 1],
+      ["Cheese", 1000, 35, null],
+      ["Burger", 1000, 333, 2],
+      ["Cheese", 1000, 35, null],
+    ]);
+    const [burger1, cheese1, burger2, cheese2] = lines;
+    expect(cheese1!.parentLineId).toBe(burger1!.id);
+    expect(cheese2!.parentLineId).toBe(burger2!.id);
+    expect(burger1!.cohortId).not.toBeNull();
+    expect(burger2!.cohortId).toBe(burger1!.cohortId);
+    expect(cheese1!.portionId).toBeNull();
+    const portions = sorted([burger1!.portionId, burger2!.portionId]);
+    expect(new Set(portions).size).toBe(2);
+
+    expect(await filedRows(id)).toEqual([
+      { name: "Burger", quantity: 2000, base: 605, vatRate: 1000, portions },
+      { name: "Cheese", quantity: 2000, base: 64, vatRate: 1000, portions },
+    ]);
+    const [sale] = saleOf(id);
+    expect(sale!.total).toBe(736);
+    expect(JSON.parse(sale!.vatBreakdown)).toEqual([{ rate: "10.00", base: "6.69", tax: "0.67" }]);
+  });
+
+  it("A1208 the same dish on two request lines files two rows, as today", async () => {
+    const id = await walkUp([...croquetas("1"), ...croquetas("1")], "6.66");
+
+    const lines = linesOf(id);
+    expect(lines.map(({ name, quantity, ordinal }) => [name, quantity, ordinal])).toEqual([
+      ["Croqueta", 1000, 1],
+      ["Croqueta", 1000, 1],
+    ]);
+    expect(lines[1]!.cohortId).not.toBe(lines[0]!.cohortId);
+    expect(await filedRows(id)).toEqual([
+      {
+        name: "Croqueta",
+        quantity: 1000,
+        base: 303,
+        vatRate: 1000,
+        portions: [lines[0]!.portionId],
+      },
+      {
+        name: "Croqueta",
+        quantity: 1000,
+        base: 303,
+        vatRate: 1000,
+        portions: [lines[1]!.portionId],
+      },
+    ]);
+  });
+
+  it("A1208 a walk-up paid by integrated card links its filed row to both portions", async () => {
+    const id = randomUUID();
+    const out = await payWorkingOrderIntegratedOrchestration(
+      cardDeps(true),
+      venue.cfg,
+      { id, expectedEdit: null, lines: croquetas("2"), zoneId: counter.zoneId },
+      venue.operatorId,
+    );
+
+    expect(out.outcome).toBe("captured");
+    const lines = linesOf(id);
+    expect(lines.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
+      [1000, 1],
+      [1000, 2],
+    ]);
+    expect(await filedRows(id)).toEqual([
+      {
+        name: "Croqueta",
+        quantity: 2000,
+        base: 605,
+        vatRate: 1000,
+        portions: sorted(lines.map((line) => line.portionId)),
+      },
+    ]);
+  });
+
+  it("A1208 100 of one dish on an integrated-card walk-up is refused before the reader is asked", async () => {
+    const id = randomUUID();
+    await expect(
+      payWorkingOrderIntegratedOrchestration(
+        cardDeps(false),
+        venue.cfg,
+        { id, expectedEdit: null, lines: croquetas("100"), zoneId: counter.zoneId },
+        venue.operatorId,
+      ),
+    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+    expect(await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
+  });
+
+  it("A1208 a parked order's two portions pay as one row", async () => {
+    const { id } = await park(croquetas("2"));
+    const lines = linesOf(id);
+    expect(lines.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
+      [1000, 1],
+      [1000, 2],
+    ]);
+
+    await payParked(id, "6.66");
+
+    expect(await filedRows(id)).toEqual([
+      {
+        name: "Croqueta",
+        quantity: 2000,
+        base: 605,
+        vatRate: 1000,
+        portions: sorted(lines.map((line) => line.portionId)),
+      },
+    ]);
+  });
+
+  it("A1208 a new line saved onto a parked order is portions", async () => {
+    const { id } = await park(croquetas("1"));
+    const [croqueta] = linesOf(id);
+    const [revision, expectedEdit] = await inTx(venue, async (tx) => [
+      await readOrderRevision(tx, id),
+      await readBillEditState(tx, id),
+    ]);
+
+    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+      operatorId: venue.operatorId,
+      expectedEdit,
+      revision,
+      lines: [
+        { workingOrderLineId: croqueta!.id, ...croquetas("1")[0]! },
+        ...burgersWithCheese("3"),
+      ],
+    });
+
+    const burgers = linesOf(id).filter((line) => line.name === "Burger");
+    expect(burgers.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
+      [1000, 1],
+      [1000, 2],
+      [1000, 3],
+    ]);
+    expect(new Set(burgers.map((line) => line.cohortId)).size).toBe(1);
+    expect(burgers[0]!.cohortId).not.toBe(croqueta!.cohortId);
+    expect(linesOf(id).filter((line) => line.name === "Cheese")).toHaveLength(3);
+  });
+
+  it("A1208 100 of one dish in one walk-up line is refused before anything is written", async () => {
+    const before = await park(croquetas("1"));
+    const id = randomUUID();
+
+    await expect(
+      payWorkingOrder(
+        venue,
+        venue.cfg,
+        {
+          id,
+          expectedEdit: null,
+          lines: croquetas("100"),
+          zoneId: counter.zoneId,
+          tender: { method: "cash", amount: "333.00" },
+        },
+        venue.operatorId,
+      ),
+    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+
+    expect(await venue.db.select().from(workingOrders).where(eq(workingOrders.id, id))).toEqual([]);
+    expect((await park(croquetas("1"))).orderNumber).toBe(before.orderNumber + 1);
+  });
+
+  it("A1208 the ceiling refusal still comes first", async () => {
+    const id = randomUUID();
+    await expect(
+      inTx(venue, (tx) =>
+        createOpenOrder(
+          tx,
+          { ...venue.cfg, simplifiedInvoiceLimit: decimal("3000.00") },
+          id,
+          croquetas("1000"),
+          null,
+          { zoneId: counter.zoneId },
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "sale.total_exceeds_simplified_limit" });
+  });
+
+  it("A1208 openTab with lines writes portions", async () => {
+    const tabId = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `M-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      return (
+        await openPartyTab(tx, venue.cfg, {
+          tableId: table.id,
+          lines: [{ menuItemId: venue.offerFor("Caña"), quantity: "2" }],
+        })
+      ).tabId;
+    });
+
+    const lines = linesOf(tabId);
+    expect(lines.map(({ quantity, ordinal }) => [quantity, ordinal])).toEqual([
+      [1000, 1],
+      [1000, 2],
+    ]);
+    expect(lines[1]!.cohortId).toBe(lines[0]!.cohortId);
+  });
+});
