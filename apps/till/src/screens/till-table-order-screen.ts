@@ -457,8 +457,11 @@ export class TillTableOrderScreen extends LitElement {
     servicePeriodStyles,
     tableTargetStyles,
     css`
+      /* Isolated so nothing raised inside the screen, the draft bar included, paints over an overlay
+         the shell lays over it. */
       :host {
         display: block;
+        isolation: isolate;
       }
 
       .width-probe {
@@ -874,7 +877,7 @@ export class TillTableOrderScreen extends LitElement {
         min-width: 0;
         position: sticky;
         bottom: 0;
-        z-index: 2;
+        z-index: 1;
         padding-block: var(--wt-space-2);
         border-block-start: 1px solid var(--wt-color-border);
         background: var(--wt-color-bg);

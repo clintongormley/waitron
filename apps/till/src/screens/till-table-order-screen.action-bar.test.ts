@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { userEvent } from "vitest/browser";
-import { cleanupWidgets } from "../widgets/test-helpers.js";
+import {
+  cleanupWidgets,
+  distance,
+  mountWidget,
+  pageAt,
+  paintedAt,
+  resetPage,
+  rgb,
+} from "../widgets/test-helpers.js";
 import { setLocale } from "../i18n/t.js";
+import { DraftStore } from "../state/draft-sync.js";
 import type { TillSentOrders } from "../widgets/sent-orders.js";
 import type { TillTableOrderScreen } from "./till-table-order-screen.js";
 import { beer, menuOf, mount, resized, tap } from "./till-table-order-screen.test-helpers.js";
@@ -175,4 +184,76 @@ describe("till-table-order-screen: the unsent order's action bar stays in the wi
     expect(remove().getRootNode()).toHaveProperty("activeElement", null);
     expect(faded()).toEqual([true, true, true]);
   });
+});
+
+/**
+ * The screen inside a copy of the shell's region (`till-shell.ts` `.region`, `.body`, `.drill`): a
+ * positioned column of the page's height whose scrolling area holds the screen, and an overlay over
+ * it, hidden until a case opens it.
+ */
+async function inShell(height: number) {
+  const { el: region } = await mountWidget<HTMLDivElement>("div", {}, "light");
+  region.style.cssText = `position: relative; display: flex; flex-direction: column; height: ${height}px`;
+  const area = document.createElement("div");
+  area.style.cssText = "flex: 1; min-height: 0; overflow: auto";
+  const overlay = document.createElement("div");
+  overlay.hidden = true;
+  // A colour nothing in the bar is painted with, so the painted check cannot pass by accident.
+  overlay.style.cssText =
+    "position: absolute; inset: 0; overflow: auto; background: var(--wt-color-warning)";
+  const screen = document.createElement("till-table-order-screen") as TillTableOrderScreen;
+  Object.assign(screen, {
+    products: dishes,
+    menus: menuOf(dishes),
+    lines: [],
+    orderId: "wo-4",
+    draftStore: new DraftStore(),
+  });
+  area.append(screen);
+  region.append(area, overlay);
+  await resized(screen);
+  for (const dish of dishes) await tap(screen, dish.name);
+  await linesRendered(screen);
+  return { screen, area, overlay };
+}
+
+describe("till-table-order-screen: the unsent order's action bar under the shell's overlay", () => {
+  afterEach(resetPage);
+
+  for (const [width, height] of [
+    [1024, 768],
+    [390, 844],
+  ] as const) {
+    it(`is drawn under an overlay (${width} px)`, async () => {
+      await pageAt(width, height);
+      const { screen, area, overlay } = await inShell(height);
+      if (width === 390) {
+        screen.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!.click();
+        await linesRendered(screen);
+      }
+      const sendAll = screen.shadowRoot!.querySelector<HTMLElement>(
+        '[data-draft-action="send-all"]',
+      )!;
+      const box = sendAll.getBoundingClientRect();
+      // Inside the button's padding, clear of its words.
+      const point = { x: box.left + 4, y: box.top + box.height / 2 };
+      // The point read must be on screen, inside the region, or the screenshot has no pixel there.
+      expect(box.height).toBeGreaterThan(0);
+      expect(point.y).toBeLessThan(area.getBoundingClientRect().bottom);
+      const face = rgb(
+        getComputedStyle(sendAll.shadowRoot!.querySelector("button")!).backgroundColor,
+      );
+      const warning = rgb(getComputedStyle(overlay).backgroundColor);
+      expect(distance(face, warning)).toBeGreaterThan(40);
+      expect(distance(await paintedAt(area.parentElement!, point.x, point.y), face)).toBeLessThan(
+        4,
+      );
+
+      overlay.hidden = false;
+      expect(
+        distance(await paintedAt(area.parentElement!, point.x, point.y), warning),
+      ).toBeLessThan(4);
+      expect(getComputedStyle(screen).isolation).toBe("isolate");
+    });
+  }
 });
