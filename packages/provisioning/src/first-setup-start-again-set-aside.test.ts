@@ -1458,13 +1458,35 @@ it("a resumed Move deletes the backup room note first", async () => {
   await expectAllAside(roots, record, before);
 });
 
-it("a backup room note that cannot be deleted stops a Move, and a resumed Move, before the venue folder changes", async () => {
-  const attempt = await startAgainAttempt(await scratch());
+it("a backup room note that cannot be deleted stops a Move, and a resumed Move, before the venue or state folder changes", async () => {
+  // A start-again note the Move would raise, and destination folders it would make again.
+  const attempt = await startAgainAttempt(await scratch(), {
+    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
+  });
   const { roots } = attempt;
   await foundEverywhere(roots);
   const record = await prepared(roots, attempt.administratorId);
+  expect(record.noteFloorMs).toBeGreaterThan(60_000);
+  for (const folder of Object.values(setAsideFolderPaths(roots, record.setAside!)))
+    await fs.rmdir(folder);
   await mkdir(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE));
+  const withoutNote = (lines: string[]) =>
+    lines.filter((line) => !line.startsWith(`${BACKUP_ROOM_NOTE_FILE}:`));
   const venueBefore = await snapshot(roots.venueDir);
+  const stateBefore = withoutNote(await snapshot(roots.stateDir));
+  const stateFiles = async () =>
+    Object.fromEntries(
+      await Promise.all(
+        (await readdir(roots.stateDir, { recursive: true }))
+          .filter((name) => !name.startsWith(BACKUP_ROOM_NOTE_FILE))
+          .map(async (name) => {
+            const full = join(roots.stateDir, name);
+            const info = await lstat(full);
+            return [name, info.isFile() ? await readFile(full, "utf8") : "folder"];
+          }),
+      ),
+    );
+  const stateBytesBefore = await stateFiles();
   const reason = expect.stringMatching(
     /^set-aside failed: E(PERM|ISDIR) state\/backup-room-note\.json$/,
   );
@@ -1473,6 +1495,8 @@ it("a backup room note that cannot be deleted stops a Move, and a resumed Move, 
     reason,
   });
   expect(await snapshot(roots.venueDir)).toEqual(venueBefore);
+  expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
+  expect(await stateFiles()).toEqual(stateBytesBefore);
   await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
     code: "setup.start_again_incomplete",
     reason,
@@ -1480,4 +1504,6 @@ it("a backup room note that cannot be deleted stops a Move, and a resumed Move, 
   // The resume takes the venue lock, which makes venue.lock.
   const unlocked = (lines: string[]) => lines.filter((line) => !line.startsWith("venue.lock:"));
   expect(unlocked(await snapshot(roots.venueDir))).toEqual(venueBefore);
+  expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
+  expect(await stateFiles()).toEqual(stateBytesBefore);
 });
