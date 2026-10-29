@@ -16,6 +16,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  incidents,
   invoiceSeries,
   readBreakGlassVerifier,
   setBreakGlassVerifierTx,
@@ -38,10 +39,15 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { eq } from "drizzle-orm";
+import { eq, max } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
+import { clockBehindChain } from "@waitron/fiscal-verifactu/src/clock-behind.js";
+import { nextCheckSeq } from "@waitron/fiscal-verifactu/src/clock-checks.js";
+import { confirmClockStop } from "@waitron/fiscal-verifactu/src/clock-confirmation.js";
+import { clockChecks } from "@waitron/fiscal-verifactu/src/schema/clock-checks.js";
+import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import {
   fakeClient,
   saleInput,
@@ -784,6 +790,100 @@ describe("a backup whose newest record and creation time are near or past the cl
     ).toMatchObject({
       status: "selected",
       identity: encodeMinuteIdentity(Date.parse("2026-10-21T10:02:00Z")),
+    });
+  });
+
+  it("a restore below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale", async () => {
+    await sellAt("2026-10-22T20:15:00Z");
+    clock.set(Date.parse("2026-10-21T10:00:00Z"));
+    const f = await host();
+    const service = restoreService(f);
+    const selected = (await recoverySelectPastWaits(clock, service, asBrowser)) as {
+      status: string;
+      identity: string;
+      input: unknown;
+    };
+    expect(selected.status).toBe("selected");
+    await runRestoreHooks({
+      db: suite.db,
+      node,
+      modules: f.configured,
+      log: () => {},
+      withModuleOperations: service.runner(selected.input),
+    });
+    const boxClock = {
+      ...steadyClock,
+      now: () => ({ ...steadyClock.now(), instant: new Date(clock.wall()) }),
+    };
+    const reading = boxClock.now();
+    expect(await withTransaction(suite.db, (tx) => clockBehindChain(tx, reading))).toMatchObject({
+      lastRecordAt: "2026-10-22T20:15:00.000Z",
+    });
+    const [standard] = await suite.db
+      .select()
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.code, `A-${selected.identity}`));
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "preproduction",
+      clock: boxClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+    });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        recordSale(
+          tx,
+          backend,
+          saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: boxClock }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "clock.behind_chain" });
+    const openIncidents = async () =>
+      (await suite.db.select().from(incidents))
+        .filter((row) => row.acknowledgedAt === null)
+        .map(({ code, params }) => ({ code, params }));
+    expect(await openIncidents()).toEqual([]);
+    await withTransaction(suite.db, async (tx) => {
+      const heads = Object.fromEntries(
+        (
+          await tx
+            .select({
+              node: registrosFacturacion.nodeId,
+              head: max(registrosFacturacion.secuencia),
+            })
+            .from(registrosFacturacion)
+            .groupBy(registrosFacturacion.nodeId)
+        ).map((row) => [row.node, row.head]),
+      );
+      await tx.insert(clockChecks).values({
+        seq: await nextCheckSeq(tx),
+        nodeId: node.nodeId,
+        openedAt: reading.instant,
+        reason: "behind_chain",
+        detail: { clockAt: reading.instant.toISOString(), heads },
+      });
+    });
+    const at = reading.instant.toISOString();
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      confirmClockStop(tx, {
+        reading,
+        boot: { ms: 5 * 60_000, id: null },
+        witnesses: [
+          { kind: "authority", id: "authority", boxAt: at, witnessAt: at, uncertaintyMs: 0 },
+        ],
+        nodeId: node.nodeId,
+      }),
+    );
+    expect(confirmation).not.toBeNull();
+    const open = await openIncidents();
+    expect(open.map(({ code }) => code).sort()).toEqual([
+      "clock.behind_chain_restarted",
+      "clock.records_misdated",
+    ]);
+    expect(open.find(({ code }) => code === "clock.records_misdated")!.params).toMatchObject({
+      count: 1,
+      from: "2026-10-22T20:15:00.000Z",
+      to: "2026-10-22T20:15:00.000Z",
     });
   });
 
