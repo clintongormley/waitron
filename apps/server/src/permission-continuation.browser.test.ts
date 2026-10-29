@@ -72,7 +72,7 @@ await import(${JSON.stringify(join(repo, "apps/dashboard/src/main.ts"))});
     ],
     { timeout: 90_000, maxBuffer: 2_000_000 },
   );
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ headless: true, timeout: 15_000 });
 }, 120_000);
 afterAll(async () => {
   await browser?.close();
@@ -276,7 +276,7 @@ it.each(["password", "passkey"] as const)(
       const page = await context.newPage();
       const errors: string[] = [];
       page.on("pageerror", (error) => errors.push(error.message));
-      page.setDefaultTimeout(15_000);
+      page.setDefaultTimeout(3_000);
       await page.goto(`${origin}/manage/test-continuation`);
       try {
         await page.locator("[data-test=test-sign-in] button").click();
