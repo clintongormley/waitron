@@ -2866,7 +2866,7 @@ describe("an extra on its own (B11d)", () => {
   });
 
   it.each([
-    // A cancel names a row's olives only on one line: as a counter order moved to a table keeps it.
+    // A cancel names a row's olives only on one line: grouped, as an order stored before portions.
     { action: "cancel", shape: "grouped" },
     { action: "discount_percent", shape: undefined },
   ] as const)(
@@ -3148,8 +3148,8 @@ describe("part of a dish with extras (B11d)", () => {
   );
 
   /** Pizza ×3 with 2 olives, written by hand: no product path is known to store an extra that is
-   * not a whole count a dish. Grouped, as a counter order moved to a table keeps it (plan D1): a
-   * portion's olives are its own. */
+   * not a whole count a dish. Grouped, as an order stored before portions: a portion's olives are
+   * its own. */
   async function unevenOlives() {
     const { billId } = await bill([{ name: "Pizza", quantity: "3", olives: 1 }], {
       shape: "grouped",

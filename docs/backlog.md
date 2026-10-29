@@ -1969,7 +1969,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-  ticket/receipt grouping, has landed. What it leaves open is A1190–A1202 and the store limit under
+  ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Remaining slices: named, stable-numbered bills;
   always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
@@ -1986,15 +1986,16 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
 
-- **A1190. Counter orders keep one line for several of a dish (owner decision; left open by A803
-  slice 1, D1).** Walk-up sales and parked counter orders are not split into portions, because
-  fiscal control tests that must stay unedited pin their grouped lines.
-  [Detail](backlog/till.md#a1190-counter-orders-keep-one-line-for-several-of-a-dish)
-
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
   Croquetas" is twelve rows to tick, because A739's payment window holds those files
-  (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Once A739 releases them,
+  (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Since A1208 the counter's
+  Pay items on a part-paid counter order lists one row per portion too. Once A739 releases them,
   group the rows with a count that sends the members' line numbers.
+
+- **A1217. Two separate adds of the same dish with extras stay two counter rows (left open by
+  A803 slice 1).** Seen in slice 1's LOOK (2026-10-29): the counter basket kept them as two lines of
+  one, where a table's draft merges them. Not re-checked after A1208.
+  [Detail](backlog/till.md#a1217-two-separate-adds-of-the-same-dish-with-extras-stay-two-counter-rows)
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
@@ -2013,8 +2014,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Partial
   transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
-  adjustment and item payment stay for measured lines and grouped counter lines, and their tests
-  build grouped bills. Retire them once A1190 and A1195 are settled.
+  adjustment and item payment stay for measured lines and lines stored before portions, and their
+  tests build grouped bills. Retire them once A1195 is settled.
 
 - **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
   test helpers call it (`apps/server/src/testing/party-venue.ts`,

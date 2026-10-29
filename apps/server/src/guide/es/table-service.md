@@ -180,8 +180,8 @@ repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cue
 
 ## Cada plato es su propia línea {#portions}
 
-Cuando una mesa pide 2 × Hamburguesa con queso, la cuenta tiene dos hamburguesas, cada una con su
-queso, en lugar de una línea de dos. Así puedes servir, mover o cancelar una hamburguesa y su queso
+Cuando tomas un pedido de 2 × Hamburguesa con queso, en una mesa o en el mostrador, la cuenta tiene
+dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes servir, mover o cancelar una hamburguesa y su queso
 va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
 
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en
@@ -193,10 +193,10 @@ deja elegir cuántos platos de una fila pasan a la cuenta nueva, cada uno con su
 dejan elegir cuántos de sus platos.
 
 Un plato al peso es distinto, porque cada uno se pesa por separado: si añades dos veces el mismo
-plato al peso tienes dos líneas, no una del doble de peso. En la cuenta de una mesa puedes añadir hasta 99 unidades de un mismo plato cada vez.
+plato al peso tienes dos líneas, no una del doble de peso. En una mesa o en el mostrador puedes añadir hasta 99 unidades de un mismo plato cada vez.
 
-Un pedido de mostrador mantiene 2 × Hamburguesa como una sola línea aunque lo
-muevas a una mesa, así que sus 2 × Hamburguesa con queso solo pasan a otra cuenta enteras.
+En el mostrador, un pedido que aparcas y vuelves a abrir muestra sus 2 × Hamburguesa como una sola
+fila mientras no se haya pagado nada de él.
 
 ## Volver a tus mesas con platos sin enviar {#unsent-tables}
 

@@ -368,7 +368,7 @@ describe("party Recall to draft", () => {
   });
 
   it("increases an actually discounted recalled line without repricing it or rewriting its adjustment", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
     await inTx(venue, async (tx) => {
       const reason = await createAdjustmentReason(tx, {
@@ -685,7 +685,7 @@ describe("party Recall to draft", () => {
   );
 
   it("an extra's started work refuses its parent's Recall", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("fire", 1, "grouped");
     const extraId = randomUUID();
     await venue.db.insert(workingOrderLines).values({
@@ -776,7 +776,7 @@ describe("party Recall to draft", () => {
           printerId: printer.id,
         }),
       );
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const p = await setup("hold", 1, "grouped");
       await venue.db
         .update(orderGroups)
@@ -838,7 +838,7 @@ describe("party Recall to draft", () => {
   });
 
   it("keeps recalled course identity for placement but omits the work from summaries and reminders", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
     const course = await inTx(venue, (tx) =>
       createCourse(tx, venue.cfg, { name: `M-${randomUUID()}`, displayOrder: 7 }),
@@ -885,7 +885,7 @@ describe("party Recall to draft", () => {
   });
 
   it("recalls and resends a discounted parent and its priced extra without changing either charge or adjustment", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("fire", 1, "grouped");
     const extraId = randomUUID();
     await venue.db.insert(workingOrderLines).values({
@@ -986,7 +986,7 @@ describe("party Recall to draft", () => {
   it.each(["hold", "fire"] as const)(
     "recalls %s work to the acting owner's bill draft and replays without writes",
     async (release) => {
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const p = await setup(release, 1, "grouped");
       const beforeLines = await venue.db
         .select()
@@ -1072,7 +1072,7 @@ describe("party Recall to draft", () => {
   });
 
   it("fires only the other active dish, leaving the recalled reservation unsent", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", 2, "grouped");
     const answer = await recall(p.partyId, p.line.id);
     expect(answer.status).toBe(200);
@@ -1093,7 +1093,7 @@ describe("party Recall to draft", () => {
   });
 
   it("retains an empty held group but a direct Fire cannot release its sole recalled dish", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
     expect((await recall(p.partyId, p.line.id)).status).toBe(200);
     const [group] = await venue.db.select().from(orderGroups).where(eq(orderGroups.id, p.groupId));
@@ -1181,7 +1181,7 @@ describe("party Recall to draft", () => {
   });
 
   it("a split-off extra's station can refuse its dish's Recall", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", 1, "grouped");
     const sideId = (
       await inTx(venue, (tx) => createStation(tx, venue.cfg, { name: `Side-${randomUUID()}` }))
@@ -1272,7 +1272,7 @@ describe("party Recall to draft", () => {
   });
 
   it("records a RECALLED notice before removing the fired kitchen work", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("fire", 1, "grouped");
     expect((await recall(p.partyId, p.line.id)).status).toBe(200);
     const notices = await venue.db

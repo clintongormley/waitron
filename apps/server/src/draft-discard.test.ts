@@ -344,7 +344,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("allows the new owner after takeover while retaining the adjustment actor", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, false, false, "hold", "grouped");
     const taken = await call(
       "POST",
@@ -368,7 +368,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("removes cancelled sources' allergy ticks and keeps each guest and another dish's tick", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, false, false, "hold", "grouped");
     const water = (await rowsOf(venue, p.billId))[3]!;
     const allergy = await inTx(venue, async (tx) => {
@@ -476,7 +476,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("cancels both frozen discounted families, discards fresh work and replays once", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, false, true, "hold", "grouped");
     const read = await call("GET", `/api/parties/${p.partyId}/drafts`);
     const current = (read.json as unknown as { drafts: Draft[] }).drafts[0]!;
@@ -563,7 +563,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("uses the existing settlement when cancelling sources leaves the remaining bill fully paid", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, true, false, "hold", "grouped");
     const body = await request(p);
     const before = await frozen();
@@ -602,7 +602,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("rolls back the first family when a later recalled family contains paid units", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(true, false, false, "hold", "grouped");
     const before = await frozen();
     const answer = await discard(p, await request(p));
@@ -614,7 +614,7 @@ describe("Discard resolves the whole owned draft atomically", () => {
   });
 
   it("retains reason, required-note and refund-approval policy for the whole Discard", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, false, false, "fire", "grouped");
     const reason = await inTx(venue, (tx) =>
       createAdjustmentReason(tx, {

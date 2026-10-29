@@ -198,7 +198,7 @@ describe("groups with split-off extras", () => {
   it("names Fryer as ready and counts plates rather than the extra's pieces", async () => {
     const v = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       await placeGrouped(tx, v.cfg, v.party, [line(v, "burger", 2, "2")], "fire", OPERATOR);
       const placed = v.party;
       const fryer = (await records(tx, placed.tabId)).find(

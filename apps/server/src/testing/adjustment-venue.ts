@@ -540,7 +540,7 @@ function roundLines(venue: AdjustmentVenue, lines: RoundLine[]): TabRoundLine[] 
 /**
  * A party seated at a fresh table by `operatorId`, with `lines` placed on its bill as one group,
  * fired or held. Answers the party, its bill and the bill's revision. With `shape: "grouped"` each
- * line is one stored line of its count, as `createOpenOrder` stores a counter order's.
+ * line is one stored line of its count, as an order stored before portions is.
  */
 export async function billWith(
   venue: AdjustmentVenue,

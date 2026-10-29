@@ -168,7 +168,7 @@ that nobody signs in on shows neither.
 
 ## Identical dishes share a row {#identical-dishes}
 
-A table's order of 2 × Burger reaches the kitchen as two dishes, so the till can serve or move each
+An order of 2 × Burger, from a table or the counter, reaches the kitchen as two dishes, so the till can serve or move each
 one on its own. The kitchen still reads them together: the station ticket, the kitchen screen and
 the pass show them as one row of 2 while they are the same, and the ticket's **Also on this order** list and
 correction slips such as **HOLD CHANGED** print them once. Dishes stay on separate rows when their

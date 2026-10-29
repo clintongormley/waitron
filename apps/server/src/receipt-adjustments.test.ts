@@ -845,7 +845,7 @@ describe("receiptLines", () => {
   });
 
   it("marks a family whose rows another dish sits between, and leaves that dish unmarked", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const { billId } = await billWith(
       venue,
       [{ name: "Croquetas", quantity: "3" }, { name: "Burger" }],

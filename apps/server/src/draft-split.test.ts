@@ -401,7 +401,7 @@ describe("splitting a saved outbox to a new bill", () => {
     "keeps a received %s on its original bill and refuses moving its charged food",
     async (kind) => {
       const p = await setup();
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const { source, snapshot } = await withSource(p, false, [], "grouped");
       const paymentId = randomUUID();
       await inTx(venue, async (tx) => {
@@ -470,7 +470,7 @@ describe("splitting a saved outbox to a new bill", () => {
 
   it("uses the existing issuance path when the remaining sent food is fully paid after the split", async () => {
     const p = await setup();
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const { snapshot } = await withSource(p, true, [], "grouped");
     await venue.db.insert(billPayments).values({
       workingOrderId: p.billId,
@@ -509,7 +509,7 @@ describe("splitting a saved outbox to a new bill", () => {
 
   it("moves every extra with its recalled parent, retaining the recorded amounts and single reservation", async () => {
     const p = await setup();
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const { source, snapshot } = await withSource(p, false, extras, "grouped");
     const before = await venue.db
       .select()

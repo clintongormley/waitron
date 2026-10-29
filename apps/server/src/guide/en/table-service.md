@@ -173,8 +173,8 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 
 ## Each dish is its own line {#portions}
 
-When a table orders 2 × Burger with cheese, the bill holds two burgers, each with its own cheese,
-rather than one line of two. That way you can serve, move or void one burger and its cheese goes
+When you take an order of 2 × Burger with cheese, at a table or at the counter, the bill holds two
+burgers, each with its own cheese, rather than one line of two. That way you can serve, move or void one burger and its cheese goes
 with it, and the bill and the kitchen agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A
@@ -184,10 +184,10 @@ the new bill, each with its own extras, while **Transfer items** moves the whole
 **Void** work on the row and let you choose how many of its dishes.
 
 A weighed dish is different, because each one is weighed on its own: adding the same weighed dish
-twice gives two lines rather than one of double the weight. On a table's bill you can add up to 99 of one dish at a time.
+twice gives two lines rather than one of double the weight. At a table or at the counter you can add up to 99 of one dish at a time.
 
-An order taken at the counter keeps 2 × Burger as one line even after you move it to a
-table, so its 2 × Burger with cheese moves to another bill only as a whole.
+At the counter, an order you park and open again shows its 2 × Burger as one row while none of it
+is paid.
 
 ## Get back to your tables with unsent dishes {#unsent-tables}
 

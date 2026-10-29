@@ -273,7 +273,7 @@ describe("recalled modifier edits", () => {
   it.each([false, true])(
     "prices newly selected extras for two sources from one shared offer snapshot, fresh=%s",
     async (fresh) => {
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const p = await setup(false, "grouped");
       await inTx(venue, (tx) =>
         placeGrouped(
@@ -445,7 +445,7 @@ describe("recalled modifier edits", () => {
   });
 
   it("scales kept extras at their stored discount while pricing an addition at the increased quantity", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, "grouped");
     const before = await frozen(p);
     const answer = await save(p, {
@@ -513,7 +513,7 @@ describe("recalled modifier edits", () => {
   );
 
   it("removes a recorded extra while keeping the original dish price and adjustment history", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, "grouped");
     const before = await frozen(p);
     const answer = await save(p, { extras: [] });
@@ -552,7 +552,7 @@ describe("recalled modifier edits", () => {
   );
 
   it("changes an option on an unavailable discounted dish without repricing its family", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, "grouped");
     await venue.db
       .update(products)
@@ -603,7 +603,7 @@ describe("recalled modifier edits", () => {
   it.each([false, true])(
     "adds only a newly priced extra to an unavailable dish, variant=%s",
     async (variant) => {
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const p = await setup(variant, "grouped");
       await venue.db
         .update(products)
@@ -694,7 +694,7 @@ describe("recalled modifier edits", () => {
   );
 
   it("rolls back a newly priced extra that exceeds the simplified-invoice ceiling", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup(false, "grouped");
     const before = await frozen(p);
     await expect(
@@ -739,7 +739,7 @@ describe("mixed New order persistence through authenticated requests", () => {
   it.each([false, true])(
     "keeps fresh placement and a discounted recalled family through reread, takeover and partial send, variant=%s",
     async (variant) => {
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const p = await setup(variant, "grouped");
       const before = await frozen(p);
       const path = `/api/parties/${p.partyId}/drafts`;
