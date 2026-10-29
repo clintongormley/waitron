@@ -203,6 +203,29 @@ describe("a reply that breaks the closed version-1 shape is refused whole", () =
     it(`refuses ${name}`, () => {
       expect(codeOf(() => readBillingDisplay(value, expected))).toBe("cloud.unavailable");
     });
+  it("refuses a price list that takes effect after the reply's day, and accepts one from that day", () => {
+    // asOf is 10 November in Madrid.
+    const from = (effectiveFrom: string) =>
+      codeOf(() => readBillingDisplay(reply(TRIAL, { ...PRICES, effectiveFrom }), expected));
+    expect(from("2026-11-11")).toBe("cloud.unavailable");
+    expect(from("2026-11-10")).toBe("accepted");
+  });
+  it("judges a price list's first day on the reply's own calendar", () => {
+    // 23:30 UTC on 31 October is already 1 November in Madrid.
+    const at = (calendarTimeZone: string) =>
+      codeOf(() =>
+        readBillingDisplay(
+          reply(
+            { status: "unavailable", reason: "state_not_ready" },
+            { ...PRICES, effectiveFrom: "2026-11-01" },
+            { calendarTimeZone, asOf: "2026-10-31T23:30:00.000Z" },
+          ),
+          expected,
+        ),
+      );
+    expect(at("Europe/Madrid")).toBe("accepted");
+    expect(at("UTC")).toBe("cloud.unavailable");
+  });
   it("accepts UTC as a zone name", () => {
     expect(
       codeOf(() => readBillingDisplay(reply(TRIAL, PRICES, { calendarTimeZone: "UTC" }), expected)),
@@ -211,7 +234,9 @@ describe("a reply that breaks the closed version-1 shape is refused whole", () =
 });
 
 describe("whether a period covers asOf is judged on the reply's own calendar", () => {
-  // 23:30 UTC on 31 October is already 1 November in Madrid.
+  // 23:30 UTC on 31 October is already 1 November in Madrid. The prices are in effect on both days,
+  // so only the period decides.
+  const prices = { ...PRICES, effectiveFrom: "2026-10-01" };
   const at = (calendarTimeZone: string, coversAsOf: boolean) =>
     reply(
       {
@@ -226,7 +251,7 @@ describe("whether a period covers asOf is judged on the reply's own calendar", (
           coversAsOf,
         },
       },
-      PRICES,
+      prices,
       { calendarTimeZone, asOf: "2026-10-31T23:30:00.000Z" },
     );
   it("in Madrid the day is 1 November, inside the period", () => {
@@ -253,7 +278,7 @@ describe("whether a period covers asOf is judged on the reply's own calendar", (
           coversAsOf,
         },
       },
-      PRICES,
+      prices,
       { calendarTimeZone, asOf: "2026-10-31T23:30:00.000Z" },
     );
   it("a period ending on 31 October covers that instant in UTC and not in Madrid", () => {
