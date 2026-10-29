@@ -4,12 +4,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppError } from "@waitron/shared";
-import {
-  billingEnvelope,
-  fetchBillingDisplay,
-  lastIncludedDay,
-  readBillingDisplay,
-} from "./cloud-billing.js";
+import { billingEnvelope, fetchBillingDisplay, readBillingDisplay } from "./cloud-billing.js";
 import type { SavedCloudState } from "./cloud-client.js";
 
 const vector = JSON.parse(
@@ -295,16 +290,6 @@ describe("the allowed level, state and period combinations", () => {
           ).toBe(ok ? "accepted" : "cloud.unavailable");
         });
       }
-});
-
-describe("the last day a period includes", () => {
-  it("is the day before `until`, in the screen's language", () => {
-    expect(lastIncludedDay("2026-11-30", "en-GB")).toBe("29 November 2026");
-    expect(lastIncludedDay("2026-03-01", "es")).toBe("28 de febrero de 2026");
-  });
-  it("is formatted on UTC so a zone west of it cannot move the day (control: New York moves it)", () => {
-    expect(lastIncludedDay("2026-11-30", "en-GB", "America/New_York")).toBe("28 November 2026");
-  });
 });
 
 describe("the exchange with Cloud", () => {

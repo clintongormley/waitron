@@ -214,14 +214,6 @@ export function readBillingDisplay(
   };
 }
 
-/** `until` is the first day a period excludes; this names the last day it includes. */
-export function lastIncludedDay(until: string, locale: string, timeZone = "UTC"): string {
-  const [y, m, d] = until.split("-").map(Number) as [number, number, number];
-  return new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone }).format(
-    new Date(Date.UTC(y, m - 1, d - 1)),
-  );
-}
-
 export function billingEnvelope(
   state: Pick<SavedCloudState, "origin" | "view" | "privateKey">,
   operationId: string,
