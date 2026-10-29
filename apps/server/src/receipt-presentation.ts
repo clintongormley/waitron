@@ -2,14 +2,14 @@ import type { Transaction } from "@waitron/db";
 import { readReceiptLanguage } from "@waitron/catalogue";
 import { resolveReceiptTrim, type ReceiptPresentation } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readLocationAddress } from "./venue-address.js";
 import { readPresentations } from "@waitron/media";
 import { readVenueLogoName } from "./receipt-venue-logo.js";
 
 export async function readReceiptPresentation(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   saleId: string,
   printedLanguage: string,
 ): Promise<

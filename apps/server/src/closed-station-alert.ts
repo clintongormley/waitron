@@ -9,7 +9,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { recordIncidentOnce } from "@waitron/core";
 import { AppError } from "@waitron/shared";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import "./errors.js";
 
 export interface Stranded {

@@ -82,7 +82,7 @@ import { isUuid, requireSession, signedInPersonOn } from "./till-session.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { KitchenScreenKind, ResolvedKitchenScreen, ScreenSlot } from "@waitron/module";
 import { stationPrintersDown } from "./station-outputs-down.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { listMadeHereStations, setMadeHereStations } from "./made-here.js";
 import { listPassMonitor, listPassScreen, passScopeOf } from "./pass-board.js";
@@ -101,13 +101,9 @@ import {
   type OwnedStaffNoticeSource,
 } from "./staff-notices.js";
 
-/**
- * `cfg` is the FULL `TillConfig` because the verbs this surface calls are typed on it; the routes
- * touch none of its fiscal ids.
- */
 export interface DeviceApiDeps {
   db: Database;
-  cfg: TillConfig;
+  cfg: TradingContext;
   secureCookies: boolean;
   /**
    * The venue-wide window during which a knock is admitted (`pairing-mode.ts`). REQUIRED, not optional:
@@ -1001,7 +997,7 @@ function parseEquipmentChoice(
 async function stationScreenOf(
   tx: Transaction,
   c: Context,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   device: DeviceBinding,
 ): Promise<ResolvedKitchenScreen> {
   return (await kitchenScreenOf(tx, c, cfg, device, "station")).screen;
@@ -1016,7 +1012,7 @@ async function stationScreenOf(
 async function kitchenScreenOf(
   tx: Transaction,
   c: Context,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   device: DeviceBinding,
   kind: KitchenScreenKind,
 ): Promise<{ screen: ResolvedKitchenScreen; personId: string | null }> {
@@ -1031,7 +1027,7 @@ async function kitchenScreenOf(
 
 async function stationScreenSlots(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   screen: ResolvedKitchenScreen,
 ): Promise<{ slots: ScreenSlot[]; queues: Map<string, StationQueueGroup[]> }> {
   const worked = (slot: ScreenSlot) => slot.available || slot.switchedOff;
@@ -1062,7 +1058,7 @@ async function stationScreenSlots(
  *  {@link stationScreenSlots} lists it with a queue. */
 async function worksStation(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   screen: ResolvedKitchenScreen,
   stationId: string,
 ): Promise<boolean> {
@@ -1078,7 +1074,7 @@ async function worksStation(
 }
 
 /** The location's stations, historical rows included. */
-async function stationsHere(tx: Transaction, cfg: Pick<TillConfig, "locationId">) {
+async function stationsHere(tx: Transaction, cfg: Pick<TradingContext, "locationId">) {
   const stations = await tx
     .select({ id: kitchenStations.id, name: kitchenStations.name, active: kitchenStations.active })
     .from(kitchenStations)

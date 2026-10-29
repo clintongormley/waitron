@@ -105,7 +105,7 @@ import {
 import { parseProfileKitchenScreens } from "./device.js";
 import type { NarrowedDevice, TableRemoval } from "@waitron/module";
 import { readLayout, saveLayout, type ZonePlanSave } from "./floor-plan.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { codeOf, createErrorBoundary } from "@waitron/server-kit";
 import { readJsonBody } from "@waitron/server-kit";
 import {
@@ -144,7 +144,7 @@ export interface ManagementApiDeps {
    * same value `mountTillApi` receives. Optional so harnesses that never reach those routes can omit
    * it; a request that does reach one without it fails closed (`requireVenueCfg`).
    */
-  venueCfg?: TillConfig;
+  venueCfg?: TradingContext;
   validateOperationDescription?: (description: string) => void;
   secureCookies: boolean;
   /** The WebAuthn Relying Party ID passkeys are bound to (`config.ts`'s `managementRpId`). */
@@ -313,7 +313,7 @@ function requireSetId(id: string): string {
   return id;
 }
 
-async function requireLiveZone(tx: Transaction, cfg: TillConfig, id: string): Promise<void> {
+async function requireLiveZone(tx: Transaction, cfg: TradingContext, id: string): Promise<void> {
   const [zone] = await tx
     .select({ id: floorZones.id })
     .from(floorZones)
@@ -347,7 +347,7 @@ function requireDeviceProfileId(id: string): string {
   return id;
 }
 
-function requireVenueCfg(deps: ManagementApiDeps): TillConfig {
+function requireVenueCfg(deps: ManagementApiDeps): TradingContext {
   /* v8 ignore start -- boot always threads venueCfg; only a harness that omits it AND hits a zone/table
      route reaches this, which no suite does — a config error, surfaced as an opaque 500 by `run`. */
   if (deps.venueCfg === undefined) {

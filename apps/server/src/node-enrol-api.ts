@@ -6,7 +6,7 @@ import { withTransaction, type Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { createEnrolRateLimiter, type EnrolRateLimiter } from "./enrol-rate-limit.js";
 import { selfEnrolNodeAgent } from "./join-requests.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 
 /** `::ffff:127.0.0.1` is IPv4 mapped into IPv6, which a dual-stack listener reports for a v4
@@ -15,7 +15,7 @@ const LOOPBACK = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
 
 export interface NodeEnrolApiDeps {
   db: Database;
-  cfg: TillConfig;
+  cfg: TradingContext;
   nodeId: string;
   /** Boot-captured. On a mirror or fenced node the read-only gate refuses the POST with
    * `node.read_only` before this is read; this is the defensive refusal for a non-primary node the

@@ -10,11 +10,11 @@ import type {
   TransactionsPage,
   TransactionsQuery,
 } from "./find-bill-types.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
-function scopeRelation(cfg: TillConfig, saleId?: string): SQL {
+function scopeRelation(cfg: TradingContext, saleId?: string): SQL {
   return sql`with recursive invoice_scope(sale_id, source_sale_id) as (
     select s.id, s.id from sales s join nodes n on n.id = s.node_id
       where n.location_id = ${cfg.locationId} ${saleId === undefined ? sql`` : sql`and s.id = ${saleId}`}
@@ -30,14 +30,14 @@ function scopeRelation(cfg: TillConfig, saleId?: string): SQL {
   )`;
 }
 
-function scopeCondition(cfg: TillConfig, inZones?: OrderZoneCondition): SQL {
+function scopeCondition(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
   // Every source matters: allowing one order must not reveal another order's invoice facts.
   return sql`not exists(select 1 from scope_orders so join working_orders wo on wo.id = so.order_id
     where so.sale_id = s.id and (wo.location_id <> ${cfg.locationId}
       or not (${inZones?.(sql`so.order_id`) ?? sql`1`})))`;
 }
 
-export function findTransactionsRelation(cfg: TillConfig, inZones?: OrderZoneCondition): SQL {
+export function findTransactionsRelation(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
   return sql`${scopeRelation(cfg)}, tender_methods as (
     select distinct t.sale_id, t.method, case when t.method = 'card' then p.card_last4 else null end as last4
     from tenders t left join payments p on t.method = 'card'
@@ -134,7 +134,7 @@ type RawTransaction = {
 
 export async function readFindTransactions(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   query: TransactionsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<TransactionsPage> {
@@ -187,7 +187,7 @@ export async function readFindTransactions(
 
 export async function resolveTransactionScope(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   saleId: string,
 ): Promise<{ workingOrderIds: string[]; locationId: string }> {
   const { rows } = await tx.execute<{

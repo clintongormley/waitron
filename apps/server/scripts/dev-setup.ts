@@ -29,7 +29,7 @@ import { writeModuleConfig } from "../src/module-config.js";
 import { resolveConfigDir } from "../src/config.js";
 import { listStations } from "../src/kitchen.js";
 import { enrolDeviceForTest } from "../src/testing/enrol.js";
-import type { TillConfig } from "../src/till-config.js";
+import type { TradingContext } from "../src/trading-context.js";
 import { parseEnvFile } from "../src/env-file.js";
 import { seedDemoRestaurant, type SeedDemoResult } from "./demo-seed/seed.js";
 import { demoSeedEnvironment } from "./demo-seed/seed-sales.js";
@@ -282,7 +282,7 @@ async function seedDemoDevices(
   receiptLocale: string,
   seeded: SeedDemoResult,
 ): Promise<void> {
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(ids.nodeId),
     locationId: brandLocationId(ids.locationId),
     locale: receiptLocale,

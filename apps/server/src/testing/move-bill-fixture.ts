@@ -7,7 +7,7 @@ import {
 } from "../move-bill.js";
 import type { BillEditExpected } from "../order-drafts.js";
 import { holderOf } from "../parties.js";
-import type { OriginConfig } from "../till-config.js";
+import type { OriginConfig } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 export * from "../move-bill.js";
 export type MoveBillOptions = Omit<Options, "expectedEdits"> & {

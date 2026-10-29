@@ -3,7 +3,7 @@ import type { Transaction } from "@waitron/db";
 import { inArray } from "drizzle-orm";
 import type { DeviceKitchenScreen } from "@waitron/module";
 import { createJoinRequest, acceptDeviceJoinRequest } from "../join-requests.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { VENUE_SERVICE } from "../modules.js";
 
 /**
@@ -14,7 +14,7 @@ import { VENUE_SERVICE } from "../modules.js";
  */
 export async function enrolDeviceForTest(
   db: Database,
-  cfg: TillConfig,
+  cfg: TradingContext,
   input: {
     name: string;
     profileId: string;
@@ -42,7 +42,7 @@ export async function enrolDeviceForTest(
  *  own check still refuses that one. */
 export async function offerOnProfile(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   profileId: string,
   screen: DeviceKitchenScreen,
 ): Promise<void> {

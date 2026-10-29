@@ -4,7 +4,7 @@ import { AppError } from "@waitron/shared";
 import { recordStepCompletions } from "@waitron/venue-service";
 import { stepsClearedByDone } from "./service-step-reckoning.js";
 import { readStepFacts } from "./service-step-signals.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { assertSubjectZones } from "./zone-access.js";
 import "./errors.js";
 
@@ -19,7 +19,7 @@ import "./errors.js";
 export async function markServiceStepDone(
   tx: Transaction,
   args: {
-    cfg: TillConfig;
+    cfg: TradingContext;
     deviceProfileId: string;
     partyId: string;
     stepId: string;

@@ -68,7 +68,8 @@ import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
 import { buildCardProvider } from "./boot.js";
 import type { TillApiDeps } from "./till-api.js";
-import type { OrderFlow, TillConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
@@ -127,7 +128,7 @@ function nextNif(): string {
   return nifWithControlLetter(60_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
@@ -144,7 +145,7 @@ function tillConfigFromVenue(venue: VenueResult): TillConfig {
  * (1.50 gross, general/21%) and one kg product (24.90 €/kg, reduced/10%).
  */
 async function setupVenue(): Promise<{
-  cfg: TillConfig;
+  cfg: TradingContext;
   catalogueId: string;
   available: (AvailableProduct & { menuItemId: string })[];
   operatorId: string;
@@ -261,7 +262,7 @@ async function setupVenue(): Promise<{
 /** The till API's deps for a provisioned venue: the suite's one database handle, the real fiscal
  * backend + system clock the sale path files through, and `secureCookies:false` so the session
  * cookie rides the non-TLS `app.request`. */
-function apiDeps(cfg: TillConfig): TillApiDeps {
+function apiDeps(cfg: TradingContext): TillApiDeps {
   return {
     db: suite.db,
     backend,
@@ -284,7 +285,7 @@ const RING = loadKeyRing({
  * (`CollectParams.readerRef`). The caching is what lets the two-readers-one-provider case prove
  * the ref is not baked in.
  */
-function fakePool(_cfg: TillConfig, client: FakeStripe): CardProviderPool {
+function fakePool(_cfg: TradingContext, client: FakeStripe): CardProviderPool {
   const cache = new Map<string, StripeTerminalProvider>();
   return {
     get: (providerId) => {
@@ -309,7 +310,7 @@ function fakePool(_cfg: TillConfig, client: FakeStripe): CardProviderPool {
 /** `apiDeps` plus a `CardProviderPool`, for the `POST /api/pay` reader-routing tests. Threads the
  * real composition list so the pay path resolves a reader's provider `credentialPurpose` from its
  * seat, exactly as boot does. */
-function apiDepsWithPool(cfg: TillConfig, pool: CardProviderPool): TillApiDeps {
+function apiDepsWithPool(cfg: TradingContext, pool: CardProviderPool): TillApiDeps {
   return {
     db: suite.db,
     backend,
@@ -384,7 +385,7 @@ async function readerIdOnPayment(workingOrderId: string): Promise<string | null>
  */
 let tillDeviceCounter = 0;
 async function enrolTillCookie(
-  cfg: TillConfig,
+  cfg: TradingContext,
   deviceProfileId: string | null = null,
 ): Promise<string> {
   tillDeviceCounter += 1;
@@ -400,7 +401,7 @@ async function enrolTillCookie(
  *  cookie. The login is device-gated, so without one it enrols a throwaway `till` device. */
 async function loginSession(
   app: Hono,
-  cfg: TillConfig,
+  cfg: TradingContext,
   operatorId: string,
   deviceCookie?: string,
 ): Promise<string> {
@@ -1182,7 +1183,7 @@ describe("POST /api/pay (integrated card terminal, over HTTP)", () => {
     }
 
     async function declinedPay(
-      mount: (cfg: TillConfig, log: Logger) => Hono,
+      mount: (cfg: TradingContext, log: Logger) => Hono,
       prepare: (deviceCookie: string) => Promise<void>,
       body: Record<string, unknown>,
     ) {
@@ -1751,7 +1752,7 @@ describe("GET /api/till (per-device card provider, over HTTP)", () => {
 describe("place → station queue → per-line advance → collect (KDS-1 ticket model, over HTTP)", () => {
   it("Mode T: place files no fiscal doc; the prep queue tracks it; collect files the sale at collect", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TillConfig = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!; // 1.50 general(21%)
 
     const app = new Hono();
@@ -2113,7 +2114,7 @@ describe("handheld sales and device capability gates", () => {
   /** Enrol a handheld device and return its `waitron_device=<id>.<token>` cookie. Its default
    * profile takes cash and nothing else. */
   async function enrolHandheldCookie(
-    cfg: TillConfig,
+    cfg: TradingContext,
     capabilities: string[] = ["take-cash"],
   ): Promise<string> {
     const profileId = await seedProfileFF("phone-portrait", capabilities);
@@ -2129,7 +2130,7 @@ describe("handheld sales and device capability gates", () => {
    * `till` device. */
   async function loginOperator(
     app: Hono,
-    cfg: TillConfig,
+    cfg: TradingContext,
     operatorId: string,
     deviceCookie?: string,
   ): Promise<string> {
@@ -2419,7 +2420,7 @@ describe("handheld sales and device capability gates", () => {
     await suite.db.execute(sql`
       update department_sale_policies set paid_when = 'ticket_then_pay'
       where department_id in (select id from departments where location_id = ${cfg.locationId})`);
-    const modeCfg: TillConfig = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2485,7 +2486,7 @@ describe("handheld sales and device capability gates", () => {
 
   it("a handheld collects a placed Mode-T order in cash for an operator holding only the payment permission, settling it and filing one record under itself, as a till does", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TillConfig = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -2580,7 +2581,7 @@ describe("handheld sales and device capability gates", () => {
 
     it("refuses a cash collect from a device whose profile lacks take-cash, leaving the order placed", async () => {
       const { cfg, available, operatorId } = await setupVenue();
-      const modeCfg: TillConfig = { ...cfg };
+      const modeCfg: TradingContext = { ...cfg };
       const each = available.find((p) => p.pricingUnit === "each")!;
       const app = new Hono();
       mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3029,7 +3030,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   it("fires the order to its station queue and answers 200 with an empty body", async () => {
     const { cfg, available, operatorId } = await setupVenue();
     // A ticket_then_pay venue settles a walk-up sale without firing it, which leaves prep to do.
-    const modeCfg: TillConfig = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3078,7 +3079,7 @@ describe("POST /api/working-orders/:id/prep for a settled order nothing fired ye
   });
   it("fires a paid order whose product has since sold out: a settled order's lines cannot be removed", async () => {
     const { cfg, available, operatorId } = await setupVenue();
-    const modeCfg: TillConfig = { ...cfg };
+    const modeCfg: TradingContext = { ...cfg };
     const each = available.find((p) => p.pricingUnit === "each")!;
     const app = new Hono();
     mountTillApi(app, apiDeps(modeCfg), noopLog);
@@ -3124,7 +3125,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
   /** A new printer, with or without a drawer, set as `deviceCookie`'s device's own receipt and drawer
    *  printer, printing receipts automatically. */
   async function deviceReceiptPrinter(
-    cfg: TillConfig,
+    cfg: TradingContext,
     deviceCookie: string,
     hasCashDrawer: boolean,
   ): Promise<string> {
@@ -3144,11 +3145,11 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   /** Another device's receipt and drawer printer here, with a drawer that device may open: the
    *  printer a lookup by location rather than by device would pick. */
-  const otherDevicesDrawerPrinter = async (cfg: TillConfig) =>
+  const otherDevicesDrawerPrinter = async (cfg: TradingContext) =>
     deviceReceiptPrinter(cfg, await enrolDrawerTill(cfg), true);
 
   /** A till device whose profile allows the drawer. */
-  async function enrolDrawerTill(cfg: TillConfig): Promise<string> {
+  async function enrolDrawerTill(cfg: TradingContext): Promise<string> {
     return enrolTillCookie(cfg, await seedProfileFF("till", ["open-cash-drawer", "take-cash"]));
   }
 
@@ -3187,7 +3188,7 @@ describe("a hand-keyed card payment opens the drawer of the device that took it,
 
   async function venueWithTill(orderFlow: OrderFlow = "prepay") {
     const venue = await setupVenue();
-    const cfg: TillConfig = { ...venue.cfg };
+    const cfg: TradingContext = { ...venue.cfg };
     await withTransaction(suite.db, (tx) =>
       offerProducts(tx, cfg, {
         orderStart: "counter",

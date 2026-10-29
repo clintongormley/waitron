@@ -33,7 +33,7 @@ import {
   configureZone,
 } from "@waitron/venue-service";
 import { floorZones, kitchenStations } from "@waitron/db";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { MANAGEMENT_COOKIE } from "@waitron/server-kit";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import "./errors.js";
@@ -615,7 +615,7 @@ beforeEach(async () => {
  * `setProductCourse`; the fiscal ids are shape-fillers, as they are in the other
  * route suites.
  */
-function venueCfg(): TillConfig {
+function venueCfg(): TradingContext {
   return {
     nodeId: brandNodeId("11111111-1111-4111-8111-111111111111"),
     locationId: brandLocationId(locationId),

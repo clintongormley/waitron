@@ -26,7 +26,7 @@ import type { SlipsLater } from "./moved-slips.js";
 import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { joinTables } from "./table-actions.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -156,7 +156,7 @@ export async function joinMergeMembers(
  */
 export async function writeMerge(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   args: { movingId: string; targetId: string; side: JoinSide; seats: number | null; free: boolean },
 ): Promise<void> {
   if (args.movingId === args.targetId) {

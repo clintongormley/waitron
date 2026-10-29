@@ -18,12 +18,12 @@ import {
   type SaveDraftInput,
 } from "../order-drafts.js";
 import type { AttendanceRecorder } from "../attendance-capture.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 
 // Content fixtures consume a draft; command-contract cases call the public writers directly.
 export async function saveDraftForTest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   operatorId: string,
   input: Omit<SaveDraftInput, "expectedEdit">,
@@ -52,7 +52,7 @@ export async function saveDraftForTest(
 
 export async function takeOverDraftForTest(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   draftId: string,
   operatorId: string,

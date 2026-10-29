@@ -24,7 +24,7 @@ import {
   readJoinStatus,
 } from "./join-requests.js";
 import { createPairingMode, PAIRING_HOLD_MS, type PairingMode } from "./pairing-mode.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { enrolDeviceForTest, offerOnProfile } from "./testing/enrol.js";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
@@ -46,7 +46,7 @@ const suite = useVenueDb({
 });
 const noopLog: Logger = () => {};
 
-function mountApp(cfg: TillConfig, pairingMode: PairingMode = createPairingMode()): Hono {
+function mountApp(cfg: TradingContext, pairingMode: PairingMode = createPairingMode()): Hono {
   const app = new Hono();
   mountJoinApi(
     app,
@@ -109,7 +109,7 @@ async function pendingCount(): Promise<number> {
 
 /** An app whose window was opened BEFORE the test makes its requests, so the gates' discard of
  *  requests a shut window stranded keeps them. */
-function openApp(cfg: TillConfig): { app: Hono; mode: PairingMode; holdId: string } {
+function openApp(cfg: TradingContext): { app: Hono; mode: PairingMode; holdId: string } {
   const mode = createPairingMode();
   const { holdId } = mode.open();
   return { app: mountApp(cfg, mode), mode, holdId };

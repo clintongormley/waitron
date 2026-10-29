@@ -17,7 +17,7 @@ import {
 import { createTable } from "./testing/live-table.js";
 import { ALL_MODULES, enabledTableRemovals } from "./modules.js";
 import { moduleCoreServices } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 const suite = useVenueDb({
   migrations: migrationOptionsFor(
@@ -38,7 +38,7 @@ it("deletes through the real core seat when the optional bookings table was neve
       operationDescription: "Hospitality",
     })
     .returning({ id: locations.id });
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     locationId: locationId(location!.id),
     nodeId: nodeId(randomUUID()),
     locale: "en-GB",

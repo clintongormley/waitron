@@ -57,7 +57,7 @@ import { decodeTicket } from "./testing/decode-ticket.js";
 import { KITCHEN_LATE_SEND_WORDS } from "./i18n/kitchen-late-send.js";
 import { createTable } from "./testing/live-table.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   createBareDepartment,
@@ -94,7 +94,7 @@ const MENUS = ["Desayunos", "Almuerzo", "Bebidas", "Café", "Deli para llevar"] 
 type MenuName = (typeof MENUS)[number];
 
 interface Venue {
-  cfg: TillConfig;
+  cfg: TradingContext;
   app: Hono;
   cookie: string;
   personId: string;
@@ -239,7 +239,7 @@ const linesOf = (tx: Transaction, workingOrderId: string) =>
 
 async function replacePeriodMembership(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   departmentId: string,
   menuIds: readonly string[],
 ) {

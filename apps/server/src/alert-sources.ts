@@ -43,7 +43,7 @@ import {
   stationsWithWaitingDishes,
 } from "./station-outputs-down.js";
 import { FIRST_START_PENDING } from "./stream-host.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { TtlCache } from "./ttl-cache.js";
 import "./errors.js";
 
@@ -719,7 +719,7 @@ export function stationOutputAlertSource(deps: {
   };
 }
 
-export function passScreenAlertSource(deps: { cfg: TillConfig }): AlertSource {
+export function passScreenAlertSource(deps: { cfg: TradingContext }): AlertSource {
   return {
     area: "kitchen",
     permission: "venue_service.manage",

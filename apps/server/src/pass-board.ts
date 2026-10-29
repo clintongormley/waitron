@@ -4,7 +4,7 @@ import { worstBand } from "@waitron/shared";
 import { ticketItems, workingOrderLines, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import type { ResolvedKitchenScreen } from "@waitron/module";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { orderWatchZones } from "./watch-zones.js";
 import {
   liveKitchenDish,
@@ -51,7 +51,7 @@ export function passScopeOf(screen: ResolvedKitchenScreen): PassScope {
 /** The pass retains unserved food until service ends, independently of device marks. */
 export async function listPassScreen(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   deviceId: string,
   scope: PassScope,
 ): Promise<{ orders: PassOrder[] }> {
@@ -87,7 +87,7 @@ export async function listPassScreen(
 /** The monitor shares the pass's service lifetime and cannot mark work complete. */
 export async function listPassMonitor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   scope: PassScope,
 ): Promise<{ orders: ExpoOrder[] }> {
   const kept = await scopedItems(tx, cfg, scope);
@@ -115,14 +115,14 @@ export async function listPassMonitor(
 
 /** A live kitchen dish at this location. `scopedItems` and `firedPassDishes` both read it, so the
  *  dark-pass alert counts only dishes a pass board would list. */
-function liveKitchenDishAt(cfg: TillConfig): SQL | undefined {
+function liveKitchenDishAt(cfg: TradingContext): SQL | undefined {
   return and(eq(workingOrders.locationId, cfg.locationId), liveKitchenDish());
 }
 
 /** The live kitchen dishes the scope sees. */
 async function scopedItems(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   scope: PassScope,
 ): Promise<{ id: string; orderId: string }[]> {
   if (scope.stationIds?.length === 0 || scope.zoneIds?.length === 0) return [];
@@ -156,7 +156,7 @@ async function scopedItems(
  *  watched zone when `withZones`, else a null zone. */
 export async function firedPassDishes(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   firedSince: string,
   withZones: boolean,
 ): Promise<
@@ -189,7 +189,7 @@ export async function firedPassDishes(
 /** The watched zone of each order the rows belong to, each order asked about once. */
 function rowsWatchZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   rows: readonly { orderId: string; partyId: string | null; deliveryTableId: string | null }[],
 ): Promise<Map<string, string | null>> {
   return orderWatchZones(tx, cfg, [

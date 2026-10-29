@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { workingOrderLines, type Transaction } from "@waitron/db";
-import type { OriginConfig } from "../till-config.js";
+import type { OriginConfig } from "../trading-context.js";
 import { fireableLineColumns, fireLines, insertTabRound, priceTabRound } from "../working-order.js";
 import { createTable } from "./live-table.js";
 import { openPartyTab } from "./serve-line.js";

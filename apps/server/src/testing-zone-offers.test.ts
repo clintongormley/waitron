@@ -33,7 +33,7 @@ import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from 
 import { parkOrder } from "./working-order.js";
 import { createStation } from "./kitchen.js";
 import { createTable } from "./testing/live-table.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { routeCategoryTo, routeProductTo, offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";

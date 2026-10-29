@@ -44,7 +44,7 @@ import { DEVICE_COOKIE } from "../device-session.js";
 import type { Logger } from "../logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "../modules.js";
 import { createTable } from "./live-table.js";
-import type { DeviceRequestConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";

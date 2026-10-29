@@ -269,7 +269,7 @@ import { dishKitchenItems, onDishesOrTheirExtras } from "./dish-kitchen.js";
 import { requireNullableString } from "@waitron/server-kit";
 import { isUuid } from "./till-session.js";
 import type { Logger } from "./logger.js";
-import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
 import { recordSaleReceiptFacts } from "./receipt-guests.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { enqueueCollectionTicket, resolveInvoicePrinter } from "./receipt-print.js";
@@ -518,7 +518,7 @@ async function productOptionLists(
  */
 async function readBasketOffers(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   zoneId: string | undefined,
   lines: readonly { menuVersionId?: unknown }[],
@@ -583,7 +583,7 @@ const RECALLED_EXTRAS_SOURCE = Symbol("recalledExtrasSource");
  */
 export async function priceOrderLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   // `courseId` absent or null = the offer's default course; a string is an override.
   // Each extras pick becomes a CHILD row taxed at the picked product's frozen class, never the dish's.
@@ -1086,7 +1086,7 @@ export type RecalledModifierPlan = ReturnType<typeof recalledModifierPlan>;
 
 export async function prepareRecalledModifiers(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   edits: {
     parent: typeof workingOrderLines.$inferSelect;
@@ -1389,7 +1389,7 @@ export async function storedOrderTotal(tx: Transaction, workingOrderId: string):
  * null, and nothing read, where the regime sets no limit. */
 async function totalBeforeEdit(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
 ): Promise<Decimal | null> {
   return cfg.simplifiedInvoiceLimit === null ? null : storedOrderTotal(tx, workingOrderId);
@@ -1399,7 +1399,7 @@ async function totalBeforeEdit(
  * without first becoming payable. */
 export async function refuseOrderOverSimplifiedLimit(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   before: Decimal | null,
 ): Promise<void> {
@@ -1778,7 +1778,7 @@ export async function openTab(
  */
 export async function assertPartyBillOpen(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
 ): Promise<number> {
   void cfg;
@@ -1815,7 +1815,7 @@ export type RoutingOnce = (() => Promise<MakerResolver>) & {
   readonly opened: () => Promise<MakerResolver> | undefined;
 };
 
-export function routingOnce(tx: Transaction, cfg: TillConfig, at: Date): RoutingOnce {
+export function routingOnce(tx: Transaction, cfg: TradingContext, at: Date): RoutingOnce {
   let opened: Promise<MakerResolver> | undefined;
   return Object.assign(() => (opened ??= VENUE_SERVICE.routingAt(tx, cfg, at)), {
     at,
@@ -1833,7 +1833,7 @@ interface DishKitchenPlace {
 /** Insert records only for extra lines whose own station differs from their dish's destination. */
 export async function insertSplitExtras(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   zoneId: string | null,
   dishes: readonly DishKitchenPlace[],
@@ -1973,7 +1973,7 @@ export async function unsentDishLines(tx: Transaction, orderId: string): Promise
  */
 export async function fireLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   // The dish decides first; an extra may get a separate record after its destination is known.
   // `quantity` is the line's stored thousandths, which the kitchen is asked to make.
@@ -2318,7 +2318,7 @@ async function stampSent(
  */
 async function heldNoRouteLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   scope: { courseIds: readonly (string | null)[]; lineIds: readonly string[] } | "all",
   routing: RoutingOnce,
@@ -2485,7 +2485,7 @@ async function releaseHeld(
 // Only the items released by this write may print, so a retry cannot print them again.
 async function finishRelease(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   fired: FiredItem[],
   noRoute: { zoneId: string | null; lines: { id: string; courseId: string | null }[] },
@@ -2734,7 +2734,7 @@ async function releasedCourses(
  */
 export async function recallLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   lineNos: number[],
   authority: OrderEditAuthority,
@@ -2822,7 +2822,7 @@ export async function recallLines(
  */
 export async function bumpCourseReady(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   courseId: string,
   firer?: Firer,
@@ -2869,7 +2869,7 @@ export type TabRoundLine = {
  */
 export async function addTabRound(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   lines: TabRoundLine[],
   stamp: { groupId?: string; creditedTo?: string } & OrderEditAuthority,
@@ -2927,7 +2927,7 @@ export interface PricedTabRound {
  */
 export async function priceTabRound(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   lines: TabRoundLine[],
   bill: "check" | "checked" = "check",
@@ -2964,7 +2964,7 @@ export async function priceTabRound(
 /** Insert a priced round's rows and record their line contexts; answers what {@link fireLines} reads. */
 export async function insertTabRound(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   round: PricedTabRound,
   rows: WorkingOrderLineInsert[],
 ): Promise<(FireableLine & { lineNo: number; groupId: string | null })[]> {
@@ -3003,7 +3003,7 @@ export interface VoidTarget {
  */
 export async function removeFromLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   target: VoidTarget,
   removed: number | null,
@@ -3127,7 +3127,7 @@ export async function removeFromLine(
  */
 async function tellKitchenOfCancelledExtra(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   extra: CancelledExtra,
 ): Promise<void> {
@@ -3356,7 +3356,7 @@ export function quantityOfLine(
  */
 export async function setLineCourse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
   lineNo: number,
   courseId: string | null,
@@ -3618,7 +3618,7 @@ async function writeServed(
  */
 export async function markServed(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
@@ -3630,7 +3630,7 @@ export async function markServed(
 /** Take back part or all of what was marked served on each named dish line, for a mis-tap. */
 export async function unmarkServed(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
@@ -3641,7 +3641,7 @@ export async function unmarkServed(
 
 async function changeServed(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   items: { lineId: string; quantity: string }[],
   args: PartyCommandArgs,
@@ -3705,7 +3705,7 @@ async function changeServed(
  */
 export async function markGroupServed(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
@@ -3778,7 +3778,7 @@ async function clampServed(tx: Transaction, lineIds: readonly string[]): Promise
  */
 export async function assertServiceModesMatch(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromOrderId: string,
   toOrderId: string,
 ): Promise<void> {
@@ -3796,7 +3796,7 @@ export async function assertServiceModesMatch(
 /** {@link assertServiceModesMatch} as an answer rather than a refusal. */
 export async function serviceModesMatch(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromOrderId: string,
   toOrderId: string,
 ): Promise<boolean> {
@@ -3822,7 +3822,7 @@ function modesMatch(
  */
 export async function moveOrderLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromTabId: string,
   toTabId: string,
   lineNos: number[] | undefined,
@@ -4011,7 +4011,7 @@ export interface TabLine {
 /** Read an open tab's lines in line-number order, at their stored prices: no re-price. */
 export async function readTabLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tabId: string,
 ): Promise<TabLine[]> {
   await assertTabOpen(tx, tabId);
@@ -4169,7 +4169,7 @@ export async function refuseUnavailableFullInvoice(
 async function readChoiceChangeableOrder(
   db: Database,
   tx: Transaction,
-  cfg: Pick<TillConfig, "nodeId">,
+  cfg: Pick<TradingContext, "nodeId">,
   orderId: string,
   expectedRevision: number,
 ) {
@@ -4209,7 +4209,7 @@ async function readChoiceChangeableOrder(
 export async function setOrderInvoiceChoice(
   db: Database,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TillConfig, "nodeId"> & Partial<Pick<OriginConfig, "origin">>,
+  cfg: Pick<TradingContext, "nodeId"> & Partial<Pick<OriginConfig, "origin">>,
   orderId: string,
   request: InvoiceChoiceRequest,
   deliveryContext?: InvoiceChoiceDeliveryContext,
@@ -4276,7 +4276,7 @@ export async function setOrderInvoiceChoice(
 
 export async function setOrderReceiptLanguage(
   db: Database,
-  cfg: Pick<TillConfig, "nodeId">,
+  cfg: Pick<TradingContext, "nodeId">,
   orderId: string,
   request: OrderEditAuthority & { revision: number; language: unknown },
   attendance?: OrderAttendance & { personId: string },
@@ -4352,7 +4352,7 @@ export function assertDistinctTransferLines(tabId: string, transfers: { lineNo: 
  */
 export async function carveOffLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
@@ -4363,7 +4363,7 @@ export async function carveOffLines(
 
 async function carveLines(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromTabId: string,
   toTabId: string,
   transfers: { lineNo: number; quantity?: string }[],
@@ -4718,7 +4718,7 @@ export interface SplitRow {
  */
 export async function splitLinesWithinOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   splits: { lineNo: number; quantity: string }[],
   opts: { splitExtras?: boolean } = {},
@@ -4733,7 +4733,7 @@ export async function splitLinesWithinOrder(
 
 export async function splitUnitsWithinOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   lineNo: number,
 ): Promise<void> {
@@ -4884,7 +4884,7 @@ export interface HeldOrder {
 /** List the venue's open bills, a party's bill and lineless ones included. */
 export async function listHeldOrders(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
 ): Promise<HeldOrderSummary[]> {
   return withTransaction(deps.db, async (tx) => {
     const rows = await tx
@@ -4947,7 +4947,7 @@ export async function listHeldOrders(
  * from even when an offer has since been deactivated. */
 export function getHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<HeldOrder> {
   return readBasketOrder(deps, cfg, id, eq(workingOrders.status, "open"));
@@ -4957,7 +4957,7 @@ export function getHeldOrder(
  * can take its payment. */
 export function getPlacedCounterOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<HeldOrder> {
   return readBasketOrder(
@@ -4970,7 +4970,7 @@ export function getPlacedCounterOrder(
 
 async function readBasketOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   which: SQL,
 ): Promise<HeldOrder> {
@@ -5380,7 +5380,7 @@ export async function bumpRevision(tx: Transaction, orderIds: readonly string[])
 
 async function readEditableOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
 ): Promise<EditableOrder> {
   const rows = await tx
@@ -5543,7 +5543,7 @@ async function assertProductsSellable(
  */
 async function applyLineEdits(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   order: EditableOrder,
   plan: {
@@ -6411,7 +6411,7 @@ export async function setWorkingOrderLabel(
  */
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest,
   issue?: undefined,
@@ -6419,7 +6419,7 @@ export async function updateHeldOrder(
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest & { operatorId: string },
   issue: IssueOnSave,
@@ -6427,7 +6427,7 @@ export async function updateHeldOrder(
 ): Promise<number>;
 export async function updateHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   req: UpdateHeldOrderRequest,
   issue?: IssueOnSave,
@@ -6517,7 +6517,7 @@ export async function updateHeldOrder(
  */
 export async function updateOrderLine(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   lineNo: number,
   patch: OrderLinePatch,
@@ -6571,7 +6571,7 @@ export async function updateOrderLine(
 /** Abandon an open held order anywhere in the venue. An unknown id reads as `working_order.not_open`. */
 export async function abandonHeldOrder(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   authority: OrderEditAuthority,
   attendance?: OrderAttendance & { personId: string },
@@ -6682,7 +6682,7 @@ export async function priceForIssuance(
   tx: Transaction,
   clock: TrustedClock,
   backend: FiscalBackend,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<PricedInvoice> {
   const order = await priceStoredOrderForIssuance(tx, id);
@@ -6909,7 +6909,7 @@ async function cancelPlaced(
  */
 export async function sendToPrep(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
@@ -6940,7 +6940,7 @@ export async function sendToPrep(
  */
 export async function markCollected(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<void> {
   return withTransaction(deps.db, (tx) => handOverOrder(tx, cfg, id));
@@ -6953,7 +6953,7 @@ export async function markCollected(
  */
 export function handOverOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   submissionId?: string,
   attendance?: OrderAttendance & { personId: string },
@@ -6972,7 +6972,7 @@ export function handOverOrder(
 
 async function handOver(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   attendance?: OrderAttendance & { personId: string },
 ): Promise<void> {
@@ -7017,7 +7017,7 @@ const PAY_AFTER_SENDING: ReadonlySet<string> = new Set(["ticket_then_pay"]);
 
 async function sentUnpaidCounterOrder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   order: { status: string; partyId: string | null },
 ): Promise<boolean> {
@@ -7066,7 +7066,7 @@ export interface CounterWaitingOrder {
  */
 export async function listCounterWaiting(
   deps: WorkingOrderDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
 ): Promise<CounterWaitingOrder[]> {
   return withTransaction(deps.db, async (tx) => {
     const firedOrders = tx.selectDistinct({ id: ticketItems.workingOrderId }).from(ticketItems);
@@ -7243,7 +7243,7 @@ export function advanceSet(to: Exclude<TicketState, "queued">) {
 /** Advance one fired ticket item one step. A held item is refused `ticket.item_held`. */
 export async function advanceTicketItem(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   itemId: string,
   to: TicketState,
   attendance?: OrderAttendance & { personId: string },
@@ -7289,7 +7289,7 @@ export async function advanceTicketItem(
 /** Advance the fired items of one order at one station; held items are skipped. */
 export async function advanceTicket(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   stationId: string,
   to: Exclude<TicketState, "queued">,
@@ -7981,7 +7981,7 @@ export interface ExpoOrder {
 /** The venue's remaining kitchen work, with each party retained through its surviving family. */
 export async function listExpoQueue(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   locationId?: string,
 ): Promise<ExpoOrder[]> {
   return readPassBoard(tx, locationId ?? cfg.locationId, sql`1 = 1`);
@@ -8330,7 +8330,7 @@ export interface TableState {
  */
 export async function listTablesWithState(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   annotators: readonly FloorAnnotator[] = [],
   locationId?: string,
   now: Date = new Date(),

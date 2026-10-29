@@ -3,7 +3,7 @@ import { floorPlans, floorTodayZones, type Transaction } from "@waitron/db";
 import type { FloorPlanSetSummary, PreparedServiceDay } from "@waitron/module";
 import { VENUE_SERVICE } from "./modules.js";
 import { todayBusinessDay } from "./floor-today-store.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** The zones that have a plan on the till: those whose department has a set. */
 export function plannedZones(sets: readonly FloorPlanSetSummary[]): Set<string> {
@@ -37,7 +37,7 @@ export interface ZoneLayoutState {
 /** Each zone's recorded layout and the layout due at `now`; a due layout with no row is at revision 0. */
 export async function zoneLayouts(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   zoneIds: readonly string[],
   now: Date,
   prepared?: PreparedServiceDay,
@@ -55,7 +55,7 @@ export type LayoutRow = { id: string; revision: number };
  */
 export async function zoneLayoutsOn(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   zoneIds: readonly string[],
   now: Date,
   day: string | null,

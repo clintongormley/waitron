@@ -10,7 +10,7 @@ import type { Transaction } from "@waitron/db";
 import { AppError, normalisePartyName } from "@waitron/shared";
 import { refuseInJoinedTable, todayOf } from "./floor-today-table.js";
 import { withMovedSlips } from "./moved-slips.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export function sameName(a: string, b: string): boolean {
@@ -24,7 +24,7 @@ export function sameName(a: string, b: string): boolean {
  */
 export async function nameToday(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   name: string | null,
 ): Promise<void> {
@@ -77,7 +77,7 @@ export async function nameToday(
  */
 async function refuseInUse(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   name: string,
   self: { tableId: string } | { joinId: string },
 ): Promise<void> {

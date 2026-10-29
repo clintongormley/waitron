@@ -15,7 +15,7 @@ import { invoicePdfFileName } from "./orders-invoice-pdf.js";
 import type { Logger } from "./logger.js";
 import { SALE_LOOKUP_CHUNK } from "./personal-data-actions.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 export const INVOICE_CUSTOMER_FILE = "invoices.json";
 
@@ -108,7 +108,7 @@ export async function findInvoiceCustomerSales(
 export interface InvoiceCustomerFilesDeps {
   db: Database;
   backend: FiscalBackend;
-  till: TillConfig;
+  till: TradingContext;
   log: Logger;
   /** Default `renderInvoicePdf`; a test passes a stub. */
   render?: (document: ReceiptDocumentInput) => Promise<Uint8Array>;

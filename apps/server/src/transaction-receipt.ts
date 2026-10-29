@@ -23,7 +23,7 @@ import {
   saleId as brandSaleId,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { receiptLines } from "./receipt-adjustments.js";
 import { readReceiptIssuer } from "./receipt-issuer.js";
 import { readReceiptOrder } from "./receipt-order.js";
@@ -70,7 +70,7 @@ function receiptGrosses(
 export async function readTransactionReceipt(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   saleId: string,
 ): Promise<TillSaleResult> {
   const scope = await resolveTransactionScope(tx, cfg, saleId);

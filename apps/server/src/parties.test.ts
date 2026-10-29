@@ -20,7 +20,7 @@ import type { Transaction } from "@waitron/db";
 import { listOutstandingSales } from "@waitron/core";
 import { setNeedsClearingInEveryDepartment } from "./testing/needs-clearing.js";
 import { MONEY_SCALE, decimal, sumDecimals, toScale } from "@waitron/shared";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import {
   OPERATOR,

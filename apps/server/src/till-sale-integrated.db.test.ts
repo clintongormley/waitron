@@ -63,7 +63,8 @@ import { FakeSumUp } from "@waitron/payments-sumup/src/testing/fake-sumup.js";
 import { deploymentEnvironment } from "./config.js";
 import type { Logger } from "./logger.js";
 import { ALL_MODULES, VENUE_SERVICE } from "./modules.js";
-import type { OrderFlow, TillConfig, DeviceRequestConfig } from "./till-config.js";
+import type { OrderFlow } from "./till-config.js";
+import type { TradingContext, DeviceRequestConfig } from "./trading-context.js";
 import type { ServiceMode } from "@waitron/module";
 import { requestBill } from "./bill-request.js";
 import {
@@ -136,7 +137,7 @@ function nextNif(): string {
   return nifWithControlLetter(70_000_000 + nifCounter);
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),
@@ -250,7 +251,7 @@ async function modeVenue(mode: OrderFlow): Promise<SeededVenue> {
 /** The split-flow deps with a real `StripeTerminalProvider` over `FakeStripe`. A tips-on test
  * overrides `cfg.tipsEnabled`. */
 function integratedDeps(
-  _cfg: TillConfig,
+  _cfg: TradingContext,
   app: Database,
   client = new FakeStripe(),
 ): { deps: IntegratedPayDeps; client: FakeStripe } {

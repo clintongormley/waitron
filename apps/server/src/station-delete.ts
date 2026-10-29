@@ -24,7 +24,7 @@ import {
 } from "@waitron/db";
 import { clearStationDeleteSettings, readStationDeleteSettings } from "@waitron/venue-service";
 import { bumpRevision } from "./working-order.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { firedQuantity } from "./kitchen-print.js";
 
 function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
@@ -34,7 +34,7 @@ function named(key: string, rows: DeleteTarget[]): DeleteImpactItem {
   return { key, count: targets.length, targets };
 }
 
-async function stationDeleteRules(tx: Transaction, cfg: TillConfig, id: string) {
+async function stationDeleteRules(tx: Transaction, cfg: TradingContext, id: string) {
   const [station] = await tx
     .select({
       id: kitchenStations.id,
@@ -149,7 +149,7 @@ async function stationDeleteRules(tx: Transaction, cfg: TillConfig, id: string) 
 
 export async function readStationDeleteImpact(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<DeleteImpact> {
   return (await stationDeleteRules(tx, cfg, id)).impact;
@@ -157,7 +157,7 @@ export async function readStationDeleteImpact(
 
 export async function deleteStation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   now = new Date(),
 ): Promise<DeleteImpact> {

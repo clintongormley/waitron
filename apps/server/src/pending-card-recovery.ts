@@ -6,7 +6,7 @@ import type { CardProviderPool } from "./card-provider-pool.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import { paymentAttemptIsLive, payWorkingOrderIntegratedOrchestration } from "./till-sale.js";
 import type { TillSaleDeps } from "./working-order.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { realSleep, runLoop, type LoopDeps } from "./loop.js";
 
 export function runPendingCardLoop(
@@ -16,7 +16,7 @@ export function runPendingCardLoop(
 }
 
 export interface AutomaticCardRecoveryDeps extends TillSaleDeps {
-  cfg: TillConfig;
+  cfg: TradingContext;
   pool: Pick<CardProviderPool, "get">;
 }
 

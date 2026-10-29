@@ -5,7 +5,7 @@ import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { readInvoiceDocument } from "./invoice-document.js";
 import type { ReceiptDocumentInput } from "./receipt-document.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** A series code may hold `/`; anything outside this set is replaced so the name stays one path
  * segment and needs no escaping inside a quoted header value. */
@@ -16,7 +16,7 @@ export function invoicePdfFileName(code: string, number: number): string {
 /** The bill's full invoice as a duplicate, with the download recorded; writes no delivery row. */
 export async function readInvoiceForDownload(
   tx: Transaction,
-  deps: { backend: FiscalBackend; till: TillConfig },
+  deps: { backend: FiscalBackend; till: TradingContext },
   billId: string,
   personId: string,
 ): Promise<{ document: ReceiptDocumentInput; fileName: string }> {

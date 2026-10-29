@@ -10,14 +10,14 @@ import { locationId, nodeId } from "@waitron/shared";
 import { DEVICE_COOKIE } from "../device-session.js";
 import { ALL_MODULES } from "../modules.js";
 import { SESSION_COOKIE } from "../till-session.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { mountTillClockApi } from "../till-clock-api.js";
 import { fixturePinHash } from "./known-secret-hashes.js";
 
 export interface ClockVenue {
   app: Hono;
-  cfg: TillConfig;
+  cfg: TradingContext;
   personId: string;
   deviceId: string;
   profileId: string;
@@ -62,7 +62,7 @@ export async function createClockVenue(
     ),
     { db, modules },
   );
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: nodeId(venue.nodeId),
     locationId: locationId(venue.locationId),
     locale: "es-ES",

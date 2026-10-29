@@ -36,7 +36,7 @@ import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/s
 import type { Logger } from "./logger.js";
 import { ALL_MODULES } from "./modules.js";
 import { createTable, switchOff } from "./testing/live-table.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { mountManagementApi } from "./management-api.js";
 import { generateSync } from "otplib";
 import { defaultLayout } from "./testing/floor-sets.js";
@@ -177,7 +177,7 @@ async function setupTenant(): Promise<{ venue: VenueResult; managerId: string; s
   return { venue, managerId, staffId };
 }
 
-function tillConfigFromVenue(venue: VenueResult): TillConfig {
+function tillConfigFromVenue(venue: VenueResult): TradingContext {
   return {
     nodeId: brandNodeId(venue.nodeId),
     locationId: brandLocationId(venue.locationId),

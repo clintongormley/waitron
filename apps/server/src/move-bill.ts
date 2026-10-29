@@ -43,7 +43,7 @@ import {
   runServiceCommand,
   setMainBill,
 } from "./parties.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertSendable,
   clearGroups,
@@ -93,7 +93,7 @@ type Destination =
 
 export async function previewBillMoveAllergy(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   billId: string,
   tableId: string,
   options: MoveBillOptions,
@@ -384,7 +384,7 @@ async function workStillToCome(tx: Transaction, sent: SentWork | null): Promise<
  */
 async function resolveDestination(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   source: string | null,
   to: MoveTarget,
   options: MoveBillOptions,
@@ -413,7 +413,7 @@ export interface TargetTable {
  */
 export async function readTargetTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   source: string | null,
   read: OtherPartyRead,
@@ -426,7 +426,7 @@ export async function readTargetTable(
 
 async function inspectTargetTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
   source: string | null,
   read: OtherPartyRead,
@@ -475,7 +475,7 @@ async function inspectTargetTable(
 /** A table no party holds, refused as seating refuses one in a zone that seats no one. */
 export async function refuseUnseatable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   table: TargetTable,
 ): Promise<void> {
   const context = await VENUE_SERVICE.resolveZoneContext(tx, cfg, table.zoneId);
@@ -571,7 +571,7 @@ const movedRevision = sql`${workingOrders.revision} + 1`;
  */
 export async function takeIntoParty(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   billId: string,
   partyId: string,
   zoneId: string | null,
@@ -643,7 +643,7 @@ export async function leaveParty(
  */
 async function adoptZone(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   billId: string,
   zoneId: string,
   options: { takesOrders: boolean } = { takesOrders: true },
@@ -670,7 +670,7 @@ async function adoptZone(
 
 export async function moveWouldSend(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   billId: string,
   toZoneId: string,
   previousMode?: string,

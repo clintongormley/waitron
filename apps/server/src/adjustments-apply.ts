@@ -72,7 +72,7 @@ import {
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { refuseRecalledWrite } from "./draft-source.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import {
   assertTabOpen,
   bumpRevision,
@@ -805,7 +805,7 @@ async function setPrice(
  */
 async function reprice(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   carve: Carve | null,
   changes: readonly Change[],
@@ -865,7 +865,7 @@ async function reprice(
  */
 export async function applyAdjustment(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   args: AdjustmentArgs,
   venueLocale: string,
   attempts?: PinAttempts,

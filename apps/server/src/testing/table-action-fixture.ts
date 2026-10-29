@@ -10,7 +10,7 @@ import {
   splitTable as split,
   type TableActionOptions as Options,
 } from "../table-actions.js";
-import type { OriginConfig, TillConfig } from "../till-config.js";
+import type { OriginConfig, TradingContext } from "../trading-context.js";
 import type { OrderAttendance } from "../working-order.js";
 export * from "../table-actions.js";
 
@@ -46,7 +46,7 @@ async function fixtureOptions(
 
 export async function joinTables(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   tableId: string,
   options: TableActionOptions,
@@ -63,7 +63,7 @@ export async function joinTables(
 }
 export async function moveGuests(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   tableId: string,
   options: TableActionOptions,
@@ -80,7 +80,7 @@ export async function moveGuests(
 }
 export async function combineParties(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   args: Omit<Parameters<typeof combine>[2], "expectedEdits"> & {
     expectedEdits?: BillEditExpected[];
   },

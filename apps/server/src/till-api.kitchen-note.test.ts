@@ -27,13 +27,13 @@ import {
 } from "@waitron/venue-service";
 import type { KitchenNoteSnapshot } from "@waitron/module";
 import { mountTillApi, type TillApiDeps } from "./till-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { createZone } from "./testing/service-zone.js";
 import { createTable } from "./testing/live-table.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
-let cfg: TillConfig;
+let cfg: TradingContext;
 let deviceId: string;
 let profileId: string;
 let tableZoneId: string;

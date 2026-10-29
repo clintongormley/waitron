@@ -3,12 +3,12 @@ import { canUseDeviceProfile } from "@waitron/identity";
 import { AppError } from "@waitron/shared";
 import { assertDeviceStillProven, type DeviceBinding } from "./device-session.js";
 import { assertStillSignedIn } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export async function currentZoneDevice(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId">,
+  cfg: Pick<TradingContext, "locationId">,
   session: { deviceId: string; sessionId: string; personId: string; device: DeviceBinding },
 ): Promise<DeviceBinding> {
   await assertStillSignedIn(tx, session);

@@ -35,7 +35,7 @@ import type { Logger } from "./logger.js";
 import { withMovedSlips } from "./moved-slips.js";
 import type { Run, TillApiDeps } from "./till-api.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { requireSession } from "./till-session.js";
 import { checkZones } from "./zone-access.js";
 import {
@@ -305,7 +305,7 @@ export function mountFloorTodayApi(app: Hono, deps: TillApiDeps, log: Logger, ru
 }
 
 /** Whether the venue's zone is enabled; refuses `zone.not_found` for none. */
-async function zoneActive(tx: Transaction, cfg: TillConfig, zoneId: string): Promise<boolean> {
+async function zoneActive(tx: Transaction, cfg: TradingContext, zoneId: string): Promise<boolean> {
   const [zone] = await tx
     .select({ active: floorZones.active })
     .from(floorZones)
@@ -322,7 +322,7 @@ async function zoneActive(tx: Transaction, cfg: TillConfig, zoneId: string): Pro
  */
 async function recordedOnto(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   zoneId: string,
   day: string,
 ): Promise<ResetOnto | null> {

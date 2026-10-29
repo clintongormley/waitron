@@ -44,7 +44,7 @@ import { createTable } from "./testing/live-table.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab } from "./testing/serve-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import "./errors.js";
 
 // Synchronous work runs from case to case; let the venue watchdog tick between them.

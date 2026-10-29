@@ -44,7 +44,7 @@ import { attachPrinterToStation } from "../station-printers.js";
 import { createTable } from "./live-table.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
-import type { DeviceRequestConfig } from "../till-config.js";
+import type { DeviceRequestConfig } from "../trading-context.js";
 import { SESSION_COOKIE } from "../till-session.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts, type ZoneOffers } from "./zone-offers.js";

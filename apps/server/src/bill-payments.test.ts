@@ -88,7 +88,7 @@ import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { decodeTicket, opensDrawer } from "./testing/decode-ticket.js";
 import { descendingIds } from "./testing/descending-ids.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import {
   collectOrderOrchestration as collectOrder,
   payWorkingOrder,

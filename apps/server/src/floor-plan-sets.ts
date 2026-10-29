@@ -12,7 +12,7 @@ import {
 } from "@waitron/db";
 import type { FloorPlanSets } from "@waitron/module";
 import { AppError } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -59,7 +59,7 @@ export function layoutCounts(
 
 async function setsOfLocation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   setIds: readonly string[],
 ): Promise<string[]> {
   if (setIds.length === 0) return [];
@@ -75,7 +75,7 @@ async function setsOfLocation(
 
 async function zonesOfLocation(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   zoneIds: readonly string[],
 ): Promise<string[]> {
   if (zoneIds.length === 0) return [];
@@ -89,7 +89,7 @@ async function zonesOfLocation(
 
 async function copyLayouts(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromSetId: string,
   toSetId: string,
 ): Promise<void> {
@@ -158,7 +158,7 @@ function inBatches<T>(rows: readonly T[], size = 1000): T[][] {
 
 async function readLayouts(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   requestedZones: readonly string[],
   requestedPairs: readonly { setId: string; zoneId: string }[],
 ): ReturnType<FloorPlanSets["readLayouts"]> {
@@ -253,7 +253,11 @@ async function readLayouts(
   return { tableCounts, layouts };
 }
 
-async function zonesShowing(tx: Transaction, cfg: TillConfig, setId: string): Promise<string[]> {
+async function zonesShowing(
+  tx: Transaction,
+  cfg: TradingContext,
+  setId: string,
+): Promise<string[]> {
   const rows = await tx
     .select({ zoneId: floorTodayZones.zoneId })
     .from(floorTodayZones)
@@ -263,7 +267,7 @@ async function zonesShowing(tx: Transaction, cfg: TillConfig, setId: string): Pr
   return rows.map((row) => row.zoneId);
 }
 
-export function floorPlanSetsFor(cfg: TillConfig): FloorPlanSets {
+export function floorPlanSetsFor(cfg: TradingContext): FloorPlanSets {
   return {
     async create(tx) {
       const [row] = await tx
@@ -280,7 +284,7 @@ export function floorPlanSetsFor(cfg: TillConfig): FloorPlanSets {
 
 export async function removeSets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   requested: readonly string[],
 ): Promise<void> {
   const setIds = await setsOfLocation(tx, cfg, requested);

@@ -31,7 +31,7 @@ import { named } from "./delete-impact.js";
 import { releaseDevice } from "./device-equipment.js";
 import { endReturningRequest, hasReturningRequest } from "./join-requests.js";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 const orderName = (row: {
   id: string;
@@ -47,7 +47,7 @@ const counted = (key: string, count: number): DeleteImpactItem => ({ key, count,
 /** The impact read and the delete both call this, so the delete acts on exactly what it reports. */
 async function deviceDeleteRules(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<DeleteImpact> {
   const [device] = await tx
@@ -163,7 +163,7 @@ async function deviceDeleteRules(
  * deleted. */
 export async function readDeviceDeleteImpact(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
 ): Promise<DeleteImpact> {
   return deviceDeleteRules(tx, cfg, id);
@@ -191,7 +191,7 @@ export async function disableDevice(tx: Transaction, id: string): Promise<void> 
  */
 export async function deleteDevice(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   id: string,
   now = new Date(),
 ): Promise<DeleteImpact> {

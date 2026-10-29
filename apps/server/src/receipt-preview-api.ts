@@ -34,7 +34,7 @@ import type { ReceiptPart } from "./receipt-document.js";
 import { drawReceipt } from "./receipt-ticket.js";
 import { createLogoCache, drawLibraryLogo, type LogoCache } from "./receipt-logo.js";
 import { sampleSale } from "./sample-receipt.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readReceiptAddress } from "./venue-address.js";
 import { checkedDepartmentReceiptWrite } from "./department-receipt-draft.js";
 import { readVenueLogo, venueLogoMayPrint } from "./receipt-venue-logo.js";
@@ -220,7 +220,7 @@ interface ReceiptPreviewSnapshot {
   venueLogo: MonoRaster | null;
 }
 async function renderDraftPreview(
-  deps: { db: Database; cfg: TillConfig },
+  deps: { db: Database; cfg: TradingContext },
   sample: ReturnType<typeof sampleSale>,
   logoCache: LogoCache,
   snapshot: ReceiptPreviewSnapshot,
@@ -276,7 +276,7 @@ export function mountReceiptPreviewApi(
   app: Hono,
   deps: {
     db: Database;
-    cfg: TillConfig;
+    cfg: TradingContext;
     receiptQrText?: ReceiptQrText;
     validateOperationDescription?: (description: string) => void;
   },

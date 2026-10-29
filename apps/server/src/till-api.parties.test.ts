@@ -33,7 +33,7 @@ import type { FiscalBackend, TrustedClock } from "@waitron/fiscal";
 import { mountTillApi } from "./till-api.js";
 import type { TillApiDeps } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
@@ -42,7 +42,7 @@ import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP surface of seating and finishing a table: the session guard, the body and id screens and
 // the status each refusal answers. The verbs themselves are pinned in `parties.test.ts`.
-let cfg: TillConfig;
+let cfg: TradingContext;
 let ana: { id: string };
 
 // `resetPerTest: false`: the venue, till, node and person are seeded once; each case seats its own

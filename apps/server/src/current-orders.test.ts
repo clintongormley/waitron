@@ -65,7 +65,7 @@ import {
   type GroupRelease,
 } from "./testing/group-composition-fixture.js";
 import { createTable } from "./testing/live-table.js";
-import type { DeviceRequestConfig } from "./till-config.js";
+import type { DeviceRequestConfig } from "./trading-context.js";
 import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";

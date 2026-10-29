@@ -18,7 +18,7 @@ import {
   zoneServicePolicies,
 } from "@waitron/venue-service";
 import { offerMenuThroughZone } from "@waitron/venue-service/testing/zone-menus.js";
-import type { TillConfig } from "../till-config.js";
+import type { TradingContext } from "../trading-context.js";
 import { publishWorkingMenu } from "./publish-menu.js";
 
 export interface ZoneOffers {
@@ -41,7 +41,7 @@ export interface OfferProductsOptions {
   productIds?: readonly string[];
 }
 
-type Cfg = Pick<TillConfig, "locationId">;
+type Cfg = Pick<TradingContext, "locationId">;
 
 const MENU_NAME = "Test offers";
 const COUNTER_ZONE = "Test counter";

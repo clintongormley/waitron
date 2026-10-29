@@ -12,14 +12,14 @@ import { AppError } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { enqueueOrderKitchenNoteChange } from "./kitchen-print.js";
 import { checkAndBumpParty, partyFamily, runServiceCommand } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { ordersWithUnfiledPayment, paymentAttemptIsLive } from "./till-sale.js";
 import type { Database } from "@waitron/db";
 import "./errors.js";
 
 export async function inheritKitchenNote(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   from: KitchenNoteScope,
   into: KitchenNoteScope,
   mode: "copy" | "combine",
@@ -112,7 +112,7 @@ export async function readOrderKitchenNotes(
 
 export async function readPartyKitchenNote(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
 ): Promise<KitchenNoteSnapshot> {
   const [party] = await tx.select().from(parties).where(eq(parties.id, partyId));
@@ -140,7 +140,7 @@ export async function readPartyKitchenNote(
   };
 }
 
-export async function requireKitchenNoteOrder(tx: Transaction, cfg: TillConfig, id: string) {
+export async function requireKitchenNoteOrder(tx: Transaction, cfg: TradingContext, id: string) {
   const [order] = await tx
     .select()
     .from(workingOrders)
@@ -161,7 +161,7 @@ export interface KitchenNoteCommand {
 export async function setOrderKitchenNote(
   tx: Transaction,
   db: Database,
-  cfg: TillConfig,
+  cfg: TradingContext,
   scope: KitchenNoteScope,
   args: KitchenNoteCommand,
 ): Promise<KitchenNoteSnapshot> {

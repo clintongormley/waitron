@@ -19,7 +19,7 @@ import { assignCatalogueToLocation, createCatalogue, createProduct } from "@wait
 import { createPrinter, deactivatePrinter } from "@waitron/printing";
 import type { PrintConfig } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId, jobOrigin } from "@waitron/shared";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { createStation } from "./kitchen.js";
 import { createOpenOrder } from "./working-order.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -75,7 +75,7 @@ async function parkedThenRelease<A, B>(
   return settled;
 }
 
-function printCfg(cfg: TillConfig): PrintConfig {
+function printCfg(cfg: TradingContext): PrintConfig {
   return { locationId: cfg.locationId };
 }
 

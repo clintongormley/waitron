@@ -338,7 +338,7 @@ import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./member
 import { runTunnelClient } from "@waitron/tunnel";
 import { readNodeLocation, readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
 import { readVenueTimeZone } from "./venue-time-zone.js";
 import { makeFiscalBackend, systemClock } from "./till-backend.js";
@@ -1771,7 +1771,7 @@ async function bootServer(
   const operationDescriptionDefault = offeredOperationDescriptionDefault(
     enabledFiscal.venueFields?.defaults?.operationDescription,
   );
-  const till: TillConfig = {
+  const till: TradingContext = {
     ...config.node,
     ...config.tillApp,
     locationId: nodeLocationId,

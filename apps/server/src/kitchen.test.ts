@@ -25,7 +25,7 @@ import {
   locationId as brandLocationId,
   nodeId as brandNodeId,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import {
   createCourse,
   createStation,
@@ -50,7 +50,7 @@ beforeAll(() => {
   db = suite.db;
 });
 
-async function setupVenue(): Promise<TillConfig> {
+async function setupVenue(): Promise<TradingContext> {
   await seedTenant(db);
   // Inserted through the table definitions, not as raw SQL: the ids and `created_at` come from
   // `$defaultFn` generators, which a raw insert never reaches.
@@ -74,7 +74,7 @@ async function setupVenue(): Promise<TillConfig> {
   };
 }
 
-function asApp<T>(cfg: TillConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+function asApp<T>(cfg: TradingContext, fn: (tx: Transaction) => Promise<T>): Promise<T> {
   void cfg;
   return withTransaction(db, async (tx) => {
     return fn(tx);
@@ -452,7 +452,7 @@ describe("kitchen-station config", () => {
 
   it("createStation preserves a foreign-key error and updateStation names an invalid effective threshold", async () => {
     const cfg = await setupVenue();
-    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const badCfg: TradingContext = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createStation(tx, badCfg, { name: "Big" })).catch(
       (e: unknown) => e,
     );
@@ -767,7 +767,7 @@ describe("kitchen-course config", () => {
       tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id)),
     );
     const other = await setupVenue();
-    const foreignCfg: TillConfig = { ...cfg, locationId: other.locationId };
+    const foreignCfg: TradingContext = { ...cfg, locationId: other.locationId };
     await expect(
       asApp(cfg, (tx) => updateCourse(tx, foreignCfg, id, { name: "Taken over" })),
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
@@ -780,7 +780,7 @@ describe("kitchen-course config", () => {
     // A location id naming no row fails the location foreign key, not the name unique. The
     // `updateCourse` half is the last suite in this file.
     const cfg = await setupVenue();
-    const badCfg: TillConfig = { ...cfg, locationId: brandLocationId(randomUUID()) };
+    const badCfg: TradingContext = { ...cfg, locationId: brandLocationId(randomUUID()) };
     const createErr = await asApp(cfg, (tx) => createCourse(tx, badCfg, { name: "Big" })).catch(
       (e: unknown) => e,
     );
@@ -791,7 +791,7 @@ describe("kitchen-course config", () => {
 
 describe("moveCourse", () => {
   /** Four courses created out of name order, so their firing order is A, B, C, D. */
-  async function fourCourses(cfg: TillConfig): Promise<string[]> {
+  async function fourCourses(cfg: TradingContext): Promise<string[]> {
     const ids: string[] = [];
     for (const [name, displayOrder] of [
       ["A", 0],

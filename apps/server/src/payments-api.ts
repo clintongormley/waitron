@@ -67,7 +67,7 @@ import { requireManagementSession } from "@waitron/server-kit";
 import { requireBodyUuid, requireString, requireUuidParam } from "@waitron/server-kit";
 import type { DeploymentEnvironment } from "./config.js";
 import type { CardProviderPool } from "./card-provider-pool.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { Logger } from "./logger.js";
 import { billPaymentIsLive, completeBillPayment, failBillPayment } from "./bill-payments.js";
 import { CHARGED, settleFromProviderRow } from "./bill-payments-loop.js";
@@ -115,7 +115,7 @@ export interface PaymentsApiDeps {
   /** For filing the sale of a stuck payment the provider reports captured. */
   backend: FiscalBackend;
   clock: TrustedClock;
-  cfg: TillConfig;
+  cfg: TradingContext;
   ring: KeyRing;
   environment: DeploymentEnvironment;
   pool: CardProviderPool;

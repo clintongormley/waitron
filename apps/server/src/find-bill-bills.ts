@@ -6,7 +6,7 @@ import { AppError, businessDayAt, businessDayBounds, rawCentsToDecimal } from "@
 import type { BillsQuery, BillRow, FindBillPage } from "./find-bill-types.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readPartyTables } from "./orders-list.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import type { OrderZoneCondition } from "./zone-access.js";
 import "./errors.js";
 
@@ -32,7 +32,7 @@ type RawBill = {
   collection_status: BillRow["collectionStatus"];
 };
 
-export function findBillsRelation(cfg: TillConfig, inZones?: OrderZoneCondition): SQL {
+export function findBillsRelation(cfg: TradingContext, inZones?: OrderZoneCondition): SQL {
   const zone = VENUE_SERVICE.orderZoneIdSql(cfg, sql`wo.id`);
   return sql`with facts as (
     select wo.id, wo.opened_at, wo.order_number, wo.label, wo.party_id,
@@ -111,7 +111,11 @@ const selection = sql`r.id, r.opened_at, r.order_number, r.label, r.party_id, r.
   cast(r.owing_cents as text) as owing_cents, r.state, r.invoice_number, r.departed_at,
   r.order_status, r.collection_status`;
 
-async function projectBills(tx: Transaction, cfg: TillConfig, raw: RawBill[]): Promise<BillRow[]> {
+async function projectBills(
+  tx: Transaction,
+  cfg: TradingContext,
+  raw: RawBill[],
+): Promise<BillRow[]> {
   if (raw.length === 0) return [];
   const tables = await readPartyTables(
     tx,
@@ -174,7 +178,7 @@ async function projectBills(tx: Transaction, cfg: TillConfig, raw: RawBill[]): P
 
 export async function readFindBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   query: BillsQuery,
   inZones?: OrderZoneCondition,
 ): Promise<FindBillPage<BillRow>> {
@@ -201,7 +205,7 @@ export async function readFindBills(
 
 export async function readFindBill(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   inZones?: OrderZoneCondition,
 ): Promise<BillRow> {

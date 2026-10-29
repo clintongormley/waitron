@@ -14,7 +14,7 @@ import type {
   PartyAllergyGuest,
   TicketAllergyCopy,
 } from "@waitron/module";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readLineNutrition } from "./line-nutrition.js";
 import { readLineCancellations, serviceQuantities } from "./line-service-state.js";
@@ -80,7 +80,7 @@ async function readAsServedAllergens(
 
 export async function resolveKitchenAllergyBlocks(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<ReadonlyMap<string, KitchenAllergyBlock | null>> {
   if (ticketItemIds.length === 0) return new Map();
@@ -152,7 +152,7 @@ export async function resolveKitchenAllergyBlocks(
 
 export async function freezeKitchenAllergies(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<void> {
   if (ticketItemIds.length === 0) return;
@@ -187,7 +187,7 @@ export async function attachKitchenAllergyCopies(
 
 export async function freezeKitchenAllergyItems(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: readonly { workingOrderLineId: string; stationId: string }[],
 ): Promise<void> {
@@ -220,7 +220,7 @@ export async function freezeKitchenAllergyItems(
 
 export async function enqueueKitchenAllergyChanges(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   changes: AllergyChangeSet,
 ): Promise<void> {
   return enqueueKitchenAllergyUpdates(tx, cfg, changes, "guest");
@@ -228,7 +228,7 @@ export async function enqueueKitchenAllergyChanges(
 
 export async function refreshKitchenAllergyClashes(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   workingLineIds: readonly string[],
 ): Promise<void> {
@@ -282,7 +282,7 @@ async function changedIngredientBlocks(
 
 async function enqueueKitchenAllergyUpdates(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   changes: Pick<AllergyChangeSet, "partyId" | "workingLineIds">,
   source: "guest" | "ingredients",
 ): Promise<void> {
@@ -421,7 +421,7 @@ export async function copyAllergyWorkingTick(
 
 export async function notifyKitchenAllergyDestination(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ticketItemIds: readonly string[],
 ): Promise<void> {
   if (ticketItemIds.length === 0) return;

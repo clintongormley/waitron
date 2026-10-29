@@ -20,7 +20,7 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { listTables } from "./tables.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
 import { dashboardOrderAt } from "./testing/session-device.js";
@@ -36,7 +36,7 @@ const suite = useVenueDb({
   resetPerTest: false,
 });
 let db: Database;
-let cfg: TillConfig;
+let cfg: TradingContext;
 let stationId: string;
 let tableId: string;
 

@@ -24,7 +24,7 @@ import {
   requireBillOfParty,
   setMainBill,
 } from "./parties.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   assertDistinctTransferLines,
   assertServiceModesMatch,
@@ -209,7 +209,7 @@ export async function splitBill(
  */
 export async function mergeBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   intoBillId: string,
   fromBillId: string,
   command: BillCommand & { expectedEdits: BillEditExpected[] },
@@ -241,7 +241,7 @@ export async function mergeBills(
  */
 export async function mergeCheckedBills(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   intoBillId: string,
   fromBillId: string,
@@ -284,7 +284,7 @@ export async function mergeCheckedBills(
  */
 export async function transferItems(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   fromBillId: string,
   toBillId: string,
   transfers: Transfers,

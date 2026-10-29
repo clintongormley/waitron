@@ -98,7 +98,7 @@ import { readIssuedSales } from "./sale-due.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptOrder } from "./receipt-order.js";
 import { receiptLines } from "./receipt-adjustments.js";
-import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
 import { readOfferedReceiptLanguages, saleLanguageFor } from "./venue-locale.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
@@ -373,7 +373,7 @@ export function receiptQr(
 /** Read the persisted amounts and manual terminal reference; card identity belongs on the slip. */
 export async function readTenderBlock(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   saleId: SaleId,
   workingOrderId: string | null,
 ): Promise<TenderBlock> {
@@ -591,7 +591,7 @@ export interface IntegratedPayRequest {
   /** The card reader to charge on, overriding the paying device's default. Resolved and validated in
    *  `/api/pay`, never trusted here; the RESOLVED reader rides on {@link IntegratedPayDeps}. */
   readerId?: string;
-  /** The till-entered gross tip. CLAMPED to "0.00" when `TillConfig.tipsEnabled` is false, so a
+  /** The till-entered gross tip. CLAMPED to "0.00" when `TradingContext.tipsEnabled` is false, so a
    *  client cannot add a tip the venue does not take. */
   tip?: string;
   /** Per-transaction staff consent to accept the card offline; meaningful only to a provider with a
@@ -849,7 +849,7 @@ async function fireAndFileSale(
 export async function readSettledTicket(
   backend: FiscalBackend,
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
 ): Promise<TillSaleResult> {
   await replayPrepayMadeHere(tx, cfg, workingOrderId);
@@ -1444,7 +1444,7 @@ async function payIntegrated(
   return { outcome: "captured", ticket };
 }
 
-function tipOf(cfg: TillConfig, req: IntegratedPayRequest): Decimal {
+function tipOf(cfg: TradingContext, req: IntegratedPayRequest): Decimal {
   // The default sits outside the ternary so a tips-off call exercises it too.
   const tipInput = req.tip ?? "0.00";
   return cfg.tipsEnabled ? decimal(tipInput) : decimal("0.00");
@@ -1902,7 +1902,7 @@ async function finalizeRecovery(
  */
 export async function fireDishesAtPayment(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   // The order's party as the caller already read it in `tx`; omitted, it is read here.
   partyId?: string | null,

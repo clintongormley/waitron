@@ -16,7 +16,7 @@ import {
 } from "@waitron/identity";
 import { payments } from "@waitron/payments";
 import type { DeleteImpact } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { parkOrder } from "./working-order.js";
 import { mountDeviceApi } from "./device-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
@@ -42,7 +42,7 @@ const suite = useVenueDb({
 const noopLog: Logger = () => {};
 
 function mountApp(
-  cfg: TillConfig,
+  cfg: TradingContext,
   pairingMode: PairingMode = createPairingMode(),
   opts: { devMode?: boolean; now?: () => Date } = {},
 ): Hono {

@@ -75,7 +75,7 @@ import {
   printerLookup,
 } from "./receipt-print.js";
 import type { PrinterLookup } from "./receipt-print.js";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { storedDeviceOrigin } from "./request-config.js";
 import {
   fireDishesAtPayment,
@@ -943,7 +943,7 @@ export async function requireOpenBill(tx: Transaction, workingOrderId: string): 
 /** Design §3.6: what a payment of the bill would be, writing nothing. */
 export async function previewBillPayment(
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   workingOrderId: string,
   ask: BillPaymentAsk,
   operatorId: string | undefined,
@@ -967,7 +967,7 @@ export async function previewBillPayment(
 async function resultOf(
   tx: Transaction,
   deps: TillSaleDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   payment: PaymentRow,
   invoice: TillSaleResult | null,
   total?: Decimal,
@@ -1332,7 +1332,7 @@ export function attestationColumns(attestation: Attestation | undefined) {
 export async function completeBillPayment(
   tx: Transaction,
   deps: BillPaymentDeps,
-  cfg: TillConfig,
+  cfg: TradingContext,
   billPaymentId: string,
   receivedAt: Date,
   attestation?: Attestation,

@@ -50,7 +50,7 @@ import {
 } from "@waitron/catalogue";
 import { createPrinter } from "@waitron/printing";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, TradingContext } from "./trading-context.js";
 import { deviceRequestCfg, seedSessionDevice } from "./testing/session-device.js";
 import { createCourse, setProductCourse } from "./kitchen.js";
 import { attachPrinterToStation } from "./station-printers.js";
@@ -167,7 +167,7 @@ async function setupVenue(): Promise<Venue> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TillConfig);
+  } satisfies TradingContext);
   return inTx(async (tx) => {
     const catalogue = await createCatalogue(tx, { name: "Carta" });
     const category = await createCategory(tx, { name: "Platos" });
@@ -3426,7 +3426,7 @@ describe("credit (D5)", () => {
   // The directive is the assertion: typecheck reports an unused `@ts-expect-error` the moment a
   // save that may issue the bill's invoice types without naming who saves. Vitest does not typecheck.
   it("will not type a save that may issue the invoice without naming who saves", () => {
-    const cfg = {} as TillConfig;
+    const cfg = {} as TradingContext;
     const issue = { fiscal: {} as TillSaleDeps, saleCfg: {} as DeviceRequestConfig };
     const unnamed = { lines: [], revision: 0, expectedEdit: null };
     expectTypeOf(updateHeldOrder).toBeCallableWith({ db }, cfg, "order", unnamed);

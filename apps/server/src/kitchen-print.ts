@@ -56,7 +56,7 @@ import { foodOnItsWay } from "./delivery-release.js";
 import { heldPaperStations, readGroupNumberLabels } from "./order-groups.js";
 import { freezeKitchenAllergyItems } from "./kitchen-allergy.js";
 import type { KitchenTicketItem, MovedSlip } from "./kitchen-ticket.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -168,7 +168,7 @@ function groupByLayout<T extends EscSetting>(printers: readonly T[]): T[][] {
  */
 async function buildTicketItems(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   lineIds: string[],
 ): Promise<
   Map<
@@ -392,7 +392,7 @@ async function readStations(
 /** The order's table, as {@link orderTableLabels} names it. */
 export async function orderTableLabel(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
 ): Promise<string | null> {
   return (await readOrderHeader(tx, cfg, orderId)).tableLabel;
@@ -410,7 +410,7 @@ interface OrderHeader {
 /** Each order's number and table ({@link orderTableLabels}), keyed by order. */
 async function readOrderHeaders(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderIds: readonly string[],
 ): Promise<Map<string, OrderHeader>> {
   const orders = await tx
@@ -441,7 +441,7 @@ async function readOrderHeaders(
 
 async function readOrderHeader(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
 ): Promise<OrderHeader> {
   return (await readOrderHeaders(tx, cfg, [orderId])).get(orderId)!;
@@ -536,7 +536,7 @@ interface KnownStations {
  */
 async function planKitchenTickets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   firedItems: FiredItem[],
   {
@@ -741,7 +741,7 @@ async function planKitchenTickets(
 /** Enqueue each job with its bill, station and line links. */
 async function enqueueKitchenJobs(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   jobs: readonly KitchenJob[],
   reprint: boolean,
@@ -762,7 +762,7 @@ async function enqueueKitchenJobs(
  */
 export async function enqueueKitchenTickets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   firedItems: FiredItem[],
   {
@@ -838,7 +838,7 @@ type CorrectionChange =
 
 export async function enqueueOrderKitchenNoteChange(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderIds: readonly string[],
   change: KitchenNoteChange,
 ): Promise<void> {
@@ -935,7 +935,7 @@ async function withoutMadeHere<T extends { workingOrderLineId: string }>(
  */
 export async function enqueueCorrectionSlips(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: CorrectionItem[],
   kind: "VOID" | "RECALLED",
@@ -956,7 +956,7 @@ export async function enqueueCorrectionSlips(
 /** Record a reroute and correct the paper at the item's old station before its station changes. */
 export async function enqueueStationMoved(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: CorrectionItem[],
   toStationName: string,
@@ -984,7 +984,7 @@ export async function enqueueStationMoved(
  */
 export async function enqueueHoldCorrections(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: (CorrectionItem & { group: number })[],
   change: HoldCorrection,
@@ -1074,7 +1074,7 @@ export async function readCancelledExtra(
  */
 export async function enqueueExtraCancelled(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   item: CorrectionItem,
   cancelledExtra: string,
@@ -1102,7 +1102,7 @@ function toNoticeItem(item: CorrectionItem) {
 
 export async function enqueueAllergyCorrectionSlips(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: readonly (CorrectionItem & { allergyBlock: KitchenAllergyBlock | null })[],
 ): Promise<void> {
@@ -1118,7 +1118,7 @@ export async function enqueueAllergyCorrectionSlips(
  */
 async function printCorrectionSlips(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
   items: CorrectionItem[],
   change: CorrectionChange,
@@ -1381,7 +1381,7 @@ async function readOnHoldTickets(tx: Transaction, orderIds: readonly string[]) {
  */
 export async function enqueueMovedSlips(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   before: SentWork | null,
   toOrderId: string,
   splitFrom: ReadonlyMap<string, string> = new Map(),
@@ -1491,7 +1491,7 @@ interface MovedWork {
  */
 async function notifyMoved(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   moves: readonly MovedWork[],
 ): Promise<void> {
   const told = moves.flatMap((move) => {
@@ -1566,7 +1566,7 @@ interface MovedSlipPrinting {
  */
 async function readMovedSlipPrinting(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   items: readonly MovedItem[],
 ): Promise<MovedSlipPrinting | null> {
   const stationIds = [...new Set(items.map((item) => item.stationId))];
@@ -1591,7 +1591,7 @@ async function readMovedSlipPrinting(
  */
 async function printMovedSlips(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   { byStation, itemsByLine, stationNames }: MovedSlipPrinting,
   items: readonly MovedItem[],
   slip: Pick<
@@ -1716,7 +1716,7 @@ export async function readSentWorkAt(
  */
 export async function enqueueMovedSlipsFor(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
   mergedInto: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
@@ -1848,7 +1848,7 @@ async function readReprintTargets(
  */
 export async function reprintOrderTickets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orderId: string,
 ): Promise<void> {
   const [fired, held] = (await readReprintParts(tx, [orderId])).get(orderId)!;

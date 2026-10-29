@@ -36,13 +36,13 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
 // The HTTP shape of the coursing, fire, station-queue and expo routes: the session guard, the id
 // screens and the STATUS mapping. The verbs' logic is pinned in `working-order.test.ts`.
-let cfg: TillConfig;
+let cfg: TradingContext;
 let ana: { id: string };
 let entCourseId: string;
 let priCourseId: string;
@@ -121,7 +121,7 @@ function collect(
 }
 
 /** `seriesId` is unused (no fiscal write on the coursing/fire path), so it carries a fresh uuid. */
-function makeCfg(locationId: string, nodeId: string): TillConfig {
+function makeCfg(locationId: string, nodeId: string): TradingContext {
   return {
     nodeId: brandNodeId(nodeId),
     locationId: brandLocationId(locationId),

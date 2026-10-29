@@ -4,7 +4,7 @@ import type { Database, SQL, Transaction } from "@waitron/db";
 import type { LocationId } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
 import { partyFamily, partyStateAndZone } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** What a till request acts on, by where its service zone is read from. */
 export type ZoneSubject =
@@ -15,7 +15,7 @@ export type ZoneScope = ReadonlySet<string> | null;
 
 async function subjectZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   subject: ZoneSubject,
 ): Promise<(string | null)[]> {
   if ("zoneId" in subject) return [subject.zoneId.toLowerCase()];
@@ -39,7 +39,7 @@ async function subjectZones(
 /** A closed party holds no table, and a dish of any bill of its family can still be read through it. */
 async function partySubjectZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
 ): Promise<(string | null)[]> {
   const party = await partyStateAndZone(tx, partyId);
@@ -67,7 +67,7 @@ async function partySubjectZones(
  */
 export async function assertSubjectZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   profileId: string,
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
@@ -83,7 +83,7 @@ export async function assertSubjectZones(
 /** {@link assertSubjectZones} for the session's profile, first thing in the route's own transaction. */
 export async function checkZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   session: { device: { deviceProfileId: string } },
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
@@ -95,7 +95,7 @@ export async function checkZones(
  * It reads committed rows outside the transaction that acts, and takes no turn in the write queue.
  */
 export async function gateZones(
-  deps: { db: Database; cfg: TillConfig },
+  deps: { db: Database; cfg: TradingContext },
   session: { device: { deviceProfileId: string } },
   subjects: readonly ZoneSubject[],
 ): Promise<void> {
@@ -121,7 +121,7 @@ export type OrderZoneCondition = (orderId: SQL) => SQL;
 
 export async function orderZoneCondition(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   profileId: string,
 ): Promise<OrderZoneCondition | undefined> {
   const scope = await readZoneScope(tx, cfg, profileId);
@@ -131,7 +131,7 @@ export async function orderZoneCondition(
 
 /** The orders the session's profile may see: those in its zones, and those in none. Read as {@link gateZones} reads. */
 export async function visibleOrders<T extends { id: string }>(
-  deps: { db: Database; cfg: TillConfig },
+  deps: { db: Database; cfg: TradingContext },
   session: { device: { deviceProfileId: string } },
   orders: readonly T[],
 ): Promise<T[]> {

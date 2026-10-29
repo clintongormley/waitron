@@ -28,7 +28,7 @@ import { createStation } from "./kitchen.js";
 import { placeGroups } from "./testing/group-submit-fixture.js";
 import { seatTable } from "./parties.js";
 import { createTable } from "./testing/live-table.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { listStationQueue } from "./working-order.js";
 import { opensDrawer, printedLines } from "./testing/decode-ticket.js";
 import {
@@ -118,7 +118,7 @@ useVenueDb({
   },
 });
 
-const english: () => TillConfig = () => ({ ...venue.cfg, locale: "en-GB" });
+const english: () => TradingContext = () => ({ ...venue.cfg, locale: "en-GB" });
 
 /** How many of the dish, and how many gherkins each carries. */
 interface Portions {
@@ -201,13 +201,13 @@ async function gherkinsCancel(
   }));
 }
 
-function apply(tx: Transaction, command: Command, cfg: TillConfig = english()) {
+function apply(tx: Transaction, command: Command, cfg: TradingContext = english()) {
   return applyAdjustment(tx, cfg, command, venue.venueLocale);
 }
 
 async function cancelGherkins(
   billId: string,
-  cfg: TillConfig = english(),
+  cfg: TradingContext = english(),
   operatorId?: string,
 ): Promise<void> {
   const command = await gherkinsCancel(billId, operatorId);

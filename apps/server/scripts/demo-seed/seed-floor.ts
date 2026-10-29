@@ -21,7 +21,7 @@ import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/s
 import type { CountryDemoIdentity, DemoPlainText } from "@waitron/country";
 import { saveLayout } from "../../src/floor-plan.js";
 import { floorPlanSetsFor } from "../../src/floor-plan-sets.js";
-import type { TillConfig } from "../../src/till-config.js";
+import type { TradingContext } from "../../src/trading-context.js";
 import { SEED_INVOICE_LOCALE, type SeedLocale } from "./locale.js";
 import { demoPlainText, type DemoDataSet } from "./data-set.js";
 
@@ -33,7 +33,7 @@ export interface SeedFloorInput {
   menuIds?: { restaurant: string; lunch: string; deli: string };
 }
 
-function toTableCfg(locationId: string, locale: SeedLocale): TillConfig {
+function toTableCfg(locationId: string, locale: SeedLocale): TradingContext {
   return {
     nodeId: brandNodeId(randomUUID()),
     locationId: brandLocationId(locationId),

@@ -26,7 +26,7 @@ import { shifts } from "@waitron/workforce";
 import { ALL_MODULES } from "./modules.js";
 import { listStations } from "./kitchen.js";
 import { predecessorAppendOnly } from "./testing/predecessor-append-only.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 type Journal = { entries: { tag: string; when: number }[] };
 const readJournal = (folder: string) =>
@@ -115,7 +115,7 @@ async function populate(db: Database) {
   const locationId = brandLocationId(location!.id);
   const nodeId = await seedNode(db, locationId);
   await db.execute(sql`insert into kitchen_timing_defaults (location_id) values (${locationId})`);
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId,
     locationId,
     locale: "es-ES",

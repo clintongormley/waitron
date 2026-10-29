@@ -85,7 +85,7 @@ import { printedLines } from "./testing/decode-ticket.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { listInvoicePrinter } from "./testing/invoice-printer.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
-import type { OriginConfig } from "./till-config.js";
+import type { OriginConfig } from "./trading-context.js";
 import { mountTillApi } from "./till-api.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { BASIC_ACTIONS, revokedDeviceSessionCookie } from "./testing/session-device.js";

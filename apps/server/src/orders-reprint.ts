@@ -4,13 +4,13 @@ import { printers, receiptReprints, sales, type Transaction } from "@waitron/db"
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError } from "@waitron/shared";
 import { enqueueReceiptCopy } from "./receipt-print.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readSettledTicket } from "./till-sale.js";
 
 /** A receipt copy files nothing and uses a document job, which cannot open the drawer. */
 export async function reprintOrderReceipt(
   tx: Transaction,
-  deps: { backend: FiscalBackend; till: TillConfig },
+  deps: { backend: FiscalBackend; till: TradingContext },
   billId: string,
   printerId: string,
   personId: string,

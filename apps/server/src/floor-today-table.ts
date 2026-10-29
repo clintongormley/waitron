@@ -10,7 +10,7 @@ import {
 import type { Transaction } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { holdersOf } from "./parties.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export interface Today {
@@ -22,7 +22,11 @@ export interface Today {
 }
 
 /** The table, read only within the venue's location, with its today's row and its merge. */
-export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string): Promise<Today> {
+export async function todayOf(
+  tx: Transaction,
+  cfg: TradingContext,
+  tableId: string,
+): Promise<Today> {
   const [table] = await tx
     .select({
       zoneId: diningTables.zoneId,
@@ -56,7 +60,7 @@ export async function todayOf(tx: Transaction, cfg: TillConfig, tableId: string)
 /** The zone of a table in an active zone of the venue's location, as `todayOf` finds it. */
 export async function zoneOfTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   tableId: string,
 ): Promise<string> {
   const [table] = await tx

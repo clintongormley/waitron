@@ -23,7 +23,7 @@ import { todayOf } from "./floor-today-table.js";
 import { blocksPlace, joinedPlaceAfter } from "./joined-split-layout.js";
 import { holdersOf } from "./parties.js";
 import type { Placement } from "./floor-reset-plan.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 /**
@@ -35,7 +35,7 @@ import "./errors.js";
  */
 export async function resetTable(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
   now: Date,
   { tableId, partIds, seats }: { tableId: string; partIds: string[]; seats: number | null },

@@ -2,7 +2,7 @@ import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { diningTables, partySurvivors, partyTables } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { VENUE_SERVICE } from "./modules.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 
 /** What {@link orderWatchZones} reads of an order. */
 export interface ZonedOrder {
@@ -14,7 +14,7 @@ export interface ZonedOrder {
 /** The current zone of each order's food, keyed by order. */
 export async function orderWatchZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   orders: readonly ZonedOrder[],
 ): Promise<Map<string, string | null>> {
   if (orders.length === 0) return new Map();
@@ -56,7 +56,7 @@ export async function orderWatchZones(
  *  party absent from the map sits at no table. */
 export async function partyWatchZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   ids: readonly string[],
 ): Promise<Map<string, string | null>> {
   const partyIds = [...new Set(ids)];
@@ -79,7 +79,7 @@ export async function partyWatchZones(
 
 async function activePartyZones(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyIds: readonly string[],
 ): Promise<Map<string, string | null>> {
   if (partyIds.length === 0) return new Map();

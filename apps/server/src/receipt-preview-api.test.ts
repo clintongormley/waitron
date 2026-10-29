@@ -30,7 +30,7 @@ import { contentLanguages } from "@waitron/catalogue";
 import { departments, departmentReceipts, departmentSalePolicies } from "@waitron/venue-service";
 import { setupVenue, type Venue } from "./testing/venue-fixtures.js";
 import { mountReceiptPreviewApi, type ReceiptPreviewResponse } from "./receipt-preview-api.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { deletePrinter } from "./printer-delete.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { clearThemes, putThemeInUse, UNTRUSTED_CASES } from "./testing/theme-logo.js";
@@ -62,7 +62,7 @@ beforeAll(async () => {
   taxId = (await withTransaction(suite.db, (tx) => readTenant(tx)))!.taxId;
 });
 
-function app(cfg: Partial<TillConfig> = {}) {
+function app(cfg: Partial<TradingContext> = {}) {
   const app = new Hono();
   mountReceiptPreviewApi(app, { db: suite.db, cfg: { ...venue.cfg, ...cfg } }, () => {});
   return app;
@@ -70,7 +70,10 @@ function app(cfg: Partial<TillConfig> = {}) {
 
 async function previewRaw(
   body: string,
-  { cookie = venue.managerCookie, cfg = {} }: { cookie?: string; cfg?: Partial<TillConfig> } = {},
+  {
+    cookie = venue.managerCookie,
+    cfg = {},
+  }: { cookie?: string; cfg?: Partial<TradingContext> } = {},
 ): Promise<Response> {
   return app(cfg).request("/management-api/receipt-preview", {
     method: "POST",
@@ -87,7 +90,7 @@ async function preview(
     paperWidth?: unknown;
     language?: unknown;
   },
-  options: { cookie?: string; cfg?: Partial<TillConfig> } = {},
+  options: { cookie?: string; cfg?: Partial<TradingContext> } = {},
 ): Promise<Response> {
   return previewRaw(JSON.stringify({ departmentId, receipt: {}, policy, ...body }), options);
 }
@@ -101,7 +104,7 @@ function localized(receipt: unknown): unknown {
   return result;
 }
 
-async function rendered(receipt: unknown, cfg: Partial<TillConfig> = {}) {
+async function rendered(receipt: unknown, cfg: Partial<TradingContext> = {}) {
   const response = await preview(
     { receipt: localized({ printAddress: true, ...(receipt as object) }) },
     { cfg },

@@ -20,7 +20,7 @@ import { seedDevice, seedNode, seedTenant } from "@waitron/db/testing/seed.js";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { deviceOrigin, jobOrigin, locationId } from "@waitron/shared";
 import { enqueueTenderRefundDrawer } from "./receipt-print.js";
-import type { DeviceRequestConfig, OriginConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig } from "./trading-context.js";
 
 const store = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const PERSON = "cccccccc-0000-4000-8000-000000000001";

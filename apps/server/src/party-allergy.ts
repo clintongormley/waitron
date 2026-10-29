@@ -32,7 +32,7 @@ import {
   toScale,
   thousandthsToDecimal,
 } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readDrafts } from "./order-drafts.js";
 import { readCurrentOrders, requireGroup, type CurrentOrderRow } from "./order-groups.js";
@@ -72,7 +72,7 @@ function active(row: CurrentOrderRow): boolean {
   return compareDecimal(decimal(row.quantity), decimal(row.cancelledQuantity ?? "0")) > 0;
 }
 
-async function readAllergyState(tx: Transaction, cfg: TillConfig, requestedPartyId: string) {
+async function readAllergyState(tx: Transaction, cfg: TradingContext, requestedPartyId: string) {
   const partyId = await survivingParty(tx, requestedPartyId);
   const family = await partyFamily(tx, partyId);
   const current = await readCurrentOrders(tx, partyId);
@@ -198,7 +198,7 @@ async function readAllergyState(tx: Transaction, cfg: TillConfig, requestedParty
 
 export async function readPartyAllergyView(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
 ): Promise<PartyAllergyRead> {
   return (await readAllergyState(tx, cfg, partyId)).view;
@@ -246,7 +246,7 @@ export async function readArrivingAllergyDishes(
 
 export async function readAllergySendView(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   target: AllergySendTarget,
 ): Promise<PartyAllergyRead> {
@@ -524,7 +524,7 @@ export async function assertPartyAllergyAnswered(tx: Transaction, partyId: strin
 
 export async function prepareAllergyRelease(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   target: AllergySendTarget,
   allergy: AllergyCommand["allergy"],

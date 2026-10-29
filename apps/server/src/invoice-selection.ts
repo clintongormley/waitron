@@ -12,7 +12,7 @@ import type { RecipientIdentifier, RecipientIdentifierType } from "@waitron/coun
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError, seriesId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 
 export interface InvoiceRecipient extends RecipientIdentifier {
@@ -69,7 +69,7 @@ export function checkedInvoiceRecipient(
 export async function selectOrderInvoice(
   tx: Transaction,
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
-  cfg: Pick<TillConfig, "nodeId" | "simplifiedInvoiceLimit">,
+  cfg: Pick<TradingContext, "nodeId" | "simplifiedInvoiceLimit">,
   orderId: string,
   total: Decimal,
 ): Promise<{

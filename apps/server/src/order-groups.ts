@@ -60,7 +60,7 @@ import {
 import type { FiredItem, HoldCorrection, TicketState } from "./kitchen-print.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { trimQuantityForDisplay } from "./receipt-lines.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import {
   checkAndBumpParty,
   partyFamily,
@@ -606,7 +606,7 @@ export async function fireHeldLine(
  */
 export async function bumpGroupReady(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
@@ -928,7 +928,7 @@ export const MAX_SNOOZE_MINUTES = 120;
  */
 export async function snoozeReminder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   groupId: string,
   minutes: number,
@@ -962,7 +962,7 @@ export async function snoozeReminder(
  */
 export async function unsnoozeReminder(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   groupId: string,
   args: PartyCommandArgs,
@@ -992,7 +992,7 @@ export async function unsnoozeReminder(
  */
 export async function moveLinesToGroup(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   moves: { lineId: string; quantity: string }[],
   target: { groupId: string } | "new",
@@ -1171,7 +1171,7 @@ export async function moveLinesToGroup(
 
 export async function splitHeldLineIntoUnits(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
   lineId: string,
   args: PartyCommandArgs & { expectedEdit: BillEditExpected },
@@ -2020,7 +2020,7 @@ export async function readCurrentOrders(tx: Transaction, partyId: string): Promi
  */
 export async function printHoldTickets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   groupIds: readonly string[],
 ): Promise<void> {
   for (const groupId of groupIds) {
@@ -2134,7 +2134,7 @@ export interface HeldChange {
 /** Record and print a HOLD correction for each change, bill by bill. */
 export async function correctHoldTickets(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   changes: readonly HeldChange[],
   correction: HoldCorrection,
 ): Promise<void> {
@@ -2208,7 +2208,7 @@ async function heldItemsOf(
  */
 export async function correctJoin(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   groupId: string,
   lineIds: readonly string[],
 ): Promise<void> {

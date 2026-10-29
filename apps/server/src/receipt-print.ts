@@ -32,13 +32,13 @@ import {
 } from "./invoice-delivery.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { readReceiptAddress } from "./venue-address.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import type { TillSaleResult } from "./till-sale.js";
 
 /** Drawer commands are separate from documents, so printing and resending never open the drawer. */
 export const DRAWER_KICK: Uint8Array = esc().kick().bytes();
 
-function printConfig(cfg: Pick<TillConfig, "locationId">): PrintConfig {
+function printConfig(cfg: Pick<TradingContext, "locationId">): PrintConfig {
   return { locationId: cfg.locationId };
 }
 
@@ -172,7 +172,7 @@ async function readDevicePrinters(
 /** Use the filed issuer where available and the current optional trim, address and logo. */
 async function buildReceiptBytes(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   duplicate: boolean,
@@ -327,7 +327,7 @@ export async function enqueueReceiptReprint(
 /** A receipt copy is a document job; the cash drawer has its own audited job. */
 export async function enqueueReceiptCopy(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,
@@ -350,7 +350,7 @@ export async function enqueueReceiptCopy(
  */
 export async function enqueueInvoiceReceipt(
   tx: Transaction,
-  cfg: Pick<TillConfig, "locationId" | "practiceMode">,
+  cfg: Pick<TradingContext, "locationId" | "practiceMode">,
   ticket: TillSaleResult,
   saleId: string,
   printer: { id: string } & EscSetting,

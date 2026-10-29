@@ -34,7 +34,7 @@ import { mountTillApi } from "./till-api.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, routeProductTo } from "./testing/zone-offers.js";
 import { SESSION_COOKIE } from "./till-session.js";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import "./errors.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
@@ -72,7 +72,7 @@ async function setup() {
   const locationId = brandLocationId(loc!.id);
   const stationId = await seedKitchenStation(db, { locationId });
   const nodeId = await seedNode(db, locationId);
-  const cfg: TillConfig = {
+  const cfg: TradingContext = {
     nodeId: brandNodeId(nodeId),
     locationId,
     locale: "es-ES",

@@ -27,7 +27,7 @@ import {
 import { VENUE_SERVICE } from "./modules.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
-import type { OriginConfig, TillConfig } from "./till-config.js";
+import type { OriginConfig, TradingContext } from "./trading-context.js";
 import { createOpenOrder, openTab } from "./working-order.js";
 import { outstandingOf, readPaymentsByBill, refuseBillHoldingMoney } from "./bill-payments.js";
 import { discardPartyDrafts } from "./order-drafts.js";
@@ -130,7 +130,7 @@ export async function seatTable(
 
 /** The core verbs a module's routes reach, bound to `cfg`. A module's routes are the dashboard's. */
 export function moduleCoreServices(
-  cfg: TillConfig,
+  cfg: TradingContext,
   removals: readonly TableRemoval[],
 ): CoreServices {
   const dashboard: OriginConfig = { ...cfg, origin: jobOrigin("dashboard") };
@@ -210,7 +210,7 @@ export async function readMainBill(tx: Transaction, partyId: string): Promise<st
 /** The service zone of the party's earliest active table; null when it holds none, or no zone. */
 export async function partyZone(
   tx: Transaction,
-  cfg: TillConfig,
+  cfg: TradingContext,
   partyId: string,
 ): Promise<string | null> {
   void cfg;

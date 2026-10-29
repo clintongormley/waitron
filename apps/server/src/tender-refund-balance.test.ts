@@ -20,7 +20,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { PAYMENTS_MIGRATIONS, payments } from "@waitron/payments";
 import { paymentRefunds } from "@waitron/payments/src/schema/payment-refunds.js";
 import { locationId } from "@waitron/shared";
-import type { TillConfig } from "./till-config.js";
+import type { TradingContext } from "./trading-context.js";
 import { readRefundableTenders } from "./tender-refund-balance.js";
 
 const AT = "2026-10-16T08:00:00.000Z";
@@ -29,7 +29,7 @@ const store = useVenueDb({
   migrations: [CORE_MIGRATIONS, PAYMENTS_MIGRATIONS],
   resetPerTest: true,
 });
-let cfg: TillConfig;
+let cfg: TradingContext;
 let deviceId: string;
 let seriesId: string;
 let orderId: string;

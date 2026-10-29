@@ -46,7 +46,7 @@ import {
   writeProductModifiers,
 } from "@waitron/catalogue";
 import { locationId as brandLocationId, nodeId as brandNodeId } from "@waitron/shared";
-import type { DeviceRequestConfig, OriginConfig, TillConfig } from "./till-config.js";
+import type { DeviceRequestConfig, OriginConfig, TradingContext } from "./trading-context.js";
 import { dashboardOrderAt, deviceRequestCfg } from "./testing/session-device.js";
 import { createCourse, createStation, setProductCourse } from "./kitchen.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
@@ -124,7 +124,7 @@ async function setupVenue(): Promise<Seeded> {
     invoiceLocales: [LOCALE],
     tipsEnabled: false,
     simplifiedInvoiceLimit: null,
-  } satisfies TillConfig);
+  } satisfies TradingContext);
   const { cafeId, aguaId, cafeMenuItemId, aguaMenuItemId, menuId, categoryId, tableId, offers } =
     await withTransaction(db, async (tx) => {
       const cat = await createCatalogue(tx, { name: "Carta" });
