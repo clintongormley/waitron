@@ -236,7 +236,7 @@ The floor is no longer written (Task 4b), so the code that works it out, and the
 
 - [ ] **Step 1: failing test** in `first-setup-start-again-set-aside.test.ts`: "a Move on a box holding a leftover note file leaves the file byte for byte and moves the found files": raw bytes in `first-setup-start-again.json`, found files dated hours ahead, Move → the found files are set aside, the note file's bytes and inode are unchanged. Fails today (the note is raised).
 - [ ] **Step 2: implement.** In `first-setup-start-again-choose.test.ts`, the three surviving refusal cases that inject their failure through the note module's mock (`:866`, `:879`, `:908`) re-home the same injected error to the next write after the record (mock `finishStartAgainDeletion`, or the set-aside rename); their assertions stay (C38).
-- [ ] **Step 3: test changes C36–C42 and C63.**
+- [ ] **Step 3: test changes C36–C42 and C63** (C42's `:296` case is already gone, deleted at the start of Task 5c; only its helper rows remain).
 - [ ] **Step 4:** `pnpm --filter @waitron/provisioning exec vitest run src/first-setup-start-again-leftovers.test.ts src/first-setup-start-again-choice.test.ts src/first-setup-start-again-choose.test.ts src/first-setup-start-again-set-aside.test.ts`; `pnpm --filter @waitron/server exec vitest run src/recovery-start-again.test.ts src/recovery-surface.test.ts src/first-setup-resolution.boot.test.ts src/first-setup-set-aside-lifetime.test.ts`; typecheck provisioning and server. Commit.
 
 ## Task 7: the hour module and the module contract drop the start-again seat
@@ -347,7 +347,7 @@ Line numbers are on `70eeac815`. DELETE: the case goes. NARROW: the named surviv
 - C39 `first-setup-start-again-set-aside.test.ts:421`, `:873`: DELETE. `:453`: NARROW — keep the negative `mtimeNs` recorded and moved; drop the note. `:529`, `:1265`, `:1461`: SETUP. Fixture `prepared()` (`:137`) drops `noteFloorMs`.
 - C40 `apps/server/src/recovery-start-again.test.ts:343`, `:365`: DELETE. `:388`: NARROW — `sample` drops `moveFloor`; the every-key-differs check stays.
 - C41 `apps/server/src/first-setup-resolution.boot.test.ts:836`: NARROW — keep the set-aside path, the bytes, the single restart and setup served; drop the note, the file-time stamping and `:882`. `:790`: SETUP. Helper `foundFilesBox(note?)` drops the parameter.
-- C42 `apps/server/src/first-setup-set-aside-lifetime.test.ts:296`: DELETE. Helpers `movedBox` (drop the note option and `:135`), `kept` (drop the note walk `:160`), `NOTE_FLOOR_MS`: SETUP for `:173`, `:181`, `:212`, `:249`.
+- C42 `apps/server/src/first-setup-set-aside-lifetime.test.ts:296`: DELETE (moved to 5c: 4b stopped writing the note it read). Helpers `movedBox` (drop the note option and `:135`), `kept` (drop the note walk `:160`), `NOTE_FLOOR_MS`: SETUP for `:173`, `:181`, `:212`, `:249`.
 
 **The seat (Task 7)**
 - C43 `packages/fiscal-verifactu/src/initial-hour-setup.test.ts:1006`, `:1017`, `:1037`, `:1062`, `:1071`, `:1081`, `:1103`, `:1120`, `:1132`, `:1148`, `:1230`, `:1250`, `:1307`, `:1344`, `:1372`, `:1382`, `:1394`: DELETE, with helpers `hourEvidence`, `selectedIntents`, `recoveryInput`, `databaseRecord`, `databaseSource`, `historyInvalid`. `:1166`: NARROW — keep `retainedAssignments(...).positions` length 2 (`:1206`); drop the seat check (`:1207-1209`).
