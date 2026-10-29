@@ -312,7 +312,6 @@ function configured() {
       context,
       contextKey: "frozen-scope",
       localHistory: { reference: "venue", complete: true, records: [] },
-      floors: [],
     }),
     withPreparationState: async (_binding, run) =>
       run({

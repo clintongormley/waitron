@@ -31,7 +31,6 @@ import {
 import { createFirstSetupNodeKeys } from "./first-setup-node-key.js";
 import { createFirstSetupRecoveryDelivery } from "./first-setup-recovery-delivery.js";
 import { createFirstSetupCommandDelivery } from "./first-setup-command-document.js";
-import { readStartAgainFloors } from "./box-folders.js";
 import "./errors.js";
 export function createModuleOperationHost(
   environment: Readonly<Record<string, string | undefined>>,
@@ -228,10 +227,6 @@ export function createFirstSetupRuntime(options: {
           ...continuationContext.slice(1),
         ]),
         localHistory,
-        floors: await readStartAgainFloors({
-          stateDir: options.stateDir,
-          venueDir: options.venueDir,
-        }),
       });
     },
     coordinator,

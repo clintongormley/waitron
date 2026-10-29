@@ -31,7 +31,6 @@ const facts = {
   },
   contextKey: "owner-generation-1",
   localHistory: { reference: "venue", complete: true, records: [] },
-  floors: [],
 };
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), "setup-preparation-host-"));

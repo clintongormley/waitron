@@ -28,7 +28,6 @@ import {
   START_AGAIN_MARKER_FILE,
   finishStartAgainDeletion,
   raiseStartAgainNote,
-  readModulePreparationHistory,
   readWellFormedModulePreparations,
   readStartAgainMarker,
   readStartAgainNote,
@@ -141,7 +140,7 @@ async function abandonedAttempt() {
 }
 
 async function startedAgain() {
-  const { f, clock, name, floorMs, actions, startRequest } = await abandonedAttempt();
+  const { f, clock, name, actions, startRequest } = await abandonedAttempt();
   await actions.startAgainFirstSetup(startRequest);
   const folders = { stateDir: f.stateDir, venueDir: f.venueDir };
   const next = createFirstSetupModuleHost({
@@ -163,7 +162,7 @@ async function startedAgain() {
     randomBytes(32).toString("base64url"),
   );
   const owner = { ...claim.state, capability: claim.capability };
-  return { f, clock, name, floorMs, folders, next, owner };
+  return { f, clock, name, folders, next, owner };
 }
 
 async function compareAndSelect(host: Host, owner: Parameters<Host["preparation"]["select"]>[0]) {
@@ -187,47 +186,35 @@ async function chosenName(host: Host) {
     .identity;
 }
 
-it("a start-again with the clock set back behind the abandoned attempt's name is refused, not given a repeated name", async () => {
-  const { f, name, floorMs, folders, next, owner } = await startedAgain();
-  expect(await readStartAgainNote(folders.stateDir)).toEqual({
-    version: 1,
-    floorMs,
-    lastName: name,
-    module: "fiscal-verifactu",
-  });
-  await expect(
-    access(join(folders.stateDir, "module-preparation-state.json")),
-  ).rejects.toMatchObject({ code: "ENOENT" });
-  vi.setSystemTime(floorMs - MINUTE_MS - 10 * MINUTE_MS);
-  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: floorMs },
-  });
-  const state = (await next.store.read())!;
-  const context = firstSetupModuleContext(state, f.module);
-  expect(context.request).toBeNull();
-  expect(state.consumptionIntent).toBe(false);
-  const history = await readModulePreparationHistory(folders, f.module);
-  expect(
-    publicHourSelectionHistory(history).records.filter(
-      (record) =>
-        (record as { reference: string }).reference ===
-        `intent/${f.module}/${context.binding.eventId}`,
-    ),
-  ).toEqual([]);
+it("a new setup beside a leftover start-again note file names its minute as if there were none", async () => {
+  const { clock, name, folders, next, owner } = await startedAgain();
+  const nowMs = Date.now();
+  await writeFile(
+    join(folders.stateDir, "first-setup-start-again.json"),
+    JSON.stringify({
+      version: 1,
+      floorMs: nowMs + 10 * MINUTE_MS,
+      lastName: name,
+      module: "fiscal-verifactu",
+    }),
+  );
+  await selectPastWaits(clock, () => compareAndSelect(next, owner));
+  expect(decodeMinuteIdentity(await chosenName(next))).toBeLessThan(
+    Math.floor((nowMs + 10 * MINUTE_MS - EPOCH_MS) / MINUTE_MS),
+  );
 });
 
 it("at the abandoned name's own minute, setup waits and then chooses a later name", async () => {
-  const { clock, name, floorMs, next, owner } = await startedAgain();
-  vi.setSystemTime(floorMs - MINUTE_MS);
+  const { clock, name, next, owner } = await startedAgain();
+  vi.setSystemTime(EPOCH_MS + decodeMinuteIdentity(name) * MINUTE_MS);
   await selectPastWaits(clock, () => compareAndSelect(next, owner));
   expect(decodeMinuteIdentity(await chosenName(next))).toBeGreaterThan(decodeMinuteIdentity(name));
 });
 
-it("a clock past the note chooses a later name at once", async () => {
-  const { clock, name, floorMs, next, owner } = await startedAgain();
-  vi.setSystemTime(floorMs + 5 * MINUTE_MS);
-  // One move only: production setup's own 90 to 150 second wait, never a wait for the note.
+it("a clock past the abandoned name chooses a later name at once", async () => {
+  const { clock, name, next, owner } = await startedAgain();
+  vi.setSystemTime(EPOCH_MS + (decodeMinuteIdentity(name) + 6) * MINUTE_MS);
+  // One move only: production setup's own 90 to 150 second wait.
   await selectPastWaits(clock, () => compareAndSelect(next, owner), 1);
   expect(decodeMinuteIdentity(await chosenName(next))).toBeGreaterThan(decodeMinuteIdentity(name));
 });
@@ -1045,27 +1032,6 @@ async function startedAgainPastDamagedPicks() {
   return { f, clock, timeFloorMs, picksMinute, next, owner };
 }
 
-it("after a Start again past a damaged picks file, a clock before the note's time floor is refused, not given a name", async () => {
-  const { f, timeFloorMs, next, owner } = await startedAgainPastDamagedPicks();
-  vi.setSystemTime(timeFloorMs - 3 * MINUTE_MS);
-  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: timeFloorMs },
-  });
-  const state = (await next.store.read())!;
-  const context = firstSetupModuleContext(state, f.module);
-  expect(context.request).toBeNull();
-  expect(state.consumptionIntent).toBe(false);
-  const history = await readModulePreparationHistory(f, f.module);
-  expect(
-    publicHourSelectionHistory(history).records.filter(
-      (record) =>
-        (record as { reference: string }).reference ===
-        `intent/${f.module}/${context.binding.eventId}`,
-    ),
-  ).toEqual([]);
-});
-
 it("after a Start again past a damaged picks file, a clock a minute before the time floor waits, then chooses a name no earlier than the floor", async () => {
   const { clock, timeFloorMs, picksMinute, next, owner } = await startedAgainPastDamagedPicks();
   vi.setSystemTime(timeFloorMs - MINUTE_MS);
@@ -1323,57 +1289,6 @@ async function attemptWithLaterPick(
   });
   return { ...base, pickMs, pickName: encodeMinuteIdentity(pickMs), shown };
 }
-
-it.each(
-  (["missing", "present"] as const).flatMap((database) =>
-    (Object.keys(PICK_DAMAGE) as PickDamage[]).map((damage) => ({ database, damage })),
-  ),
-)(
-  "with the database $database, a readable pick later than the file times beside $damage keeps its name in the note, and the next setup never chooses it",
-  async ({ database, damage }) => {
-    const later = await attemptWithLaterPick(
-      database,
-      damage,
-      PICKS_AFTER_NAME_MS + 60 * MINUTE_MS,
-    );
-    const { f, clock, pickMs, pickName, shown } = later;
-    expect(pickMs).toBeGreaterThan(later.timeFloorMs);
-    expect(await readStartAgainNote(f.stateDir)).toEqual({
-      version: 1,
-      floorMs: pickMs + MINUTE_MS,
-      lastName: pickName,
-      module: "fiscal-verifactu",
-    });
-    if (shown !== undefined)
-      expect(shown).toEqual({
-        reached: "named",
-        lastName: pickName,
-        ...(damage !== "none" && {
-          unreadable: { records: ["series-picks"], floorMs: pickMs + MINUTE_MS },
-        }),
-      });
-    const next = createFirstSetupModuleHost({
-      stateDir: f.stateDir,
-      venueDir: f.venueDir,
-      modules: f.modules,
-      environment: {},
-      database: () => suite.db,
-    });
-    const claim = await next.owner.claimFirstSetup(
-      { environment: "production", request: { ...request } },
-      randomBytes(32).toString("base64url"),
-    );
-    vi.setSystemTime(pickMs - 2 * MINUTE_MS);
-    await expect(
-      selectPastWaits(clock, () =>
-        compareAndSelect(next, { ...claim.state, capability: claim.capability }),
-      ),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: pickMs + MINUTE_MS },
-    });
-  },
-);
 
 it.each(["missing", "present"] as const)(
   "with the database %s, a readable pick earlier than the file times beside a revision the hour module cannot use leaves the time floor in the note, and the summary names the pick",

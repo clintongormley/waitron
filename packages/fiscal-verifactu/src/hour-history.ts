@@ -1,6 +1,6 @@
 import { AppError } from "@waitron/shared";
 import "./errors.js";
-import { EPOCH_MS, decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
+import { decodeMinuteIdentity, isMinuteIdentity } from "./hour-identity.js";
 
 export interface HourScope {
   readonly taxpayerNif: string;
@@ -58,12 +58,6 @@ export function projectHourHistory(evidence: unknown): HourHistory {
   const seen = new Map<string, string>();
   if (sources.length === 0) contradictions.add("missing_sources");
   for (const source of sources) {
-    if (
-      record(source) &&
-      source.reference === "start-again-note" &&
-      !(Number.isSafeInteger(source.timeFloorMs) && (source.timeFloorMs as number) >= EPOCH_MS)
-    )
-      throw new AppError("sif.allocation_invalid", { reason: "history_invalid" });
     if (
       !record(source) ||
       !text(source.reference) ||
