@@ -32,6 +32,8 @@ const REPLACES: readonly string[] = [
 /** Files that name venue.db beside a removal without touching the live database. */
 const CO_NAMERS: Readonly<Record<string, string>> = {
   "apps/server/src/backup-archive-file.ts": "unlinks its own archive copy in a scratch folder",
+  "apps/server/src/backup-supervisor.ts":
+    "reads venue.db's size; its rename option reaches only the note, through the note writer",
   "apps/server/src/backup-room-note.ts":
     "writes the note; its rename and unlink touch the note's own files",
   "apps/server/src/backup-verification.ts":
