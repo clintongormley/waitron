@@ -55,7 +55,7 @@ async function write(overrides: Partial<Parameters<typeof writeBackupRoomNote>[0
     nodeId: "node-1",
     installationStartedAt: startedAt,
     managedByEnvironment: false,
-    folders: [{ destination: "usb", dir: join(root, "usb") }],
+    folders: [{ destination: "usb", dir: join(root, "usb"), configuredDir: join(root, "usb") }],
     now: () => now,
     log,
     ...overrides,
@@ -86,12 +86,22 @@ describe("writeBackupRoomNote", () => {
         birthtimeNs: expect.stringMatching(/^\d+$/),
       },
       managedByEnvironment: true,
-      folders: [{ destination: "usb", dir: join(root, "usb") }],
+      folders: [{ destination: "usb", dir: join(root, "usb"), configuredDir: join(root, "usb") }],
       writtenAt: "2026-10-29T12:00:00.000Z",
     });
     expect(log).not.toHaveBeenCalled();
     expect(await readdir(stateDir)).toEqual([BACKUP_ROOM_NOTE_FILE]);
     expect((await lstat(notePath())).mode & 0o777).toBe(0o600);
+  });
+
+  it("keeps each folder's configured path beside its real one, and reads them back", async () => {
+    const folders = [
+      { destination: "usb", dir: join(root, "usb"), configuredDir: join(root, "usb-link") },
+    ];
+    await write({ folders });
+    const stored = JSON.parse(await readFile(notePath(), "utf8")) as BackupRoomNote;
+    expect(stored.folders).toEqual(folders);
+    expect(await read()).toEqual({ note: stored });
   });
 
   it("reads back as the note it wrote", async () => {
@@ -360,7 +370,7 @@ describe("readBackupRoomNote", () => {
     installationStartedAt: "2026-10-01T09:00:00.000Z",
     venueDb: { dev: "1", ino: "2", birthtimeNs: "3" },
     managedByEnvironment: false,
-    folders: [{ destination: "usb", dir: "/mnt/usb" }],
+    folders: [{ destination: "usb", dir: "/mnt/usb", configuredDir: "/media/usb" }],
     writtenAt: "2026-10-29T12:00:00.000Z",
   });
 
@@ -407,31 +417,73 @@ describe("readBackupRoomNote", () => {
     ],
     ["folders that are not a list", (note) => ({ ...note, folders: {} })],
     ["a folder that is not an object", (note) => ({ ...note, folders: ["usb"] })],
-    ["a folder with no directory", (note) => ({ ...note, folders: [{ destination: "usb" }] })],
-    ["a folder with no destination", (note) => ({ ...note, folders: [{ dir: "/mnt/usb" }] })],
+    [
+      "a folder with no directory",
+      (note) => ({ ...note, folders: [{ destination: "usb", configuredDir: "/media/usb" }] }),
+    ],
+    [
+      "a folder with no destination",
+      (note) => ({ ...note, folders: [{ dir: "/mnt/usb", configuredDir: "/media/usb" }] }),
+    ],
     [
       "a folder with an empty destination",
-      (note) => ({ ...note, folders: [{ destination: "", dir: "/mnt/usb" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "", dir: "/mnt/usb", configuredDir: "/media/usb" }],
+      }),
     ],
     [
       "a folder with an empty directory",
-      (note) => ({ ...note, folders: [{ destination: "usb", dir: "" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "", configuredDir: "/media/usb" }],
+      }),
     ],
     [
       "a folder whose directory climbs out",
-      (note) => ({ ...note, folders: [{ destination: "usb", dir: "../../etc" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "../../etc", configuredDir: "/media/usb" }],
+      }),
     ],
     [
       "a folder with a relative directory",
-      (note) => ({ ...note, folders: [{ destination: "usb", dir: "a/b" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "a/b", configuredDir: "/media/usb" }],
+      }),
     ],
     [
       "a folder whose absolute directory has a .. step",
-      (note) => ({ ...note, folders: [{ destination: "usb", dir: "/a/../b" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "/a/../b", configuredDir: "/media/usb" }],
+      }),
+    ],
+    [
+      "a folder with no configured directory",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "/mnt/usb" }] }),
+    ],
+    [
+      "a folder whose configured directory is relative",
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "/mnt/usb", configuredDir: "media/usb" }],
+      }),
+    ],
+    [
+      "a folder whose configured directory is not text",
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "/mnt/usb", configuredDir: 7 }],
+      }),
     ],
     [
       "a folder whose directory has a doubled slash",
-      (note) => ({ ...note, folders: [{ destination: "usb", dir: "/mnt//usb" }] }),
+      (note) => ({
+        ...note,
+        folders: [{ destination: "usb", dir: "/mnt//usb", configuredDir: "/media/usb" }],
+      }),
     ],
   ])("answers malformed for %s", async (_label, change) => {
     const body = change(valid());

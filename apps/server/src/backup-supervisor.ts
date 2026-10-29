@@ -322,13 +322,15 @@ export class BackupSupervisor {
       return;
     }
     if (this.#stopped) return;
+    // `foldersOnDisk` names each folder by the id of a backend that has a `localDir`.
+    const configured = new Map(backends.map((b) => [b.id, b.localDir]));
     await writeBackupRoomNote({
       stateDir: this.#deps.stateDir,
       venueDir: this.#deps.venueDir,
       nodeId,
       installationStartedAt,
       managedByEnvironment: this.#deps.isManagedByEnvironment(),
-      folders,
+      folders: folders.map((f) => ({ ...f, configuredDir: configured.get(f.destination)! })),
       now: () => this.#now(),
       log: this.#deps.log,
       rename: this.#deps.renameNote,

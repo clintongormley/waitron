@@ -21,8 +21,16 @@ export interface BackupRoomNote {
   installationStartedAt: string;
   venueDb: VenueDbIdentity;
   managedByEnvironment: boolean;
-  folders: BackupFolder[];
+  folders: BackupRoomNoteFolder[];
   writtenAt: string;
+}
+
+/**
+ * `configuredDir` is the path backups are configured to write to, as given; `dir` is where it led
+ * when the note was written. The start uses a folder only while the one still leads to the other.
+ */
+export interface BackupRoomNoteFolder extends BackupFolder {
+  configuredDir: string;
 }
 
 /** Decimal strings: the numbers can exceed what a JSON number holds exactly. */
@@ -68,7 +76,7 @@ export async function writeBackupRoomNote(options: {
   nodeId: string;
   installationStartedAt: Date;
   managedByEnvironment: boolean;
-  folders: readonly BackupFolder[];
+  folders: readonly BackupRoomNoteFolder[];
   now: () => Date;
   log: Logger;
   rename?: Rename;
@@ -90,7 +98,11 @@ export async function writeBackupRoomNote(options: {
       installationStartedAt: options.installationStartedAt.toISOString(),
       venueDb,
       managedByEnvironment: options.managedByEnvironment,
-      folders: options.folders.map(({ destination, dir }) => ({ destination, dir })),
+      folders: options.folders.map(({ destination, dir, configuredDir }) => ({
+        destination,
+        dir,
+        configuredDir,
+      })),
       writtenAt: options.now().toISOString(),
     };
     await writeFile(temporary, JSON.stringify(note), { mode: 0o600, flag: "wx" });
@@ -169,7 +181,11 @@ function parseNote(text: string): BackupRoomNote | null {
     return null;
   if (typeof value.managedByEnvironment !== "boolean" || !Array.isArray(folders)) return null;
   const foldersValid = folders.every(
-    (folder) => isRecord(folder) && isText(folder.destination) && isFolderDir(folder.dir),
+    (folder) =>
+      isRecord(folder) &&
+      isText(folder.destination) &&
+      isFolderDir(folder.dir) &&
+      isFolderDir(folder.configuredDir),
   );
   if (!foldersValid) return null;
   return {
@@ -182,7 +198,11 @@ function parseNote(text: string): BackupRoomNote | null {
       birthtimeNs: venueDb.birthtimeNs as string,
     },
     managedByEnvironment: value.managedByEnvironment,
-    folders: (folders as BackupFolder[]).map(({ destination, dir }) => ({ destination, dir })),
+    folders: (folders as BackupRoomNoteFolder[]).map(({ destination, dir, configuredDir }) => ({
+      destination,
+      dir,
+      configuredDir,
+    })),
     writtenAt: value.writtenAt,
   };
 }

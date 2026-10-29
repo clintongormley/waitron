@@ -10,6 +10,7 @@ import {
   rename,
   rm,
   stat,
+  symlink,
   truncate,
   writeFile,
 } from "node:fs/promises";
@@ -1309,6 +1310,28 @@ describe("BackupSupervisor keeps the backup room note in step", () => {
       managedByEnvironment: true,
       folders: [{ destination: "primary", dir: sameDisk }],
     });
+  }, 60_000);
+
+  it("a reload records a folder configured through a link by both the link and where it leads", async () => {
+    const target = await realpath(await makeDestDir());
+    const link = join(await realpath(await makeDestDir()), "backups-link");
+    await symlink(target, link);
+    const refs: Refs = {
+      config: localFsConfig([link], STRONG_KEY_1),
+      role: "primary",
+      venueDir: await makeVenueDir(),
+      logs: [],
+      managed: false,
+    };
+    const stateDir = await makeStateDir();
+    const sup = supervisorFor(refs, stateDir);
+    try {
+      await sup.reload();
+    } finally {
+      await sup.stop();
+    }
+    const note = JSON.parse(await readFile(notePath(stateDir), "utf8")) as Record<string, unknown>;
+    expect(note.folders).toEqual([{ destination: "primary", dir: target, configuredDir: link }]);
   }, 60_000);
 
   it("a reload as a standby deletes an existing note", async () => {

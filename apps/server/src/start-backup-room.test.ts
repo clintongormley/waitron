@@ -62,7 +62,10 @@ async function archive(dir: string, at: Date, mib: number): Promise<string> {
 }
 
 async function note(
-  over: { managedByEnvironment?: boolean; folders?: { destination: string; dir: string }[] } = {},
+  over: {
+    managedByEnvironment?: boolean;
+    folders?: { destination: string; dir: string; configuredDir: string }[];
+  } = {},
 ) {
   await writeBackupRoomNote({
     stateDir,
@@ -70,7 +73,7 @@ async function note(
     nodeId: "node-1",
     installationStartedAt: STARTED,
     managedByEnvironment: over.managedByEnvironment ?? false,
-    folders: over.folders ?? [{ destination: "usb", dir: usb }],
+    folders: over.folders ?? [{ destination: "usb", dir: usb, configuredDir: usb }],
     now: () => NOW,
     log: () => undefined,
   });
@@ -226,7 +229,10 @@ describe("deleteOldBackupsAtStart", () => {
   it("on an environment-managed box deletes only in the environment's own local folders, never a bucket", async () => {
     const envFolder = join(root, "env-backups");
     await mkdir(envFolder);
-    await note({ managedByEnvironment: true, folders: [{ destination: "usb", dir: usb }] });
+    await note({
+      managedByEnvironment: true,
+      folders: [{ destination: "usb", dir: usb, configuredDir: usb }],
+    });
     await archive(usb, days(1), 15);
     await archive(usb, days(2), 15);
     const envOldest = await archive(envFolder, days(1), 15);
@@ -281,6 +287,71 @@ describe("deleteOldBackupsAtStart", () => {
     expect(lockVenue).not.toHaveBeenCalled();
     expect(loadBoxEnv).not.toHaveBeenCalled();
     expect(log).not.toHaveBeenCalled();
+  });
+
+  describe("a folder configured through a link", () => {
+    let link: string;
+    beforeEach(async () => {
+      link = join(root, "usb-link");
+      await fs.symlink(usb, link);
+      await note({ folders: [{ destination: "usb", dir: usb, configuredDir: link }] });
+    });
+
+    it("is deleted from while the link still leads to the folder the note recorded (control)", async () => {
+      const oldest = await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const { deps, log } = setup();
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect(await readdir(usb)).not.toContain(oldest);
+      expect(skipped(log)).toEqual([]);
+    });
+
+    it("is left alone once the link leads elsewhere, where backups now go", async () => {
+      await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const moved = join(root, "usb-2");
+      await mkdir(moved);
+      await archive(moved, days(1), 15);
+      await archive(moved, days(2), 15);
+      await rm(link);
+      await fs.symlink(moved, link);
+      const { deps, log } = setup({ statfs: disk(10 * MIB, [usb, moved]) });
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect((await readdir(usb)).length).toBe(2);
+      expect((await readdir(moved)).length).toBe(2);
+      expect(skipped(log)).toEqual([{ reason: "no_folders" }]);
+      expect(codes(log)).not.toContain("backup.archive_deleted");
+    });
+
+    it("named by the environment is deleted from where the link leads now", async () => {
+      await note({
+        managedByEnvironment: true,
+        folders: [{ destination: "primary", dir: usb, configuredDir: link }],
+      });
+      await archive(usb, days(1), 15);
+      await archive(usb, days(2), 15);
+      const moved = join(root, "usb-2");
+      await mkdir(moved);
+      const movedOldest = await archive(moved, days(1), 15);
+      await archive(moved, days(2), 15);
+      await rm(link);
+      await fs.symlink(moved, link);
+      const { deps, log } = setup({
+        baseEnv: { WAITRON_BACKUP_DIR: link, WAITRON_BACKUP_RECOVERY_KEY: KEY },
+        loadBoxEnv: async (base) => ({ ...base, WAITRON_TILL_NODE_ID: "node-1" }),
+        statfs: disk(10 * MIB, [usb, moved]),
+      });
+
+      await deleteOldBackupsAtStart(deps);
+
+      expect((await readdir(usb)).length).toBe(2);
+      expect(await readdir(moved)).not.toContain(movedOldest);
+      expect(skipped(log)).toEqual([]);
+    });
   });
 
   it("does nothing when only the state folder's disk is full: deleting frees only the venue folder's", async () => {

@@ -4668,8 +4668,10 @@ measurement), so the running server leaves that fact in `<state>/backup-room-not
 
 **What it holds.** The node id, the installation start, `venue.db`'s device number, file number and
 birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), whether the environment
-manages backups, the backup folders on the venue folder's disk, and when it was written. No secret
-and no bucket.
+manages backups, the backup folders on the venue folder's disk, and when it was written. Each folder
+is `{ destination, dir, configuredDir }`: `configuredDir` is the path backups are configured to
+write to, as given, and `dir` is the real path it led to when the note was written. No secret and
+no bucket.
 
 **Who writes it.** Only `BackupSupervisor.reload` (`apps/server/src/backup-supervisor.ts`). Every
 reload deletes the note first (`:211`); a failure of that deletion is logged
@@ -4701,7 +4703,9 @@ file is fresh. It deletes nothing unless the note is a regular file of at most 6
 names the box env's node id, and matches `venue.db`'s device number, file number and birth time; no
 restore or reset request is waiting; the recovery key loads; and who manages backups, judged on the
 raw environment, is what the note says. The folders are the environment's local destinations when it
-manages backups, else the note's, each kept only if it is on the venue folder's disk now. Each
+manages backups, resolved now, else the note's, each kept only if its `configuredDir` still leads
+to the `dir` the note recorded (a link moved while the server was stopped points backups at
+another folder); either way each is kept only if it is on the venue folder's disk now. Each
 refusal is logged once `backup.start_room_skipped` with a `reason`, `out_of_reach` among them when
 free space plus every deletable backup falls short of 24 MiB. A step still under 24 MiB after its
 deleting logs `backup.start_room_short`, whether or not any deletion succeeded; the refusal's

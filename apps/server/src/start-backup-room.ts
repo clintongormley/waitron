@@ -124,7 +124,7 @@ async function checks(
   // The raw environment, never `merged`: a dashboard box keeps its recovery key in backup.env.
   const managedByEnvironment = isBackupManagedByEnvironment(deps.baseEnv);
   if (note.managedByEnvironment !== managedByEnvironment) return { skipped: "management_changed" };
-  let candidates: BackupFolder[];
+  let candidates: { id: string; localDir: string }[];
   if (managedByEnvironment) {
     try {
       candidates = archiveDestinations({
@@ -132,21 +132,22 @@ async function checks(
         env: merged,
         sealed: null,
         venueId: merged.WAITRON_TILL_LOCATION_ID ?? "",
-      }).flatMap((d) => (d.kind === "local-fs" ? [{ destination: d.id, dir: d.dir }] : []));
+      }).flatMap((d) => (d.kind === "local-fs" ? [{ id: d.id, localDir: d.dir }] : []));
     } catch {
       return { skipped: "destinations_invalid" };
     }
-  } else candidates = note.folders;
+  } else candidates = note.folders.map((f) => ({ id: f.destination, localDir: f.configuredDir }));
   let folders: BackupFolder[];
   try {
-    ({ folders } = await foldersOnDisk(
-      candidates.map((f) => ({ id: f.destination, localDir: f.dir })),
-      deps.venueDir,
-      deps.deviceOf,
-    ));
+    ({ folders } = await foldersOnDisk(candidates, deps.venueDir, deps.deviceOf));
   } catch {
     return { skipped: "venue_disk_unreadable" };
   }
+  // A configured path that now leads elsewhere is not where backups go any more.
+  if (!managedByEnvironment)
+    folders = folders.filter((f) =>
+      note.folders.some((n) => n.destination === f.destination && n.dir === f.dir),
+    );
   if (folders.length === 0) return { skipped: "no_folders" };
   return { note, folders };
 }

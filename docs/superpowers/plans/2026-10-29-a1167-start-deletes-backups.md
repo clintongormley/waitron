@@ -37,6 +37,10 @@ is its watch-side caller. This branch is rebased on it.
    [{ destination, dir }] (the real paths `foldersOnDisk(backends, venueDir)` answers), writtenAt
    (ISO) }`. No secret goes in it: folder paths are already shown in plain text on the status read
    (`backup-supervisor.ts:44,58`); bucket destinations are never listed.
+   (2026-10-29, review: each folder also holds `configuredDir`, the backend's `localDir` as given.
+   A dashboard-managed start resolves `configuredDir` again and uses a folder only while it still
+   leads to the recorded `dir`, so a link moved to another folder while the server was stopped
+   cannot authorise deleting from the folder backups no longer write to.)
 2. **Written by the running server**, `BackupSupervisor.reload`. The FIRST step of every `reload()`,
    before the teardown, deletes the note; the note is written again only on the success path (gate
    passed: enabled, recovery key, primary; venue opened; backends built; not stopped), from

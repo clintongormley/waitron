@@ -319,7 +319,7 @@ describe("a box started from its spare file", () => {
       nodeId: box.baseEnv.WAITRON_TILL_NODE_ID!,
       installationStartedAt: daysAgo(3),
       managedByEnvironment: false,
-      folders: [{ destination: "usb", dir: folder }],
+      folders: [{ destination: "usb", dir: folder, configuredDir: folder }],
       now: () => new Date(now),
       log: () => undefined,
     });
