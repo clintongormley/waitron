@@ -122,6 +122,8 @@ function recoveryRecordDamagedOf(
   if (modules === undefined) unavailable();
   let damaged = false;
   for (const module of names) {
+    // Before the read: a module the box lacks is refused here, never read as a damaged record.
+    if (initialSetupFor(modules, module)?.recoveryDocument === undefined) continue;
     try {
       readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
     } catch (error) {
@@ -158,7 +160,7 @@ async function presentAttemptEligibility(
     modules !== undefined &&
     ((register === undefined && emptyWorkspace) ||
       (await firstSetupUnusedAssignment(state, originals, modules)));
-  return { emptyWorkspace, assignment };
+  return { emptyWorkspace, assignment, eligible: emptyWorkspace || Boolean(assignment) };
 }
 function summaryOf(
   state: FirstSetupState,
@@ -319,14 +321,14 @@ export function createFirstSetupResolutionActions(
             // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
             if (holdings.rows === 0) unavailable();
           } else if (inspection.database !== "missing") {
-            const { emptyWorkspace, assignment } = await presentAttemptEligibility(
+            const { eligible } = await presentAttemptEligibility(
               inspection,
               retained.state,
               snapshot.originals,
               host.modules,
               undefined,
             );
-            if (!emptyWorkspace && !assignment) unavailable();
+            if (!eligible) unavailable();
           }
           const summary = summaryOf(
             retained.state,
@@ -376,7 +378,7 @@ export function createFirstSetupResolutionActions(
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const { emptyWorkspace, assignment } = await presentAttemptEligibility(
+          const { emptyWorkspace, assignment, eligible } = await presentAttemptEligibility(
             inspection,
             state,
             snapshot.originals,
@@ -407,8 +409,7 @@ export function createFirstSetupResolutionActions(
           } else {
             await assertRecoveredOwner(request.owner, state);
             if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
-            if (inspection.database !== "missing" && !emptyWorkspace && !unusedAssignment)
-              unavailable();
+            if (inspection.database !== "missing" && !eligible) unavailable();
           }
           if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
             unavailable();

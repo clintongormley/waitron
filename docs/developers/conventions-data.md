@@ -5089,7 +5089,7 @@ damaged name record raises it, if lower, to the first whole minute more than 150
 newest modification time among the attempt's files and folders other than its databases, A1099;
 a Start again beside a stopped recovery, with a setup database that holds records, also counts
 every installation name that database held, whatever its taxpayer or environment, A1131); a setup or restore waits 90 to 150 seconds first. Guard for the note:
-`scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
+`scripts/start-again-records-writers.test.ts`, weaker than its name — it reads which files name the
 note, its confirmation and choice records or the set-aside folder as text, so a path built from pieces escapes it, and it never sees code that empties the whole
 state folder without naming the file. The one
 exception is the preproduction throwaway, which names with no second clock and no history check

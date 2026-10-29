@@ -4,7 +4,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
 import { historicalFirstFiscalDocuments } from "../test/historical-first-fiscal.js";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
-import { createFirstFiscalEvidence } from "./first-fiscal-evidence.js";
+import {
+  createFirstFiscalEvidence,
+  readFirstFiscalEvidenceSnapshot,
+} from "./first-fiscal-evidence.js";
 
 const fixtures: Awaited<ReturnType<typeof firstFiscalFixture>>[] = [];
 async function fixture() {
@@ -371,3 +374,54 @@ it("participates in an already held complete callback without queueing itself", 
     expect(await f.evidence.read(f.context.binding)).toEqual({ trust: f.key, current: f.current });
   });
 });
+
+const PUBLIC_RECORD = "state/module-operation-public.json";
+const snapshot = (value: unknown) => [
+  {
+    name: PUBLIC_RECORD,
+    bytes: Buffer.from(typeof value === "string" ? value : JSON.stringify(value)),
+  },
+];
+const entry = (module: string, current: unknown) => ({
+  attemptId: "attempt-1",
+  revision: 1,
+  ownerGeneration: 1,
+  module,
+  current,
+});
+it("the strict read of a well-formed public record answers this module's entries, and of no record nothing", () => {
+  const originals = snapshot({
+    version: 1,
+    modules: {},
+    history: [entry("fiscal-verifactu", { n: 1 }), entry("other-module", { n: 2 })],
+  });
+  expect(readFirstFiscalEvidenceSnapshot("fiscal-verifactu", originals)).toEqual([{ n: 1 }]);
+  expect(readFirstFiscalEvidenceSnapshot("fiscal-verifactu", [])).toEqual([]);
+});
+it.each([
+  ["text that is not JSON", snapshot("{damaged")],
+  ["a top-level list", snapshot([])],
+  ["a history that is not a list", snapshot({ version: 1, modules: {}, history: {} })],
+  [
+    "a record over the size limit",
+    snapshot({ version: 1, modules: {}, history: [entry("fiscal-verifactu", "x".repeat(70_000))] }),
+  ],
+  [
+    "one malformed history entry",
+    snapshot({
+      version: 1,
+      modules: {},
+      history: [
+        entry("fiscal-verifactu", { n: 1 }),
+        { ...entry("fiscal-verifactu", { n: 2 }), revision: 1.5 },
+      ],
+    }),
+  ],
+])(
+  "the strict read of a public record holding %s is refused setup.attempt_invalid",
+  (_which, originals) => {
+    expect(() => readFirstFiscalEvidenceSnapshot("fiscal-verifactu", originals)).toThrow(
+      expect.objectContaining({ code: "setup.attempt_invalid" }),
+    );
+  },
+);

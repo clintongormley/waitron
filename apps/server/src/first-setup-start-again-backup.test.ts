@@ -427,7 +427,7 @@ it("the fence lets the backup routes and every read through while A's recovery r
   expect(await renewed.json()).toEqual({ renewed: true });
 });
 
-it("a stopped recovery is named in the summary with the name it chose", async () => {
+it("a stopped recovery is named in the summary", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const { owner, ids } = await signedIn(f.host);

@@ -783,6 +783,30 @@ it("a confirmation that shows a damaged recovery record the box does not find is
   expect(await attemptFiles(f)).toEqual(before);
 });
 
+it("with the database missing, a setup naming a module the box's software does not include is refused module.operation_invalid by the summary and by Start again, and nothing is written", async () => {
+  const { f, owner, ids, request } = await missingDatabase();
+  await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
+  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules: [] } });
+  const refusal = {
+    code: "module.operation_invalid",
+    params: { module: (await f.store.read())!.frozen.modules[0]!.module },
+  };
+  const before = await attemptFiles(f);
+  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject(refusal);
+  for (const shown of [
+    { reached: "named" as const },
+    { reached: "named" as const, recoveryRecordDamaged: true as const },
+  ])
+    await expect(
+      actions.startAgainFirstSetup({
+        ...request,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      }),
+    ).rejects.toMatchObject(refusal);
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("the Start again route takes recoveryRecordDamaged only as true", async () => {
   const { f, actions, owner, ids, request } = await missingDatabase();
   const app = routes(f, actions);
