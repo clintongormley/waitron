@@ -24,7 +24,7 @@ export interface BackupRoomNote {
 export interface VenueDbIdentity {
   dev: string;
   ino: string;
-  birthtimeMs: string;
+  birthtimeNs: string;
 }
 
 export type BackupRoomNoteSkip =
@@ -45,7 +45,7 @@ async function venueDbIdentity(venueDir: string): Promise<VenueDbIdentity> {
   return {
     dev: info.dev.toString(),
     ino: info.ino.toString(),
-    birthtimeMs: info.birthtimeMs.toString(),
+    birthtimeNs: info.birthtimeNs.toString(),
   };
 }
 
@@ -129,7 +129,7 @@ export async function readBackupRoomNote(options: {
   const same =
     current.dev === note.venueDb.dev &&
     current.ino === note.venueDb.ino &&
-    current.birthtimeMs === note.venueDb.birthtimeMs;
+    current.birthtimeNs === note.venueDb.birthtimeNs;
   return same ? { note } : { skipped: "identity_mismatch" };
 }
 
@@ -152,7 +152,7 @@ function parseNote(text: string): BackupRoomNote | null {
   if (!isRecord(value) || value.version !== 1 || typeof value.nodeId !== "string") return null;
   if (!isTime(value.installationStartedAt) || !isTime(value.writtenAt)) return null;
   const { venueDb, folders } = value;
-  if (!isRecord(venueDb) || ![venueDb.dev, venueDb.ino, venueDb.birthtimeMs].every(isDigits))
+  if (!isRecord(venueDb) || ![venueDb.dev, venueDb.ino, venueDb.birthtimeNs].every(isDigits))
     return null;
   if (typeof value.managedByEnvironment !== "boolean" || !Array.isArray(folders)) return null;
   const foldersValid = folders.every(
@@ -167,7 +167,7 @@ function parseNote(text: string): BackupRoomNote | null {
     venueDb: {
       dev: venueDb.dev as string,
       ino: venueDb.ino as string,
-      birthtimeMs: venueDb.birthtimeMs as string,
+      birthtimeNs: venueDb.birthtimeNs as string,
     },
     managedByEnvironment: value.managedByEnvironment,
     folders: (folders as BackupFolder[]).map(({ destination, dir }) => ({ destination, dir })),

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import {
   appendFile,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
@@ -59,10 +60,6 @@ async function write(overrides: Partial<Parameters<typeof writeBackupRoomNote>[0
 
 const read = (nodeId = "node-1") => readBackupRoomNote({ stateDir, venueDir, nodeId });
 
-// Lets the clock move past the millisecond a replaced file was born in, so a filesystem that
-// reuses the freed inode number still gives the new file a different birth time.
-const nextMillisecond = () => new Promise((resolve) => setTimeout(resolve, 5));
-
 describe("file names", () => {
   it("names the note and the start's deletion record in the state folder", () => {
     expect(BACKUP_ROOM_NOTE_FILE).toBe("backup-room-note.json");
@@ -81,7 +78,7 @@ describe("writeBackupRoomNote", () => {
       venueDb: {
         dev: expect.stringMatching(/^\d+$/),
         ino: expect.stringMatching(/^\d+$/),
-        birthtimeMs: expect.stringMatching(/^\d+$/),
+        birthtimeNs: expect.stringMatching(/^\d+$/),
       },
       managedByEnvironment: true,
       folders: [{ destination: "usb", dir: join(root, "usb") }],
@@ -190,8 +187,22 @@ describe("readBackupRoomNote", () => {
   it("refuses the note once venue.db is deleted and created again", async () => {
     await write();
     await unlink(venueDb());
-    await nextMillisecond();
     await writeFile(venueDb(), "new installation");
+    expect(await read()).toEqual({ skipped: "identity_mismatch" });
+  });
+
+  it("refuses a note whose venue.db birth time differs only below the millisecond", async () => {
+    await write();
+    const info = await lstat(venueDb(), { bigint: true });
+    const stored = JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
+    const otherNs =
+      info.birthtimeNs % 1_000_000n === 0n ? info.birthtimeNs + 1n : info.birthtimeNs - 1n;
+    stored.venueDb = {
+      dev: info.dev.toString(),
+      ino: info.ino.toString(),
+      birthtimeNs: otherNs.toString(),
+    };
+    await writeFile(notePath(), JSON.stringify(stored));
     expect(await read()).toEqual({ skipped: "identity_mismatch" });
   });
 
@@ -224,7 +235,7 @@ describe("readBackupRoomNote", () => {
     version: 1,
     nodeId: "node-1",
     installationStartedAt: "2026-10-01T09:00:00.000Z",
-    venueDb: { dev: "1", ino: "2", birthtimeMs: "3" },
+    venueDb: { dev: "1", ino: "2", birthtimeNs: "3" },
     managedByEnvironment: false,
     folders: [{ destination: "usb", dir: "/mnt/usb" }],
     writtenAt: "2026-10-29T12:00:00.000Z",
@@ -245,11 +256,11 @@ describe("readBackupRoomNote", () => {
     ["no venue.db identity", (note) => ({ ...note, venueDb: null })],
     [
       "a venue.db identity that is not digits",
-      (note) => ({ ...note, venueDb: { dev: "1", ino: "x", birthtimeMs: "3" } }),
+      (note) => ({ ...note, venueDb: { dev: "1", ino: "x", birthtimeNs: "3" } }),
     ],
     [
       "a venue.db identity number",
-      (note) => ({ ...note, venueDb: { dev: "1", ino: "2", birthtimeMs: 3 } }),
+      (note) => ({ ...note, venueDb: { dev: "1", ino: "2", birthtimeNs: 3 } }),
     ],
     [
       "a managed flag that is not true or false",
