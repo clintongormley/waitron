@@ -1,8 +1,11 @@
 # A1131b/c slice 2: one wipe, no password — Implementation Plan
 
-**Resume:** start at **Task 0** (nothing built yet). Task 0 is a gate: if it finds a path that leaves
-`<state>/module-evidence/` beside a later failed setup, the build stops before Task 1 and lane A
-relays owner question OQ1 below.
+**Resume:** Task 0 ran 2026-10-29 and STOPPED as predicted (see Task 0 → Result). The build waits
+for the owner's answer to OQ1; no code is written. On answer A, add a new Task 0b before Task 1
+(Start again and Recover from backup refuse while `<state>/module-evidence/` exists, with English
+and Spanish words and the guide line), plan it and have it reviewed, then Task 1 onward; on C,
+Task 1 onward as written; on B, stop and re-plan (it changes the fiscal module, and the owner lands
+it).
 
 > **For agentic workers:** this plan is built INLINE by the lead session (owner's instruction for
 > this slice), on the FULL review path: a fresh per-task reviewer after Tasks 1, 3a, 4, 5, 7a and 7b
@@ -12,7 +15,7 @@ relays owner question OQ1 below.
 > task, update the ledger, and checkpoint.
 
 **Goal:** Start again deletes a failed setup with no setup password; the box itself decides every
-refusal and says it in the design's words; a setup database the box cannot read can be deleted with
+refusal and says it in the design's words; a setup database the box cannot even open or list can be deleted with
 a safety margin no earlier than the setup's last saved write; the item counts no longer travel
 between the page and the box; the confirmation records say whose setup it was and that nobody signed
 in.
@@ -30,6 +33,7 @@ whole of it; §1a, §3, §4, §5, §9c–§9e and "Slices" item 2 are this plan'
 (`docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`, landed as #2230) left the
 counts on the wire and the refusal block drawing them; this slice removes both. Plan review folded:
 `~/waitron-campaign/item-a1131bc-2-plan-review.md` (0 critical, 7 important, 9 minor).
+Round-3 check folded: `~/waitron-campaign/item-a1131bc-2-plan-review-3.md` (0 critical, 4 important, 9 minor).
 
 **Worktree / branch:** `/Users/clintongormley/workspace/worktrees/waitron-feat-a1131bc-2-one-wipe-no-password`,
 `feat/a1131bc-2-one-wipe-no-password`, off main `bff4a7809`. Ledger:
@@ -46,24 +50,29 @@ the task's commit, the `Tests` counts read, and every test edited by design (old
   > but that copy stays. Example: Marta's old box was restored from a backup in March, rejoined in
   > May, then set up again; the setup stopped part way and she presses Start again. Start again
   > records the failed setup's series names so they are never used again, but not the names in that
-  > copy, and a later restore replaces the copy with the backup's own. **A (recommended):** Start
+  > copy, and a later restore overwrites the copy only if that backup carries one; otherwise the old
+  > copy stays (the entry is optional, `packages/fiscal-verifactu/src/backup-verification.ts:203`).
+  > **A (recommended):** Start
   > again and Recover from backup are refused while that copy is there (no change to the fiscal
   > rules); the way out is a reinstall, which deletes the copy too. **B:** the box also reads that
   > copy into the safety margin; this changes the fiscal module's rule, so it needs its own review.
   > **C:** do nothing: new names are taken from the clock's current minute, which is later than any
   > name in the copy unless the clock was wrong.
+
+  Posted 2026-10-29 with Result's example.
 - **OQ2 — answer before the PR lands, not before the build** (review I1; a correction of the
-  coordinator's "so nothing filed or sold can ever be wiped"). With question 2's answer A, the box
-  deletes a setup database it cannot read. Task 5 refuses whenever any part it CAN read shows an
-  invoice record or a record Waitron never deletes. But when the damaged part is itself the table
-  that holds invoices, or the file's header (so the box cannot even list its tables), the box
-  cannot see whether an invoice is there. Example: a power cut corrupts the page of the setup
-  database that holds invoice records; every other table reads as empty; the box offers the delete
-  with the margin. **A (recommended, what Task 5 builds, and what Q2 A's example already implies):**
-  delete with the margin, and the guide says the box could not check that database for invoices.
-  **B:** refuse unless the damage is confined to tables Start again deletes anyway; then a database
-  damaged in its header is refused too, which is answer C of Q2 for the commonest damage. Switching
-  to B is one condition in `readSetupDatabaseHoldingsOrDamage` plus its tests.
+  coordinator's "so nothing filed or sold can ever be wiped"; round-3 I1). Damage the box's first
+  read does not touch — for example a page of the invoice table alone — is labelled readable and
+  refused `setup.not_ready` through the held path, as today, so it never reaches the delete. The
+  delete-with-a-margin path is reached only when the box cannot open the file, list its tables, or
+  read the `tenants`/`locations` pages (`first-setup-resolution-inspection.ts:86-108`; the
+  emptiness check swallows its own errors, `first-setup-empty-database.ts:106-108`).
+  **A (recommended, what Task 5 builds):** delete with the margin in that case; the guide says the
+  box could not check that database for invoices; damage elsewhere stays refused and only a
+  reinstall clears it. **B:** delete with the margin only when the tables can still be listed and
+  the damage sits in the venue-identity pages; refuse header or table-list damage. Switching to B is
+  one condition in `readSetupDatabaseHoldingsOrDamage` plus its tests. Posted corrected 2026-10-29
+  ~10:30.
 
 ## Global Constraints
 
@@ -158,8 +167,10 @@ The spec's line numbers were re-checked; they still hold except where noted.
   `first-setup-resolution.ts:664-674`) holds `administrator: { displayName, email }`. It is written
   only after the password was checked (review R5). No code reads a record back: `rg
   START_AGAIN_CONFIRMATIONS_DIR` finds only its writer, `deploy/waitron.sh:749` and
-  `scripts/start-again-note-writers.test.ts:37` (run 2026-10-29). One test writes a record directly:
-  `packages/provisioning/src/first-setup-start-again-choose.test.ts:629-634`.
+  `scripts/start-again-note-writers.test.ts:37` (run 2026-10-29). Two tests outside the confirmation
+  module's own suite write a record directly:
+  `packages/provisioning/src/first-setup-start-again-choose.test.ts:628-635` and
+  `first-setup-start-again-note.test.ts:2802` (`seedKept`).
 - **The A1099 file-time floor** (`attemptLastWriteMs`, `packages/provisioning/src/first-setup-start-again-deletion.ts:333-354`)
   skips `venue.db`, `node.db` and every side file on purpose: the inspection's read-only open moves
   `venue.db-shm`, and a floor that moved between the summary and Start again would fail the
@@ -213,9 +224,13 @@ The spec's line numbers were re-checked; they still hold except where noted.
     would be a new §1a behaviour.
   - Any operational failure (a failed copy, a full disk, a failed journal check, I/O) → `setup.not_ready`
     as today. Otherwise a full disk would turn a database holding invoices into "cannot be read".
-  The residual — damage inside the very table that holds invoices, or in the header — is OQ2.
+  Reached only when the inspection's own reads fail: the header, the schema, or the
+  `tenants`/`locations` pages (`first-setup-resolution-inspection.ts:86-108`; the emptiness check
+  swallows its own errors, `first-setup-empty-database.ts:106-108`). Damage elsewhere stays
+  `setup.not_ready` through the held path. Stated in the PR and the guide, and raised with the owner
+  alongside OQ2, because it is answer C of Q2 for that damage.
 - **D4 — The §5 floor counts `venue.db`, `node.db`, `-wal` and `-journal`, not `-shm`.** The spec
-  lists `-shm`; it holds no committed data and every reader moves it (review E1, E2), so counting it
+  lists `-shm`; it holds no committed data and every reader of a WAL-mode database moves it (review E1, E2), so counting it
   would make every Start again past an unreadable database fail its deep-equal check. The owner's
   words were "when that setup last saved anything"; `-shm` is not a save. Because the box's first
   read creates an empty `-wal` at that moment (E2), the floor is **no earlier than** the setup's last
@@ -232,8 +247,8 @@ The spec's line numbers were re-checked; they still hold except where noted.
   reused"; a setup whose frozen modules have no floor seat (today `fiscal-none`, which "has no SIF,
   installation number or hash chain") chose no series name the margin guards, so there is no margin
   to take. Refusing it would be Q2's answer C, which the owner rejected. The check runs **before**
-  `gatherStartAgainFloor`'s early return, and `floorMs` is set only from a seat's own floor over the
-  file times — never from `recoveryFloor`, which still raises the note separately as today. With a
+  `gatherStartAgainFloor`'s early return. With no seat, `floorMs` is null whatever `recoveryFloor`
+  is; with a seat, `floorMs` is the combined floor as today (`first-setup-resolution.ts:263-273`). With a
   seat that answers no floor from the file times, the database is refused `setup.not_ready`.
   Consequence: `StartAgainUnreadable.floorMs` becomes `number | null` (null only alongside
   `"setup-database"`), in the three parsers and the page (no `namesFrom` line when null).
@@ -301,7 +316,7 @@ Rows are by test title (line numbers drift). "Retitle" changes only a title that
 | route: "HTTPS lets a shown summary carrying held counts past the body check, and refuses a malformed one" | `held` accepted | any `held` key answers 400 `setup.request_invalid`; malformed cases kept for the other keys | counts gone |
 | full-disk e2e: "in the held state, with the box's spare file, the summary answers with what the setup database holds…" | counts in summary | no counts; retitle | counts gone |
 | provisioning confirmation: "a confirmation that discards a stopped recovery beside a held database keeps what it held", "a held database with an invoice record its module lists as deletable is kept as shown", and the `held` malformed-count `it.each` | `held` stored/validated | deleted; one new case: a `shown.held` key is not stored | counts gone |
-| provisioning choose: "Move then finishes Start again: … A1042's confirmation records are byte-identical" (`:629-634` fixture) | writes `administrator`, no version | M2 on the fixture only; every assertion unedited | D8 (review I6) |
+| provisioning choose: "Move then finishes Start again: … A1042's confirmation records are byte-identical" (`:628-635` fixture) | writes `administrator`, no version | M2 on the fixture only; every assertion unedited | D8 (review I6) |
 | note: "the summary route refuses without the owner headers" | `setup.owner_required` | answers 200 with the summary | §3 |
 | note: "with the database present and no password, a damaged kept picks file asks for the password, and nothing changes" | `setup.start_again_password_required` | without `confirmUnreadable` → `setup.attempt_conflict`, nothing changes; retitle | §3 |
 | note: "with the database present and the setup password, a damaged kept picks file without confirmUnreadable…", "…gets a summary naming it, and Start again without confirming it…" | with owner | same assertions, no owner; retitle | §3 |
@@ -346,7 +361,7 @@ non-password assertions (enabled/disabled, order, request body, restarting).
    again** must leave the §5 floor as shown. Pinned in Tasks 1 and 5 (the errcode-11 WAL case).
 5. **A send refused `kept-records` after the page drew a confirmation** must close the
    confirmation, draw `heldChanged`, and offer Start again again (whose summary then draws
-   `keptFault`). Pinned in Task 8b.
+   `keptFault`). Pinned in Task 8a.
 
 ---
 
@@ -365,25 +380,27 @@ Read while planning and in the plan review (not run): writers are `restoreSecret
 migrated and its hooks run, and `apps/server/src/backup-data-placement.ts:70`), and the old
 recovery's `first-setup-backup-recovery.ts:562`, under `record.target.target.stateDir`.
 `recovery-unpack-command.ts` unpacks only `RECOVERY_FILES` (`state-secrets.ts:16-23`). Paths back
-to first setup that leave the folder: **`apps/server/src/rejoin-command.ts:131-139`** (deletes the
+to first setup that leave the folder: **`apps/server/src/rejoin-command.ts:133-140`** (deletes the
 databases, re-migrates, clears `trading.env`, "next boot is setup mode"; guards `rejoin.ts:43-52`
 need only a fenced node and a serving primary — the review expects this to be the STOP), and the
 staged reset `reset-request.ts:106-109` (databases plus three named files). `waitron.sh reset`
 empties the state folder but for its kept list.
 
-- [ ] **Step 1: Writers.** Run
+- [x] **Step 1: Writers.** Run
   `rg -n "module-evidence" --glob '!*.test.*' --glob '!docs/**' apps packages deploy scripts` and
   `rg -n "restoreSecrets\(|unpackBundleToDir\(" --glob '!*.test.*' apps packages`. Expected writers:
   the three above. A writer beyond them joins Step 3's list.
-- [ ] **Step 2: Paths back to first setup.** Run
+- [x] **Step 2: Paths back to first setup.** Run
   `rg -n "wipeVenueDatabases\(|clearTradingEnv\(|setup mode" --glob '!*.test.*' apps/server/src packages`
   and list every caller that can leave a box claimable for first setup with its state folder
   otherwise intact. Expected: rejoin, the staged reset; any other joins Step 3.
-- [ ] **Step 3: Probe each path** (failing case written first in the output README: "the claim is
+- [x] **Step 3: Probe each path** (failing case written first in the output README: "the claim is
   refused"; the STOP case is the claim succeeding with `module-evidence` present):
   - (a) rejoin: on a box with a restored venue (the spec's probe T2,
     `~/waitron-campaign/a1131bc-redesign-measure/where-restore-writes.test.ts.txt`), run the rejoin
-    wipe (`rejoinAsSecondary` with a fenced held document, or the `wipeDatabase` step it calls), then
+    wipe (`rejoinAsSecondary` with a fenced held document; its `wipeDatabase` step is an inline
+    closure in `rejoin-command.ts:133-140`, not an export, so a probe reaches it through `runRejoin`
+    with an injected `rejoin`), then
     a first-setup claim (`assertVenueFirstSetupAllowed(venueDir)` and the owner store's claim the
     probe's T3 uses). Record whether `<state>/module-evidence` is still there and whether the claim
     succeeds.
@@ -392,12 +409,28 @@ empties the state folder but for its kept list.
     `<state>/module-evidence` is absent and the target's copy is present.
   - Control for (a) and (b): a box with no restored venue, the claim succeeds — so a refusal in (a)
     or (b) is not a broken probe.
-- [ ] **Step 4: Who reads it after a wipe.** `rg -n "module-evidence|hour-history" packages/fiscal-verifactu/src apps/server/src --glob '!*.test.*'`:
+- [x] **Step 4: Who reads it after a wipe.** `rg -n "module-evidence|hour-history" packages/fiscal-verifactu/src apps/server/src --glob '!*.test.*'`:
   record whether a first setup's or a fresh-box restore's name choice reads `<state>/module-evidence`
   (the worked example for OQ1 needs it).
-- [ ] **Step 5: Decide.** Any path in Step 3 that leaves the folder and allows the claim → STOP per
+- [x] **Step 5: Decide.** Any path in Step 3 that leaves the folder and allows the claim → STOP per
   the rule above. Otherwise write the finding, the commands and the counts into the ledger and
   carry on. Delete the probe; `git status --short` shows nothing.
+
+**Result (2026-10-29):** Step 1 and 2 searches found exactly the writers and paths the plan lists.
+Probe `~/waitron-campaign/a1131bc-2-module-evidence/` ("Tests 2 passed (2)"): (a) the fresh-box
+restore (POST /setup-api/restore 202, `runStagedRestore` true), then the restore's own secret writer
+`restoreSecrets` given a `secrets/module-evidence/…` entry (the archive fixture carries none and is
+bound to its preparation: a rebuilt artifact was refused `server.config_invalid` `source_mismatch`);
+then `runRejoin` with its real wipe closure, only `rejoinAsSecondary`'s fenced/carrier guards
+replaced by a stand-in that calls `closePreWipe` and `wipeDatabase`; after it `trading.env` was
+gone, the evidence copy still present, and `assertVenueFirstSetupAllowed` plus a store claim
+succeeded. Control: before the wipe `trading.env` and the evidence copy were both present. (b) not
+probed: `runStagedReset` refuses `trading_configured` and `venue_present` (`reset-request.ts:71-78`),
+so it is only a second route after a rejoin. (c) the old recovery keeps the copy in its target
+only. Step 4 readers (read, not run): `readRecoveryDocumentEvidence` (`boot.ts:2572`),
+`readFirstSetupBackupHistory` (`first-setup-backup-history.ts:76`), and `backup-sources.ts:57`
+through `readRetained` (copied into later backups); nothing under `packages/provisioning/src` names
+`module-evidence`. Decision: STOP; OQ1 posted to the owner 2026-10-29.
 
 ### Task 1: The file-time floor can count the databases; the wipe deletes journals
 
@@ -473,10 +506,12 @@ the box no longer sends. The fiscal module's `startAgainHoldings` seat still ret
 body), `apps/server/src/setup-first-fiscal-api.ts` (summary route stops calling `firstFiscalOwner`
 and asks for a restart on `setup.start_again_incomplete`, D14; Start again route stops passing
 `owner`; drop the status line `:39`), `apps/server/src/errors.ts` (retire
-`setup.start_again_password_required`, `:1041`), `apps/setup/src/setup-app.ts:1479` only to delete
-the dead comparison, `packages/provisioning/src/first-setup-start-again-confirmation.ts` (D8 shape,
-except `"unreadable"`, which is Task 5's). Tests: only the new ones below, plus the table rows of
-the note, backup-discard, unused-pdf and first-fiscal-hour-finish files.
+`setup.start_again_password_required`, `:1041`),
+`packages/provisioning/src/first-setup-start-again-confirmation.ts` (D8 shape, except
+`"unreadable"`, which is Task 5's). The page's comparison against that code
+(`apps/setup/src/setup-app.ts:1479`) is deleted in Task 7b, not here: the page tests still answer
+with the code themselves. Tests: only the new ones below, plus the table rows of the note,
+backup-discard and first-fiscal-hour-finish files (the unused-pdf rows are Task 3b's).
 
 **Interfaces — Produces:**
 - `StartAgainSummaryRequest = { inspectionId: string; revision: number; ownerGeneration: number }`.
@@ -533,7 +568,7 @@ recovery-delivery, 24 in backup-discard). Work file by file, running each file a
   `first-setup-set-aside-lifetime`, `first-setup-backup-handoff`, `start-again-full-disk.e2e`,
   `spare-space`, `setup-first-fiscal-api.disk-full`, `setup-first-backup-api-adapters`,
   `first-setup-workspace`, `first-setup-recovery-delivery`; and the M2 fixture in
-  `packages/provisioning/src/first-setup-start-again-choose.test.ts:629-634` (assertions unedited).
+  `packages/provisioning/src/first-setup-start-again-choose.test.ts:628-635` (assertions unedited).
 - [ ] **Step 2: M1-twin.** In each file the class names, add the no-password twin of each floor or
   note case; write the expected floor by hand from the stamped file times (first whole minute more
   than 150 s after the newest), not from the code.
@@ -632,8 +667,9 @@ writes the record with `database: "unreadable"`.
     confirmUnreadable deletes it, writes an unreadable record, and the note's floor is the first
     whole minute more than 150 s after its newest counted file time" (overwrite `venue.db` with
     random bytes — errcode 26 — remove its side files; stamp files to T, `venue.db` to T + 10 min).
-  - **The realistic case** (review minor 8): a WAL-mode database with one damaged page after the
-    header (errcode 11, the review's E2 damage), end to end: inspection, summary, then Start again;
+  - **The realistic case** (review minor 8): a WAL-mode database with the `tenants` table's page
+    damaged (its root page from `sqlite_schema`), so the inspection labels it `corrupt`; assert the
+    label first; then end to end: inspection, summary, then Start again;
     the `-wal` the first read creates and the `-shm` each read moves leave `unreadable.floorMs` equal
     at the summary and at Start again, and Start again goes ahead.
   - **The two floor controls on their own** (spec §5): (i) `venue.db` stamped later than every other
@@ -642,11 +678,16 @@ writes the record with `database: "unreadable"`.
   - "a -shm moved between the summary and Start again leaves the floor as shown, and Start again goes
     ahead" (D4).
   - Review Focus 3: "a damaged table beside a readable table holding kept rows refuses kept-records,
-    and deletes nothing" (damage a page of a deletable table in a database that holds a kept row).
+    and deletes nothing" (damage the `tenants` page of a held database that also holds a kept row;
+    assert the inspection says `corrupt` first; expect `kept-records`). Control: damage a page of a
+    table the inspection does not read → `setup.not_ready`, nothing deleted (the held path,
+    unchanged).
   - "Start again past an unreadable database without confirmUnreadable is refused attempt_conflict,
     and nothing changes".
   - Review Focus 1: "a corrupt database whose copy fails refuses setup.not_ready and deletes nothing"
-    — stub the holdings copy to throw `ENOSPC`.
+    — put a `venue.db-journal` beside it (or give the `-wal` committed pages) so the reader takes the
+    copy path, then stub the copy (`copyVenueFiles` or `mkdtemp`) to throw `ENOSPC`; assert the stub
+    was called.
   - Review Focus 2: "a readable held database the inspection labels unreadable refuses kept-records
     for an invoice record, and setup.not_ready with none" (`heldSetup({ invoices: 1, recovery: false })`
     and `heldSetup({ recovery: false })`, inspection stubbed to `database: "unreadable"` through the
@@ -664,7 +705,9 @@ writes the record with `database: "unreadable"`.
     the parser; `["series-picks", "setup-database"]` is refused (order); `floorMs: null` passes only
     with `"setup-database"`.
 - [ ] **Step 2:** run the held and route files and the provisioning confirmation test; the new cases
-  fail (`setup.not_ready` today, review R2).
+  fail (`setup.not_ready` today, review R2), except these controls, which pass before and after:
+  Review Focus 1 (`not_ready`); the "with none → `setup.not_ready`" half of Review Focus 2; the
+  `partial` case; both provisioning refusals; the route's order-refusal case.
 - [ ] **Step 3: Implement** as above.
 - [ ] **Step 4:** run the held, note, route and inspection files and the provisioning start-again
   set; typecheck both packages; `scripts/start-again-note-writers.test.ts` unedited.
@@ -719,7 +762,8 @@ their owner helpers `:679-839`; `heldStartAgainDatabase` goes in 7b with its las
 
 **Files:** Create `apps/setup/src/setup-app-wipe.test.ts`. Modify `apps/setup/src/setup-app.ts`,
 `apps/setup/src/screens/initial-owner-strings.ts`, `apps/setup/src/first-setup-session.ts`
-(`heldStartAgainDatabase`).
+(`heldStartAgainDatabase`). `setup-app.ts:1479`'s comparison against the retired
+`setup.start_again_password_required` goes here with the branch it guards (moved from Task 3a).
 
 Page flow: Start again is enabled whenever the inspection has a non-null `revision` and
 `ownerGeneration`, nothing is running, no refusal is drawn and the page is not busy — whatever the
@@ -754,7 +798,8 @@ drawn with the database missing (D10), and `#resumeFirstSetup`'s missing branch 
   `Object.hasOwn(..., key) === false` for every removed key.
 - [ ] **Step 2:** run both; the new cases fail.
 - [ ] **Step 3: Implement** as above.
-- [ ] **Step 4:** both files green; `pnpm --filter @waitron/setup typecheck` and `lint` clean.
+- [ ] **Step 4:** `setup-app-wipe.test.ts` green, and in `setup-app-resolution.test.ts` the extended
+  strings test (`-t "Start again's confirmation words"`) green; `pnpm --filter @waitron/setup typecheck` and `lint` clean.
   **Red until Tasks 8a–9, by design:** `setup-app-resolution.test.ts` (its other cases),
   `setup-app-missing-database.test.ts`, `setup-app-held-refusals.test.ts`,
   `first-setup-retirement.test.ts`, and the three a11y files — record each failing title against
@@ -805,17 +850,20 @@ drawn with the database missing (D10), and `#resumeFirstSetup`'s missing branch 
 **Files:** `apps/server/src/guide/en/backup-recovery.md`, `apps/server/src/guide/es/backup-recovery.md`,
 `docs/operations/first-live-fiscal-setup.md`, `deploy/README.md`, `deploy/waitron.sh` (comment
 `:742-745`), `apps/server/README.md`, `docs/developers/conventions-data.md` (`:5086-5091`),
+`docs/developers/testing-guide.md` (the A1127 paragraph),
 `CLAUDE.md` (§5's list of what raises the note's floor), `docs/backlog/setup.md`, `docs/backlog.md`,
 and the spec's §3 cost list (D16; a dated amendment line, as earlier amendments are written).
 
 Find every sentence again with
 `rg -n -i "start again.{0,160}password|password.{0,160}start again|who confirmed|what the (repair )?page showed|after you enter(ed)? the (administrator )?password|password step|saved items|cuántos|introduzcas la contraseña|introdujeras la contraseña|other than its databases|beside a stopped recovery, with a setup database" apps/server/src/guide docs/operations docs/developers deploy apps/server/README.md docs/backlog/setup.md CLAUDE.md`.
-Hits on 2026-10-29: EN guide `:29-31`, `:32-33`, `:37`, `:45-47`, `:50`; ES guide `:31`, `:34`, `:40`,
-`:48`, `:50`, `:53`; runbook `:97-98`, `:102`, `:106`, `:116-118`, `:131-135`, `:150-156`;
+Hits on 2026-10-29: EN guide `:29-31`, `:32-33`, `:37`, `:45-47`; ES guide `:31`, `:40`,
+`:48`, `:53`; `docs/developers/testing-guide.md:1315` ("without it the password step answers `507
+storage.disk_full`"); runbook `:97-98`, `:102`, `:106`, `:116-118`, `:131-135`, `:150-156`;
 `deploy/README.md:395-398`; `deploy/waitron.sh:744`; `apps/server/README.md:58-61`;
 `conventions-data.md:5086-5091` ("other than its databases"; A1131 limited to "beside a stopped
-recovery"); `docs/backlog/setup.md:651` (the full-disk entry's "password step" is now the summary
-read). `docs/operations/a679-changed-checks.md:1838` is a dated historical record: leave it.
+recovery"); `docs/backlog/setup.md:644-651` (the full-disk entry's "password step" is now the summary
+read). Unrelated hits, left alone: `design-system.md:3837` (the dashboard login's password step)
+and the `cuántos` lines in `kitchen-service.md`, `box-status.md` and other guides. `docs/operations/a679-changed-checks.md:1838` is a dated historical record: leave it.
 CLAUDE.md §5's note entry lists the ways the floor is raised (Move, A1099 damaged name records):
 add the unreadable setup database in one clause, keep the line's length, and run
 `scripts/claude-md-pointers.test.ts`.
@@ -823,7 +871,7 @@ add the unreadable setup database in one clause, keep the line's length, and run
 After the edit, each must say: Start again asks for no password, and anyone who can open the repair
 page can use it, and can see what the summary shows (D16, once, in the guide); the box refuses
 beside saved selling settings, a finished setup, or a database holding an invoice or another record
-Waitron never deletes, in §9c's words; a setup database the box cannot read is deleted, and new
+Waitron never deletes, in §9c's words; a setup database the box cannot even open or list is deleted, and new
 series names start **no earlier than** the first whole minute more than 150 seconds after the
 setup's newest file time, counting its databases (D4) — not "after you entered the password" (the
 old "two and a half to three and a half minutes after you entered the password" came from the
@@ -839,7 +887,8 @@ removes them"; slices 3–4 still to come.
 - [ ] **Step 1:** edit; `pnpm exec prettier --write` on the two guide files, `apps/server/README.md`
   and `CLAUDE.md`; `docs/` is Prettier-ignored, so READ the runbook paragraphs `:80-170` and the
   conventions entry whole after editing (CLAUDE.md §1: a behaviour change retires every receipt).
-- [ ] **Step 2:** re-run the search; expect only the "files found" page's password and Continue's.
+- [ ] **Step 2:** re-run the search; expect only the files-found page, Continue, the dashboard login
+  (`design-system.md`) and the unrelated `cuántos` lines.
 - [ ] **Step 3:** `… pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts src/guide-backup-recovery.test.ts src/guide-pages.test.ts`,
   `… pnpm exec vitest run scripts/guide-links.test.ts scripts/english-only.test.ts scripts/waitron-sh.test.mjs scripts/claude-md-pointers.test.ts`,
   `pnpm format:check`. Commit.
