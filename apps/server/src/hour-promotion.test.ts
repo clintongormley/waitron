@@ -617,33 +617,32 @@ it("a promotion beside a leftover start-again note file is not held back by the 
   ).toMatchObject({ status: "selected" });
 });
 
-it("refuses a promotion minute no later than a recorded installation name, writing nothing", async () => {
+it("waits past the minutes recorded installation names hold, writing no fiscal rows", async () => {
   const s = await service();
   await admit(s);
   const [live] = await suite.db.select().from(registroSif);
-  const nameMs = Date.now() + 10 * 60_000;
-  await suite.db.insert(registroSif).values({
-    nodeId: primary.nodeId,
-    nif: live!.nif,
-    idSistemaInformatico: live!.idSistemaInformatico,
-    numeroInstalacion: encodeMinuteIdentity(nameMs),
-    registradoEn: new Date(Date.now() - 60 * 60_000),
-    revocadoEn: new Date(Date.now() - 30 * 60_000),
-  });
+  // The current minute and the next are both held, so a minute that rolls over mid-test changes nothing.
+  const minute = Math.floor(Date.now() / 60_000) * 60_000;
+  for (const nameMs of [minute, minute + 60_000])
+    await suite.db.insert(registroSif).values({
+      nodeId: primary.nodeId,
+      nif: live!.nif,
+      idSistemaInformatico: live!.idSistemaInformatico,
+      numeroInstalacion: encodeMinuteIdentity(nameMs),
+      registradoEn: new Date(Date.now() - 60 * 60_000),
+      revocadoEn: new Date(Date.now() - 30 * 60_000),
+    });
   await compare(s);
   const before = await rows();
-  await expect(
-    s.prepare(
+  expect(
+    await s.prepare(
       binding,
       { breakGlass: key.secret },
       context,
       { action: "select", comparisonId },
       { onBox: true },
     ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: nameMs + 60_000 },
-  });
+  ).toMatchObject({ status: "waiting", targetMs: minute + 120_000 });
   expect(await rows()).toEqual(before);
 });
 

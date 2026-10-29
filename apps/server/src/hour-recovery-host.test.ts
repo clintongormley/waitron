@@ -179,7 +179,7 @@ it.each([
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("retains a higher surviving hour when the supplied copy is older", async () => {
+it("refuses the settle-target minute a surviving host already names", async () => {
   const f = await host();
   f.facts.history.push({
     reference: "retired-workspace",
@@ -191,8 +191,8 @@ it("retains a higher surviving hour when the supplied copy is older", async () =
         ...scope,
         softwareId: "OTHER",
         nodeId: "retired-node",
-        identity: "0CNRP",
-        recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+        identity: "0CNQT",
+        recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
       },
     ],
   });
@@ -239,7 +239,7 @@ it("binds durable host admission to the selected source and refuses a different 
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("adds the selected copy's opaque public floor to surviving host evidence", async () => {
+it("adds the selected copy's opaque public names to surviving host evidence", async () => {
   const f = await host();
   agreeInternet();
   const service = createSelectedRecoveryPreparation({
@@ -258,8 +258,8 @@ it("adds the selected copy's opaque public floor to surviving host evidence", as
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: "remote-node",
-                identity: "0CNRP",
-                recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+                identity: "0CNQT",
+                recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
               },
             ],
           },
@@ -339,7 +339,7 @@ it("refuses a selected backup whose named key no longer matches the database", a
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("admits recovery from the real validated archive preview with its public spent-hour floor", async () => {
+it("admits recovery from the real validated archive preview with its public spent names", async () => {
   const f = await host();
   agreeInternet();
   const manifest = await buildManifest({
@@ -383,8 +383,8 @@ it("admits recovery from the real validated archive preview with its public spen
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: node.nodeId,
-                identity: "0CNRP",
-                recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+                identity: "0CNQT",
+                recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
               },
             ],
           }),
