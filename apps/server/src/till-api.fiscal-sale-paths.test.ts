@@ -867,6 +867,24 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
                 where working_order_id = ${id}`,
           )
         ).rows[0];
+      // The kitchen's items stand for one cohort's portions 1 and 2, each on its own dish line.
+      const kitchenPortions = async (id: string) => {
+        const rows = (
+          await suite.db.execute<{ line: string; cohort: string; ordinal: number }>(
+            sql`select ti.working_order_line_id as line, p.cohort_id as cohort, p.ordinal as ordinal
+                from ticket_items ti
+                join working_line_portions wlp on wlp.working_order_line_id = ti.working_order_line_id
+                join order_portions p on p.id = wlp.portion_id
+                where ti.working_order_id = ${id}
+                order by p.ordinal`,
+          )
+        ).rows;
+        return {
+          lines: new Set(rows.map((row) => row.line)).size,
+          cohorts: new Set(rows.map((row) => row.cohort)).size,
+          ordinals: rows.map((row) => row.ordinal),
+        };
+      };
 
       const workingOrderId = randomUUID();
       const filed = () =>
@@ -900,13 +918,23 @@ describe("paying a parked pay-first order over POST /api/sales sends its dishes 
           }),
         });
       expect((await pay()).status).toBe(200);
-      expect(await kitchenItems(workingOrderId)).toEqual({ items: 1, fired: 1 });
+      expect(await kitchenItems(workingOrderId)).toEqual({ items: 2, fired: 2 });
+      expect(await kitchenPortions(workingOrderId)).toEqual({
+        lines: 2,
+        cohorts: 1,
+        ordinals: [1, 2],
+      });
       const afterPay = await filed();
       expect(afterPay.registros).toHaveLength(1);
       expect(afterPay.wo).toEqual([{ status: "settled" }]);
 
       expect((await pay()).status).toBe(200);
-      expect(await kitchenItems(workingOrderId)).toEqual({ items: 1, fired: 1 });
+      expect(await kitchenItems(workingOrderId)).toEqual({ items: 2, fired: 2 });
+      expect(await kitchenPortions(workingOrderId)).toEqual({
+        lines: 2,
+        cohorts: 1,
+        ordinals: [1, 2],
+      });
       const afterReplay = await filed();
       expect(afterReplay.registros).toHaveLength(1);
       expect(afterReplay.wo).toEqual([{ status: "settled" }]);
@@ -1820,6 +1848,34 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         band: string;
       }[];
     }[];
+    // The two agua are two queue items of 1, each on its own working line.
+    const queuedAgua = {
+      id: expect.any(String),
+      allergy: null,
+      workingOrderLineId: expect.any(String),
+      state: "queued",
+      // The kitchen name, falling back to the staff name because this product carries none.
+      name: "Agua mineral",
+      quantity: "1.000",
+      unitName: { es: "ud" },
+      unitPrecision: 0,
+      soldInEach: true,
+      // No course, so the item fires immediately: a null course is treated as earliest.
+      course: null,
+      firedAt: expect.any(String),
+      note: null,
+      // No extras picked on this line → an empty modifier sub-item list, and no options list
+      // answered → an empty frozen-answer list.
+      modifiers: [],
+      optionSnapshots: [],
+      // Just fired — nowhere near the default station's 5-minute warm threshold.
+      queuedAt: expect.any(String),
+      band: "fresh",
+      // This dish's own allergens are unreviewed, so the profile is empty and flagged pending.
+      asServed: { allergens: {}, pending: true },
+      // No recipe, so the diet reads "unknown": an unreviewed plate asserts no positive claim.
+      asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
+    };
     expect(groups1).toEqual([
       {
         bumpMode: "line",
@@ -1835,47 +1891,22 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
         // KDS order-timing alerts (design §3/§6/§11): the venue's DEFAULT station carries the schema's
         // default thresholds — provisioning never overrides them.
         thresholds: { warmAfterMinutes: 5, overdueAfterMinutes: 10, forgottenAfterMinutes: 15 },
-        items: [
-          {
-            id: expect.any(String),
-            allergy: null,
-            workingOrderLineId: expect.any(String),
-            state: "queued",
-            // The kitchen name, falling back to the staff name because this product carries none.
-            name: "Agua mineral",
-            quantity: "2.000",
-            unitName: { es: "ud" },
-            unitPrecision: 0,
-            soldInEach: true,
-            // No course, so the item fires immediately: a null course is treated as earliest.
-            course: null,
-            firedAt: expect.any(String),
-            note: null,
-            // No extras picked on this line → an empty modifier sub-item list, and no options list
-            // answered → an empty frozen-answer list.
-            modifiers: [],
-            optionSnapshots: [],
-            // Just fired — nowhere near the default station's 5-minute warm threshold.
-            queuedAt: expect.any(String),
-            band: "fresh",
-            // This dish's own allergens are unreviewed, so the profile is empty and flagged pending.
-            asServed: { allergens: {}, pending: true },
-            // No recipe, so the diet reads "unknown": an unreviewed plate asserts no positive claim.
-            asServedDiet: { vegan: "unknown", vegetarian: "unknown", contains: [] },
-          },
-        ],
+        items: [queuedAgua, queuedAgua],
       },
     ]);
 
-    // 4. Advance the ticket item over HTTP, per line: queued → preparing → ready.
-    const itemId = groups1[0]!.items[0]!.id;
-    for (const to of ["preparing", "ready"]) {
-      const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
-        method: "POST",
-        headers: { "content-type": "application/json", cookie },
-        body: JSON.stringify({ to, stationId: defaultStation.id }),
-      });
-      expect(advance.status).toBe(200);
+    // 4. Advance each ticket item over HTTP, per line: queued → preparing → ready.
+    const itemIds = groups1[0]!.items.map((item) => item.id);
+    expect(new Set(groups1[0]!.items.map((item) => item.workingOrderLineId)).size).toBe(2);
+    for (const itemId of itemIds) {
+      for (const to of ["preparing", "ready"]) {
+        const advance = await app.request(`/api/ticket-items/${itemId}/advance`, {
+          method: "POST",
+          headers: { "content-type": "application/json", cookie },
+          body: JSON.stringify({ to, stationId: defaultStation.id }),
+        });
+        expect(advance.status).toBe(200);
+      }
     }
     // A `ready` line stays on the queue until its order is handed over.
     const groupsReady = (
@@ -1884,7 +1915,9 @@ describe("place → station queue → per-line advance → collect (KDS-1 ticket
       orderId: string;
       items: { state: string }[];
     }[];
-    expect(groupsReady.find((g) => g.orderId === workingOrderId)!.items[0]!.state).toBe("ready");
+    expect(
+      groupsReady.find((g) => g.orderId === workingOrderId)!.items.map((item) => item.state),
+    ).toEqual(["ready", "ready"]);
 
     // 5. COLLECT: Mode T files `recordSale` IMMEDIATE here, placed → settled — the genuine chained
     // fiscal write this suite exists to prove.
@@ -2830,16 +2863,82 @@ it("files an extras pick and an options answer through cash checkout and reprint
   ]);
   expect(stored.records).toHaveLength(1);
   expect(stored.records[0]!.huella).toMatch(/^[0-9A-F]{64}$/);
-  // The options answer IS frozen, on the DISH's working-order line, with the list's and the label's
-  // names copied by value; the child line answers nothing of its own.
+  // The options answer IS frozen, on each DISH's working-order line, with the list's and the label's
+  // names copied by value; each dish is its own portion with its own two cheeses under it, and the
+  // child line answers nothing of its own.
   const frozen = await withTransaction(suite.db, async (tx) => {
     return tx
-      .select({ optionSnapshots: workingOrderLines.optionSnapshots })
+      .select({
+        id: workingOrderLines.id,
+        name: workingOrderLines.name,
+        quantity: workingOrderLines.quantity,
+        parentLineId: workingOrderLines.parentLineId,
+        optionSnapshots: workingOrderLines.optionSnapshots,
+      })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, workingOrderId))
       .orderBy(workingOrderLines.lineNo);
   });
-  expect(frozen).toEqual([{ optionSnapshots: [frozenAnswer] }, { optionSnapshots: [] }]);
+  const [dish1, , dish2] = frozen;
+  expect(frozen).toEqual([
+    {
+      ...dish1,
+      name: "Agua mineral",
+      quantity: 1000,
+      parentLineId: null,
+      optionSnapshots: [frozenAnswer],
+    },
+    {
+      id: expect.any(String),
+      name: "Queso",
+      quantity: 2000,
+      parentLineId: dish1!.id,
+      optionSnapshots: [],
+    },
+    {
+      ...dish2,
+      name: "Agua mineral",
+      quantity: 1000,
+      parentLineId: null,
+      optionSnapshots: [frozenAnswer],
+    },
+    {
+      id: expect.any(String),
+      name: "Queso",
+      quantity: 2000,
+      parentLineId: dish2!.id,
+      optionSnapshots: [],
+    },
+  ]);
+  const portions = (
+    await suite.db.execute<{ line: string; portion: string; cohort: string; ordinal: number }>(
+      sql`select wlp.working_order_line_id as line, p.id as portion, p.cohort_id as cohort,
+                 p.ordinal as ordinal
+          from working_line_portions wlp join order_portions p on p.id = wlp.portion_id
+          where wlp.working_order_line_id in (${dish1!.id}, ${dish2!.id})
+          order by p.ordinal`,
+    )
+  ).rows;
+  expect(portions.map((row) => [row.line, row.ordinal])).toEqual([
+    [dish1!.id, 1],
+    [dish2!.id, 2],
+  ]);
+  expect(new Set(portions.map((row) => row.cohort)).size).toBe(1);
+  // Both filed rows, the dish's and the cheese's, stand for both portions.
+  const links = (
+    await suite.db.execute<{ line_no: number; portion: string }>(
+      sql`select sl.line_no as line_no, slp.portion_id as portion
+          from sale_line_portions slp join sale_lines sl on sl.id = slp.sale_line_id
+          order by sl.line_no, slp.portion_id`,
+    )
+  ).rows;
+  const both = portions.map((row) => row.portion).sort();
+  expect(links.map((row) => [row.line_no, row.portion])).toEqual([
+    [1, both[0]],
+    [1, both[1]],
+    [2, both[0]],
+    [2, both[1]],
+  ]);
   // Rename the extra's product AFTER the sale: what a replay and a reprint read must be the names the
   // sale froze, never the catalogue's current ones.
   await withTransaction(suite.db, async (tx) => {
