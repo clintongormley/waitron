@@ -1,5 +1,7 @@
 # A1089: show what the box recorded when its saved backup settings cannot be used
 
+_2026-10-29: build approved by the owner's rule of 2026-10-29 ~08:07, and built on that day._
+
 **Proposed, 2026-10-29. Not approved for building.** The owner's rule of 2026-10-29 ~01:58 makes
 evidence first the default for A1089 areas of this shape: a read-only inspection of what the box
 recorded, current facts only where they verifiably describe the same thing, sign-in at the action,
@@ -117,7 +119,7 @@ The panel has three parts:
 | Code | Plain explanation (EN) | What the panel adds |
 | --- | --- | --- |
 | `credentials.key_version_unknown` | The saved settings were locked with key number {n}. This box holds key number {m}{ and {p}}, so it cannot open them. | Both numbers. |
-| `credentials.decrypt_failed` | The saved settings carry this box's key number {n}, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which. | Key number, written time. |
+| `credentials.decrypt_failed` | The saved settings carry this box's key number {n}, but this box's key of that number does not open them. Either that key was replaced, or the saved record was changed or came from another box; Waitron cannot tell which. | Key number, written time. The key number only while the failed record is still the saved one; otherwise the sentence names no number. |
 | `credentials.malformed_payload`, `server.credential_unusable` | The saved record opened but its contents are not backup settings. | Written time. |
 | `backup.archive_settings_invalid` | The saved settings opened, but their {part} could not be used. | The part, from a fixed list (schedule, retention, destinations…). |
 | `backup.recovery_key_missing` | The saved settings read correctly, but this box holds no backup recovery key, and backups are never made without one. | The destinations. |
@@ -128,12 +130,13 @@ The panel has three parts:
 Spanish wording is written with the build, in the same shape. Words follow the refusal rule: they
 explain what happened and what each choice does, and never send the person to somebody else.
 
-When **Read again** finds a record that reads and a usable key, the panel says: "The saved settings
+When **Read again** finds a record that reads and a usable key, backups are not set by the box's
+environment, and the latest load the supervisor recorded failed, the panel says: "The saved settings
 read correctly now. Backups stay off until the settings are saved again, the recovery key is
 replaced, or the box restarts. Nothing was changed." The build proves each of the three, and that
 the bucket copy's key write alone leaves backups off. The sentence is not shown when the newest
 failure is `server.config_invalid`: that variable is read from the box's environment on every load,
-so none of the three would turn backups on.
+so none of the three turns backups on while that variable stays as it is.
 
 If the read itself fails (a server error or a lost connection), the panel says it could not read
 the facts and keeps **Read again** and **Stop**. If backups are set by the box's environment

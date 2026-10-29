@@ -4814,6 +4814,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   (`alert-messages.ts`) and the settings-evidence panel say "equipo". Pick one word across the
   screen; elsewhere "caja" also means the till.
 
+- **Backup status sends a saved bucket address as stored, password included.** A bucket address
+  written as `https://user:secret@host` passes the settings checks, and `GET /api/backup/status`
+  returns it unchanged (`destinationView`, `apps/server/src/backup-supervisor.ts`, since
+  2026-10-13). The settings-evidence answer masks that password with `redactSecrets`; the status
+  reply does not, and the Backups form may need the address back as saved, so check the form
+  before masking it there.
+
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real
   destination timeouts.
