@@ -416,9 +416,6 @@ Conditional automatic conflict recovery,
 corrective-record resolution, filing investigation, outside evidence and fencing, and the complete
 old-backup/new-hardware operational exercise remain queued.
 
-**2026-10-29 (owner):** the Cloud allocation registry is dropped — "We no longer have the
-reservations because we use the time-based codes instead."
-
 **2026-10-12, a conflict no longer holds its chain (owner).** A record AEAT refuses as a duplicate
 (3000) while holding a different or cancelled record under that key is now `rechazado` with code
 3000, with its incident and filing case, and the chain's later records are still sent
@@ -803,6 +800,11 @@ here under A556, with A948/Q17/Q5(d). No new fiscal item or enablement is create
   Copies held separately remain separate recovery sources, requiring their own recovery keys;
   reinstalling does not recover access to them. See [first Live setup](../operations/first-live-fiscal-setup.md#when-both-credentials-are-lost).
 
+- **The Cloud fiscal allocation registry is dropped (owner, 2026-10-29, A1189).** "We no longer
+  have the reservations because we use the time-based codes instead." Waitron's client and report
+  journal are removed; the fiscal package still reads old Cloud receipts until
+  [their retirement](#retire-the-historical-allocation-formats-from-fiscal-verifactu).
+
 - **A €0 fully comped sale settles when it is comped (owner, 2026-10-21).** Keep the
   settlement-time behaviour; do not backdate it to the invoice's issue time.
 
@@ -1070,13 +1072,13 @@ check (`packages/fiscal-verifactu/src/allocation-envelope.ts`, its Cloud branch 
 contribution (`initial-setup.ts`, spread into production by `hour-configuration.ts`). The settings
 `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_FINGERPRINT` and
 `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` are read by `allocation-configuration.ts`,
-`initial-setup.ts` (the trust file and receipt folder) and `initial-cloud-setup.ts` (the
-fingerprint); no document names them since the Cloud allocation guide was deleted. Removing the
+`initial-setup.ts` (the trust file and receipt folder) and `initial-cloud-setup.ts` (the trust
+file and the fingerprint); their only guide, the Cloud allocation guide, was deleted. Removing the
 formats changes activation and the remaining assertions of several tests (among them
 `hour-configuration.test.ts`, `backup-verification-history.test.ts`,
 `paper-register-history.test.ts`, and the server's `retired-first-setup-routes.test.ts` and
 `hour-restore-retired-inputs.test.ts`), so it is its own fiscal change for the owner to land. Left
-by A1189 (2026-10-29), which removed only the server's unused registry client.
+by A1189 (2026-10-29), which removed the server's unused registry client and report journal.
 
 ## Rename the `hour-*` names to minute names
 

@@ -177,8 +177,9 @@ under `docs/backlog/`.
 ### Fiscal records, invoices and the asesor
 
 - **Retire the historical allocation formats from `fiscal-verifactu`.** Historical code still
-  reads signed paper, Cloud receipts and emergency names, and three Cloud settings no doc names.
-  Removing it changes activation, so it is its own fiscal change for the owner to land.
+  reads signed paper, Cloud receipts and emergency names, and three Cloud settings whose only
+  guide was deleted. Removing it changes activation, so it is its own fiscal change for the owner
+  to land. Left open by A1189.
   [Detail](backlog/fiscal.md#retire-the-historical-allocation-formats-from-fiscal-verifactu)
 
 - **A1155: rename the box identity setting `WAITRON_TILL_NODE_ID` to `WAITRON_NODE_ID`.** Left
