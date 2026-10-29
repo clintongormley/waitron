@@ -625,7 +625,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
   record, saved trading settings and a finished setup stay. Designed with A1131 below
   (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`, revised 2026-10-29);
-  waits for the owner's two questions in it. Slice 1 (Start again's words) does not depend on them.
+  waits for the owner's two questions in it (who may delete a failed setup, given the repair page is
+  reachable from the venue's network; and a damaged setup database). Slice 1 (Start again's words)
+  does not depend on them.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
   missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore

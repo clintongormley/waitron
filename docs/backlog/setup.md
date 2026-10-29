@@ -649,7 +649,7 @@ replaces the failed setup): `docs/superpowers/specs/2026-10-28-a1131bc-restore-r
 The owner sent that design back (2026-10-28 ~15:25); the revision of 2026-10-29 wipes the failed setup
 first and then uses the fresh-box restore, which writes into the usual folders and makes no recovery
 folder, so this case cannot arise on a box set up after it. Its slice 4 deletes the old recovery-folder
-code; its question 2 asks what happens to boxes that already have one.
+code, and a box that still has one is reinstalled (the pre-live rule, CLAUDE.md §3).
 
 ## On a full disk, the repair page's password step needs room for a whole copy of the setup database
 
@@ -705,7 +705,7 @@ reading when it places the recovery. Next step: measure that on a box.
   opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
   beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
-  wipe.
+  wipe; the A1098 "files found" page keeps its password, since moving files aside is not that wipe.
 - **DECIDED (owner, 2026-10-26): beside a stopped recovery, Start again is offered even when the
   setup database holds records; the page says what is there and what is lost.**
 - **Built with it, to respect the owner's fiscal stop (A1131 part 1; awaiting the owner's
