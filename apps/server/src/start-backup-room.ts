@@ -184,16 +184,17 @@ async function deleteToFloor(
 }
 
 /** What the start deleted, and the `venue.db` it deleted for. */
-interface StartDeletedRecord {
+export interface StartDeletedRecord {
   version: 1;
   at: string;
   venueDb: VenueDbIdentity;
   deleted: StoredArchive[];
 }
 
-type StoredArchive = Omit<DeletableArchive, "takenAt"> & { takenAt: string };
+export type StoredArchive = Omit<DeletableArchive, "takenAt"> & { takenAt: string };
 
-const recordPath = (stateDir: string) => join(stateDir, BACKUP_ROOM_START_DELETED_FILE);
+export const startDeletedRecordPath = (stateDir: string) =>
+  join(stateDir, BACKUP_ROOM_START_DELETED_FILE);
 
 /**
  * Writes the record for the note's `venue.db`. A readable record an earlier start left for the
@@ -205,8 +206,11 @@ async function writeRecord(
   deleted: readonly DeletableArchive[],
 ): Promise<void> {
   const now = deps.now().toISOString();
-  const earlier = await readRecord(deps.stateDir);
-  const kept = earlier !== null && sameVenueDb(earlier.venueDb, note.venueDb) ? earlier : null;
+  const earlier = await readStartDeletedRecord(deps.stateDir);
+  const kept =
+    "record" in earlier && sameVenueDb(earlier.record.venueDb, note.venueDb)
+      ? earlier.record
+      : null;
   const entries = [...(kept?.deleted ?? [])];
   for (const { destination, dir, key, bytes, takenAt } of deleted)
     if (!entries.some((each) => each.destination === destination && each.key === key))
@@ -218,20 +222,37 @@ async function writeRecord(
     deleted: entries,
   };
   try {
-    await writeFileDurable(recordPath(deps.stateDir), JSON.stringify(record), 0o600);
+    await writeFileDurable(startDeletedRecordPath(deps.stateDir), JSON.stringify(record), 0o600);
   } catch (error) {
     deps.log("warn", "backup.start_room_record_failed", { errno: errnoOf(error) });
   }
 }
 
-const sameVenueDb = (a: VenueDbIdentity, b: VenueDbIdentity) =>
+export const sameVenueDb = (a: VenueDbIdentity, b: VenueDbIdentity) =>
   a.dev === b.dev && a.ino === b.ino && a.birthtimeNs === b.birthtimeNs;
 
-/** The record, or null when there is none or it is not one this step writes. */
-async function readRecord(stateDir: string): Promise<StartDeletedRecord | null> {
+export type StartDeletedRecordRead =
+  | { record: StartDeletedRecord }
+  | { skipped: "missing" | "malformed" }
+  | { skipped: "unreadable"; errno: string | null };
+
+/** The record, when it is one this step writes. */
+export async function readStartDeletedRecord(stateDir: string): Promise<StartDeletedRecordRead> {
+  let text: string;
+  try {
+    text = await readFile(startDeletedRecordPath(stateDir), "utf8");
+  } catch (error) {
+    const errno = errnoOf(error) ?? null;
+    return errno === "ENOENT" ? { skipped: "missing" } : { skipped: "unreadable", errno };
+  }
+  const record = parseRecord(text);
+  return record === null ? { skipped: "malformed" } : { record };
+}
+
+function parseRecord(text: string): StartDeletedRecord | null {
   let value: unknown;
   try {
-    value = JSON.parse(await readFile(recordPath(stateDir), "utf8"));
+    value = JSON.parse(text);
   } catch {
     return null;
   }

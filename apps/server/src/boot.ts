@@ -324,6 +324,7 @@ import {
 } from "./backup-config.js";
 import { readArchiveSettings } from "./archive-settings.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
+import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { BackupSupervisor } from "./backup-supervisor.js";
 import { schemaVersionsByModule } from "./backup-manifest.js";
@@ -2234,6 +2235,12 @@ async function bootServer(
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const stagingTurn = createStagingTurn();
   const backupRoom = createBackupRoomHooks({ db, nodeId: till.nodeId, fiscal: enabledFiscal });
+  await recordStartDeletions({
+    stateDir: config.stateDir,
+    venueDir: config.venueDir,
+    record: backupRoom.recordArchivesDeleted,
+    log,
+  });
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({

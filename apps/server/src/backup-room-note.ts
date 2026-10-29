@@ -49,7 +49,7 @@ const notePath = (stateDir: string) => join(stateDir, BACKUP_ROOM_NOTE_FILE);
 
 const MAX_NOTE_BYTES = 64 * 1024;
 
-async function venueDbIdentity(venueDir: string): Promise<VenueDbIdentity> {
+export async function venueDbIdentity(venueDir: string): Promise<VenueDbIdentity> {
   const info = await lstat(join(venueDir, "venue.db"), { bigint: true });
   return {
     dev: info.dev.toString(),
