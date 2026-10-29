@@ -24,6 +24,7 @@ import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
 import "./recovery-document-panel.js";
+import "../widgets/backup-settings-evidence.js";
 import type {
   ArchiveRecoveryPackAnswer,
   BackupApplyBody,
@@ -224,6 +225,10 @@ export class BackupScreen extends LitElement {
       .line {
         display: block;
       }
+      .evidence-open {
+        display: inline-block;
+        margin-top: var(--wt-space-2);
+      }
       .field-label {
         display: block;
         margin-bottom: var(--wt-space-1);
@@ -347,6 +352,7 @@ export class BackupScreen extends LitElement {
   } | null = null;
   /** A write stood but the box could not load it; kept until the next write. */
   @state() private reloadErrorCode: string | null = null;
+  @state() private evidenceOpen = false;
   @state() private mintedKey: string | null = null;
   @state() private advancedPaste = false;
   @state() private pastedKey = "";
@@ -1302,6 +1308,11 @@ export class BackupScreen extends LitElement {
       ${this.canManage ? html`<div class="card"><dashboard-recovery-document .api=${this.api} .canManage=${this.canManage}></dashboard-recovery-document></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
+      <dashboard-backup-settings-evidence
+        .api=${this.api}
+        .open=${this.evidenceOpen}
+        @evidence-close=${() => (this.evidenceOpen = false)}
+      ></dashboard-backup-settings-evidence>
       <div class="card">
         <dashboard-stream-settings
           .api=${this.api}
@@ -1441,8 +1452,14 @@ export class BackupScreen extends LitElement {
             ${
               s.loadErrorCode
                 ? html`<span class="line stale" data-test="load-failed"
-                    >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
-                  >`
+                      >${t("backup.status.load_failed")} ${codeMessage(s.loadErrorCode)}</span
+                    ><wt-button
+                      class="evidence-open"
+                      data-test="evidence-open"
+                      variant="secondary"
+                      @click=${() => (this.evidenceOpen = true)}
+                      >${t("backup_evidence.heading")}</wt-button
+                    >`
                 : nothing
             }
           </dd>
