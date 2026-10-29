@@ -333,7 +333,9 @@ another machine agrees within 30 seconds (`packages/fiscal-verifactu/src/hour-cl
 name needs a second clock within 30 seconds of the box"), not a minute a name in the history it
 can read already holds (`packages/provisioning/src/first-setup-runtime.test.ts`, "the hosted
 selector refuses a minute another node's revoked identity already uses", which covers a name in
-the box's own database only; a later name does not refuse it, A1207), and after a 90 to 150 second
+the box's own database only; a later name does not refuse it,
+`packages/fiscal-verifactu/src/hour-selection.test.ts`, "$action selects as with an empty history
+beside $later", A1207), and after a 90 to 150 second
 wait
 (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "every setup wait over a minute of box
 readings lies in (90 000, 150 000]"). The terminal asks no recent-setup question

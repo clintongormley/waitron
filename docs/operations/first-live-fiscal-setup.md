@@ -44,9 +44,13 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **This box's records already hold a series for that minute**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
+- **This box's records already hold a series for the minute this box would use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
   with no countdown (`first-hour.browser.test.ts`, "a minute in use names its time and does not
   count down").
+- **A later minute is already in use** (no time given): the box's clock has gone back behind the
+  name this attempt already chose; it can finish once the box's clock reaches that minute
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
+  refuses before writing anything").
 
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
