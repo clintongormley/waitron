@@ -4697,9 +4697,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
   [Audit](backlog/self-service-refusals.md#backup-settings).
 
-- **A1167: the start deletes old backups by itself** in place of the full-disk page's button (owner's
-  Q4 answer). [Detail](backlog/box.md#a1167-backups-make-room-for-themselves)
-
 - **Backup destination failures log no elapsed time or operation phase.**
   Add non-sensitive phase and elapsed-time diagnostics when investigating real
   destination timeouts.

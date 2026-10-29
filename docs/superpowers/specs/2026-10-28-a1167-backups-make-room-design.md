@@ -11,6 +11,10 @@ the watch deletes every backup §1 allows when they cannot reach 2.5 GiB._
 _2026-10-29: A1127 slice 3 builds Q3 A's bar by [its plan](../plans/2026-10-29-a1127-3-full-disk-bar.md).
 The bar does not say the box deleted every old backup it may (the plan's decision 7)._
 
+_2026-10-29: the start-time slice (Q4) is built by [the start slice plan](../plans/2026-10-29-a1167-start-deletes-backups.md),
+whose "Deviations from the design" replace the example of a small file written as a new chain starts
+with a note the backup supervisor writes._
+
 The owner, 2026-10-28 ~08:35 CET (`~/waitron-campaign/questions.md`, "WATCHER … A1167 queued for
 you"):
 

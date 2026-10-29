@@ -88,11 +88,11 @@ every free-space reading under 2 GiB first deletes the oldest deletable backups 
 every one it may when they cannot reach it, while backups run and no backup run holds or waits for
 the staging turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
 
-Still open:
-
-- **The start deletes old backups by itself** in place of the full-disk page's button (Q4 A),
-  measured first, and only if the installation's start can be read without opening the venue
-  database (design Q4).
+The start slice is built by plan
+[2026-10-29-a1167-start-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-start-deletes-backups.md):
+a start on a full disk deletes old backups under the same rules before it releases the spare file,
+reading the installation start from a note the running server leaves. How it works and its limits:
+[conventions-data.md](../developers/conventions-data.md#the-backup-room-note).
 
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
