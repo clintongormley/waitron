@@ -1463,6 +1463,79 @@ describe("dish extras on kitchen tickets", () => {
     ]);
   });
 
+  it("gives the station queue each dish's extra count and amount on a counter line of two dishes, not the line's totals", async () => {
+    const { cfg, catalogueId } = await setupVenue();
+    const { stored, items } = await asApp(cfg, async (tx) => {
+      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+        { name: "Queso", customerName: "Queso cliente", kitchenName: "QUESO", maxQuantity: 2 },
+        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+      ]);
+      const [cheese, ham] = productIds as [string, string];
+      const [gram] = await tx
+        .insert(units)
+        .values({
+          staffName: "Staff unit",
+          staffAbbreviation: "su",
+          name: { es: "gramo" },
+          abbreviation: { es: "g" },
+          precision: 0,
+          hardwareUnit: "g",
+        })
+        .returning({ id: units.id });
+      await assignProductUnit(tx, ham, gram!.id);
+      await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
+        where list_id = ${listId} and product_id = ${ham}`);
+      const orderId = await fireNewOrder(tx, cfg, [
+        {
+          productId: dish,
+          quantity: "2",
+          extras: [
+            {
+              listId,
+              picks: [
+                { productId: cheese, quantity: 2 },
+                { productId: ham, quantity: 3 },
+              ],
+            },
+          ],
+        },
+      ]);
+      const stored = await tx
+        .select({
+          productId: workingOrderLines.productId,
+          parentLineId: workingOrderLines.parentLineId,
+          quantity: workingOrderLines.quantity,
+        })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, orderId))
+        .orderBy(workingOrderLines.lineNo);
+      return {
+        stored: stored.map(({ productId, parentLineId, quantity }) => ({
+          product: productId === dish ? "dish" : productId === cheese ? "cheese" : "ham",
+          child: parentLineId !== null,
+          quantity,
+        })),
+        items: (await listStationQueue(tx, station.id)).flatMap((group) => group.items),
+      };
+    });
+
+    expect(stored).toEqual([
+      { product: "dish", child: false, quantity: 2000 },
+      { product: "cheese", child: true, quantity: 4000 },
+      { product: "ham", child: true, quantity: 300000 },
+    ]);
+    expect(
+      items.map((item) => item.modifiers.map(({ perDish, amount }) => ({ perDish, amount }))),
+    ).toEqual([
+      [
+        { perDish: 2, amount: undefined },
+        { perDish: undefined, amount: "150.000" },
+      ],
+    ]);
+  });
+
   it("prints split chips once on Fryer paper and cross-references both station and pass paper", async () => {
     const venue = await setupSplitExtrasVenue();
     const { cfg, products, lists, printers } = venue;
