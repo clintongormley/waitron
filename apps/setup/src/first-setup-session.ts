@@ -63,14 +63,7 @@ function publicState(value: unknown): value is FirstSetupState {
   );
 }
 const SUMMARY_REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"];
-const RECOVERY_KEYS = [
-  "startedAt",
-  "lastActiveAt",
-  "lastActiveSource",
-  "lastName",
-  "failed",
-  "cloud",
-];
+const RECOVERY_KEYS = ["startedAt", "lastActiveAt", "lastActiveSource", "failed", "cloud"];
 function readableRecovery(value: unknown): boolean {
   return (
     object(value) &&
@@ -79,31 +72,10 @@ function readableRecovery(value: unknown): boolean {
     typeof value.startedAt === "string" &&
     typeof value.lastActiveAt === "string" &&
     ["memory", "saved-step"].includes(value.lastActiveSource as string) &&
-    (value.lastName === null || (typeof value.lastName === "string" && value.lastName !== "")) &&
     typeof value.failed === "boolean" &&
     typeof value.cloud === "boolean"
   );
 }
-const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"];
-function readableUnreadable(value: unknown): boolean {
-  if (
-    !object(value) ||
-    Object.keys(value).length !== 2 ||
-    !Array.isArray(value.records) ||
-    value.records.length === 0 ||
-    !Number.isSafeInteger(value.floorMs)
-  )
-    return false;
-  const positions = value.records.map((record) => UNREADABLE_RECORDS.indexOf(record as string));
-  return positions.every((at, index) => at >= 0 && (index === 0 || at > positions[index - 1]!));
-}
-const sameUnreadable = (a: StartAgainSummary["unreadable"], b: StartAgainSummary["unreadable"]) =>
-  a === undefined
-    ? b === undefined
-    : b !== undefined &&
-      a.floorMs === b.floorMs &&
-      a.records.length === b.records.length &&
-      a.records.every((record, index) => record === b.records[index]);
 const HELD_KEYS = ["rows", "kept", "records", "accepted"] as const;
 const count = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
 // Not `records <= kept`: the server shows a module's invoice records even where the module wrongly
@@ -155,21 +127,11 @@ function summaryOf(value: unknown): StartAgainSummary {
     summary === null ||
     typeof summary !== "object" ||
     Object.keys(summary).some(
-      (key) =>
-        ![
-          "reached",
-          "lastName",
-          "recoveryRecordDamaged",
-          "recovery",
-          "unreadable",
-          "held",
-        ].includes(key),
+      (key) => !["reached", "recoveryRecordDamaged", "recovery", "held"].includes(key),
     ) ||
     !SUMMARY_REACHED.includes(summary.reached as string) ||
-    !(summary.lastName === null || (typeof summary.lastName === "string" && summary.lastName)) ||
     !(summary.recoveryRecordDamaged === undefined || summary.recoveryRecordDamaged === true) ||
     !(summary.recovery === undefined || readableRecovery(summary.recovery)) ||
-    !(summary.unreadable === undefined || readableUnreadable(summary.unreadable)) ||
     !(summary.held === undefined || readableHeld(summary.held))
   )
     failure("setup.attempt_invalid");
@@ -177,9 +139,7 @@ function summaryOf(value: unknown): StartAgainSummary {
 }
 const sameSummary = (a: StartAgainSummary, b: StartAgainSummary) =>
   a.reached === b.reached &&
-  a.lastName === b.lastName &&
   a.recoveryRecordDamaged === b.recoveryRecordDamaged &&
-  sameUnreadable(a.unreadable, b.unreadable) &&
   sameHeld(a.held, b.held) &&
   (a.recovery === undefined
     ? b.recovery === undefined
@@ -790,24 +750,6 @@ export class FirstSetupSession {
       return summary;
     });
   }
-  /**
-   * With the database present, answered only while a damaged name record is there to name and no
-   * stopped recovery is: the page reads this only after its activity read found none, so it has
-   * drawn no recovery whose discard the send could confirm.
-   */
-  damagedRecordSummary(): Promise<StartAgainSummary> {
-    const unreadable = (): never => {
-      throw new Error("The damaged records' summary could not be read.");
-    };
-    return this.#run(async (current) => {
-      const owner = this.#presentDatabaseOwner();
-      const { snapshot } = await this.#presentDatabaseSnapshot(owner, current, unreadable);
-      const summary = summaryOf(await this.#api.startAgainSummary(snapshot, owner));
-      current();
-      if (summary.unreadable === undefined || summary.recovery !== undefined) unreadable();
-      return summary;
-    });
-  }
   retireDamagedRecord(summary?: StartAgainSummary) {
     return this.#run(async (current) => {
       const owner = this.#presentDatabaseOwner();
@@ -824,9 +766,6 @@ export class FirstSetupSession {
           undefined,
           summary === undefined || summary.recoveryRecordDamaged === true ? true : undefined,
           summary?.recovery === undefined ? undefined : { shown: summary },
-          summary?.unreadable !== undefined && summary.recovery === undefined
-            ? { shown: summary }
-            : undefined,
         );
         current();
         if (result.restarting !== true) failure("setup.attempt_conflict");

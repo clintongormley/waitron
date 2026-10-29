@@ -127,16 +127,13 @@ export interface StartAgainRecoveryShown {
   startedAt: string;
   lastActiveAt: string;
   lastActiveSource: "memory" | "saved-step";
-  lastName: string | null;
   failed: boolean;
   cloud: boolean;
 }
 export interface StartAgainSummary {
   reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
-  lastName: string | null;
   recoveryRecordDamaged?: true;
   recovery?: StartAgainRecoveryShown;
-  unreadable?: StartAgainUnreadable;
   held?: StartAgainHeld;
 }
 /** What the setup database holds beside a stopped recovery: its rows, the kept ones, and invoices. */
@@ -148,12 +145,6 @@ export interface StartAgainHeld {
 }
 /** Why the server refused Start again with `setup.start_again_refused`. */
 export type StartAgainRefusalCause = "trading-settings" | "setup-finished" | "kept-records";
-export type StartAgainUnreadableRecord = "series-picks" | "public-record" | "fiscal-documents";
-/** The damaged name records, in that fixed order, and the first minute new series names can use. */
-export interface StartAgainUnreadable {
-  records: StartAgainUnreadableRecord[];
-  floorMs: number;
-}
 export interface BackupRepairStatus {
   phase: "unstarted" | "prepared" | "placement-started" | "restored" | "selected" | "uncertain";
   recoveryId?: string;

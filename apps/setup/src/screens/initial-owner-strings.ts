@@ -11,8 +11,7 @@ export const initialOwnerStrings = {
     missingDatabase: "The setup database is missing.",
     missingAsk:
       "This box cannot check whether this setup filed anything to AEAT or made a sale. Its record says it:",
-    reachedName: "chose the invoice series name {name}",
-    reachedNoName: "chose no invoice series name",
+    reachedNotStarted: "did not start activation",
     reachedFiscalStarted: "started activation, with no record that it finished",
     reachedFiscalFinished: "finished activation",
     missingBackup: "If you have a backup, recover from it.",
@@ -39,13 +38,6 @@ export const initialOwnerStrings = {
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
     damagedRecordPassword:
       "To start again, enter the administrator password you chose during setup.",
-    startAgainHelp: "This box will not use this setup's invoice series names again.",
-    seriesPicksDamaged:
-      "This box's record of the invoice series names it chose is damaged and cannot be read.",
-    publicRecordDamaged: "This setup's public fiscal record is damaged and cannot be read.",
-    fiscalDocumentsDamaged:
-      "This setup's fiscal documents on this box are damaged and cannot be read.",
-    namesFrom: "New series names can start from {date}, {time}.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
     restarting: "The old attempt is deleted. Reconnect to continue.",
@@ -94,8 +86,7 @@ export const initialOwnerStrings = {
     missingDatabase: "Falta la base de datos de configuración.",
     missingAsk:
       "Este equipo no puede comprobar si esta configuración envió algo a la AEAT o hizo alguna venta. Su registro dice que:",
-    reachedName: "eligió el nombre de serie de facturas {name}",
-    reachedNoName: "no eligió ningún nombre de serie de facturas",
+    reachedNotStarted: "no empezó la activación",
     reachedFiscalStarted: "empezó la activación, sin constancia de que terminara",
     reachedFiscalFinished: "terminó la activación",
     missingBackup: "Si tienes una copia, recupera desde ella.",
@@ -127,15 +118,6 @@ export const initialOwnerStrings = {
       "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
     damagedRecordPassword:
       "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
-    startAgainHelp:
-      "Este equipo no volverá a usar los nombres de serie de facturas de esta configuración.",
-    seriesPicksDamaged:
-      "El registro de los nombres de serie de facturas que eligió este equipo está dañado y no se puede leer.",
-    publicRecordDamaged:
-      "El registro fiscal público de esta configuración está dañado y no se puede leer.",
-    fiscalDocumentsDamaged:
-      "Los documentos fiscales de esta configuración en este equipo están dañados y no se pueden leer.",
-    namesFrom: "Los nuevos nombres de serie podrán empezar el {date} a las {time}.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
     restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
@@ -174,11 +156,3 @@ export const initialOwnerStrings = {
     fix: "Corrige el campo señalado.",
   },
 } as const;
-
-export function namesFromText(locale: string, floorMs: number, timeZone?: string): string {
-  const at = new Date(floorMs);
-  const unbroken = (text: string) => text.replaceAll(" ", "\u00a0");
-  return initialOwnerStrings[locale.startsWith("es") ? "es" : "en"].namesFrom
-    .replace("{date}", unbroken(at.toLocaleDateString(locale, { dateStyle: "medium", timeZone })))
-    .replace("{time}", unbroken(at.toLocaleTimeString(locale, { timeStyle: "short", timeZone })));
-}
