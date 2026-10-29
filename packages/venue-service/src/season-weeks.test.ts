@@ -75,7 +75,7 @@ async function venue() {
     ).id;
     await configureZone(tx, cfg, { zoneId: zone!.id, departmentId });
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       return (await saveMenuPeriod(tx, cfg, departmentId, { name, menuId, staffMenuIds: [] })).id;
@@ -651,7 +651,7 @@ describe("saveSeasonWeeks", () => {
     const more = await scoped(async (tx) => {
       const department = async (name: string) => {
         const id = (await createDepartment(tx, v.cfg, { name, orderStart: "table" })).id;
-        const menuId = (await createCatalogue(tx, { name })).id;
+        const menuId = (await createCatalogue(tx, { name: `${name} ${v.cfg.locationId}` })).id;
         const { document } = await buildMenuDocument(tx, menuId);
         await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
         const period = (await saveMenuPeriod(tx, v.cfg, id, { name, menuId, staffMenuIds: [] })).id;

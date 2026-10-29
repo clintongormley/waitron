@@ -123,7 +123,7 @@ const unpricedVariant = (name: string) => ({
 });
 const seedProduct = (name = "P") =>
   app(async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Menu" });
+    const menu = await createCatalogue(tx, { name: `Menu for ${name}` });
     return (
       await createProduct(tx, {
         catalogueId: menu.id,

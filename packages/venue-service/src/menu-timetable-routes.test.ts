@@ -94,7 +94,7 @@ async function routed() {
     await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
     await configureZone(tx, cfg, { zoneId: counterZone, departmentId: deli });
     const menu = async (name: string) => {
-      const id = (await createCatalogue(tx, { name })).id;
+      const id = (await createCatalogue(tx, { name: `${name} ${locationId}` })).id;
       const { document } = await buildMenuDocument(tx, id);
       await publishMenu(tx, id, menuDocumentHash(document), "person-1");
       return id;

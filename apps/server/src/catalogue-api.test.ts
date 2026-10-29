@@ -594,10 +594,14 @@ const suite = useVenueDb({
   },
 });
 
-// Every test here shares one database, and a category's name is unique among its siblings and an
-// Active product's across the venue. Before each test the rows earlier tests left are renamed, so
-// a name an earlier test used is free again; the rows themselves remain.
+// Shared rows keep their identities; their menu, category and product names must be free for the next case.
 beforeEach(async () => {
+  await suite.db.execute(
+    sql`update catalogues set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
+  );
+  await suite.db.execute(
+    sql`update sections set internal_name = 'earlier test ' || owner_menu_id where role = 'menu_root'`,
+  );
   await suite.db.execute(
     sql`update categories set name = 'earlier test ' || id where name <> 'earlier test ' || id`,
   );
@@ -1195,6 +1199,27 @@ describe("mountCatalogueApi — catalogues", () => {
     },
   );
 
+  it.each(["create", "rename"] as const)(
+    "refuses a taken menu name on %s with the name field and no writes",
+    async (mode) => {
+      const app = mountApp();
+      await createCatalogueVia(app, "Unique held menu");
+      const other = await createCatalogueVia(app, "Unique other menu");
+      const before = await (await send(app, "GET", "/management-api/catalogues")).json();
+      const response = await send(
+        app,
+        mode === "create" ? "POST" : "PATCH",
+        mode === "create" ? "/management-api/catalogues" : `/management-api/catalogues/${other}`,
+        { body: { name: "  UNIQUE HELD MENU  " } },
+      );
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({
+        error: { code: "menu.name_taken", params: { field: "name" } },
+      });
+      expect(await (await send(app, "GET", "/management-api/catalogues")).json()).toEqual(before);
+    },
+  );
+
   it("POST /management-api/catalogues unauthenticated → 401", async () => {
     const res = await send(mountApp(), "POST", "/management-api/catalogues", {
       body: { name: "No cookie" },
@@ -1252,6 +1277,23 @@ describe("mountCatalogueApi — catalogues", () => {
     }[];
     expect(rows.find((r) => r.id === copy.id)?.name).toBe("Duplicable lunch (copy)");
     expect(rows.find((r) => r.id === source)?.name).toBe("Duplicable lunch");
+  });
+
+  it("refuses a copy name already held by another menu with an inline name refusal", async () => {
+    const app = mountApp();
+    const source = await createCatalogueVia(app, "Copy source");
+    await createCatalogueVia(app, "Taken copy name");
+    const before = await catalogueCount();
+    const response = await send(app, "POST", duplicatePath(source), {
+      body: { name: "  tAKEN COPY NAME  " },
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "menu.name_taken", params: { field: "name" } },
+    });
+    expect(await catalogueCount()).toBe(before);
+    const rows = await (await send(app, "GET", "/management-api/catalogues")).json();
+    expect(rows).toContainEqual(expect.objectContaining({ id: source, name: "Copy source" }));
   });
 
   it("POST /management-api/catalogues/:id/duplicate unauthenticated → 401, nothing written", async () => {

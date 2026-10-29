@@ -587,7 +587,9 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
         .from(persons)
         .where(eq(persons.role, "admin"));
       const offer = await withTransaction(venue.store.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, { name: "Carta" });
+        const catalogue = await createCatalogue(tx, {
+          name: `Boot setup routes menu ${cfg.locationId}`,
+        });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
           catalogueId: catalogue.id,

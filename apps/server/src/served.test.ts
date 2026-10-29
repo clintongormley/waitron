@@ -164,7 +164,7 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Carta" });
+    const catalogue = await createCatalogue(tx, { name: `Served menu ${cfg.locationId}` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, unitPrice] of Object.entries(DISHES) as [Dish, string][]) {

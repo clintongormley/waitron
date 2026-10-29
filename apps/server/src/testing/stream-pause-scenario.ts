@@ -363,7 +363,7 @@ export async function runStreamPauseScenario(fixture: StreamPauseFixture): Promi
         })
         .returning({ id: devices.id });
       const offer = await withTransaction(seeding.venue, async (tx) => {
-        const catalogue = await createCatalogue(tx, { name: "Carta" });
+        const catalogue = await createCatalogue(tx, { name: `Stream menu ${venue.locationId}` });
         const drinks = await createCategory(tx, { name: "Bebidas" });
         const water = await createProduct(tx, {
           catalogueId: catalogue.id,

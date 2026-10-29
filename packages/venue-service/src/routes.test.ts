@@ -96,7 +96,7 @@ async function fixture(
 
   const { menuId, categoryId, managerSessionId, staffSessionId, supervisorSessionId } =
     await db.transaction(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Drinks" });
+      const menu = await createCatalogue(tx, { name: `Drinks ${scopedLocationId}` });
       const category = await createCategory(tx, { name: `Cocktails ${scopedLocationId}` });
       const [manager] = await tx
         .insert(persons)

@@ -364,7 +364,7 @@ export async function provisionAdjustmentVenue(
       stationId: station!.id,
       printerId: printer.id,
     });
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: `Adjustment menu ${cfg.locationId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {

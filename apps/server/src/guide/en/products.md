@@ -251,6 +251,23 @@ place that refuses it does not undo the save. The window names the places that f
 them ticked so you can try again. A menu's sections themselves are built under **Products and menus →
 Menus**.
 
+## Copy a menu {#copy-menu}
+
+When your next menu is similar to one you already have, start with a copy. In **Products and
+menus → Menus**, open the menu's ⋮ and choose **Copy…**. Enter a new name, then choose **Copy**.
+You must use a name no menu already holds; upper and lower case count as the same name. **Cancel**
+creates nothing. If you have typed a name, you can keep editing or discard it when you close the
+window.
+
+Use a different name when you create or rename a menu too. If another menu already has it, the
+message appears under Name. Names ignore surrounding spaces and case, including on inactive
+menus. Menus that already share a name keep it until you rename one; you can still edit their
+customer names, colour and image.
+
+The copy starts unpublished, with the source menu's working sections, prices and Home page
+settings. Published versions and scheduled publications stay with the source. Editing the copy's
+own sections leaves the source as it was; included menus still point to the same shared menus.
+
 ## Patch the live menu in an emergency {#patch-live-menu}
 
 Use a patch when you find a mistake in the menu that is live now, such as a wrong price, while the

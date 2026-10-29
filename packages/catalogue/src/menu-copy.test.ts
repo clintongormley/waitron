@@ -437,4 +437,35 @@ describe("duplicateMenu", () => {
     });
     expect(await count()).toBe(menus);
   });
+  it.each(["Lunch", "  lUNCH  ", "Desserts"])(
+    "refuses the taken copy name %j without changing either menu",
+    async (name) => {
+      const f = await fixture();
+      const before = await fx.db.select().from(catalogues);
+      const source = await rowsOf(f.lunch);
+      const other = await rowsOf(f.desserts);
+      await expect(app((tx) => duplicateMenu(tx, f.lunch, name))).rejects.toMatchObject({
+        code: "menu.name_taken",
+        params: { field: "name" },
+      });
+      expect(await fx.db.select().from(catalogues)).toEqual(before);
+      expect(await rowsOf(f.lunch)).toEqual(source);
+      expect(await rowsOf(f.desserts)).toEqual(other);
+    },
+  );
+  it("compares an inactive menu's composed name without removing accents", async () => {
+    const f = await fixture();
+    const held = await app((tx) => createCatalogue(tx, { name: "Caf\u00e9" }));
+    await app((tx) =>
+      tx.update(catalogues).set({ active: false }).where(eq(catalogues.id, held.id)),
+    );
+    const before = await fx.db.select().from(catalogues);
+    await expect(app((tx) => duplicateMenu(tx, f.lunch, "  CAFE\u0301  "))).rejects.toMatchObject({
+      code: "menu.name_taken",
+      params: { field: "name" },
+    });
+    expect(await fx.db.select().from(catalogues)).toEqual(before);
+    const distinct = await app((tx) => duplicateMenu(tx, f.lunch, "Cafe"));
+    expect(distinct.name).toBe("Cafe");
+  });
 });

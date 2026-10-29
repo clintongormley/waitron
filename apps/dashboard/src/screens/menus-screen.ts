@@ -32,6 +32,7 @@ import "@waitron/ui/src/components/wt-tabs.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "@waitron/ui/src/components/wt-slider.js";
 import { PATH_SEPARATOR } from "../widgets/category-form.js";
+import { foldName } from "@waitron/catalogue/src/name-uniqueness.js";
 import { memberName } from "../widgets/member-names.js";
 import "../widgets/menu-structure-table.js";
 import {
@@ -44,6 +45,7 @@ import "../widgets/menu-prices-table.js";
 import "../widgets/device-home-preview.js";
 import "../widgets/home-shortcut-picker.js";
 import "../widgets/menu-patch-dialog.js";
+import "../widgets/menu-copy-dialog.js";
 import { overtakeSentence } from "../widgets/menu-publications.js";
 import type { PriceOutcome, PriceSave } from "../widgets/menu-prices-table.js";
 import { publishFailure, statusWords, type PublishResult } from "../widgets/menu-preview.js";
@@ -703,7 +705,7 @@ export class MenusScreen extends LitElement {
   @state() private previewResetRequired = false;
   /** The menus whose publish is out. Replaced, never mutated, so a change re-renders. */
   @state() private publishing: ReadonlySet<string> = new Set();
-  @state() private duplicating: ReadonlySet<string> = new Set();
+  @state() private copyingMenu: CatalogueSummary | null = null;
   /** From the probes' container queries: "narrow" at 30rem or less, where each status sits under
    * its menu's name; "wide" from 50rem, where the changes link has a column of its own; "middle"
    * between, where the link sits under the status. */
@@ -1410,7 +1412,8 @@ export class MenusScreen extends LitElement {
         await this.api.createCatalogue(internalName, details);
       } else await this.api.updateMenuDetails(form.id, input);
     } catch (error) {
-      const errors = refusal(error);
+      const errors =
+        codeOf(error) === "menu.name_taken" ? { name: t("menus.name_taken") } : refusal(error);
       this.menuFormErrors = errors.name ? { internalName: errors.name } : errors;
       this.busy = false;
       return;
@@ -1426,23 +1429,6 @@ export class MenusScreen extends LitElement {
     // The empty table's Add menu is gone once the menu it made is listed.
     if (opener?.isConnected === false)
       this.renderRoot.querySelector<HTMLElement>('.header [data-test="add-menu"]')?.focus();
-    this.#followStatus(true);
-  }
-
-  /** Stays on the list: the copy is listed by the refresh, and a failed refresh is a load failure. */
-  async #duplicate(menu: CatalogueSummary): Promise<void> {
-    if (this.duplicating.has(menu.id)) return;
-    this.memberError = null;
-    this.duplicating = new Set([...this.duplicating, menu.id]);
-    try {
-      await this.api.duplicateCatalogue(menu.id, `${menu.name}${t("menus.copy_suffix")}`);
-    } catch (error) {
-      this.memberError = codeMessage(codeOf(error));
-      return;
-    } finally {
-      this.duplicating = new Set([...this.duplicating].filter((id) => id !== menu.id));
-    }
-    await this.#watchMenus().catch(() => undefined);
     this.#followStatus(true);
   }
 
@@ -2267,9 +2253,11 @@ export class MenusScreen extends LitElement {
               align="start"
               variant="ghost"
               data-test=${`duplicate-${menu.id}`}
-              ?disabled=${this.duplicating.has(menu.id)}
-              @click=${() => void this.#duplicate(menu)}
-              >${t("menus.duplicate")}</wt-button
+              ?disabled=${this.copyingMenu?.id === menu.id}
+              @click=${() => {
+                if (!this.copyingMenu) this.copyingMenu = menu;
+              }}
+              >${t("menus.copy")}</wt-button
             ></wt-row-actions
           >`,
       },
@@ -2346,6 +2334,14 @@ export class MenusScreen extends LitElement {
       data-test="menu-form"
       .nameLabel=${t("menus.name")}
       .nameRequired=${t("menus.name_required")}
+      .validateName=${(name: string) => {
+        if (this.menuForm?.id && name === this.menuForm.name) return "";
+        return this.menus.some(
+          (menu) => menu.id !== this.menuForm?.id && foldName(menu.name) === foldName(name),
+        )
+          ? t("menus.name_taken")
+          : "";
+      }}
       .open=${this.menuForm !== null}
       .busy=${this.busy}
       .api=${this.api}
@@ -2444,7 +2440,23 @@ export class MenusScreen extends LitElement {
             </div>`
           : nothing
       }
-      ${this.#renderMenuForm()}`;
+      ${this.#renderMenuForm()}
+      <dashboard-menu-copy-dialog
+        .open=${this.copyingMenu !== null}
+        .menu=${this.copyingMenu}
+        .menus=${this.menus}
+        .api=${this.api}
+        @menu-copy-close=${(event: Event) => {
+          event.stopPropagation();
+          this.copyingMenu = null;
+        }}
+        @menu-copied=${async (event: Event) => {
+          event.stopPropagation();
+          this.copyingMenu = null;
+          await this.#watchMenus().catch(() => undefined);
+          this.#followStatus(true);
+        }}
+      ></dashboard-menu-copy-dialog>`;
   }
 
   #renderLoadState() {

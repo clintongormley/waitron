@@ -452,7 +452,7 @@ describe("sections and the reporting and routing they do not touch", () => {
   it("adds, moves and removes a routed product and deletes its section without changing its folder or rules", async () => {
     const v = await setupVenue();
     const app = mountApp();
-    const catalogueId = await createCatalogue(app, v.managerCookie, "Carta");
+    const catalogueId = await createCatalogue(app, v.managerCookie, "Routed menu");
     const categoryId = await createCategory(app, v.managerCookie, "Bebidas");
     const productId = await createProduct(app, v.managerCookie, catalogueId, "Agua");
     expect(

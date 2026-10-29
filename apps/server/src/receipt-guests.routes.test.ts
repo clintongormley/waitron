@@ -136,7 +136,9 @@ async function venue(db: Database): Promise<Venue> {
     freeItemId,
     tableFreeItemId,
   } = await withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, {
+      name: `Receipt guests routes menu ${cfg.locationId}`,
+    });
     const category = await createCategory(tx, { name: "Tapas" });
     const product = await createProduct(tx, {
       catalogueId: menu.id,

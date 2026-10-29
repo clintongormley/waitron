@@ -77,6 +77,7 @@ export class SectionDetailsForm extends LitElement {
   @property() heading = "";
   @property() nameLabel = "";
   @property() nameRequired = "";
+  @property({ attribute: false }) validateName?: (name: string) => string;
   @property({ attribute: false }) api?: ImageUploader;
   @property({ attribute: false }) refusal: unknown = null;
   @property({ attribute: false }) fieldErrors: Record<string, string> = {};
@@ -158,9 +159,10 @@ export class SectionDetailsForm extends LitElement {
     this.dismissed = new Set([...this.dismissed, ...keys]);
   }
   #validate(): Record<string, string> {
-    return this.internalName.trim()
-      ? {}
-      : { internalName: this.nameRequired || t("sections.internal_name_required") };
+    const error = this.internalName.trim()
+      ? this.validateName?.(this.internalName.trim())
+      : this.nameRequired || t("sections.internal_name_required");
+    return error ? { internalName: error } : {};
   }
 
   /** The keys of `errors` that a field this form shows displays. */

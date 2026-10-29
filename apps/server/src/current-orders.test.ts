@@ -184,7 +184,7 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   });
   return inTx(async (tx) => {
-    const catalogue = await createCatalogue(tx, { name: "Carta" });
+    const catalogue = await createCatalogue(tx, { name: `Current orders menu ${cfg.locationId}` });
     const category = await createCategory(tx, { name: "Platos" });
     const productId = {} as Record<Dish, string>;
     // Three different names, so a row showing the customer's or the kitchen's name fails.

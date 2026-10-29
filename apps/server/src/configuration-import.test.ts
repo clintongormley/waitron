@@ -689,7 +689,9 @@ describe("routing cells in a staged import", () => {
           .values({ locationId: cfg.locationId, name: "Barra" })
           .returning();
         const category = await createCategory(tx, { name: "Bebidas" });
-        const menu = await createCatalogue(tx, { name: "Carta" });
+        const menu = await createCatalogue(tx, {
+          name: `Configuration import menu ${cfg.locationId}`,
+        });
         const product = await createProduct(tx, {
           catalogueId: menu.id,
           categoryId: category.id,

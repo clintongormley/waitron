@@ -992,6 +992,13 @@ failing test first.
 
 ## Decisions and deliberate limits
 
+- **Menu copies (A1172, owner 2026-10-28).** Copy… asks for an empty, required new name before
+  saving the copy, matching floor plan sets. Cancel saves nothing. The browser and server refuse
+  a name another menu holds; the source keeps its working state. Create and Rename apply the same
+  rule. Case, surrounding whitespace and Unicode composition do not distinguish names; accents
+  and interior spacing do. Existing duplicates remain until renamed, and do not block presentation
+  edits (owner, 2026-10-28).
+
 - Changing the catalogue that opens first keeps the previous default sellable as a member.
   Which catalogues you sell and which opens first are independent choices. The default-change
   case in `packages/catalogue/src/operations.test.ts` checks both catalogues and their default flags.

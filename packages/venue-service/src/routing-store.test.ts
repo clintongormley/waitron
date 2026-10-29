@@ -126,7 +126,7 @@ async function fixture(tx: Transaction, suffix = "") {
   const beer = (await createCategory(tx, { name: "Beer", parentId: drinks })).id;
   const cocktails = (await createCategory(tx, { name: "Cocktails", parentId: drinks })).id;
   const food = (await createCategory(tx, { name: `Food${suffix}` })).id;
-  const menu = await createCatalogue(tx, { name: "Menu" });
+  const menu = await createCatalogue(tx, { name: `Menu${suffix}` });
   const product = async (name: string, categoryId: string | null) =>
     (
       await createProduct(tx, {

@@ -248,7 +248,7 @@ async function provision(db: typeof suite.db): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   const seeded = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
+    const cat = await createCatalogue(tx, { name: `Bill payments api menu ${cfg.locationId}` });
     const platos = await createCategory(tx, { name: "Platos" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {

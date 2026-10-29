@@ -96,7 +96,7 @@ async function venue(options: { oneSeason?: boolean } = {}) {
     for (const zone of zones) await configureZone(tx, cfg, { zoneId: zone.id, departmentId });
     const menus: Record<string, string> = {};
     const period = async (name: string) => {
-      const menuId = (await createCatalogue(tx, { name })).id;
+      const menuId = (await createCatalogue(tx, { name: `${name} ${cfg.locationId}` })).id;
       menus[name] = menuId;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
