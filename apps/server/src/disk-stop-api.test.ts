@@ -231,6 +231,12 @@ describe("GET /management-api/disk-stop", () => {
     expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: DELETED });
   });
 
+  it("names a deletion detected exactly a day before the read", async () => {
+    stoppedSince = NOW;
+    await recordDeletion(new Date(NOW.getTime() - 24 * HOUR));
+    expect(await bodyOf(manager)).toEqual({ stopped: true, deleted: DELETED });
+  });
+
   it("names no deletion while no stop is noted", async () => {
     await recordDeletion(new Date(NOW.getTime() - HOUR));
     expect(await bodyOf(manager)).toEqual({ stopped: false, deleted: null });
