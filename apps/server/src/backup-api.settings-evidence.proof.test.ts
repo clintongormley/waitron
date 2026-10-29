@@ -45,8 +45,8 @@ import { mountStreamApi } from "./stream-api.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
-// Lets one case make the record's decryption fail in a way no stored record produces; every other
-// call is the real one.
+// Lets one case make the record's read throw a settings error whose params no stored record can
+// produce; every other call is the real one.
 const recordRead = vi.hoisted(() => ({ fail: undefined as (() => never) | undefined }));
 vi.mock("@waitron/credentials", async (importOriginal) => {
   const real = await importOriginal<typeof import("@waitron/credentials")>();
