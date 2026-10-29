@@ -21,6 +21,7 @@ export const VERIFACTU_DASHBOARD: DashboardContribution = {
             html`<dashboard-aeat-certificate-card
               .client=${client}
               .readOnly=${readOnly}
+              .permissionContinuation=${ctx.permissionContinuation}
             ></dashboard-aeat-certificate-card>`,
         };
       },

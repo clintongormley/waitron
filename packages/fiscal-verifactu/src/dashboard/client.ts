@@ -1,7 +1,9 @@
 import type { DashboardRequest } from "@waitron/dashboard-kit";
-
-// Local copies of the route's JSON shapes (`src/certificate-card.ts`, `src/certificate-install.ts`):
-// importing them would pull `@waitron/db` and Node builtins into the browser bundle.
+import {
+  parseCertificateDiagnosisResult,
+  type CertificateDiagnosisRequest,
+  type CertificateDiagnosisResult,
+} from "../certificate-diagnosis-contract.js";
 
 export type CertificateKind = "sello" | "representante";
 
@@ -52,6 +54,20 @@ export class AeatCertificateClient {
 
   read(): Promise<CertificateCardView> {
     return this.#request<CertificateCardView>(PATH, "GET", undefined, { passive: true });
+  }
+
+  async diagnose(
+    body: CertificateDiagnosisRequest,
+    signal: AbortSignal,
+  ): Promise<CertificateDiagnosisResult> {
+    return parseCertificateDiagnosisResult(
+      await this.#request(`${PATH}/diagnose`, "POST", body, {
+        signal,
+        timeLimitMs: 35_000,
+        sessionErrors: "caller",
+        activity: "none",
+      }),
+    );
   }
 
   install(body: InstallBody): Promise<InstallAnswerView> {
