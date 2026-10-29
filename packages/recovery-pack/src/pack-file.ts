@@ -75,6 +75,29 @@ function exact(value: unknown, keys: readonly string[]): value is Record<string,
   );
 }
 
+/**
+ * A value {@link canonicalJson} writes as JSON that reads back to the same bytes. The depth limit
+ * also refuses a value that contains itself.
+ */
+function json(value: unknown, depth = 0): boolean {
+  if (depth > 32) return false;
+  if (value === null || typeof value === "boolean" || typeof value === "string") return true;
+  if (typeof value === "number") return Number.isFinite(value);
+  const keys = typeof value === "object" ? Reflect.ownKeys(value as object) : [];
+  if (Array.isArray(value))
+    return (
+      Object.getPrototypeOf(value) === Array.prototype &&
+      keys.length === value.length + 1 &&
+      Object.keys(value).length === value.length &&
+      value.every((item) => json(item, depth + 1))
+    );
+  return (
+    plainObject(value) &&
+    Object.keys(value).length === keys.length &&
+    Object.values(value).every((item) => json(item, depth + 1))
+  );
+}
+
 function count(value: unknown): value is number {
   return Number.isSafeInteger(value) && (value as number) > 0;
 }
@@ -139,7 +162,7 @@ function checked(value: unknown): RecoveryPackFile {
       value.backupKey === null ||
       (typeof value.backupKey === "string" && value.backupKey !== "")
     ) ||
-    !(value.serverKey === null || plainObject(value.serverKey)) ||
+    !(value.serverKey === null || (plainObject(value.serverKey) && json(value.serverKey))) ||
     !(value.serverKeyName === null || label(value.serverKeyName)) ||
     !holder(value.serverKeyHeldBy)
   )

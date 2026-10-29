@@ -94,6 +94,44 @@ describe("the recovery pack's attached file", () => {
     expect(parseRecoveryPackFile(bytes).backupKey).toBe(backupKey);
   });
 
+  it.each([
+    ["an undefined value", { secret: undefined }],
+    ["a function", { secret: () => "A" }],
+    ["NaN", { count: Number.NaN }],
+    ["Infinity", { count: Number.POSITIVE_INFINITY }],
+    ["a big integer", { count: 1n }],
+    ["a date", { createdAt: new Date("2026-10-12T09:30:00.000Z") }],
+    ["a map", { keys: new Map() }],
+    ["an object with no prototype", { scope: Object.create(null) as object }],
+    ["an array with a hole", { list: [1, , 3] }],
+    ["an array with an extra property", { list: Object.assign([1], { extra: 2 }) }],
+    ["a symbol key", { [Symbol("hidden")]: "A" }],
+    ["an undefined value inside an array", { list: [undefined] }],
+  ])("refuses to build a server key holding %s", (_name, serverKey) => {
+    expect(() =>
+      buildRecoveryPackFile({ ...full, serverKey: serverKey as Record<string, unknown> }),
+    ).toThrow("Recovery pack file refused: shape");
+  });
+
+  it("refuses to build a server key that contains itself", () => {
+    const looped: Record<string, unknown> = { kind: "loop" };
+    looped.self = { inner: looped };
+    expect(() => buildRecoveryPackFile({ ...full, serverKey: looped })).toThrow(
+      "Recovery pack file refused: shape",
+    );
+  });
+
+  it("builds and reads back byte for byte a server key of every JSON value", () => {
+    const nested = {
+      ...serverKey,
+      extras: [null, true, false, 0, -1.5, 1e21, "", "ñ \u2028", [], {}, [{ a: [1, { b: null }] }]],
+    };
+    const bytes = buildRecoveryPackFile({ ...full, serverKey: nested });
+    const read = parseRecoveryPackFile(bytes);
+    expect(read.serverKey).toEqual(nested);
+    expect(buildRecoveryPackFile(read)).toEqual(bytes);
+  });
+
   it("refuses a missing key and an extra key", () => {
     const missing: Partial<RecoveryPackFile> = { ...full };
     delete missing.backupKey;
