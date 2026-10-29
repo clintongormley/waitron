@@ -499,6 +499,8 @@ until A977).
   their existing amounts, quantities, dates and language keys.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
+  Dashboard overview behavior and accessibility suites use English dish and variant samples;
+  currency, ordering, overflow and deliberate EN/ES checks stay in place.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

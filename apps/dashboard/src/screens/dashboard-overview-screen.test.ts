@@ -13,12 +13,12 @@ const overview: SalesOverview = {
   openTables: { open: 3, total: 12 },
   topSellers: [
     {
-      name: "Café con leche",
+      name: "Coffee with milk",
       quantity: "18",
       total: "36.00",
       variants: [
-        { name: "Café con leche grande", quantity: "10", total: "22.00" },
-        { name: "Café con leche pequeño", quantity: "8", total: "14.00" },
+        { name: "Large coffee with milk", quantity: "10", total: "22.00" },
+        { name: "Small coffee with milk", quantity: "8", total: "14.00" },
       ],
     },
     { name: "Croissant", quantity: "12", total: "24.00", variants: [] },
@@ -120,11 +120,11 @@ describe("dashboard-overview-screen", () => {
     const names = [...el.shadowRoot!.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );
-    expect(names).toEqual(["Café con leche", "Croissant"]);
+    expect(names).toEqual(["Coffee with milk", "Croissant"]);
     const variants = [...card.querySelectorAll("[data-test=variant-name]")].map(
       (n) => n.textContent,
     );
-    expect(variants).toEqual(["Café con leche grande", "Café con leche pequeño"]);
+    expect(variants).toEqual(["Large coffee with milk", "Small coffee with milk"]);
     expect(card.querySelector('[data-test="seller-row-0-variant-1"]')!.textContent).toContain(
       "14,00\u00a0€",
     );
@@ -570,7 +570,7 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
     try {
       setLocale(locale);
       const productName = "SupercalifragilisticexpialidociousChocolate";
-      const variantName = "SupercalifragilisticexpialidociousChocolateGrande";
+      const variantName = "SupercalifragilisticexpialidociousChocolateFamily";
       const { el } = await mountWidget<OverviewScreen>(
         "dashboard-overview-screen",
         {
@@ -585,7 +585,7 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
                   variants: [{ name: variantName, quantity: "88888", total: "88888.88" }],
                 },
                 {
-                  name: "Croquetas de jamón artesanas",
+                  name: "Handmade chicken croquettes",
                   quantity: "55555",
                   total: "55555.55",
                   variants: [],
@@ -610,8 +610,8 @@ describe.each(["light", "dark"] as const)("top-seller name overflow (%s)", (them
       expect(tableBox.right).toBeLessThanOrEqual(cardBox.right - parseFloat(padding.paddingRight));
       expect(cardBox.right).toBeLessThanOrEqual(innerWidth);
       const ordinaryName = card.querySelector<HTMLElement>("[data-test=seller-row-1] th")!;
-      expect(ordinaryName.textContent).toBe("Croquetas de jamón artesanas");
-      expect(ordinaryName.title).toBe("Croquetas de jamón artesanas");
+      expect(ordinaryName.textContent).toBe("Handmade chicken croquettes");
+      expect(ordinaryName.title).toBe("Handmade chicken croquettes");
       const range = document.createRange();
       range.selectNodeContents(ordinaryName);
       const tops = [...range.getClientRects()].map((box) => box.top);
