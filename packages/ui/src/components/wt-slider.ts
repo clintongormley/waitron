@@ -149,6 +149,8 @@ export class WtSlider extends LitElement {
   readonly #id = uniqueId("wt-slider");
   readonly #offPage = Object.assign(document.createElement("input"), { type: "range" });
   #lastContinuousInput: number | null = null;
+  /** The number the thumb sits at, read by both the drawn number and the fill. */
+  #onRangeValue = 0;
 
   /**
    * The value a range with this min, max and step holds once given `value`, clamped and snapped
@@ -166,6 +168,7 @@ export class WtSlider extends LitElement {
 
   override willUpdate(changed: PropertyValues<this>): void {
     if (changed.has("value")) this.shown = null;
+    this.#onRangeValue = this.#onRange(this.shown ?? this.value);
   }
 
   #onInput(event: Event): void {
@@ -201,17 +204,16 @@ export class WtSlider extends LitElement {
     return Array.from({ length: count }, (_, i) => (i * this.step) / span);
   }
 
-  /** The fill follows the range's own value, which it has clamped and snapped to its step. */
   override updated(): void {
     const input = this.renderRoot.querySelector("input")!;
-    const share = (input.valueAsNumber - this.min) / (this.max - this.min);
+    const share = (this.#onRangeValue - this.min) / (this.max - this.min);
     input.style.setProperty("--wt-slider-fill", String(share));
   }
 
   override render() {
     const errorId = `${this.#id}-error`;
     const hintId = `${this.#id}-hint`;
-    const shown = this.#onRange(this.shown ?? this.value);
+    const shown = this.#onRangeValue;
     const describedBy = [this.hint && hintId, this.error && errorId].filter(Boolean).join(" ");
     const value = html`<span part="value" aria-hidden="true">${this.format(shown)}</span>`;
     const input = html`<input

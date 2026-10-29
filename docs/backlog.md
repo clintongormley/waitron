@@ -3138,11 +3138,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   (A1180): the thumb at min sat at x 286–297 of a 300px range, and min's mark centre at x 47. No
   app sets right to left yet.
 
-- **`wt-slider` works out its snapped value twice.** The shown number reads it from an off-page
-  range (`#onRange`, A1181) and the filled track from the real one in `updated()`
-  (`packages/ui/src/components/wt-slider.ts`). Both agree today; one source would be tidier. Raised
-  by A1181's convention review as a tidy-up, not a defect.
-
 - **A841 slice 5 differences from the pictures and tidy-ups (2026-10-21).** Optional, for the owner
   to judge from its [screenshots](backlog/mockups/a841-5-theme-editor/): at a 1280 px window with
   the side menu open the form is about 825 px wide, under the 900 px at which the preview sits beside the choices, so it sits
