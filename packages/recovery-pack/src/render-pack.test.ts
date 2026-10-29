@@ -231,6 +231,25 @@ describe("parts the renderer refuses", () => {
     ).rejects.toThrow("Recovery pack refused: overflow");
   });
 
+  it("leaves no output-size refusal unhandled after a drawing refusal", async () => {
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", record);
+    try {
+      const notes = Array.from({ length: 120 }, (_, i) => `Step ${i + 1}.`);
+      await expect(
+        renderRecoveryPack({
+          ...input({ parts: [{ ...bucket, page: { ...bucket.page!, notes } }] }),
+          maxBytes: 1,
+        }),
+      ).rejects.toThrow("Recovery pack refused: overflow");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", record);
+    }
+  });
+
   it("leaves blank a last-changed day and check the part does not give", async () => {
     const pages = await rendered(
       await renderRecoveryPack(

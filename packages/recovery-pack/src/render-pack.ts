@@ -143,6 +143,9 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       resolve(bytes);
     });
   });
+  // Drawing below can refuse before `result` is returned; a size refusal from output already
+  // written must not then go unobserved.
+  result.catch(() => undefined);
 
   const width = () => pdf.page.width - 2 * LEFT;
   let inset = 0;
