@@ -6,7 +6,8 @@ Written **2026-07-26**. Plain action list; the reasoning and sources are in
 > **Recovery questions updated, 2026-10-04 (W41s).** Review
 > [Q5(f) and Q33–Q41](asesor-questions.md) before an adviser engagement on recovery. They cover
 > offline restoration, independent paper or optional cloud allocations, missing issued invoices
-> and the remedies after rejection or conflict. These are proposed procedures; the technical
+> and the remedies after rejection or conflict. *(Dated note, 2026-10-29: the optional cloud
+> registry was dropped; series names now come from the box's clock minute instead.)* These are proposed procedures; the technical
 > probes remain separate from the legal questions. The standalone Word copies need refreshing
 > before they are sent.
 

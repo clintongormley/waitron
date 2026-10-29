@@ -1212,7 +1212,7 @@ it is the case where a single till needs two series (and, per art. 7.c, still on
 > nuevo y empieza una cadena nueva. Además, cerramos sus series y abrimos otras nuevas. ¿Es
 > admisible abrir series nuevas por este motivo? ¿Debe documentarse la razón en algún sitio?
 
-**(f), added 2026-10-03; revised 2026-10-04.** Recovery must work on new hardware with an old
+**(f), added 2026-10-03; revised 2026-10-04.** *(Dated note, 2026-10-29: the cloud registry proposed below was dropped; series names now come from the box's clock minute instead. The text is kept as written.)* Recovery must work on new hardware with an old
 backup and no internet. The proposed allocation history lives outside that backup: a paper
 register in the recovery pack, or a cloud registry for customers who subscribe. An administrator
 can reserve an allocation on a phone over cellular service and enter it into the offline box.
