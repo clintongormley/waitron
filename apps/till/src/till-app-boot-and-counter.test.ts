@@ -3524,6 +3524,45 @@ describe("till-app logout while a request is waiting for the server", () => {
     },
   );
 
+  it.each(
+    (["en-GB", "es-ES"] as const).flatMap((locale) =>
+      (
+        [
+          ["paid in cash", "recordSale", "confirm-payment", { method: "cash", amount: "500" }],
+          ["paid by card", "pay", "collect-card", {}],
+          ["parked", "parkOrder", "park-order", { label: "Later" }],
+        ] as const
+      ).map(([how, call, event, detail]) => ({ locale, how, call, event, detail })),
+    ),
+  )(
+    "A1208 a walk-up refused for more than 99 of one dish says so when $how ($locale)",
+    async ({ locale, call, event, detail }) => {
+      const refused = vi
+        .fn()
+        .mockRejectedValue({ code: "tab.portions_too_many", status: 400, limit: 99 });
+      const { el } = await mountApp({
+        getTill: vi.fn().mockResolvedValue({
+          ...till,
+          locale,
+          cardProvider: "stripe_terminal",
+          capabilities: ["print-receipt", "integrated-card-payment"],
+        }),
+        [call]: refused,
+      });
+      const c = await toCounter(el);
+      c.store.addProduct(c.products[0]!, "100");
+
+      emit(c, event, detail);
+      await flush(el);
+
+      expect(refused).toHaveBeenCalledOnce();
+      expect(el.shadowRoot!.querySelector('[role="alert"]')!.textContent!.trim()).toBe(
+        codeMessage("tab.portions_too_many", locale),
+      );
+      expect(c.store.lines.map((line) => line.quantity)).toEqual(["100"]);
+    },
+  );
+
   it("does not retry a cash sale after its save-refusal recheck outlives sign-out", async () => {
     let answerDeadEnds!: (result: { sends: false; deadEnds: [] }) => void;
     const recordSale = vi.fn();

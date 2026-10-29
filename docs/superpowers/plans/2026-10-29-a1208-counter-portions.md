@@ -182,7 +182,11 @@ land** (queue item), even with green CI.
   member's extra only) takes the matching entry of `rowAdjustTarget(...).extras` (`adjust-target.ts:124-134`:
   one target per extra product, its `lineIds` naming that extra under every member), so Comp on the
   cheese of a 3 × burger row comps three cheeses, as today's one line of 3 does. The server checks
-  them as slice 1 D31 and D34 state.
+  them as slice 1 D31 and D34 state. **Correction (Task 8 review):** Cancel on such an extra is
+  not offered. The server cancels an extra on its own only from its own line and refuses
+  `lineIds` for it (`standInRow`, `apps/server/src/adjustments-apply.ts:622-623`, pinned by
+  `order-portions.adjustments.test.ts:3076-3089`), and the table screen offers no such Cancel on a
+  grouped row either. Owner question Q6.
 - **D10 — what reverses from slice 1, and what does not.** Reverses: D1 and finding 1 (counter
   writers stay grouped), D30's last clause ("on a counter order they do not [expand]"), the
   table-service guide's counter paragraph (`apps/server/src/guide/en/table-service.md:189-190` and its
@@ -836,6 +840,11 @@ the lines and revision, clears `dirty`, keeps `persisted`, the id and `loadGener
   ("ud") printed `2.000 ud x Pan` in the `separate` mode; on portions it prints the line twice, as a
   table's does if Task 6b confirms it. **Default: match tables.**
 - **Q4 — the guides' Spanish** (slice 1 D22): shipped only with approval at land.
+- **Q6 — Cancel on an extra of a grouped counter row.** On a retrieved 3 × pizza with olives the
+  olives offer Comp (all three) but no Cancel, because the server cancels an extra on its own only
+  from its own line (slice 1). Before this item the counter's one line of 3 offered it. **Default:
+  no Cancel there, as on the table screen**; cancelling the dish row, or comping the olives, still
+  works. Alternative: let the server cancel an extra across a row's portions.
 - **Q5 — counter Pay items lists one row per portion.** A part-paid counter order of 12 cañas shows
   12 rows in Pay items (`payLines`, `apps/till/src/state/bill-payment.ts:345-360`, fed from
   `till-app.ts:7684` and `:17382`), as tables have since slice 1. Grouping it waits for A739 to release

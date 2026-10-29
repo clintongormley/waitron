@@ -605,3 +605,215 @@ describe("till-basket: no adjustments until the basket matches the stored order"
     expect(rows(elsewhere)[0]!.querySelector(".remove")).not.toBeNull();
   });
 });
+
+describe("A1208 a retrieved row of identical portions", () => {
+  const cheese = {
+    listId: "list-extras",
+    productId: "p-cheese",
+    name: "Cheese",
+    price: "1.00",
+    quantity: 1,
+  };
+  const sent = { sentAt: "2026-10-29T09:00:00.000Z", firedAt: "2026-10-29T09:00:00.000Z" };
+  const dish = (id: string, lineNo: number) =>
+    tabLine({
+      id,
+      lineNo,
+      productId: "burger",
+      unitPriceGross: "10.00",
+      portion: true,
+      movable: true,
+      stationId: "grill",
+      state: "queued",
+      ...sent,
+    });
+  const topping = (id: string, lineNo: number, parentLineNo: number) =>
+    tabLine({
+      id,
+      lineNo,
+      parentLineNo,
+      productId: "p-cheese",
+      listId: "list-extras",
+      unitPrecision: null,
+      unitPriceGross: "1.00",
+    });
+  const portions: StoredLines = {
+    orderId: "wo-9",
+    revision: 4,
+    lines: [
+      dish("b-1", 1),
+      dish("b-2", 2),
+      dish("b-3", 3),
+      topping("c-1", 4, 1),
+      topping("c-2", 5, 2),
+      topping("c-3", 6, 3),
+    ],
+  };
+  function rowOfThree(): WorkingOrderStore {
+    const store = new WorkingOrderStore();
+    store.loadFrom(
+      "wo-9",
+      [
+        {
+          workingOrderLineId: "b-1",
+          portionLineIds: ["b-1", "b-2", "b-3"],
+          product: burger,
+          quantity: "3",
+          extras: [cheese],
+        },
+      ],
+      undefined,
+      4,
+    );
+    return store;
+  }
+  const cheeseOfBurger = () =>
+    t("table.extra_of").replace("{extra}", "Cheese").replace("{dish}", "Hamburguesa");
+
+  it("comps the row as every dish in it, counted in dishes", async () => {
+    const el = await mount(rowOfThree(), portions);
+    const heard = adjustments(el);
+
+    within(el, 0, "data-comp-line")!.click();
+
+    expect(heard).toEqual([
+      {
+        kind: "comp",
+        combined: true,
+        counter: true,
+        target: {
+          lineId: "b-1",
+          lineIds: ["b-1", "b-2", "b-3"],
+          name: "Hamburguesa",
+          quantity: "3",
+          total: "33.00",
+          unitTotal: "11.00",
+          started: false,
+        },
+      },
+    ]);
+  });
+
+  it("cancels the row as every dish in it", async () => {
+    const el = await mount(rowOfThree(), portions);
+    const heard = adjustments(el);
+
+    within(el, 0, "data-cancel-line")!.click();
+
+    expect(heard).toEqual([
+      {
+        kind: "cancel",
+        counter: true,
+        target: expect.objectContaining({
+          lineId: "b-1",
+          lineIds: ["b-1", "b-2", "b-3"],
+          quantity: "3",
+        }),
+      },
+    ]);
+  });
+
+  it("comps the row's cheese as the cheese of every dish in it", async () => {
+    const el = await mount(rowOfThree(), portions);
+    const heard = adjustments(el);
+
+    within(el, "0-0", "data-comp-extra")!.click();
+
+    expect(heard).toEqual([
+      {
+        kind: "comp",
+        combined: true,
+        counter: true,
+        target: {
+          lineId: "c-1",
+          lineIds: ["c-1", "c-2", "c-3"],
+          name: cheeseOfBurger(),
+          quantity: "3",
+          total: "3.00",
+          unitTotal: null,
+          started: false,
+          extra: true,
+          kitchenTold: true,
+        },
+      },
+    ]);
+  });
+
+  it("offers no Cancel on the row's cheese, which the server cancels only one line at a time", async () => {
+    const el = await mount(rowOfThree(), portions);
+
+    expect(within(el, "0", "data-cancel-line")).not.toBeNull();
+    expect(within(el, "0-0", "data-comp-extra")).not.toBeNull();
+    expect(all(el, "[data-cancel-extra]")).toBe(0);
+  });
+
+  it("moves the row to another station as every dish in it", async () => {
+    const el = await mount(rowOfThree(), portions);
+    const heard: unknown[] = [];
+    el.addEventListener("move-station", (event) => heard.push((event as CustomEvent).detail));
+
+    within(el, "0", "data-move-station")!.click();
+
+    expect(heard).toEqual([
+      {
+        workingOrderId: "wo-9",
+        lineId: "b-1",
+        lineIds: ["b-1", "b-2", "b-3"],
+        name: "Hamburguesa",
+        stationId: "grill",
+        counter: true,
+      },
+    ]);
+  });
+
+  it("offers nothing on a row, or its extras, whose listing lacks one of its dishes", async () => {
+    const lacking: StoredLines = {
+      ...portions,
+      lines: portions.lines.filter((line) => line.id !== "b-3" && line.id !== "c-3"),
+    };
+    const store = rowOfThree();
+    const el = await mount(store, lacking);
+
+    expect(all(el, "[data-comp-line], [data-cancel-line], [data-move-station]")).toBe(0);
+    expect(all(el, "[data-comp-extra], [data-cancel-extra]")).toBe(0);
+    expect(all(el, "[data-discount-bill]")).toBe(1);
+    const { el: details } = await mountWidget<TillBasket>("till-basket", {
+      store,
+      lineDetails: true,
+      storedLines: lacking,
+      stationMoveLines: lacking,
+    });
+    details.openLineDetails(store.lines[0]!);
+    await details.updateComplete;
+    const picker = details.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+    expect(picker.querySelector("[data-move-station]")).toBeNull();
+  });
+
+  it("moves the row from its line window as every dish in it", async () => {
+    const store = rowOfThree();
+    const { el } = await mountWidget<TillBasket>("till-basket", {
+      store,
+      lineDetails: true,
+      storedLines: portions,
+      stationMoveLines: portions,
+    });
+    const heard: unknown[] = [];
+    el.addEventListener("move-station", (event) => heard.push((event as CustomEvent).detail));
+    el.openLineDetails(store.lines[0]!);
+    await el.updateComplete;
+    const picker = el.shadowRoot!.querySelector<TillModifierPicker>("till-modifier-picker")!;
+
+    await userEvent.click(picker.querySelector<HTMLElement>("[data-move-station]")!);
+
+    expect(heard).toEqual([
+      {
+        workingOrderId: "wo-9",
+        lineId: "b-1",
+        lineIds: ["b-1", "b-2", "b-3"],
+        name: "Hamburguesa",
+        stationId: "grill",
+        counter: true,
+      },
+    ]);
+  });
+});

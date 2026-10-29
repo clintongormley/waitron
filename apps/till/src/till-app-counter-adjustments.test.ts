@@ -2287,3 +2287,82 @@ async function discardBasketChanges(el: TillApp): Promise<void> {
   question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
   await flush(el);
 }
+
+describe("A1208 actions on a retrieved row of identical portions", () => {
+  const portionsHeld = (): HeldOrder =>
+    ({
+      ...heldOrder(4),
+      lines: ["b-1", "b-2", "b-3"].map((id) => ({
+        workingOrderLineId: id,
+        productId: "cana",
+        quantity: "1.000",
+        product: product("cana", "Caña", "2.50"),
+      })),
+    }) as HeldOrder;
+  const portionsListed = (): TabLines => ({
+    revision: 4,
+    lines: ["b-1", "b-2", "b-3"].map((id, i) =>
+      tabLine({
+        id,
+        lineNo: i + 1,
+        name: "Caña",
+        productId: "cana",
+        unitPriceGross: "2.50",
+        portion: true,
+        movable: true,
+        stationId: "bar",
+        sentAt: "2026-10-29T09:00:00.000Z",
+        firedAt: "2026-10-29T09:00:00.000Z",
+        state: "queued",
+      }),
+    ),
+  });
+  const rowOfThree = (overrides: Record<string, unknown> = {}) =>
+    retrieved({
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(portionsHeld()),
+      getTabLines: vi.fn().mockResolvedValue(portionsListed()),
+      ...overrides,
+    });
+
+  it("shows the three cañas as one row of three", async () => {
+    const el = await rowOfThree();
+    expect(counter(el).store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Caña", "3"],
+    ]);
+  });
+
+  it.each([
+    ["data-comp-line", "Complaint", "comp"],
+    ["data-cancel-line", "Mistake", "cancel"],
+  ] as const)("asks about every caña in the row from %s", async (attribute, reason, action) => {
+    const el = await rowOfThree();
+
+    await press(el, inBasket(el, `[${attribute}="0"]`)!);
+    await chooseReason(el, reason);
+    await press(el, inDialog(el, "[data-adjust-continue]"));
+
+    expect(api.previewAdjustment).toHaveBeenCalledWith(
+      "wo-9",
+      expect.objectContaining({ action, lineId: "b-1", lineIds: ["b-1", "b-2", "b-3"] }),
+    );
+  });
+
+  it("moves every caña in the row to the chosen station", async () => {
+    const el = await rowOfThree({
+      listStations: vi.fn().mockResolvedValue(stations),
+      moveDishStation: vi.fn().mockResolvedValue({ revision: 5 }),
+    });
+    await openCounterMove(el);
+    await flush(el);
+    emit(el.shadowRoot!.querySelector("till-station-choice-dialog")!, "station-chosen", {
+      stationId: "grill",
+    });
+    await flush(el);
+
+    expect(api.moveDishStation).toHaveBeenCalledWith(
+      "wo-9",
+      expect.objectContaining({ lineIds: ["b-1", "b-2", "b-3"], stationId: "grill" }),
+      expect.anything(),
+    );
+  });
+});
