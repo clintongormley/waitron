@@ -651,8 +651,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) is built: the
   confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
   still lists them, and the counts still travel between the page and the box and are stored in the
-  confirmation record, until slice 2 removes them. Slice 2 also corrects the two lines that call that
-  record "what the page showed" (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md`).
+  confirmation record, until slice 2 removes them. Slice 2 also corrects the three lines that say the
+  confirmation record holds, or the confirmation is of, what the page showed
+  (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md` ("what the repair page showed
+  them") and `apps/server/README.md`).
   Slices 2 to 4 are still to come.
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database
