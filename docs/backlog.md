@@ -189,9 +189,11 @@ under `docs/backlog/`.
 - **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
   connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
   failure.
-  The owner approved evidence-first planning on 2026-10-29. The
+  The owner approved the reviewed read-only evidence build on 2026-10-29. The
   [implementation plan](superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
-  awaits build approval. Persistent connection/configuration and external-refusal repair remain open.
+  has contracts and a local query adapter on `feat/a1089-certificate-diagnosis`;
+  process supervision, authorization, the route and the screen remain unbuilt.
+  Persistent connection/configuration and external-refusal repair remain open.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The

@@ -1,5 +1,11 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 implementation update: the owner's 08:07 instruction approves the
+reviewed read-only build. Contracts and the local query adapter are on
+`feat/a1089-certificate-diagnosis`; process supervision, authorization, the route
+and the screen remain unbuilt. Persistent repair remains open. The earlier
+proposal and planning-only statements below describe their publication state._
+
 _2026-10-29: the owner approved option A for planning only at 01:58. The
 [implementation plan](../plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
 keeps persistent repair open; its build needs separate approval. The proposal and its
