@@ -304,6 +304,7 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
+import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
 import {
   barTables,
@@ -6396,7 +6397,7 @@ export class TillApp extends LitElement {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
       if (
-        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
+        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6557,7 +6558,7 @@ export class TillApp extends LitElement {
     let paid = false;
     try {
       if (
-        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
+        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -7323,9 +7324,12 @@ export class TillApp extends LitElement {
     return true;
   }
 
+  /** Saves the basket's edits to its stored order. `lines` are `rows` as `#currentSaleLines` sent
+   * them, one per row; a row of several portions is saved as its members (plan D8). */
   async #syncIfDirty(
     id: string,
     lines: SaleLine[],
+    rows: readonly OrderLine[],
     label: string | undefined,
     lateSend?: LateSend,
   ): Promise<boolean> {
@@ -7336,7 +7340,7 @@ export class TillApp extends LitElement {
     try {
       const saved = await this.api.updateWorkingOrder(id, {
         expectedEdit: this.#counterExpectedEdit(id),
-        lines,
+        lines: lines.flatMap((wire, index) => portionWireLines(rows[index]!, wire)),
         label,
         revision: this.#store.revision,
         ...(lateSend === undefined ? {} : { lateSend }),
@@ -7425,10 +7429,11 @@ export class TillApp extends LitElement {
         if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
         if (!current()) return;
         const lines = this.#currentSaleLines();
+        const rows = [...this.#store.lines];
         const label = this.#store.label;
         const payload = this.#basketPayload();
         if (this.#store.persisted) {
-          if (!(await this.#syncIfDirty(id, lines, label, lateSend)) || !current()) return;
+          if (!(await this.#syncIfDirty(id, lines, rows, label, lateSend)) || !current()) return;
           // A refused save can precede a replay, but unsaved edits are a different placement.
           if (this.#basketPayload() !== this.#basketBaseline) {
             this.errorKey = "place.error";
@@ -8578,7 +8583,13 @@ export class TillApp extends LitElement {
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
         } else if (
-          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label, lateSend)) ||
+          !(await this.#syncIfDirty(
+            id,
+            lines,
+            basketLines,
+            label ?? this.#store.label,
+            lateSend,
+          )) ||
           basketVisit !== this.#store.loadGeneration
         )
           return;
@@ -8775,13 +8786,20 @@ export class TillApp extends LitElement {
     if (droppedAProduct) this.errorKey = "held.product_gone";
     else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
     else if (mustChooseAgain) this.errorKey = "held.options_changed";
-    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision, {
-      ...order.kitchenNote,
-      scopeKey:
-        "partyId" in order.kitchenNote.scope
-          ? `party:${order.kitchenNote.scope.partyId}`
-          : `order:${order.kitchenNote.scope.workingOrderId}`,
-    });
+    const holdsMoney = this.heldOrders.some((held) => held.id === order.id && paidInPart(held));
+    this.#store.loadFrom(
+      order.id,
+      foldRetrievedPortions(lines, listed, holdsMoney),
+      order.label ?? undefined,
+      order.revision,
+      {
+        ...order.kitchenNote,
+        scopeKey:
+          "partyId" in order.kitchenNote.scope
+            ? `party:${order.kitchenNote.scope.partyId}`
+            : `order:${order.kitchenNote.scope.workingOrderId}`,
+      },
+    );
     this.#counterBillEdit = {
       id: order.id,
       visit: this.#store.loadGeneration,
@@ -17344,7 +17362,13 @@ export class TillApp extends LitElement {
     this.submitting = true;
     try {
       if (
-        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label, lateSend)) ||
+        !(await this.#syncIfDirty(
+          id,
+          this.#currentSaleLines(),
+          [...this.#store.lines],
+          this.#store.label,
+          lateSend,
+        )) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;

@@ -6648,3 +6648,269 @@ describe("A738 counter order views", () => {
     },
   );
 });
+
+describe("A1208 a retrieved counter order's portions", () => {
+  const tostada: TillProduct = { ...cafe, id: "tostada", name: "Tostada", unitPrice: "2.50" };
+  const catalogue = zoneOffers({ menus: [defaultMenu], products: [cafe, tostada] }, "zone-counter");
+  const cafeOffer = "menu-item-cafe-0";
+  const ids = ["l1", "l2", "l3"];
+  const held = (revision = 4) => ({
+    kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 0 },
+    id: "wo-1",
+    expectedEdit: null,
+    orderNumber: 5,
+    label: null,
+    revision,
+    lines: ids.map((id) => ({ workingOrderLineId: id, menuItemId: cafeOffer, quantity: "1.000" })),
+  });
+  const listedLine = (id: string, lineNo: number) => ({
+    id,
+    lineNo,
+    stationId: "bar",
+    changesAfterSending: null,
+    movable: true,
+    name: "Café",
+    productId: "cafe",
+    parentProductId: null,
+    parentLineNo: null,
+    quantity: "1.000",
+    priceQuantity: "1.000",
+    unitPrecision: 0,
+    unitPriceGross: "1.50",
+    servedAt: null,
+    courseId: null,
+    sentAt: null,
+    firedAt: null,
+    state: null,
+    groupId: null,
+    note: null,
+    listId: null,
+    menuItemId: cafeOffer,
+    portion: true,
+  });
+  const summary = (hasPayments: boolean) => ({
+    items: [],
+    id: "wo-1",
+    orderNumber: 5,
+    label: null,
+    counts: {},
+    total: "4.50",
+    outstanding: hasPayments ? "3.00" : "4.50",
+    hasPayments,
+    partyId: null,
+    openedAt: "2026-10-29T12:00:00.000Z",
+    signals: [],
+  });
+
+  async function retrieved(overrides: Record<string, unknown> = {}) {
+    const updateWorkingOrder = vi.fn(async (_id: string, request: { revision: number }) => ({
+      revision: request.revision + 1,
+    }));
+    const mounted = await mountApp({
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(catalogue)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(catalogue),
+      retrieveWorkingOrder: vi.fn().mockResolvedValue(held()),
+      getTabLines: vi
+        .fn()
+        .mockResolvedValue({ revision: 4, lines: ids.map((id, i) => listedLine(id, i + 1)) }),
+      updateWorkingOrder,
+      ...overrides,
+    });
+    const c = await toCounter(mounted.el);
+    emit(c, "retrieve-order", { id: "wo-1" });
+    await flush(mounted.el);
+    return { el: mounted.el, c, updateWorkingOrder };
+  }
+  /** What the tender panel asks before it takes a payment: the counter's dead-end question. */
+  const askBeforeTender = (c: TillCounterScreen) =>
+    emit(c.shadowRoot!.querySelector("till-tender-pay")!, "check-before-tender", {
+      resolve: () => undefined,
+    });
+  const sentLines = (update: ReturnType<typeof vi.fn>) =>
+    (
+      update.mock.calls[0]![1] as { lines: { workingOrderLineId?: string; quantity: string }[] }
+    ).lines.map((line) => [line.workingOrderLineId, line.quantity]);
+
+  it("shows three identical stored portions as one row of three", async () => {
+    const { c } = await retrieved();
+    expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Café", "3"],
+    ]);
+  });
+
+  it("parks an unchanged row without saving it", async () => {
+    const { el, c, updateWorkingOrder } = await retrieved();
+    emit(c, "park-order", { label: undefined });
+    await flush(el);
+    expect(updateWorkingOrder).not.toHaveBeenCalled();
+  });
+
+  it("saves a row raised to four as its three portions, the last carrying the added dish", async () => {
+    const { el, c, updateWorkingOrder } = await retrieved();
+    c.store.setLineQuantity(0, "4");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    expect(sentLines(updateWorkingOrder)).toEqual([
+      ["l1", "1"],
+      ["l2", "1"],
+      ["l3", "2"],
+    ]);
+  });
+
+  it("saves a row lowered to two as its first two portions, leaving the last out", async () => {
+    const { el, c, updateWorkingOrder } = await retrieved();
+    c.store.setLineQuantity(0, "2");
+    emit(c, "park-order", { label: "Later" });
+    await flush(el);
+    expect(sentLines(updateWorkingOrder)).toEqual([
+      ["l1", "1"],
+      ["l2", "1"],
+    ]);
+  });
+
+  it("shows each portion as its own row on an order the held list says holds money", async () => {
+    const { c } = await retrieved({
+      listWorkingOrders: vi.fn().mockResolvedValue([summary(true)]),
+    });
+    expect(c.store.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+      ["l1", "1"],
+      ["l2", "1"],
+      ["l3", "1"],
+    ]);
+  });
+
+  it("still folds an order when only another order on the held list holds money", async () => {
+    const { c } = await retrieved({
+      listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(true), id: "wo-2" }]),
+    });
+    expect(c.store.lines.map((line) => line.quantity)).toEqual(["3"]);
+  });
+
+  it("places what is left after a dead-end answer removes the row, saving no member of it", async () => {
+    const placing = zoneOffers(
+      { menus: [defaultMenu], products: [cafe, tostada] },
+      "zone-counter",
+      "ticket_then_pay",
+    );
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "3",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed",
+        },
+      ],
+      stations: [],
+    });
+    const { el, c, updateWorkingOrder } = await retrieved({
+      getTill: vi.fn().mockResolvedValue({ ...till, orderFlow: "ticket_then_pay" }),
+      getDeviceZones: vi.fn().mockResolvedValue(deviceZonesFor(placing)),
+      listDefaultZoneOffers: vi.fn().mockResolvedValue(placing),
+      askSaleDeadEnds,
+      placeOrder: vi.fn(() => new Promise(() => {})),
+    });
+    c.store.addProduct(
+      c.products.find((product) => product.id === "tostada")!,
+      "1",
+    );
+    emit(c, "place-order");
+    await flush(el);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("remove", { detail: { key: "0" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+
+    expect(sentLines(updateWorkingOrder)).toEqual([[undefined, "1"]]);
+  });
+
+  it("asks about dead ends with the row as one line, and applies each answer to its own row", async () => {
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "1",
+          name: "Tostada",
+          quantity: "1",
+          stationId: "grill",
+          stationName: "Grill",
+          why: "closed",
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    });
+    const { el, c } = await retrieved({
+      askSaleDeadEnds,
+      recordSale: vi.fn(() => new Promise(() => {})),
+    });
+    c.store.addProduct(
+      c.products.find((product) => product.id === "tostada")!,
+      "1",
+    );
+    askBeforeTender(c);
+    await flush(el);
+
+    const asked = askSaleDeadEnds.mock.calls[0]![0] as {
+      lines: { workingOrderLineId?: string; quantity: string }[];
+    };
+    expect(asked.lines.map((line) => [line.workingOrderLineId, line.quantity])).toEqual([
+      ["l1", "3"],
+      [undefined, "1"],
+    ]);
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("make-at", { detail: { key: "1", stationId: "kitchen" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(c.store.lines.map((line) => [line.product.name, line.quantity, line.makeAt])).toEqual([
+      ["Café", "3", undefined],
+      ["Tostada", "1", "kitchen"],
+    ]);
+  });
+
+  it("removes the dish a dead-end answer names, never the row before it", async () => {
+    const askSaleDeadEnds = vi.fn().mockResolvedValue({
+      sends: true,
+      deadEnds: [
+        {
+          key: "1",
+          name: "Tostada",
+          quantity: "1",
+          stationId: "grill",
+          stationName: "Grill",
+          why: "closed",
+        },
+      ],
+      stations: [],
+    });
+    const { el, c } = await retrieved({
+      askSaleDeadEnds,
+      recordSale: vi.fn(() => new Promise(() => {})),
+    });
+    c.store.addProduct(
+      c.products.find((product) => product.id === "tostada")!,
+      "1",
+    );
+    askBeforeTender(c);
+    await flush(el);
+
+    const dialog = el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog")!;
+    dialog
+      .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+      .dispatchEvent(new CustomEvent("remove", { detail: { key: "1" } }));
+    await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+    await flush(el);
+    expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+      ["Café", "3"],
+    ]);
+  });
+});

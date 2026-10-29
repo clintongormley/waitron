@@ -73,6 +73,9 @@ export interface OrderLine {
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
+  /** A retrieved row of identical portions: every member's stored dish line, by line number,
+   * `workingOrderLineId` first. ABSENT on a line of one. Never sent. */
+  portionLineIds?: string[];
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
   quantity: string;
