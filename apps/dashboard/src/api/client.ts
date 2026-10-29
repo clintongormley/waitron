@@ -1950,6 +1950,49 @@ export interface StreamSupervisorStatus {
 export type StreamStatusView =
   StreamSupervisorStatus | { state: "off"; reason: string; stateSince: string } | { state: "off" };
 
+/** LOCAL copy of `LoadFailureDetail` (`apps/server/src/backup-settings-evidence.ts`). */
+export type BackupLoadFailureDetail =
+  { reason: string } | { keyVersion: number } | { min: number } | { variable: string };
+
+/** One failure to load the saved backup settings, as the box kept it. */
+export interface BackupLoadFailure {
+  at: string;
+  code: string;
+  detail: BackupLoadFailureDetail | null;
+  recordDigest: string | null;
+  recordWrittenAt: string | null;
+}
+
+export type BackupEvidenceDestination =
+  | { kind: "folder"; dir: string; look: "folder" | "missing" | "not_a_folder" | "unknown" }
+  | {
+      kind: "bucket";
+      endpoint: string | null;
+      region: string;
+      bucket: string;
+      accessKeyId: string;
+      archiveFolder: string;
+    };
+
+/** `GET /api/backup/settings-evidence` — LOCAL copy of the server's `SettingsEvidence`
+ * (`apps/server/src/backup-settings-evidence.ts`). Never carries a secret. */
+export interface BackupSettingsEvidence {
+  readAt: string;
+  managedByEnvironment: boolean;
+  /** Newest first. */
+  failures: BackupLoadFailure[];
+  lastCleanLoadAt: string | null;
+  record: { keyVersion: number; writtenAt: string; digest: string } | null;
+  /** Also true when the record that failed has been deleted since (`record` is null). */
+  rewrittenSinceLastFailure: boolean;
+  boxKeyNumbers: { current: number; previous?: number };
+  now:
+    | { state: "absent" }
+    | { state: "unreadable"; code: string; detail: BackupLoadFailureDetail | null }
+    | { state: "readable"; destinations: BackupEvidenceDestination[] };
+  recoveryKey: { held: boolean; tooShort: boolean; fingerprint?: string };
+}
+
 /** `GET /api/backup/archive-recovery-pack`. `pack` is the pack's code line alone, and secret. */
 export interface ArchiveRecoveryPackAnswer {
   pack: string;
@@ -4361,6 +4404,10 @@ export class DashboardApi {
 
   getBackupStatus(): Promise<BackupStatusView> {
     return this.#request<BackupStatusView>("/api/backup/status", "GET");
+  }
+
+  getBackupSettingsEvidence(): Promise<BackupSettingsEvidence> {
+    return this.#request<BackupSettingsEvidence>("/api/backup/settings-evidence", "GET");
   }
 
   // ── Servers ───────────────────────────────────────────────────────────────────────────────────
