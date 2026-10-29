@@ -193,10 +193,15 @@ under `docs/backlog/`.
   [implementation plan](superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
   has contracts, a local query adapter, isolated process supervision, parent
   authorization/material binding and the HTTP route on `feat/a1089-certificate-diagnosis`.
+  The branch also adds request cancellation, a shared session generation and permission
+  sign-in at the current surface. Local browser tests hold real password and passkey login
+  responses across Stop, apply their cookies and re-read the actual account's rights;
+  the authenticator's cryptographic answer is synthetic. These tests also check native
+  password clearing, old-account replies, idle expiry, keyboard focus and both themes.
   Local route tests compare persistent rows and write counts after the isolated child exits,
   and disconnect real HTTP sockets during opening, response reading and cleanup. Boot tests
   cover runner shutdown and the existing read-only gates. Earlier tests exercise sales and
-  installation while a query waits. Permission continuation, the screen, complete coverage
+  installation while a query waits. The diagnosis screen, complete coverage
   and whole-flow qualification remain open.
   Persistent connection/configuration and external-refusal repair remain open.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).

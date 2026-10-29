@@ -1,5 +1,14 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29 browser-support checkpoint: the branch adds opt-in request cancellation
+and in-place permission sign-in using one shared session generation. Local tests
+hold real password/passkey login responses across Stop, apply their cookies and
+re-read the actual account's rights without a diagnostic request; authenticator
+cryptography is synthetic. Browser checks cover native password clearing,
+old-account callbacks, idle expiry, keyboard focus and both themes. The diagnosis
+screen, complete coverage and whole-flow qualification remain open, as does
+persistent repair. Earlier checkpoints below retain their publication state._
+
 _2026-10-29 HTTP checkpoint: Tasks 1–5 now include the optional diagnostic route
 and a runner owned by boot. Local tests exercise no-touch authorization, filtered
 error details, both material kinds, expiry and revocation, plus real HTTP socket
