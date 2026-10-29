@@ -170,15 +170,15 @@ async function abandonedWithMissingDatabase(
   return { f, name, ids, startAgain, summary, attemptFiles, confirmations };
 }
 it("an abandoned activation with a missing database starts again only once confirmed", async () => {
-  const { f, name, startAgain, summary, attemptFiles, confirmations } =
+  const { f, startAgain, summary, attemptFiles, confirmations } =
     await abandonedWithMissingDatabase(["activation-started"]);
   const before = await attemptFiles();
   await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await attemptFiles()).toEqual(before);
   expect(await confirmations()).toEqual([]);
   const shown = await summary();
-  expect(shown).toEqual({ reached: "fiscal-started", lastName: name });
-  await expect(startAgain({ reached: "named", lastName: name })).rejects.toMatchObject({
+  expect(shown).toEqual({ reached: "fiscal-started" });
+  await expect(startAgain({ reached: "named" })).rejects.toMatchObject({
     code: "setup.attempt_conflict",
   });
   expect(await attemptFiles()).toEqual(before);
@@ -191,12 +191,12 @@ it("an abandoned activation with a missing database starts again only once confi
   ).toMatchObject({ database: "missing", shown });
 });
 it("an attempt committed before it was abandoned, with a missing database, is shown as fiscal-finished and starts again on confirmation", async () => {
-  const { f, name, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
+  const { f, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
     "activation-started",
     "committed",
   ]);
   const shown = await summary();
-  expect(shown).toEqual({ reached: "fiscal-finished", lastName: name });
+  expect(shown).toEqual({ reached: "fiscal-finished" });
   await startAgain(shown);
   const written = await confirmations();
   expect(written).toHaveLength(1);

@@ -23,8 +23,6 @@ export interface SetupDatabaseHoldings {
   readonly kept: number;
   readonly records: number;
   readonly accepted: number;
-  /** Each module that sets Start again's floor, with what its `startAgainHistory` read. */
-  readonly history: Readonly<Record<string, readonly unknown[]>>;
 }
 
 // Reasons are log-only codes: they never carry a path or a value read from the database.
@@ -142,7 +140,6 @@ async function readHoldings(
   }
   let records = 0;
   let accepted = 0;
-  const history: Record<string, readonly unknown[]> = {};
   for (const module of modules) {
     const initialSetup = module.provisioning?.initialSetup;
     if (initialSetup?.startAgainHoldings !== undefined) {
@@ -150,11 +147,6 @@ async function readHoldings(
       records += held.records;
       accepted += held.accepted;
     }
-    if (initialSetup?.startAgainFloor !== undefined) {
-      if (initialSetup.startAgainHistory === undefined)
-        notReady(`history reader missing: ${module.name}`);
-      history[module.name] = await initialSetup.startAgainHistory!(target);
-    }
   }
-  return { rows, kept, records, accepted, history };
+  return { rows, kept, records, accepted };
 }

@@ -120,12 +120,10 @@ it("a legitimate held setup database beside a stopped recovery answers the summa
   const shown = await summary(f);
   expect(shown).toEqual({
     reached: "fiscal-finished",
-    lastName: f.installationName,
     recovery: {
       startedAt: expect.any(String),
       lastActiveAt: expect.any(String),
       lastActiveSource: expect.any(String),
-      lastName: expect.toBeOneOf([null, expect.any(String)]),
       failed: false,
       cloud: false,
     },
@@ -391,7 +389,6 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
   });
   const shown: StartAgainSummary = {
     reached: "fiscal-finished",
-    lastName: f.installationName,
     held: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
   };
   return () =>

@@ -2,7 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import "node:fs";
 
-import { access, lstat, readFile, readdir, writeFile } from "node:fs/promises";
+import { access, lstat, readFile, readdir, unlink, writeFile } from "node:fs/promises";
 
 import { Socket } from "node:net";
 
@@ -343,7 +343,6 @@ it("once A's lease lapsed, B's password step seals A: A's renewal and step are r
     startedAt: stopped!.startedAt,
     lastActiveAt: stopped!.lastActiveAt,
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: false,
     cloud: false,
   });
@@ -369,7 +368,7 @@ it("B gets no summary and no Start again while A's lease is fresh, and nothing i
       owner,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "claimed", lastName: null },
+        shown: { reached: "claimed" },
       },
     }),
   ).rejects.toEqual(expect.objectContaining(inProgress(activity).error));
@@ -437,14 +436,12 @@ it("a stopped recovery is named in the summary with the name it chose", async ()
   const stopped = (await f.service.liveness())!;
   expect(stopped.state).toBe("stopped");
   const plain = await attemptOnly.startAgainSummary({ ...ids, owner });
-  expect(plain.lastName).not.toBe(f.selected.identity);
   expect(await actions.startAgainSummary({ ...ids, owner })).toEqual({
     ...plain,
     recovery: {
       startedAt: stopped.startedAt,
       lastActiveAt: stopped.lastActiveAt,
       lastActiveSource: "memory",
-      lastName: f.selected.identity,
       failed: false,
       cloud: false,
     },
@@ -463,13 +460,92 @@ it("a recovery that failed at placement-started is named as failed at once", asy
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: true,
     cloud: false,
   });
 });
 
 type Repair = Awaited<ReturnType<typeof preparedRepair>>;
+
+// The kept picks in the recovery's own copy.
+async function removeTargetPicks(f: Pick<Repair, "record">) {
+  await unlink(join(f.record.target.target.stateDir, "module-preparation-state.json")).catch(
+    (error: unknown) => {
+      if ((error as { code?: string }).code !== "ENOENT") throw error;
+    },
+  );
+}
+
+async function appendInput(f: Pick<Repair, "workspace" | "record">, input: unknown) {
+  const { version, sequence, previousRecordDigest, recordedAt, ...last } = f.record;
+  void version;
+  void sequence;
+  void previousRecordDigest;
+  void recordedAt;
+  await f.workspace.append({ ...last, input });
+}
+
+it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
+  ["named nothing", "cannot be read", null, () => "unreadable"],
+  [
+    // A valid minute name, one minute after the time the input says it was chosen.
+    "recorded a name its own time disagrees with",
+    "are missing",
+    {
+      allocation: {
+        version: 1,
+        allocationId: "hour/restore",
+        taxpayerNif: "89890001K",
+        softwareId: "W1",
+        environment: "preproduction",
+        installationIdentity: "0CNQV",
+        series: [{ code: "A-0CNQV", purpose: "standard" }],
+        source: "hour",
+        reservationEvidence: null,
+        issuedAt: "2026-10-16T12:42:00.000Z",
+      },
+      approval: {
+        version: 1,
+        eventId: "restore",
+        sourceId: "archive",
+        targetNodeId: "node",
+        operatorId: { kind: "recovery-key", nodeId: "node", eventId: "restore" },
+        oldMachineAbsent: false,
+        oldMachineOffline: true,
+        noParallelRecovery: true,
+        confirmedAt: "2026-10-16T12:42:00.000Z",
+        incidentEvidence: "hour/restore",
+      },
+    },
+    null,
+  ],
+])(
+  "a stopped recovery whose journal %s and whose copy's picks %s gets a summary: no name is read",
+  async (_name, _picks, input, picksOf) => {
+    const f = await preparedRepair();
+    expect(f.record).toMatchObject({ phase: "prepared", input: null });
+    await f.service.close(f.session.sessionId);
+    if (input !== null) await appendInput(f, input);
+    expect((await f.workspace.read()).at(-1)).toMatchObject({ phase: "prepared", input });
+    await removeTargetPicks(f);
+    if (picksOf !== null)
+      await writeFile(
+        join(f.record.target.target.stateDir, "module-preparation-state.json"),
+        picksOf(f.record.binding),
+      );
+    const stopped = (await f.service.liveness())!;
+    expect(stopped.state).toBe("stopped");
+    const { owner, ids } = await signedIn(f.host);
+    const { actions } = repairApp(f);
+    expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+      startedAt: stopped.startedAt,
+      lastActiveAt: stopped.lastActiveAt,
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
+    });
+  },
+);
 
 it("after a restart, a stopped recovery is named with its saved steps' times", async () => {
   const f = await selectedRepair();
@@ -487,7 +563,6 @@ it("after a restart, a stopped recovery is named with its saved steps' times", a
     startedAt: records[0]!.recordedAt,
     lastActiveAt: records.at(-1)!.recordedAt,
     lastActiveSource: "saved-step",
-    lastName: f.selected.identity,
     failed: false,
     cloud: false,
   });
@@ -506,7 +581,6 @@ it("a recovery that failed after it was restored is named as failed", async () =
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: true,
     cloud: false,
   });

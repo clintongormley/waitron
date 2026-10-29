@@ -473,7 +473,7 @@ it("a missing hour database starts again only once confirmed, and records the co
     code: "setup.not_ready",
   });
   const shown = await actions.startAgainSummary(input);
-  expect(shown).toEqual(await hourShown(f));
+  expect(shown).toEqual(HOUR_SHOWN);
   const at = new Date().toISOString();
   const state = (await f.host.store.read())!;
   const pending = actions.startAgainFirstSetup({
@@ -505,13 +505,7 @@ it("a missing hour database starts again only once confirmed, and records the co
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
-async function hourShown(f: Awaited<ReturnType<typeof fixture>>) {
-  const state = (await f.host.store.read())!;
-  return {
-    reached: "named" as const,
-    lastName: (firstSetupModuleContext(state, MODULE).request as { identity: string }).identity,
-  };
-}
+const HOUR_SHOWN = { reached: "named" as const };
 
 it("a missing hour database refuses a confirmed Start again from an owner whose latest event is not a fresh recovery", async () => {
   const f = await fixture();
@@ -522,7 +516,7 @@ it("a missing hour database refuses a confirmed Start again from an owner whose 
     venueDir: f.venueDir,
     host: f.host,
   });
-  const shown = await hourShown(f);
+  const shown = HOUR_SHOWN;
   await expect(
     actions.startAgainFirstSetup({
       inspectionId: snapshot.inspection.inspectionId,

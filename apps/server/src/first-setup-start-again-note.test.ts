@@ -404,12 +404,9 @@ it("a missing database: Start again without the confirmation is refused, and not
 });
 
 it("a confirmation whose summary differs from the box's own is refused, and nothing is written", async () => {
-  const { f, name, actions, request } = await missingDatabase();
+  const { f, actions, request } = await missingDatabase();
   const before = await attemptFiles(f);
-  for (const shown of [
-    { reached: "claimed" as const, lastName: name },
-    { reached: "named" as const, lastName: "00000" },
-  ]) {
+  for (const shown of [{ reached: "claimed" as const }]) {
     await expect(
       actions.startAgainFirstSetup({
         ...request,
@@ -423,12 +420,12 @@ it("a confirmation whose summary differs from the box's own is refused, and noth
 });
 
 it("a confirmed Start again writes the confirmation record with who, when and what the record showed", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, owner, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   const answered = await postSummary(app, ids, ownerHeaders(owner));
   expect(answered.status, await answered.clone().text()).toBe(200);
   const shown = await answered.json();
-  expect(shown).toEqual({ reached: "named", lastName: name });
+  expect(shown).toEqual({ reached: "named" });
   const state = (await f.store.read())!;
   const at = new Date().toISOString();
   await actions.startAgainFirstSetup({
@@ -452,14 +449,14 @@ it("a confirmed Start again writes the confirmation record with who, when and wh
 });
 
 it("an attempt that finished activation shows it and can be started again on confirmation", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase([
+  const { f, actions, owner, ids, request } = await missingDatabase([
     { kind: "activation-started" },
     { kind: "committed", result: {} },
   ]);
   const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
   expect(answered.status, await answered.clone().text()).toBe(200);
   const shown = await answered.json();
-  expect(shown).toEqual({ reached: "fiscal-finished", lastName: name });
+  expect(shown).toEqual({ reached: "fiscal-finished" });
   await actions.startAgainFirstSetup({
     ...request,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
@@ -494,14 +491,14 @@ it("the summary route refuses over plain HTTP", async () => {
 });
 
 it("a confirmation sent while the database is present is refused", async () => {
-  const { f, name, actions, startRequest } = await abandonedAttempt();
+  const { f, actions, startRequest } = await abandonedAttempt();
   const before = await attemptFiles(f);
   await expect(
     actions.startAgainFirstSetup({
       ...startRequest,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name },
+        shown: { reached: "named" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -510,7 +507,7 @@ it("a confirmation sent while the database is present is refused", async () => {
 });
 
 it("a complete attempt is still refused", async () => {
-  const { f, name, actions, request } = await missingDatabase([
+  const { f, actions, request } = await missingDatabase([
     { kind: "activation-started" },
     { kind: "committed", result: {} },
   ]);
@@ -527,7 +524,7 @@ it("a complete attempt is still refused", async () => {
       ownerGeneration: current.ownerGeneration!,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "fiscal-finished", lastName: name },
+        shown: { reached: "fiscal-finished" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -541,7 +538,7 @@ const exists = (path: string) =>
   );
 
 it("on a missing database, the confirmation record is on disk before the marker, and both before the first deletion", async () => {
-  const { f, name, request } = await missingDatabase();
+  const { f, request } = await missingDatabase();
   const confirmations = join(f.stateDir, CONFIRMATIONS);
   const marker = join(f.venueDir, START_AGAIN_MARKER_FILE);
   const atMarker: boolean[] = [];
@@ -565,7 +562,7 @@ it("on a missing database, the confirmation record is on disk before the marker,
       ...request,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name },
+        shown: { reached: "named" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
@@ -589,18 +586,15 @@ it("the Start again route takes the confirmation only in its exact shape", async
       },
       tls(),
     );
-  const shown = { reached: "named", lastName: name };
+  const shown = { reached: "named" };
   for (const malformed of [
     { nothingFiledOrSold: false, shown },
     { nothingFiledOrSold: "true", shown },
     { nothingFiledOrSold: true, shown, extra: 1 },
     { nothingFiledOrSold: true },
     { nothingFiledOrSold: true, shown: { ...shown, extra: 1 } },
-    { nothingFiledOrSold: true, shown: { reached: "named" } },
     { nothingFiledOrSold: true, shown: { ...shown, reached: "complete" } },
-    { nothingFiledOrSold: true, shown: { ...shown, lastName: "" } },
-    { nothingFiledOrSold: true, shown: { ...shown, lastName: "A".repeat(65) } },
-    { nothingFiledOrSold: true, shown: { ...shown, lastName: 5 } },
+    { nothingFiledOrSold: true, shown: { ...shown, lastName: name } },
   ]) {
     const refused = await send(malformed);
     expect(await refused.json(), JSON.stringify(malformed)).toEqual({
@@ -620,7 +614,6 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     startedAt: "2026-10-16T11:40:00.000Z",
     lastActiveAt: "2026-10-16T11:44:00.000Z",
     lastActiveSource: "saved-step",
-    lastName: name,
     failed: false,
     cloud: false,
   };
@@ -630,7 +623,7 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
       register: request.register,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name, recovery: value },
+        shown: { reached: "named", recovery: value },
       },
     });
   for (const malformed of [
@@ -640,10 +633,7 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     { ...recovery, startedAt: "yesterday" },
     { ...recovery, lastActiveAt: 5 },
     { ...recovery, lastActiveSource: "disk" },
-    { ...recovery, lastName: undefined },
-    { ...recovery, lastName: 5 },
-    { ...recovery, lastName: "" },
-    { ...recovery, lastName: "A".repeat(65) },
+    { ...recovery, lastName: name },
     { ...recovery, failed: "false" },
     { ...recovery, cloud: 0 },
   ]) {
@@ -652,8 +642,8 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
       error: { code: "setup.request_invalid", params: { field: "body" } },
     });
   }
-  // A well-formed recovery, with a name or with none, reaches the action, which finds none here.
-  for (const shown of [recovery, { ...recovery, lastName: null }]) {
+  // A well-formed recovery reaches the action, which finds none here.
+  for (const shown of [recovery]) {
     const passed = await send(shown);
     expect(passed.status).toBe(409);
     expect(await passed.json()).toEqual({ error: { code: "setup.attempt_conflict", params: {} } });
@@ -663,7 +653,7 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
 });
 
 it("the Start again route takes confirmRecoveryDiscard only in its exact shape, with a shown recovery", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, owner, ids, request } = await missingDatabase();
   const reached: unknown[] = [];
   const app = routes(f, {
     ...actions,
@@ -675,11 +665,10 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
     startedAt: "2026-10-16T11:40:00.000Z",
     lastActiveAt: "2026-10-16T11:44:00.000Z",
     lastActiveSource: "memory",
-    lastName: name,
     failed: false,
     cloud: false,
   };
-  const shown = { reached: "named", lastName: name, recovery };
+  const shown = { reached: "named", recovery };
   const send = (confirmRecoveryDiscard: unknown) =>
     sendStartAgain(app, owner, { ...ids, register: request.register, confirmRecoveryDiscard });
   for (const malformed of [
@@ -687,7 +676,7 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
     {},
     { shown, extra: 1 },
     { nothingFiledOrSold: true, shown },
-    { shown: { reached: "named", lastName: name } },
+    { shown: { reached: "named" } },
     { shown: { ...shown, extra: 1 } },
     { shown: { ...shown, recovery: { ...recovery, extra: 1 } } },
     { shown: { ...shown, recovery: { ...recovery, cloud: 0 } } },
@@ -734,18 +723,17 @@ function sendStartAgain(
 }
 
 it("with the database missing, a damaged recovery record reaches the confirmation: the summary route answers it, never setup.not_ready", async () => {
-  const { f, name, actions, owner, ids } = await missingDatabase([], damageRecoveryRecord);
+  const { f, actions, owner, ids } = await missingDatabase([], damageRecoveryRecord);
   const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
   expect(answered.status, await answered.clone().text()).toBe(200);
   expect(await answered.json()).toEqual({
     reached: "named",
-    lastName: name,
     recoveryRecordDamaged: true,
   });
 });
 
 it("Start again past a damaged recovery record goes ahead once the summary showing it is confirmed", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase([], damageRecoveryRecord);
+  const { f, actions, owner, ids, request } = await missingDatabase([], damageRecoveryRecord);
   const app = routes(f, actions);
   const shown = await (await postSummary(app, ids, ownerHeaders(owner))).json();
   const accepted = await sendStartAgain(app, owner, {
@@ -758,19 +746,19 @@ it("Start again past a damaged recovery record goes ahead once the summary showi
   expect(files).toHaveLength(1);
   expect(
     JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8")).shown,
-  ).toEqual({ reached: "named", lastName: name, recoveryRecordDamaged: true });
+  ).toEqual({ reached: "named", recoveryRecordDamaged: true });
   await expectStartAgainDeleted(f);
 });
 
 it("a confirmation that did not show the damaged recovery record is refused, and nothing is written", async () => {
-  const { f, name, actions, request } = await missingDatabase([], damageRecoveryRecord);
+  const { f, actions, request } = await missingDatabase([], damageRecoveryRecord);
   const before = await attemptFiles(f);
   await expect(
     actions.startAgainFirstSetup({
       ...request,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name },
+        shown: { reached: "named" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -780,7 +768,7 @@ it("a confirmation that did not show the damaged recovery record is refused, and
 });
 
 it("a confirmation that shows a damaged recovery record the box does not find is refused", async () => {
-  const { f, name, actions, request } = await missingDatabase();
+  const { f, actions, request } = await missingDatabase();
   await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
   const before = await attemptFiles(f);
   await expect(
@@ -788,7 +776,7 @@ it("a confirmation that shows a damaged recovery record the box does not find is
       ...request,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name, recoveryRecordDamaged: true },
+        shown: { reached: "named", recoveryRecordDamaged: true },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -797,7 +785,7 @@ it("a confirmation that shows a damaged recovery record the box does not find is
 });
 
 it("the Start again route takes recoveryRecordDamaged only as true", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, owner, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   for (const recoveryRecordDamaged of [false, "true", 1]) {
     const refused = await sendStartAgain(app, owner, {
@@ -805,7 +793,7 @@ it("the Start again route takes recoveryRecordDamaged only as true", async () =>
       register: request.register,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name, recoveryRecordDamaged },
+        shown: { reached: "named", recoveryRecordDamaged },
       },
     });
     expect(await refused.json(), JSON.stringify(recoveryRecordDamaged)).toEqual({
@@ -839,6 +827,17 @@ async function damagePicks(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"])
   await expect(lstat(picksFile(f))).resolves.toMatchObject({ size: expect.any(Number) });
   await writeFile(picksFile(f), "{damaged");
 }
+
+it("with the database missing, a damaged picks file adds nothing to the summary, and Start again with that summary goes ahead", async () => {
+  const { f, actions, owner, ids, request } = await missingDatabase([], damagePicks);
+  const shown = await actions.startAgainSummary({ ...ids, owner });
+  expect(shown).toEqual({ reached: "named" });
+  await actions.startAgainFirstSetup({
+    ...request,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  await expectStartAgainDeleted(f);
+});
 
 async function stampTree(path: string, at: Date) {
   const found = await lstat(path).catch(() => null);
@@ -984,7 +983,6 @@ it("with the database missing, an outside evidence file configured beside a dama
     ownerGeneration: current.ownerGeneration!,
   };
   const shown = await actions.startAgainSummary({ ...ids, owner });
-  expect(shown).toMatchObject({ unreadable: { records: ["series-picks"] } });
   await expectRefusedUnchanged(
     f,
     () =>
@@ -1097,7 +1095,7 @@ it("an attempt that never chose a name is summarised as claimed, with no name", 
         capability: recovered.capability,
       },
     }),
-  ).resolves.toEqual({ reached: "claimed", lastName: null });
+  ).resolves.toEqual({ reached: "claimed" });
 });
 
 const LOCKS = /^venue\.(lock|holder)/;
@@ -1188,7 +1186,7 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
 ])(
   "on a missing database, Start again beside %s is refused, and nothing is written",
   async (_name, place) => {
-    const { f, name, actions, request } = await missingDatabase();
+    const { f, actions, request } = await missingDatabase();
     await place(f);
     const inspected = await f.host.resolution.inspectFirstSetupResolution();
     const before = await folderTrees(f);
@@ -1198,7 +1196,7 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
         inspectionId: inspected.inspectionId,
         confirmMissingDatabase: {
           nothingFiledOrSold: true,
-          shown: { reached: "named", lastName: name },
+          shown: { reached: "named" },
         },
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -1209,7 +1207,7 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
 );
 
 it("on a missing database, Start again with outside evidence configured is refused, and nothing is written", async () => {
-  const { f, name, actions, request } = await missingDatabase();
+  const { f, actions, request } = await missingDatabase();
   const inspect = f.host.resolution.inspectFirstSetupResolution.bind(f.host.resolution);
   vi.spyOn(f.host.resolution, "inspectFirstSetupResolution").mockImplementation(async () => {
     const inspection = await inspect();
@@ -1224,7 +1222,7 @@ it("on a missing database, Start again with outside evidence configured is refus
       ...request,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name },
+        shown: { reached: "named" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -1431,7 +1429,7 @@ it("Start again leaves the confirmation folder in place", async () => {
 });
 
 it("a marker over its limit refuses Start again before anything is written", async () => {
-  const { f, name, request } = await missingDatabase();
+  const { f, request } = await missingDatabase();
   const actions = createFirstSetupResolutionActions({ ...f, host: f.host, markerLimit: 1 });
   const before = await folderTrees(f);
   await expect(
@@ -1439,7 +1437,7 @@ it("a marker over its limit refuses Start again before anything is written", asy
       ...request,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "named", lastName: name },
+        shown: { reached: "named" },
       },
     }),
   ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -1701,7 +1699,7 @@ async function seedKept(stateDir: string) {
     database: "missing",
     administrator: { displayName: "Elena", email: "elena@example.test" },
     ownerGeneration: 1,
-    shown: { reached: "named", lastName: "0CNQT" },
+    shown: { reached: "named" },
   });
   const paths = [join(stateDir, NOTE), join(stateDir, CONFIRMATIONS, record)];
   const bytes = () => Promise.all(paths.map((path) => readFile(path)));

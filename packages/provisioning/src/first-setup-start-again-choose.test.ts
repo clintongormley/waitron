@@ -631,7 +631,7 @@ it("Move then finishes Start again: the marker and the marked files are gone, th
     database: "missing",
     administrator: { ...START_AGAIN_ADMIN },
     ownerGeneration: 1,
-    shown: { reached: "claimed", lastName: null },
+    shown: { reached: "claimed" },
   });
   const confirmations = join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR);
   const confirmationBytes = async () =>

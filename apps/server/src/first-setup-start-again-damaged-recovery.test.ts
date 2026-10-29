@@ -155,7 +155,7 @@ it("with the database present, a damaged recovery-key record beside a stopped re
   const f = await damagedBesideStoppedRecovery();
   expect(f.shown).toMatchObject({
     recoveryRecordDamaged: true,
-    recovery: { lastName: f.selected.identity },
+    recovery: expect.any(Object),
   });
   const targetLock = join(
     (await f.workspace.readChain()).at(-1)!.target.target.venueDir,

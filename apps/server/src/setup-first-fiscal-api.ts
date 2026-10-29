@@ -17,7 +17,6 @@ import {
   type StartAgainHeld,
   type StartAgainRecoveryShown,
   type StartAgainSummary,
-  type StartAgainUnreadable,
   type VenueRequest,
 } from "@waitron/provisioning";
 import { createErrorBoundary } from "@waitron/server-kit";
@@ -88,38 +87,20 @@ function recoveryDiscardConfirmation(value: unknown) {
   if (shown.recovery === undefined) invalid();
   return { shown };
 }
-function unreadableConfirmation(value: unknown) {
-  const shown = shownSummary(exact(value, ["shown"]).shown);
-  if (shown.unreadable === undefined) invalid();
-  return { shown };
-}
 function shownSummary(value: unknown): StartAgainSummary {
-  const shown = exact(
-    value,
-    ["reached", "lastName"],
-    ["recoveryRecordDamaged", "recovery", "unreadable", "held"],
-  );
+  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "recovery", "held"]);
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
-  const unreadable = Object.hasOwn(shown, "unreadable")
-    ? shownUnreadable(shown.unreadable)
-    : undefined;
   const held = Object.hasOwn(shown, "held") ? shownHeld(shown.held) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
-    !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string) ||
-    (shown.lastName !== null &&
-      (typeof shown.lastName !== "string" ||
-        shown.lastName.length < 1 ||
-        shown.lastName.length > 64))
+    !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string)
   )
     invalid();
   return {
     reached: shown.reached as StartAgainSummary["reached"],
-    lastName: shown.lastName as string | null,
     ...(damaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
-    ...(unreadable !== undefined && { unreadable }),
     ...(held !== undefined && { held }),
   };
 }
@@ -141,26 +122,11 @@ function shownHeld(value: unknown): StartAgainHeld {
     accepted: held.accepted as number,
   };
 }
-const UNREADABLE_RECORDS = ["series-picks", "public-record", "fiscal-documents"];
-function shownUnreadable(value: unknown): StartAgainUnreadable {
-  const unreadable = exact(value, ["records", "floorMs"]);
-  const records = unreadable.records;
-  if (!Array.isArray(records) || records.length === 0 || !Number.isSafeInteger(unreadable.floorMs))
-    invalid();
-  const positions = records.map((record) => UNREADABLE_RECORDS.indexOf(record as string));
-  if (positions.some((at, index) => at < 0 || (index > 0 && at <= positions[index - 1]!)))
-    invalid();
-  return {
-    records: records as StartAgainUnreadable["records"],
-    floorMs: unreadable.floorMs as number,
-  };
-}
 function shownRecovery(value: unknown): StartAgainRecoveryShown {
   const recovery = exact(value, [
     "startedAt",
     "lastActiveAt",
     "lastActiveSource",
-    "lastName",
     "failed",
     "cloud",
   ]);
@@ -168,10 +134,6 @@ function shownRecovery(value: unknown): StartAgainRecoveryShown {
     !isCanonicalInstant(recovery.startedAt) ||
     !isCanonicalInstant(recovery.lastActiveAt) ||
     !["memory", "saved-step"].includes(recovery.lastActiveSource as string) ||
-    (recovery.lastName !== null &&
-      (typeof recovery.lastName !== "string" ||
-        recovery.lastName.length < 1 ||
-        recovery.lastName.length > 64)) ||
     typeof recovery.failed !== "boolean" ||
     typeof recovery.cloud !== "boolean"
   )
@@ -180,7 +142,6 @@ function shownRecovery(value: unknown): StartAgainRecoveryShown {
     startedAt: recovery.startedAt as string,
     lastActiveAt: recovery.lastActiveAt as string,
     lastActiveSource: recovery.lastActiveSource as StartAgainRecoveryShown["lastActiveSource"],
-    lastName: recovery.lastName as string | null,
     failed: recovery.failed,
     cloud: recovery.cloud,
   };
@@ -1066,7 +1027,6 @@ export function mountFirstSetupResolutionApi(
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
           ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
-          ...(Object.hasOwn(rawBody, "confirmUnreadable") ? ["confirmUnreadable"] : []),
           ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
             ? ["recoveryRecordDamagedShown"]
             : []),
@@ -1091,9 +1051,6 @@ export function mountFirstSetupResolutionApi(
         const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
           ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
           : undefined;
-        const confirmUnreadable = Object.hasOwn(body, "confirmUnreadable")
-          ? unreadableConfirmation(body.confirmUnreadable)
-          : undefined;
         try {
           await diskFullOr(() =>
             options.startAgain!({
@@ -1103,7 +1060,6 @@ export function mountFirstSetupResolutionApi(
               register,
               ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
               ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
-              ...(confirmUnreadable === undefined ? {} : { confirmUnreadable }),
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
                 ? { recoveryRecordDamagedShown: true as const }
                 : {}),

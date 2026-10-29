@@ -368,8 +368,7 @@ it.each(["syntax", "binding", "digest"] as const)(
   "a damaged recovery document %s is treated as missing, and the summary says so",
   async (damage) => {
     const f = await fixture(43, request.taxId, "production", false, 42, { document: true, damage });
-    const name = (firstSetupModuleContext(f.old, MODULE).request as { identity: string }).identity;
-    expect(f.shown).toEqual({ reached: "named", lastName: name, recoveryRecordDamaged: true });
+    expect(f.shown).toEqual({ reached: "named", recoveryRecordDamaged: true });
   },
 );
 it.each([{ document: true }, { document: true, damage: "missing-original" as const }])(

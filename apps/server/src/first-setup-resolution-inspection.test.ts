@@ -227,7 +227,7 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
     ownerGeneration,
     owner,
   });
-  expect(shown).toEqual({ reached: "named", lastName: null });
+  expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });
   const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
   expect(confirmations).toHaveLength(1);

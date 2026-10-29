@@ -191,7 +191,6 @@ export {
   type StartAgainConfirmation,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
-  type StartAgainUnreadable,
   type StartAgainHeld,
 } from "./first-setup-start-again-confirmation.js";
 export {

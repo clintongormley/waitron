@@ -5,9 +5,7 @@ import {
   assertNoLegacyFirstSetupWorkspace,
   createFirstSetupBackupWorkspace,
   emptyAbandonedBackupRecovery,
-  firstSetupModuleContext,
   isEmptiedTombstone,
-  readModulePreparationHistory,
   readFirstSetupRecoveryDeliverySnapshot,
   startAgainSummary,
   writeStartAgainConfirmation,
@@ -19,25 +17,14 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
   START_AGAIN_MARKER_LIMIT,
-  attemptLastWriteMs,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
-  type StartAgainUnreadable,
   type BackupRepairRecord,
   type RegisterAnswer,
   type FirstSetupInspection,
   type FirstSetupState,
 } from "@waitron/provisioning";
-import {
-  initialSetupFor,
-  type InitialSetupContribution,
-  type WaitronModule,
-} from "@waitron/module";
-import {
-  readFirstFiscalEvidenceSnapshot,
-  readWellFormedFirstFiscalEvidence,
-} from "./first-fiscal-evidence.js";
-import { readFirstFiscalDeliverySnapshot } from "./first-fiscal-delivery.js";
+import { initialSetupFor, type WaitronModule } from "@waitron/module";
 import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
@@ -46,7 +33,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import { readSeriesPicks, seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
+import { seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
 import {
   readSetupDatabaseHoldings,
   type SetupDatabaseHoldings,
@@ -60,7 +47,6 @@ export interface StartAgainFirstSetupRequest {
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmRecoveryDiscard?: { shown: StartAgainSummary };
-  confirmUnreadable?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {
@@ -69,15 +55,6 @@ export interface StartAgainSummaryRequest {
   ownerGeneration: number;
   owner?: FirstSetupOwnerAttempt;
 }
-type Seat = NonNullable<InitialSetupContribution["startAgainFloor"]>;
-type UnreadableRecord = StartAgainUnreadable["records"][number];
-const PUBLIC_RECORD = "state/module-operation-public.json";
-const DOCUMENTS = "state/first-fiscal-documents/";
-const UNREADABLE_ORDER: readonly UnreadableRecord[] = [
-  "series-picks",
-  "public-record",
-  "fiscal-documents",
-];
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
 }
@@ -135,155 +112,64 @@ function frozenModuleNames(state: FirstSetupState): string[] {
     ),
   ];
 }
-/** Outside evidence refuses Start again, so only the attempt's own public evidence is read here. */
-async function gatherStartAgainFloor(
-  roots: FirstSetupRoots,
+/** A kept recovery record that cannot be read is treated as missing, and shown as damaged. */
+function recoveryRecordDamagedOf(
   state: FirstSetupState,
   originals: readonly { name: string; bytes: Uint8Array | null }[],
   modules: readonly WaitronModule[] | undefined,
-  deletion: { discarding?: string },
-  recoveryFloor: Floor | null,
-  databaseMissing: boolean,
-  databaseHistory?: SetupDatabaseHoldings["history"],
-) {
-  const attempts = [state, ...state.previous];
+): boolean {
   const names = frozenModuleNames(state);
-  if (names.length === 0)
-    return { floor: recoveryFloor, known: null, recoveryRecordDamaged: false };
+  if (names.length === 0) return false;
   if (modules === undefined) unavailable();
-  let recoveryRecordDamaged = false;
-  const unreadable = new Set<UnreadableRecord>();
-  // Only the database-missing path reads past a damaged public record or documents file; with the
-  // database present a damaged one is refused.
-  const unreadableRecord = (error: unknown, damaged: boolean, record: UnreadableRecord) => {
-    if (!databaseMissing || !damaged || !(error instanceof AppError)) throw error;
-    unreadable.add(record);
-  };
-  const inputs: { module: string; seat: Seat; input: Parameters<Seat>[0] }[] = [];
+  let damaged = false;
   for (const module of names) {
-    const seat = initialSetupFor(modules, module)?.startAgainFloor;
-    if (seat === undefined) continue;
-    let publicEvidence: unknown[];
     try {
-      publicEvidence = readFirstFiscalEvidenceSnapshot(module, originals);
+      readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
     } catch (error) {
-      unreadableRecord(
-        error,
-        originals.find((entry) => entry.name === PUBLIC_RECORD)?.bytes != null,
-        "public-record",
-      );
-      publicEvidence = readWellFormedFirstFiscalEvidence(module, originals);
-    }
-    const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
-    let recovery: ReturnType<typeof readFirstSetupRecoveryDeliverySnapshot>;
-    let seen = originals;
-    try {
-      recovery = readFirstSetupRecoveryDeliverySnapshot(module, state, originals, modules);
-    } catch (error) {
+      const recoveryName = `state/first-fiscal-documents/${module}.recovery.json`;
       if (
         !(error instanceof AppError) ||
         originals.find((entry) => entry.name === recoveryName)?.bytes == null
       )
         throw error;
-      // The kept recovery record is the recovery sheet's public statement, which never sets Start
-      // again's floor (`isNamelessEvidence`), so one that cannot be read is treated as missing.
-      recovery = null;
-      recoveryRecordDamaged = true;
-      seen = originals.map((entry) =>
-        entry.name === recoveryName ? { name: entry.name, bytes: null } : entry,
-      );
+      damaged = true;
     }
-    let document = recovery?.statement;
-    if (document == null)
-      try {
-        document = await readFirstFiscalDeliverySnapshot(module, state, seen);
-      } catch (error) {
-        unreadableRecord(
-          error,
-          seen.some((entry) => entry.name.startsWith(DOCUMENTS) && entry.bytes !== null),
-          "fiscal-documents",
-        );
-      }
-    const evidence = [
-      ...publicEvidence.map((item) => ({ item, record: "public-record" as const })),
-      ...(document === undefined ? [] : [{ item: document, record: "fiscal-documents" as const }]),
-    ];
-    const usable = !databaseMissing
-      ? evidence
-      : evidence.filter(({ item, record }) => {
-          try {
-            seat({ attempts: [], preparations: [], publicEvidence: [item] });
-            return true;
-          } catch (error) {
-            unreadableRecord(error, true, record);
-            return false;
-          }
-        });
-    const picks = await readSeriesPicks(roots, module, seat);
-    if (picks.unreadable) unreadable.add("series-picks");
-    inputs.push({
-      module,
-      seat,
-      input: {
-        attempts: attempts
-          .filter((attempt) => attempt.frozen.modules.some((entry) => entry.module === module))
-          .map((attempt) => ({
-            context: firstSetupModuleContext(attempt, module),
-            input: attempt.inputs[module],
-          })),
-        preparations: picks.preparations,
-        publicEvidence: usable.map(({ item }) => item),
-        ...(databaseHistory?.[module] !== undefined && {
-          databaseHistory: databaseHistory[module],
-        }),
-      },
-    });
   }
-  const latestOf = (lastWriteMs?: number) => {
-    let latest: Floor | null = null;
-    for (const { module, seat, input } of inputs) {
-      const floor = seat(lastWriteMs === undefined ? input : { ...input, lastWriteMs });
-      if (floor !== null && (latest === null || floor.floorMs > latest.floorMs))
-        latest = { floorMs: floor.floorMs, lastName: floor.lastName, module };
-    }
-    return latest;
-  };
-  const known = latestOf();
-  let floor = known;
-  if (unreadable.size > 0) {
-    const lastWriteMs = await attemptLastWriteMs(roots, deletion).catch((error: unknown) => {
-      throw error instanceof AppError
-        ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
-        : error;
-    });
-    if (lastWriteMs === null) unavailable();
-    floor = latestOf(lastWriteMs);
-  }
-  if (recoveryFloor !== null && (floor === null || recoveryFloor.floorMs > floor.floorMs))
-    floor = recoveryFloor;
-  if (unreadable.size === 0) return { floor, known, recoveryRecordDamaged };
-  if (floor === null) unavailable();
-  return {
-    floor,
-    known,
-    recoveryRecordDamaged,
-    unreadable: {
-      records: UNREADABLE_ORDER.filter((record) => unreadable.has(record)),
-      floorMs: floor.floorMs,
-    },
-  };
+  return damaged;
+}
+/** Start again's test of the attempt with the venue database present and not held. */
+async function presentAttemptEligibility(
+  inspection: Pick<FirstSetupInspection, "emptyDatabase" | "artifacts">,
+  state: FirstSetupState,
+  originals: Parameters<typeof firstSetupUnusedAssignment>[1],
+  modules: readonly WaitronModule[] | undefined,
+  register: RegisterAnswer | undefined,
+) {
+  const noOtherHistory = inspection.artifacts.every(
+    (artifact) =>
+      ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
+        artifact.name,
+      ) ||
+      (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
+  );
+  const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
+  const assignment =
+    inspection.emptyDatabase &&
+    (register === undefined || register.kind === "current-master") &&
+    modules !== undefined &&
+    ((register === undefined && emptyWorkspace) ||
+      (await firstSetupUnusedAssignment(state, originals, modules)));
+  return { emptyWorkspace, assignment };
 }
 function summaryOf(
   state: FirstSetupState,
-  gathered: Awaited<ReturnType<typeof gatherStartAgainFloor>>,
+  recoveryRecordDamaged: boolean,
   recovery: StartAgainRecoveryShown | undefined,
 ): StartAgainSummary {
-  const summary = startAgainSummary(state, gathered.known?.lastName ?? null);
   return {
-    ...summary,
-    ...(gathered.recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
+    ...startAgainSummary(state),
+    ...(recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
-    ...(gathered.unreadable !== undefined && { unreadable: gathered.unreadable }),
   };
 }
 type BackupRecovery = Pick<
@@ -297,9 +183,8 @@ const PRESENT_START_AGAIN_STATUSES: readonly string[] = [
   "consumption-intent",
   "abandoned",
 ];
-type Floor = { floorMs: number; lastName: string | null; module: string };
 type FoundRecovery =
-  | { kind: "stopped"; id: string; floor: Floor | null; shown: StartAgainRecoveryShown }
+  | { kind: "stopped"; id: string; shown: StartAgainRecoveryShown }
   | { kind: "unemptied"; id: string };
 export function createFirstSetupResolutionActions(
   options: FirstSetupRoots & {
@@ -354,48 +239,15 @@ export function createFirstSetupResolutionActions(
     }
     if (!STOPPED_PHASES.includes(activity.phase) || last?.target.recoveryId !== activity.recoveryId)
       unavailable();
-    const module = last.binding.module;
-    const seat =
-      host.modules === undefined
-        ? undefined
-        : initialSetupFor(host.modules, module)?.startAgainFloor;
-    if (seat === undefined) unavailable();
-    const recoveryInputs = records.map((record) => record.input);
-    const floor = (preparations: readonly unknown[]) => {
-      try {
-        return seat({ attempts: [], preparations, publicEvidence: [], recoveryInputs });
-      } catch {
-        return undefined;
-      }
-    };
-    // One call over both sources, so a later name in the journal wins over an older pick. The
-    // module names nothing for an input it cannot read, so a refusal comes from the picks, which
-    // are then left out.
-    const picks = await readModulePreparationHistory(last.target.target, module).catch(
-      () => undefined,
-    );
-    const named = picks === undefined ? undefined : floor(picks);
-    const found = named === undefined ? floor([]) : named;
-    // A name reaches the page or a commit only after the journal records its input (`prepare` and
-    // `commit` in first-setup-backup-recovery.ts), so with no input and no name in readable picks,
-    // no name was used. Picks that cannot be read could hold one.
-    if (
-      (found ?? null) === null &&
-      !(recoveryInputs.every((input) => input === null) && named !== undefined)
-    )
-      unavailable();
+    if (host.modules === undefined) unavailable();
+    if (initialSetupFor(host.modules, last.binding.module) === undefined) unavailable();
     return {
       kind: "stopped",
       id: activity.recoveryId,
-      floor:
-        found === undefined || found === null
-          ? null
-          : { floorMs: found.floorMs, lastName: found.lastName, module },
       shown: {
         startedAt: activity.startedAt,
         lastActiveAt: activity.lastActiveAt,
         lastActiveSource: activity.lastActiveSource,
-        lastName: found?.lastName ?? null,
         failed: activity.failed,
         cloud: activity.cloud,
       },
@@ -447,16 +299,7 @@ export function createFirstSetupResolutionActions(
           const inspection = await host.resolution.inspectFirstSetupResolution();
           matchesInspection(inspection, request);
           if (inspection.database !== "missing" && found?.kind === "unemptied") unavailable();
-          const presentPicksOnly = inspection.database !== "missing" && found === undefined;
-          if (presentPicksOnly) {
-            const attempt = await host.store.readForRepair().catch(() => null);
-            if (
-              attempt === null ||
-              host.modules === undefined ||
-              !(await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(attempt.state)))
-            )
-              unavailable();
-          }
+          if (inspection.database !== "missing" && found === undefined) unavailable();
           const retained = await host.store.readForRepair();
           if (retained === null) unavailable();
           const held =
@@ -476,20 +319,23 @@ export function createFirstSetupResolutionActions(
             holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
             if (holdings.rows === 0) unavailable();
+          } else if (inspection.database !== "missing") {
+            const { emptyWorkspace, assignment } = await presentAttemptEligibility(
+              inspection,
+              retained.state,
+              snapshot.originals,
+              host.modules,
+              undefined,
+            );
+            if (!emptyWorkspace && !assignment) unavailable();
           }
-          const gathered = await gatherStartAgainFloor(
-            roots,
+          const summary = summaryOf(
             retained.state,
-            snapshot.originals,
-            host.modules,
-            discarding,
-            found?.kind === "stopped" ? found.floor : null,
-            inspection.database === "missing",
-            holdings?.history,
+            recoveryRecordDamagedOf(retained.state, snapshot.originals, host.modules),
+            recovery,
           );
-          if (presentPicksOnly && gathered.unreadable === undefined) unavailable();
-          if (holdings === undefined) return summaryOf(retained.state, gathered, recovery);
-          return { ...summaryOf(retained.state, gathered, recovery), held: heldShown(holdings) };
+          if (holdings === undefined) return summary;
+          return { ...summary, held: heldShown(holdings) };
         }),
       );
     },
@@ -504,7 +350,6 @@ export function createFirstSetupResolutionActions(
             "register",
             "confirmMissingDatabase",
             "confirmRecoveryDiscard",
-            "confirmUnreadable",
             "recoveryRecordDamagedShown",
           ]);
           await assertNoLegacyFirstSetupWorkspace(options);
@@ -521,11 +366,6 @@ export function createFirstSetupResolutionActions(
           if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
           const discardsStopped = !missing && found?.kind === "stopped";
           if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
-          if (
-            request.confirmUnreadable !== undefined &&
-            (missing || request.confirmRecoveryDiscard !== undefined)
-          )
-            conflict();
           const held =
             !missing &&
             (inspection.database !== "no-venue-rows" ||
@@ -535,25 +375,18 @@ export function createFirstSetupResolutionActions(
             if (state.status === "complete" || request.confirmMissingDatabase === undefined)
               unavailable();
           } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
-          const noOtherHistory = inspection.artifacts.every(
-            (artifact) =>
-              ["first-setup.json", "first-setup-claim.json", "venue.db", "venue.db-wal"].includes(
-                artifact.name,
-              ) ||
-              (!artifact.name.startsWith("outside-") && artifact.status === "missing"),
-          );
-          const emptyWorkspace = inspection.emptyDatabase && unused(state) && noOtherHistory;
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const assignment =
-            inspection.emptyDatabase &&
-            (request.register === undefined || request.register.kind === "current-master") &&
-            host.modules !== undefined &&
-            ((request.register === undefined && emptyWorkspace) ||
-              (await firstSetupUnusedAssignment(state, snapshot.originals, host.modules)));
+          const { emptyWorkspace, assignment } = await presentAttemptEligibility(
+            inspection,
+            state,
+            snapshot.originals,
+            host.modules,
+            request.register,
+          );
           const unusedAssignment = Boolean(assignment);
           // The held state has no assignment (it needs an empty database), so its damaged record is
-          // the one the summary showed, checked once the floor is gathered.
+          // the one the summary showed, checked below.
           const recoveryRecordDamaged =
             !missing && !held && typeof assignment === "object" && assignment.recoveryRecordDamaged;
           let holdings: SetupDatabaseHoldings | undefined;
@@ -612,31 +445,16 @@ export function createFirstSetupResolutionActions(
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           const damagedShown = request.recoveryRecordDamagedShown === true;
           if (!held && recoveryRecordDamaged !== damagedShown) conflict();
-          const gathered = await gatherStartAgainFloor(
-            roots,
-            state,
-            snapshot.originals,
-            host.modules,
-            discarding,
-            found?.kind === "stopped" ? found.floor : null,
-            missing,
-            holdings?.history,
-          );
-          if (held && gathered.recoveryRecordDamaged !== damagedShown) conflict();
+          const shownDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
+          if (held && shownDamaged !== damagedShown) conflict();
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";
-          const presentUnreadable =
-            !missing && !discardsStopped && gathered.unreadable !== undefined;
-          // With the database present, no summary is shown while an abandoned journal is being
-          // finished, so nothing confirms a damaged name record on that path.
-          if (finishing && presentUnreadable) throw new AppError("setup.attempt_invalid", {});
-          if (presentUnreadable !== (request.confirmUnreadable !== undefined)) conflict();
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped || presentUnreadable
+            missing || discardsStopped
               ? {
-                  ...summaryOf(state, gathered, recovery),
+                  ...summaryOf(state, shownDamaged, recovery),
                   ...(holdings !== undefined && { held: heldShown(holdings) }),
                 }
               : undefined;
@@ -648,8 +466,6 @@ export function createFirstSetupResolutionActions(
             conflict();
           if (discardsStopped && !isDeepStrictEqual(request.confirmRecoveryDiscard?.shown, shown))
             conflict();
-          if (presentUnreadable && !isDeepStrictEqual(request.confirmUnreadable?.shown, shown))
-            conflict();
           const backup = options.backupRecovery;
           const refuseRunning = async (): Promise<never> => {
             const activity = await backup!.liveness();
@@ -659,7 +475,7 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record changes the recovery's
           // originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if ((missing || discardsStopped || presentUnreadable) && !finishing) {
+          if ((missing || discardsStopped) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),

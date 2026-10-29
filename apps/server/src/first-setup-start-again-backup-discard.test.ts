@@ -366,7 +366,7 @@ it("the box's repair app fences its writes and names a stopped recovery in its s
     tls(),
   );
   expect(summary.status, await summary.clone().text()).toBe(200);
-  expect(await summary.json()).toMatchObject({ recovery: { lastName: f.selected.identity } });
+  expect((await summary.json()).recovery).toBeDefined();
 });
 
 async function startAgainOver(
@@ -606,7 +606,7 @@ it("with the database present and no recovery, the summary refuses setup.not_rea
     actions.startAgainFirstSetup({
       ...ids,
       owner,
-      confirmRecoveryDiscard: { shown: { reached: "claimed", lastName: null } },
+      confirmRecoveryDiscard: { shown: { reached: "claimed" } },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await expectNothingWritten(f, before);
@@ -664,6 +664,40 @@ it.each([
   },
 );
 
+it.each([
+  ["damaged", "{damaged"],
+  ["intact", JSON.stringify({ version: 1, modules: {}, history: [] })],
+] as const)(
+  "with the database present and empty, a %s public fiscal record beside a stopped recovery refuses the summary and Start again setup.not_ready, and nothing is written",
+  async (_label, bytes) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const startAgain = await presentOver(f, f.service);
+    expect(startAgain.shown.recovery).toBeDefined();
+    await writeFile(join(f.roots.stateDir, "module-operation-public.json"), bytes);
+    const current = await f.host.resolution.inspectFirstSetupResolution();
+    const ids = {
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+    };
+    const last = (await f.workspace.readChain()).at(-1)!;
+    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+    await expect(
+      startAgain.actions.startAgainSummary({ ...ids, owner: startAgain.owner }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(
+      startAgain.actions.startAgainFirstSetup({
+        ...ids,
+        owner: startAgain.owner,
+        confirmRecoveryDiscard: { shown: startAgain.shown },
+      }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expectNothingWritten(f, before);
+    expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  },
+);
+
 it("with the database present, the fence refuses a well-formed discard while the recovery runs, before it reaches Start again, and nothing changes", async () => {
   const f = await selectedRepair();
   const host = databasePresent(f.host);
@@ -684,12 +718,10 @@ it("with the database present, the fence refuses a well-formed discard while the
   expect(activity.state).toBe("running");
   const shown: StartAgainSummary = {
     reached: "claimed",
-    lastName: null,
     recovery: {
       startedAt: activity.startedAt,
       lastActiveAt: activity.lastActiveAt,
       lastActiveSource: "memory",
-      lastName: null,
       failed: false,
       cloud: false,
     },
