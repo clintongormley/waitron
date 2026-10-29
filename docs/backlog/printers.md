@@ -19,8 +19,8 @@ locally and hosts the print agent (et al)". It is the Waitron-owned outbound age
 design asks for (printers, cash drawers and card readers stay local), so it is what lets a venue
 started in the cloud after its box dies (A1188) print, open the drawer and take card payments.
 
-**Brainstorm started 2026-10-29; paused until the owner is back on 3 November.** The device test
-queued for that day may no longer be needed (see the router answer below).
+**Brainstorm started 2026-10-29; paused until the owner is back on 3 November**, when the device
+test below runs.
 
 The owner's answers (2026-10-29):
 
@@ -67,9 +67,17 @@ Proposed in the brainstorm, not agreed:
   alerts while the phone is in a pocket.
 - A venue with a box already has its print agent there; for it the app is optional.
 
-Still to ask: whether the device test below is still worth running, now that the backup router
-covers the case it was for; whether Waitron recommends (or resells) a backup router, and whether it
-should tell staff when the venue is running on the router's mobile data; whether kiosk mode
+Owner, 2026-10-29, on the questions the router answer raised:
+
+- The device test: "it would be interesting to try regardless". It stays queued.
+- Whether Waitron recommends or resells a backup router: "Quite possibly".
+- Whether staff are told when the venue is on the router's mobile data: "How would we know?" Ways
+  proposed, not agreed and none tried: read the router's own status, which works only for routers
+  Waitron knows (so it pairs with recommending one); or notice that the venue's public address, as
+  Cloud sees it, has changed to one belonging to a mobile network, a hint rather than proof, since
+  an operator may serve fibre and mobile from the same address blocks.
+
+Still to ask: whether kiosk mode
 replaces the Fully Kiosk resale; whether a second device takes over
 printing automatically when the print-agent tablet is off; which printer connections it must reach
 (network, USB, Bluetooth); and how it compares with printers that fetch jobs from the cloud
