@@ -4691,6 +4691,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   kit, the recovery sheet with the disk key and the archive recovery pack into one document,
   and add the venue's emergency address and emergency code from Waitron Cloud (A1188).
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
+  **Design waiting for the owner's answer** (2026-10-29):
+  [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), mock-ups in
+  `backlog/mockups/a1187-recovery-pack/`.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
