@@ -13,7 +13,6 @@ import { isUuid } from "./till-session.js";
 
 export interface FreshSignInDeps {
   db: Database;
-  /** This step's own throttle, keyed by person: neither sign-in's nor profile changes'. */
   throttle: PasswordThrottle & PasswordThrottleProbe;
   keyRing: TotpKeyRing;
   rpId: string;

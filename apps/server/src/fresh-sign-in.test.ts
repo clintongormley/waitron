@@ -10,9 +10,9 @@ import {
   IDENTITY_MIGRATIONS,
   managementSessions,
   persons,
+  regenerateOwnRecoveryCodes,
   webauthnCredentials,
 } from "@waitron/identity";
-import { replaceRecoveryCodes } from "@waitron/identity/src/mfa.js";
 import { codeOf, openManagementSession } from "@waitron/identity/test/fixtures.js";
 
 vi.mock("@simplewebauthn/server", async (orig) => ({
@@ -54,12 +54,20 @@ const confirm = (token: string, body: unknown) =>
     body,
   );
 
-async function enrolTotp(personId: string): Promise<string[]> {
+async function enrolTotp(personId: string, token: string): Promise<string[]> {
   await suite.db
     .update(persons)
     .set({ totpSecret: encryptTotpSecret(secret, TOTP_KEY_RING.current) })
     .where(eq(persons.id, personId));
-  return withTransaction(suite.db, (tx) => replaceRecoveryCodes(tx, personId));
+  const { codes } = await withTransaction(suite.db, (tx) =>
+    regenerateOwnRecoveryCodes(tx, {
+      managementSessionId: token,
+      currentPassword: "correct horse",
+      totp: generateSync({ secret }),
+      keyRing: TOTP_KEY_RING,
+    }),
+  );
+  return codes;
 }
 
 async function withPasskey(personId: string, credentialId: string): Promise<void> {
@@ -106,11 +114,12 @@ describe("confirmFreshSignIn with a password", () => {
     expect(await codeOf(() => confirm(token, { method: "password", password: "wrong" }))).toBe(
       "password.invalid",
     );
+    expect(await codeOf(() => confirm(token, { method: "password" }))).toBe("password.invalid");
   });
 
   it("needs the authenticator code, or an unused recovery code that it spends, once one is set up", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
-    const codes = await enrolTotp(personId);
+    const codes = await enrolTotp(personId, token);
 
     expect(
       await codeOf(() => confirm(token, { method: "password", password: "correct horse" })),
@@ -222,7 +231,7 @@ describe("confirmFreshSignIn with a passkey", () => {
   it("accepts the passkey with the authenticator code once one is set up", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     await withPasskey(personId, "cred-mine");
-    await enrolTotp(personId);
+    await enrolTotp(personId, token);
     mockVerifyAuth.mockResolvedValue(authVerified());
     const { challengeHandle } = await beginCheck(token);
     expect(
@@ -238,7 +247,7 @@ describe("confirmFreshSignIn with a passkey", () => {
   it("throttles wrong codes resent behind one valid passkey response as password.throttled", async () => {
     const { personId, token } = await openManagementSession(suite.db, "admin");
     await withPasskey(personId, "cred-mine");
-    await enrolTotp(personId);
+    await enrolTotp(personId, token);
     mockVerifyAuth.mockResolvedValue(authVerified());
     const { challengeHandle } = await beginCheck(token);
     const body = { method: "passkey", challengeHandle, response: { id: "cred-mine" } };
