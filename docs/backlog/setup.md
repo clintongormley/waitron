@@ -638,7 +638,7 @@ that recovery can take it to `selected` beside a confirmation record that says i
 neither reads the confirmation records (`apps/server/src/first-setup-backup-recovery.ts`; read, not
 run). No page offers this. Follow-up: `open` and `resume` refuse a recovery that a confirmation
 record says was discarded. At this commit the record's `shown.recovery` holds the recovery's start
-time, last activity and series name, not its id
+time, last activity and where that time was read from, whether it failed and whether it came from Waitron Cloud, not its id
 (`packages/provisioning/src/first-setup-start-again-confirmation.ts`, `StartAgainRecoveryShown`).
 
 ## A Waitron Cloud recovery whose download takes more than 30 seconds may be refused its series name

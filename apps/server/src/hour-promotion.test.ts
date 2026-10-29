@@ -595,7 +595,7 @@ it("serves clock, selection and authenticated promotion through the management r
   }
 });
 
-it("a promotion beside a leftover start-again note file names its minute as a box without one does", async () => {
+it("a promotion beside a leftover start-again note file is not held back by the file's floor", async () => {
   const stateDir = join(root, "state");
   const s = await service();
   await admit(s);

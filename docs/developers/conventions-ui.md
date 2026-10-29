@@ -1246,9 +1246,6 @@ the record write, for example) keeps its own code. A plain `waitron.sh reset` ke
 --all` removes them. A backup recovery's check of the box's files skips `first-setup-set-aside` in
 each root (`originals`, `packages/provisioning/src/first-setup-backup-workspace.ts`).
 
-A Move raises no series-name floor (A1206, 2026-10-29: Start again keeps no record of the names
-it deletes), and the page no longer says from when new names can start.
-
 After a Keep, the process serves the kept page on `GET /` (the `onKept` latch in `recoveryApp`,
 drawn by `startAgainDraw`, `apps/server/src/recovery-surface.ts`); the next start reads the
 recorded Keep from disk. After a Move, the answer names the set-aside folder, above the list of

@@ -1,5 +1,7 @@
 # A1154 changed test checks
 
+> 2026-10-29: Start again no longer keeps the start-again note; the promotion's floor case now checks that a leftover note file is ignored (A1206).
+
 Historical review inventory, 2026-10-28. The owner authorizes removal of the obsolete registration command and action, preservation of restore/setup/promotion checks, fixture renames and one series per node. The 2026-10-05 standing decision permits equally strict checks of deliberately changed behavior. The exact two protected helper references were approved on 2026-10-28; every other protected byte remains unchanged.
 
 | File | Old check and resulting check |

@@ -115,7 +115,8 @@ attempts/quarantine, spare-first and these receipt/policy choices have whole-des
 
 The design retains B3's five encrypted subvolumes, complete stopped-state inventory, old images
 by immutable digest plus container references, logs/host evidence outside rollback and the
-monotonic start-again overlay. Closure/rollback races and lost completion answers use a durable
+monotonic start-again overlay (2026-10-29, A1206: the start-again note it builds on is retired;
+re-plan the overlay before building). Closure/rollback races and lost completion answers use a durable
 host journal; uncertain evidence stops admission rather than guessing. RESTORED retires that
 attempt's restore permission before old service reopens. Normal work needs no per-operation
 updater roundtrip. Bucket/spare publication stays frozen during validation, with qualified

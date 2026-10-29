@@ -1068,7 +1068,7 @@ Fiscal: each behind its own review, owner sign-off at land.
 
 Signed paper, Cloud receipts and emergency names are still read by historical code: the activation
 check (`packages/fiscal-verifactu/src/allocation-envelope.ts`, its Cloud branch importing
-`cloud-evidence.ts`), the start-again floor (`initial-hour-setup.ts`) and the historical setup
+`cloud-evidence.ts`) and the historical setup
 contribution (`initial-setup.ts`, spread into production by `hour-configuration.ts`). The settings
 `WAITRON_FISCAL_CLOUD_TRUST_FILE`, `WAITRON_FISCAL_CLOUD_FINGERPRINT` and
 `WAITRON_FISCAL_CLOUD_RECEIPT_DIRECTORY` are read by `allocation-configuration.ts`,

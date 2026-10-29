@@ -4660,6 +4660,15 @@ trusting the installation start the [backup room note](#the-backup-room-note) ho
 full disk the database may not open: on HFS+ the store's open failed at 0 B and 4 KiB free, and a
 read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
+## Start again's records and the set-aside folder
+
+Start again's confirmation and choice records and the set-aside folder survive a plain
+`waitron.sh reset` and are removed only by `reset --all` (A1042, A1098; `deploy/waitron.sh`,
+`wipe_box`). Guard: `scripts/start-again-records-writers.test.ts`, weaker than its name — it reads
+which files name the confirmation folder, the choice folder or the set-aside folder as text, so a
+path built from pieces escapes it, and it never sees code that empties the whole state folder
+without naming the file.
+
 ## The backup room note
 
 A1167's start slice (plan `docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md`). On a
@@ -5108,13 +5117,6 @@ passes, and that setup can repeat an earlier attempt's name once its clock is mo
 seconds behind the earlier attempt's. A promotion has
 no wait, so it relies on coming long enough after a Start again (up to 120 seconds with each box
 30 seconds off); that is reasoning about how long joining as a standby takes, not measured.
-
-Start again's confirmation and choice records and the set-aside folder survive a plain
-`waitron.sh reset` and are removed only by `reset --all` (A1042, A1098; `deploy/waitron.sh`,
-`wipe_box`). Guard: `scripts/start-again-records-writers.test.ts`, weaker than its name — it reads
-which files name the confirmation folder, the choice folder or the set-aside folder as text, so a
-path built from pieces escapes it, and it never sees code that empties the whole state folder
-without naming the file.
 
 The one exception to the second clock and the history check is the preproduction throwaway, which names with no second clock and no history check
 and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
