@@ -636,7 +636,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
   taken from when it last saved anything. Being built in the spec's four slices. Slice 1 (Start
   again's words without counts, plan
-  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) is built: the
+  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) landed as #2230: the
   confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
   still lists them, and the counts still travel between the page and the box and are stored in the
   confirmation record, until slice 2 removes them. Slice 2 also corrects the three lines that say the
