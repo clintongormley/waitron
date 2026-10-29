@@ -482,7 +482,11 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
   invites the owner to sign up for Cloud and try level 2 (remote access, translation, the
   rota solver, backups) free for 30 days, with no payment details. Sign-up and payment
-  happen on Cloud's pages. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §4–§5.
+  happen on Cloud's pages. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §4–§5.
+  [Plan](superpowers/plans/2026-10-29-a1186-cloud-trial-offer.md) and
+  [proposed EN/ES mockups](backlog/mockups/a1186-cloud-trial-offer/README.md) propose a small
+  completion invitation without building A250. **Build remains open**; Cloud's qualified
+  trial journey is prerequisite G1 in the plan.
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).

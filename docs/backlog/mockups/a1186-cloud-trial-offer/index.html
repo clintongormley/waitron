@@ -1,0 +1,883 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>A1186 · Proposed Cloud trial invitation</title>
+    <style>
+      /* Frozen token subset from packages/ui-core/src/tokens at Waitron 517cc76.
+   Standalone documentation mockup; no product imports or JavaScript. */
+      :root {
+        color-scheme: light;
+        --wt-color-bg: #f7f7f8;
+        --wt-color-border: #d6d9e0;
+        --wt-color-focus: #1f6feb;
+        --wt-color-primary: #1f6feb;
+        --wt-color-primary-text: #1a5fd0;
+        --wt-color-surface: #ffffff;
+        --wt-color-surface-raised: #ffffff;
+        --wt-color-text: #16181d;
+        --wt-color-text-muted: #5c626e;
+        --wt-focus-offset: 2px;
+        --wt-focus-ring: 2px solid var(--wt-color-focus);
+        --wt-font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+        --wt-font-size-lg: 18px;
+        --wt-font-size-md: 14px;
+        --wt-font-size-sm: 12px;
+        --wt-font-size-xl: 22px;
+        --wt-font-weight-bold: 600;
+        --wt-font-weight-normal: 400;
+        --wt-modal-inline-margin: clamp(
+          var(--wt-space-1),
+          5vw - var(--wt-space-4),
+          var(--wt-space-5)
+        );
+        --wt-modal-inline-padding: clamp(var(--wt-space-3), 3vw, var(--wt-space-5));
+        --wt-radius-full: 9999px;
+        --wt-radius-lg: 16px;
+        --wt-space-1: 4px;
+        --wt-space-2: 8px;
+        --wt-space-3: 12px;
+        --wt-space-4: 16px;
+        --wt-space-5: 24px;
+        --wt-space-6: 32px;
+        --wt-tap-min: 44px;
+      }
+      body:has(#en-dark:target),
+      body:has(#es-dark:target) {
+        color-scheme: dark;
+        --wt-color-bg: #101216;
+        --wt-color-border: #333945;
+        --wt-color-focus: #4c8dff;
+        --wt-color-primary: #4c8dff;
+        --wt-color-primary-text: #78a9ff;
+        --wt-color-surface: #191c22;
+        --wt-color-surface-raised: #22262e;
+        --wt-color-text: #eceef2;
+        --wt-color-text-muted: #a1a7b3;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: var(--wt-font-family);
+        font-size: var(--wt-font-size-md);
+        font-weight: var(--wt-font-weight-normal);
+        line-height: 1.5;
+        color: var(--wt-color-text);
+        background: var(--wt-color-bg);
+      }
+      a {
+        color: var(--wt-color-primary-text);
+      }
+      a:focus-visible {
+        outline: var(--wt-focus-ring);
+        outline-offset: var(--wt-focus-offset);
+      }
+      .proposal {
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border-bottom: 1px solid var(--wt-color-border);
+        background: var(--wt-color-surface);
+      }
+      .proposal p {
+        margin: 0;
+      }
+      .proposal nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0 var(--wt-space-4);
+      }
+      .proposal nav a {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+      }
+      .variant {
+        display: none;
+      }
+      .variant.default {
+        display: block;
+      }
+      body:has(.variant:target) .variant:not(:target) {
+        display: none;
+      }
+      body .variant:target {
+        display: block;
+      }
+      main {
+        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-modal-inline-margin)));
+        margin: var(--wt-space-5) auto;
+        padding: var(--wt-space-5) var(--wt-modal-inline-padding);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface-raised);
+      }
+      .setup-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--wt-space-3);
+      }
+      .logo svg {
+        display: block;
+        width: calc(var(--wt-space-6) * 5);
+        height: auto;
+      }
+      .logo svg > g:first-of-type {
+        fill: var(--wt-color-primary);
+      }
+      .logo svg > g:last-of-type {
+        fill: var(--wt-color-text);
+      }
+      .chrome {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-2);
+        color: var(--wt-color-text-muted);
+      }
+      .chrome span {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: var(--wt-tap-min);
+        min-height: var(--wt-tap-min);
+      }
+      h1 {
+        font-size: var(--wt-font-size-xl);
+        font-weight: var(--wt-font-weight-bold);
+        margin: var(--wt-space-5) 0 var(--wt-space-3);
+        line-height: 1.25;
+      }
+      h2 {
+        font-size: var(--wt-font-size-lg);
+        font-weight: var(--wt-font-weight-bold);
+        margin: 0 0 var(--wt-space-3);
+        line-height: 1.35;
+      }
+      .mode {
+        display: inline-block;
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-full);
+        padding: var(--wt-space-1) var(--wt-space-3);
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .intro {
+        color: var(--wt-color-text-muted);
+        margin: var(--wt-space-3) 0 var(--wt-space-4);
+      }
+      .choices {
+        margin: var(--wt-space-4) 0;
+      }
+      .choice {
+        display: flex;
+        align-items: center;
+        gap: var(--wt-space-3);
+        padding: var(--wt-space-3) var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-bottom-width: 0;
+        background: var(--wt-color-surface);
+        min-height: var(--wt-tap-min);
+      }
+      .choice:first-child {
+        border-start-start-radius: var(--wt-radius-lg);
+        border-start-end-radius: var(--wt-radius-lg);
+      }
+      .choice:last-child {
+        border-bottom-width: 1px;
+        border-end-start-radius: var(--wt-radius-lg);
+        border-end-end-radius: var(--wt-radius-lg);
+      }
+      .choice-copy {
+        display: flex;
+        flex: 1;
+        min-width: 0;
+        flex-direction: column;
+        gap: var(--wt-space-1);
+      }
+      .choice strong {
+        font-weight: var(--wt-font-weight-bold);
+      }
+      .description {
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+      .arrow {
+        width: var(--wt-font-size-lg);
+        height: var(--wt-font-size-lg);
+        flex: none;
+        color: var(--wt-color-text-muted);
+      }
+      .card {
+        margin: var(--wt-space-4) 0;
+        padding: var(--wt-space-4);
+        border: 1px solid var(--wt-color-border);
+        border-radius: var(--wt-radius-lg);
+        background: var(--wt-color-surface);
+      }
+      .card:last-child {
+        margin-bottom: 0;
+      }
+      .card p {
+        margin: 0 0 var(--wt-space-2);
+      }
+      .card ul {
+        margin: 0 0 var(--wt-space-3);
+        padding-inline-start: var(--wt-space-5);
+      }
+      .card li + li {
+        margin-top: var(--wt-space-1);
+      }
+      .card .limits {
+        color: var(--wt-color-text-muted);
+        font-size: var(--wt-font-size-sm);
+      }
+      .link {
+        display: inline-flex;
+        align-items: center;
+        min-height: var(--wt-tap-min);
+        color: var(--wt-color-primary-text);
+        text-decoration: underline;
+        overflow-wrap: anywhere;
+      }
+      .annotation {
+        width: min(calc(var(--wt-space-6) * 22), calc(100% - 2 * var(--wt-space-4)));
+        margin: var(--wt-space-4) auto var(--wt-space-6);
+        font-size: var(--wt-font-size-sm);
+        color: var(--wt-color-text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="proposal">
+      <p><strong>A1186 · Proposed mockup / Propuesta visual</strong></p>
+      <p>Not running product / No es el producto en funcionamiento</p>
+      <nav aria-label="Mockup variants">
+        <a href="#en-light">EN · Light</a><a href="#en-dark">EN · Dark</a
+        ><a href="#es-light">ES · Claro</a><a href="#es-dark">ES · Oscuro</a>
+      </nav>
+    </header>
+    <section
+      id="en-light"
+      class="variant default"
+      lang="en"
+      aria-label="en-light proposed completion"
+    >
+      <main>
+        <header class="setup-header">
+          <div class="logo" role="img" aria-label="Waitron">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -27 619.4480314288155 131">
+              <g fill="#1f6feb" transform="scale(0.8540)">
+                <g transform="translate(-42.822,-82.996)">
+                  <path
+                    d="m 123.17018,198.0122 c 2.17722,-1.32762 2.76782,-3.27275 2.21561,-7.29709 -0.24681,-1.79868 -0.89461,-6.89333 -1.43954,-11.32146 -1.1705,-9.51141 -0.35018,-8.09459 -10.7848,-18.62706 -9.39245,-9.4805 -9.34512,-9.4113 -8.78552,-12.84513 0.35137,-2.15606 0.76841,-6.62704 1.79467,-19.24036 0.0804,-0.98794 0.17147,-1.96948 0.20242,-2.18118 0.13804,-0.94443 1.35463,-0.17288 4.06522,2.57811 7.89179,8.00942 6.38819,7.95734 21.67507,0.7507 2.97651,-1.40321 5.91097,-2.70971 6.52101,-2.90333 4.00945,-1.27255 4.79393,-7.58724 1.18269,-9.51992 -2.33491,-1.24961 -3.55412,-0.87409 -15.68164,4.82992 -4.41408,2.0761 -3.66098,2.46293 -11.96623,-6.14642 l -6.76157,-7.00916 -3.21,-0.40865 c -1.76549,-0.22476 -4.364729,-0.86292 -5.776079,-1.41813 -3.069751,-1.58081 -5.625335,-0.13468 -8.72474,0.80675 -2.82271,0.85864 -6.86432,2.05382 -8.98135,2.65595 -2.117025,0.60213 -4.772945,1.55046 -5.902025,2.10739 l -2.05288,1.01261 -4.61898,7.96158 c -2.54044,4.37887 -5.16578,9.02204 -5.83408,10.31815 l -1.21511,2.35657 0.81083,1.70032 c 1.52118,3.18996 5.6412,4.11145 8.30744,1.85807 0.57345,-0.48466 3.03673,-4.2433 5.47396,-8.35253 2.43722,-4.10924 4.73942,-7.72155 5.115995,-8.02737 1.53076,-1.24313 9.01572,-3.38847 9.26046,-2.65424 0.44159,1.32476 -2.22401,29.87331 -2.86401,30.67348 -0.72941,0.91197 -18.140039,11.87335 -19.256449,11.87335 -2.527642,0 -7.808456,-3.07599 -15.88561,-6.64712 -3.143538,-1.45926 -6.965525,-0.35254 -7.233043,4.3543 0,3.49257 5.892415,5.25421 21.304128,12.06897 2.729326,1.20686 3.886362,0.57034 16.225089,-6.35467 8.161604,-4.58064 14.020645,-8.0564 14.241775,-8.0564 0.22113,0 4.34856,4.06306 9.172049,9.02901 l 8.77,9.02902 0.48786,2.64674 c 0.64601,3.50475 2.13493,15.13533 2.14561,16.76029 0.0239,3.63102 4.6011,5.7126 8.00177,3.63894 z"
+                  />
+                  <circle cx="102.45071" cy="94.106522" r="11.110726" />
+                  <path d="M125.352,112.07302 A16.911921,16.911921 0 1 1 155.816,112.07302 Z" />
+                  <rect x="117.7423" y="103.6336" width="45.1875" height="9.1550" />
+                  <ellipse cx="118.2475" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <ellipse cx="162.9205" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <circle cx="140.58401" cy="88.605515" r="5.0364189" />
+                </g>
+              </g>
+              <g fill="#16181d" transform="translate(136.4,0)">
+                <g transform="translate(0,0)">
+                  <path d="M0,0 L21,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L71,100 L50,100 Z" />
+                  <path d="M100,0 L121,0 L71,100 L50,100 Z" />
+                </g>
+                <g transform="translate(79,0)">
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M60,0 L81,0 L81,100 L60,100 Z" />
+                  <path d="M33,60 L70,60 L70,80 L23,80 Z" />
+                </g>
+                <g transform="translate(168,0)">
+                  <path d="M0,0 h21 v21 h-21 Z" />
+                  <path d="M0,40 h21 v60 h-21 Z" />
+                </g>
+                <rect x="0" y="-23" width="475" height="10" />
+                <path d="M194,-23 h21 v123 h-21 Z" />
+                <g transform="translate(223,0)">
+                  <path d="M0,0 h21 v100 h-21 Z" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M14,0 L46,0 A26,29 0 0 1 46,58 L14,58 Z M21,18 L46,18 A11,11 0 0 1 46,40 L21,40 Z"
+                  />
+                  <path d="M38,50 L58,50 L80,100 L57,100 Z" />
+                </g>
+                <g transform="translate(303,0)">
+                  <path
+                    fill-rule="evenodd"
+                    d="M30,0 L52,0 A30,30 0 0 1 82,30 L82,70 A30,30 0 0 1 52,100 L30,100 A30,30 0 0 1 0,70 L0,30 A30,30 0 0 1 30,0 Z M32,20 L50,20 A12,12 0 0 1 62,32 L62,68 A12,12 0 0 1 50,80 L32,80 A12,12 0 0 1 20,68 L20,32 A12,12 0 0 1 32,20 Z"
+                  />
+                </g>
+                <g transform="translate(393,0)">
+                  <path d="M0,0 L21,0 L61,76 L61,0 L82,0 L82,100 L61,100 L21,24 L21,100 L0,100 Z" />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="chrome" aria-label="Static theme and language chrome">
+            <span aria-hidden="true">◐</span><span>EN⌄</span>
+          </div>
+        </header>
+        <h1>Setup complete</h1>
+        <div class="mode">Preparation</div>
+        <p class="intro">The server is ready. Open it here:</p>
+        <div class="choices">
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Dashboard</strong
+              ><span class="description"
+                >Set up your menu, staff, devices and settings, and see your sales.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Till</strong><span class="description">Take orders and payments.</span></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Email inbox</strong
+              ><span class="description"
+                >Read account emails captured locally, such as invitations and password
+                resets.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <div class="card">
+          <p>Opening hours: Monday to Friday, 09:00–17:00</p>
+          <span class="link">Change opening hours</span>
+        </div>
+        <div class="card">
+          <p>
+            Your server is trading — but it has no backups yet, so there is no way back from a disk
+            failure.
+          </p>
+          <span class="link">Set up backups now</span>
+        </div>
+        <section class="card trial" aria-labelledby="heading-en-light">
+          <h2 id="heading-en-light">Try Waitron Cloud for 30 days</h2>
+          <p data-copy="offer">
+            Try level 2 free for 30 days, with no payment details needed to start.
+          </p>
+          <ul>
+            <li>Remote access</li>
+            <li>Automatic translation</li>
+            <li>Rota solver</li>
+            <li>Off-box backups</li>
+          </ul>
+          <p class="limits" data-copy="limits">Translation and rota-solver limits apply.</p>
+          <p data-copy="destination">
+            Explore Cloud services opens this server's connection page. Sign up, choose the trial
+            and manage payment on Cloud's pages.
+          </p>
+          <p data-copy="optional">
+            This is optional. You can return later in Dashboard, under Settings, Cloud services.
+          </p>
+          <span class="link" data-copy="action">Explore Cloud services</span>
+        </section>
+      </main>
+      <p class="annotation">
+        Proposed completion invitation. All product controls are static. Explore Cloud services
+        would open the local /manage/cloud page. Trial integration is gated by G1 in the plan.
+      </p>
+    </section>
+    <section id="en-dark" class="variant" lang="en" aria-label="en-dark proposed completion">
+      <main>
+        <header class="setup-header">
+          <div class="logo" role="img" aria-label="Waitron">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -27 619.4480314288155 131">
+              <g fill="#1f6feb" transform="scale(0.8540)">
+                <g transform="translate(-42.822,-82.996)">
+                  <path
+                    d="m 123.17018,198.0122 c 2.17722,-1.32762 2.76782,-3.27275 2.21561,-7.29709 -0.24681,-1.79868 -0.89461,-6.89333 -1.43954,-11.32146 -1.1705,-9.51141 -0.35018,-8.09459 -10.7848,-18.62706 -9.39245,-9.4805 -9.34512,-9.4113 -8.78552,-12.84513 0.35137,-2.15606 0.76841,-6.62704 1.79467,-19.24036 0.0804,-0.98794 0.17147,-1.96948 0.20242,-2.18118 0.13804,-0.94443 1.35463,-0.17288 4.06522,2.57811 7.89179,8.00942 6.38819,7.95734 21.67507,0.7507 2.97651,-1.40321 5.91097,-2.70971 6.52101,-2.90333 4.00945,-1.27255 4.79393,-7.58724 1.18269,-9.51992 -2.33491,-1.24961 -3.55412,-0.87409 -15.68164,4.82992 -4.41408,2.0761 -3.66098,2.46293 -11.96623,-6.14642 l -6.76157,-7.00916 -3.21,-0.40865 c -1.76549,-0.22476 -4.364729,-0.86292 -5.776079,-1.41813 -3.069751,-1.58081 -5.625335,-0.13468 -8.72474,0.80675 -2.82271,0.85864 -6.86432,2.05382 -8.98135,2.65595 -2.117025,0.60213 -4.772945,1.55046 -5.902025,2.10739 l -2.05288,1.01261 -4.61898,7.96158 c -2.54044,4.37887 -5.16578,9.02204 -5.83408,10.31815 l -1.21511,2.35657 0.81083,1.70032 c 1.52118,3.18996 5.6412,4.11145 8.30744,1.85807 0.57345,-0.48466 3.03673,-4.2433 5.47396,-8.35253 2.43722,-4.10924 4.73942,-7.72155 5.115995,-8.02737 1.53076,-1.24313 9.01572,-3.38847 9.26046,-2.65424 0.44159,1.32476 -2.22401,29.87331 -2.86401,30.67348 -0.72941,0.91197 -18.140039,11.87335 -19.256449,11.87335 -2.527642,0 -7.808456,-3.07599 -15.88561,-6.64712 -3.143538,-1.45926 -6.965525,-0.35254 -7.233043,4.3543 0,3.49257 5.892415,5.25421 21.304128,12.06897 2.729326,1.20686 3.886362,0.57034 16.225089,-6.35467 8.161604,-4.58064 14.020645,-8.0564 14.241775,-8.0564 0.22113,0 4.34856,4.06306 9.172049,9.02901 l 8.77,9.02902 0.48786,2.64674 c 0.64601,3.50475 2.13493,15.13533 2.14561,16.76029 0.0239,3.63102 4.6011,5.7126 8.00177,3.63894 z"
+                  />
+                  <circle cx="102.45071" cy="94.106522" r="11.110726" />
+                  <path d="M125.352,112.07302 A16.911921,16.911921 0 1 1 155.816,112.07302 Z" />
+                  <rect x="117.7423" y="103.6336" width="45.1875" height="9.1550" />
+                  <ellipse cx="118.2475" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <ellipse cx="162.9205" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <circle cx="140.58401" cy="88.605515" r="5.0364189" />
+                </g>
+              </g>
+              <g fill="#16181d" transform="translate(136.4,0)">
+                <g transform="translate(0,0)">
+                  <path d="M0,0 L21,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L71,100 L50,100 Z" />
+                  <path d="M100,0 L121,0 L71,100 L50,100 Z" />
+                </g>
+                <g transform="translate(79,0)">
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M60,0 L81,0 L81,100 L60,100 Z" />
+                  <path d="M33,60 L70,60 L70,80 L23,80 Z" />
+                </g>
+                <g transform="translate(168,0)">
+                  <path d="M0,0 h21 v21 h-21 Z" />
+                  <path d="M0,40 h21 v60 h-21 Z" />
+                </g>
+                <rect x="0" y="-23" width="475" height="10" />
+                <path d="M194,-23 h21 v123 h-21 Z" />
+                <g transform="translate(223,0)">
+                  <path d="M0,0 h21 v100 h-21 Z" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M14,0 L46,0 A26,29 0 0 1 46,58 L14,58 Z M21,18 L46,18 A11,11 0 0 1 46,40 L21,40 Z"
+                  />
+                  <path d="M38,50 L58,50 L80,100 L57,100 Z" />
+                </g>
+                <g transform="translate(303,0)">
+                  <path
+                    fill-rule="evenodd"
+                    d="M30,0 L52,0 A30,30 0 0 1 82,30 L82,70 A30,30 0 0 1 52,100 L30,100 A30,30 0 0 1 0,70 L0,30 A30,30 0 0 1 30,0 Z M32,20 L50,20 A12,12 0 0 1 62,32 L62,68 A12,12 0 0 1 50,80 L32,80 A12,12 0 0 1 20,68 L20,32 A12,12 0 0 1 32,20 Z"
+                  />
+                </g>
+                <g transform="translate(393,0)">
+                  <path d="M0,0 L21,0 L61,76 L61,0 L82,0 L82,100 L61,100 L21,24 L21,100 L0,100 Z" />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="chrome" aria-label="Static theme and language chrome">
+            <span aria-hidden="true">◐</span><span>EN⌄</span>
+          </div>
+        </header>
+        <h1>Setup complete</h1>
+        <div class="mode">Preparation</div>
+        <p class="intro">The server is ready. Open it here:</p>
+        <div class="choices">
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Dashboard</strong
+              ><span class="description"
+                >Set up your menu, staff, devices and settings, and see your sales.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Till</strong><span class="description">Take orders and payments.</span></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Email inbox</strong
+              ><span class="description"
+                >Read account emails captured locally, such as invitations and password
+                resets.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <div class="card">
+          <p>Opening hours: Monday to Friday, 09:00–17:00</p>
+          <span class="link">Change opening hours</span>
+        </div>
+        <div class="card">
+          <p>
+            Your server is trading — but it has no backups yet, so there is no way back from a disk
+            failure.
+          </p>
+          <span class="link">Set up backups now</span>
+        </div>
+        <section class="card trial" aria-labelledby="heading-en-dark">
+          <h2 id="heading-en-dark">Try Waitron Cloud for 30 days</h2>
+          <p data-copy="offer">
+            Try level 2 free for 30 days, with no payment details needed to start.
+          </p>
+          <ul>
+            <li>Remote access</li>
+            <li>Automatic translation</li>
+            <li>Rota solver</li>
+            <li>Off-box backups</li>
+          </ul>
+          <p class="limits" data-copy="limits">Translation and rota-solver limits apply.</p>
+          <p data-copy="destination">
+            Explore Cloud services opens this server's connection page. Sign up, choose the trial
+            and manage payment on Cloud's pages.
+          </p>
+          <p data-copy="optional">
+            This is optional. You can return later in Dashboard, under Settings, Cloud services.
+          </p>
+          <span class="link" data-copy="action">Explore Cloud services</span>
+        </section>
+      </main>
+      <p class="annotation">
+        Proposed completion invitation. All product controls are static. Explore Cloud services
+        would open the local /manage/cloud page. Trial integration is gated by G1 in the plan.
+      </p>
+    </section>
+    <section id="es-light" class="variant" lang="es" aria-label="es-light proposed completion">
+      <main>
+        <header class="setup-header">
+          <div class="logo" role="img" aria-label="Waitron">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -27 619.4480314288155 131">
+              <g fill="#1f6feb" transform="scale(0.8540)">
+                <g transform="translate(-42.822,-82.996)">
+                  <path
+                    d="m 123.17018,198.0122 c 2.17722,-1.32762 2.76782,-3.27275 2.21561,-7.29709 -0.24681,-1.79868 -0.89461,-6.89333 -1.43954,-11.32146 -1.1705,-9.51141 -0.35018,-8.09459 -10.7848,-18.62706 -9.39245,-9.4805 -9.34512,-9.4113 -8.78552,-12.84513 0.35137,-2.15606 0.76841,-6.62704 1.79467,-19.24036 0.0804,-0.98794 0.17147,-1.96948 0.20242,-2.18118 0.13804,-0.94443 1.35463,-0.17288 4.06522,2.57811 7.89179,8.00942 6.38819,7.95734 21.67507,0.7507 2.97651,-1.40321 5.91097,-2.70971 6.52101,-2.90333 4.00945,-1.27255 4.79393,-7.58724 1.18269,-9.51992 -2.33491,-1.24961 -3.55412,-0.87409 -15.68164,4.82992 -4.41408,2.0761 -3.66098,2.46293 -11.96623,-6.14642 l -6.76157,-7.00916 -3.21,-0.40865 c -1.76549,-0.22476 -4.364729,-0.86292 -5.776079,-1.41813 -3.069751,-1.58081 -5.625335,-0.13468 -8.72474,0.80675 -2.82271,0.85864 -6.86432,2.05382 -8.98135,2.65595 -2.117025,0.60213 -4.772945,1.55046 -5.902025,2.10739 l -2.05288,1.01261 -4.61898,7.96158 c -2.54044,4.37887 -5.16578,9.02204 -5.83408,10.31815 l -1.21511,2.35657 0.81083,1.70032 c 1.52118,3.18996 5.6412,4.11145 8.30744,1.85807 0.57345,-0.48466 3.03673,-4.2433 5.47396,-8.35253 2.43722,-4.10924 4.73942,-7.72155 5.115995,-8.02737 1.53076,-1.24313 9.01572,-3.38847 9.26046,-2.65424 0.44159,1.32476 -2.22401,29.87331 -2.86401,30.67348 -0.72941,0.91197 -18.140039,11.87335 -19.256449,11.87335 -2.527642,0 -7.808456,-3.07599 -15.88561,-6.64712 -3.143538,-1.45926 -6.965525,-0.35254 -7.233043,4.3543 0,3.49257 5.892415,5.25421 21.304128,12.06897 2.729326,1.20686 3.886362,0.57034 16.225089,-6.35467 8.161604,-4.58064 14.020645,-8.0564 14.241775,-8.0564 0.22113,0 4.34856,4.06306 9.172049,9.02901 l 8.77,9.02902 0.48786,2.64674 c 0.64601,3.50475 2.13493,15.13533 2.14561,16.76029 0.0239,3.63102 4.6011,5.7126 8.00177,3.63894 z"
+                  />
+                  <circle cx="102.45071" cy="94.106522" r="11.110726" />
+                  <path d="M125.352,112.07302 A16.911921,16.911921 0 1 1 155.816,112.07302 Z" />
+                  <rect x="117.7423" y="103.6336" width="45.1875" height="9.1550" />
+                  <ellipse cx="118.2475" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <ellipse cx="162.9205" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <circle cx="140.58401" cy="88.605515" r="5.0364189" />
+                </g>
+              </g>
+              <g fill="#16181d" transform="translate(136.4,0)">
+                <g transform="translate(0,0)">
+                  <path d="M0,0 L21,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L71,100 L50,100 Z" />
+                  <path d="M100,0 L121,0 L71,100 L50,100 Z" />
+                </g>
+                <g transform="translate(79,0)">
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M60,0 L81,0 L81,100 L60,100 Z" />
+                  <path d="M33,60 L70,60 L70,80 L23,80 Z" />
+                </g>
+                <g transform="translate(168,0)">
+                  <path d="M0,0 h21 v21 h-21 Z" />
+                  <path d="M0,40 h21 v60 h-21 Z" />
+                </g>
+                <rect x="0" y="-23" width="475" height="10" />
+                <path d="M194,-23 h21 v123 h-21 Z" />
+                <g transform="translate(223,0)">
+                  <path d="M0,0 h21 v100 h-21 Z" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M14,0 L46,0 A26,29 0 0 1 46,58 L14,58 Z M21,18 L46,18 A11,11 0 0 1 46,40 L21,40 Z"
+                  />
+                  <path d="M38,50 L58,50 L80,100 L57,100 Z" />
+                </g>
+                <g transform="translate(303,0)">
+                  <path
+                    fill-rule="evenodd"
+                    d="M30,0 L52,0 A30,30 0 0 1 82,30 L82,70 A30,30 0 0 1 52,100 L30,100 A30,30 0 0 1 0,70 L0,30 A30,30 0 0 1 30,0 Z M32,20 L50,20 A12,12 0 0 1 62,32 L62,68 A12,12 0 0 1 50,80 L32,80 A12,12 0 0 1 20,68 L20,32 A12,12 0 0 1 32,20 Z"
+                  />
+                </g>
+                <g transform="translate(393,0)">
+                  <path d="M0,0 L21,0 L61,76 L61,0 L82,0 L82,100 L61,100 L21,24 L21,100 L0,100 Z" />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="chrome" aria-label="Static theme and language chrome">
+            <span aria-hidden="true">◐</span><span>ES⌄</span>
+          </div>
+        </header>
+        <h1>Configuración completada</h1>
+        <div class="mode">Preparación</div>
+        <p class="intro">El servidor está listo. Ábrelo desde aquí:</p>
+        <div class="choices">
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Panel</strong
+              ><span class="description"
+                >Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus
+                ventas.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Caja</strong><span class="description">Toma pedidos y cobra.</span></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Bandeja de correo</strong
+              ><span class="description"
+                >Lee los correos de cuentas capturados localmente, como invitaciones y
+                restablecimientos de contraseña.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <div class="card">
+          <p>Horario de apertura: de lunes a viernes, 09:00–17:00</p>
+          <span class="link">Cambiar el horario de apertura</span>
+        </div>
+        <div class="card">
+          <p>
+            Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay
+            forma de recuperarse de un fallo del disco.
+          </p>
+          <span class="link">Configura ahora las copias de seguridad</span>
+        </div>
+        <section class="card trial" aria-labelledby="heading-es-light">
+          <h2 id="heading-es-light">Prueba Waitron Cloud durante 30 días</h2>
+          <p data-copy="offer">
+            Prueba el nivel 2 gratis durante 30 días, sin datos de pago para empezar.
+          </p>
+          <ul>
+            <li>Acceso remoto</li>
+            <li>Traducción automática</li>
+            <li>Planificador de turnos</li>
+            <li>Copias de seguridad fuera del servidor</li>
+          </ul>
+          <p class="limits" data-copy="limits">
+            La traducción y el planificador de turnos tienen límites de uso.
+          </p>
+          <p data-copy="destination">
+            Explorar los servicios de Cloud abre la página de conexión de este servidor. Regístrate,
+            elige la prueba y gestiona el pago en las páginas de Cloud.
+          </p>
+          <p data-copy="optional">
+            Es opcional. Puedes volver más tarde desde Panel, Ajustes, Servicios Cloud.
+          </p>
+          <span class="link" data-copy="action">Explorar los servicios de Cloud</span>
+        </section>
+      </main>
+      <p class="annotation">
+        Propuesta de invitación al terminar la configuración. Los controles del producto son
+        estáticos. Explorar los servicios de Cloud abriría la página local /manage/cloud. La
+        integración de la prueba depende de G1 en el plan.
+      </p>
+    </section>
+    <section id="es-dark" class="variant" lang="es" aria-label="es-dark proposed completion">
+      <main>
+        <header class="setup-header">
+          <div class="logo" role="img" aria-label="Waitron">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -27 619.4480314288155 131">
+              <g fill="#1f6feb" transform="scale(0.8540)">
+                <g transform="translate(-42.822,-82.996)">
+                  <path
+                    d="m 123.17018,198.0122 c 2.17722,-1.32762 2.76782,-3.27275 2.21561,-7.29709 -0.24681,-1.79868 -0.89461,-6.89333 -1.43954,-11.32146 -1.1705,-9.51141 -0.35018,-8.09459 -10.7848,-18.62706 -9.39245,-9.4805 -9.34512,-9.4113 -8.78552,-12.84513 0.35137,-2.15606 0.76841,-6.62704 1.79467,-19.24036 0.0804,-0.98794 0.17147,-1.96948 0.20242,-2.18118 0.13804,-0.94443 1.35463,-0.17288 4.06522,2.57811 7.89179,8.00942 6.38819,7.95734 21.67507,0.7507 2.97651,-1.40321 5.91097,-2.70971 6.52101,-2.90333 4.00945,-1.27255 4.79393,-7.58724 1.18269,-9.51992 -2.33491,-1.24961 -3.55412,-0.87409 -15.68164,4.82992 -4.41408,2.0761 -3.66098,2.46293 -11.96623,-6.14642 l -6.76157,-7.00916 -3.21,-0.40865 c -1.76549,-0.22476 -4.364729,-0.86292 -5.776079,-1.41813 -3.069751,-1.58081 -5.625335,-0.13468 -8.72474,0.80675 -2.82271,0.85864 -6.86432,2.05382 -8.98135,2.65595 -2.117025,0.60213 -4.772945,1.55046 -5.902025,2.10739 l -2.05288,1.01261 -4.61898,7.96158 c -2.54044,4.37887 -5.16578,9.02204 -5.83408,10.31815 l -1.21511,2.35657 0.81083,1.70032 c 1.52118,3.18996 5.6412,4.11145 8.30744,1.85807 0.57345,-0.48466 3.03673,-4.2433 5.47396,-8.35253 2.43722,-4.10924 4.73942,-7.72155 5.115995,-8.02737 1.53076,-1.24313 9.01572,-3.38847 9.26046,-2.65424 0.44159,1.32476 -2.22401,29.87331 -2.86401,30.67348 -0.72941,0.91197 -18.140039,11.87335 -19.256449,11.87335 -2.527642,0 -7.808456,-3.07599 -15.88561,-6.64712 -3.143538,-1.45926 -6.965525,-0.35254 -7.233043,4.3543 0,3.49257 5.892415,5.25421 21.304128,12.06897 2.729326,1.20686 3.886362,0.57034 16.225089,-6.35467 8.161604,-4.58064 14.020645,-8.0564 14.241775,-8.0564 0.22113,0 4.34856,4.06306 9.172049,9.02901 l 8.77,9.02902 0.48786,2.64674 c 0.64601,3.50475 2.13493,15.13533 2.14561,16.76029 0.0239,3.63102 4.6011,5.7126 8.00177,3.63894 z"
+                  />
+                  <circle cx="102.45071" cy="94.106522" r="11.110726" />
+                  <path d="M125.352,112.07302 A16.911921,16.911921 0 1 1 155.816,112.07302 Z" />
+                  <rect x="117.7423" y="103.6336" width="45.1875" height="9.1550" />
+                  <ellipse cx="118.2475" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <ellipse cx="162.9205" cy="108.2063" rx="4.5435009" ry="4.5773635" />
+                  <circle cx="140.58401" cy="88.605515" r="5.0364189" />
+                </g>
+              </g>
+              <g fill="#16181d" transform="translate(136.4,0)">
+                <g transform="translate(0,0)">
+                  <path d="M0,0 L21,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M50,0 L71,0 L71,100 L50,100 Z" />
+                  <path d="M100,0 L121,0 L71,100 L50,100 Z" />
+                </g>
+                <g transform="translate(79,0)">
+                  <path d="M50,0 L71,0 L21,100 L0,100 Z" />
+                  <path d="M60,0 L81,0 L81,100 L60,100 Z" />
+                  <path d="M33,60 L70,60 L70,80 L23,80 Z" />
+                </g>
+                <g transform="translate(168,0)">
+                  <path d="M0,0 h21 v21 h-21 Z" />
+                  <path d="M0,40 h21 v60 h-21 Z" />
+                </g>
+                <rect x="0" y="-23" width="475" height="10" />
+                <path d="M194,-23 h21 v123 h-21 Z" />
+                <g transform="translate(223,0)">
+                  <path d="M0,0 h21 v100 h-21 Z" />
+                  <path
+                    fill-rule="evenodd"
+                    d="M14,0 L46,0 A26,29 0 0 1 46,58 L14,58 Z M21,18 L46,18 A11,11 0 0 1 46,40 L21,40 Z"
+                  />
+                  <path d="M38,50 L58,50 L80,100 L57,100 Z" />
+                </g>
+                <g transform="translate(303,0)">
+                  <path
+                    fill-rule="evenodd"
+                    d="M30,0 L52,0 A30,30 0 0 1 82,30 L82,70 A30,30 0 0 1 52,100 L30,100 A30,30 0 0 1 0,70 L0,30 A30,30 0 0 1 30,0 Z M32,20 L50,20 A12,12 0 0 1 62,32 L62,68 A12,12 0 0 1 50,80 L32,80 A12,12 0 0 1 20,68 L20,32 A12,12 0 0 1 32,20 Z"
+                  />
+                </g>
+                <g transform="translate(393,0)">
+                  <path d="M0,0 L21,0 L61,76 L61,0 L82,0 L82,100 L61,100 L21,24 L21,100 L0,100 Z" />
+                </g>
+              </g>
+            </svg>
+          </div>
+          <div class="chrome" aria-label="Static theme and language chrome">
+            <span aria-hidden="true">◐</span><span>ES⌄</span>
+          </div>
+        </header>
+        <h1>Configuración completada</h1>
+        <div class="mode">Preparación</div>
+        <p class="intro">El servidor está listo. Ábrelo desde aquí:</p>
+        <div class="choices">
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Panel</strong
+              ><span class="description"
+                >Configura la carta, el personal, los dispositivos y los ajustes, y consulta tus
+                ventas.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Caja</strong><span class="description">Toma pedidos y cobra.</span></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+          <div class="choice">
+            <span class="choice-copy"
+              ><strong>Bandeja de correo</strong
+              ><span class="description"
+                >Lee los correos de cuentas capturados localmente, como invitaciones y
+                restablecimientos de contraseña.</span
+              ></span
+            ><svg class="arrow" viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M6 3.5 10.5 8 6 12.5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </div>
+        </div>
+        <div class="card">
+          <p>Horario de apertura: de lunes a viernes, 09:00–17:00</p>
+          <span class="link">Cambiar el horario de apertura</span>
+        </div>
+        <div class="card">
+          <p>
+            Tu servidor ya está vendiendo, pero aún no tiene copias de seguridad, así que no hay
+            forma de recuperarse de un fallo del disco.
+          </p>
+          <span class="link">Configura ahora las copias de seguridad</span>
+        </div>
+        <section class="card trial" aria-labelledby="heading-es-dark">
+          <h2 id="heading-es-dark">Prueba Waitron Cloud durante 30 días</h2>
+          <p data-copy="offer">
+            Prueba el nivel 2 gratis durante 30 días, sin datos de pago para empezar.
+          </p>
+          <ul>
+            <li>Acceso remoto</li>
+            <li>Traducción automática</li>
+            <li>Planificador de turnos</li>
+            <li>Copias de seguridad fuera del servidor</li>
+          </ul>
+          <p class="limits" data-copy="limits">
+            La traducción y el planificador de turnos tienen límites de uso.
+          </p>
+          <p data-copy="destination">
+            Explorar los servicios de Cloud abre la página de conexión de este servidor. Regístrate,
+            elige la prueba y gestiona el pago en las páginas de Cloud.
+          </p>
+          <p data-copy="optional">
+            Es opcional. Puedes volver más tarde desde Panel, Ajustes, Servicios Cloud.
+          </p>
+          <span class="link" data-copy="action">Explorar los servicios de Cloud</span>
+        </section>
+      </main>
+      <p class="annotation">
+        Propuesta de invitación al terminar la configuración. Los controles del producto son
+        estáticos. Explorar los servicios de Cloud abriría la página local /manage/cloud. La
+        integración de la prueba depende de G1 en el plan.
+      </p>
+    </section>
+  </body>
+</html>
