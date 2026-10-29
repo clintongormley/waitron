@@ -33,7 +33,6 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import { seriesPicksUnreadable } from "./first-setup-start-again-name-records.js";
 import {
   readSetupDatabaseHoldings,
   type SetupDatabaseHoldings,
@@ -430,18 +429,8 @@ export function createFirstSetupResolutionActions(
             return marker;
           };
           let marker = await markerFor({ ...discarding, ...heldOption });
-          const picksDamaged =
-            !missing &&
-            host.modules !== undefined &&
-            (await seriesPicksUnreadable(roots, host.modules, frozenModuleNames(state)));
-          if (
-            (recoveryRecordDamaged || discardsStopped || picksDamaged) &&
-            request.owner === undefined
-          )
-            throw new AppError(
-              "setup.start_again_password_required",
-              picksDamaged ? { seriesPicksUnreadable: true } : {},
-            );
+          if ((recoveryRecordDamaged || discardsStopped) && request.owner === undefined)
+            throw new AppError("setup.start_again_password_required", {});
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           const damagedShown = request.recoveryRecordDamagedShown === true;
           if (!held && recoveryRecordDamaged !== damagedShown) conflict();

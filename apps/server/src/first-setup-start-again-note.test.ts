@@ -839,6 +839,20 @@ it("with the database missing, a damaged picks file adds nothing to the summary,
   await expectStartAgainDeleted(f);
 });
 
+it("with the database present, a damaged picks file asks for no password: Start again goes ahead and deletes the attempt", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await damagePicks(f);
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).not.toBe("missing");
+  await actions.startAgainFirstSetup({
+    ...startRequest,
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  });
+  await expectStartAgainDeleted(f);
+});
+
 async function stampTree(path: string, at: Date) {
   const found = await lstat(path).catch(() => null);
   if (found === null) return;
