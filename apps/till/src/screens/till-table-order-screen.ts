@@ -876,6 +876,7 @@ export class TillTableOrderScreen extends LitElement {
         bottom: 0;
         z-index: 2;
         padding-block: var(--wt-space-2);
+        border-block-start: 1px solid var(--wt-color-border);
         background: var(--wt-color-bg);
       }
 
