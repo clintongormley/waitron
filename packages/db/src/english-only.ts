@@ -43,6 +43,7 @@ export const GENERIC_PACKAGES = [
   "staffing",
   "composition",
   "fiscal-none",
+  "recovery-pack",
   "provisioning",
   "ui",
   // Generic browser infrastructure, same as `ui`: the dashboard module-UI kit (i18n + code-message
@@ -87,15 +88,13 @@ export const PRODUCTION_ONLY: ReadonlySet<string> = new Set(["provisioning"]);
 export const SELF = ["english-only.ts", "no-regime-vocabulary.test.ts"] as const;
 
 /**
- * Dashboard i18n translation catalogues, excluded by exact suffix from the scan.
+ * Translation catalogues, excluded by exact suffix from the scan: their `es` values are
+ * translation, not vocabulary.
  *
- * A module's dashboard panel keeps its own `{ en, es }` copy in `src/dashboard/strings.ts`, and
- * those `es` values are translation, not vocabulary.
- *
- * NARROW, by design: only the exact suffix `dashboard/strings.ts`, so a `dashboard/*.ts` widget
- * that is NOT the catalogue is still scanned.
+ * NARROW, by design: only those exact suffixes, so any other file in those folders is still
+ * scanned.
  */
-export const I18N_CATALOGUES = ["dashboard/strings.ts"] as const;
+export const I18N_CATALOGUES = ["dashboard/strings.ts", "i18n/pack-words.ts"] as const;
 
 /**
  * A package's starter-content translations: the words its seed writes into a new venue in

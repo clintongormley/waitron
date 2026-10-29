@@ -332,3 +332,114 @@ it.each(["en", "es"] as const)(
     ).toBe("");
   },
 );
+
+async function recoveryPack(
+  file: Partial<import("@waitron/recovery-pack").RecoveryPackFile>,
+): Promise<Uint8Array<ArrayBuffer>> {
+  const { renderRecoveryPack } = await import("@waitron/recovery-pack");
+  const fontUrl = (await import("../assets/register-noto-sans.ttf?url")).default;
+  const { recoveryDocumentBytes } = await import("../recovery-document.js");
+  const madeAt = "2026-10-17T12:40:00.000Z";
+  return renderRecoveryPack({
+    locale: "en",
+    timeZone: "Europe/Madrid",
+    loadFont: async () => new Uint8Array(await (await fetch(fontUrl)).arrayBuffer()),
+    cover: {
+      legalName: saved.taxpayerName,
+      taxId: saved.scope.taxpayerNif,
+      venueName: saved.venueName,
+      madeAt,
+      madeBy: null,
+      number: 3,
+    },
+    parts: [],
+    file: {
+      kind: "waitron-recovery-pack",
+      version: 1,
+      number: 3,
+      madeAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      serverKey: JSON.parse(new TextDecoder().decode(recoveryDocumentBytes(saved))),
+      serverKeyName: saved.nodeKey.name,
+      serverKeyHeldBy: null,
+      ...file,
+    },
+  });
+}
+it("loads the server key from a recovery pack that holds it", async () => {
+  const el = await mount();
+  const secrets: (string | undefined)[] = [];
+  el.addEventListener("recovery-key-change", (event) =>
+    secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
+  );
+  await upload(el, await recoveryPack({}));
+  expect(secrets.at(-1)).toBe("AbCdEfGhIjKlMnOpQrStUvWxYz012345");
+  expect(el.shadowRoot!.textContent).toContain("Key loaded");
+});
+it.each([
+  [
+    "en",
+    { number: 1, madeOn: "2026-09-02", received: true },
+    "Caja principal",
+    "This recovery pack does not hold the server key. It is on recovery pack 1, made on 2 September 2026: choose that pack, or type the key from it.",
+  ],
+  [
+    "es",
+    { number: 1, madeOn: "2026-09-02", received: true },
+    "Caja principal",
+    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 1, hecho el 2 de septiembre de 2026: elige ese paquete o introduce su clave.",
+  ],
+  [
+    "en",
+    { number: 2, madeOn: "2026-09-12", received: false },
+    "Caja principal",
+    "This recovery pack does not hold the server key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. That pack never reached a browser when it was made: if you do not have it, the key cannot be read from any pack.",
+  ],
+  [
+    "es",
+    { number: 2, madeOn: "2026-09-12", received: false },
+    "Caja principal",
+    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. Ese paquete nunca llegó a un navegador cuando se hizo: si no lo tienes, la clave no se puede leer de ningún paquete.",
+  ],
+  [
+    "en",
+    null,
+    "Caja principal",
+    "This recovery pack does not hold the server key: choose the pack or sheet whose key name is Caja principal.",
+  ],
+  [
+    "es",
+    null,
+    "Caja principal",
+    "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja cuyo nombre de clave es Caja principal.",
+  ],
+  [
+    "en",
+    null,
+    null,
+    "This recovery pack does not hold the server key: choose the pack or sheet that holds it, or type the key from it.",
+  ],
+  [
+    "es",
+    null,
+    null,
+    "Este paquete de recuperación no tiene la clave del servidor: elige el paquete o la hoja que la tiene, o introduce su clave.",
+  ],
+] as const)(
+  "says where the key is when a pack does not hold it (%s, %o, %s)",
+  async (locale, serverKeyHeldBy, serverKeyName, message) => {
+    const el = await mount();
+    el.locale = locale;
+    await el.updateComplete;
+    const secrets: (string | undefined)[] = [];
+    el.addEventListener("recovery-key-change", (event) =>
+      secrets.push((event as CustomEvent<{ secret?: string }>).detail.secret),
+    );
+    await upload(el, await recoveryPack({ serverKey: null, serverKeyHeldBy, serverKeyName }));
+    expect(el.shadowRoot!.querySelector("#pdf-error")!.textContent).toBe(message);
+    expect(secrets.every((secret) => secret === undefined)).toBe(true);
+    expect(native(el, "printed-recovery-key").disabled).toBe(false);
+  },
+);

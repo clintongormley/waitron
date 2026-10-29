@@ -310,13 +310,14 @@ describe("setup bucket restore unsaved changes", () => {
     async (action) => {
       const { el, form, host } = await mount();
       await edit(form);
-      let finish!: (value: string) => void;
-      vi.spyOn(File.prototype, "text").mockImplementationOnce(
+      let open!: (value: ArrayBuffer) => void;
+      vi.spyOn(File.prototype, "arrayBuffer").mockImplementationOnce(
         () =>
-          new Promise<string>((resolve) => {
-            finish = resolve;
+          new Promise<ArrayBuffer>((resolve) => {
+            open = resolve;
           }),
       );
+      const finish = (text: string) => open(new TextEncoder().encode(text).buffer);
       const files = new DataTransfer();
       files.items.add(new File(["old"], "kit.txt"));
       const input = q<HTMLInputElement>(form, "[data-test=kit-file]");

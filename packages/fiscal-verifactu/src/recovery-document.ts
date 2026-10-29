@@ -1,5 +1,6 @@
 import { encodeNodeKey } from "./paper-register-compact.js";
 import type { RegisterScope, NamedNodeKey } from "./paper-register-protocol.js";
+import type { ServerKeyHolder } from "@waitron/recovery-pack/src/pack-file.js";
 
 export type RecoveryDocument = {
   kind: "waitron-recovery-document";
@@ -16,6 +17,16 @@ export type RecoveryDocumentPublic = Omit<RecoveryDocument, "nodeKey"> & {
 export const RECOVERY_ATTACHMENT = "waitron-recovery-key-v1.json";
 export const MAX_RECOVERY_ATTACHMENT = 8192;
 export const MAX_RECOVERY_PDF = 8 * 1024 * 1024;
+/** A valid recovery pack that does not hold the server key; it says where the key is. */
+export class RecoveryPackWithoutKeyError extends Error {
+  constructor(
+    readonly serverKeyName: string | null,
+    readonly heldBy: ServerKeyHolder | null,
+  ) {
+    super("This recovery pack does not hold the server key");
+    this.name = "RecoveryPackWithoutKeyError";
+  }
+}
 export function refuseRecovery(): never {
   throw new Error("Recovery PDF refused");
 }

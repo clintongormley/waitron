@@ -75,11 +75,17 @@ export const restoreEn = {
     "Rebuild this server from the copy the old server kept in your storage bucket. Use this only when the old server is gone. You need the recovery kit, and nothing else.",
   "restore_bucket.sensitive":
     "The recovery kit is as sensitive as the recovery key: anyone holding it can read every sale and every stored credential in the bucket copy. Enter it only here.",
-  "restore_bucket.kit_file": "Recovery kit file",
+  "restore_bucket.kit_file": "Recovery pack or kit file",
+  "restore_bucket.pack_no_code":
+    "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+  "restore_bucket.pack_not_a_pack":
+    "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the code.",
+  "restore_bucket.pack_damaged":
+    "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
   "restore_bucket.kit": "Recovery kit",
   "restore_bucket.kit_help_label": "Help with the recovery kit",
   "restore_bucket.kit_help":
-    "Choose the kit file above, or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1.",
+    "Choose your recovery pack or kit file above, or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1.",
   "restore_bucket.kit_missing": "Upload or paste the recovery kit.",
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
@@ -254,11 +260,17 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el kit de recuperación y nada más.",
   "restore_bucket.sensitive":
     "El kit de recuperación es tan delicado como la clave de recuperación: quien lo tenga puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
-  "restore_bucket.kit_file": "Archivo del kit de recuperación",
+  "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
+  "restore_bucket.pack_no_code":
+    "Este paquete de recuperación no contiene el código de la copia en el bucket: el equipo no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",
+  "restore_bucket.pack_not_a_pack":
+    "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el código.",
+  "restore_bucket.pack_damaged":
+    "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el código.",
   "restore_bucket.kit": "Kit de recuperación",
   "restore_bucket.kit_help_label": "Ayuda sobre el kit de recuperación",
   "restore_bucket.kit_help":
-    "Elige arriba el archivo del kit, o pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1.",
+    "Elige arriba tu paquete de recuperación o el archivo del kit, o pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1.",
   "restore_bucket.kit_missing": "Sube o pega el kit de recuperación.",
   "restore_bucket.environment": "Entorno",
   "restore_bucket.environment_help_label": "Ayuda sobre el entorno",

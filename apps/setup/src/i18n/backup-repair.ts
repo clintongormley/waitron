@@ -11,6 +11,13 @@ export const backupRepairStrings = {
     artifact: "Backup file",
     archiveKey: "Archive key",
     kit: "Bucket recovery kit",
+    kitFile: "Recovery pack or kit file",
+    packNoCode:
+      "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
+    packNotAPack:
+      "This PDF is not a Waitron recovery pack. Choose the venue's recovery pack or kit file, or paste the code.",
+    packDamaged:
+      "This recovery pack is damaged, or was changed after it was made. Choose the pack as it was saved, or paste the code.",
     taxId: "Tax ID",
     keyName: "Key name",
     offline: "The old box is stopped and will stay offline.",
@@ -56,6 +63,13 @@ export const backupRepairStrings = {
     artifact: "Archivo de copia",
     archiveKey: "Clave del archivo",
     kit: "Kit de recuperación del bucket",
+    kitFile: "Paquete de recuperación o archivo del kit",
+    packNoCode:
+      "Este paquete de recuperación no contiene el código de la copia en el bucket: el equipo no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",
+    packNotAPack:
+      "Este PDF no es un paquete de recuperación de Waitron. Elige el paquete de recuperación o el archivo del kit del local, o pega el código.",
+    packDamaged:
+      "Este paquete de recuperación está dañado o se modificó después de hacerse. Elige el paquete tal como se guardó o pega el código.",
     taxId: "NIF",
     keyName: "Nombre de la clave",
     offline: "La caja anterior está apagada y seguirá desconectada.",

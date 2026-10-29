@@ -15,6 +15,7 @@
   "dependencies": {
     "@waitron/country": "workspace:*",
     "@waitron/country-packs": "workspace:*",
+    "@waitron/recovery-pack": "workspace:*",
     "@waitron/shared": "workspace:*",
     "@waitron/ui": "workspace:*",
     "lit": "^3.2.0",
@@ -25,6 +26,7 @@
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "axe-core": "^4.14.0",
+    "pdf-lib": "1.17.1",
     "playwright": "^1.64.1",
     "typescript": "^7.0.0",
     "vite": "^8.3.5",

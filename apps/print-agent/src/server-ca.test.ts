@@ -1,3 +1,4 @@
+import { generateKeyPairSync } from "node:crypto";
 import { createServer, type Server } from "node:https";
 import { rootCertificates } from "node:tls";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -8,9 +9,22 @@ import forge from "node-forge";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createServerTrustingFetch } from "./server-ca.js";
 
+/** A 2048-bit RSA key pair from Node's native generator; forge's own takes seconds on a busy runner. */
+function rsaKeys(): { publicKey: forge.pki.rsa.PublicKey; privateKey: forge.pki.rsa.PrivateKey } {
+  const pair = generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: "spki", format: "pem" },
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+  });
+  return {
+    publicKey: forge.pki.publicKeyFromPem(pair.publicKey),
+    privateKey: forge.pki.privateKeyFromPem(pair.privateKey),
+  };
+}
+
 /** A CA + a leaf for `commonName`/`127.0.0.1`, returned as PEMs and a usable key. */
 function mintCa(leafCn: string): { caPem: string; serverKeyPem: string; serverCertPem: string } {
-  const caKeys = forge.pki.rsa.generateKeyPair(2048);
+  const caKeys = rsaKeys();
   const ca = forge.pki.createCertificate();
   ca.publicKey = caKeys.publicKey;
   ca.serialNumber = "01";
@@ -24,7 +38,7 @@ function mintCa(leafCn: string): { caPem: string; serverKeyPem: string; serverCe
   ]);
   ca.sign(caKeys.privateKey, forge.md.sha256.create());
 
-  const serverKeys = forge.pki.rsa.generateKeyPair(2048);
+  const serverKeys = rsaKeys();
   const leaf = forge.pki.createCertificate();
   leaf.publicKey = serverKeys.publicKey;
   leaf.serialNumber = "02";

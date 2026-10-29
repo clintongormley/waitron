@@ -248,6 +248,9 @@ importers:
       '@waitron/recipes':
         specifier: workspace:*
         version: link:../../packages/recipes
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../../packages/recovery-pack
       '@waitron/reporting':
         specifier: workspace:*
         version: link:../../packages/reporting
@@ -408,6 +411,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../../packages/module
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../../packages/recovery-pack
       '@waitron/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -427,6 +433,9 @@ importers:
       axe-core:
         specifier: ^4.14.0
         version: 4.14.0
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
       playwright:
         specifier: ^1.64.1
         version: 1.64.1
@@ -1166,6 +1175,9 @@ importers:
       '@waitron/module':
         specifier: workspace:*
         version: link:../module
+      '@waitron/recovery-pack':
+        specifier: workspace:*
+        version: link:../recovery-pack
       '@waitron/server-kit':
         specifier: workspace:*
         version: link:../server-kit
@@ -1819,6 +1831,52 @@ importers:
       '@vitest/coverage-v8':
         specifier: ^4.1.12
         version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      typescript:
+        specifier: ^7.0.0
+        version: 7.0.2
+      vitest:
+        specifier: ^4.1.12
+        version: 4.1.12(@types/node@26.6.5)(@vitest/browser-playwright@4.1.12)(@vitest/coverage-v8@4.1.12)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(tsx@4.23.15)(yaml@2.9.1))
+
+  packages/recovery-pack:
+    dependencies:
+      fontkit:
+        specifier: 2.0.4
+        version: 2.0.4
+      pdf-lib:
+        specifier: 1.17.1
+        version: 1.17.1
+      pdfkit:
+        specifier: 0.20.2
+        version: 0.20.2
+      qrcode:
+        specifier: ^1.5.4
+        version: 1.5.4
+    devDependencies:
+      '@napi-rs/canvas':
+        specifier: ^1.0.13
+        version: 1.0.13
+      '@types/fontkit':
+        specifier: ^2.0.9
+        version: 2.0.9
+      '@types/node':
+        specifier: ^26.6.5
+        version: 26.6.5
+      '@types/pdfkit':
+        specifier: ^0.17.7
+        version: 0.17.7
+      '@types/qrcode':
+        specifier: ^1.5.5
+        version: 1.5.6
+      '@vitest/coverage-v8':
+        specifier: ^4.1.12
+        version: 4.1.12(@vitest/browser@4.1.12)(vitest@4.1.12)
+      jsqr:
+        specifier: ^1.4.0
+        version: 1.4.0
+      pdfjs-dist:
+        specifier: 6.4.299
+        version: 6.4.299
       typescript:
         specifier: ^7.0.0
         version: 7.0.2
@@ -3340,9 +3398,6 @@ packages:
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
     engines: {node: '>=6.0.0'}
-
-  '@jridgewell/sourcemap-codec@1.5.5':
-    resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
 
   '@jridgewell/sourcemap-codec@1.6.0':
     resolution: {integrity: sha512-T7jf+5zgsZHwNJ4lvQ7/aezbyk0nNX+zJVWpmHA7VYsEx7a7qr5Rg5IbtJFqkgze5Y2sruq1RUY8Q837Od7iFw==}
@@ -7013,14 +7068,12 @@ snapshots:
 
   '@jridgewell/resolve-uri@3.1.2': {}
 
-  '@jridgewell/sourcemap-codec@1.5.5': {}
-
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
   '@jridgewell/trace-mapping@0.3.31':
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
-      '@jridgewell/sourcemap-codec': 1.5.5
+      '@jridgewell/sourcemap-codec': 1.6.0
 
   '@js-sdsl/ordered-map@4.4.2': {}
 

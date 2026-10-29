@@ -185,7 +185,10 @@ export type RecoveryPreparationSource =
   | { kind: "staged"; stagedId: string };
 
 export interface BucketRestoreBody {
-  /** The recovery kit as pasted or read from its file; as sensitive as the recovery key. */
+  /**
+   * The recovery kit as pasted, read from its file, or read from a recovery pack PDF's attached
+   * file; as sensitive as the recovery key.
+   */
   kit: string;
   environment: "production" | "preproduction";
   oldBoxGone: boolean;

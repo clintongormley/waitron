@@ -35,7 +35,7 @@ keeps the old attempt and database files separately. You do not need the old set
 prove access to an independently authenticated backup.
 
 Choose an archive, bucket copy or supported Cloud copy. Supply its named node recovery key,
-and its archive key or source credentials where applicable. Choose the saved recovery PDF or enter the grouped key from your recovery sheet. Cloud approval is separate from this key;
+and its archive key or source credentials where applicable. Choose the saved recovery PDF or a recovery pack that holds the server key, or enter the grouped key from your recovery sheet. Cloud approval is separate from this key;
 production Cloud recovery remains unavailable through the current client.
 
 After **Open backup**, check the authenticated details and use the module's recovery controls.

@@ -172,7 +172,7 @@ comments without a parser, guessing from the code before a `/` whether it opens 
 expression, and a wrong guess can hide a Spanish word in code on a later line. It also never scans
 a package that `GENERIC_PACKAGES` leaves out (among them `bookings`,
 `venue-service`, `ui-core`, `server-kit` and `country-gb`), `provisioning`'s test files, any
-`dashboard/strings.ts`, a package's top-level `src/starter-content.ts` (the whole file, comments
+`dashboard/strings.ts` or `i18n/pack-words.ts`, a package's top-level `src/starter-content.ts` (the whole file, comments
 and identifiers included; nothing checks that it holds only data), a `«…»` quote anywhere
 in the source (code included), or a backtick citation in a comment.
 

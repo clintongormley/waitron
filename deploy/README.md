@@ -528,6 +528,14 @@ command against it treat that entrypoint differently:
   `sudo chown 10001 kit.txt` keeps it private at mode 0600. Otherwise the command stops with
   `cannot read kit file: /kit.txt`.
 
+  `--from-bucket` also takes the venue's recovery pack PDF in place of the kit file, under the same
+  rules for where the file sits. The command reads the bucket copy code from the file attached
+  inside the PDF, never from its printed text, where a long code wraps. It restores nothing and
+  prints one line when the pack holds no bucket copy code (the box had no bucket copy when the pack
+  was made), when the PDF is not a Waitron recovery pack, or when the file attached inside the pack
+  is damaged or was changed after it was made. Like the kit file, the PDF can hold the bucket's key and
+  the recovery key, and it may also hold the server key: keep it as private as the kit file.
+
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
   backup's node key, a fresh allocation and current outside evidence. The source examples below
@@ -562,6 +570,10 @@ command against it treat that entrypoint differently:
   docker compose run --rm -v "$PWD/pack.txt:/pack.txt:ro" --entrypoint node app \
     /app/bin-restore.js restore --from-archive /pack.txt --archive-key <name>
   ```
+
+  `--from-archive` also takes the venue's recovery pack PDF in place of the pack file, and reads
+  its archive code the same way. It refuses in the same three cases, the first being a pack made
+  while the box kept no backup archive in a bucket.
 
   The Backups screen's Show archive recovery pack button, offered once a destination is a bucket,
   shows the pack's code line, and the Download pack file link shown with it downloads a file that

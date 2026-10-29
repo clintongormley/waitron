@@ -72,9 +72,13 @@ finish moving them; the box then starts a new first setup.
 ## Choose your copy {#source}
 
 Choose **Backup file**, **Bucket copy** or **Cloud copy** and the matching environment.
-For an archive, choose the file and enter its archive key. For a bucket copy, paste its recovery
-kit. For Cloud, request approval, approve it in Cloud and check the approval here. Cloud recovery
-requires a supported recovery service; this route does not enable production Cloud recovery.
+For an archive, choose the file and enter its archive key. For a bucket copy, choose your recovery
+pack or recovery kit file, or paste the kit. The page reads the pack's bucket copy code from the
+file attached inside the PDF, not from the printed text, and sends only that code. If the pack was
+made before the box had a bucket copy, the PDF is not a Waitron recovery pack, or the file attached
+inside the pack is damaged or was changed after it was made, the page says so under the field and keeps what was there. For Cloud, request approval, approve it in Cloud
+and check the approval here. Cloud recovery requires a supported recovery service; this route does
+not enable production Cloud recovery.
 
 The archive key, bucket credentials and Cloud approval give access to a copy. You still need that
 copy's named node recovery key to authenticate recovery. Keep production and preproduction separate.
@@ -82,7 +86,9 @@ copy's named node recovery key to authenticate recovery. Keep production and pre
 ## Prove access to the selected backup {#proof}
 
 Enter the grouped recovery key from the sheet you kept for this backup, or choose its saved
-recovery PDF. A newer replacement sheet may not open an older backup.
+recovery PDF or a recovery pack that holds the server key. If the pack does not hold the server
+key, the page says so and, when the pack records it, names the pack or the key name to look for.
+A newer replacement sheet may not open an older backup.
 
 Confirm that the old box stays offline and that you are the only person recovering this taxpayer.
 Choose **Open backup**. Only after the key is accepted does the page show the backup's taxpayer,

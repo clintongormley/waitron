@@ -379,6 +379,10 @@ under the task.
    the design's alternative (attach only the key file, print the codes); PR A then shrinks to Tasks
    2-4, 6-7 without the attachment in the fiscal reader.
 
+**Result (2026-10-29): go.** Only "refuses hostile carrier: duplicate name" fails when every one-file
+check is removed; once two names are accepted, a PDF carrying both is stopped by the one-file rule
+alone, so Task 5's both-files case is required. Receipts in PR A's description.
+
 ### Task 2 — the package and the attached file's format
 
 **Files:** `packages/recovery-pack/` (new: `package.json`, `tsconfig.json`, `vitest.config.ts`,
@@ -776,8 +780,8 @@ transaction opens (it is a file, not the database). A test calls each builder in
   `archive-settings.ts:299-302`): add `readHeldArchiveSettingsIn(tx, ring)` beside
   `readHeldArchiveSettings` (`:305-311`, which then calls it), so the page's failure is keyed by
   that code and not by the raw credential or parse error; for the first bucket destination, `archiveCode` and the
-  `restore --from-archive` steps; for a local folder, `backupKey` and the steps for setup's Restore
-  from backup; none → `absent` ("This box makes no archives"). Check = the key's change time and the
+  `restore --from-archive` steps; for a local folder, `backupKey` (its page's secret sets `exactSpaces: true`: a passphrase's
+  spaces are part of it) and the steps for setup's Restore from backup; none → `absent` ("This box makes no archives"). Check = the key's change time and the
   archive settings' revision.
 - **server key:** asks the one module with `recoveryPackPage` (none → `absent`, "This venue files no
   invoices with the tax agency"); no key in force → `failed`, "this box has no server key yet",
