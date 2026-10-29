@@ -123,13 +123,13 @@ declare module "@waitron/shared" {
      * is the variable NAME and is the only field: the value is never echoed, so a secret pasted into
      * the wrong variable cannot land in an error's params.
      */
-    "server.till_config_missing": { key: string };
+    "server.node_config_missing": { key: string };
     /**
      * The node identity is malformed or has no location in the venue database. `key` names the
      * variable and is the only field; the rejected value is not carried, for the reason
-     * `server.till_config_missing` gives.
+     * `server.node_config_missing` gives.
      */
-    "server.till_config_invalid": { key: string };
+    "server.node_config_invalid": { key: string };
     /**
      * A tenant's credential exists but this host cannot use it — a field the purpose registry
      * declares is absent from the sealed row, or its value is not one of the accepted ones. `field`

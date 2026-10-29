@@ -34,7 +34,8 @@ import { deploymentEnvironment } from "./config.js";
 import { DEVICE_COOKIE } from "./device-session.js";
 import { ALL_MODULES } from "./modules.js";
 import { mountTillApi } from "./till-api.js";
-import { loadTillConfig } from "./till-config.js";
+import { loadTillAppSettings } from "./till-config.js";
+import { loadNodeIdentity } from "./node-config.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
 import { decodeTicket } from "./testing/decode-ticket.js";
 import { decimal } from "@waitron/shared";
@@ -120,7 +121,10 @@ async function venue(db: Database): Promise<Venue> {
     { db, modules: ALL_MODULES },
   );
   const cfg = await deviceRequestCfg(db, {
-    ...loadTillConfig({
+    ...loadNodeIdentity({
+      WAITRON_NODE_ID: allocated.nodeId,
+    }),
+    ...loadTillAppSettings({
       WAITRON_NODE_ID: allocated.nodeId,
     }),
     locationId: brandLocationId(allocated.locationId),

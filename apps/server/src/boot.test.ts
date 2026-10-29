@@ -90,7 +90,8 @@ import { DRAIN_DUTY } from "./pass.js";
 import { mintMtlsMaterial } from "@waitron/server-kit/testing/mtls.js";
 import { ensureBoxSecrets, tightenTlsDir } from "./box-secrets.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
-import { loadTillConfig } from "./till-config.js";
+import { loadTillAppSettings } from "./till-config.js";
+import { loadNodeIdentity } from "./node-config.js";
 import type { TillConfig } from "./till-config.js";
 import { defaultLayout } from "./testing/floor-sets.js";
 import { enrolDeviceForTest } from "./testing/enrol.js";
@@ -2019,7 +2020,8 @@ describe("startServer, against a migrated venue directory", () => {
         defaultLayout(
           db,
           {
-            ...loadTillConfig(TILL_ENV),
+            ...loadNodeIdentity(TILL_ENV),
+            ...loadTillAppSettings(TILL_ENV),
             locationId: brandLocationId(TILL_LOCATION_ID),
             simplifiedInvoiceLimit: null,
           },
@@ -2505,7 +2507,7 @@ describe("startServer, against a migrated venue directory", () => {
         WAITRON_ENV: "production",
       }),
     ).rejects.toMatchObject({
-      code: "server.till_config_invalid",
+      code: "server.node_config_invalid",
       params: { key: "WAITRON_NODE_ID" },
     });
   });
@@ -2950,7 +2952,8 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
 
   beforeAll(async () => {
     const cfg: TillConfig = {
-      ...loadTillConfig(TILL_ENV),
+      ...loadNodeIdentity(TILL_ENV),
+      ...loadTillAppSettings(TILL_ENV),
       locationId: brandLocationId(TILL_LOCATION_ID),
       simplifiedInvoiceLimit: null,
     };
@@ -3096,7 +3099,11 @@ describe("SP-C dev override reaches the live device routes only under devMode", 
   }, 60_000);
 
   it("the equipment read names a stuck kitchen printer", async () => {
-    const cfg = { ...loadTillConfig(TILL_ENV), locationId: TILL_LOCATION_ID };
+    const cfg = {
+      ...loadNodeIdentity(TILL_ENV),
+      ...loadTillAppSettings(TILL_ENV),
+      locationId: TILL_LOCATION_ID,
+    };
     const [printer] = await sharedDb
       .insert(printers)
       .values({

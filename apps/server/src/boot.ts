@@ -336,7 +336,7 @@ import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readNodeLocation, readFilingModule } from "./till-config.js";
+import { readNodeLocation, readFilingModule } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TillConfig } from "./till-config.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
@@ -988,7 +988,7 @@ async function bootServer(
   // keeps the two from overlapping and leaves nothing open behind a failed migration. Setup mode
   // migrates the FULL schema, which the wizard needs; trading mode migrates only the enabled set.
   const setsToMigrate =
-    config.till === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
+    config.node === undefined ? availableModules : enabledModules(availableModules, moduleConfig);
   const migrationOptions = migrationOptionsFor(
     orderedMigrationSets(setsToMigrate),
     config.migrationsRoot,
@@ -1041,7 +1041,7 @@ async function bootServer(
   // Drift visibility: log the enabled set against what the database has actually migrated. A
   // soft-disabled module's data is kept; it is simply not migrated.
   let appliedModuleVersions: Record<string, number> = {};
-  if (config.till !== undefined) {
+  if (config.node !== undefined) {
     const myModuleVersions = await schemaVersionsByModule(db, availableModules);
     appliedModuleVersions = myModuleVersions;
     const migrated = new Set(
@@ -1115,11 +1115,11 @@ async function bootServer(
       hostname: BOX_HOSTNAME,
       port: config.httpPort,
       secure:
-        config.till === undefined ||
+        config.node === undefined ||
         config.tls !== undefined ||
         mintedBoxLeaf(config.stateDir) !== undefined,
       listIpv4: boxAddresses,
-      discoveryEnabled: config.till === undefined,
+      discoveryEnabled: config.node === undefined,
       serveBoxCa: config.tls === undefined,
       connectionHostnames: BOX_LEAF_HOSTNAMES,
     },
@@ -1127,7 +1127,7 @@ async function bootServer(
   );
   mountGuidePages(app, {}, log);
 
-  if (config.till === undefined) {
+  if (config.node === undefined) {
     // SETUP MODE — this box is bound to no venue. Beyond the routes mounted above, it serves
     // `/health` and the unauthenticated setup surface, and runs no background work: there is
     // nothing to submit yet.
@@ -1552,16 +1552,16 @@ async function bootServer(
     );
   }
 
-  const nodeLocationId = await readNodeLocation(db, config.till.nodeId);
+  const nodeLocationId = await readNodeLocation(db, config.node.nodeId);
   if (nodeLocationId === null)
-    throw new AppError("server.till_config_invalid", { key: "WAITRON_NODE_ID" });
+    throw new AppError("server.node_config_invalid", { key: "WAITRON_NODE_ID" });
   assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
 
   // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
   // the adoption-pending latch, and the branch above returns while it is set.
   // Both deployment axes from ONE read of the row, so the initial holder pair is never torn: two
   // separate reads could straddle a concurrent promotion and yield an impossible `(mirror, primary)`.
-  const initialAxes = await readDeploymentAxes(db, config.till.nodeId);
+  const initialAxes = await readDeploymentAxes(db, config.node.nodeId);
   await assertRestoredMembershipReadable(config.stateDir, db);
   // A returned box that died before it was fenced would otherwise boot with a stale chart and SELL
   // while the promoted cloud is also primary — two nodes filing under one NIF (CLAUDE.md §5). So a
@@ -1570,7 +1570,7 @@ async function bootServer(
   // so a persisted superseding document flows into the `fenced` demote. An unreachable peer lets
   // boot proceed as primary: the MVP's accepted window. Demote-only: it can never self-promote.
   if (initialAxes.mode !== "mirror") {
-    const peer = await readMirrorConfig(db, config.till.nodeId);
+    const peer = await readMirrorConfig(db, config.node.nodeId);
     if (peer !== null) {
       const [trustSet, held] = await Promise.all([
         readMembershipTrustSet(db),
@@ -1578,7 +1578,7 @@ async function bootServer(
       ]);
       await reconcileMembershipOnBoot({
         held,
-        nodeId: config.till.nodeId,
+        nodeId: config.node.nodeId,
         // `mirror_config` is owner-written trusted config, so no SSRF screen.
         peerUrl: `${peer.relayUrl.replace(/\/+$/, "")}/management-api/membership`,
         fetchPeerMembership: fetchPeerMembershipDocument,
@@ -1597,18 +1597,18 @@ async function bootServer(
   // Re-read AFTER the reconciliation above, so a persisted superseding chart is reflected here.
   // Read without re-verifying: boot trusts its own held row as it trusts the deployment axes.
   const heldMembership = await readNodeMembership(db);
-  const fenced = isFenced(heldMembership, config.till.nodeId);
+  const fenced = isFenced(heldMembership, config.node.nodeId);
   let axes = initialAxes;
   if (fenced && axes.singletonRole === "primary") {
     // Demote the singleton axis, which stops every singleton duty. `mode` stays 'primary'; the
     // read-only gate below, not the mode, enforces the fence.
-    const ownNodeId = config.till.nodeId;
+    const ownNodeId = config.node.nodeId;
     await withTransaction(db, async (tx) => {
       await setSingletonRoleTx(tx, ownNodeId, "secondary");
     });
     // Re-read rather than synthesize: both axes from one read of the current row, so `mode` cannot
     // be stale if it flipped since the initial read.
-    axes = await readDeploymentAxes(db, config.till.nodeId);
+    axes = await readDeploymentAxes(db, config.node.nodeId);
   }
   const holders = createDeploymentHolders(axes.mode, axes.singletonRole);
   // Shared by reference between the fiscal pass that WRITES it and the box-status read that surfaces
@@ -1637,7 +1637,7 @@ async function bootServer(
         stateDir: config.stateDir,
         db,
         ring,
-        nodeId: config.till.nodeId,
+        nodeId: config.node.nodeId,
         contactUrl: config.advertisedOrigin,
         hostnames: BOX_LEAF_HOSTNAMES,
         listIpv4: boxAddresses,
@@ -1693,11 +1693,11 @@ async function bootServer(
   }
 
   // The node whose DATA the node-scoped read paths display. On a mirror it is the ORIGIN primary,
-  // whose node_id the venue's sales carry; `config.till.nodeId` stays the node's own identity for
+  // whose node_id the venue's sales carry; `config.node.nodeId` stays the node's own identity for
   // every WRITE path.
-  let dataNodeId: string = config.till.nodeId;
+  let dataNodeId: string = config.node.nodeId;
   if (isMirror) {
-    const loaded = await readMirrorConfig(db, config.till.nodeId);
+    const loaded = await readMirrorConfig(db, config.node.nodeId);
     if (loaded === null) {
       throw new AppError("server.config_invalid", {
         variable: "mirror_config",
@@ -1754,7 +1754,7 @@ async function bootServer(
     {
       db,
       ring,
-      nodeId: config.till.nodeId,
+      nodeId: config.node.nodeId,
       environment: config.environment,
       makeStripe: defaultMakeStripe,
     },
@@ -1763,7 +1763,7 @@ async function bootServer(
   // `makeFiscalBackend` cross-checks `filingModule` against the enabled fiscal module, so a node
   // whose records were filed under another regime fails the boot rather than chaining under the
   // wrong one (CLAUDE.md §5).
-  const filingModule = await readFilingModule(db, config.till);
+  const filingModule = await readFilingModule(db, config.node);
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
@@ -1772,7 +1772,8 @@ async function bootServer(
     enabledFiscal.venueFields?.defaults?.operationDescription,
   );
   const till: TillConfig = {
-    ...config.till,
+    ...config.node,
+    ...config.tillApp,
     locationId: nodeLocationId,
     simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
@@ -2720,7 +2721,7 @@ async function bootServer(
             ? `https://${tunnelConfig.relayHost}:${tunnelConfig.relayPort}/`
             : undefined,
         boxHostname: BOX_HOSTNAME,
-        designated: { ...config.till, locationId: nodeLocationId },
+        designated: { ...config.node, locationId: nodeLocationId },
         accountKey: accountKey.toString("base64"),
         credentialKeyRing: totpKeyRing,
       },

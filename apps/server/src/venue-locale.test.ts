@@ -1,3 +1,6 @@
+import { loadTillAppSettings } from "./till-config.js";
+import { tenants } from "@waitron/db";
+import { eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -204,4 +207,21 @@ describe("readOfferedReceiptLanguages", () => {
       withTransaction(suite.db, (tx) => readOfferedReceiptLanguages(tx, { locationId: missing })),
     ).rejects.toThrow(`no location ${missing}`);
   });
+});
+
+it.each([
+  [undefined, "en-GB"],
+  ["", "en-GB"],
+  ["es-ES", "es-ES"],
+  ["zz-ZZ", "en-GB"],
+])("raw locale override leaves GB geography visible (%s)", async (raw, expected) => {
+  await suite.db.update(tenants).set({ country: "GB" }).where(eq(tenants.id, 1));
+  try {
+    const settings = loadTillAppSettings({ WAITRON_TILL_LOCALE: raw });
+    expect(await readVenueLocale(suite.db, { locationId, override: settings.localeOverride })).toBe(
+      expected,
+    );
+  } finally {
+    await suite.db.update(tenants).set({ country: "ES" }).where(eq(tenants.id, 1));
+  }
 });

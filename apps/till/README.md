@@ -137,17 +137,18 @@ for a server using its persisted self-signed leaf (`vite.config.ts`).
 | `WAITRON_TILL_LOCALE` | no       | `es-ES` | Overrides the default UI language. A few other things read it too, among them the kitchen's unit names, the payment slip's date and money format, and the dish-text language a sale falls back to when the venue has saved no content languages. Not the receipt's language: that is the location's by default, or the one staff choose at the till. |
 | `WAITRON_TILL_TIPS`   | no       | off     | Offer a tip prompt at card collect. Only `true` or `1` enable it.                                                                                                                                                                                                                                                                                    |
 
-You still supply the location when starting an adopted spare: its local role can exist before
-its own `nodes` row, so that row cannot supply the location during the pending adoption.
+You do not supply a location setting. Ordinary trading reads the location from the configured
+node in the database. An adopted spare serves its pending status before looking for its own node row.
 
 After this identity-setting rename, reset your existing throwaway demo or test venue with
 `wa-wt reset demo <worktree-name>` before starting it. Provisioning writes the new settings;
 there is no fallback to the old names.
 
-The server reads these settings once at boot through `tryLoadTillConfig`
-(`apps/server/src/till-config.ts`). With neither identity set, it enters setup mode. Setting only
-one identity refuses boot with `server.config_invalid`; a malformed identity refuses with
-`server.till_config_invalid`. These errors name the setting without echoing its value.
+The server reads box identity through `tryLoadNodeIdentity` (`apps/server/src/node-config.ts`)
+and till preferences through `loadTillAppSettings` (`apps/server/src/till-config.ts`). With
+`WAITRON_NODE_ID` unset or empty, you get setup mode even when you supply till preferences.
+A malformed node identity, or a configured node missing from the database after pending adoption,
+refuses trading with `server.node_config_invalid`. The error names the setting without echoing its value.
 
 ### A no-browser check
 

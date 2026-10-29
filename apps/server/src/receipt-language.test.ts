@@ -57,7 +57,8 @@ import { mountTillApi } from "./till-api.js";
 import { readInvoiceDocument } from "./invoice-document.js";
 import { buildReceiptDocument } from "./receipt-document.js";
 import { mountPaymentsApi } from "./payments-api.js";
-import { loadTillConfig } from "./till-config.js";
+import { loadTillAppSettings } from "./till-config.js";
+import { loadNodeIdentity } from "./node-config.js";
 import type { DeviceRequestConfig } from "./till-config.js";
 import {
   payWorkingOrderIntegratedOrchestration as payWorkingOrderIntegrated,
@@ -156,7 +157,11 @@ async function venueWith(
   );
   // Built the way boot builds it, from the variables the box sets.
   const cfg = await deviceRequestCfg(suite.db, {
-    ...loadTillConfig({
+    ...loadNodeIdentity({
+      WAITRON_NODE_ID: venue.nodeId,
+      ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
+    }),
+    ...loadTillAppSettings({
       WAITRON_NODE_ID: venue.nodeId,
       ...(envLocale === undefined ? {} : { WAITRON_TILL_LOCALE: envLocale }),
     }),

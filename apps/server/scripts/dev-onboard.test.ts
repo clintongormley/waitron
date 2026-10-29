@@ -131,7 +131,7 @@ describe("devOnboard against a real venue directory", () => {
     expect(present).toBe(1);
   });
 
-  it("writes a .env that loadConfig accepts as a SETUP-MODE config (config.till undefined)", () => {
+  it("writes a .env that loadConfig accepts as a SETUP-MODE config (config.node undefined)", () => {
     const written = parseEnvFile(readFileSync(envPath, "utf8"));
     // Placeholder roots: loadConfig uses them as string fallbacks and never stats them.
     const config = loadConfig(written, "/dev/null/migrations", "/dev/null/state");
@@ -139,7 +139,7 @@ describe("devOnboard against a real venue directory", () => {
     expect(config.devMode).toBe(true);
     expect(config.httpPort).toBe(8080);
     expect(config.venueDir).toBe(venueDir);
-    expect(config.till).toBeUndefined();
+    expect(config.node).toBeUndefined();
   });
 
   it("refuses to touch a venue directory that already holds a venue", async () => {

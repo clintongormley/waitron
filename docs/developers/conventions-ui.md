@@ -1830,7 +1830,7 @@ take the old server's while that one still answers, so failover work must route 
 
 Some of those values change only when the server restarts, and the revision covers them, so an open
 till takes the new value after a restart without reloading: tips come from `WAITRON_TILL_TIPS`
-(`loadTillConfig`, `apps/server/src/till-config.ts`), the simplified-invoice limit from the fiscal
+(`loadTillAppSettings`, `apps/server/src/till-config.ts`), the simplified-invoice limit from the fiscal
 backend at boot (`apps/server/src/boot.ts`), and the onboarding intent from the server's
 configuration.
 
