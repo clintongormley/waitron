@@ -130,6 +130,7 @@ describe("startFreeSpaceWatch", () => {
       statfs?: Statfs;
       log?: Logger;
       restoreSpare?: () => Promise<void>;
+      freeOldBackups?: (signal: AbortSignal) => Promise<void>;
     } = {},
   ) {
     const spy = logSpy();
@@ -154,6 +155,7 @@ describe("startFreeSpaceWatch", () => {
       log,
       statfs,
       ...(options.restoreSpare ? { restoreSpare: options.restoreSpare } : {}),
+      ...(options.freeOldBackups ? { freeOldBackups: options.freeOldBackups } : {}),
       timer: (ms, fn) => {
         const entry = { ms, fn, cancelled: false };
         armed.push(entry);
@@ -349,6 +351,89 @@ describe("startFreeSpaceWatch", () => {
     w.armed[0]!.fn();
     await new Promise((resolve) => setImmediate(resolve));
     await new Promise((resolve) => setImmediate(resolve));
+    expect(w.armed).toHaveLength(1);
+    expect(w.state.current().freeBytes).toBeNull();
+  });
+
+  it("deletes old backups first, then writes the spare back and reads, so a low disk they fixed raises no warning", async () => {
+    const calls: string[] = [];
+    const freeOldBackups = async () => {
+      calls.push("delete");
+      w.reading.free = 4 * GIB;
+    };
+    const restoreSpare = async () => {
+      calls.push("restore");
+    };
+    const w = watch({ freeOldBackups, restoreSpare });
+    w.reading.free = 1.9 * GIB;
+    await w.tick();
+    expect(calls).toEqual(["delete", "restore"]);
+    expect(w.state.current()).toEqual({ freeBytes: 4 * GIB, readAt: w.now, lowSince: null });
+    expect(w.events("storage.space_low")).toEqual([]);
+
+    const control = watch({ restoreSpare });
+    control.reading.free = 1.9 * GIB;
+    await control.tick();
+    expect(control.events("storage.space_low")).toHaveLength(1);
+  });
+
+  it("a noted stop lifts in the reading whose deletion made the room", async () => {
+    const calls: string[] = [];
+    const disk = {
+      noted: () => true,
+      full: async () => {
+        calls.push("full");
+        return false;
+      },
+    };
+    const w = watch({
+      disk,
+      freeOldBackups: async () => {
+        calls.push("delete");
+      },
+      restoreSpare: async () => {
+        calls.push("restore");
+      },
+    });
+    await w.tick();
+    expect(calls).toEqual(["delete", "restore", "full"]);
+  });
+
+  it("a deletion step that throws is logged, and the same reading still writes the spare back and records", async () => {
+    const restoreSpare = vi.fn(async () => {});
+    const w = watch({
+      restoreSpare,
+      freeOldBackups: async () => {
+        throw Object.assign(new Error("gone"), { code: "ENOENT" });
+      },
+    });
+    await w.tick();
+    expect(w.events("backup.low_space_delete_failed")).toEqual([
+      ["warn", "backup.low_space_delete_failed", { errorCode: "unknown", errno: "ENOENT" }],
+    ]);
+    expect(restoreSpare).toHaveBeenCalledTimes(1);
+    expect(w.state.current().freeBytes).toBe(10 * GIB);
+  });
+
+  it("stop() aborts the deletion step's signal and answers once the step has finished", async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    let given: AbortSignal | undefined;
+    const freeOldBackups = async (signal: AbortSignal) => {
+      given = signal;
+      await held;
+    };
+    const w = watch({ freeOldBackups });
+    w.armed[0]!.fn();
+    await vi.waitFor(() => expect(given).toBeDefined());
+    expect(given!.aborted).toBe(false);
+    let stopped = false;
+    const stopping = w.handle.stop().then(() => (stopped = true));
+    expect(given!.aborted).toBe(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stopped).toBe(false);
+    release();
+    await stopping;
     expect(w.armed).toHaveLength(1);
     expect(w.state.current().freeBytes).toBeNull();
   });
