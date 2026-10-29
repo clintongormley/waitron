@@ -2967,16 +2967,16 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   of today's joins.
 
 - **A1207. A help tooltip near the window's foot covers its own "?".** Seen, 2026-10-29 (A1125's
-  look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125. With no
-  room below its "?", `wt-help-tooltip` slides up over it instead of opening above
+  look, `g-phone-help-390-*` in `~/waitron-campaign-c/a1125-shots/`); left open by A1125, #2238.
+  With no room below its "?", `wt-help-tooltip` slides up over it instead of opening above
   (`positionTooltip`, `packages/ui/src/components/wt-help-tooltip.ts`): on a phone, it covers the
   Order screen's bar.
 
 - **A1208. The Served toast covers the Order screen's Fire / Send all buttons.** Measured
-  2026-10-29 in A1125's review (the probe was not kept); left open by A1125. At 1024×768 it covers
-  the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like the
-  Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses where
-  the toast goes.
+  2026-10-29 in A1125's review (the probe was not kept); left open by A1125, #2238. At 1024×768 it
+  covers the top 26 px of Fire / Send all; on a 390 px phone, all of Move to…. A fixed lift like
+  the Ready bar's does not fit a bar that is not always at the window's foot; the owner chooses
+  where the toast goes.
 
 - **A1128. Till tests that press a handheld's retired Order tab.** Since A797 slice 3 a handheld's
   bar draws no Order tab, yet some `till-app-*` tests emit `screen-select` for `order`, a tap nobody
