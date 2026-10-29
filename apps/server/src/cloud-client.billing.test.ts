@@ -135,6 +135,108 @@ it("waits for the Retry-After hint of a 429 whose body is not JSON", async () =>
   }
 });
 
+async function dropLease(stateDir: string) {
+  const file = join(stateDir, "cloud-connection.json");
+  const state = JSON.parse(await readFile(file, "utf8"));
+  delete state.lifecycle.lease;
+  await writeFile(file, JSON.stringify(state));
+}
+
+it("counts the minute from when the read went to Cloud, not from before a five-second lease renewal", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const sent: number[] = [];
+  const { f } = await billingCloud((v, s, res) => {
+    sent.push(Date.now());
+    send(res, 200, reply(v, s));
+  });
+  try {
+    await dropLease(f.options.stateDir);
+    const start = Date.now();
+    f.delay(async () => {
+      vi.setSystemTime(start + 5_000);
+    });
+    await f.client.billing();
+    f.delay(async () => {});
+    vi.setSystemTime(start + 64_999);
+    await f.client.billing();
+    expect(sent.map((t) => t - start)).toEqual([5_000]);
+    vi.setSystemTime(start + 65_000);
+    await f.client.billing();
+    expect(sent.map((t) => t - start)).toEqual([5_000, 65_000]);
+  } finally {
+    await f.close();
+  }
+});
+
+it("shares a read whose lease renewal outlasts the minute with a caller arriving meanwhile", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((v, s, res) => send(res, 200, reply(v, s)));
+  try {
+    await dropLease(f.options.stateDir);
+    const start = Date.now();
+    let second: Promise<unknown> | undefined;
+    f.delay(async () => {
+      f.delay(async () => {});
+      vi.setSystemTime(start + 61_000);
+      second = codeOf(f.client.billing());
+      // Lets the second caller reach the shared read before the renewal answers.
+      await new Promise((r) => setTimeout(r, 50));
+    });
+    expect(await codeOf(f.client.billing())).toBe("answered");
+    expect(await second).toBe("answered");
+    expect(reads()).toBe(1);
+  } finally {
+    await f.close();
+  }
+});
+
+it("counts a 429's Retry-After from when the refusal arrived, five seconds after the read was sent", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((_v, _s, res) => {
+    vi.setSystemTime(Date.now() + 5_000);
+    send(res, 429, { error: "rate_limited" }, { "retry-after": "120" });
+  });
+  try {
+    const start = Date.now();
+    expect(await codeOf(f.client.billing())).toBe("cloud.unavailable");
+    vi.setSystemTime(start + 124_999);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(1);
+    vi.setSystemTime(start + 125_000);
+    await codeOf(f.client.billing());
+    expect(reads()).toBe(2);
+  } finally {
+    await f.close();
+  }
+});
+
+it("remembers a read that never reached Cloud, because the lease could not be renewed, for a minute from when it started", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  const { f, reads } = await billingCloud((v, s, res) => send(res, 200, reply(v, s)));
+  try {
+    await dropLease(f.options.stateDir);
+    const start = Date.now();
+    f.offline();
+    f.delay(async () => {
+      vi.setSystemTime(start + 5_000);
+    });
+    const before = f.requests.filter((r) => r[2] === "renew").length;
+    const renewals = () => f.requests.filter((r) => r[2] === "renew").length - before;
+    expect(await codeOf(f.client.billing())).toBe("cloud.unavailable");
+    expect([reads(), renewals()]).toEqual([0, 1]);
+    f.delay(async () => {});
+    vi.setSystemTime(start + 59_999);
+    expect(await codeOf(f.client.billing())).toBe("cloud.unavailable");
+    expect(renewals()).toBe(1);
+    f.online();
+    vi.setSystemTime(start + 60_000);
+    expect(await codeOf(f.client.billing())).toBe("answered");
+    expect([reads(), renewals()]).toEqual([1, 2]);
+  } finally {
+    await f.close();
+  }
+});
+
 it("refuses without a connection, sending nothing", async () => {
   const f = await cloudFixture();
   try {

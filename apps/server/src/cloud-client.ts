@@ -415,21 +415,28 @@ export function createCloudConnection(options: CloudConnectionOptions) {
         billingRead.registration !== registration ||
         startedAt >= billingRead.notBefore
       ) {
+        let sentAt: number | undefined;
         // Bound only by the read's own limit: one caller leaving must not fail it for the others.
         const outcome = (async () => {
           const state = await leaseState();
           if (registrationOf(state) !== registration) throw new AppError("cloud.unavailable", {});
+          sentAt = Date.now();
           return fetchBillingDisplay(state, { onRefusal: recordRefusal });
         })();
-        const entry = { registration, notBefore: startedAt + 60_000, outcome };
+        // Shared until it settles, however long the lease renewal before it takes.
+        const entry = { registration, notBefore: Infinity, outcome };
         billingRead = entry;
-        outcome.catch((error: BillingRefusal) => {
-          if (error.retryAfterMs)
-            entry.notBefore = Math.max(
-              entry.notBefore,
-              startedAt + Math.min(error.retryAfterMs, 3_600_000),
-            );
-        });
+        // The minute counts from the read Cloud received, and a 429's wait from its arrival.
+        const settle = (error?: BillingRefusal) => {
+          entry.notBefore =
+            sentAt === undefined
+              ? startedAt + 60_000
+              : Math.max(
+                  sentAt + 60_000,
+                  error?.retryAfterMs ? Date.now() + Math.min(error.retryAfterMs, 3_600_000) : 0,
+                );
+        };
+        outcome.then(() => settle(), settle);
       }
       const { outcome } = billingRead;
       let display: BillingDisplay;
