@@ -14,6 +14,7 @@ import {
   type CloudInstallationStatus,
   type CloudObservation,
 } from "./cloud-installation.js";
+import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
 import {
   collectTranslation,
   type OnRefusal,
@@ -389,7 +390,63 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       else return;
       await save(state);
     }, true);
+  // Cloud's billing contract allows one read a minute across every dashboard (Retry-After may ask
+  // for longer) and no snapshot on disk, so the last read and its outcome live here, per registration.
+  let billingRead:
+    { registration: string; notBefore: number; outcome: Promise<BillingDisplay> } | undefined;
+  const registrationOf = (state: SavedCloudState | undefined) =>
+    state?.view?.registration && !state.lifecycle?.revoked
+      ? `${state.publicKey} ${state.view.registration.installationId}`
+      : undefined;
   return {
+    async billing(signal?: AbortSignal): Promise<BillingDisplay> {
+      const registration = registrationOf(await read());
+      if (!registration) throw new AppError("cloud.not_configured", {});
+      const startedAt = Date.now();
+      if (
+        !billingRead ||
+        billingRead.registration !== registration ||
+        startedAt >= billingRead.notBefore
+      ) {
+        // Bound only by the read's own limit: one caller leaving must not fail it for the others.
+        const outcome = (async () => {
+          const state = await leaseState();
+          if (registrationOf(state) !== registration) throw new AppError("cloud.unavailable", {});
+          return fetchBillingDisplay(state, { onRefusal: recordRefusal });
+        })();
+        const entry = { registration, notBefore: startedAt + 60_000, outcome };
+        billingRead = entry;
+        outcome.catch((error: BillingRefusal) => {
+          if (error.retryAfterMs)
+            entry.notBefore = Math.max(
+              entry.notBefore,
+              startedAt + Math.min(error.retryAfterMs, 3_600_000),
+            );
+        });
+      }
+      const { outcome } = billingRead;
+      let display: BillingDisplay;
+      if (signal) {
+        let remove = () => {};
+        try {
+          display = await Promise.race([
+            outcome,
+            new Promise<never>((_resolve, reject) => {
+              const abort = () => reject(new AppError("cloud.unavailable", {}));
+              if (signal.aborted) abort();
+              signal.addEventListener("abort", abort, { once: true });
+              remove = () => signal.removeEventListener("abort", abort);
+            }),
+          ]);
+        } finally {
+          remove();
+        }
+      } else display = await outcome;
+      const now = registrationOf(await read());
+      if (now !== registration)
+        throw new AppError(now ? "cloud.unavailable" : "cloud.not_configured", {});
+      return display;
+    },
     translation: {
       submit: async (operationId: string, body: string, signal?: AbortSignal) =>
         submitTranslation(await leaseState(signal), operationId, body, signal, recordRefusal),

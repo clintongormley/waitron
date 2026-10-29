@@ -8,6 +8,7 @@ export async function installationFixture(
   options: {
     cloudBeforeVersion2?: boolean;
     translation?: MachineHandler;
+    billing?: MachineHandler;
     translationState?: () => ServiceState;
   } = {},
 ) {
@@ -57,6 +58,10 @@ export async function installationFixture(
     }
     if (String(values[2]).startsWith("translation-") && options.translation) {
       await options.translation(values, saved, req, res, sent);
+      return;
+    }
+    if (values[2] === "billing-display" && options.billing) {
+      await options.billing(values, saved, req, res, sent);
       return;
     }
     expect(req.url).toBe(`/api/installations/${values[2]}`);
