@@ -5971,6 +5971,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
   Layouts' receipt, address and operation-description samples use English.
   Database zone and party-label suites use English sample zone, group and guest names.
+  UI-core input and textarea samples use English label and note text; phone-label checks
+  retain their 120-character inputs and existing bounds.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

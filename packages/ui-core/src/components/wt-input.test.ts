@@ -612,12 +612,12 @@ test("field help sits outside the field box, at its trailing side and centred on
 });
 
 test("a long label at phone width is cut with an ellipsis on one line", async () => {
-  const long = "Nombre del cliente tal como aparecerá en la factura simplificada y en el ticket "
+  const long = "Customer name as it will appear on the simplified invoice and on the receipt "
     .repeat(2)
     .slice(0, 120);
   const el = await mount(`<wt-input label="${long}" value="Ana"></wt-input>`);
   host.style.width = "390px";
-  const short = await mount('<wt-input label="Nombre" value="Ana"></wt-input>');
+  const short = await mount('<wt-input label="Name" value="Ana"></wt-input>');
   host.style.width = "390px";
   const text = (input: HTMLElement) =>
     input.shadowRoot!.querySelector<HTMLElement>(".field-label-text")!;
@@ -633,7 +633,7 @@ test("a long label at phone width is cut with an ellipsis on one line", async ()
 });
 
 test("a long required label keeps its star visible at phone width", async () => {
-  const long = "Nombre del cliente tal como aparecerá en la factura simplificada y en el ticket "
+  const long = "Customer name as it will appear on the simplified invoice and on the receipt "
     .repeat(2)
     .slice(0, 120);
   const el = await mount(`<wt-input label="${long}" value="Ana" required></wt-input>`);
