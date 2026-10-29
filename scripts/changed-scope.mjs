@@ -308,6 +308,7 @@ export const LIGHT_B_PACKAGES = [
   "@waitron/sync-enrolment",
   "@waitron/composition",
   "@waitron/fiscal-none",
+  "@waitron/recovery-pack",
 ];
 
 /**

@@ -120,6 +120,7 @@ describe("configuration", () => {
       "staffing",
       "composition",
       "fiscal-none",
+      "recovery-pack",
       "provisioning",
       "ui",
       "dashboard-kit",
