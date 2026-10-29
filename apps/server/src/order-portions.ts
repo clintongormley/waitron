@@ -197,6 +197,18 @@ export interface GrowingPortion {
   nextOrdinal: number;
 }
 
+/**
+ * Whether raising a stored dish of `quantity` to `requested` thousandths adds copies of its whole
+ * portion, the row itself keeping `quantity`, rather than raising the row in place.
+ */
+export function risesByCopies(
+  quantity: number,
+  requested: number,
+  portion: GrowingPortion | undefined,
+): boolean {
+  return requested > quantity && portion !== undefined && !portion.measured;
+}
+
 /** The portion each of `lineIds` holds, as a rise needs it; a line holding none is absent. */
 export async function readGrowingPortions(
   tx: Transaction,

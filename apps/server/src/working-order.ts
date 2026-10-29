@@ -63,6 +63,7 @@ import {
   readGrowingPortions,
   recordPortionEvents,
   registerPortions,
+  risesByCopies,
   type GrowingPortion,
   type PortionRef,
 } from "./order-portions.js";
@@ -1165,6 +1166,14 @@ export async function prepareRecalledModifiers(
     ).map((row) => [row.id, row.parentId ?? row.id]),
   );
   const ownOptions = await productOptionLists(tx, [...new Set(productsById.values())]);
+  const portions = await readGrowingPortions(
+    tx,
+    choices.flatMap(({ parent, input }) =>
+      input.extras !== undefined && stringToThousandths(input.quantity) > parent.quantity
+        ? [parent.id]
+        : [],
+    ),
+  );
   const pricing: Parameters<typeof priceOrderLines>[3] = [];
   const owners: string[] = [];
   for (const { parent, children, input } of choices) {
@@ -1202,7 +1211,14 @@ export async function prepareRecalledModifiers(
     owners.push(parent.id);
     pricing.push({
       menuItemId: held.menuItemId,
-      quantity: input.quantity,
+      // Priced for the stored row's own dishes: each copy of a whole portion carries the same.
+      quantity: risesByCopies(
+        parent.quantity,
+        stringToThousandths(input.quantity),
+        portions.get(parent.id),
+      )
+        ? thousandthsToDecimal(parent.quantity)
+        : input.quantity,
       [FROZEN_OPTIONS]: [],
       [FROZEN_EXTRAS]: extras.added,
       [ADDED_EXTRAS_ONLY]: true,

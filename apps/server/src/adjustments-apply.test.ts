@@ -1473,6 +1473,40 @@ describe("raising an adjusted line the kitchen does not have (ruling R12)", () =
     expect(await placeOf(billId, 2)).toEqual({ groupId: coffee.groupId, sent: true, items: [] });
   });
 
+  it.each([false, true])(
+    "A803 portions: Olives added while raising a bound held Pizza to 2 are one dish's on each Pizza, comped=%s",
+    async (comped) => {
+      const { billId } = await bill([{ name: "Pizza" }], { release: "hold" });
+      await bindAsPortion(billId, 1);
+      if (comped) await adjust(billId, { ...(await todayLine(venue, billId, 1)), action: "comp" });
+
+      await inTx(venue, async (tx) =>
+        updateOrderLine(
+          tx,
+          venue.cfg,
+          billId,
+          1,
+          {
+            quantity: "2",
+            extras: [
+              { listId: venue.pizzaExtras, picks: [{ productId: venue.olivesId, quantity: 1 }] },
+            ],
+          },
+          await readOrderRevision(tx, billId),
+          venue.staffId,
+        ),
+      );
+
+      const rows = await rowsOf(venue, billId);
+      const olives = rows.filter((row) => row.name === "Olives");
+      expect(olives.map((row) => [row.quantity, row.lineTotal])).toEqual([
+        ["1.000", "1.50"],
+        ["1.000", "1.50"],
+      ]);
+      expect(new Set(olives.map((row) => row.parentLineId)).size).toBe(2);
+    },
+  );
+
   it("A803 portions: a raise that would add 100 portions of a bound held Burger is refused and changes nothing; 99 goes", async () => {
     const { billId } = await bill([{ name: "Burger" }], { release: "hold" });
     await bindAsPortion(billId, 1);

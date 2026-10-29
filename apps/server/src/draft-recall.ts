@@ -34,6 +34,7 @@ import {
   carryLineReductions,
   readGrowingPortions,
   registerPortions,
+  risesByCopies,
   type PortionRef,
 } from "./order-portions.js";
 import { appendRecalledLine, type Draft, type DraftLineInput } from "./order-drafts.js";
@@ -141,10 +142,9 @@ export async function saveRecalledLine(
       ? await storedOrderTotal(tx, line.workingOrderId)
       : null;
   const portion = (await readGrowingPortions(tx, [line.id])).get(line.id);
-  const copies =
-    quantity > line.quantity && portion !== undefined && !portion.measured
-      ? addedPortions(line.id, thousandthsToDecimal(line.quantity), decimal(input.quantity))
-      : 0;
+  const copies = risesByCopies(line.quantity, quantity, portion)
+    ? addedPortions(line.id, thousandthsToDecimal(line.quantity), decimal(input.quantity))
+    : 0;
   const inPlace = copies === 0 ? quantity : line.quantity;
   await tx
     .update(workingOrderLines)

@@ -483,6 +483,35 @@ describe("recalled modifier edits", () => {
     );
   });
 
+  it.each([
+    { quantity: "2", dishes: 2 },
+    { quantity: "1", dishes: 1 },
+  ])(
+    "prices an extra added to a whole portion raised to $quantity for one dish on each portion",
+    async ({ quantity, dishes }) => {
+      const p = await setup();
+      const answer = await save(p, {
+        quantity,
+        extras: [
+          {
+            listId: p.extras.id,
+            picks: [
+              { productId: p.cheese.id, quantity: 1 },
+              { productId: p.bacon.id, quantity: 1 },
+            ],
+          },
+        ],
+      });
+      expect(answer.status, JSON.stringify(answer.json)).toBe(200);
+      const bacon = (await family(p)).filter((row) => row.productId === p.bacon.id);
+      expect(bacon.map((row) => ({ quantity: row.quantity, total: row.lineTotal }))).toEqual(
+        Array.from({ length: dishes }, () => ({ quantity: 1000, total: 200 })),
+      );
+      expect(new Set(bacon.map((row) => row.parentLineId)).size).toBe(dishes);
+      expect(bacon[0]!.parentLineId).toBe(p.parent.id);
+    },
+  );
+
   it("removes a recorded extra while keeping the original dish price and adjustment history", async () => {
     // Grouped, as a counter order moved to a table keeps it (plan D1).
     const p = await setup(false, "grouped");
