@@ -600,6 +600,7 @@ const PERMANENT_SALE_REFUSALS = new Set([
 
 /** Table refusals shown in their code's own words. */
 const TABLE_REFUSALS = new Set([
+  "tab.portions_too_many",
   "fiscal.fingerprint_mismatch",
   "service_zone.closed",
   "order.payment_in_flight",

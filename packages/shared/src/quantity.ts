@@ -1,3 +1,6 @@
+/** The most portions of one dish a send or a raise on a table's bill adds at once. */
+export const PORTIONS_AT_ONCE = 99;
+
 /**
  * The PER-DISH count of a filed child option line, from its stored quantity, which is the dish
  * quantity times the per-option quantity. For deciding a "×N" badge; DISPLAY-ONLY.

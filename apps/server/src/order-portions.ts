@@ -11,7 +11,7 @@ import {
   workingOrderLines,
   type Transaction,
 } from "@waitron/db";
-import { AppError } from "@waitron/shared";
+import { AppError, PORTIONS_AT_ONCE } from "@waitron/shared";
 import type { PortionBinding } from "./portion-sale-projection.js";
 import "./errors.js";
 import type { OrderLineIdentity, PricedTabRound } from "./working-order.js";
@@ -29,9 +29,6 @@ export interface PortionRef {
   /** Sold by weight, in decimals or in a measure: one portion, never split. */
   measured: boolean;
 }
-
-/** The most portions of one dish a send or a raise adds at once. */
-export const PORTIONS_AT_ONCE = 99;
 
 /** Refuses adding `count` portions of one dish in one write. */
 export function refuseTooManyPortions(count: number): void {

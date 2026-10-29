@@ -1,3 +1,4 @@
+import { PORTIONS_AT_ONCE } from "@waitron/shared";
 import { en, es } from "./strings.js";
 import { currentLocale, pickLocale } from "./t.js";
 
@@ -29,8 +30,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "Estas selecciones de zonas han cambiado. Vuelve a consultarlas antes de guardar.",
   },
   "tab.portions_too_many": {
-    en: "At most 99 of one dish can be added at a time. Lower it to 99, then add the rest.",
-    es: "Se pueden añadir como máximo 99 de un mismo plato a la vez. Baja a 99 y añade el resto después.",
+    en: `At most ${PORTIONS_AT_ONCE} of one dish can be added at a time. Lower it to ${PORTIONS_AT_ONCE}, then add the rest.`,
+    es: `Se pueden añadir como máximo ${PORTIONS_AT_ONCE} de un mismo plato a la vez. Baja a ${PORTIONS_AT_ONCE} y añade el resto después.`,
   },
   "party.not_found": {
     en: "The table order could not be found.",

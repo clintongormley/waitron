@@ -5591,6 +5591,33 @@ describe("till-app: a menu published while a table's draft is open (D9)", () => 
     expect(versions()).toEqual(["offer-beer v1"]);
   });
 
+  it("says a send adding too many of one dish is refused in its own words, not the generic table error", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    await tap(el, "Beer");
+    await saved(el);
+    api.submitDraft.mockRejectedValueOnce({ code: "tab.portions_too_many", status: 400 });
+
+    await act(el, "fire-all");
+    await flush(el);
+
+    expect(banner(el)?.textContent).toContain(codeMessage("tab.portions_too_many"));
+    expect(banner(el)?.textContent).not.toContain(t("table.error"));
+  });
+
+  it("says a saved draft adding too many of one dish is refused in its own words, not the generic table error", async () => {
+    const { el } = await mountApp();
+    await openTable(el);
+    api.saveDraft.mockRejectedValueOnce({ code: "tab.portions_too_many", status: 400 });
+
+    await tap(el, "Beer");
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 20));
+    await flush(el, 6);
+
+    expect(banner(el)?.textContent).toContain(codeMessage("tab.portions_too_many"));
+    expect(banner(el)?.textContent).not.toContain(t("table.error"));
+  });
+
   it("adopts nothing onto another line when the server's draft replaced the lines while it asked", async () => {
     const { el } = await mountApp({ menuState: vi.fn().mockResolvedValue(state("v1")) });
     await openTable(el);
