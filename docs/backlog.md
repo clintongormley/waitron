@@ -4763,8 +4763,10 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
   **Design approved by the owner** (2026-10-29), with the authenticator code asked for only when
   the person has one set up: [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md),
-  mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is next to plan; part 2
-  waits for A1188 part 1, part 3 for B3's retained disk key.
+  mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is planned
+  ([plan](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md)); its first pull request, the
+  pack format and every reader, is #2250. Part 2 waits for A1188 part 1, part 3 for B3's retained
+  disk key.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
