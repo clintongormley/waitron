@@ -9,6 +9,7 @@ import {
   realpath,
   rename,
   rm,
+  symlink,
   unlink,
   writeFile,
 } from "node:fs/promises";
@@ -86,6 +87,7 @@ describe("writeBackupRoomNote", () => {
     });
     expect(log).not.toHaveBeenCalled();
     expect(await readdir(stateDir)).toEqual([BACKUP_ROOM_NOTE_FILE]);
+    expect((await lstat(notePath())).mode & 0o777).toBe(0o600);
   });
 
   it("reads back as the note it wrote", async () => {
@@ -172,8 +174,14 @@ describe("readBackupRoomNote", () => {
     expect(await read()).toEqual({ skipped: "missing" });
   });
 
-  it("answers unreadable when the note cannot be read", async () => {
+  it("answers unreadable when a folder stands at the note's name", async () => {
     await mkdir(notePath());
+    expect(await read()).toEqual({ skipped: "unreadable" });
+  });
+
+  it("answers unreadable when the note's folder cannot be looked into", async () => {
+    await rm(stateDir, { recursive: true });
+    await writeFile(stateDir, "a file where the state folder was");
     expect(await read()).toEqual({ skipped: "unreadable" });
   });
 
@@ -195,19 +203,103 @@ describe("readBackupRoomNote", () => {
     expect(await read()).toEqual({ skipped: "identity_mismatch" });
   });
 
-  it("refuses a note whose venue.db birth time differs only below the millisecond", async () => {
-    await write();
+  async function storedNote(): Promise<Record<string, unknown>> {
+    return JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
+  }
+
+  async function rewriteIdentity(
+    change: (identity: { dev: bigint; ino: bigint; ns: bigint }) => {
+      dev: bigint;
+      ino: bigint;
+      ns: bigint;
+    },
+  ) {
     const info = await lstat(venueDb(), { bigint: true });
-    const stored = JSON.parse(await readFile(notePath(), "utf8")) as Record<string, unknown>;
-    const otherNs =
-      info.birthtimeNs % 1_000_000n === 0n ? info.birthtimeNs + 1n : info.birthtimeNs - 1n;
+    const next = change({ dev: info.dev, ino: info.ino, ns: info.birthtimeNs });
+    const stored = await storedNote();
     stored.venueDb = {
-      dev: info.dev.toString(),
-      ino: info.ino.toString(),
-      birthtimeNs: otherNs.toString(),
+      dev: next.dev.toString(),
+      ino: next.ino.toString(),
+      birthtimeNs: next.ns.toString(),
     };
     await writeFile(notePath(), JSON.stringify(stored));
+  }
+
+  it("refuses a note whose venue.db birth time differs only below the millisecond", async () => {
+    await write();
+    await rewriteIdentity((id) => ({
+      ...id,
+      ns: id.ns % 1_000_000n === 0n ? id.ns + 1n : id.ns - 1n,
+    }));
     expect(await read()).toEqual({ skipped: "identity_mismatch" });
+  });
+
+  it("refuses a note whose venue.db file number alone differs", async () => {
+    await write();
+    await rewriteIdentity((id) => ({ ...id, ino: id.ino + 1n }));
+    expect(await read()).toEqual({ skipped: "identity_mismatch" });
+  });
+
+  it("refuses a note whose venue.db device number alone differs", async () => {
+    await write();
+    await rewriteIdentity((id) => ({ ...id, dev: id.dev + 1n }));
+    expect(await read()).toEqual({ skipped: "identity_mismatch" });
+  });
+
+  it("accepts the rewritten identity unchanged (control for the identity cases)", async () => {
+    await write();
+    await rewriteIdentity((id) => id);
+    expect(await read()).toMatchObject({ note: { nodeId: "node-1" } });
+  });
+
+  it("drops a key the writer never writes from the answer", async () => {
+    await write();
+    const stored = await storedNote();
+    await writeFile(notePath(), JSON.stringify({ ...stored, extra: "not ours" }));
+    expect(await read()).toEqual({ note: stored });
+  });
+
+  it("accepts a note whose installation start is its written time (control for the order case)", async () => {
+    await write({ installationStartedAt: now });
+    expect(await read()).toMatchObject({ note: { installationStartedAt: now.toISOString() } });
+  });
+
+  it("refuses a note whose installation start is after its written time", async () => {
+    await write({ installationStartedAt: new Date(now.getTime() + 1) });
+    expect(await read()).toEqual({ skipped: "malformed" });
+  });
+
+  const padTo = async (bytes: number) => {
+    const stored = await storedNote();
+    const bare = JSON.stringify({ ...stored, padding: "" });
+    const body = JSON.stringify({ ...stored, padding: "x".repeat(bytes - bare.length) });
+    expect(Buffer.byteLength(body)).toBe(bytes);
+    await writeFile(notePath(), body);
+  };
+
+  it("accepts a note of exactly 64 KiB (control for the size case)", async () => {
+    await write();
+    await padTo(64 * 1024);
+    expect(await read()).toMatchObject({ note: { nodeId: "node-1" } });
+  });
+
+  it("answers malformed for a note over 64 KiB, before reading it", async () => {
+    await write();
+    await padTo(64 * 1024 + 1);
+    expect(await read()).toEqual({ skipped: "malformed" });
+  });
+
+  it("answers malformed for a 65 KiB note", async () => {
+    await write();
+    await padTo(65 * 1024);
+    expect(await read()).toEqual({ skipped: "malformed" });
+  });
+
+  it("answers unreadable for a link at the note's name, even to a valid note", async () => {
+    await write();
+    await rename(notePath(), join(root, "elsewhere.json"));
+    await symlink(join(root, "elsewhere.json"), notePath());
+    expect(await read()).toEqual({ skipped: "unreadable" });
   });
 
   it("accepts the note after writes into the same venue.db (control)", async () => {
@@ -220,6 +312,16 @@ describe("readBackupRoomNote", () => {
   it("refuses the note for another node", async () => {
     await write();
     expect(await read("node-2")).toEqual({ skipped: "node_mismatch" });
+  });
+
+  it("refuses the note when the caller names no node", async () => {
+    await write();
+    expect(await read("")).toEqual({ skipped: "node_mismatch" });
+  });
+
+  it("refuses a note naming no node, even to a caller naming none", async () => {
+    await write({ nodeId: "" });
+    expect(await read("")).toEqual({ skipped: "malformed" });
   });
 
   it("refuses the note when venue.db is missing", async () => {
@@ -251,12 +353,28 @@ describe("readBackupRoomNote", () => {
     ["null", () => null],
     ["another version", (note) => ({ ...note, version: 2 })],
     ["a node id that is not text", (note) => ({ ...note, nodeId: 7 })],
+    ["an empty node id", (note) => ({ ...note, nodeId: "" })],
     [
       "an installation start that is not a time",
       (note) => ({ ...note, installationStartedAt: "soon" }),
     ],
     ["an installation start that is not text", (note) => ({ ...note, installationStartedAt: 5 })],
+    ["an installation start of bare digits", (note) => ({ ...note, installationStartedAt: "1" })],
+    [
+      "an installation start without milliseconds",
+      (note) => ({ ...note, installationStartedAt: "2026-10-01T09:00:00Z" }),
+    ],
+    [
+      "an installation start with an offset",
+      (note) => ({ ...note, installationStartedAt: "2026-10-01T11:00:00.000+02:00" }),
+    ],
     ["a written time that is not a time", (note) => ({ ...note, writtenAt: "later" })],
+    ["a written time of bare digits", (note) => ({ ...note, writtenAt: "1" })],
+    ["a written time that is a date alone", (note) => ({ ...note, writtenAt: "2026-10-29" })],
+    [
+      "an installation start after the written time",
+      (note) => ({ ...note, installationStartedAt: "2026-10-29T12:00:00.001Z" }),
+    ],
     ["no venue.db identity", (note) => ({ ...note, venueDb: null })],
     [
       "a venue.db identity that is not digits",
@@ -274,6 +392,30 @@ describe("readBackupRoomNote", () => {
     ["a folder that is not an object", (note) => ({ ...note, folders: ["usb"] })],
     ["a folder with no directory", (note) => ({ ...note, folders: [{ destination: "usb" }] })],
     ["a folder with no destination", (note) => ({ ...note, folders: [{ dir: "/mnt/usb" }] })],
+    [
+      "a folder with an empty destination",
+      (note) => ({ ...note, folders: [{ destination: "", dir: "/mnt/usb" }] }),
+    ],
+    [
+      "a folder with an empty directory",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "" }] }),
+    ],
+    [
+      "a folder whose directory climbs out",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "../../etc" }] }),
+    ],
+    [
+      "a folder with a relative directory",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "a/b" }] }),
+    ],
+    [
+      "a folder whose absolute directory has a .. step",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "/a/../b" }] }),
+    ],
+    [
+      "a folder whose directory has a doubled slash",
+      (note) => ({ ...note, folders: [{ destination: "usb", dir: "/mnt//usb" }] }),
+    ],
   ])("answers malformed for %s", async (_label, change) => {
     const body = change(valid());
     await writeFile(notePath(), typeof body === "string" ? body : JSON.stringify(body));
