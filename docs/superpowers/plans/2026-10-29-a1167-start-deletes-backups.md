@@ -14,7 +14,8 @@ restore and promotion reach it. A restore places a NEW file (`restoreDatabase`,
 `apps/server/src/restore.ts`: the new file is made while the old one still exists, so its inode
 differs); promotion writes into the same file but runs on a standby, where backups do not run.
 
-Plan review (fresh context, 2026-10-29): 0 Critical, 9 Important, 10 Minor, all folded below.
+Plan review (fresh context, 2026-10-29): 0 Critical, 9 Important, 10 Minor, all folded below; a
+round-3 claim check of the folds found three partly wrong claims, corrected here.
 
 **Fiscal boundary (H2).** Nothing here changes `registerSif`, `restoreFiscal`, `activate`, the chain,
 invoice numbering, `registros_facturacion` or the alta builders; no task edits a file under
@@ -31,7 +32,7 @@ is its watch-side caller. This branch is rebased on it.
 
 1. **The note.** `<state>/backup-room-note.json` (name `BACKUP_ROOM_NOTE_FILE`, exported from
    `@waitron/provisioning` beside `SPARE_SPACE_FILE`), JSON:
-   `{ version: 1, nodeId, installationStartedAt (ISO), venueDb: { dev, ino, birthtimeMs } (from
+   `{ version: 1, nodeId, installationStartedAt (ISO), venueDb: { dev, ino, birthtimeNs } (from
    lstat of <venue>/venue.db with `bigint: true`, stored as strings), managedByEnvironment, folders:
    [{ destination, dir }] (the real paths `foldersOnDisk(backends, venueDir)` answers), writtenAt
    (ISO) }`. No secret goes in it: folder paths are already shown in plain text on the status read
@@ -52,15 +53,19 @@ is its watch-side caller. This branch is rebased on it.
    - `placeBackupDatabase` (`backup-data-placement.ts`) gets `stateDir` on `PlacementInput`; the
      backup verification (`backup-verification.ts`, scratch `join(scratch, "state")`) passes its
      SCRATCH state folder, never the live one.
-   - Start again: `deleteMarkedAttempt` (`apps/server/src/first-setup-resolution.ts:~713`) and
-     `moveStartAgainUnits` (`packages/provisioning/src/first-setup-start-again-set-aside.ts:~351`)
-     delete it first; that reaches the start's resume (`first-setup-entry.ts:178`, `:211`) and the
-     repair page (`first-setup-start-again-choose.ts:155-156`). Defence in depth: Start again already
+   - Start again: `deleteMarkedAttempt` (`packages/provisioning/src/first-setup-start-again-deletion.ts:522`),
+     inside its body, so both callers are covered (`first-setup-resolution.ts:713`, and
+     `finishStartAgainDeletion` at `deletion.ts:625`, which the start's resume `first-setup-entry.ts:211`
+     and the repair page `first-setup-start-again-choose.ts:156` reach); `moveStartAgainUnits`
+     (`first-setup-start-again-set-aside.ts:351`, from `choose.ts:155`); and `resumeStartAgainSetAside`
+     (`set-aside.ts:432`, from `first-setup-entry.ts:178`, which moves pieces without calling
+     `moveStartAgainUnits`). Each deletes it first. Defence in depth: Start again already
      refuses while `trading.env` exists (`first-setup-start-again-deletion.ts:35-37`), and the note's
      node id comes from `trading.env`.
    - Promotion: boot's `promoteMirrorRun` (`boot.ts:~2733`) deletes it before promoting AND again
-     right before the restart signal, because a reload during promotion (role holders refresh at
-     `promote.ts:90/119/176/232`) could write a note with the old installation start.
+     right before the restart signal (`boot.ts:2754-2757`), because a backup reload after a settings
+     write (`backup-api.ts:314-316`) that runs once a role-holder refresh (`promote.ts:90/119/176/232`)
+     has made the role primary could write a note with the old installation start.
    - `waitron.sh reset` keeps only `tls` and the Start-again files (`deploy/waitron.sh:744-747`), so
      it deletes the note; it also removes the `backups` volume (`:735-737`).
    - Why every path, not only the identity check: a wipe then re-create (rejoin, staged reset, Start
@@ -75,7 +80,8 @@ is its watch-side caller. This branch is rebased on it.
    when `backupEntry.kind` is neither `repair` nor `selected` and the lowest free space of the state
    and venue folders is under `FULL_DISK_BYTES` (the only region where `releaseSpareToStart` can
    release). `runEntry` has not loaded the box env at that point, so the step loads it itself:
-   `merged = await (deps.loadBoxEnv ?? loadBoxEnv)(deps.baseEnv, deps.stateDir)`. Order:
+   `merged = await deps.loadBoxEnv(deps.baseEnv, deps.stateDir)` (`EntryDeps.loadBoxEnv` is required,
+   `node-entry.ts:102`), loaded after step 1, so a start with no note never reads the env files. Order:
    1. If no note file exists, return (cheap first check, so a box without a note never takes the
       lock and existing call-count tests stay as they are).
    2. Take the venue lock, or apply `freeSpaceAtStart`'s rule (`start-space.ts:105-126`): refused as
@@ -84,13 +90,14 @@ is its watch-side caller. This branch is rebased on it.
    3. Delete nothing unless ALL hold, each refusal logged once `backup.start_room_skipped` with a
       `reason`:
       - the note parses, its version is 1, and its `nodeId` equals `merged.WAITRON_TILL_NODE_ID`;
-      - `lstat(<venue>/venue.db)`'s dev, ino and birthtimeMs equal the note's;
+      - `lstat(<venue>/venue.db)`'s dev, ino and birthtimeNs equal the note's;
       - no staged restore or reset request is waiting (read the real file names from
         `restore-request.ts`/`reset-request.ts`): it will replace `venue.db`, which makes the current
         installation's archives into ones from before the next installation;
       - `loadRecoveryKey(merged)` answers a key (a throw → skip): backups still run (design §1);
-      - who manages backups is judged on the RAW env, `backupKeysInEnv(deps.baseEnv)` (as boot does,
-        `boot.ts` `isBackupManagedByEnvironment`), never on `merged` (a dashboard box keeps its
+      - who manages backups is judged on the RAW env, `isBackupManagedByEnvironment(deps.baseEnv)`
+        (`backup-config.ts:120`; boot imports it as `backupKeysInEnv`, `boot.ts:319`, and calls it on
+        the raw `base` at `:2232`), never on `merged` (a dashboard box keeps its
         recovery key in `backup.env`, which `merged` includes). Env-managed now: the folders are the
         env's local destinations, `archiveDestinations({ managedByEnvironment: true, env: merged,
         sealed: null, venueId: merged.WAITRON_TILL_LOCATION_ID })` keeping `local-fs` only (a parse
@@ -103,8 +110,11 @@ is its watch-side caller. This branch is rebased on it.
       (`deps.freeSpaceFloor ?? START_FREE_SPACE_FLOOR`, 256 MiB), dir: venueDir, reason:
       "start_room", outOfReach: "floor", installationStartedAt: the note's, signal: a never-aborted
       signal, onDeleted: writes the start-deleted record })`, modelled on `low-space-backups.ts`. A
-      `backup.staging_space_low` refusal means even every deletable backup cannot reach the floor:
-      log `backup.start_room_skipped` reason `out_of_reach` and fall through.
+      `backup.staging_space_low` refusal comes either before any deletion, when free space plus every
+      deletable backup falls short of the floor (`backup-room.ts:233-234`; log
+      `backup.start_room_skipped` reason `out_of_reach`), or after deletions, when the fresh reading is
+      still under the floor (`:268-269`; `onDeleted` has already written the start-deleted record, so
+      log `backup.start_room_short` with the free bytes, not `out_of_reach`). Both fall through.
    `releaseSpareToStart` then runs unchanged and re-reads free space, so a step that made room
    releases nothing.
 6. **The alert.** When the step deleted anything, `onDeleted` writes
@@ -191,13 +201,13 @@ Files: `apps/server/src/db-wipe.ts`, `apps/server/src/restore.ts` (`restoreDatab
 
 ### Task 3b. Start again deletes the note first, and a guard keeps the list closed
 
-Files: `apps/server/src/first-setup-resolution.ts` (`deleteMarkedAttempt`),
-`packages/provisioning/src/first-setup-start-again-set-aside.ts` (`moveStartAgainUnits`), their
-tests; new root guard `scripts/backup-room-note.test.ts`.
+Files: `packages/provisioning/src/first-setup-start-again-deletion.ts` (`deleteMarkedAttempt`),
+`packages/provisioning/src/first-setup-start-again-set-aside.ts` (`moveStartAgainUnits`,
+`resumeStartAgainSetAside`), their tests; new root guard `scripts/backup-room-note.test.ts`.
 
-- Red tests (small): each leaves no note.
+- Red tests (small): each leaves no note, a resumed Move included.
 - Guard, two literal lists: (a) files that replace or remove the live `venue.db` — `db-wipe.ts`,
-  `restore.ts`, `first-setup-resolution.ts`, `first-setup-start-again-set-aside.ts` — each must name
+  `restore.ts`, `first-setup-start-again-deletion.ts`, `first-setup-start-again-set-aside.ts` — each must name
   `deleteBackupRoomNote` or `BACKUP_ROOM_NOTE_FILE`; (b) files that only co-name `venue.db`/`VENUE_FILE`
   with `rm`/`rename`/`unlink` (staging copies, scratch, pointer files: `backup-archive-file.ts`,
   `backup-verification.ts`, `first-setup-backup-source.ts`, `first-setup-database-holdings.ts`,
