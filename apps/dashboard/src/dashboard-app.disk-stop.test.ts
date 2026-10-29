@@ -210,7 +210,7 @@ describe("the shell's full-disk bar", () => {
     await expect.poll(() => diskBar(el)?.message).toBe(MANAGER_EN);
     expect(diskBar(el)!.getAttribute("tone")).toBe("error");
     expect(diskBar(el)!.closest(".banner-row")).not.toBeNull();
-    expect(diskBar(el)!.actionLabel).toBe("");
+    expect(diskBar(el)!.actionLabel).toBe("Open Box status");
   });
 
   it("draws the manager's line in Spanish, and repaints it when the language changes", async () => {
@@ -417,6 +417,8 @@ describe("the full-disk bar's button", () => {
     expect(location.pathname).toBe("/manage/box-status");
     await el.updateComplete;
     expect(diskBar(el)!.actionLabel).toBe("");
+    await diskBar(el)!.updateComplete;
+    expect(diskBar(el)!.shadowRoot!.querySelector("wt-button")).toBeNull();
   });
 
   it("asks before Open Box status leaves unsaved changes, and Keep editing stays", async () => {
