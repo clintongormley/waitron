@@ -38,11 +38,13 @@ export {
 } from "./manager-login.js";
 export {
   CHALLENGE_TTL_MS,
+  beginOwnPasskeyCheck,
   beginPasskeyAuthentication,
   beginPasskeyRegistration,
   finishPasskeyAuthentication,
   finishPasskeyRegistration,
   readPasskeySignals,
+  verifyOwnPasskey,
 } from "./passkey.js";
 export { markPasskeyOffered, shouldOfferPasskey } from "./passkey-offer.js";
 export {
@@ -65,6 +67,8 @@ export {
   disableOwnTotp,
   unlinkOwnGoogle,
   verifyOwnCredentials,
+  verifyOwnFreshSignIn,
+  requireEnrolledCode,
   checkOwnPassword,
   removeOwnPasskey,
 } from "./profile.js";

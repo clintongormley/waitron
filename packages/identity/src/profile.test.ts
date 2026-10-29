@@ -12,8 +12,11 @@ import { startManagementSession } from "./management-session.js";
 import { hashSessionToken } from "./session-token.js";
 import { issueAccountAction, completeAccountAction } from "./account-action.js";
 import { loginManager } from "./manager-login.js";
-import { encryptTotpSecret } from "./mfa.js";
+import { encryptTotpSecret, replaceRecoveryCodes } from "./mfa.js";
 import {
+  checkOwnPassword,
+  requireEnrolledCode,
+  verifyOwnFreshSignIn,
   readOwnProfile,
   saveOwnProfile,
   confirmOwnEmailChange,
@@ -638,5 +641,162 @@ describe("your profile", () => {
       email: f.email,
       pendingEmail: null,
     });
+  });
+});
+
+describe("a fresh sign-in by the signed-in person", () => {
+  const keyRing = { current: { version: 1, key: Buffer.alloc(32, 11) } };
+  const secret = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
+
+  /** A code no step the verifier accepts produces for `secret`. */
+  function wrongCode(): string {
+    const now = Math.floor(Date.now() / 1000);
+    const accepted = new Set(
+      [-60, -30, 0, 30, 60].map((offset) => generateSync({ secret, epoch: now + offset })),
+    );
+    return ["000000", "111111", "222222", "333333", "444444", "555555"].find(
+      (code) => !accepted.has(code),
+    )!;
+  }
+
+  async function enrolled() {
+    const f = await fixture();
+    await suite.db.execute(
+      sql`update persons set totp_secret = ${encryptTotpSecret(secret, keyRing.current)} where id = ${f.personId}`,
+    );
+    const codes = await withTransaction(suite.db, (tx) => replaceRecoveryCodes(tx, f.personId));
+    return { ...f, codes };
+  }
+
+  const fresh = (input: Parameters<typeof verifyOwnFreshSignIn>[1]) =>
+    withTransaction(suite.db, (tx) => verifyOwnFreshSignIn(tx, input));
+
+  it("accepts the person's own password when no authenticator is set up, asking no code", async () => {
+    const f = await fixture();
+    const person = await fresh({ ...f, currentPassword: "correct horse", keyRing });
+    expect(person.id).toBe(f.personId);
+  });
+
+  it("refuses a wrong password as password.invalid", async () => {
+    const f = await fixture();
+    expect(await codeOf(() => fresh({ ...f, currentPassword: "wrong", keyRing }))).toBe(
+      "password.invalid",
+    );
+  });
+
+  it("refuses a person with no password as password.invalid", async () => {
+    const f = await fixture();
+    await suite.db.execute(sql`update persons set password_hash = null where id = ${f.personId}`);
+    expect(await codeOf(() => fresh({ ...f, currentPassword: "", keyRing }))).toBe(
+      "password.invalid",
+    );
+  });
+
+  it("trusts a password check taken before the transaction for the same person", async () => {
+    const f = await fixture();
+    const checked = await checkOwnPassword(suite.db, {
+      personId: f.personId,
+      currentPassword: "correct horse",
+    });
+    const person = await fresh({ ...f, currentPassword: "correct horse", checked, keyRing });
+    expect(person.id).toBe(f.personId);
+  });
+
+  it("asks an enrolled person for their authenticator code", async () => {
+    const f = await enrolled();
+    expect(await codeOf(() => fresh({ ...f, currentPassword: "correct horse", keyRing }))).toBe(
+      "totp.invalid",
+    );
+    expect(
+      await codeOf(() =>
+        fresh({ ...f, currentPassword: "correct horse", totp: wrongCode(), keyRing }),
+      ),
+    ).toBe("totp.invalid");
+    const person = await fresh({
+      ...f,
+      currentPassword: "correct horse",
+      totp: generateSync({ secret }),
+      keyRing,
+    });
+    expect(person.id).toBe(f.personId);
+  });
+
+  it("accepts a recovery code once, then refuses the same code", async () => {
+    const f = await enrolled();
+    const input = { ...f, currentPassword: "correct horse", recoveryCode: f.codes[0], keyRing };
+    expect((await fresh(input)).id).toBe(f.personId);
+    expect(await codeOf(() => fresh(input))).toBe("totp.invalid");
+  });
+
+  it("refuses a recovery code that is not one of the person's", async () => {
+    const f = await enrolled();
+    const other = await enrolled();
+    expect(
+      await codeOf(() =>
+        fresh({ ...f, currentPassword: "correct horse", recoveryCode: other.codes[0], keyRing }),
+      ),
+    ).toBe("totp.invalid");
+  });
+
+  it("tries the authenticator code first, leaving a recovery code sent beside a valid one unspent", async () => {
+    const f = await enrolled();
+    await fresh({
+      ...f,
+      currentPassword: "correct horse",
+      totp: generateSync({ secret }),
+      recoveryCode: f.codes[0],
+      keyRing,
+    });
+    expect(
+      (await fresh({ ...f, currentPassword: "correct horse", recoveryCode: f.codes[0], keyRing }))
+        .id,
+    ).toBe(f.personId);
+  });
+
+  it("falls back to a recovery code when the authenticator code is wrong", async () => {
+    const f = await enrolled();
+    const person = await fresh({
+      ...f,
+      currentPassword: "correct horse",
+      totp: wrongCode(),
+      recoveryCode: f.codes[1],
+      keyRing,
+    });
+    expect(person.id).toBe(f.personId);
+  });
+
+  it("asks nothing of a person with no authenticator, whatever codes are sent", async () => {
+    const f = await fixture();
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        requireEnrolledCode(
+          tx,
+          { id: f.personId, totpSecret: null },
+          { totp: "not a code", recoveryCode: "not a recovery code" },
+          keyRing,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("leaves the other account changes needing an authenticator code: a recovery code does not stand in", async () => {
+    const f = await enrolled();
+    // Credentials has no recoveryCode field; sent anyway, as a request body could.
+    const withRecovery = {
+      ...f,
+      currentPassword: "correct horse",
+      recoveryCode: f.codes[2],
+      keyRing,
+    };
+    expect(
+      await codeOf(() =>
+        withTransaction(suite.db, (tx) => regenerateOwnRecoveryCodes(tx, withRecovery)),
+      ),
+    ).toBe("totp.invalid");
+    // The recovery code was not spent by the refused change.
+    expect(
+      (await fresh({ ...f, currentPassword: "correct horse", recoveryCode: f.codes[2], keyRing }))
+        .id,
+    ).toBe(f.personId);
   });
 });
