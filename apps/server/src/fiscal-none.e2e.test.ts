@@ -281,6 +281,8 @@ describe("a GB (no-regime) venue writes NO fiscal record", () => {
         substitutedSaleIds: [toSubstitute.saleId],
         counterparty: {
           taxId: "GB999999973",
+          identifierType: "vat-number",
+          identifierCountryCode: "GB",
           legalName: "Acme Buyer Ltd",
           countryCode: "GB",
         },

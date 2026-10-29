@@ -1,3 +1,5 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import { setImmediate as nextTurn } from "node:timers/promises";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { formatInvoiceNumber } from "@waitron/core";
@@ -25,28 +27,43 @@ export interface InvoiceCustomerSale {
   issuedAt: string;
   name: string;
   taxId: string;
+  identifierType?: RecipientIdentifierType;
+  identifierCountryCode?: string;
   countryCode: string;
   address: string;
   total: string;
 }
 
-/** Decision 6's search: one statement over the sales naming a customer, filtered by
- * `normaliseInvoiceTaxId` of each stored number, then their columns by key. `taxId` is already
- * normalised: normalising removes only one leading "ES", so a second pass can change it. Call it
- * inside a write-lock turn. */
 export async function findInvoiceCustomerSales(
   tx: Transaction,
   taxId: string,
-  options?: { chunk?: number },
+  options?: {
+    chunk?: number;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  },
 ): Promise<InvoiceCustomerSale[]> {
   const chunk = options?.chunk ?? SALE_LOOKUP_CHUNK;
   // No ORDER BY: ordering by issued_at walks the issue-time index and fetches every row by
   // position, slower than the plain scan (plan decision 6).
-  const named = tx.all<{ id: string; counterparty_tax_id: string }>(
-    sql`select id, counterparty_tax_id from sales where counterparty_tax_id is not null`,
+  const named = tx.all<{
+    id: string;
+    counterparty_tax_id: string;
+    counterparty_identifier_type: string | null;
+    counterparty_identifier_country_code: string | null;
+  }>(
+    sql`select id, counterparty_tax_id, counterparty_identifier_type, counterparty_identifier_country_code from sales where counterparty_tax_id is not null`,
   );
   const matched = named
-    .filter((row) => normaliseInvoiceTaxId(row.counterparty_tax_id) === taxId)
+    .filter((row) =>
+      options?.identifierType === undefined
+        ? row.counterparty_identifier_type === null &&
+          row.counterparty_identifier_country_code === null &&
+          normaliseInvoiceTaxId(row.counterparty_tax_id) === taxId
+        : row.counterparty_identifier_type === options.identifierType &&
+          row.counterparty_identifier_country_code === options.identifierCountryCode &&
+          row.counterparty_tax_id === taxId,
+    )
     .map((row) => row.id);
   const found: InvoiceCustomerSale[] = [];
   for (let start = 0; start < matched.length; start += chunk) {
@@ -58,6 +75,8 @@ export async function findInvoiceCustomerSales(
         issuedAt: sales.issuedAt,
         name: sales.counterpartyLegalName,
         taxId: sales.counterpartyTaxId,
+        identifierType: sales.counterpartyIdentifierType,
+        identifierCountryCode: sales.counterpartyIdentifierCountryCode,
         countryCode: sales.counterpartyCountryCode,
         address: sales.counterpartyAddress,
         total: sales.total,
@@ -74,6 +93,7 @@ export async function findInvoiceCustomerSales(
         issuedAt: row.issuedAt,
         name: row.name ?? "",
         taxId: row.taxId ?? "",
+        ...storedRecipientIdentifier(row.identifierType, row.identifierCountryCode),
         countryCode: row.countryCode ?? "",
         address: row.address ?? "",
         total: centsToDecimal(row.total),
@@ -125,9 +145,6 @@ interface InvoiceRead {
   }[];
 }
 
-/** Decision 6's invoice turns, then the PDFs outside any turn, with `nextTurn()` after each.
- * `taxId`, already normalised, is written as it is. Throws a plain `Error` (cause attached) when any invoice cannot be made, after logging
- * `invoice_customer.pdf_failed` with its sale id. */
 export async function buildInvoiceCustomerFiles(
   deps: InvoiceCustomerFilesDeps,
   taxId: string,
@@ -209,6 +226,12 @@ export async function buildInvoiceCustomerFiles(
       issuedAt: sale.issuedAt,
       name: sale.name,
       taxId: sale.taxId,
+      ...(sale.identifierType === undefined
+        ? {}
+        : {
+            identifierType: sale.identifierType,
+            identifierCountryCode: sale.identifierCountryCode,
+          }),
       countryCode: sale.countryCode,
       address: sale.address,
       total: sale.total,

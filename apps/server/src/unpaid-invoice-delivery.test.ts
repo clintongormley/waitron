@@ -84,7 +84,7 @@ async function bill(kind: "email" | "a4" | "disabled-a4" | "receipt" | "unset") 
       recipient: {
         taxId: "B12345674",
         legalName: "Cliente SL",
-        address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        address: "2 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
       ...(kind === "unset"

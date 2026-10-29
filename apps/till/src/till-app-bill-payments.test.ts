@@ -260,7 +260,7 @@ describe("A773 bill document choices retain their editing observation", () => {
   const recipient = {
     taxId: "12345678Z",
     legalName: "Ana García",
-    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    address: "1 Main Street, 28013 Madrid, Madrid",
     countryCode: "ES",
   };
 
@@ -530,7 +530,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES",
     };
     let chosen = false;
@@ -585,7 +585,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -613,7 +613,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     for (const [name, value] of [
       ["taxId", "12345678Z"],
       ["legalName", "Ana García"],
-      ["address", "Calle Mayor 1"],
+      ["address", "1 Main Street"],
       ["postalCode", "28013"],
       ["locality", "Madrid"],
       ["province", "Madrid"],
@@ -628,7 +628,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES",
     };
     emit(
@@ -674,7 +674,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -717,7 +717,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
     for (const [name, value] of [
       ["taxId", "12345678Z"],
       ["legalName", "Ana García"],
-      ["address", "Calle Mayor 1"],
+      ["address", "1 Main Street"],
       ["postalCode", "28013"],
       ["locality", "Madrid"],
       ["province", "Madrid"],
@@ -753,7 +753,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
       recipient: {
         taxId: "12345678Z",
         legalName: "Newer name",
-        address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+        address: "1 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES",
       },
     });
@@ -790,7 +790,7 @@ describe("till-app: the three ways to pay part of a bill", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Retained draft",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       });
@@ -3879,7 +3879,7 @@ describe("till-app: a partly paid order at the counter", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -6217,7 +6217,7 @@ describe("till-app: a bill's full invoice offers A4 on the device's invoice prin
   const recipient = {
     taxId: "12345678Z",
     legalName: "Ana García",
-    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    address: "1 Main Street, 28013 Madrid, Madrid",
     countryCode: "ES",
   };
   const recipientDialog = (el: TillApp) =>
@@ -6427,7 +6427,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
   const recipient = {
     taxId: "12345678Z",
     legalName: "Ana García",
-    address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+    address: "1 Main Street, 28013 Madrid, Madrid",
     countryCode: "ES",
   };
   const recipientDialog = (el: TillApp) =>
@@ -6437,7 +6437,7 @@ describe("till-app: a bill's full invoice keeps its saved delivery and re-reads 
     for (const [name, value] of [
       ["taxId", "12345678Z"],
       ["legalName", legalName],
-      ["address", "Calle Mayor 1"],
+      ["address", "1 Main Street"],
       ["postalCode", "28013"],
       ["locality", "Madrid"],
       ["province", "Madrid"],

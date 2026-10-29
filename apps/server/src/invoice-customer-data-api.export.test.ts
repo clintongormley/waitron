@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
+import { sales } from "@waitron/db";
 import { Hono } from "hono";
 import { strFromU8, unzipSync } from "fflate";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -198,4 +201,63 @@ describe("the invoice customer download, end to end", () => {
       for (const name of staffNames) expect(text).not.toMatch(name);
     }
   });
+});
+
+it("exports the exact foreign identity and raw address in JSON and a real PDF", async () => {
+  const [template] = await suite.db.select().from(sales).where(eq(sales.id, fixture.sales.j1));
+  const saleId = randomUUID();
+  await suite.db.insert(sales).values({
+    ...template!,
+    id: saleId,
+    invoiceNumber: 920001,
+    workingOrderId: null,
+    counterpartyTaxId: " Ab-09 /xy ",
+    counterpartyIdentifierType: "passport",
+    counterpartyIdentifierCountryCode: "FR",
+    counterpartyCountryCode: "ES",
+    counterpartyAddress: " Saved, raw historical address ",
+  });
+  const app = new Hono();
+  mountInvoiceCustomerDataApi(
+    app,
+    {
+      db: suite.db,
+      backend: fixture.venue.backend,
+      till: fixture.venue.cfg,
+      nodeId: fixture.venue.cfg.nodeId,
+      venueLocale: "es-ES",
+      onMirror: () => false,
+    },
+    logger,
+  );
+  const identity = {
+    taxId: " Ab-09 /xy ",
+    identifierType: "passport",
+    identifierCountryCode: "FR",
+  };
+  const response = await app.request(`${DOWNLOAD}?${new URLSearchParams(identity).toString()}`, {
+    headers: { cookie: fixture.venue.adminDashboard },
+  });
+  const files = await unzipped(response);
+  const data = JSON.parse(strFromU8(files["invoices.json"]!)) as {
+    taxId: string;
+    invoices: {
+      taxId: string;
+      identifierType: string;
+      identifierCountryCode: string;
+      countryCode: string;
+      address: string;
+      pdf: string;
+    }[];
+  };
+  expect(data.taxId).toBe(identity.taxId);
+  expect(data.invoices).toHaveLength(1);
+  expect(data.invoices[0]).toMatchObject({
+    ...identity,
+    countryCode: "ES",
+    address: " Saved, raw historical address ",
+  });
+  const text = await pdfText(files[data.invoices[0]!.pdf]!);
+  expect(text).toContain("Ab-09 /xy");
+  expect(text).toContain("Saved, raw historical address");
 });

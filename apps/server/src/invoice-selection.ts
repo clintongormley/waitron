@@ -1,86 +1,68 @@
 import { and, eq } from "drizzle-orm";
-import { getCountryPack } from "@waitron/country-packs";
+import {
+  getCountryPack,
+  normalizeRecipientCountryCode,
+  recipientIdentifierResult,
+} from "@waitron/country-packs";
 import { readLiveSeriesIdTx, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { refuseOverSimplifiedLimit } from "@waitron/core";
 import type { RecordSaleInput } from "@waitron/core";
+import type { RecipientIdentifier, RecipientIdentifierType } from "@waitron/country-packs";
 import type { FiscalBackend } from "@waitron/fiscal";
 import { AppError, seriesId } from "@waitron/shared";
 import type { Decimal } from "@waitron/shared";
 import type { TillConfig } from "./till-config.js";
 import "./errors.js";
 
-export interface InvoiceRecipient {
-  taxId: string;
+export interface InvoiceRecipient extends RecipientIdentifier {
   legalName: string;
   address: string;
   countryCode: string;
 }
 
-function completeSpanishPostalAddress(address: string): boolean {
-  const parts = address.split(",").map((part) => part.trim());
-  const streetParts = parts.slice(0, -3);
-  const postalLocality = parts.at(-3);
-  const province = parts.at(-2);
-  const country = parts.at(-1);
-  return (
-    parts.length >= 4 &&
-    streetParts.every((part) => part !== "") &&
-    /^\d{5}\s+\S/u.test(postalLocality ?? "") &&
-    province !== "" &&
-    country === "España"
-  );
+export function storedRecipientIdentifier(
+  type: string | null,
+  country: string | null,
+): Pick<RecipientIdentifier, "identifierType" | "identifierCountryCode"> {
+  return type === null
+    ? {}
+    : { identifierType: type as RecipientIdentifierType, identifierCountryCode: country! };
 }
 
 export function checkedInvoiceRecipient(
   backend: Pick<FiscalBackend, "recipientNameMaxLength">,
   recipient: unknown,
 ): InvoiceRecipient {
-  if (
-    recipient === null ||
-    typeof recipient !== "object" ||
-    !("taxId" in recipient) ||
-    typeof recipient.taxId !== "string"
-  ) {
-    throw new AppError("invoice.recipient_invalid", { field: "taxId" });
+  const identity = recipientIdentifierResult(recipient);
+  if (!identity.valid) {
+    throw new AppError("invoice.recipient_invalid", { field: identity.field });
   }
-  const taxId = getCountryPack("ES")!.taxIdentifier!.validate(recipient.taxId);
-  if (!taxId.valid) {
-    throw new AppError("invoice.recipient_invalid", { field: "taxId" });
-  }
+  const value = recipient as Record<string, unknown>;
   if (
-    !("legalName" in recipient) ||
-    typeof recipient.legalName !== "string" ||
-    recipient.legalName.trim() === "" ||
+    !("legalName" in value) ||
+    typeof value.legalName !== "string" ||
+    value.legalName.trim() === "" ||
     (backend.recipientNameMaxLength !== null &&
-      Array.from(recipient.legalName.trim()).length > backend.recipientNameMaxLength)
+      Array.from(value.legalName.trim()).length > backend.recipientNameMaxLength)
   ) {
     throw new AppError("invoice.recipient_invalid", { field: "legalName" });
   }
-  if (
-    !("address" in recipient) ||
-    typeof recipient.address !== "string" ||
-    !completeSpanishPostalAddress(recipient.address)
-  ) {
+  if (!("address" in value) || typeof value.address !== "string" || value.address.trim() === "") {
     throw new AppError("invoice.recipient_invalid", { field: "address" });
   }
-  if (
-    !("countryCode" in recipient) ||
-    typeof recipient.countryCode !== "string" ||
-    !/^[A-Za-z]{2}$/.test(recipient.countryCode)
-  ) {
+  const countryCode = normalizeRecipientCountryCode(value.countryCode);
+  if (countryCode === undefined) {
     throw new AppError("management.request_invalid", { field: "recipient.countryCode" });
   }
-  if (recipient.countryCode.toUpperCase() !== "ES") {
-    throw new AppError("fiscal.foreign_recipient_unsupported", {
-      countryCode: recipient.countryCode.toUpperCase(),
-    });
+  if (countryCode === "ES" && !getCountryPack("ES")!.postalAddress!.isComplete(value.address)) {
+    throw new AppError("invoice.recipient_invalid", { field: "address" });
   }
   return {
-    taxId: taxId.normalized,
-    legalName: recipient.legalName.trim(),
-    address: recipient.address.trim(),
-    countryCode: "ES",
+    ...identity.value,
+    legalName: value.legalName.trim(),
+    address: value.address.trim(),
+    countryCode,
   };
 }
 
@@ -101,6 +83,8 @@ export async function selectOrderInvoice(
     .select({
       invoiceType: workingOrders.invoiceType,
       recipientTaxId: workingOrders.recipientTaxId,
+      recipientIdentifierType: workingOrders.recipientIdentifierType,
+      recipientIdentifierCountryCode: workingOrders.recipientIdentifierCountryCode,
       recipientLegalName: workingOrders.recipientLegalName,
       recipientAddress: workingOrders.recipientAddress,
       recipientCountryCode: workingOrders.recipientCountryCode,
@@ -127,6 +111,10 @@ export async function selectOrderInvoice(
   }
   const recipient = checkedInvoiceRecipient(backend, {
     taxId: order.recipientTaxId!,
+    ...storedRecipientIdentifier(
+      order.recipientIdentifierType,
+      order.recipientIdentifierCountryCode,
+    ),
     legalName: order.recipientLegalName!,
     address: order.recipientAddress!,
     countryCode: order.recipientCountryCode!,
@@ -138,6 +126,12 @@ export async function selectOrderInvoice(
       seriesId: seriesId(await readLiveSeriesIdTx(tx, cfg.nodeId, "full")),
       counterparty: {
         taxId: recipient.taxId,
+        ...(recipient.identifierType === undefined
+          ? {}
+          : {
+              identifierType: recipient.identifierType,
+              identifierCountryCode: recipient.identifierCountryCode,
+            }),
         legalName: recipient.legalName,
         countryCode: recipient.countryCode,
       },

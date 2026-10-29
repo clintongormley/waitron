@@ -1425,6 +1425,16 @@ receipt and content languages differ. Snapshot displays may fall back to a store
 they never rewrite the record. Regression: `packages/shared/src/content-languages.test.ts`,
 “keeps a receipt-only name visible when the content default is absent”.
 
+### Country names need the receipt language even when the browser lacks its locale data
+
+A successful `Intl.DisplayNames` constructor does not establish that it used the requested
+language. A963's Chromium 156 probe returned no supported locale for `gl-ES` or `eu-ES` and
+resolved their French country name to English; Node returned Galician and Basque names. The
+country registry carries pinned CLDR translations for those two languages, with its licence in
+`deploy/third-party/unicode-cldr/`. The French-snapshot cases in
+`apps/till/src/screens/till-ticket-view.test.ts` fail when that fallback is removed. Other receipt
+languages and unsupported stored locale tags keep their separately tested receipt-word fallback.
+
 ## Unsaved changes: shared close interception, owner-provided draft comparisons
 
 Use the shared registry for staged modal, page and credential input, including the supervisor's

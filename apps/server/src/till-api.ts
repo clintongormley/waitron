@@ -1,3 +1,4 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import { refuseRecalledWrite } from "./draft-source.js";
 import { currentZoneDevice } from "./device-zones.js";
@@ -2034,6 +2035,8 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         expectedEdit: BillEditExpected | null;
         delivery?: unknown;
         recipient: {
+          identifierType?: RecipientIdentifierType;
+          identifierCountryCode?: string;
           taxId: string;
           legalName: string;
           address: string;

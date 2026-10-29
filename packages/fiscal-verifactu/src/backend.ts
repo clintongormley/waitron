@@ -3,6 +3,7 @@ import "./errors.js";
 import { sql } from "drizzle-orm";
 import { readTenant, withTransaction } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
+import { recipientIdentifierResult } from "@waitron/country-packs";
 import { AppError, decimal, readSaleOrigin, sumDecimals } from "@waitron/shared";
 import type { NodeId, SaleId } from "@waitron/shared";
 import type {
@@ -273,9 +274,7 @@ export class VerifactuBackend implements FiscalBackend {
     const desglose = sale.vatBreakdown.map(toDetalleDesglose);
     const cuotaTotal = sumDecimals(sale.vatBreakdown.map((line) => line.tax));
 
-    // An F1 must name its recipient and an F2 must NOT carry one. `buildDestinatarios` is the one
-    // place that refuses a foreign recipient; no country test is repeated here, so "foreign
-    // customers are not supported yet" never reads as "an F1 with no recipient".
+    // Postal country does not determine the identifier type or its issuing country.
     const destinatarios =
       sale.counterparty !== null ? this.buildDestinatarios(sale.counterparty) : undefined;
 
@@ -695,28 +694,45 @@ export class VerifactuBackend implements FiscalBackend {
     });
   }
 
-  /**
-   * Maps the generic `Counterparty` onto an AEAT `Destinatario` for every record that names a
-   * recipient — an F1 from `recordSale` and an F3 from `recordSubstitution` alike. A domestic
-   * recipient is named by NIF.
-   *
-   * A FOREIGN recipient would need `IDOtro` (CodigoPais + IDType + ID), and which IDType a given
-   * non-resident takes is a fiscal decision nobody here has made. This is the ONE place that
-   * decision is encoded: a non-`ES` recipient is refused, deliberately, because a guessed IDType
-   * would be filed into an append-only, hash-chained record and could never be unfiled. Open with
-   * the asesor: `docs/compliance/asesor-questions.md`, Q17(a).
-   */
   private buildDestinatarios(counterparty: Counterparty): { IDDestinatario: Destinatario[] } {
-    if (counterparty.countryCode !== "ES") {
-      // `countryCode` is a country code, not operator data, so it may travel in params — the
-      // registry's rule is that an operator's own values never do (they reach `waitron.log`, which
-      // the unauthenticated recovery page renders on the venue's LAN).
-      throw new AppError("fiscal.foreign_recipient_unsupported", {
-        countryCode: counterparty.countryCode,
+    const checked = recipientIdentifierResult(counterparty);
+    if (!checked.valid) {
+      if (
+        counterparty.countryCode !== "ES" &&
+        !("identifierType" in counterparty) &&
+        !("identifierCountryCode" in counterparty)
+      ) {
+        throw new AppError("fiscal.foreign_recipient_unsupported", {
+          countryCode: counterparty.countryCode,
+        });
+      }
+      throw new AppError("fiscal.record_invalid", {
+        fields: [checked.field],
+        codes: ["RECIPIENT_IDENTIFIER_INVALID"],
       });
     }
+    const identity = checked.value;
+    if (identity.identifierType === undefined || identity.identifierType === "tax-number") {
+      return { IDDestinatario: [{ NombreRazon: counterparty.legalName, NIF: identity.taxId }] };
+    }
+    const idTypes = {
+      "vat-number": "02",
+      passport: "03",
+      "residence-country-id": "04",
+      "residence-certificate": "05",
+      "other-document": "06",
+    } as const;
     return {
-      IDDestinatario: [{ NombreRazon: counterparty.legalName, NIF: counterparty.taxId }],
+      IDDestinatario: [
+        {
+          NombreRazon: counterparty.legalName,
+          IDOtro: {
+            CodigoPais: identity.identifierCountryCode!,
+            IDType: idTypes[identity.identifierType],
+            ID: identity.taxId,
+          },
+        },
+      ],
     };
   }
 

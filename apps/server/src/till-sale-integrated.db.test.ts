@@ -592,7 +592,7 @@ describe("walk-up invoice preparation", () => {
   const recipient = {
     taxId: "b12345674",
     legalName: "  Cliente SL  ",
-    address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+    address: "2 Main Street, 28013 Madrid, Madrid",
     countryCode: "es",
   };
 
@@ -619,7 +619,7 @@ describe("walk-up invoice preparation", () => {
         invoiceType: "F1",
         recipientTaxId: "B12345674",
         recipientLegalName: "Cliente SL",
-        recipientAddress: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+        recipientAddress: "2 Main Street, 28013 Madrid, Madrid",
         recipientCountryCode: "ES",
       });
       expect(await saleCount(id)).toBe(0);
@@ -755,9 +755,9 @@ describe("walk-up invoice preparation", () => {
     },
     {
       invoiceType: "F1",
-      recipient: { ...recipient, countryCode: "FR" },
-      code: "fiscal.foreign_recipient_unsupported",
-      params: { countryCode: "FR" },
+      recipient: { ...recipient, countryCode: "ZZ" },
+      code: "management.request_invalid",
+      params: { field: "recipient.countryCode" },
     },
   ])("refuses malformed or unsupported walk-up invoice input %#", async (request) => {
     const { cfg, cafe } = await setupVenue();
@@ -1466,7 +1466,7 @@ describe("payWorkingOrderIntegrated — capture idempotency (recovery window + c
             recipient: {
               taxId: "B12345674",
               legalName: "Cliente SL",
-              address: "Calle Mayor 2, 28013 Madrid, Madrid, España",
+              address: "2 Main Street, 28013 Madrid, Madrid",
               countryCode: "ES",
             },
             recipientNameMaxLength: backend.recipientNameMaxLength,

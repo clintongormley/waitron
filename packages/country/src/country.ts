@@ -145,6 +145,9 @@ export interface CountryPack {
   readonly fiscalJurisdictions: readonly FiscalJurisdiction[];
   readonly defaultFiscalJurisdictionId?: string;
   readonly demo?: CountryDemoIdentity;
+  /** Completeness of a recipient postal address stored separately from its country code. */
+  readonly postalAddress?: { isComplete(address: string): boolean };
+  readonly countryNames?: Readonly<Record<string, string>>;
   readonly taxIdentifier?: ValueValidator<string>;
   readonly postalCode?: ValueValidator<"postal-code">;
   readonly telephone?: ValueValidator<string>;

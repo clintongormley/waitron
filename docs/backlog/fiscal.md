@@ -253,16 +253,6 @@ rectificativas de facturas recibidas (casilla 40/41, needs a `corrects_purchase_
 self-FK); bienes-de-inversión regularización (43); the prorrata rule (44, asesor-driven);
 intra-community and import boxes (32–39); a libro-registro / Pre303 export.
 
-## A1a. A foreign business customer needs an identifier-type decision
-
-`recordSale` now names a Spanish recipient on a full invoice. A non-Spanish one is refused by name
-(`fiscal.foreign_recipient_unsupported`), deliberately: AEAT's `IDOtro` needs an `IDType` — NIF-IVA,
-passport, residence certificate and so on, enumerated in
-`@waitron/verifactu`'s AEAT XSD (`SuministroInformacion.xsd`) — and choosing wrongly files a record
-into an append-only table that can never be unfiled. Whoever wires up business-customer sales makes
-that call. A231 adds the saved Spanish-recipient choice around issuance. Foreign
-recipient support remains outside that build; `recordSubstitution` still has no HTTP route.
-
 ## `packages/fiscal-verifactu` restates rules the validator owns
 
 - `venue-fields.ts` repeats the venue-field patterns and caps, kept honest by drift guards

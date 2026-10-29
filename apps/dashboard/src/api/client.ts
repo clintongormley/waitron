@@ -1,3 +1,5 @@
+import type { RecipientIdentifier } from "@waitron/country-packs";
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type { TenderRefundView, StuckTenderRefundRow } from "./tender-refund-types.js";
 import type { AllergenDeclaration as AllergenEntry } from "@waitron/catalogue/src/allergens.js";
 export type { AllergenEntry };
@@ -383,6 +385,8 @@ export interface RosterEntry {
 
 export interface InvoiceCustomerSearchDto {
   taxId: string;
+  identifierType?: RecipientIdentifierType;
+  identifierCountryCode?: string;
   invoices: { invoice: string; issuedAt: string; name: string; total: string }[];
 }
 
@@ -2145,7 +2149,14 @@ export interface OrderDetailDto {
   invoices: {
     kind: "invoice" | "credit_note" | "substitution";
     invoiceType?: "F1" | "F2";
-    recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+    recipient?: {
+      taxId: string;
+      legalName: string;
+      countryCode: string;
+      address: string;
+      identifierType?: RecipientIdentifierType;
+      identifierCountryCode?: string;
+    };
     taxpayerDomicile?: string;
     number: string;
     issuedAt: string;
@@ -2410,15 +2421,21 @@ export class DashboardApi {
       { as: "file" },
     );
   }
-  findInvoiceCustomer(taxId: string): Promise<InvoiceCustomerSearchDto> {
+  findInvoiceCustomer(
+    taxId: string,
+    identity?: Pick<RecipientIdentifier, "identifierType" | "identifierCountryCode">,
+  ): Promise<InvoiceCustomerSearchDto> {
     return this.#request<InvoiceCustomerSearchDto>(
-      `/management-api/invoice-customers/personal-data?taxId=${encodeURIComponent(taxId)}`,
+      `/management-api/invoice-customers/personal-data?taxId=${encodeURIComponent(taxId)}${identity === undefined ? "" : `&identifierType=${encodeURIComponent(identity.identifierType ?? "")}&identifierCountryCode=${encodeURIComponent(identity.identifierCountryCode ?? "")}`}`,
       "GET",
     );
   }
-  downloadInvoiceCustomerData(taxId: string): Promise<DownloadedFile> {
+  downloadInvoiceCustomerData(
+    taxId: string,
+    identity?: Pick<RecipientIdentifier, "identifierType" | "identifierCountryCode">,
+  ): Promise<DownloadedFile> {
     return this.#request<DownloadedFile>(
-      `/management-api/invoice-customers/personal-data/export?taxId=${encodeURIComponent(taxId)}`,
+      `/management-api/invoice-customers/personal-data/export?taxId=${encodeURIComponent(taxId)}${identity === undefined ? "" : `&identifierType=${encodeURIComponent(identity.identifierType ?? "")}&identifierCountryCode=${encodeURIComponent(identity.identifierCountryCode ?? "")}`}`,
       "GET",
       undefined,
       { as: "file" },

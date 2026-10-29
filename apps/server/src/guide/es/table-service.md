@@ -3,7 +3,7 @@
 ## Emitir una factura completa {#full-invoice}
 
 Cuando un cliente de una mesa necesita una factura a su nombre, elige **Factura completa** para
-la cuenta e introduce su NIF español, su razón social y su dirección completa antes del último
+la cuenta e introduce su identificador, su razón social y su dirección completa antes del último
 pago. La elección guardada permite superar el límite de factura simplificada. Al cobrar toda
 la cuenta se emite la factura; al registrar que se han ido sin pagar también se emite y queda
 pendiente de pago.
@@ -11,6 +11,19 @@ pendiente de pago.
 El cobro de mostrador todavía no puede emitir una factura completa. Mantén el pedido del cliente
 en una cuenta de mesa y usa los pagos de esa cuenta. Tramitar un pedido de mostrador por sí solo
 no emite una factura.
+
+Elige **NIF español** para un NIF, NIE o CIF. Para un pasaporte u otro documento aceptado,
+elige su **Tipo de identificador**, **País emisor** y **Número de documento**. Introduce el número
+tal como aparece. Puedes usar un pasaporte con una dirección española: el país emisor pertenece
+al documento, independientemente de dónde viva el cliente. Una factura completa necesita un
+identificador. **Cancelar** vuelve sin guardar.
+
+Elige el país de la dirección e introduce la calle y el número y la localidad. Una dirección
+española también necesita un código postal válido de cinco cifras y la provincia; ambos son
+opcionales en otros países. Por ejemplo, una dirección francesa puede ser **2 Main Street**,
+**París**, **Francia**, sin código postal ni provincia. No añadas el país a la calle. La factura
+impresa y el ticket en la pantalla de caja muestran el país en el idioma del ticket. El detalle
+del pedido lo muestra en el idioma de tu pantalla.
 
 ## Evitar justificantes de tarjeta duplicados {#reader-slips}
 

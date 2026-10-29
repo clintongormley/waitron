@@ -75,7 +75,7 @@ it("a changed form that is still incomplete shows its field errors on the press,
   await el.updateComplete;
   expect(sent).toEqual([]);
   expect(field(el, "legalName").error).toBe("");
-  expect(field(el, "taxId").error).toBe(t("invoice.tax_id_invalid"));
+  expect(field(el, "taxId").error).toBe(t("invoice.identifier_required"));
   expect(field(el, "province").error).toBe(t("invoice.province_required"));
   expect(bottom(el).error).toBe(t("form.fix_fields"));
   expect(await saveState(el)).toEqual({

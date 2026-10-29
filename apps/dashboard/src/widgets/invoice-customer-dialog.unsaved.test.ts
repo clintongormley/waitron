@@ -157,3 +157,33 @@ it("disconnect closes the dialog and clears the typed number, and a reopened dia
   await edit(form, "12345678Z");
   expect(app.leave.coordinator.isDirty()).toBe(true);
 });
+
+it("tracks document kind and issuer after a successful search, and restores them on discard", async () => {
+  const { app, form } = await fixture();
+  async function choose(field: string, value: string) {
+    form
+      .shadowRoot!.querySelector(`[name=${field}]`)!
+      .dispatchEvent(
+        new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+      );
+    await form.updateComplete;
+  }
+  await choose("identifierType", "passport");
+  await choose("identifierCountryCode", "FR");
+  await edit(form, "P123");
+  form.shadowRoot!.querySelector<HTMLElement>("[data-test=find]")!.click();
+  await expect.poll(() => form.shadowRoot!.querySelector("[data-test=count]")).not.toBeNull();
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await choose("identifierCountryCode", "GB");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  await choose("identifierCountryCode", "FR");
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+  await choose("identifierType", "other-document");
+  expect(app.leave.coordinator.isDirty()).toBe(true);
+  pressClose(form);
+  const q = await warning(app);
+  expect(q.open).toBe(true);
+  q.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+  await expect.poll(() => form.open).toBe(false);
+  expect(app.leave.coordinator.isDirty()).toBe(false);
+});

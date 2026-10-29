@@ -124,6 +124,24 @@ fixture now inserts its historical group shape, prices and inserts the recorded 
 lower-level helpers, and retains its submission event and command record. Its five cases passed;
 the full snapshot also checks that A773's recalled-line and service-cancellation tables start empty.
 
+Receipt, 2026-10-28, A963: the database guest-count upgrade and server canvas-retirement fixtures
+failed before reaching their migration checks because today's sales insert named the new recipient
+identity columns. The former now inserts its predecessor's sales column set directly. The latter
+already preapplies named later additions for its current-writer fill; its explicit list gains the
+new nullable identity columns. That composite canvas fixture is not an untouched historical schema.
+All original expectation/matcher calls remain unchanged. Database coverage ran1,505cases; the
+four selected server upgrade files ran9cases. RED/GREEN and assertion inventory:
+`~/waitron-campaign-e/receipts/a963-task8-20261028/` (`upgrade-fixture-red.log`,
+`historical-server-fixtures.log`, `db-coverage.log`, `historical-server-fixtures-green.log`).
+
+The same branch's Madrid seed baseline compares the current schema with a frozen capture.
+After adding nullable columns, extend the in-memory expected schema explicitly; do not
+regenerate the capture or remove schema/row comparisons. Running
+`pnpm --filter @waitron/server exec vitest run scripts/demo-seed/seed.madrid-baseline.test.ts`
+reproduced the two missing-column failures, then passed after the four identity columns
+were appended to each expected phase. The captures, digests and original assertions stayed
+unchanged (`madrid-red.log` and `madrid-green.log` in the same receipt folder).
+
 ## A migration set gets a whole database-backed suite by calling one function.
 
 `packages/db/src/testing/schema-conformance.ts` is a suite FACTORY — a function you call at the top
@@ -3187,3 +3205,17 @@ bare Hono app cannot establish that trading or recovery boot installs it.
 **Test provider HTTP refusals through the real client, as well as a throwing fake seat.** A fake
 proved the thrown error preserved the local reader while the HTTP client silently accepted
 401/403/409.
+
+## Keep a document identifier on one template text node
+
+When a label and identifier must read as one string, interpolate the complete string. A formatter
+can wrap adjacent Lit interpolations onto separate lines, changing the DOM text between them.
+The identifier remains unchanged in storage while a screen assertion, copy or reader receives
+extra whitespace. The recipient-line checks in `apps/till/src/screens/till-ticket-view.test.ts`
+assert the complete domestic and foreign text; they do not audit other formatted templates.
+
+Measured on A963, 2026-10-28: after formatting the new recipient label expression, the unchanged
+`NIF: B11223344` assertion and two new passport assertions failed on intervening newlines. One
+string interpolation restored all 211 ticket cases without changing their assertions. Receipt
+logs: `~/waitron-campaign-e/receipts/a963-task8-20261028/till-dialog-final.log` and
+`ticket-final.log`. No change to stored identity was involved.

@@ -58,11 +58,13 @@ For the one-month answer time and the venue's other duties, see
 ## Download an invoice customer's data {#invoice-customer-data}
 
 When a customer asks what the venue holds about them, an admin can find their full invoices by
-tax number and download them. On **Orders**, press **Find a customer by tax number**, type the
-number and press **Find**. Letter case, spaces, dots, hyphens and an ES at the start make no
-difference. The window lists every full invoice that names the number; press **Download their
+identifier and download them. On **Orders**, press **Find an invoice customer**. For a Spanish
+tax number, keep **Spanish tax ID**, type the number and press **Find**. Letter case, spaces,
+dots, hyphens and an ES at the start make no difference for that search. For another document,
+choose its actual type and issuing country and enter the number exactly as recorded, including
+spaces and letter case. The window lists the full invoices that match all three; press **Download their
 data** to get a ZIP with a PDF copy of each invoice, an `invoices.json` file with the name, tax
-number and address on each and every address the box emailed it to or tried to, and a
+number, document type and issuing country when present, address on each and every address the box emailed it to or tried to, and a
 `README.txt` in the venue's language. Managers do not see this action. A booking holds no
 tax number, so this search does not find bookings. Waitron keeps no list of these requests, so
 note the request and your answer in the venue's own records. For the one-month answer time and the

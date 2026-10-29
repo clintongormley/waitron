@@ -1,3 +1,4 @@
+import { getCountryPack, RECIPIENT_REGION_NAMES } from "@waitron/country-packs";
 import { afterEach, describe, expect, it } from "vitest";
 import { page } from "vitest/browser";
 import { t as uiText, setLocale } from "../i18n/t.js";
@@ -2643,4 +2644,76 @@ describe("till-ticket-view: a full invoice's delivery (A231q B5)", () => {
       expect(text(el)).not.toContain("@");
     });
   });
+});
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "es"])(
+  "shows the separately saved recipient country in receipt language %s",
+  async (locale) => {
+    setLocale("en-GB");
+    const { el } = await mount({
+      invoiceType: "F1",
+      locale,
+      recipient: {
+        taxId: "B12345674",
+        legalName: "Customer Ltd",
+        countryCode: "ES",
+        address: "2 Main Street, 28013 Madrid, Madrid",
+      },
+    });
+    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
+      getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale]!,
+    );
+    expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
+      "2 Main Street, 28013 Madrid, Madrid",
+    );
+  },
+);
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "unknown"])(
+  "shows a French snapshot country in saved receipt language %s on an English till",
+  async (locale) => {
+    setLocale("en-GB");
+    const { el } = await mount({
+      invoiceType: "F1",
+      locale,
+      recipient: {
+        taxId: "Passport 123",
+        legalName: "Alex Guest",
+        countryCode: "FR",
+        address: "2 Main Street, Paris",
+      },
+    });
+    const language = ["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"].includes(locale)
+      ? locale
+      : "es-ES";
+    const country =
+      RECIPIENT_REGION_NAMES[new Intl.Locale(language).language]?.["FR"] ??
+      new Intl.DisplayNames([language], { type: "region" }).of("FR")!;
+    const recipient = el.shadowRoot!.querySelector(".recipient")!;
+    expect(recipient.textContent).toContain(country);
+    expect(recipient.textContent).toContain("2 Main Street, Paris");
+    expect(recipient.textContent).not.toContain(locale === "en-GB" ? "Francia" : "France");
+  },
+);
+
+it.each([
+  ["en-GB", "Passport"],
+  ["es-ES", "Pasaporte"],
+])("labels a foreign document using saved receipt language %s", async (locale, label) => {
+  setLocale(locale === "en-GB" ? "es-ES" : "en-GB");
+  const { el } = await mount({
+    invoiceType: "F1",
+    locale,
+    recipient: {
+      taxId: " Ab-09 /xy ",
+      identifierType: "passport",
+      identifierCountryCode: "FR",
+      legalName: "Guest",
+      countryCode: "ES",
+      address: "2 Main Street, Madrid",
+    },
+  });
+  expect(el.shadowRoot!.querySelector(".recipient")!.textContent).toContain(
+    `${label}:  Ab-09 /xy `,
+  );
 });

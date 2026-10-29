@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { createCanvas } from "@napi-rs/canvas";
 import jsQR from "jsqr";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -828,4 +829,55 @@ describe("A4 columns and right-aligned amounts", () => {
     for (const element of elements)
       expect(right(element)).toBeLessThanOrEqual(CONTENT_RIGHT + 1e-6);
   });
+});
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB"])(
+  "renders the recipient country from the pack in a real %s PDF",
+  async (locale) => {
+    const input = structuredClone(fixture);
+    input.invoiceLocale = locale;
+    input.result.recipient!.address = "2 Main Street, 28013 Madrid, Madrid";
+    const { pages } = await rendered(input);
+    const text = pages.map((page) => page.text).join(" ");
+    expect(text).toContain("2 Main Street, 28013 Madrid, Madrid");
+    expect(text).toContain(getCountryPack("ES")!.countryNames![locale]!);
+    expect(text).not.toContain(locale === "en-GB" ? "España" : "Spain");
+  },
+);
+
+it("prints a French snapshot country in Catalan in the real PDF", async () => {
+  const input = structuredClone(fixture);
+  input.invoiceLocale = "ca-ES";
+  input.result.recipient = {
+    taxId: "Passport 123",
+    legalName: "Alex Guest",
+    address: "2 Main Street, Paris",
+    countryCode: "FR",
+  };
+  const before = structuredClone(input);
+  const { pages } = await rendered(input);
+  const text = pages.map((page) => page.text).join(" ");
+  expect(text).toContain("2 Main Street, Paris");
+  expect(text).toContain(new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!);
+  expect(text).not.toContain("France");
+  expect(input).toEqual(before);
+});
+
+it.each([
+  ["en-GB", "Passport"],
+  ["es-ES", "Pasaporte"],
+])("renders an actual foreign document label in %s PDF", async (locale, label) => {
+  const input = structuredClone(fixture);
+  input.invoiceLocale = locale;
+  input.result.recipient = {
+    taxId: "Ab-09/xy",
+    identifierType: "passport",
+    identifierCountryCode: "FR",
+    legalName: "Guest",
+    countryCode: "ES",
+    address: "2 Main Street, Madrid",
+  };
+  const { pages } = await rendered(input);
+  expect(pages[0]!.text).toContain(`${label}: Ab-09/xy`);
+  expect(pages[0]!.text).not.toContain("NIF: Ab-09/xy");
 });

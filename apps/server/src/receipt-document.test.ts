@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { formatReceipt } from "./receipt-ticket.js";
@@ -1153,3 +1154,140 @@ describe("the header rows: order, number and date (A754)", () => {
     },
   );
 });
+
+describe("recipient country presentation", () => {
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "es", "unknown"])(
+    "uses receipt language %s independently of raw address shape",
+    (locale) => {
+      const names = getCountryPack("ES")!.countryNames!;
+      const country =
+        names[
+          locale === "en-GB" || locale === "ca-ES" || locale === "gl-ES" || locale === "eu-ES"
+            ? locale
+            : "es-ES"
+        ]!;
+      for (const address of [
+        "2 Main Street, 28013 Madrid, Madrid",
+        "Saved customer address",
+        `2 Main Street, 28013 Madrid, Madrid, ${names["es-ES"]}`,
+      ]) {
+        const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+        input.invoiceLocale = locale;
+        input.result.recipient!.address = address;
+        const before = structuredClone(input);
+        const words = buildReceiptDocument(input).elements.flatMap((e) =>
+          e.kind === "text" ? [e.text] : [],
+        );
+        expect(words[words.indexOf(address) + 1]).toBe(country);
+        expect(words.filter((word) => word === country)).toHaveLength(1);
+        expect(input).toEqual(before);
+      }
+    },
+  );
+  it.each(["58mm", "80mm"] as const)(
+    "prints the saved country on %s in every Spain receipt language",
+    (paperWidth) => {
+      for (const locale of getCountryPack("ES")!.invoiceLocales) {
+        const input = structuredClone(FULL_INVOICE_FIXTURE);
+        input.invoiceLocale = locale;
+        input.result.recipient!.address = "2 Main Street, 28013 Madrid, Madrid";
+        input.printer = { paperWidth, resolution: "180dpi" };
+        const words = printedLines(formatReceipt(input)).map((line) => line.trim());
+        const country = getCountryPack("ES")!.countryNames![locale]!;
+        expect(words.filter((word) => word === country)).toHaveLength(1);
+        expect(words).not.toContain("Spain");
+      }
+    },
+  );
+});
+
+it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES", "en-GB", "unknown"])(
+  "renders a French snapshot country using invoice words at %s without changing its address",
+  (locale) => {
+    const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+    input.invoiceLocale = locale;
+    input.result.recipient = {
+      taxId: "Passport 123",
+      legalName: "Alex Guest",
+      address: "2 Main Street, Paris",
+      countryCode: "FR",
+    };
+    const before = structuredClone(input);
+    const language = ["en-GB", "es-ES", "ca-ES", "gl-ES", "eu-ES"].includes(locale)
+      ? locale
+      : "es-ES";
+    const country = new Intl.DisplayNames([language], { type: "region" }).of("FR");
+    const words = buildReceiptDocument(input).elements.flatMap((element) =>
+      element.kind === "text" ? [element.text] : [],
+    );
+    expect(words[words.indexOf("2 Main Street, Paris") + 1]).toBe(country);
+    expect(words.filter((word) => word === country)).toHaveLength(1);
+    expect(input).toEqual(before);
+  },
+);
+it.each(["58mm", "80mm"] as const)("prints a foreign snapshot country once on %s", (paperWidth) => {
+  const input = structuredClone(FULL_INVOICE_FIXTURE);
+  input.invoiceLocale = "ca-ES";
+  input.result.recipient = {
+    taxId: "Passport 123",
+    legalName: "Alex Guest",
+    address: "2 Main Street, Paris",
+    countryCode: "FR",
+  };
+  input.printer = { paperWidth, resolution: "180dpi" };
+  const country = new Intl.DisplayNames(["ca-ES"], { type: "region" }).of("FR")!;
+  const words = printedLines(formatReceipt(input)).map((line) => line.trim());
+  expect(words).toContain("2 Main Street, Paris");
+  expect(words.filter((word) => word === country)).toHaveLength(1);
+});
+
+it.each([
+  ["en-GB", "Passport"],
+  ["es-ES", "Pasaporte"],
+  ["ca-ES", "Passaport"],
+  ["gl-ES", "Pasaporte"],
+  ["eu-ES", "Pasaportea"],
+])("labels an actual passport in receipt language %s", (locale, label) => {
+  const input = structuredClone(FULL_INVOICE_DOCUMENT_FIXTURE);
+  input.invoiceLocale = locale;
+  input.result.recipient = {
+    taxId: " Ab-09 /xy ",
+    identifierType: "passport",
+    identifierCountryCode: "FR",
+    legalName: "Guest",
+    address: "2 Main Street, Paris",
+    countryCode: "ES",
+  };
+  const before = structuredClone(input);
+  const words = buildReceiptDocument(input).elements.flatMap((e) =>
+    e.kind === "text" ? [e.text] : [],
+  );
+  expect(words).toContain(`${label}:  Ab-09 /xy `);
+  expect(words).not.toContain("NIF:  Ab-09 /xy ");
+  expect(input).toEqual(before);
+});
+
+it.each(["58mm", "80mm"] as const)(
+  "prints an actual passport label in English and Spanish on %s",
+  (paperWidth) => {
+    for (const [locale, label] of [
+      ["en-GB", "Passport"],
+      ["es-ES", "Pasaporte"],
+    ]) {
+      const input = structuredClone(FULL_INVOICE_FIXTURE);
+      input.invoiceLocale = locale!;
+      input.printer = { paperWidth, resolution: "180dpi" };
+      input.result.recipient = {
+        taxId: "Ab-09/xy",
+        identifierType: "passport",
+        identifierCountryCode: "FR",
+        legalName: "Guest",
+        countryCode: "ES",
+        address: "2 Main Street, Madrid",
+      };
+      const lines = printedLines(formatReceipt(input)).map((line) => line.trim());
+      expect(lines).toContain(`${label}: Ab-09/xy`);
+      expect(lines).not.toContain("NIF: Ab-09/xy");
+    }
+  },
+);

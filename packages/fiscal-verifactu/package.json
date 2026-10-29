@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@waitron/core": "workspace:*",
+    "@waitron/country-packs": "workspace:*",
     "@waitron/credentials": "workspace:*",
     "@waitron/dashboard-kit": "workspace:*",
     "@waitron/db": "workspace:*",
@@ -47,7 +48,6 @@
     "@vitest/browser-playwright": "^4.1.12",
     "@vitest/coverage-v8": "^4.1.12",
     "@waitron/catalogue": "workspace:*",
-    "@waitron/country-packs": "workspace:*",
     "@waitron/migrations": "workspace:*",
     "axe-core": "^4.13.0",
     "drizzle-kit": "^0.31.11",

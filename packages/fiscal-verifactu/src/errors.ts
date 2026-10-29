@@ -268,15 +268,7 @@ declare module "@waitron/shared" {
      */
     "fiscal.substitution_unsupported": { saleId: string; tipoFactura: string };
 
-    /**
-     * Thrown by `buildDestinatarios` (./backend.ts) for a recipient whose country is not `ES`: which
-     * `IDOtro` `IDType` AEAT admits for a non-resident is open with the asesor
-     * (`docs/compliance/asesor-questions.md`, Q17(a)), and a guessed one could never be unfiled. A
-     * PERMANENT refusal — retrying files nothing new.
-     *
-     * `countryCode` is not operator data, so it may ride in params; the recipient's name and tax
-     * identifier never do (see `fiscal.record_invalid`).
-     */
+    /** Invalid identity with a non-ES postal country and neither document field supplied. */
     "fiscal.foreign_recipient_unsupported": { countryCode: string };
 
     /** `recordCaseEvent` (./filing-cases.ts) was handed a case id no `filing_cases` row has. */

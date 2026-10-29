@@ -1,4 +1,5 @@
 import { VALENCIA_DEMO_TEXT, GALICIA_DEMO_TEXT } from "@waitron/country-packs/demo/testing";
+import { countryNameFor, receiptCountryNameFor } from "./registry.js";
 import { findAdministrativeArea, resolveFiscalJurisdiction } from "@waitron/country";
 import { describe, expect, it } from "vitest";
 import {
@@ -357,3 +358,61 @@ it.each(["15", "27", "32", "36", ...GALICIA_DEMO_TEXT.provinceAliases])(
     });
   },
 );
+
+describe("recipient country names", () => {
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])("names ES in receipt language %s", (locale) => {
+    expect(receiptCountryNameFor("ES", locale)).toBe(getCountryPack("ES")!.countryNames![locale]);
+  });
+  it.each(["unknown", "es"])("keeps Spain receipts Spanish for %s", (locale) => {
+    expect(receiptCountryNameFor("ES", locale)).toBe(getCountryPack("ES")!.countryNames!["es-ES"]);
+  });
+  it("names countries in the screen language and falls back to English", () => {
+    expect(countryNameFor("ES", "en-GB")).toBe("Spain");
+    expect(countryNameFor("ES", "unknown")).toBe("Spain");
+  });
+  it.each(["XX"])("keeps the country code for an unlabelled country %s", (code) => {
+    expect(countryNameFor(code, "en-GB")).toBe(code);
+    expect(receiptCountryNameFor(code, "es-ES")).toBe(code);
+  });
+});
+
+it("keeps the country name Spanish for the screen's bare-language alias", () => {
+  expect(countryNameFor("ES", "es")).toBe(getCountryPack("ES")!.countryNames!["es-ES"]);
+});
+
+describe("recipient countries without installed packs", () => {
+  it.each([
+    ["FR", "France"],
+    ["GB", "United Kingdom"],
+    ["IE", "Ireland"],
+    ["HK", "Hong Kong SAR China"],
+  ])("names %s on English screens without installing a venue pack", (code, name) => {
+    expect(countryNameFor(code, "en-GB")).toBe(name);
+    expect(countryNameFor(code, "invalid_locale")).toBe(name);
+    expect(countryNameFor(code, "unknown")).toBe(name);
+  });
+  it.each(["es-ES", "ca-ES", "gl-ES", "eu-ES"])(
+    "names a French address in receipt language %s rather than a recipient pack default",
+    (locale) => {
+      const name = new Intl.DisplayNames([locale], { type: "region" }).of("FR");
+      expect(receiptCountryNameFor("FR", locale)).toBe(name);
+      expect(countryNameFor("FR", locale)).toBe(name);
+    },
+  );
+  it.each(["es", "unknown", "invalid_locale", ""])(
+    "uses the actual Spanish receipt-word fallback for a foreign address at %s",
+    (locale) => {
+      const name = new Intl.DisplayNames(["es-ES"], { type: "region" }).of("FR");
+      expect(receiptCountryNameFor("FR", locale)).toBe(name);
+    },
+  );
+  it.each(["XX", "ZZ", "EU", "ESP", "123", ""])("keeps unassigned stored code %s raw", (code) => {
+    expect(countryNameFor(code, "en-GB")).toBe(code);
+    expect(receiptCountryNameFor(code, "ca-ES")).toBe(code);
+  });
+});
+
+it("names countries in English for a stored English receipt with English words", () => {
+  expect(receiptCountryNameFor("ES", "en-GB")).toBe("Spain");
+  expect(receiptCountryNameFor("FR", "en-GB")).toBe("France");
+});

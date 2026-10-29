@@ -1,3 +1,4 @@
+import { getCountryPack } from "@waitron/country-packs";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -28,9 +29,13 @@ describe("till-invoice-recipient-dialog", () => {
   it("shows Spain in the selected language", async () => {
     const el = await mountDialog();
     const country = el.shadowRoot!.querySelector<HTMLElement & { value: string }>(
-      "wt-input[name=countryCode]",
+      "wt-combobox[name=countryCode]",
     )!;
-    expect(country.value).toBe("Spain");
+    expect(country.value).toBe("ES");
+    expect(
+      (country as HTMLElementTagNameMap["wt-combobox"]).options.find((o) => o.value === "ES")
+        ?.label,
+    ).toBe("Spain");
   });
 
   it.each(["en", "es-ES"])(
@@ -40,7 +45,7 @@ describe("till-invoice-recipient-dialog", () => {
       const el = await mountDialog();
       await fill(el, "taxId", "12345678Z");
       await fill(el, "legalName", "Ana García");
-      await fill(el, "address", "Calle Mayor 1");
+      await fill(el, "address", "1 Main Street");
       await fill(el, "postalCode", "28013");
       await fill(el, "locality", "Madrid");
       await fill(el, "province", "Madrid");
@@ -89,7 +94,7 @@ describe("till-invoice-recipient-dialog", () => {
 
     await fill(el, "taxId", "12345678Z");
     await fill(el, "legalName", "Ana García");
-    await fill(el, "address", "Calle Mayor 1");
+    await fill(el, "address", "1 Main Street");
     await fill(el, "postalCode", "28013");
     await fill(el, "locality", "Madrid");
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
@@ -104,7 +109,7 @@ describe("till-invoice-recipient-dialog", () => {
 
     await fill(el, "province", "Madrid");
     el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
-    expect(saved[0]?.recipient.address).toBe("Calle Mayor 1, 28013 Madrid, Madrid, España");
+    expect(saved[0]?.recipient.address).toBe("1 Main Street, 28013 Madrid, Madrid");
   });
 
   it("marks an invalid Spanish tax ID and missing customer details, then saves corrected details", async () => {
@@ -138,7 +143,7 @@ describe("till-invoice-recipient-dialog", () => {
 
     await fill(el, "taxId", " 12345678z ");
     await fill(el, "legalName", "  Ana García ");
-    await fill(el, "address", "  Calle Mayor 1 ");
+    await fill(el, "address", "  1 Main Street ");
     await fill(el, "postalCode", " 28013 ");
     await fill(el, "locality", " Madrid ");
     await fill(el, "province", " Madrid ");
@@ -151,7 +156,7 @@ describe("till-invoice-recipient-dialog", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -188,7 +193,7 @@ async function fillValid(el: TillInvoiceRecipientDialog) {
   for (const [name, value] of [
     ["taxId", "12345678Z"],
     ["legalName", "Ana García"],
-    ["address", "Calle Mayor 1"],
+    ["address", "1 Main Street"],
     ["postalCode", "28013"],
     ["locality", "Madrid"],
     ["province", "Madrid"],
@@ -207,7 +212,7 @@ function confirmations(el: TillInvoiceRecipientDialog) {
 const anaGarcia = {
   taxId: "12345678Z",
   legalName: "Ana García",
-  address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+  address: "1 Main Street, 28013 Madrid, Madrid",
   countryCode: "ES",
 } as const;
 
@@ -624,4 +629,57 @@ describe("till-invoice-recipient-dialog email delivery", () => {
     save(el);
     expect(sent[0]!.delivery).toEqual({ medium: "receipt" });
   });
+});
+
+describe("country-free recipient input", () => {
+  it.each(["en-GB", "es-ES", "es"])(
+    "keeps country separate from the address in %s",
+    async (locale) => {
+      setLocale(locale);
+      const el = await mountDialog();
+      const sent = confirmations(el);
+      await fillValid(el);
+      await fill(el, "address", " Main Street, 2 ");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      expect(sent[0]?.recipient).toEqual({
+        taxId: "12345678Z",
+        legalName: anaGarcia.legalName,
+        address: "Main Street, 2, 28013 Madrid, Madrid",
+        countryCode: "ES",
+      });
+      const country = el.shadowRoot!.querySelector<
+        HTMLElement & { value: string; disabled: boolean }
+      >("wt-combobox[name=countryCode]")!;
+      expect(country.value).toBe("ES");
+      expect(
+        (country as HTMLElementTagNameMap["wt-combobox"]).options.find((o) => o.value === "ES")
+          ?.label,
+      ).toBe(getCountryPack("ES")!.countryNames![locale === "es" ? "es-ES" : locale]);
+      expect(country.disabled).toBe(false);
+    },
+  );
+  it.each(["00000", "99999"])(
+    "uses the pack's postcode rule for %s and recovers inline",
+    async (postalCode) => {
+      const el = await mountDialog();
+      const sent = confirmations(el);
+      await fillValid(el);
+      await fill(el, "postalCode", postalCode);
+      el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      await el.updateComplete;
+      expect(sent).toEqual([]);
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { error: string }>("wt-input[name=postalCode]")!
+          .error,
+      ).toBe(t("invoice.postal_code_invalid"));
+      expect(el.shadowRoot!.querySelector("wt-form-actions")!.error).toBe(t("form.fix_fields"));
+      expect(
+        el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>("[data-invoice-save]")!
+          .disabled,
+      ).toBe(true);
+      await fill(el, "postalCode", "28013");
+      el.shadowRoot!.querySelector<HTMLElement>("[data-invoice-save]")!.click();
+      expect(sent).toHaveLength(1);
+    },
+  );
 });

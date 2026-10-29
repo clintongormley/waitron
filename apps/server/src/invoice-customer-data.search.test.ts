@@ -21,7 +21,7 @@ const suite = useVenueDb({
   },
 });
 
-function search(taxId: string, options?: { chunk?: number }) {
+function search(taxId: string, options?: Parameters<typeof findInvoiceCustomerSales>[2]) {
   return suite.db.withWriteLock(() => findInvoiceCustomerSales(suite.db, taxId, options));
 }
 
@@ -195,3 +195,51 @@ function recordingEveryStatement(tx: Transaction) {
   });
   return { recording, statements };
 }
+
+describe("foreign identity matching", () => {
+  it("matches value, document type and issuing country independently", async () => {
+    const [template] = await suite.db.select().from(sales).where(eq(sales.id, fixture.sales.j1));
+    const identities = [
+      { taxId: "Ab-09", identifierType: "passport" as const, identifierCountryCode: "FR" },
+      {
+        taxId: "Ab-09",
+        identifierType: "residence-country-id" as const,
+        identifierCountryCode: "FR",
+      },
+      { taxId: "Ab-09", identifierType: "passport" as const, identifierCountryCode: "GB" },
+      { taxId: "AB09", identifierType: "passport" as const, identifierCountryCode: "FR" },
+      { taxId: "ab-09", identifierType: "passport" as const, identifierCountryCode: "FR" },
+      { taxId: " Ab-09 ", identifierType: "passport" as const, identifierCountryCode: "FR" },
+      { taxId: "12345678Z", identifierType: "passport" as const, identifierCountryCode: "FR" },
+    ];
+    const saved = [];
+    for (const [index, identity] of identities.entries()) {
+      const id = randomUUID();
+      await suite.db.insert(sales).values({
+        ...template!,
+        id,
+        invoiceNumber: 910000 + index,
+        workingOrderId: null,
+        counterpartyTaxId: identity.taxId,
+        counterpartyIdentifierType: identity.identifierType,
+        counterpartyIdentifierCountryCode: identity.identifierCountryCode,
+        counterpartyCountryCode: "ES",
+        counterpartyAddress: " Saved, raw historical address ",
+      });
+      saved.push({ id, identity });
+    }
+    for (const { id, identity } of saved) {
+      const found = await search(identity.taxId, { ...identity, chunk: 1 });
+      expect(found.map((row) => row.saleId)).toEqual([id]);
+      expect(found[0]).toMatchObject({
+        ...identity,
+        countryCode: "ES",
+        address: " Saved, raw historical address ",
+      });
+    }
+    expect(await ids("12345678Z")).toEqual([fixture.sales.j1, fixture.sales.j2, fixture.sales.j3]);
+    expect(
+      await search("AB09", { identifierType: "passport", identifierCountryCode: "IE" }),
+    ).toEqual([]);
+  });
+});

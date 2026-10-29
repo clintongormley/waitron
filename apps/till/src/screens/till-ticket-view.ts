@@ -11,7 +11,12 @@ import {
   perDishOptionQuantity,
   resolveSnapshotText,
 } from "@waitron/shared";
-import { FALLBACK_RECEIPT_LOCALE, receiptLabelsFor } from "@waitron/country-packs";
+import {
+  FALLBACK_RECEIPT_LOCALE,
+  recipientIdentifierLabel,
+  receiptCountryNameFor,
+  receiptLabelsFor,
+} from "@waitron/country-packs";
 import type { ReceiptLabels } from "@waitron/country";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
@@ -762,8 +767,11 @@ export class TillTicketView extends LitElement {
           r.invoiceType === "F1" && r.recipient
             ? html`<section class="recipient">
                 <p>${r.recipient.legalName}</p>
-                <p>${labels.nif}: ${r.recipient.taxId}</p>
+                <p>
+                  ${`${recipientIdentifierLabel(r.recipient.identifierType, language)}: ${r.recipient.taxId}`}
+                </p>
                 <p>${r.recipient.address}</p>
+                <p>${receiptCountryNameFor(r.recipient.countryCode, language)}</p>
               </section>`
             : nothing
         }

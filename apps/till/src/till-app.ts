@@ -7395,6 +7395,8 @@ export class TillApp extends LitElement {
           : JSON.stringify([
               choice.invoiceType,
               choice.recipient.taxId,
+              choice.recipient.identifierType ?? "tax-number",
+              choice.recipient.identifierCountryCode ?? "ES",
               choice.recipient.legalName,
               choice.recipient.address,
               choice.recipient.countryCode,
@@ -16850,7 +16852,11 @@ export class TillApp extends LitElement {
         this.invoiceRecipientRefusalField = emailRefused
           ? "email"
           : code === "invoice.recipient_invalid" &&
-              (field === "taxId" || field === "legalName" || field === "address")
+              (field === "taxId" ||
+                field === "identifierType" ||
+                field === "identifierCountryCode" ||
+                field === "legalName" ||
+                field === "address")
             ? field
             : "";
         if (code === "invoice_delivery.printer_invalid") {

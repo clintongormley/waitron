@@ -1,3 +1,4 @@
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import { eq } from "drizzle-orm";
 import { sales } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
@@ -14,6 +15,8 @@ export async function readReceiptIssuer(backend: FiscalBackend, tx: Transaction,
       issuedAt: sales.issuedAt,
       issuedOffsetMinutes: sales.issuedOffsetMinutes,
       recipientTaxId: sales.counterpartyTaxId,
+      identifierType: sales.counterpartyIdentifierType,
+      identifierCountryCode: sales.counterpartyIdentifierCountryCode,
       recipientLegalName: sales.counterpartyLegalName,
       recipientCountryCode: sales.counterpartyCountryCode,
       recipientAddress: sales.counterpartyAddress,
@@ -43,6 +46,7 @@ export async function readReceiptIssuer(backend: FiscalBackend, tx: Transaction,
       ? {
           recipient: {
             taxId: sale.recipientTaxId,
+            ...storedRecipientIdentifier(sale.identifierType, sale.identifierCountryCode),
             legalName: sale.recipientLegalName,
             countryCode: sale.recipientCountryCode,
             address: sale.recipientAddress,

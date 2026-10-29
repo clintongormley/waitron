@@ -1,3 +1,4 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import type {
   AllergyCommand,
   AllergyMoveRead,
@@ -1057,7 +1058,14 @@ export interface TillSaleResult extends ReceiptPresentation {
   issuedOffsetMinutes?: number;
   operationDate?: string;
   invoiceType?: "F1" | "F2";
-  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+  recipient?: {
+    taxId: string;
+    legalName: string;
+    countryCode: string;
+    address: string;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  };
   /** Issuer identity stored with the filed invoice; immediate issuance responses may omit it. */
   issuer?: { venueName: string; nif: string; domicile?: string };
   receiptHeader?: { tradingName: string; printTradingName: boolean };
@@ -2108,7 +2116,14 @@ export interface PartyBill {
   revision: number;
   invoiceType: "F1" | "F2";
   invoiceDelivery?: InvoiceDeliveryChoice;
-  recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+  recipient: {
+    taxId: string;
+    legalName: string;
+    address: string;
+    countryCode: string;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  } | null;
   partyId: string;
   label: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
@@ -2827,6 +2842,8 @@ export class TillApi {
       | {
           invoiceType: "F1" | "F2";
           recipient: {
+            identifierType?: RecipientIdentifierType;
+            identifierCountryCode?: string;
             taxId: string;
             legalName: string;
             address: string;
@@ -2866,7 +2883,14 @@ export class TillApi {
     id: string;
     lines: SaleLine[];
     invoiceType?: "F1" | "F2";
-    recipient?: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+    recipient?: {
+      taxId: string;
+      legalName: string;
+      address: string;
+      countryCode: string;
+      identifierType?: RecipientIdentifierType;
+      identifierCountryCode?: string;
+    } | null;
     zoneId?: string;
     tip?: string;
     allowOffline?: boolean;
@@ -3091,7 +3115,14 @@ export class TillApi {
       expectedEdit: BillEditExpected | null;
       revision: number;
       invoiceType: "F1" | "F2";
-      recipient: { taxId: string; legalName: string; address: string; countryCode: string } | null;
+      recipient: {
+        taxId: string;
+        legalName: string;
+        address: string;
+        countryCode: string;
+        identifierType?: RecipientIdentifierType;
+        identifierCountryCode?: string;
+      } | null;
       delivery?: InvoiceDeliveryChoice;
     },
   ): Promise<{ revision: number }> {

@@ -2131,7 +2131,7 @@ describe("till-app simplified-invoice limit", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -2417,7 +2417,7 @@ describe("till-app counter: the guests the receipt prints", () => {
       recipient: {
         taxId: "12345678Z",
         legalName: "Ana García",
-        address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+        address: "1 Main Street, 28013 Madrid, Madrid",
         countryCode: "ES" as const,
       },
     };

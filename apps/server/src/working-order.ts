@@ -1,3 +1,4 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
 import { withIssuanceTransaction } from "@waitron/core";
 import {
   newCustomerPresentation,
@@ -1637,6 +1638,8 @@ export async function createOpenOrder(
     recipientLegalName: recipient?.legalName ?? null,
     recipientAddress: recipient?.address ?? null,
     recipientCountryCode: recipient?.countryCode ?? null,
+    recipientIdentifierType: recipient?.identifierType ?? null,
+    recipientIdentifierCountryCode: recipient?.identifierCountryCode ?? null,
     // Not a fiscal field.
     deliveryTableId,
     partyId: placement.partyId ?? null,
@@ -4137,6 +4140,8 @@ export interface InvoiceChoiceRequest extends OrderEditAuthority {
   invoiceType: "F1" | "F2";
   delivery?: unknown;
   recipient: {
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
     taxId: string;
     legalName: string;
     address: string;
@@ -4251,6 +4256,8 @@ export async function setOrderInvoiceChoice(
         recipientLegalName: normalizedRecipient?.legalName ?? null,
         recipientAddress: normalizedRecipient?.address ?? null,
         recipientCountryCode: normalizedRecipient?.countryCode ?? null,
+        recipientIdentifierType: normalizedRecipient?.identifierType ?? null,
+        recipientIdentifierCountryCode: normalizedRecipient?.identifierCountryCode ?? null,
         revision,
       })
       .where(and(eq(workingOrders.id, orderId), eq(workingOrders.nodeId, cfg.nodeId)));

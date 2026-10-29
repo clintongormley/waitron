@@ -1,3 +1,5 @@
+import type { RecipientIdentifierType } from "@waitron/country-packs";
+import { storedRecipientIdentifier } from "./invoice-selection.js";
 import type { BusinessDayClock } from "@waitron/shared";
 import { canEmailInvoice } from "./invoice-email-contact.js";
 import { and, asc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
@@ -574,7 +576,14 @@ export interface OrderLine {
 export interface OrderInvoice {
   kind: "invoice" | "credit_note" | "substitution";
   invoiceType?: "F1" | "F2";
-  recipient?: { taxId: string; legalName: string; countryCode: string; address: string };
+  recipient?: {
+    taxId: string;
+    legalName: string;
+    countryCode: string;
+    address: string;
+    identifierType?: RecipientIdentifierType;
+    identifierCountryCode?: string;
+  };
   taxpayerDomicile?: string;
   number: string;
   issuedAt: string;
@@ -792,6 +801,8 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
     .select({
       id: sales.id,
       counterpartyTaxId: sales.counterpartyTaxId,
+      identifierType: sales.counterpartyIdentifierType,
+      identifierCountryCode: sales.counterpartyIdentifierCountryCode,
       counterpartyLegalName: sales.counterpartyLegalName,
       counterpartyCountryCode: sales.counterpartyCountryCode,
       counterpartyAddress: sales.counterpartyAddress,
@@ -849,6 +860,7 @@ async function readInvoices(tx: Transaction, saleId: string): Promise<OrderInvoi
         ? {
             recipient: {
               taxId: invoice.counterpartyTaxId,
+              ...storedRecipientIdentifier(invoice.identifierType, invoice.identifierCountryCode),
               legalName: invoice.counterpartyLegalName,
               countryCode: invoice.counterpartyCountryCode,
               address: invoice.counterpartyAddress,

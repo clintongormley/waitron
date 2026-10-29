@@ -3322,7 +3322,7 @@ describe("till-app", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -3340,7 +3340,7 @@ describe("till-app", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -3442,7 +3442,7 @@ describe("till-app", () => {
           recipient: {
             taxId: "12345678Z",
             legalName: "Ana García",
-            address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+            address: "1 Main Street, 28013 Madrid, Madrid",
             countryCode: "ES",
           },
         },
@@ -3505,7 +3505,7 @@ describe("till-app", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES" as const,
     };
 
@@ -3552,7 +3552,7 @@ describe("till-app", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES" as const,
     };
 
@@ -3599,7 +3599,7 @@ describe("till-app", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES" as const,
     };
     emit(c, "choose-invoice");
@@ -3621,7 +3621,7 @@ describe("till-app", () => {
     for (const [name, value] of [
       ["taxId", "12345678Z"],
       ["legalName", "Ana García López"],
-      ["address", "Calle Mayor 1"],
+      ["address", "1 Main Street"],
       ["postalCode", "28013"],
       ["locality", "Madrid"],
       ["province", "Madrid"],
@@ -3781,7 +3781,7 @@ describe("till-app", () => {
     for (const [name, value] of [
       ["taxId", "12345678Z"],
       ["legalName", "Ana García"],
-      ["address", "Calle Mayor 1"],
+      ["address", "1 Main Street"],
       ["postalCode", "28013"],
       ["locality", "Madrid"],
       ["province", "Madrid"],
@@ -3810,7 +3810,7 @@ describe("till-app", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -3834,7 +3834,7 @@ describe("till-app", () => {
     const recipient = {
       taxId: "12345678Z",
       legalName: "Ana García",
-      address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+      address: "1 Main Street, 28013 Madrid, Madrid",
       countryCode: "ES",
     };
 
@@ -3889,7 +3889,7 @@ describe("till-app", () => {
         recipient: {
           taxId: "12345678Z",
           legalName: "Ana García",
-          address: "Calle Mayor 1, 28013 Madrid, Madrid, España",
+          address: "1 Main Street, 28013 Madrid, Madrid",
           countryCode: "ES",
         },
       },
@@ -13506,7 +13506,7 @@ describe("till-app", () => {
       expect(recordSale).toHaveBeenCalledTimes(3);
     });
     it("threads the invoice answer receipt trim through to the ticket view", async () => {
-      const receipt = { headerSubtitle: "Calle Mayor 1", footerMessage: "Gracias por su visita" };
+      const receipt = { headerSubtitle: "1 Main Street", footerMessage: "Gracias por su visita" };
       const { el } = await mountApp({
         recordSale: vi.fn().mockResolvedValue({ ...saleResult, receiptTrim: receipt }),
       });
@@ -13519,7 +13519,7 @@ describe("till-app", () => {
     });
 
     it("threads the invoice answer current address through to the ticket view", async () => {
-      const venueAddress = ["Calle Mayor 1", "28013 Madrid"];
+      const venueAddress = ["1 Main Street", "28013 Madrid"];
       const { el } = await mountApp({
         recordSale: vi.fn().mockResolvedValue({ ...saleResult, venueAddress }),
       });

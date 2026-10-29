@@ -320,6 +320,8 @@ export async function recordSale(
     counterpartyTaxId: counterparty?.taxId ?? null,
     counterpartyLegalName: counterparty?.legalName ?? null,
     counterpartyCountryCode: counterparty?.countryCode ?? null,
+    counterpartyIdentifierType: counterparty?.identifierType ?? null,
+    counterpartyIdentifierCountryCode: counterparty?.identifierCountryCode ?? null,
     counterpartyAddress: counterparty === null ? null : (input.recipientAddress ?? null),
     taxpayerDomicile: taxpayer?.domicile ?? null,
     operatorId: input.operatorId ?? null,

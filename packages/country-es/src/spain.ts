@@ -292,8 +292,28 @@ const unsupportedAreaCodes = new Set(
   unsupportedFiscalJurisdictions.flatMap(({ areaCodes }) => areaCodes),
 );
 
+function completeSpanishPostalAddress(address: string): boolean {
+  const parts = address.split(",").map((part) => part.trim());
+  return (
+    parts.length >= 3 &&
+    parts.slice(0, -2).every((part) => part !== "") &&
+    /^\d{5}\s+\S/u.test(parts.at(-2) ?? "") &&
+    parts.at(-1) !== ""
+  );
+}
+
 export const SPAIN: CountryPack = {
   countryCode: "ES",
+  postalAddress: { isComplete: completeSpanishPostalAddress },
+  countryNames: {
+    en: "Spain",
+    es: "España",
+    "en-GB": "Spain",
+    "es-ES": "España",
+    "ca-ES": "Espanya",
+    "gl-ES": "España",
+    "eu-ES": "Espainia",
+  },
   defaultProductVatClass: "reduced",
   defaultLocale: "es-ES",
   defaultTimeZone: "Europe/Madrid",

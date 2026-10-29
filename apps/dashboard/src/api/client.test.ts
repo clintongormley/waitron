@@ -3424,3 +3424,35 @@ it("saves both reader fields through the authenticated reader PATCH", async () =
     }),
   );
 });
+
+it.each(["findInvoiceCustomer", "downloadInvoiceCustomerData"] as const)(
+  "encodes each identity query component for %s",
+  async (method) => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify({ taxId: " Ab& /xy ", invoices: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+    await api[method](" Ab& /xy ", { identifierType: "passport", identifierCountryCode: "FR" });
+    const suffix = method === "downloadInvoiceCustomerData" ? "/export" : "";
+    expect(fetchImpl.mock.calls[0]![0]).toBe(
+      `/management-api/invoice-customers/personal-data${suffix}?taxId=%20Ab%26%20%2Fxy%20&identifierType=passport&identifierCountryCode=FR`,
+    );
+  },
+);
+
+it("keeps a malformed issuer in one query value for server validation", async () => {
+  const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ taxId: "P123", invoices: [] }));
+  const api = new DashboardApi("", fetchImpl);
+  const issuer = "FR&taxId=OTHER";
+  await api.findInvoiceCustomer("P123", {
+    identifierType: "passport",
+    identifierCountryCode: issuer,
+  });
+  const url = new URL(String(fetchImpl.mock.calls[0]![0]), "https://box.example");
+  expect(url.searchParams.getAll("taxId")).toEqual(["P123"]);
+  expect(url.searchParams.getAll("identifierCountryCode")).toEqual([issuer]);
+  expect(url.searchParams.getAll("identifierType")).toEqual(["passport"]);
+});

@@ -414,3 +414,41 @@ describe("the invoice customer download", () => {
     await refused(await ask(withTaxId(DOWNLOAD, "12345678Z"), admin.cookie), 401, sessionRequired);
   });
 });
+
+describe("foreign identity query", () => {
+  it.each(ROUTES)("refuses malformed identity metadata at %s", async (route) => {
+    for (const [query, field] of [
+      ["taxId=Ab-09&identifierType=passport", "identifierCountryCode"],
+      ["taxId=Ab-09&identifierCountryCode=FR", "identifierType"],
+      ["taxId=Ab-09&identifierType=unknown&identifierCountryCode=FR", "identifierType"],
+      ["taxId=Ab-09&identifierType=passport&identifierCountryCode=ZZ", "identifierCountryCode"],
+      ["taxId=%20%20&identifierType=passport&identifierCountryCode=FR", "taxId"],
+      [
+        "taxId=Ab-09&identifierType=passport&identifierType=passport&identifierCountryCode=FR",
+        "query",
+      ],
+      [
+        "taxId=Ab-09&identifierType=passport&identifierCountryCode=FR&identifierCountryCode=FR",
+        "query",
+      ],
+    ]) {
+      await refused(await ask(`${route}?${query}`, fixture.venue.adminDashboard), 400, {
+        code: "management.request_invalid",
+        params: { field },
+      });
+    }
+  });
+  it("accepts an explicit foreign value without normalizing it", async () => {
+    const identity = {
+      taxId: " Ab-09 /xy ",
+      identifierType: "passport",
+      identifierCountryCode: "FR",
+    };
+    const response = await ask(
+      `${SEARCH}?${new URLSearchParams(identity).toString()}`,
+      fixture.venue.adminDashboard,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ ...identity, invoices: [] });
+  });
+});

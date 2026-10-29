@@ -3,9 +3,21 @@
 ## Issue a full invoice {#full-invoice}
 
 When a table customer needs an invoice in their name, choose **Full invoice** for the bill and
-enter their Spanish tax number, legal name and complete address before its final payment. The
+enter their identifier, legal name and complete address before its final payment. The
 saved choice lets the bill grow above the simplified-invoice limit. Paying the table bill in full
 issues the invoice; recording an unpaid departure also issues it, leaving the amount unpaid.
+
+Choose **Spanish tax ID** for a NIF, NIE or CIF. For a passport or another accepted document,
+choose its actual **Identifier type**, **Issuing country** and **Document number**. Enter the
+number as written. A passport is accepted with a Spanish address too; the issuing country
+belongs to the document, independently of where the customer lives. A full invoice needs an
+identifier. **Cancel** returns without saving.
+
+Choose the address country and enter the street and number and locality. A Spanish address also
+needs a valid five-digit postcode and province; those fields are optional for other countries.
+For example, a French address can be **2 Main Street**, **Paris**, **France**, without a postcode
+or province. Do not add the country name to the street. The printed invoice and till ticket name
+it in the receipt language. Order details name it in your screen language.
 
 Counter payment cannot issue a full invoice yet. Keep the customer's order on a table bill and
 use that bill's payments. Placing a counter order alone does not issue an invoice.

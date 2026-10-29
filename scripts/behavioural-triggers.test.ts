@@ -152,6 +152,9 @@ const EXPECTED_TRIGGERS = [
   "working_orders_enforce_transition",
   "working_orders_invoice_type_insert",
   "working_orders_invoice_type_update",
+  "working_orders_recipient_identity_insert",
+  "working_orders_recipient_identity_update",
+  "sales_recipient_identity_insert",
   "working_orders_release_main_bill",
   "working_orders_release_main_bill_on_move",
   "tender_refunds_guard_update",
@@ -494,6 +497,56 @@ describe("the behavioural triggers a migrated venue file carries", () => {
         (name) => !name.endsWith("_append_only_update") && !name.endsWith("_append_only_delete"),
       );
     expect(created).toEqual([...EXPECTED_TRIGGERS, ...IMAGE_REFERENCE_TRIGGERS].sort());
+  });
+});
+
+describe("recipient identity guards", () => {
+  it("refuses a sale document with no identifier and accepts a complete independent identity", () => {
+    const invalid = sale("identity-invalid-sale", 100)
+      .replace(
+        "corrects_sale_id)",
+        "corrects_sale_id, counterparty_identifier_type, counterparty_identifier_country_code)",
+      )
+      .replace(/null\)$/, "null, 'passport', 'FR')");
+    expect(refusalFor(connection, invalid)).toBe("recipient identity is incomplete");
+    const valid = sale("identity-valid-sale", 100)
+      .replace(
+        "corrects_sale_id)",
+        "corrects_sale_id, counterparty_tax_id, counterparty_identifier_type, counterparty_identifier_country_code)",
+      )
+      .replace(/null\)$/, "null, ' Ab-09 /xy ', 'passport', 'FR')");
+    expect(refusalFor(connection, valid)).toBeUndefined();
+    expect(
+      connection
+        .prepare(
+          `select counterparty_tax_id as value, counterparty_identifier_type as kind,
+      counterparty_identifier_country_code as issuer from sales where id = 'identity-valid-sale'`,
+        )
+        .get(),
+    ).toEqual({ value: " Ab-09 /xy ", kind: "passport", issuer: "FR" });
+  });
+
+  it("refuses an incomplete order document at insert and update", () => {
+    const invalid = workingOrder("identity-invalid-order", "open")
+      .replace("party_id)", "party_id, recipient_identifier_type)")
+      .replace(/null\)$/, "null, 'passport')");
+    expect(refusalFor(connection, invalid)).toBe("recipient identity is incomplete");
+    connection.exec(workingOrder("identity-updated-order", "open"));
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set recipient_identifier_type = 'passport'
+      where id = 'identity-updated-order'`,
+      ),
+    ).toBe("recipient identity is incomplete");
+    expect(
+      refusalFor(
+        connection,
+        `update working_orders set invoice_type = 'F1', recipient_tax_id = ' Ab-09 /xy ',
+      recipient_identifier_type = 'passport', recipient_identifier_country_code = 'FR'
+      where id = 'identity-updated-order'`,
+      ),
+    ).toBeUndefined();
   });
 });
 
