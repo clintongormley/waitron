@@ -26,6 +26,7 @@ import {
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
+import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import {
   moveStartAgainUnits,
@@ -1428,4 +1429,81 @@ it("a side file beside a database that cannot be looked at refuses naming it, an
     reason: "set-aside failed: EACCES venue/venue.db-shm",
   });
   expect(await readFile(join(roots.venueDir, "venue.db"), "utf8")).toBe("found database");
+});
+
+it("a Move deletes the backup room note first", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  await writeFile(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
+  await moveStartAgainUnits(roots, record);
+  await expect(lstat(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expectAllAside(roots, record, before);
+});
+
+it("a resumed Move deletes the backup room note first", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const before = await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  await cutMove(roots, record, 1);
+  await writeFile(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
+  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
+  await expect(lstat(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+  await expectAllAside(roots, record, before);
+});
+
+it("a backup room note that cannot be deleted stops a Move, and a resumed Move, before the venue or state folder changes", async () => {
+  // A start-again note the Move would raise, and destination folders it would make again.
+  const attempt = await startAgainAttempt(await scratch(), {
+    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
+  });
+  const { roots } = attempt;
+  await foundEverywhere(roots);
+  const record = await prepared(roots, attempt.administratorId);
+  expect(record.noteFloorMs).toBeGreaterThan(60_000);
+  for (const folder of Object.values(setAsideFolderPaths(roots, record.setAside!)))
+    await fs.rmdir(folder);
+  await mkdir(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE));
+  const withoutNote = (lines: string[]) =>
+    lines.filter((line) => !line.startsWith(`${BACKUP_ROOM_NOTE_FILE}:`));
+  const venueBefore = await snapshot(roots.venueDir);
+  const stateBefore = withoutNote(await snapshot(roots.stateDir));
+  const stateFiles = async () =>
+    Object.fromEntries(
+      await Promise.all(
+        (await readdir(roots.stateDir, { recursive: true }))
+          .filter((name) => !name.startsWith(BACKUP_ROOM_NOTE_FILE))
+          .map(async (name) => {
+            const full = join(roots.stateDir, name);
+            const info = await lstat(full);
+            return [name, info.isFile() ? await readFile(full, "utf8") : "folder"];
+          }),
+      ),
+    );
+  const stateBytesBefore = await stateFiles();
+  const reason = expect.stringMatching(
+    /^set-aside failed: E(PERM|ISDIR) state\/backup-room-note\.json$/,
+  );
+  await expect(moveStartAgainUnits(roots, record)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason,
+  });
+  expect(await snapshot(roots.venueDir)).toEqual(venueBefore);
+  expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
+  expect(await stateFiles()).toEqual(stateBytesBefore);
+  await expect(resumeStartAgainSetAside(roots)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+    reason,
+  });
+  // The resume takes the venue lock, which makes venue.lock.
+  const unlocked = (lines: string[]) => lines.filter((line) => !line.startsWith("venue.lock:"));
+  expect(unlocked(await snapshot(roots.venueDir))).toEqual(venueBefore);
+  expect(withoutNote(await snapshot(roots.stateDir))).toEqual(stateBefore);
+  expect(await stateFiles()).toEqual(stateBytesBefore);
 });

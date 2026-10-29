@@ -105,7 +105,13 @@ export type {
 export { passwordThrottleBucket, createPasswordThrottle } from "./password-throttle.js";
 export type { PasswordThrottle, PasswordThrottleProbe } from "./password-throttle.js";
 export { inTurn, keysInTurn } from "./attempt-turns.js";
-export { stagedPath, stageFile, writeFileAtomic } from "./fs-atomic.js";
+export {
+  failedAtFolderSync,
+  stagedPath,
+  stageFile,
+  writeFileAtomic,
+  writeFileDurable,
+} from "./fs-atomic.js";
 
 export { createModuleOperationHost, createFirstSetupRuntime } from "./first-setup-runtime.js";
 export type { PreparationAuthority } from "./first-setup-preparation.js";
@@ -204,7 +210,15 @@ export {
   type StartAgainMarker,
 } from "./first-setup-start-again-deletion.js";
 export { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-export { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
+export {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
+  backupRoomNoteTemporaryName,
+  isBackupRoomFileName,
+} from "./spare-space-name.js";
+export { deleteBackupRoomNote } from "./backup-room-note-file.js";
 export {
   START_AGAIN_CHOICES_DIR,
   assertStartAgainNotKept,

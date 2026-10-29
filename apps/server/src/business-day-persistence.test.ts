@@ -161,7 +161,7 @@ describe("business-day timeline through cold restore and reset", () => {
       } finally {
         await restored.close();
       }
-      await wipeVenueDatabases(venueDir);
+      await wipeVenueDatabases(venueDir, join(root, "state"));
       await applyMigrations(venueDir, migrations);
       const reset = await openVenueDatabase(venueDir);
       try {

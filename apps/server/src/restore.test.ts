@@ -44,6 +44,7 @@ import { enabledModules, fiscalSlot } from "@waitron/module";
 import type { RestoreHook, WaitronModule } from "@waitron/module";
 import { formatEnvFile, parseEnvFile } from "./env-file.js";
 import { readModuleConfig } from "./module-config.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 import { REBUILD_MARKER } from "./rebuild-first-start.js";
 import { ALL_MODULES } from "./modules.js";
 import { type ArchiveEntry, packArchive } from "./backup-archive.js";
@@ -212,12 +213,14 @@ const venueFile = (): string => join(venueDir, "venue.db");
 const incomingFile = (): string => `${venueFile()}.incoming`;
 
 async function restoreDatabase(
-  args: Omit<Parameters<typeof placeDatabaseFile>[0], "databasePath"> & { dumpBytes: Uint8Array },
+  args: Omit<Parameters<typeof placeDatabaseFile>[0], "databasePath" | "stateDir"> & {
+    dumpBytes: Uint8Array;
+  },
 ) {
   const folder = await mkdtemp(join(stagingDir, "placement-source-"));
   const databasePath = join(folder, "venue.db");
   await writeFile(databasePath, args.dumpBytes, { mode: 0o600 });
-  return placeDatabaseFile({ ...args, databasePath });
+  return placeDatabaseFile({ stateDir, ...args, databasePath });
 }
 
 async function expectVenueUntouched(): Promise<void> {
@@ -1080,6 +1083,25 @@ describe("restore hooks (identity phase)", () => {
     expect(migrate).not.toHaveBeenCalled();
     await expect(stat(join(stateDir, "trading.env"))).rejects.toMatchObject({ code: "ENOENT" });
     expect(await readFile(join(stateDir, "trading.env.replaced"), "utf8")).toBe(existing);
+  });
+
+  it("a note that cannot be deleted refuses the restore with the identity where it was", async () => {
+    const existing = formatEnvFile({
+      ...parseEnvFile(TRADING_ENV),
+      WAITRON_TILL_NODE_ID: "c0000000-0000-4000-8000-0000000000aa",
+    });
+    await writeFile(join(stateDir, "trading.env"), existing);
+    await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+    const migrate = vi.fn(async () => {});
+    await expect(restoreFromArtifact(makeRestoreDeps({ migrate }))).rejects.toMatchObject({
+      code: expect.stringMatching(/^(EISDIR|EPERM)$/),
+    });
+    expect(migrate).not.toHaveBeenCalled();
+    await expectVenueUntouched();
+    expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(existing);
+    await expect(stat(join(stateDir, "trading.env.replaced"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 
   it("a failed hook leaves NO trading.env, neither the target's nor the artifact's", async () => {

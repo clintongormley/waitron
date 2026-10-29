@@ -8,7 +8,12 @@ import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { SPARE_SPACE_FILE, SPARE_SPACE_RELEASED_FILE } from "./spare-space-name.js";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  SPARE_SPACE_FILE,
+  SPARE_SPACE_RELEASED_FILE,
+} from "./spare-space-name.js";
 
 const directories: string[] = [];
 afterEach(async () => {
@@ -244,6 +249,52 @@ it("the spare's marker written or deleted in the box's state folder leaves a rec
   expect(await f.store.inspect(recoveryId)).toBe(before);
   await rm(marker);
   expect(await f.store.inspect(recoveryId)).toBe(before);
+});
+
+it.each([
+  BACKUP_ROOM_NOTE_FILE,
+  `${BACKUP_ROOM_NOTE_FILE}.0123456789ab.tmp`,
+  BACKUP_ROOM_START_DELETED_FILE,
+  `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
+])(
+  "%s written or deleted in the box's state folder leaves a recovery's originals digest unchanged",
+  async (name) => {
+    const f = await fixture();
+    const file = join(f.anchor.stateDir, name);
+    const before = await f.store.inspect(recoveryId);
+    await writeFile(file, '{"version":1}');
+    expect(await f.store.inspect(recoveryId)).toBe(before);
+    await writeFile(file, '{"version":1,"changed":true}');
+    expect(await f.store.inspect(recoveryId)).toBe(before);
+    await rm(file);
+    expect(await f.store.inspect(recoveryId)).toBe(before);
+  },
+);
+
+it.each([
+  `${BACKUP_ROOM_NOTE_FILE}.tmp`,
+  `${BACKUP_ROOM_NOTE_FILE}.0123456789ab.tmp.extra`,
+  `${BACKUP_ROOM_START_DELETED_FILE}.0123456789ab.tmp`,
+])(
+  "a file named %s in the box's state folder changes a recovery's originals digest",
+  async (name) => {
+    const f = await fixture();
+    const before = await f.store.inspect(recoveryId);
+    await writeFile(join(f.anchor.stateDir, name), "x");
+    expect(await f.store.inspect(recoveryId)).not.toBe(before);
+  },
+);
+
+it("the backup room note named in a venue folder apart from the state folder is still one of the originals", async () => {
+  const f = await fixture();
+  const file = join(f.anchor.venueDir, BACKUP_ROOM_NOTE_FILE);
+  await writeFile(file, "before");
+  const input = await f.input();
+  await f.store.append(input);
+  await writeFile(file, "after");
+  await expect(f.store.append({ ...input, input: { accepted: true } })).rejects.toMatchObject({
+    code: "setup.attempt_conflict",
+  });
 });
 
 it("a folder named like the spare's marker in the box's state folder is still one of the originals", async () => {

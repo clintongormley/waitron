@@ -5,6 +5,11 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  backupRoomNoteTemporaryName,
+} from "@waitron/provisioning";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import { ALL_MODULES } from "./modules.js";
@@ -93,6 +98,25 @@ describe("collectSealedEntries", () => {
     ]);
     expect(JSON.parse(text(entries, "manifest.json"))).toEqual(MANIFEST);
     expect(text(entries, "secrets/secrets.env")).toBe("secrets.env-contents");
+  });
+});
+
+describe("collectSealedEntries with the backup room's files present", () => {
+  it("holds none of them", async () => {
+    for (const name of [
+      BACKUP_ROOM_NOTE_FILE,
+      backupRoomNoteTemporaryName("0123456789ab"),
+      BACKUP_ROOM_START_DELETED_FILE,
+      `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
+    ])
+      await writeFile(join(stateDir, name), '{"version":1}');
+    const entries = await collectSealedEntries({
+      stateDir,
+      modules: ALL_MODULES,
+      resolvers: {},
+      manifest: MANIFEST,
+    });
+    expect(names(entries)).toEqual(["manifest.json", ...REQUIRED]);
   });
 });
 

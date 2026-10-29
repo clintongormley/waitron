@@ -16,6 +16,7 @@ import "./errors.js";
 
 interface PlacementInput {
   venueDir: string;
+  stateDir: string;
   modules: readonly WaitronModule[];
   migrationsRoot: string | null;
   log: Logger;
@@ -25,7 +26,12 @@ export async function placeBackupDatabase(
   databasePath: string,
   input: PlacementInput,
 ): Promise<void> {
-  await restoreDatabase({ databasePath, venueDir: input.venueDir, log: input.log });
+  await restoreDatabase({
+    databasePath,
+    venueDir: input.venueDir,
+    stateDir: input.stateDir,
+    log: input.log,
+  });
   await applyMigrations(
     input.venueDir,
     migrationOptionsFor(orderedMigrationSets(input.modules), input.migrationsRoot),
@@ -34,7 +40,7 @@ export async function placeBackupDatabase(
 
 export async function placeBackupData(
   validated: ValidatedArtifact,
-  input: PlacementInput & { stateDir: string },
+  input: PlacementInput,
 ): Promise<void> {
   const allowed = new Set([
     ...RECOVERY_FILES.map((name) => "secrets/" + name),

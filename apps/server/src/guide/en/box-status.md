@@ -108,7 +108,9 @@ disk to make room. It never deletes the newest backup in a folder, a backup from
 last restore or fresh setup, or a backup in a bucket. If that is still not enough, the backup is not
 made, and the bell says how much room it needs. While backups are on, the box also deletes its
 oldest backups on that disk, within the same limits, whenever the disk falls under about 2 GB free, until about
-2.5 GB is free.
+2.5 GB is free. When the box starts with its disk full, it can delete them in the same way so that
+it has room to start and, once it is running, tells you on the bell and by
+[email](box-status.md#emails), as it does for the others.
 
 This page cannot remove other files or move your data to a larger disk.
 

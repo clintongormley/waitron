@@ -1335,7 +1335,7 @@ spare (a boot of its venue with 8 MiB free resolved with about 4 MiB left; 4 MiB
 restart, no-release and write-back cases use a 6 MiB spare, because on a 32 MiB image a booted server holding
 its 4 MiB change log leaves about 23.18 MiB free, so the real 24 MiB write-back rule cannot be met.
 The two cases that rest on free space being above 16 MiB (the restart and the no-release case)
-assert it while the server is up, so a run on the edge fails rather than passing on free space alone. These figures are HFS+; CI's tmpfs is the first Linux run.
+assert it while the server is up, so a run on the edge fails rather than passing on free space alone. Two cases (A1167) give a box a 1 MiB spare and a backup folder on the small disk, fill to 6 MiB free, and check that the start deletes the oldest archive and keeps the spare, and that after `venue.db` is replaced it deletes none and releases the spare. These figures are HFS+; CI's tmpfs is the first Linux run.
 
 **A fourth real-disk file checks that a backup run makes room for itself.** `apps/server/src/backup-room.e2e.test.ts`
 (A1167 slice 1) calls `runOnce` with a real `LocalFsBackend` on a small disk: with room for between

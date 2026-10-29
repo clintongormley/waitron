@@ -3,6 +3,7 @@ import { lstat, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError, isUuid } from "@waitron/shared";
+import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { readDurableHostJsonWithBytes, writeDurableHostJson } from "./durable-host-json.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import { insideFirstSetupWorkspace } from "./first-setup-workspace.js";
@@ -13,6 +14,7 @@ import {
 import { isEmptiedTombstone } from "./first-setup-backup-discard.js";
 import { removeAndSync } from "./folder-sync.js";
 import { openImmutableWhenWalEmpty } from "./read-only-database.js";
+import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
 export const START_AGAIN_MARKER_FILE = "first-setup-deleting.json";
@@ -531,6 +533,8 @@ export async function deleteMarkedAttempt(
   const named = new Set(value.files.map((entry) => `${entry.root}:${entry.name}`));
   let current = "";
   try {
+    current = join(canonical.stateDir, BACKUP_ROOM_NOTE_FILE);
+    await deleteBackupRoomNote(canonical.stateDir);
     for (const item of await itemsOnDisk(canonical, heldBy(value))) {
       current = item.path;
       if (item.kind === "folder") await remove(item.path, "folder");

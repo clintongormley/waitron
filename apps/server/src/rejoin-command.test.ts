@@ -18,6 +18,7 @@ import type { RejoinDeps, RejoinResult } from "./rejoin.js";
 import { runRejoin } from "./rejoin-command.js";
 import { completeRebuild, REBUILD_MARKER } from "./rebuild-first-start.js";
 import { signedMembershipDoc } from "./testing/membership-doc-fixture.js";
+import { BACKUP_ROOM_NOTE_FILE } from "@waitron/provisioning";
 
 // Named explicitly rather than left to the `<stateDir>/venue` default, so a case that asserts on
 // the directory is asserting on a path this file chose.
@@ -497,6 +498,53 @@ describe("waitron-rejoin rejoin — default wiring", () => {
         "WAITRON_TILL_NODE_ID=old\n",
       );
       expect(await readFile(join(stateDir, REBUILD_MARKER, "retained"), "utf8")).toBe("keep");
+    } finally {
+      await rm(stateDir, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves the restore marker, the venue and trading config when the backup room note cannot be deleted", async () => {
+    const stateDir = await mkdtemp(join(tmpdir(), "rejoin-note-refused-"));
+    const venueDir = join(stateDir, "venue");
+    const held = signedMembershipDoc(3, {
+      signerNodeId: "carrier-node",
+      nodes: [
+        { nodeId: "carrier-node", contactUrl: "https://carrier", standing: "serving-primary" },
+        { nodeId: NODE, contactUrl: "https://this", standing: "sell-only" },
+      ],
+    });
+    const marker = JSON.stringify({ version: 1, source: "archive" });
+    try {
+      await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
+      const seeded = await openVenueDatabase(venueDir);
+      try {
+        await writeNodeMembership(seeded.venue, held);
+      } finally {
+        await seeded.close();
+      }
+      await writeFile(join(stateDir, "trading.env"), "WAITRON_TILL_NODE_ID=old\n");
+      await writeFile(join(stateDir, REBUILD_MARKER), marker);
+      // Something at the note's path that no unlink removes.
+      await mkdir(join(stateDir, BACKUP_ROOM_NOTE_FILE));
+      const out: string[] = [];
+      expect(
+        await runRejoin({
+          argv: ["rejoin", "--accept-loss"],
+          env: { ...base, WAITRON_STATE_DIR: stateDir, WAITRON_VENUE_DIR: venueDir },
+          out: (line) => out.push(line),
+        }),
+      ).toBe(1);
+      expect(out.at(-1)).toBe("rejoin failed");
+      expect(await readFile(join(stateDir, REBUILD_MARKER), "utf8")).toBe(marker);
+      const reopened = await openVenueDatabase(venueDir);
+      try {
+        expect(await readNodeMembership(reopened.venue)).toEqual(held);
+      } finally {
+        await reopened.close();
+      }
+      expect(await readFile(join(stateDir, "trading.env"), "utf8")).toBe(
+        "WAITRON_TILL_NODE_ID=old\n",
+      );
     } finally {
       await rm(stateDir, { recursive: true, force: true });
     }

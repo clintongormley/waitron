@@ -1,11 +1,14 @@
-import { cp, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { cp, lstat, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
+import { incidents } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { emptyDrainResult, type FiscalDutyDeps } from "@waitron/fiscal";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
+import { BACKUP_ROOM_START_DELETED_FILE } from "@waitron/provisioning";
 import type { Alert } from "@waitron/module";
 import type {
   TranslationCell,
@@ -17,6 +20,7 @@ import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
 import { type BackupSupervisorDeps } from "./backup-supervisor.js";
 import { createBackupRoomHooks } from "./backup-deletion-alert.js";
 import { startFreeSpaceWatch } from "./free-space-watch.js";
+import { recordStartDeletions } from "./start-backup-room-record.js";
 import { lowSpaceBackupDeletion, runningLocalBackends } from "./low-space-backups.js";
 import { createCloudSnapshotWorker } from "./cloud-snapshot-worker.js";
 import { createContentSuggestionRunner } from "./content-suggestion-runner.js";
@@ -32,7 +36,10 @@ vi.mock("@hono/node-server", async () => {
 
 const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
-const clocks = vi.hoisted(() => ({ archive: undefined as BackupSupervisorDeps | undefined }));
+const clocks = vi.hoisted(() => ({
+  archive: undefined as BackupSupervisorDeps | undefined,
+  order: [] as string[],
+}));
 vi.mock("./backup-supervisor.js", async (original) => {
   const actual = await original<typeof import("./backup-supervisor.js")>();
   return {
@@ -42,12 +49,26 @@ vi.mock("./backup-supervisor.js", async (original) => {
         super(deps);
         clocks.archive = deps;
       }
+      override async reload() {
+        clocks.order.push("reload");
+        return super.reload();
+      }
     },
   };
 });
 vi.mock("./backup-deletion-alert.js", async (original) => {
   const actual = await original<typeof import("./backup-deletion-alert.js")>();
   return { ...actual, createBackupRoomHooks: vi.fn(actual.createBackupRoomHooks) };
+});
+vi.mock("./start-backup-room-record.js", async (original) => {
+  const actual = await original<typeof import("./start-backup-room-record.js")>();
+  return {
+    ...actual,
+    recordStartDeletions: vi.fn((...args: Parameters<typeof actual.recordStartDeletions>) => {
+      clocks.order.push("record");
+      return actual.recordStartDeletions(...args);
+    }),
+  };
 });
 vi.mock("./low-space-backups.js", async (original) => {
   const actual = await original<typeof import("./low-space-backups.js")>();
@@ -145,6 +166,29 @@ describe("boot's authority clock wiring", () => {
         JSON.stringify({ modules: { "fiscal-none": false } }),
       );
       const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+      // What a start that deleted old backups before this boot left for it.
+      const venueDb = await lstat(database, { bigint: true });
+      await writeFile(
+        join(scratch, BACKUP_ROOM_START_DELETED_FILE),
+        JSON.stringify({
+          version: 1,
+          at: "2026-10-13T23:00:00.000Z",
+          venueDb: {
+            dev: venueDb.dev.toString(),
+            ino: venueDb.ino.toString(),
+            birthtimeNs: venueDb.birthtimeNs.toString(),
+          },
+          deleted: [
+            {
+              destination: "usb",
+              dir: "/media/usb",
+              key: "k",
+              bytes: 1,
+              takenAt: "2026-10-02T12:00:00.000Z",
+            },
+          ],
+        }),
+      );
       const env = {
         WAITRON_HTTP_LANDING_PORT: "0",
         WAITRON_HTTP_PORT: String(port),
@@ -212,6 +256,26 @@ describe("boot's authority clock wiring", () => {
       expect(clocks.archive!.readInstallationStart).toBe(hooks.readInstallationStart);
       expect(clocks.archive!.recordArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(clocks.archive!.statfs).toBeUndefined();
+      // Before the first backup run, which could raise the same alert for its own deletions.
+      expect(recordStartDeletions).toHaveBeenCalledOnce();
+      expect(vi.mocked(recordStartDeletions).mock.calls[0]![0]).toMatchObject({
+        stateDir: scratch,
+        venueDir: dirname(database),
+        record: hooks.recordArchivesDeleted,
+      });
+      expect(clocks.order.slice(0, 2)).toEqual(["record", "reload"]);
+      expect(
+        await suite.db
+          .select({ params: incidents.params, detectedAt: incidents.detectedAt })
+          .from(incidents)
+          .where(eq(incidents.code, "backup.archives_deleted")),
+      ).toEqual([
+        {
+          params: { count: 1, date: "2026-10-02", lastDate: "2026-10-02", severalDays: false },
+          detectedAt: "2026-10-13T23:00:00.000Z",
+        },
+      ]);
+      expect(existsSync(join(scratch, BACKUP_ROOM_START_DELETED_FILE))).toBe(false);
       // The free-space watch's first step deletes old backups with the same hooks and staging turn
       // as every run, on the disk the watch reads.
       expect(lowSpaceBackupDeletion).toHaveBeenCalledOnce();
@@ -364,7 +428,9 @@ describe("boot's authority clock wiring", () => {
       drain.calls = [];
       drain.slots = [];
       clocks.archive = undefined;
+      clocks.order = [];
       vi.mocked(createBackupRoomHooks).mockClear();
+      vi.mocked(recordStartDeletions).mockClear();
       vi.mocked(createCloudSnapshotWorker).mockClear();
       vi.mocked(createContentSuggestionRunner).mockClear();
       vi.mocked(mountContentSuggestionsApi).mockClear();

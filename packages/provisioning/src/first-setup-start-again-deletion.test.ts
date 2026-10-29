@@ -4,6 +4,11 @@ import { tmpdir } from "node:os";
 import { afterEach, expect, it } from "vitest";
 import { lockVenueDatabase } from "@waitron/db";
 import { isAppError } from "@waitron/shared";
+import {
+  BACKUP_ROOM_NOTE_FILE,
+  BACKUP_ROOM_START_DELETED_FILE,
+  backupRoomNoteTemporaryName,
+} from "./spare-space-name.js";
 import type { BackupRepairRecord } from "./first-setup-backup-workspace.js";
 import { createFirstSetupBackupWorkspace } from "./first-setup-backup-workspace.js";
 import { emptyAbandonedBackupRecovery } from "./first-setup-backup-discard.js";
@@ -487,4 +492,46 @@ it("a modules.json changed after the marker named it is a changed finding, and t
   });
   expect(await exists(join(roots.stateDir, "modules.json"))).toBe(true);
   expect(await exists(join(roots.stateDir, "first-setup.json"))).toBe(true);
+});
+
+it("deleting the marked attempt deletes the backup room note first", async () => {
+  const roots = await box();
+  const marker = await startAgainMarkerFor(roots, attempt);
+  await writeFile(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE), "{}");
+  await deleteMarkedAttempt(roots, marker);
+  expect(await exists(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE))).toBe(false);
+  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+});
+
+it("the backup room's files written after the marker are no finding, and Start again finishes", async () => {
+  const roots = await box();
+  await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
+  const temporary = backupRoomNoteTemporaryName("0123456789ab");
+  const recordTemporary = `${BACKUP_ROOM_START_DELETED_FILE}.tmp`;
+  for (const name of [
+    BACKUP_ROOM_NOTE_FILE,
+    temporary,
+    BACKUP_ROOM_START_DELETED_FILE,
+    recordTemporary,
+  ])
+    await writeFile(join(roots.stateDir, name), '{"version":1}');
+  expect((await collectStartAgainFindings(roots))?.findings).toEqual([]);
+  await finishStartAgainDeletion(roots);
+  expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
+  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
+  expect((await readdir(roots.stateDir)).sort()).toEqual(
+    [BACKUP_ROOM_START_DELETED_FILE, temporary, recordTemporary].sort(),
+  );
+});
+
+it("a backup room note that cannot be deleted stops the deletion before the venue folder changes", async () => {
+  const roots = await box();
+  const marker = await startAgainMarkerFor(roots, attempt);
+  await mkdir(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE));
+  const before = (await readdir(roots.venueDir)).sort();
+  const refused = await refusal(deleteMarkedAttempt(roots, marker));
+  expect(refused.code).toBe("setup.start_again_incomplete");
+  expect(refused.reason).toMatch(/^deletion failed: E(PERM|ISDIR) .*backup-room-note\.json$/);
+  expect((await readdir(roots.venueDir)).sort()).toEqual(before);
+  expect(await exists(join(roots.venueDir, "venue.db"))).toBe(true);
 });

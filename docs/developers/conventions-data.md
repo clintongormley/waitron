@@ -3339,7 +3339,18 @@ copy needs. Within the server, three paths delete it, all through `releaseSpare`
 - **The repair host before the four requests of the Start-again flow**
   (`releaseSpareBeforeStartAgain`, mounted first in `resolutionApp`), under 16 MiB.
 
-`waitron.sh reset` deletes it too. It is never venue data: never backed up, exported or streamed,
+**Old backups go before the spare.** Just before the start's release, `runEntry` calls
+`deleteOldBackupsAtStart` (`apps/server/src/start-backup-room.ts`, called at
+`apps/server/src/node-entry.ts:375`, the release at `:389`), except at a backup recovery's repair
+or selected stage. It does anything only under `FULL_DISK_BYTES` (16 MiB) free on the venue
+folder's disk, the one its deletions free, and only with a backup room note that passes every check ([The backup room note](#the-backup-room-note)). It
+deletes old backups toward the start's floor (256 MiB) when the deletable ones reach it, otherwise
+toward the spare plus 16 MiB (24 MiB), and deletes nothing when even that is out of reach. The
+release then reads free space again, so a step that brought the venue folder's disk to the spare
+plus 16 MiB releases nothing, unless the state folder is on another disk that is itself under
+16 MiB free.
+
+`waitron.sh reset` deletes the spare too. The spare is never venue data: never backed up, exported or streamed,
 and the backup recovery's originals walk (`packages/provisioning/src/first-setup-backup-workspace.ts`)
 leaves it and its marker out, so writing or deleting either cannot refuse a resume.
 
@@ -4645,6 +4656,114 @@ by `since` even when it missed the run that cleared it.
   for the alert's write (`storage.disk_full`). The deletion's log lines are then the only record.
 - The macOS case for one folder reached by two real paths runs only on macOS; a Linux bind mount
   was not built.
+
+**At start.** A start on a full disk deletes old backups too, before it releases the spare file,
+trusting the installation start the [backup room note](#the-backup-room-note) holds, because on a
+full disk the database may not open: on HFS+ the store's open failed at 0 B and 4 KiB free, and a
+read-only open of a cleanly stopped database failed there and worked at 64 KiB.
+
+## The backup room note
+
+A1167's start slice (plan `docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md`). On a
+full disk the start may not be able to open `venue.db` to read when the installation began (the plan's
+measurement), so the running server leaves that fact in `<state>/backup-room-note.json`
+(`BACKUP_ROOM_NOTE_FILE`, `@waitron/provisioning`) for the start to use.
+
+**What it holds.** The node id, the installation start, `venue.db`'s device number, file number and
+birth time (`venueDbIdentity`, `apps/server/src/backup-room-note.ts`), whether the environment
+manages backups, the backup folders on the venue folder's disk, and when it was written. Each folder
+is `{ destination, dir, configuredDir }`: `configuredDir` is the path backups are configured to
+write to, as given, and `dir` is the real path it led to when the note was written. No secret and
+no bucket.
+
+**Who writes it.** Only `BackupSupervisor.reload` (`apps/server/src/backup-supervisor.ts`). Nothing
+guards who writes it. Every reload deletes the note first (`:211`); a failure of that deletion is logged
+`backup.room_note_delete_failed`, not thrown. The note is written again only at the end of a reload
+that started the backup run (`#writeNote`, `:311`), when the installation start reads as a date,
+through a temporary file and a rename. A null or failed read, a failed write or a `stop()` landing
+meanwhile leaves no note.
+
+**Who deletes it.** Every path that replaces or removes the live `venue.db`, before it does apart
+from the reset:
+
+- `wipeVenueDatabases` (`apps/server/src/db-wipe.ts`), and so every wipe;
+- `restoreDatabase` and `placeValidated` (`apps/server/src/restore.ts`), the latter before it sets
+  the old identity aside; `placeBackupDatabase` reaches `restoreDatabase` with the state folder it is
+  given, which for a backup verification is the scratch one;
+- Start again: `deleteMarkedAttempt` (`packages/provisioning/src/first-setup-start-again-deletion.ts`),
+  and `moveStartAgainUnits` and `resumeStartAgainSetAside`
+  (`packages/provisioning/src/first-setup-start-again-set-aside.ts`);
+- a rejoin's wipe (`apps/server/src/rejoin-command.ts`), before it removes the rebuild marker;
+- promotion (`promoteMirrorRun`, `apps/server/src/boot.ts`): before promoting, where a failed
+  deletion refuses the promotion, and again after stopping the backup supervisor and before the
+  restart, where a failed deletion is logged and the restart goes ahead;
+- `waitron.sh reset`, which empties the state folder apart from `tls/` and the Start-again files in
+  one removal, taking the note and `venue/` in no set order.
+
+**What the start checks** (`deleteOldBackupsAtStart`, `apps/server/src/start-backup-room.ts`).
+Nothing at all at 16 MiB free or more on the venue folder's disk (a full state folder on another
+disk is left alone: the step deletes only in folders on the venue folder's disk), or with no note file (so no lock and no env read). Then it
+takes the venue lock, or, when that fails other than in use, goes on without it unless the holder
+file is fresh. It deletes nothing unless the note is a regular file of at most 64 KiB that parses,
+names the box env's node id, and matches `venue.db`'s device number, file number and birth time; no
+restore or reset request is waiting; the recovery key loads; and who manages backups, judged on the
+raw environment, is what the note says. The folders are the environment's local destinations when it
+manages backups, resolved now, else the note's, each kept only if its `configuredDir` still leads
+to the `dir` the note recorded (a link moved while the server was stopped points backups at
+another folder); either way each is kept only if it is on the venue folder's disk now. Each
+refusal is logged once `backup.start_room_skipped` with a `reason`, `out_of_reach` among them when
+free space plus every deletable backup falls short of 24 MiB. A step still under 24 MiB after its
+deleting logs `backup.start_room_short`, whether or not any deletion succeeded; the refusal's
+`afterDeleting` tells the two apart. It throws nothing: a failure in the checks or the deleting is
+logged `backup.start_room_failed`. Each deletion logs `backup.archive_deleted` with
+`reason: "start_room"`.
+
+**The record and the alert.** A step that deleted anything writes
+`<state>/backup-room-start-deleted.json` (`BACKUP_ROOM_START_DELETED_FILE`) with `writeFileDurable`:
+each deleted archive and the time, for the note's `venue.db`. A record an earlier start left for the
+same `venue.db` keeps its entries and the earlier time. A failed write is logged
+`backup.start_room_record_failed` and the deletions stand. Boot reads it
+(`recordStartDeletions`, `apps/server/src/start-backup-room-record.ts`, at `boot.ts:2238`, before the
+backup supervisor's first reload at `:2275`) and records the same `backup.archives_deleted` alert a
+backup run raises, then deletes the record. A malformed record, or one for another `venue.db`
+(`other_venue_db`), is logged `backup.start_room_record_dropped` and deleted with no alert; an
+unreadable record, an unreadable `venue.db` or a failed alert keeps it for the next start.
+
+**Kept out of** venue data: the originals walk of a backup recovery leaves the note, its temporary
+files and the record out (`isBackupRoomFileName`, `packages/provisioning/src/spare-space-name.ts`).
+
+**The guard.** `scripts/backup-room-note.test.ts`, weaker than its name: it reads text, against two
+hand-kept lists. A non-test `.ts` file under `apps/<app>/src` or `packages/<package>/src` that names
+`VENUE_FILE`, or `venue.db` after a quote or a `/`, beside one of `rm`, `rename`, `unlink`,
+`copyFile`, `cp`, `removeAndSync` or `rmdir`, must be on REPLACES (and call
+`deleteBackupRoomNote(`) or on CO_NAMERS with a reason. It does not see a whole-folder `rm` that takes
+`venue.db` without naming it, a removal or copy through a function under another name (a wrapper, or
+a write such as `writeFile`), a `venue.db` path built from pieces, or shell (`waitron.sh reset`); a
+listed file passes on one call, not one per path. The rejoin and promotion deletions are on neither
+list, because `boot.ts` and `rejoin-command.ts` do not match: nothing guards promotion's two, and
+only the rejoin's wipe, through `db-wipe.ts`, is guarded.
+
+**Deliberate limits.**
+
+- The step deletes without the venue lock on a disk too full to take it, unless a fresh holder
+  shows, as the staging clean-up does (`apps/server/src/start-space.ts`).
+- A future path that writes a new installation into the same `venue.db` on a primary would pass the
+  identity check; only the guard, which reads text, would notice.
+- A peer's fence that demotes the box at boot (`boot.ts`, `fenced && axes.singletonRole ===
+  "primary"`) is not visible to the step, which checks no role.
+- A box at a backup recovery's repair or selected stage never gets the start's deletion.
+- `venue.db`'s device number and birth time are not measured on Linux or in Docker; a mismatch
+  skips, which is safe. The in-place-write control in `apps/server/src/backup-room-note.test.ts`, run
+  by CI on Linux, is the only receipt that ordinary writes keep them.
+- A `waitron-restore` run reading a folder archive while the app restarts can race its deletion, as
+  above. Not measured.
+- A backup stamped by a clock that ran ahead, and a folder two boxes share, are the run's own limits
+  above.
+- A restore that crashes between placing the file and writing its new installation leaves the
+  restored file holding the old installation start; the next reload writes a note with it, and a
+  backup run reads it the same way.
+- A reload whose first note deletion fails leaves the old note; it is trusted only while `venue.db`'s
+  identity still matches it.
 
 
 ## Root receipt excerpts moved on 2026-10-23

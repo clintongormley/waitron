@@ -63,37 +63,6 @@ Three parts:
   one-step choice, a bucket of the owner's as the other), and how loudly a box with no copy, or a
   stale one, says so.
 
-## A1167. Backups make room for themselves
-
-**Owner, 2026-10-28 ~08:35:** "our backup policy needs to delete old backups automatically when we're
-running out of disk space, plus alert the administrator, plus refuse to do a backup if there still
-isn't enough space, and alert the manager."
-
-Design: [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md).
-The owner answered its four questions on 2026-10-28 (`~/waitron-campaign/questions.md`, "OWNER
-ANSWERS — A1167").
-
-Slice 1 landed (plan
-[2026-10-28-a1167-1-room-before-backup.md](../superpowers/plans/2026-10-28-a1167-1-room-before-backup.md)):
-before each backup run copies anything, it deletes its oldest deletable backups on the disk that
-holds its working folder, or is refused with the sizes; both are shown on the bell and emailed to
-managers and administrators. How it works and its limits: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
-The deletion words give the days the deleted backups were taken (the oldest and newest when they
-differ), and both emails' subjects start with the venue's name (owner, 2026-10-29). Slice 2's
-deletions use the same words.
-
-Slice 2 landed (plan
-[2026-10-29-a1167-2-watch-deletes-backups.md](../superpowers/plans/2026-10-29-a1167-2-watch-deletes-backups.md)):
-every free-space reading under 2 GiB first deletes the oldest deletable backups toward 2.5 GiB, or
-every one it may when they cannot reach it, while backups run and no backup run holds or waits for
-the staging turn. How it works: [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies).
-
-Still open:
-
-- **The start deletes old backups by itself** in place of the full-disk page's button (Q4 A),
-  measured first, and only if the installation's start can be read without opening the venue
-  database (design Q4).
-
 <a id="automatic-upgrades-that-can-be-undone-until-the-first-order"></a>
 
 ## Automatic upgrades with rollback until a clean, running restart
@@ -914,6 +883,18 @@ The owner's four answers: no reserved
   `x-waitron-build` header on every main-listener response after `/health`; see
   `docs/backlog/dashboard.md` → Decisions and deliberate limits.)
 
+
+- **Backups make room for themselves (A1167, owner 2026-10-28 and 2026-10-29).** Owner, 2026-10-28:
+  "our backup policy needs to delete old backups automatically when we're running out of disk space,
+  plus alert the administrator, plus refuse to do a backup if there still isn't enough space, and
+  alert the manager." Design:
+  [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
+  its four questions answered in `~/waitron-campaign/questions.md` ("OWNER ANSWERS — A1167"). On
+  2026-10-29 the owner chose that the deletion words give the days the deleted backups were taken
+  (the oldest and newest when they differ), and that both backup emails' subjects start with the
+  venue's name. How the run, the free-space watch and the start delete:
+  [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)
+  and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
 
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and

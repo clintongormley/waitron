@@ -2,6 +2,7 @@ import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { DATABASE_FILES, SIDE_FILE_SUFFIXES, VENUE_FILE } from "@waitron/store";
 import { litestreamMetaDir } from "@waitron/stream/litestream.js";
+import { deleteBackupRoomNote } from "./backup-room-note.js";
 
 /**
  * Discard this node's whole local database. The caller holds the venue lock.
@@ -14,8 +15,10 @@ import { litestreamMetaDir } from "@waitron/stream/litestream.js";
  * left too.
  *
  * Each removal is `force`, so a box that never migrated, or a half-wiped one being re-run, succeeds.
+ * The backup room note goes first: it vouches for the `venue.db` being removed.
  */
-export async function wipeVenueDatabases(venueDir: string): Promise<void> {
+export async function wipeVenueDatabases(venueDir: string, stateDir: string): Promise<void> {
+  await deleteBackupRoomNote(stateDir);
   for (const file of DATABASE_FILES) {
     for (const suffix of ["", ...SIDE_FILE_SUFFIXES]) {
       await rm(join(venueDir, `${file}${suffix}`), { force: true });

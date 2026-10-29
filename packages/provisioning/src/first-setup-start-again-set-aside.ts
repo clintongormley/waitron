@@ -2,6 +2,7 @@ import * as fs from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
 import { lockVenueDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { deleteBackupRoomNote } from "./backup-room-note-file.js";
 import { canonicalFirstSetupRoots } from "./first-setup-resolution.js";
 import {
   readStartAgainChoices,
@@ -12,6 +13,7 @@ import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { raiseStartAgainNote, readStartAgainNote } from "./first-setup-start-again-note.js";
 import { syncFolder } from "./folder-sync.js";
+import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import "./errors.js";
 
 export interface SetAsideIo {
@@ -343,6 +345,14 @@ async function unrecordedSideFile(
   return null;
 }
 
+async function deleteNoteFirst(stateDir: string): Promise<void> {
+  try {
+    await deleteBackupRoomNote(stateDir);
+  } catch (error) {
+    throw failed(codeOf(error), `state/${BACKUP_ROOM_NOTE_FILE}`);
+  }
+}
+
 /**
  * D4 steps 3 and 4: raises the note to the record's floor, then renames each unit's pieces, in
  * survey order and each unit's move order, into the record's folders. Never overwrites: a present
@@ -355,6 +365,7 @@ export async function moveStartAgainUnits(
 ): Promise<void> {
   if (record.choice !== "move" || record.setAside === null)
     throw new AppError("setup.attempt_invalid", {});
+  await deleteNoteFirst(roots.stateDir);
   await raiseNoteToRecord(roots.stateDir, record);
   const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
   for (const unit of record.listed.units)
@@ -440,6 +451,7 @@ export async function resumeStartAgainSetAside(
   try {
     const record = await latestMove();
     if (record === null) return "none";
+    await deleteNoteFirst(canonical.stateDir);
     await removeLeftoverProbes(canonical, io);
     await raiseNoteToRecord(canonical.stateDir, record);
     const folders = await makeDestinationFolders(canonical, record, io);

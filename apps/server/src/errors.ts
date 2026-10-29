@@ -1355,8 +1355,14 @@ declare module "@waitron/shared" {
     /** The backup staging folder's filesystem reported fewer than `neededBytes` free, so the tick
      * stopped before writing more there. `neededBytes` is what the step needed: from a room step
      * (before the copy, and after encrypting), the need plus the free-space floor; from the check
-     * right after the copy, the copy's size. `availableBytes` is what it reported. */
-    "backup.staging_space_low": { neededBytes: number; availableBytes: number };
+     * right after the copy, the copy's size. `availableBytes` is what it reported. `afterDeleting`
+     * is set only by a room step: false when it refused before deleting anything, true when it
+     * refused on the reading taken after its deletions (or after a deletion failed). */
+    "backup.staging_space_low": {
+      neededBytes: number;
+      availableBytes: number;
+      afterDeleting?: boolean;
+    };
     /** A backup run deleted `count` of its oldest backups to make room for itself; `date` and
      * `lastDate` are the venue's calendar days the oldest and newest of them were taken,
      * `YYYY-MM-DD`, and `severalDays` says they differ. Recorded as an incident, never thrown. */

@@ -469,6 +469,11 @@ called weaker than its name, the topic file lists what it does not see.
   a full disk with nothing else to free would serve only the full-disk page (A1127). Guard:
   `scripts/spare-space.test.ts`, weaker than its name: reads text.
   [Detail](docs/developers/conventions-data.md#the-boxs-spare-file).
+- **Every server path that replaces or removes the live `venue.db` deletes
+  `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.** Cost if not: a full-disk start could trust an old installation start and delete backups
+  from before a restore or Start again, which can hold sales the live database lacks. Guard:
+  `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
+  [Detail](docs/developers/conventions-data.md#the-backup-room-note).
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
   `exclusive: false`; file-changing commands take `lockVenueDatabase` before changing anything.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.
