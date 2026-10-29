@@ -37,6 +37,7 @@ it("an archive built with the backup room's files in the state folder holds none
     BACKUP_ROOM_NOTE_FILE,
     backupRoomNoteTemporaryName("0123456789ab"),
     BACKUP_ROOM_START_DELETED_FILE,
+    `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
   ])
     await writeFile(join(stateDir, name), '{"version":1}');
   const parts = await collectStateParts({ stateDir, modules: ALL_MODULES, resolvers: {} });

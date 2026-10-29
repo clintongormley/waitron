@@ -1,3 +1,5 @@
+import { stagedPath } from "./fs-atomic.js";
+
 /** The box's spare file in its state folder: deleted to make room on a nearly full disk. */
 export const SPARE_SPACE_FILE = "spare-space";
 
@@ -22,6 +24,7 @@ export function isBackupRoomFileName(name: string): boolean {
   return (
     name === BACKUP_ROOM_NOTE_FILE ||
     name === BACKUP_ROOM_START_DELETED_FILE ||
+    name === stagedPath(BACKUP_ROOM_START_DELETED_FILE) ||
     BACKUP_ROOM_NOTE_TEMPORARY.test(name)
   );
 }

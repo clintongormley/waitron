@@ -255,6 +255,7 @@ it.each([
   BACKUP_ROOM_NOTE_FILE,
   `${BACKUP_ROOM_NOTE_FILE}.0123456789ab.tmp`,
   BACKUP_ROOM_START_DELETED_FILE,
+  `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
 ])(
   "%s written or deleted in the box's state folder leaves a recovery's originals digest unchanged",
   async (name) => {
@@ -270,7 +271,11 @@ it.each([
   },
 );
 
-it.each([`${BACKUP_ROOM_NOTE_FILE}.tmp`, `${BACKUP_ROOM_NOTE_FILE}.0123456789ab.tmp.extra`])(
+it.each([
+  `${BACKUP_ROOM_NOTE_FILE}.tmp`,
+  `${BACKUP_ROOM_NOTE_FILE}.0123456789ab.tmp.extra`,
+  `${BACKUP_ROOM_START_DELETED_FILE}.0123456789ab.tmp`,
+])(
   "a file named %s in the box's state folder changes a recovery's originals digest",
   async (name) => {
     const f = await fixture();

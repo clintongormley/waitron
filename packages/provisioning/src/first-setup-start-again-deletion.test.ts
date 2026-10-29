@@ -507,14 +507,20 @@ it("the backup room's files written after the marker are no finding, and Start a
   const roots = await box();
   await writeStartAgainMarker(roots, await startAgainMarkerFor(roots, attempt));
   const temporary = backupRoomNoteTemporaryName("0123456789ab");
-  for (const name of [BACKUP_ROOM_NOTE_FILE, temporary, BACKUP_ROOM_START_DELETED_FILE])
+  const recordTemporary = `${BACKUP_ROOM_START_DELETED_FILE}.tmp`;
+  for (const name of [
+    BACKUP_ROOM_NOTE_FILE,
+    temporary,
+    BACKUP_ROOM_START_DELETED_FILE,
+    recordTemporary,
+  ])
     await writeFile(join(roots.stateDir, name), '{"version":1}');
   expect((await collectStartAgainFindings(roots))?.findings).toEqual([]);
   await finishStartAgainDeletion(roots);
   expect(await exists(join(roots.venueDir, START_AGAIN_MARKER_FILE))).toBe(false);
   expect(await exists(join(roots.venueDir, "venue.db"))).toBe(false);
   expect((await readdir(roots.stateDir)).sort()).toEqual(
-    [BACKUP_ROOM_START_DELETED_FILE, temporary].sort(),
+    [BACKUP_ROOM_START_DELETED_FILE, temporary, recordTemporary].sort(),
   );
 });
 

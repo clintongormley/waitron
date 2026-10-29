@@ -107,6 +107,7 @@ describe("collectSealedEntries with the backup room's files present", () => {
       BACKUP_ROOM_NOTE_FILE,
       backupRoomNoteTemporaryName("0123456789ab"),
       BACKUP_ROOM_START_DELETED_FILE,
+      `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
     ])
       await writeFile(join(stateDir, name), '{"version":1}');
     const entries = await collectSealedEntries({
