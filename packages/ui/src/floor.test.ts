@@ -33,13 +33,13 @@ test("snapRotation normalizes a negative rotation into the [0, 360) contract", (
 
 test("buildZoneTabs orders the zone tabs by displayOrder", () => {
   const zones = [
-    { id: "z2", name: "Terraza", displayOrder: 2 },
-    { id: "z1", name: "Comedor", displayOrder: 1 },
+    { id: "z2", name: "Terrace", displayOrder: 2 },
+    { id: "z1", name: "Dining room", displayOrder: 1 },
   ];
   const tabs = buildZoneTabs(zones);
   expect(tabs).toEqual([
-    { key: "z1", name: "Comedor" },
-    { key: "z2", name: "Terraza" },
+    { key: "z1", name: "Dining room" },
+    { key: "z2", name: "Terrace" },
   ]);
 });
 
@@ -112,10 +112,10 @@ test("toFloorTable carries the party's name through the occupancy half", () => {
     state: "open-tab",
     pendingToServe: 0,
     status: null,
-    partyName: "Ana",
+    partyName: "Ann",
   });
   const free = toFloorTable(placement, { state: "free", pendingToServe: 0, status: null });
-  expect(named.partyName).toBe("Ana");
+  expect(named.partyName).toBe("Ann");
   expect(free.partyName).toBeUndefined();
 });
 
