@@ -1026,10 +1026,21 @@ is drawn the Floor carries a `ready-bar` attribute, and the app raises its Sent 
 the page's padding (`--wt-page-padding`, `apps/till/index.html`) so they sit above it.
 
 On the Order screen the unsent order's button bar (Move to…, Fire, Send all; `.draft-bar`,
-`apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` at the foot of the till's
-scroll area, beside the menu and on the phone's Review view alike, with a line along its top and
-the order pane's own colour behind it, so a long order scrolls under it and never pushes it out of
-the window. Guard: `till-table-order-screen.action-bar.test.ts`.
+`apps/till/src/screens/till-table-order-screen.ts`) is `position: sticky` with `bottom: 0`, beside
+the menu and on the phone's Review view alike, with a line along its top and the order pane's own
+colour behind it. While the order pane runs past the foot of the till's scroll area, the bar stays
+at that foot and what is above it scrolls under it; otherwise it sits in its own place below the
+unsent order's lines. Its wrappers, `.round-control` and `.round-bar`, are `display: contents`, so
+the bar can rise anywhere in the order pane, over an open Sent panel too. While a round is being
+sent `.round-control` stays `inert`, and the fade is drawn on each part and on the bar's buttons,
+since a `display: contents` element paints nothing. The screen's `:host` is `isolation: isolate`,
+as the Floor's is, so the bar's `z-index: 1` never draws it over an overlay the shell lays over the
+screen. Nothing lifts the Served toast clear of the bar, so the toast can cover its buttons. Guards:
+in `apps/till/src/screens/till-table-order-screen.action-bar.test.ts`, the "keeps Send all on
+screen" cases, "shuts and fades the order, the bar included, while a round is being sent" and "is
+drawn under an overlay"; weaker than the paragraph: they put the screen in stand-ins for the shell's
+scroll area, not the real `till-shell`, and the "keeps Send all on screen" cases measure Send all
+only.
 
 When the zones read offers another layout (`layoutDue`), a device that can change today shows a
 `role="status"` line above the map or the list, "{period} layout is ready." or, with no new period
