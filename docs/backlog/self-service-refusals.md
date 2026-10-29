@@ -792,7 +792,7 @@ error; the message does not promise that every apply starts the worker.
 reconciling key numbers, restoring an old credentials key, and rewriting the record. Do not replace
 recovery keys or discard backup files just because settings cannot be read.
 
-**2026-10-29, built on feat/a1089-backup-settings-evidence:** when Backups says the saved settings
+**2026-10-29, A1089 settings-evidence panel (#2244):** when Backups says the saved settings
 can't be used, a **What the box recorded** button opens a panel that reads `GET
 /api/backup/settings-evidence`. It lists the times the box could not use its saved backup settings
 since it last started, newest first, at most five, each with a sentence about its cause (for example

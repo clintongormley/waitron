@@ -4791,7 +4791,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **A1089: unusable archive settings still have no repair beyond choosing them again.**
   Explaining or reconciling key numbers, restoring an old credentials key and rewriting the record
-  remain open; left open by A1089's settings-evidence panel (feat/a1089-backup-settings-evidence).
+  remain open; left open by A1089's settings-evidence panel (#2244).
   [Detail](backlog/self-service-refusals.md#backup-settings)
 
 - **A1089: the settings-evidence panel shows no failure from before the box's last restart.** The
