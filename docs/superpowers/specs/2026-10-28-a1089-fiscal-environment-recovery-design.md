@@ -168,3 +168,13 @@ access and persistent repair OPEN. It reduces uncertainty without depending on L
 **B:** design full failed-start access plus authorised configuration correction before any build. This addresses
 the broader recovery gap first, but requires startup identity and platform restart/rollback decisions now.
 The owner has not chosen either alternative. Approval of this proposal's scope is required before a plan or build.
+
+
+## 2026-10-29 planning decision
+
+The owner selected option A at 01:58 on 29 October: plan the running-dashboard read-only evidence
+inspection first. This supersedes this historical proposal's awaiting-scope wording for planning
+only. The [implementation plan](../plans/2026-10-29-a1089-fiscal-environment-evidence.md) records
+the incident/record association, separate facts, permission checks, in-place sign-in, Read again
+and Stop. Each build requires its own owner approval. Persistent repair, failed-start access and
+Lane A's setup/backup work remain open; this plan changes no product behavior or fiscal data.
