@@ -735,7 +735,6 @@ export function startAgainDraw(
       survey: startAgain.survey,
       locale: view.locale,
       secure: view.secure,
-      now: (startAgain.now ?? (() => new Date()))(),
       ...(view.message === undefined ? {} : { message: view.message }),
       ...(view.chosen === undefined ? {} : { chosen: view.chosen }),
     });

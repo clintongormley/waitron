@@ -57,12 +57,11 @@ function choice(
       ],
     },
     setAside: { state: "first-setup-set-aside/1", venue: "first-setup-set-aside/1" },
-    noteFloorMs: 1_800_000_000_000,
     ...overrides,
   };
 }
 const keep = (overrides: Partial<Omit<StartAgainChoiceRecord, "version">> = {}) =>
-  choice({ choice: "keep", setAside: null, noteFloorMs: null, ...overrides });
+  choice({ choice: "keep", setAside: null, ...overrides });
 
 it("a record is written once, with every field, and a second write of the same stem is refused setup.attempt_conflict", async () => {
   const stateDir = await scratch();
@@ -94,9 +93,6 @@ it("a record that does not hold its shape is not written", async () => {
     { ownerGeneration: -1 },
     { listed: { digest: HASH_C, units: [{ root: "elsewhere" } as never] } },
     { setAside: null },
-    { noteFloorMs: 1.5 },
-    { choice: "keep", setAside: null, noteFloorMs: 5 },
-    { choice: "keep", noteFloorMs: null },
     { extra: true } as never,
   ];
   for (const overrides of bad)
@@ -319,7 +315,7 @@ it("a record on disk spelling its attempt id in upper case, in its name or insid
   }
 });
 
-it("paths in a record stay inside their folders, and the note floor is not negative", async () => {
+it("paths in a record stay inside their folders", async () => {
   const stateDir = await scratch();
   const [unit] = choice().listed.units;
   const [entry] = unit!.entries;
@@ -329,7 +325,6 @@ it("paths in a record stay inside their folders, and the note floor is not negat
     { setAside: { state: "first-setup-set-aside/../x", venue: "first-setup-set-aside/1" } },
     { setAside: { state: "first-setup-set-aside", venue: "first-setup-set-aside/1" } },
     { setAside: { state: "first-setup-set-aside/1", venue: "elsewhere/1" } },
-    { noteFloorMs: -5 },
     ...[
       { ...unit!, path: "../x" },
       { ...unit!, path: "/abs" },
@@ -344,7 +339,5 @@ it("paths in a record stay inside their folders, and the note floor is not negat
       writeStartAgainChoice(stateDir, choice(overrides)),
       JSON.stringify(overrides),
     ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  await expect(writeStartAgainChoice(stateDir, choice({ noteFloorMs: 0 }))).resolves.toBeTypeOf(
-    "string",
-  );
+  await expect(writeStartAgainChoice(stateDir, choice())).resolves.toBeTypeOf("string");
 });

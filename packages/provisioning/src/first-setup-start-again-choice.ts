@@ -29,8 +29,6 @@ export interface StartAgainChoiceRecord {
   readonly listed: { readonly digest: string; readonly units: readonly StartAgainUnit[] };
   /** Folders relative to their roots; null for keep. */
   readonly setAside: { readonly state: string; readonly venue: string } | null;
-  /** The floor a Move raises the note to; null for keep. */
-  readonly noteFloorMs: number | null;
 }
 
 const CHOICE_LIMIT = 8 * 1024 * 1024;
@@ -115,11 +113,10 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
     "ownerGeneration",
     "listed",
     "setAside",
-    "noteFloorMs",
   ];
   if (!exactKeys(value, keys)) return damaged();
   const { at, attemptId, frozenDigest, markerSha256, choice, administrator } = value;
-  const { ownerGeneration, listed, setAside, noteFloorMs } = value;
+  const { ownerGeneration, listed, setAside } = value;
   const keep = choice === "keep";
   if (
     value.version !== 1 ||
@@ -141,12 +138,10 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
     !hash(listed.digest) ||
     !Array.isArray(listed.units) ||
     (keep
-      ? setAside !== null || noteFloorMs !== null
+      ? setAside !== null
       : !exactKeys(setAside, ["state", "venue"]) ||
         !setAsidePath(setAside.state) ||
-        !setAsidePath(setAside.venue) ||
-        (noteFloorMs !== null &&
-          (!Number.isSafeInteger(noteFloorMs) || (noteFloorMs as number) < 0)))
+        !setAsidePath(setAside.venue))
   )
     return damaged();
   return {
@@ -169,7 +164,6 @@ function parseChoice(value: unknown): StartAgainChoiceRecord {
           state: (setAside as { state: string }).state,
           venue: (setAside as { venue: string }).venue,
         },
-    noteFloorMs: noteFloorMs as number | null,
   };
 }
 

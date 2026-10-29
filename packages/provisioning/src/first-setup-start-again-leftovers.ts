@@ -7,7 +7,6 @@ import {
   collectStartAgainFindings,
   type StartAgainFinding,
 } from "./first-setup-start-again-deletion.js";
-import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import { readFirstSetupRecord, type FirstSetupState } from "./first-setup-state.js";
 import "./errors.js";
 
@@ -37,15 +36,11 @@ export type StartAgainSurvey =
       readonly markerSha256: string;
       readonly units: readonly StartAgainUnit[];
       readonly digest: string;
-      /** Null on a box with no start-again note, which a Move has nothing to raise. */
-      readonly noteFloorMs: number | null;
     }
   | { readonly kind: "explain"; readonly reason: string };
 type Choice = Extract<StartAgainSurvey, { kind: "choice" }>;
 
 export const START_AGAIN_ENTRY_LIMIT = 20_000;
-/** A1099's approved margin, 2½ minutes. */
-export const START_AGAIN_FLOOR_MARGIN_MS = 150_000;
 
 type Root = "venue" | "state";
 type Roots = { stateDir: string; venueDir: string };
@@ -62,7 +57,6 @@ const LOCKS = new Set([
   "recovery.lock",
 ]);
 const STEP = /^step-\d{6}$/;
-const MINUTE_NS = 60_000_000_000n;
 
 class Explain extends Error {}
 
@@ -83,20 +77,6 @@ async function lstatOrNull(path: string) {
     if (missing(error)) return null;
     throw error;
   }
-}
-
-export function startAgainSetAsideFloorMs(units: readonly StartAgainUnit[]): number | null {
-  let newest: bigint | null = null;
-  for (const unit of units)
-    for (const entry of unit.entries)
-      if (entry.mtimeNs !== null && (newest === null || BigInt(entry.mtimeNs) > newest))
-        newest = BigInt(entry.mtimeNs);
-  if (newest === null) return null;
-  const floor = newest + BigInt(START_AGAIN_FLOOR_MARGIN_MS) * 1_000_000n;
-  // A choice record refuses a negative floor.
-  if (floor <= 0n) return 0;
-  const minutes = (floor + MINUTE_NS - 1n) / MINUTE_NS;
-  return Number(minutes * 60_000n);
 }
 
 type Draft = { root: Root; path: string; why: StartAgainUnit["why"]; database: boolean };
@@ -242,10 +222,6 @@ export async function surveyStartAgainLeftovers(roots: Roots): Promise<StartAgai
       markerSha256,
       units,
       digest: sha256(JSON.stringify([marker.attemptId, marker.frozenDigest, markerSha256, units])),
-      noteFloorMs:
-        (await readStartAgainNote(canonical.stateDir)) === null
-          ? null
-          : startAgainSetAsideFloorMs(units),
     };
   } catch (error) {
     if (error instanceof Explain) return { kind: "explain", reason: error.message };

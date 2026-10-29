@@ -1,6 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import * as fsPromises from "node:fs/promises";
 import {
   lstat,
   mkdir,
@@ -36,7 +35,6 @@ import {
 } from "./first-setup-start-again-confirmation.js";
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import type { SetAsideIo } from "./first-setup-start-again-set-aside.js";
 
 /** Runs once after the next survey, standing in for a change between the survey and what follows. */
@@ -57,31 +55,25 @@ vi.mock("./first-setup-start-again-leftovers.js", async (original) => {
   };
 });
 
-/**
- * `write`: the next note raise writes through a folder that refuses to open its temporary file;
- * `throw`: it rejects with a plain error instead, as no current step after the record does.
- */
-let failNoteWrite: false | "write" | "throw" | "throwAt" | { code: unknown } = false;
-vi.mock("./first-setup-start-again-note.js", async (original) => {
-  const real = await original<typeof import("./first-setup-start-again-note.js")>();
+/** The next deletion after a Move's record rejects with a plain error, as no current step after the record does. */
+let failFinish: false | "throw" | "throwAt" | { code: unknown } = false;
+vi.mock("./first-setup-start-again-deletion.js", async (original) => {
+  const real = await original<typeof import("./first-setup-start-again-deletion.js")>();
   return {
     ...real,
-    raiseStartAgainNote: (...args: Parameters<typeof real.raiseStartAgainNote>) => {
-      const mode = failNoteWrite;
-      failNoteWrite = false;
-      if (mode === false) return real.raiseStartAgainNote(...args);
+    finishStartAgainDeletion: (...args: Parameters<typeof real.finishStartAgainDeletion>) => {
+      const mode = failFinish;
+      failFinish = false;
+      if (mode === false) return real.finishStartAgainDeletion(...args);
       if (mode === "throw") return Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" }));
       if (typeof mode === "object")
         return Promise.reject(Object.assign(new Error("odd code"), { code: mode.code }));
-      if (mode === "throwAt")
-        return Promise.reject(
-          Object.assign(new Error("EIO"), { code: "EIO", path: join(args[0], "note", "x.json") }),
-        );
-      const [stateDir, next] = args;
-      return real.raiseStartAgainNote(stateDir, next, {
-        ...fsPromises,
-        open: () => Promise.reject(Object.assign(new Error("EIO"), { code: "EIO" })),
-      });
+      return Promise.reject(
+        Object.assign(new Error("EIO"), {
+          code: "EIO",
+          path: join(args[0].venueDir, "first-setup-deleting.json"),
+        }),
+      );
     },
   };
 });
@@ -95,7 +87,7 @@ async function scratch() {
 }
 afterEach(async () => {
   afterSurvey = undefined;
-  failNoteWrite = false;
+  failFinish = false;
   for (const child of children.splice(0)) child.kill("SIGKILL");
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
@@ -191,7 +183,6 @@ async function keepRecord(f: StartAgainAttempt) {
     ownerGeneration: 1,
     listed: { digest: survey.digest, units: survey.units },
     setAside: null,
-    noteFloorMs: null,
   });
 }
 
@@ -570,7 +561,6 @@ it("Keep writes one record with who, when, what and which files, and moves nothi
       ownerGeneration: state.ownerGeneration,
       listed: { digest: survey.digest, units: survey.units },
       setAside: null,
-      noteFloorMs: null,
     },
   ]);
   const after = await folders(f.roots);
@@ -589,22 +579,14 @@ it("after Keep, a later Move is refused setup.start_again_kept and moves nothing
   expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["keep"]);
 });
 
-it("Move writes the record before the first rename, and raises the note to the moved files' floor before it", async () => {
-  const f = await found({
-    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
-  });
-  const survey = await choiceSurvey(f);
-  expect(survey.noteFloorMs).not.toBeNull();
-  expect(survey.noteFloorMs!).toBeGreaterThan(T0 - 60 * MINUTE);
-  const seen: { records: string[]; note: unknown }[] = [];
+it("Move writes the record before the first rename", async () => {
+  const f = await found();
+  const seen: { records: string[] }[] = [];
   const io: SetAsideIo = {
     ...realIo,
     rename: async (from, to) => {
       if (!from.includes(PROBE) && seen.length === 0)
-        seen.push({
-          records: await readdir(join(f.roots.stateDir, START_AGAIN_CHOICES_DIR)),
-          note: await readStartAgainNote(f.roots.stateDir),
-        });
+        seen.push({ records: await readdir(join(f.roots.stateDir, START_AGAIN_CHOICES_DIR)) });
       await rename(from, to);
     },
   };
@@ -613,14 +595,8 @@ it("Move writes the record before the first rename, and raises the note to the m
 
   expect(seen).toHaveLength(1);
   expect(seen[0]!.records).toHaveLength(1);
-  expect(seen[0]!.note).toEqual({
-    version: 1,
-    floorMs: survey.noteFloorMs,
-    lastName: "AB123",
-    module: "probe",
-  });
   const [record] = await recordsOf(f);
-  expect(record).toMatchObject({ choice: "move", noteFloorMs: survey.noteFloorMs });
+  expect(record).toMatchObject({ choice: "move" });
 });
 
 it("Move then finishes Start again: the marker and the marked files are gone, the moved files are at the destination unchanged, and A1042's confirmation records are byte-identical", async () => {
@@ -846,28 +822,9 @@ it("a Move whose finisher refuses after every piece moved is refused setup.start
   );
 });
 
-it("a Move whose note cannot be written after its record is refused setup.start_again_move_unfinished, and moves nothing", async () => {
-  const f = await found({
-    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
-  });
-  expect((await choiceSurvey(f)).noteFloorMs).not.toBeNull();
-  failNoteWrite = "write";
-
-  await expect(choose(f, "move")).rejects.toMatchObject({
-    code: "setup.start_again_move_unfinished",
-    reason: "setup.attempt_invalid",
-  });
-
-  expect((await recordsOf(f)).map((record) => record.choice)).toEqual(["move"]);
-  expect((await readStartAgainNote(f.roots.stateDir))?.floorMs).toBe(T0 - 60 * MINUTE);
-  expect(await readFile(join(f.roots.venueDir, "venue.db"), "utf8")).toBe("found database");
-});
-
 it("a plain error after the Move's record is refused setup.start_again_move_unfinished, naming its errno", async () => {
-  const f = await found({
-    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
-  });
-  failNoteWrite = "throw";
+  const f = await found();
+  failFinish = "throw";
 
   await expect(choose(f, "move")).rejects.toMatchObject({
     code: "setup.start_again_move_unfinished",
@@ -882,10 +839,8 @@ it.each([
 ])(
   "a plain error after the Move's record whose code is $name is refused naming no code",
   async ({ code }) => {
-    const f = await found({
-      note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
-    });
-    failNoteWrite = { code };
+    const f = await found();
+    failFinish = { code };
 
     await expect(choose(f, "move")).rejects.toMatchObject({
       code: "setup.start_again_move_unfinished",
@@ -906,14 +861,12 @@ it("rootRelativePath names a path under either root by its root, and leaves out 
 });
 
 it("a plain error naming a path after the Move's record carries that path relative to its root", async () => {
-  const f = await found({
-    note: { floorMs: T0 - 60 * MINUTE, lastName: "AB123", module: "probe" },
-  });
-  failNoteWrite = "throwAt";
+  const f = await found();
+  failFinish = "throwAt";
 
   await expect(choose(f, "move")).rejects.toMatchObject({
     code: "setup.start_again_move_unfinished",
-    reason: "move failed: EIO state/note/x.json",
+    reason: "move failed: EIO venue/first-setup-deleting.json",
   });
 });
 

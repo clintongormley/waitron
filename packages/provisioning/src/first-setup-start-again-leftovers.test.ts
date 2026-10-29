@@ -21,9 +21,7 @@ import { startAgainAttempt } from "../test/start-again-attempt.js";
 import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js";
 import {
   START_AGAIN_ENTRY_LIMIT,
-  START_AGAIN_FLOOR_MARGIN_MS,
   classifyStartAgainRefusal,
-  startAgainSetAsideFloorMs,
   surveyStartAgainLeftovers,
   type StartAgainSurvey,
 } from "./first-setup-start-again-leftovers.js";
@@ -327,65 +325,6 @@ it("the inode alone changes the digest", async () => {
   expect(second.units[0]!.entries[0]!.size).toBe(first.units[0]!.entries[0]!.size);
   expect(second.units[0]!.entries[0]!.ino).not.toBe(first.units[0]!.entries[0]!.ino);
   expect(second.digest).not.toBe(first.digest);
-});
-
-it("on a box with a note, the note floor is the newest moved file time plus 150 s, rounded up to the minute", async () => {
-  expect(START_AGAIN_FLOOR_MARGIN_MS).toBe(150_000);
-  const { roots } = await startAgainAttempt(await scratch(), {
-    note: { floorMs: Date.parse("2026-10-26T00:00:00Z"), lastName: "AB123", module: "probe" },
-  });
-  const database = join(roots.venueDir, "venue.db");
-  const wal = join(roots.venueDir, "venue.db-wal");
-  await writeFile(database, "found database");
-  await writeFile(wal, "found pages");
-  const at = (iso: string) => new Date(iso);
-  await utimes(database, at("2026-10-26T16:40:00Z"), at("2026-10-26T16:40:00Z"));
-  await utimes(wal, at("2026-10-26T16:52:10Z"), at("2026-10-26T16:52:10Z"));
-  const survey = choice(await surveyStartAgainLeftovers(roots));
-  const expected = Date.parse("2026-10-26T16:55:00Z");
-  expect(survey.noteFloorMs).toBe(expected);
-  expect(startAgainSetAsideFloorMs(survey.units)).toBe(expected);
-
-  await utimes(wal, at("2026-10-26T16:52:30Z"), at("2026-10-26T16:52:30Z"));
-  expect(choice(await surveyStartAgainLeftovers(roots)).noteFloorMs).toBe(expected);
-
-  await utimes(wal, at("2026-10-26T16:52:30.001Z"), at("2026-10-26T16:52:30.001Z"));
-  expect(choice(await surveyStartAgainLeftovers(roots)).noteFloorMs).toBe(
-    Date.parse("2026-10-26T16:56:00Z"),
-  );
-});
-
-it("on a box with no note, the note floor is null even when a found file is dated hours ahead", async () => {
-  const { roots } = await startAgainAttempt(await scratch());
-  const database = join(roots.venueDir, "venue.db");
-  await writeFile(database, "found database");
-  const ahead = new Date(Date.now() + 5 * 60 * 60_000);
-  await utimes(database, ahead, ahead);
-  const survey = choice(await surveyStartAgainLeftovers(roots));
-  expect(startAgainSetAsideFloorMs(survey.units)).toBeGreaterThan(ahead.getTime());
-  expect(survey.noteFloorMs).toBeNull();
-});
-
-it("the note floor is never below zero, whatever the newest file's time before 1970", () => {
-  const unitAt = (mtimeNs: string) => ({
-    root: "state" as const,
-    path: "trading.env",
-    why: "not-created" as const,
-    pieces: ["trading.env"],
-    entries: [{ path: "trading.env", type: "file" as const, ino: "1", size: "4", mtimeNs }],
-  });
-  expect(startAgainSetAsideFloorMs([unitAt("-315619200000000000")])).toBe(0);
-  expect(startAgainSetAsideFloorMs([unitAt("-150000000000")])).toBe(0);
-  expect(startAgainSetAsideFloorMs([unitAt("-149999999999")])).toBe(60_000);
-});
-
-it("the note floor is null when no unit holds a file", async () => {
-  const { roots } = await startAgainAttempt(await scratch());
-  await mkdir(join(roots.stateDir, "first-setup-workspaces", "empty"), { recursive: true });
-  const survey = choice(await surveyStartAgainLeftovers(roots));
-  expect(survey.units.map((unit) => unit.path)).toEqual(["first-setup-workspaces"]);
-  expect(survey.noteFloorMs).toBeNull();
-  expect(startAgainSetAsideFloorMs([])).toBeNull();
 });
 
 it("no marker, no survey", async () => {
