@@ -168,7 +168,9 @@ however many of your bills there hold unsent dishes, a table gets one button. Ta
 back to that table. The table you are at is highlighted, and once nothing of yours is unsent there
 its button loses the ✎ and goes when you leave, while a table you leave with dishes still unsent
 keeps its ✎ button. If someone else takes over your bill, it stops counting as yours: at once at the
-table you are at, and at any other table when the Floor next updates its tables.
+table you are at, and at any other table when the Floor next updates its tables. When there are
+more buttons than fit, **Floor** stays where it is and the table buttons slide sideways beside it;
+a faded edge shows there are more that way.
 
 Tapping **Floor** after a table opens that table's zone, if this device shows it. Everything else is
 in **More** (☰): your name and clock actions when the bar has no room for them, which on a phone is

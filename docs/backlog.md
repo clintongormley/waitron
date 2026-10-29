@@ -2181,6 +2181,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   to the height (design §3.1), so with every entry offered it sits below the menu's bottom edge at
   360×640 (759 px against a 632 px menu in Spanish, the build plan's slice 3 D6, probe B), and
   nothing says the menu scrolls. First seen at 320×568 by A681's look (625 px of content in 552 px).
+  Since A1123 a handheld's More opens under ☰ rather than over the bar, so it has less room than
+  those measurements had.
   Decide whether More should show that it scrolls, or hold fewer items on a short screen.
 
 - **At 320 px in CI's fonts the till's two Spanish tabs do not fit their strip (found by A681's CI,
@@ -2939,23 +2941,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   not, and the proposal keeps a name of four characters or fewer whole, so a seed, an API call or
   an imported file can still give a table "1+2" or "T1+T2", which reads on the Ready bar like one
   of today's joins.
-
-- **A1121. With many table buttons a handheld's Order screen can lose its visible way back to the
-  Floor.** Seen in A797 slice 3's LOOK, 2026-10-26: at 360 and 390 px with ten buttons the strip
-  scrolls sideways, Floor scrolls out of sight with the table buttons, and nothing hints that the
-  strip scrolls. Options to decide: keep Floor fixed at the start of the strip, a fade at the cut edge.
-  [Detail](backlog/till.md#a1121-with-many-table-buttons-a-handhelds-order-screen-can-lose-its-visible-way-back-to-the-floor)
-
-- **A1122. At 1024 px a handheld's Floor button slides sideways as table buttons appear.** Seen
-  in A797 slice 3's LOOK, 2026-10-26: the group is centred between the brand and the name, so
-  Floor sits at x 388 with no table buttons, 356 with one and 319 with two.
-  [Detail](backlog/till.md#a1122-at-1024-px-a-handhelds-floor-button-slides-sideways-as-table-buttons-appear)
-
-- **A1123. At 360×640 a handheld's ☰ popup moves up over the bar and covers ☰ itself.** Seen in
-  A797 slice 3's LOOK, 2026-10-26: to fit whole it starts at y 11. Nothing is lost, and tapping
-  outside or Escape closes it. See also "On a short phone the till's More menu is taller than the
-  room it gets", above.
-  [Detail](backlog/till.md#a1123-at-360640-a-handhelds--popup-moves-up-over-the-bar-and-covers--itself)
 
 - **A1124. At 360 px a "✎ ›" chip on the till Floor's zone tabs covers the end of the Terrace
   tab.** Seen in A797 slice 3's LOOK, 2026-10-26: the tab reads "Terrac". I believe this predates

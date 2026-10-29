@@ -175,7 +175,9 @@ tiene un solo botón. Toca un botón para volver a esa mesa. La mesa en la que e
 resaltada, y cuando ya no queda nada tuyo sin enviar en ella su botón pierde el ✎ y desaparece al
 salir, mientras que una mesa de la que sales con platos aún sin enviar conserva su botón con ✎. Si
 otra persona se queda con tu cuenta, deja de contar como tuya: al momento en la mesa en la que
-estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas.
+estás, y en cualquier otra mesa cuando Sala vuelva a actualizar sus mesas. Cuando hay más botones
+de los que caben, **Sala** se queda en su sitio y los botones de las mesas se deslizan de lado junto
+a él; un borde difuminado indica que hay más por ese lado.
 
 Si tocas **Sala** después de una mesa, se abre la zona de esa mesa, si este dispositivo la muestra.
 Todo lo demás está en **Más** (☰): tu nombre y las acciones de fichaje cuando no caben en la barra,
