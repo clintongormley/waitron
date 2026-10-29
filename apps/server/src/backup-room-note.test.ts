@@ -187,6 +187,10 @@ describe("readBackupRoomNote", () => {
   it("refuses the note once venue.db is deleted and created again", async () => {
     await write();
     await unlink(venueDb());
+    // A filesystem that hands the freed inode straight to the new file (ext4 may) and stamps times
+    // from a clock coarser than its nanosecond field would make the two files look alike; real
+    // replacements are never this quick, so the test waits out such a tick.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     await writeFile(venueDb(), "new installation");
     expect(await read()).toEqual({ skipped: "identity_mismatch" });
   });
