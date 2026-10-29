@@ -997,13 +997,20 @@ export class DashboardApp extends LitElement {
   private sessionExpiryTimer?: ReturnType<typeof setTimeout>;
   private sessionIdleTimeoutSeconds = 30 * 60;
   private sessionGeneration = 0;
+  #signingOut = false;
 
   readonly #onSessionInvalid = (event: Event): void => {
     const code = (event as CustomEvent<{ code?: unknown }>).detail?.code;
     // A refusal still in flight from before the reset must not replace its notice; only a reload does.
     if (this.sessionNoticeCode === "node.reset") return;
-    // Signed out already: a late refusal must not rewrite the address or the sign-in notice.
-    if (this.sessionRole === undefined && code !== "node.reset") return;
+    // An ended or absent session answers `required`: while signed out, or while signing out (which
+    // returns to login itself), it must not rewrite the address. Expiry and suspension can still end
+    // a session the login screen holds unannounced.
+    if (
+      code === "management_session.required" &&
+      (this.sessionRole === undefined || this.#signingOut)
+    )
+      return;
     if (
       code === "management_session.expired" ||
       code === "management_session.required" ||
@@ -1578,10 +1585,13 @@ export class DashboardApp extends LitElement {
       scopes: "all",
       reason: "signout",
       proceed: async () => {
+        this.#signingOut = true;
         try {
           await this.api.logout();
         } catch {
           // The local session is cleared even when the logout request is refused.
+        } finally {
+          this.#signingOut = false;
         }
         if (this.isConnected && generation === this.sessionGeneration)
           this.#returnToLogin(null, next);

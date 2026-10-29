@@ -6524,21 +6524,69 @@ describe("dashboard-app: session signals", () => {
     expect(notice(el)).toBe(codeMessage("node.reset"));
   });
 
+  it("keeps the sign-in page's address when a no-session refusal arrives while signed out", async () => {
+    history.replaceState(null, "", "/manage/staff");
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", {
+      api: stubApi({
+        getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+      }),
+    });
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    sessionInvalid("management_session.required");
+    await flush(el);
+    expect(notice(el)).toBeNull();
+    expect(location.pathname).toBe("/manage/staff");
+  });
+
+  it("returns to login on a no-session refusal in a session signed into after a sign-out", async () => {
+    const { el } = await signedIn();
+    el.shadowRoot!.querySelector<HTMLElement>("[data-test=logout]")!.click();
+    await flush(el);
+    expect(login(el)).not.toBeNull();
+    login(el)!.dispatchEvent(
+      new CustomEvent("logged-in", { bubbles: true, composed: true, detail: {} }),
+    );
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    sessionInvalid("management_session.required");
+    await flush(el);
+    expect(overview(el)).toBeNull();
+    expect(login(el)).not.toBeNull();
+  });
+
   it.each(["management_session.expired", "person.suspended"])(
-    "keeps the sign-in page's notice and address when %s arrives while signed out",
+    "explains a %s refusal that ends the session while the add-a-passkey offer shows",
     async (code) => {
-      history.replaceState(null, "", "/manage/staff");
+      const signals = createSessionSignals();
+      const real = new DashboardApi(
+        "",
+        async () => new Response(JSON.stringify({ error: { code } }), { status: 401 }),
+        signals.reportError,
+        signals.reportActivity,
+      );
       const { el } = await mountWidget<DashboardApp>("dashboard-app", {
         api: stubApi({
           getMe: vi.fn().mockRejectedValue({ code: "management_session.required" }),
+          login: vi.fn().mockResolvedValue({ personId: "p1", offerPasskey: true }),
+          passkeyOfferSeen: vi.fn(() => real.passkeyOfferSeen()),
         }),
       });
       await flush(el);
-      expect(login(el)).not.toBeNull();
-      sessionInvalid(code);
+      const screen = login(el)!;
+      Object.assign(screen, {
+        email: "manager@example.com",
+        step: "password",
+        password: "correct horse battery",
+      });
       await flush(el);
-      expect(notice(el)).toBeNull();
-      expect(location.pathname).toBe("/manage/staff");
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=submit]")!.click();
+      await flush(el);
+      screen.shadowRoot!.querySelector<HTMLElement>("[data-test=skip-passkey]")!.click();
+      await flush(el);
+      await flush(el);
+      expect(login(el)).toBe(screen);
+      expect(notice(el)).toBe(codeMessage(code));
     },
   );
 

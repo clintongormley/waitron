@@ -559,6 +559,44 @@ describe("the full-disk bar's button", () => {
     expect(location.pathname).toBe("/manage/box-status");
   });
 
+  it("a refusal from a read that answers while Sign in as a manager is still signing out keeps Box status as the destination", async () => {
+    let finishRead!: (response: Response) => void;
+    let finishLogout!: (response: Response) => void;
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(stopped), { status: 200 }))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishRead = resolve)))
+      .mockImplementationOnce(() => new Promise<Response>((resolve) => (finishLogout = resolve)));
+    const signals = createSessionSignals();
+    const real = new DashboardApi("", fetchImpl, signals.reportError, signals.reportActivity);
+    const { api, liveData } = shellApi(
+      vi.fn(() => real.background.getDiskStop()),
+      {
+        getMe: vi.fn().mockResolvedValue(me("supervisor", [])),
+        logout: vi.fn(() => real.logout()),
+      },
+    );
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api });
+    await expect.poll(() => diskBar(el)).not.toBeNull();
+    liveData.invalidate([{ type: "incidents", id: "x" }]);
+    await expect.poll(() => fetchImpl.mock.calls.length).toBe(2);
+    await diskBar(el)!.updateComplete;
+    await pressButton(el);
+    await expect.poll(() => fetchImpl.mock.calls.length).toBe(3);
+    expect(String(fetchImpl.mock.calls[2]![0])).toBe("/management-api/session");
+    finishRead(
+      new Response(JSON.stringify({ error: { code: "management_session.required" } }), {
+        status: 401,
+      }),
+    );
+    await flush(el);
+    await flush(el);
+    finishLogout(new Response(null, { status: 204 }));
+    await expect.poll(() => login(el)).not.toBeNull();
+    await flush(el);
+    expect(location.pathname).toBe("/manage/box-status");
+  });
+
   it("asks before Sign in as a manager signs out over unsaved changes", async () => {
     const logout = vi.fn().mockResolvedValue(undefined);
     const { el } = await mountAs("supervisor", [], { logout });
