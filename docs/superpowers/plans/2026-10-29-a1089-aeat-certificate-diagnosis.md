@@ -303,3 +303,22 @@ unchanged history, read-only execution, indirect imports or actual shipping. The
 audit and runtime/bundle cases supply separate evidence. Fourteen independent installed-copy
 omissions failed their intended assertions and passed after restoration; earlier unchanged
 protection-control receipts were retained rather than repeated.
+
+
+## 2026-10-30 review fix qualification
+
+The sole whole-branch Claude run-it review took 853 seconds on the rebased candidate.
+`fiscal-certificate-diagnosis-cleanup.test.ts` then reproduced a completed native inspection
+being discarded while the real database queue held its final no-touch authorization for
+2.5 seconds, beyond the default two-second child-cleanup window. The cleanup failure now
+checks whether that child has exited; whole-attempt deadlines remain covered by the runner
+suites. The focused process/entry run passes 74 cases at 99.67/96.42/100/100.
+
+Saved installation time now uses the adjacent card's venue-zone formatter. New EN/ES cases
+cross midnight relative to UTC; the branch's new saved-record test retains both its appearance
+and disappearance checks using the formatted value. No pre-branch assertion changed.
+Independent cases now catch deletion of the source-generation echo, completion-epoch advance,
+fresh-session outcome and parent progress cap (16 accepted, 17 refused). All six review-fix
+omissions fail assertions and pass after restoration in the disposable installed candidate.
+The normal hook and current-head package CI remain the next gates; live AEAT and persistent
+repair remain outside this qualification.

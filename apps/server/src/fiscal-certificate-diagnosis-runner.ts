@@ -197,6 +197,7 @@ export function createCertificateDiagnosisRunner(options: {
             if (!childExited) child.kill("SIGKILL");
           });
           schedule(at + reserve, () => {
+            if (childExited) return;
             fail();
             endSupervision();
           });

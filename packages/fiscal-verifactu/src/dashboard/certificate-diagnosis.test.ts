@@ -251,13 +251,13 @@ it("a fresh inspection with no saved record replaces the opening's saved facts",
     lastAcceptedAt: null,
   };
   const { panel } = await mountDiagnosis({ savedCard: { ...savedCard, installed } });
-  expect(panel.shadowRoot!.textContent).toContain("2025-01-02T00:00:00.000Z");
+  expect(panel.shadowRoot!.textContent).toContain("2 Jan 2025, 01:00");
   await click(panel, "diagnosis-confirm");
   await click(panel, "diagnosis-inspect");
   await vi.waitFor(() => expect(q(panel, "diagnosis-copy")).not.toBeNull());
   expect(panel.shadowRoot!.textContent).toContain("No saved installation record.");
   expect(panel.shadowRoot!.textContent).not.toContain("This saved record has not been verified");
-  expect(panel.shadowRoot!.textContent).not.toContain("2025-01-02T00:00:00.000Z");
+  expect(panel.shadowRoot!.textContent).not.toContain("2 Jan 2025, 01:00");
 });
 it.each([
   "local-finding",

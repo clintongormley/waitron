@@ -34,6 +34,7 @@ describe.each(["light", "dark"] as const)("diagnosis accessibility %s", (theme) 
           "success",
           "stale",
           "revision",
+          "saved",
         ] as const) {
           await mountThemed("<div></div>", theme);
           const auth = permission(mode === "reader" ? ["fiscal.view"] : ["system.manage"]);
@@ -49,6 +50,11 @@ describe.each(["light", "dark"] as const)("diagnosis accessibility %s", (theme) 
             if (mode === "unavailable") throw new Error("PRIVATE_FAULT");
             if (mode === "revision") throw { code: "fiscal.certificate_changed", params: {} };
             if (mode === "busy") return new Promise(() => {});
+            if (mode === "saved")
+              return evidence(body, {
+                saved: { kind: "sello", installedAt: "2026-10-29T23:30:00.000Z" },
+                association: "verified",
+              });
             return evidence(
               body,
               body.operation === "check"

@@ -186,34 +186,11 @@ under `docs/backlog/`.
   distinct serving-node and data-node contexts, including practice marking. The A1156 review's
   print-delivery override survived the reprint-only controls; existing delivery/PDF suites remain.
 
-- **A1089: diagnose persistent AEAT certificate-check failures in the app.** The certificate dialog offers file/type changes, another check and Cancel. Add
-  connection/configuration diagnosis with an applicable repair choice and any needed sign-in there; retry alone does not resolve every HTTP or unclassified
-  failure.
-  The owner approved the reviewed read-only evidence build on 2026-10-29. The
-  [implementation plan](superpowers/plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
-  has contracts, a local query adapter, isolated process supervision, parent
-  authorization/material binding and the HTTP route on `feat/a1089-certificate-diagnosis`.
-  The branch also adds request cancellation, a shared session generation and permission
-  sign-in at the current surface. Local browser tests hold real password and passkey login
-  responses across Stop, apply their cookies and re-read the actual account's rights;
-  the authenticator's cryptographic answer is synthetic. These tests also check native
-  password clearing, old-account replies, idle expiry, keyboard focus and both themes.
-  Local route tests compare persistent rows and write counts after the isolated child exits,
-  and disconnect real HTTP sockets during opening, response reading and cleanup. Boot tests
-  cover runner shutdown and the existing read-only gates. Earlier tests exercise sales and
-  installation while a query waits. The branch now includes diagnosis from the card
-  and failed editor, with separate local inspection, an explicit query, source confirmation,
-  Stop and evidence copy. Browser tests exercise native file/type edits, account changes,
-  secret clearing, stale file reads and answers, separate Save and the actual shell/module
-  sign-in handoff. English and Spanish views were inspected in both themes at desktop and
-  phone widths. Guide twins and shared anchors now explain the separate actions and limits.
-  A built browser/module/HTTP/native-child check exercises installed and candidate material,
-  one local mutual-TLS query each, safe copy and unchanged table snapshots and write counts.
-  A changed certificate requires an explicit exit and card reload before a fresh inspection;
-  that ordinary card read is separate from diagnosis. Suspended accounts must sign in again.
-  The focused process-helper coverage gap is closed by failure and cleanup cases. The branch
-  still needs whole-candidate review, the normal push hook and current-head package CI.
-  Persistent connection/configuration and external-refusal repair remain open.
+- **A1089: repair persistent AEAT certificate-check failures in the app.** Read-only
+  diagnosis distinguishes saved facts, current material and observed query results, with
+  sign-in, Stop and explicit copy at the action. It does not repair network/configuration
+  problems or a persistent external refusal. Design the applicable repair choices without
+  treating an HTTP status, another check or a completed query as proof of the cause.
   [Remaining workflow](backlog/self-service-refusals.md#certificate).
 
 - **A1089: reconciliation alerts need a production caller and an evidence/decision route.** The

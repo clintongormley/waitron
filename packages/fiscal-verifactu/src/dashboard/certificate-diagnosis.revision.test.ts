@@ -10,6 +10,56 @@ import "./certificate-card.js";
 let card: HTMLElementTagNameMap["dashboard-aeat-certificate-card"] | undefined;
 const originalLocale = currentLocale();
 
+it("rejects an otherwise matching answer with another source generation", async () => {
+  const diagnose = vi.fn(async (body: CertificateDiagnosisRequest) =>
+    evidence(body, {
+      binding: {
+        expectedRevision: body.expectedRevision,
+        sourceGeneration: body.sourceGeneration + 1,
+      },
+    }),
+  );
+  const state = new DiagnosisState({
+    client: { diagnose } as unknown as AeatCertificateClient,
+    permissionContinuation: permission().hook,
+    changed() {},
+  });
+  state.open({ source: "installed", savedCard, candidate: null });
+  state.confirmSource();
+  await state.run("inspect");
+  expect(state.view.result).toBeNull();
+  expect(state.view.resultUnavailable).toBe(true);
+  expect(state.canCheck).toBe(false);
+  state.stop();
+});
+
+it.each([
+  ["en", "30 Oct 2026, 00:30"],
+  ["es", "30 oct 2026, 00:30"],
+])("shows the saved installation in the venue's day and time in %s", async (language, expected) => {
+  setLocale(language!);
+  const panel = document.createElement("dashboard-aeat-certificate-diagnosis");
+  panel.savedCard = savedCard;
+  panel.permissionContinuation = permission().hook;
+  panel.client = new AeatCertificateClient((async (_path, _method, raw) =>
+    evidence(raw as CertificateDiagnosisRequest, {
+      saved: { kind: "sello", installedAt: "2026-10-29T23:30:00.000Z" },
+      association: "verified",
+    })) as DashboardRequest);
+  document.body.append(panel);
+  try {
+    await panel.updateComplete;
+    const button = (test: string) =>
+      panel.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(`[data-test=${test}]`)!;
+    await userEvent.click(button("diagnosis-confirm"));
+    await userEvent.click(button("diagnosis-inspect"));
+    await vi.waitFor(() => expect(panel.shadowRoot!.textContent).toContain(expected));
+    expect(panel.shadowRoot!.textContent).not.toContain("2026-10-29T23:30:00.000Z");
+  } finally {
+    panel.remove();
+  }
+});
+
 it("a suspended account cannot start more work before a new authenticated account snapshot", async () => {
   const diagnose = vi.fn(async () => {
     throw { code: "person.suspended", params: {} };

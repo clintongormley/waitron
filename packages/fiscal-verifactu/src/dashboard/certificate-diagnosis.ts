@@ -20,6 +20,7 @@ import {
   type DiagnosisCandidate,
 } from "./certificate-diagnosis-state.js";
 import { t, type AeatCertificateKey } from "./strings.js";
+import { day, time } from "./dates.js";
 
 @customElement("dashboard-aeat-certificate-diagnosis")
 export class AeatCertificateDiagnosis extends LitElement {
@@ -279,7 +280,7 @@ export class AeatCertificateDiagnosis extends LitElement {
         <dl>
           <dt>${t("aeat_certificate.diagnosis.saved")}</dt>
           <dd>
-            ${saved ? html`${t(`aeat_certificate.kind.${saved.kind}`)} · ${saved.installedAt}` : t("aeat_certificate.diagnosis.no_saved")}
+            ${saved ? html`${t(`aeat_certificate.kind.${saved.kind}`)} · ${day(saved.installedAt, this.savedCard.timeZone)}, ${time(saved.installedAt, this.savedCard.timeZone)}` : t("aeat_certificate.diagnosis.no_saved")}
           </dd>
           ${saved ? html`<dd>${t(result?.association === "verified" ? "aeat_certificate.diagnosis.verified" : "aeat_certificate.diagnosis.unverified")}</dd>` : nothing}
           <dt>${t("aeat_certificate.diagnosis.environment")}</dt>

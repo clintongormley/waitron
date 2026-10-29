@@ -33,6 +33,45 @@ function runner() {
   return value;
 }
 
+it.each([16, 17])(
+  "the parent accepts at most sixteen child progress frames independently of the child's own limit (%s)",
+  async (count) => {
+    const channel = new Duplex({
+      read() {},
+      write(_data, _encoding, callback) {
+        callback();
+      },
+    });
+    const child = Object.assign(new EventEmitter(), {
+      pid: 123456,
+      stdio: [null, null, null, channel],
+      kill: vi.fn(() => true),
+    });
+    vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+    const value = runner();
+    const pending = value.attempt(
+      async (runChild, signal) => ({ result: await runChild(null, signal) }),
+      new AbortController().signal,
+    );
+    for (let index = 0; index < count; index++)
+      channel.emit(
+        "data",
+        Buffer.from(JSON.stringify({ type: "progress", value: { step: index } }) + "\n"),
+      );
+    channel.emit("data", Buffer.from('{"type":"result","value":{"selected":true}}\n'));
+    child.emit("exit", 0);
+    await expect(pending).resolves.toEqual({
+      result:
+        count === 16
+          ? { outcome: "completed", value: { selected: true } }
+          : { outcome: "interrupted", reason: "unavailable", lastProgress: { step: 15 } },
+    });
+    await expect(value.attempt(async () => "next", new AbortController().signal)).resolves.toBe(
+      "next",
+    );
+  },
+);
+
 it("uses the adjacent shipped child without a source loader", () => {
   vi.mocked(existsSync).mockReturnValue(true);
   const runtime = certificateDiagnosisRuntime();
