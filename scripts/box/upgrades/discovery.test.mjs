@@ -370,8 +370,11 @@ describe("bounded release discovery without application", () => {
   ])("bounds each cooperative %s attempt at %i ms", async (stage, budget) => {
     vi.useFakeTimers();
     let attempts = 0;
+    const armed = Array.from({ length: 3 }, () => Promise.withResolvers());
+    const signals = [];
     const hanging = (signal) => {
       attempts++;
+      signals.push(signal);
       return new Promise((resolve, reject) =>
         signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
       );
@@ -382,19 +385,31 @@ describe("bounded release discovery without application", () => {
         : stage === "hold"
           ? { hold: { check: (_, signal) => hanging(signal) } }
           : { pullImage: (_, signal) => hanging(signal) };
-    const h = harness(overrides);
+    const h = harness({
+      ...overrides,
+      sleep: (ms, signal) => {
+        const pending = sleep(ms, signal);
+        if (attempts > 0) armed[attempts - 1].resolve();
+        return pending;
+      },
+    });
     let completed = false;
     const pending = discoverRelease(h.input, h.deps, h.signal).then((result) => {
       completed = true;
       return result;
     });
+    await armed[0].promise;
     await vi.advanceTimersByTimeAsync(budget - 1);
     expect(attempts).toBe(1);
     expect(completed).toBe(false);
+    expect(signals[0].aborted).toBe(false);
     await vi.advanceTimersByTimeAsync(1);
+    expect(signals[0].aborted).toBe(true);
     await timerTurn();
+    await armed[1].promise;
     await vi.advanceTimersByTimeAsync(budget);
     await timerTurn();
+    await armed[2].promise;
     await vi.advanceTimersByTimeAsync(budget);
     await timerTurn();
     expect(await pending).toMatchObject({ kind: "deferred" });
