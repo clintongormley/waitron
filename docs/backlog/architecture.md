@@ -504,6 +504,7 @@ until A977).
   Database kitchen-course, station and station-printer suites use English sample names.
   Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
   Layouts' receipt, address and operation-description samples use English.
+  Database zone and party-label suites use English sample zone, group and guest names.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

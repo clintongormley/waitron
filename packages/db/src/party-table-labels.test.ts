@@ -221,16 +221,16 @@ describe("party table labels", () => {
       const survivor = await party();
       const middle = await party();
       const first = await party();
-      await nameParty(survivor, "Ana");
+      await nameParty(survivor, "Anna");
       await nameParty(middle, "Middle");
       await nameParty(first, "First");
       await merge(middle, survivor);
       await merge(first, middle);
       expect(await inTx((tx) => partySurvivorNames(tx, [first, middle, survivor]))).toEqual(
         new Map([
-          [first, { id: survivor, name: "Ana" }],
-          [middle, { id: survivor, name: "Ana" }],
-          [survivor, { id: survivor, name: "Ana" }],
+          [first, { id: survivor, name: "Anna" }],
+          [middle, { id: survivor, name: "Anna" }],
+          [survivor, { id: survivor, name: "Anna" }],
         ]),
       );
     });
@@ -241,7 +241,7 @@ describe("party table labels", () => {
       await nameParty(merged, "Merged");
       await merge(merged, end);
       const unmerged = await party();
-      await nameParty(unmerged, "Luis");
+      await nameParty(unmerged, "Lewis");
       const first = await party();
       const second = await party();
       await merge(first, second);
@@ -252,7 +252,7 @@ describe("party table labels", () => {
       ).toEqual(
         new Map([
           [merged, { id: end, name: null }],
-          [unmerged, { id: unmerged, name: "Luis" }],
+          [unmerged, { id: unmerged, name: "Lewis" }],
         ]),
       );
     });
@@ -344,8 +344,8 @@ describe("party table labels", () => {
       await merge(seated, survivor);
       await merge(cycleA, cycleB);
       await merge(cycleB, cycleA);
-      await nameParty(survivor, "Ana");
-      await nameParty(seated, "Luis");
+      await nameParty(survivor, "Anna");
+      await nameParty(seated, "Lewis");
       const missing = "cccccccc-9999-4000-8000-0000000000c1";
       const asked = [first, seated, alone, survivor, cycleA, missing];
 
@@ -361,10 +361,10 @@ describe("party table labels", () => {
       expect(got.get(seated)!.labels).toEqual(["Bp 2"]);
       expect(new Map([...got].map(([id, bill]) => [id, bill.survivor]))).toEqual(
         new Map([
-          [first, { id: survivor, name: "Ana" }],
-          [seated, { id: survivor, name: "Ana" }],
+          [first, { id: survivor, name: "Anna" }],
+          [seated, { id: survivor, name: "Anna" }],
           [alone, { id: alone, name: null }],
-          [survivor, { id: survivor, name: "Ana" }],
+          [survivor, { id: survivor, name: "Anna" }],
           [cycleA, undefined],
           [missing, undefined],
         ]),
@@ -381,12 +381,12 @@ describe("party table labels", () => {
         { id: a, label: "Bg A", joinedAt: "2026-09-29T20:00:00.000Z" },
         { id: b, label: "Bg B", joinedAt: "2026-09-29T20:01:00.000Z" },
       ]);
-      await group([a, b], "Cumple");
+      await group([a, b], "Birthday");
       const got = (await inTx((tx) => billParties(tx, [id]))).get(id)!;
-      expect(got.labels).toEqual(["Cumple"]);
+      expect(got.labels).toEqual(["Birthday"]);
       expect(got.tables).toEqual([
-        { id: a, name: "Bg A", shown: "Cumple" },
-        { id: b, name: "Bg B", shown: "Cumple" },
+        { id: a, name: "Bg A", shown: "Birthday" },
+        { id: b, name: "Bg B", shown: "Birthday" },
       ]);
     });
 
@@ -440,10 +440,10 @@ describe("party table labels", () => {
   describe("today's names", () => {
     it("lists a named group's name once in place of its tables", async () => {
       const { s, ids, partyId } = await longTable();
-      await group([ids.bar, ids.c3, ids.c4, ids.c5], `García birthday ${s}`);
+      await group([ids.bar, ids.c3, ids.c4, ids.c5], `Taylor birthday ${s}`);
       await nameToday(ids.c4, `Window ${s}`);
       expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
-        new Map([[partyId, [`García birthday ${s}`]]]),
+        new Map([[partyId, [`Taylor birthday ${s}`]]]),
       );
     });
 
@@ -455,9 +455,9 @@ describe("party table labels", () => {
         { id: c3, label: `Counter 3 ${s}`, joinedAt: "2026-09-29T20:02:00.000Z" },
         { id: nine, label: `Table 9 ${s}`, joinedAt: "2026-09-29T20:03:00.000Z" },
       ]);
-      await group([bar, c3], `García birthday ${s}`);
+      await group([bar, c3], `Taylor birthday ${s}`);
       expect(await inTx((tx) => partyTableLabels(tx, [later]))).toEqual(
-        new Map([[later, [`García birthday ${s}`, `Table 9 ${s}`]]]),
+        new Map([[later, [`Taylor birthday ${s}`, `Table 9 ${s}`]]]),
       );
 
       const t = randomUUID().slice(0, 6);
@@ -467,22 +467,22 @@ describe("party table labels", () => {
         { id: bar2, label: `Bar ${t}`, joinedAt: "2026-09-29T20:01:00.000Z" },
         { id: c32, label: `Counter 3 ${t}`, joinedAt: "2026-09-29T20:02:00.000Z" },
       ]);
-      await group([bar2, c32], `García birthday ${t}`);
+      await group([bar2, c32], `Taylor birthday ${t}`);
       expect(await inTx((tx) => partyTableLabels(tx, [earlier]))).toEqual(
-        new Map([[earlier, [`Table 9 ${t}`, `García birthday ${t}`]]]),
+        new Map([[earlier, [`Table 9 ${t}`, `Taylor birthday ${t}`]]]),
       );
     });
 
     it("names each table by its own today's name, else its label, and shows it as its group's name", async () => {
       const { s, ids, labels } = await longTable();
-      await group([ids.bar, ids.c3], `García birthday ${s}`);
+      await group([ids.bar, ids.c3], `Taylor birthday ${s}`);
       await group([ids.c4]);
       await nameToday(ids.c3, `Window ${s}`);
       await nameToday(ids.c4, `Door ${s}`);
       expect(await inTx((tx) => tableNames(tx, [ids.bar, ids.c3, ids.c4, ids.c5]))).toEqual(
         new Map([
-          [ids.bar, { id: ids.bar, name: labels.bar, shown: `García birthday ${s}` }],
-          [ids.c3, { id: ids.c3, name: `Window ${s}`, shown: `García birthday ${s}` }],
+          [ids.bar, { id: ids.bar, name: labels.bar, shown: `Taylor birthday ${s}` }],
+          [ids.c3, { id: ids.c3, name: `Window ${s}`, shown: `Taylor birthday ${s}` }],
           [ids.c4, { id: ids.c4, name: `Door ${s}`, shown: `Door ${s}` }],
           [ids.c5, { id: ids.c5, name: labels.c5, shown: labels.c5 }],
         ]),
@@ -505,21 +505,21 @@ describe("party table labels", () => {
       const [bar, c3] = [randomUUID(), randomUUID()];
       const first = await party([{ id: bar, label: `Bar ${s}`, ...AT }]);
       const second = await party([{ id: c3, label: `Counter 3 ${s}`, ...AT }]);
-      await group([bar, c3], `García birthday ${s}`);
+      await group([bar, c3], `Taylor birthday ${s}`);
       expect(await inTx((tx) => partyTableLabels(tx, [first, second]))).toEqual(
         new Map([
-          [first, [`García birthday ${s}`]],
-          [second, [`García birthday ${s}`]],
+          [first, [`Taylor birthday ${s}`]],
+          [second, [`Taylor birthday ${s}`]],
         ]),
       );
     });
 
     it("lists each of two groups sharing one name, both at one party", async () => {
       const { s, ids, partyId } = await longTable();
-      await group([ids.bar, ids.c3], `García birthday ${s}`);
-      await group([ids.c4, ids.c5], `García birthday ${s}`);
+      await group([ids.bar, ids.c3], `Taylor birthday ${s}`);
+      await group([ids.c4, ids.c5], `Taylor birthday ${s}`);
       expect(await inTx((tx) => partyTableLabels(tx, [partyId]))).toEqual(
-        new Map([[partyId, [`García birthday ${s}`, `García birthday ${s}`]]]),
+        new Map([[partyId, [`Taylor birthday ${s}`, `Taylor birthday ${s}`]]]),
       );
     });
 
@@ -537,7 +537,7 @@ describe("party table labels", () => {
       const c3 = await table(`Counter 3 ${s}`);
       const c4 = await table(`Counter 4 ${s}`);
       const c5 = await table(`Counter 5 ${s}`);
-      await group([c3, c4], `García birthday ${s}`);
+      await group([c3, c4], `Taylor birthday ${s}`);
       await nameToday(c4, `Window ${s}`);
       await nameToday(c5, `Terrace ${s}`);
       const delivered = (id: string, deliveryTableId: string) => ({
@@ -545,7 +545,7 @@ describe("party table labels", () => {
         partyId: null,
         deliveryTableId,
         deliveryTableLabel: null,
-        label: "Luis",
+        label: "Lewis",
       });
       expect(
         await inTx((tx) =>
@@ -559,8 +559,8 @@ describe("party table labels", () => {
       ).toEqual(
         new Map([
           ["bar", `Bar ${s}`],
-          ["c3", `García birthday ${s}`],
-          ["c4", `García birthday ${s}`],
+          ["c3", `Taylor birthday ${s}`],
+          ["c4", `Taylor birthday ${s}`],
           ["c5", `Terrace ${s}`],
         ]),
       );
@@ -568,7 +568,7 @@ describe("party table labels", () => {
 
     it("names an order delivered to a renamed table, and a party bill, by the shown names", async () => {
       const { s, ids, partyId } = await longTable();
-      await group([ids.bar, ids.c3, ids.c4, ids.c5], `García birthday ${s}`);
+      await group([ids.bar, ids.c3, ids.c4, ids.c5], `Taylor birthday ${s}`);
       const window = await table(`Terrace ${s}`);
       await nameToday(window, `Window ${s}`);
       expect(
@@ -579,15 +579,15 @@ describe("party table labels", () => {
               partyId: null,
               deliveryTableId: window,
               deliveryTableLabel: null,
-              label: "Luis",
+              label: "Lewis",
             },
-            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Ana" },
+            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Anna" },
           ]),
         ),
       ).toEqual(
         new Map([
           ["delivered", `Window ${s}`],
-          ["bill", `García birthday ${s}`],
+          ["bill", `Taylor birthday ${s}`],
         ]),
       );
     });
@@ -619,7 +619,7 @@ describe("party table labels", () => {
       expect(
         await inTx((tx) =>
           orderTableLabels(tx, LOCATION, [
-            { id: "bill", partyId, deliveryTableId, deliveryTableLabel: null, label: "Ana" },
+            { id: "bill", partyId, deliveryTableId, deliveryTableLabel: null, label: "Anna" },
           ]),
         ),
       ).toEqual(new Map([["bill", "Table 21, 22"]]));
@@ -630,10 +630,10 @@ describe("party table labels", () => {
       expect(
         await inTx((tx) =>
           orderTableLabels(tx, LOCATION, [
-            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Ana" },
+            { id: "bill", partyId, deliveryTableId: null, deliveryTableLabel: null, label: "Anna" },
           ]),
         ),
-      ).toEqual(new Map([["bill", "Ana"]]));
+      ).toEqual(new Map([["bill", "Anna"]]));
     });
 
     it("names the bill of a party merged into another after the survivor's tables", async () => {
@@ -648,7 +648,7 @@ describe("party table labels", () => {
               partyId: merged,
               deliveryTableId: null,
               deliveryTableLabel: null,
-              label: "Ana",
+              label: "Anna",
             },
           ]),
         ),
@@ -666,14 +666,14 @@ describe("party table labels", () => {
               partyId: null,
               deliveryTableId,
               deliveryTableLabel: null,
-              label: "Luis",
+              label: "Lewis",
             },
             {
               id: "labelled",
               partyId: null,
               deliveryTableId: null,
               deliveryTableLabel: null,
-              label: "Marta",
+              label: "Martha",
             },
             {
               id: "walk-up",
@@ -687,16 +687,16 @@ describe("party table labels", () => {
               partyId: null,
               deliveryTableId: elsewhere,
               deliveryTableLabel: null,
-              label: "Pepe",
+              label: "Peter",
             },
           ]),
         ),
       ).toEqual(
         new Map([
           ["delivered", "Terrace 3"],
-          ["labelled", "Marta"],
+          ["labelled", "Martha"],
           ["walk-up", null],
-          ["elsewhere", "Pepe"],
+          ["elsewhere", "Peter"],
         ]),
       );
     });
@@ -710,7 +710,7 @@ describe("party table labels", () => {
               partyId: null,
               deliveryTableId: null,
               deliveryTableLabel: "Terrace 9",
-              label: "Luis",
+              label: "Lewis",
             },
           ]),
         ),

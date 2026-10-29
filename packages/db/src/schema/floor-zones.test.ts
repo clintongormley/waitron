@@ -50,11 +50,11 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
   }
 
   it("maps display_order and name through the Drizzle export", async () => {
-    const id = await seedZone(LOCATION_A, "Comedor");
+    const id = await seedZone(LOCATION_A, "Dining room");
     await inTx((tx) => tx.update(floorZones).set({ displayOrder: 5 }).where(eq(floorZones.id, id)));
     const [row] = await inTx((tx) => tx.select().from(floorZones).where(eq(floorZones.id, id)));
     expect(row!.displayOrder).toBe(5);
-    expect(row!.name).toBe("Comedor");
+    expect(row!.name).toBe("Dining room");
   });
 
   it("dining_tables.zone_id round-trips, and its FK rejects an absent zone", async () => {
@@ -66,7 +66,7 @@ describe("floor_zones schema (columns and the dining_tables.zone_id FK)", () => 
         .returning({ id: diningTables.id }),
     );
     const tableId = table!.id;
-    const zoneId = await seedZone(LOCATION_A, "Salon");
+    const zoneId = await seedZone(LOCATION_A, "Lounge");
     await inTx((tx) => tx.update(diningTables).set({ zoneId }).where(eq(diningTables.id, tableId)));
     const [row] = await inTx((tx) =>
       tx
