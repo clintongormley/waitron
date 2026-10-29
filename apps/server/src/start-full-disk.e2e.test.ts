@@ -77,6 +77,7 @@ import { loadBoxEnv } from "./box-env.js";
 import { deviceNoticeSources } from "./box-staff-notices.js";
 import { mountDeviceApi } from "./device-api.js";
 import { createDiskFullState, watchForDiskFull, type DiskFullState } from "./disk-full-state.js";
+import { mountDiskStopApi } from "./disk-stop-api.js";
 import { resolveEmailDelivery } from "./email-delivery.js";
 import { readDiskUsage } from "./disk-usage.js";
 import { freeBytes } from "./free-bytes.js";
@@ -433,6 +434,16 @@ describe("the Box status read and free-space deletion on a real full disk", () =
       },
       () => {},
     );
+    mountDiskStopApi(
+      app,
+      {
+        db,
+        disk: diskState,
+        registry: createAlertRegistry({ claims: ALL_ALERT_CLAIMS, sources: [] }),
+        now,
+      },
+      () => {},
+    );
     mountPersonalDataExportApi(
       app,
       {
@@ -521,6 +532,30 @@ describe("the Box status read and free-space deletion on a real full disk", () =
     expect(lastSeen()).toBe(before);
     expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs1'`)).toEqual([
       { id: "bs1" },
+    ]);
+  });
+
+  it("the disk-stop read answers on a full disk with a change waiting, for a cashier and a manager", async (ctx) => {
+    const small = needDisk(ctx);
+    const before = seenAMinuteAgo();
+    const cashierBefore = new Date(Date.now() - 60_000).toISOString();
+    db.run(
+      sql`update management_sessions set last_seen_at = ${cashierBefore} where token_hash = ${hashSessionToken(cashier.token)}`,
+    );
+    db.run(sql`insert into change_log (id, payload) values ('bs7', '{"resource":"zz","id":"7"}')`);
+    db.all(sql`pragma wal_checkpoint(truncate)`);
+    small.fill(0);
+    diskState.noteRefused();
+
+    for (const cookie of [cashier.cookie, manager.cookie]) {
+      const res = await app.request("/management-api/disk-stop", { headers: { cookie } });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ stopped: true, deleted: null });
+    }
+    expect(lastSeen()).toBe(before);
+    expect(lastSeenOf(cashier.token)).toBe(cashierBefore);
+    expect(db.all<{ id: string }>(sql`select id from change_log where id = 'bs7'`)).toEqual([
+      { id: "bs7" },
     ]);
   });
 

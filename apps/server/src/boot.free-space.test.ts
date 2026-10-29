@@ -57,7 +57,75 @@ async function tick(): Promise<void> {
   await vi.waitFor(() => expect(holder.armed.length).toBe(n + 1));
 }
 
+async function bootServer(
+  venue: Awaited<ReturnType<typeof setupVenue>>,
+  run: () => Promise<void>,
+): Promise<void> {
+  const [port] = await freePorts(1);
+  let scratch: string | undefined;
+  let server: StartedServer | undefined;
+  try {
+    scratch = await mkdtemp(join(tmpdir(), "waitron-boot-free-space-"));
+    const migrationsRoot = join(scratch, "migrations");
+    for (const [index, set] of manifestSets().entries()) {
+      await cp(migrations[index]!.migrationsFolder, join(migrationsRoot, set.name), {
+        recursive: true,
+      });
+    }
+    await writeFile(
+      join(scratch, "modules.json"),
+      JSON.stringify({ modules: { "fiscal-none": false } }),
+    );
+    const database = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const env = {
+      WAITRON_HTTP_LANDING_PORT: "0",
+      WAITRON_HTTP_PORT: String(port),
+      WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 5).toString("base64"),
+      WAITRON_CREDENTIALS_KEY_VERSION: "1",
+      WAITRON_STATE_DIR: scratch,
+      WAITRON_VENUE_DIR: dirname(database),
+      WAITRON_TILL_NODE_ID: venue.cfg.nodeId,
+      WAITRON_TILL_LOCATION_ID: venue.cfg.locationId,
+      WAITRON_MIGRATIONS_DIR: migrationsRoot,
+      WAITRON_ENV: "preproduction",
+    };
+    holder.free = GIB;
+    server = await startServer(env, env);
+    await vi.waitFor(async () => {
+      expect((await fetch(`http://127.0.0.1:${httpPort()}/health`)).status).toBe(200);
+    });
+    await run();
+  } finally {
+    if (server !== undefined) await server.close();
+    holder.deps = undefined;
+    holder.armed.length = 0;
+    if (scratch !== undefined) await rm(scratch, { recursive: true, force: true });
+  }
+}
+
 describe("the running server's free-space watch", () => {
+  it("the disk-stop read follows the stop for staff and managers, and the watch lifts it", async () => {
+    const venue = await setupVenue(suite.db);
+    await bootServer(venue, async () => {
+      const diskStop = async (cookie: string) => {
+        const response = await fetch(`http://127.0.0.1:${httpPort()}/management-api/disk-stop`, {
+          headers: { cookie },
+        });
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false, deleted: null });
+
+      (holder.deps!.disk as DiskFullState).noteRefused();
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: true, deleted: null });
+      expect(await diskStop(venue.managerCookie)).toEqual({ stopped: true, deleted: null });
+
+      // The stop re-reads the real venue folder, which has room.
+      await tick();
+      expect(await diskStop(venue.staffCookie)).toEqual({ stopped: false, deleted: null });
+    });
+  });
+
   it("the bell shows the box's disk, and a full-disk stop lifts on the watch's next reading", async () => {
     const venue = await setupVenue(suite.db);
     const [port] = await freePorts(1);
