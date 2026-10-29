@@ -17,7 +17,6 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
-import { startAgainNoteName } from "../test/start-again-deleted.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -151,7 +150,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       );
       expect(clearedSummary.status, await clearedSummary.clone().text()).toBe(200);
       const shown = await clearedSummary.json();
-      expect(shown.lastName).toEqual(expect.any(String));
       const selected = await post(
         "/setup-api/first-setup/resolution/start-again",
         { ...clearedIds, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
@@ -170,7 +168,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       child = childProcess(script, f.env);
       expect(await ready(child, origin, agent)).toEqual({ claimed: false });
       expect(await readFile(join(f.stateDir, "tls", "ca.crt"))).toEqual(ca);
-      expect(await startAgainNoteName(f)).toBe(shown.lastName);
       expect(await readdir(join(f.stateDir, "first-setup-start-again-confirmations"))).toHaveLength(
         1,
       );

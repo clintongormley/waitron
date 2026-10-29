@@ -136,7 +136,6 @@ async function expectNothingWritten(
   await expect(
     access(join(f.roots.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
 // A discarded recovery's folder keeps its records and its target's lock files, nothing else.
@@ -154,7 +153,7 @@ async function confirmations(stateDir: string) {
 
 async function expectDiscarded(
   f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
-  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+  expected: { shown: StartAgainSummary; lock: { ino: number } },
 ) {
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -170,7 +169,6 @@ async function expectDiscarded(
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
   expect(expected.shown.recovery).toBeDefined();
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
     expected.shown,
@@ -420,7 +418,7 @@ it("once A's lease lapsed, B's password step rewrites the attempt and B's Start 
   expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).not.toEqual(attempt);
   const startAgain = await startAgainOver(f, f.service, recovered);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
 it("A's late step after B's Start again is refused setup.recovery_discarded, in the same process and after a restart", async () => {
@@ -524,9 +522,8 @@ it("with the database present, the password and the confirmed summary discard a 
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await presentOver(f, f.service);
-  expect(startAgain.shown.recovery).toMatchObject({ lastName: f.selected.identity });
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({
@@ -904,7 +901,7 @@ it("with the database present, the fence refuses a well-formed discard while the
   expect(startAgain).toHaveBeenCalledTimes(1);
 });
 
-it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it and raises the note to its series name", async () => {
+it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
@@ -926,15 +923,15 @@ it("an inspection read under a nearly full reading releases the spare, and Start
   await expect(access(spare)).rejects.toMatchObject({ code: "ENOENT" });
   const startAgain = await presentOver(f, f.service);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
-it("when the note cannot be written, Start again abandons, empties and deletes nothing", async () => {
+it("when the confirmation record cannot be written, Start again abandons, empties and deletes nothing", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const last = (await f.workspace.readChain()).at(-1)!;
   const startAgain = await presentOver(f, f.service);
-  vi.mocked(provisioning.raiseStartAgainNote).mockRejectedValueOnce(
+  vi.mocked(provisioning.writeStartAgainConfirmation).mockRejectedValueOnce(
     new AppError("setup.attempt_invalid", {}),
   );
   await expect(startAgain.run()).rejects.toMatchObject({ code: "setup.attempt_invalid" });

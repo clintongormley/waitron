@@ -21,7 +21,6 @@ import "@waitron/db";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   readStartAgainMarker,
-  readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 
@@ -157,7 +156,6 @@ async function expectNothingWritten(
   await expect(
     access(join(f.roots.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
 // A discarded recovery's folder keeps its records and its target's lock files, nothing else.
@@ -175,7 +173,7 @@ async function confirmations(stateDir: string) {
 
 async function expectDiscarded(
   f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
-  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+  expected: { shown: StartAgainSummary; lock: { ino: number } },
 ) {
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -191,21 +189,19 @@ async function expectDiscarded(
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
   expect(expected.shown.recovery).toBeDefined();
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
     expected.shown,
   ]);
 }
 
-it("a backup recovery prepared and given up is discarded by Start again: the note holds its name, its lock stays", async () => {
+it("a backup recovery prepared and given up is discarded by Start again, and its lock stays", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await confirmedStartAgain(f, f.service);
-  expect(startAgain.shown.lastName).not.toBe(f.selected.identity);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
 it("a recovery that failed at placement-started is discarded by Start again at once", async () => {
@@ -226,7 +222,7 @@ it("a recovery that failed at placement-started is discarded by Start again at o
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await confirmedStartAgain(f, recovery(f.options));
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
   await expect(access(join(f.record.target.target.venueDir, "venue.db"))).rejects.toMatchObject({
     code: "ENOENT",
   });

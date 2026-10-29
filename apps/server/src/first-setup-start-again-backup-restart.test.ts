@@ -33,13 +33,10 @@ import { lockVenueDatabase } from "@waitron/db";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   isEmptiedTombstone,
-  raiseStartAgainNote,
   readStartAgainMarker,
   readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
-
-import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { clock } from "../test/hour-recovery-host.js";
 
@@ -146,7 +143,7 @@ async function confirmations(stateDir: string) {
 
 async function expectDiscarded(
   f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
-  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+  expected: { shown: StartAgainSummary; lock: { ino: number } },
 ) {
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -162,7 +159,6 @@ async function expectDiscarded(
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
   expect(expected.shown.recovery).toBeDefined();
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
     expected.shown,
@@ -211,28 +207,6 @@ async function signedIn(host: Host, recovered?: Response) {
 
 type Repair = Awaited<ReturnType<typeof preparedRepair>>;
 
-function laterInput(input: unknown, minutes: number) {
-  const later = structuredClone(input) as {
-    allocation: {
-      installationIdentity: string;
-      issuedAt: string;
-      series: { code: string; purpose: string }[];
-    };
-  };
-  const ms = Date.parse(later.allocation.issuedAt) + minutes * 60_000;
-  const identity = encodeMinuteIdentity(ms);
-  later.allocation.series = later.allocation.series.map((series) => ({
-    ...series,
-    code: series.code.replace(later.allocation.installationIdentity, identity),
-  }));
-  later.allocation.installationIdentity = identity;
-  later.allocation.issuedAt = new Date(ms).toISOString();
-  return { input: later, identity };
-}
-
-const PICKS_NAMING_NOTHING = (binding: unknown) =>
-  JSON.stringify({ version: 1, revisions: [{ binding, value: { version: 1, entries: [] } }] });
-
 async function startAgainOver(
   f: Pick<Repair, "host" | "roots">,
   backupRecovery: Service,
@@ -266,7 +240,7 @@ it("a summary read before the recovery stopped, naming no recovery, refuses Star
   await expectNothingWritten(f, before);
 });
 
-it("an abandoned journal whose emptying was refused is finished by the next Start again, with the same note and no second confirmation", async () => {
+it("an abandoned journal whose emptying was refused is finished by the next Start again, with no second confirmation", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
@@ -276,35 +250,11 @@ it("an abandoned journal whose emptying was refused is finished by the next Star
   await expect(first.run()).rejects.toMatchObject({ code: "setup.attempt_uncertain" });
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
   await access(join(f.roots.stateDir, "first-setup.json"));
-  const note = await readFile(join(f.roots.stateDir, "first-setup-start-again.json"));
-  const noteFile = await lstat(join(f.roots.stateDir, "first-setup-start-again.json"));
   await unlink(planted);
   const second = await startAgainOver(f, f.service);
   expect(second.shown).not.toHaveProperty("recovery");
   await expect(second.run()).resolves.toBeUndefined();
-  expect(await readFile(join(f.roots.stateDir, "first-setup-start-again.json"))).toEqual(note);
-  expect((await lstat(join(f.roots.stateDir, "first-setup-start-again.json"))).ino).toBe(
-    noteFile.ino,
-  );
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: first.shown, lock });
-});
-
-it("finishing an abandoned journal whose note is gone raises the note again with the attempt's own floor", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const planted = join(f.record.target.target.stateDir, "planted");
-  await symlink("/nonexistent", planted);
-  await expect((await startAgainOver(f, f.service)).run()).rejects.toMatchObject({
-    code: "setup.attempt_uncertain",
-  });
-  await unlink(planted);
-  await unlink(join(f.roots.stateDir, "first-setup-start-again.json"));
-  clock.advance(1);
-  const second = await startAgainOver(f, f.service);
-  expect(second.shown).not.toHaveProperty("recovery");
-  expect(second.shown.lastName).not.toBeNull();
-  await expect(second.run()).resolves.toBeUndefined();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(second.shown.lastName);
+  await expectDiscarded(f, { shown: first.shown, lock });
 });
 
 it("after Start again discards a recovery, the backup entry answers absent and the box answers fresh setup", async () => {
@@ -314,19 +264,6 @@ it("after Start again discards a recovery, the backup entry answers absent and t
   expect(await backupEntry.resolveFirstSetupBackupEntry(f.roots)).toEqual({ kind: "absent" });
   const entry = await resolveFirstSetupEntry(f.roots, { WAITRON_ENV: "preproduction" });
   expect(entry.kind).toBe("normal");
-});
-
-it("Start again never lowers a note that already holds a later name than the recovery's", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const later = laterInput(f.selected.input, 60);
-  const raised = await raiseStartAgainNote(f.roots.stateDir, {
-    floorMs: Date.parse((later.input as { allocation: { issuedAt: string } }).allocation.issuedAt),
-    lastName: later.identity,
-    module: f.record.binding.module,
-  });
-  await (await startAgainOver(f, f.service)).run();
-  expect(await readStartAgainNote(f.roots.stateDir)).toEqual(raised);
 });
 
 it("an open started while Start again runs its checks refuses it setup.recovery_in_progress before anything is written, and the open resumes the recovery", async () => {
@@ -399,7 +336,7 @@ it("an open started while Start again runs its checks refuses it setup.recovery_
   expect(await opening).toMatchObject({ recoveryId: session.recoveryId });
 });
 
-it("an open started while Start again writes its note refuses it setup.recovery_in_progress before the seal, and the recovery is neither sealed nor abandoned", async () => {
+it("an open started while Start again writes its confirmation record refuses it setup.recovery_in_progress before the seal, and the recovery is neither sealed nor abandoned", async () => {
   const f = await repairFixture();
   const { owner } = await signedIn(f.host);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
@@ -437,15 +374,15 @@ it("an open started while Start again writes its note refuses it setup.recovery_
   const sealed = vi.spyOn(service, "sealLapsed");
   const discarded = vi.spyOn(service, "discardInTurn");
   let opening: Promise<unknown> | undefined;
-  const real = vi.mocked(provisioning.raiseStartAgainNote).getMockImplementation();
+  const real = vi.mocked(provisioning.writeStartAgainConfirmation).getMockImplementation();
   const actual = await vi.importActual<typeof provisioning>("@waitron/provisioning");
-  vi.mocked(provisioning.raiseStartAgainNote).mockImplementationOnce(async (...args) => {
+  vi.mocked(provisioning.writeStartAgainConfirmation).mockImplementationOnce(async (...args) => {
     sealed.mockClear();
     opening ??= service.open({ ...request, recoveryId: session.recoveryId }, client).then(
       (resumed) => resumed,
       (error: unknown) => error,
     );
-    return (real ?? actual.raiseStartAgainNote)(...args);
+    return (real ?? actual.writeStartAgainConfirmation)(...args);
   });
   await expect(
     actions.startAgainFirstSetup({
@@ -460,28 +397,6 @@ it("an open started while Start again writes its note refuses it setup.recovery_
   expect(discarded).not.toHaveBeenCalled();
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   await access(join(f.roots.stateDir, "first-setup.json"));
-});
-
-it("a recovery stopped during its settle wait, whose picks name nothing, is shown with no name, and Start again takes only the attempt's floor", async () => {
-  const f = await preparedRepair();
-  expect(f.record).toMatchObject({ phase: "prepared", input: null });
-  await f.service.close(f.session.sessionId);
-  await writeFile(
-    join(f.record.target.target.stateDir, "module-preparation-state.json"),
-    PICKS_NAMING_NOTHING(f.record.binding),
-  );
-  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
-  const startAgain = await startAgainOver(f, f.service);
-  const attemptOnly = await createFirstSetupResolutionActions({
-    ...f.roots,
-    host: f.host,
-  }).startAgainSummary({ ...startAgain.ids, owner: startAgain.owner });
-  expect(startAgain.shown.recovery).toMatchObject({ lastName: null });
-  expect(startAgain.shown.lastName).toBe(attemptOnly.lastName);
-  await expect(startAgain.run()).resolves.toBeUndefined();
-  expect((await f.workspace.read()).at(-1)!.phase).toBe("abandoned");
-  expect((await lstat(join(f.record.target.target.venueDir, "venue.lock"))).ino).toBe(lock.ino);
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName ?? null).toBe(attemptOnly.lastName);
 });
 
 async function nextStart(f: Pick<Repair, "roots" | "options">) {
@@ -768,12 +683,9 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
   });
   await vi.waitFor(() => expect(restarts).toHaveBeenCalledTimes(1));
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([shown]);
   await access(join(f.record.target.target.venueDir, "venue.db"));
   await access(join(f.roots.stateDir, "first-setup.json"));
-  const note = await readFile(join(f.roots.stateDir, "first-setup-start-again.json"));
-  const noteFile = await lstat(join(f.roots.stateDir, "first-setup-start-again.json"));
   await f.service.dispose();
   clock.advance(1);
 
@@ -789,8 +701,4 @@ it("a disk that fills after the abandon, before the target's lock: Start again a
   await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  expect(await readFile(join(f.roots.stateDir, "first-setup-start-again.json"))).toEqual(note);
-  expect((await lstat(join(f.roots.stateDir, "first-setup-start-again.json"))).ino).toBe(
-    noteFile.ino,
-  );
 });

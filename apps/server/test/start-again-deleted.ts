@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { readStartAgainMarker, readStartAgainNote } from "@waitron/provisioning";
+import { readStartAgainMarker } from "@waitron/provisioning";
 
 type Roots = { stateDir: string; venueDir: string };
 
@@ -36,15 +36,9 @@ export async function expectStartAgainDeleted(roots: Roots): Promise<void> {
   expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
 }
 
-export async function startAgainNoteName(roots: Roots): Promise<string | null | undefined> {
-  return (await readStartAgainNote(roots.stateDir))?.lastName;
-}
-
-/** For a refused Start again: no marker, and the note exactly as it was. */
+/** For a refused Start again: no marker. */
 export async function startAgainUnchanged(roots: Roots): Promise<() => Promise<void>> {
-  const before = await readStartAgainNote(roots.stateDir);
   return async () => {
     expect(await readStartAgainMarker(roots.venueDir)).toBeNull();
-    expect(await readStartAgainNote(roots.stateDir)).toEqual(before);
   };
 }

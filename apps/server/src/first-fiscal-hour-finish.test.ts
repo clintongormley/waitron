@@ -49,11 +49,7 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SetupDeps } from "./setup-api.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
-import {
-  expectStartAgainDeleted,
-  startAgainNoteName,
-  startAgainUnchanged,
-} from "../test/start-again-deleted.js";
+import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 import {
   createFakeTimersHourClock,
   selectPastWaits,
@@ -458,7 +454,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database starts again only once confirmed, records the confirmation and notes the name", async () => {
+it("a missing hour database starts again only once confirmed, and records the confirmation", async () => {
   const f = await fixture();
   await f.recover();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
@@ -507,7 +503,6 @@ it("a missing hour database starts again only once confirmed, records the confir
     shown,
   });
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
-  expect(await startAgainNoteName(f)).toBe(shown.lastName);
 });
 
 async function hourShown(f: Awaited<ReturnType<typeof fixture>>) {

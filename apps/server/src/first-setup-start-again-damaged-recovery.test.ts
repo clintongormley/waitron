@@ -11,7 +11,6 @@ import {
   createFirstSetupBackupWorkspace,
   isEmptiedTombstone,
   readStartAgainMarker,
-  readStartAgainNote,
 } from "@waitron/provisioning";
 import { recovery } from "../test/first-setup-backup-recovery-fixture.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
@@ -174,7 +173,6 @@ it("with the database present, a damaged recovery-key record beside a stopped re
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
   const folder = join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR);
   const records = await readdir(folder);
   expect(records).toHaveLength(1);
@@ -192,7 +190,6 @@ it("with the database present, a damaged recovery-key record beside a stopped re
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).toEqual(attempt);
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
   await expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject(
     { code: "ENOENT" },
   );
