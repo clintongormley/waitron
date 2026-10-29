@@ -1309,6 +1309,7 @@ export class TillShell extends LitElement {
     event.preventDefault();
     tabs[next]!.focus({ preventScroll: true });
     tabs[next]!.click();
+    tabs[next]!.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
 
   #primaryTabs(

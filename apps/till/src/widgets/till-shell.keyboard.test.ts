@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import { cleanupWidgets, mountWidget } from "./test-helpers.js";
 import "./till-shell.js";
 import type { TillShell } from "./till-shell.js";
@@ -66,3 +66,45 @@ it("wraps Left and Right across Floor and tables, and selects the ends with Home
   await userEvent.keyboard("{ArrowDown}");
   expect(selected).toHaveBeenCalledTimes(1);
 });
+
+it.each(["ltr", "rtl"])(
+  "keeps keyboard focus visible while selection is deferred, in %s",
+  async (direction) => {
+    const before = { width: innerWidth, height: innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el, host } = await mountWidget<TillShell>("till-shell", {
+        formFactor: "phone-portrait",
+        activeScreen: "floor",
+        barTables: Array.from({ length: 10 }, (_, i) => ({
+          tableId: `t${i + 1}`,
+          name: `T${i + 1}`,
+          unsent: true,
+          current: false,
+          held: false,
+        })),
+      });
+      host.dir = direction;
+      const selected = vi.fn();
+      el.addEventListener("open-bar-table", (event) => selected((event as CustomEvent).detail));
+      const tabs = tabsOf(el);
+      tabs[0]!.focus();
+      const scrollY = window.scrollY;
+      await userEvent.keyboard("{End}");
+      expect(selected).toHaveBeenCalledExactlyOnceWith({ tableId: "t10", held: false });
+      expect(el.shadowRoot!.activeElement).toBe(tabs[10]);
+      const strip = el.shadowRoot!.querySelector<HTMLElement>(".bar-tables")!;
+      await vi.waitFor(() => {
+        const box = tabs[10]!.getBoundingClientRect();
+        const view = strip.getBoundingClientRect();
+        expect(box.left).toBeGreaterThanOrEqual(view.left - 0.5);
+        expect(box.right).toBeLessThanOrEqual(view.right + 0.5);
+      });
+      expect(window.scrollY).toBe(scrollY);
+      expect(tabs[0]!.getAttribute("aria-selected")).toBe("true");
+      expect(tabs.map((tab) => tab.tabIndex)).toEqual([0, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1]);
+    } finally {
+      await page.viewport(before.width, before.height);
+    }
+  },
+);
