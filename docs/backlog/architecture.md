@@ -423,10 +423,9 @@ until A977).
   Both dialogs use that helper for the issuing list. Add sourced names for that list without
   admitting those values to the postal-country list. This is a wording follow-up; the identifiers
   retain their explicit issuing code.
-- **A967 — point 2: printed pages, in two pull requests.** The working-time PDF's frame
-  (`attendance-export-pdf.ts:29–160`) and the category sales report (`category-sales-page.ts:48–65`);
-  then the printer test and ruler pages (`printer-test-page.ts:26–29`, `test-page.ts:21–25`). No
-  visible change.
+- **A967 — point 2: printer test pages.** Move the printer test and ruler pages
+  (`printer-test-page.ts`, `test-page.ts`) into `apps/server/src/i18n/`, with no visible change.
+  The working-time PDF frame and category sales wording now use their catalogues there.
 - **A968 — point 2: the guide's frame and the recovery page.** `guide-pages.ts:73–85` and
   `recovery-surface.ts:107–425` (about 50 strings). The recovery page is served when the box cannot
   start, so its strings must load without the database. No visible change.
