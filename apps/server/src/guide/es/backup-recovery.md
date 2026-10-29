@@ -112,17 +112,17 @@ para conservarlos. Si se rechaza una carpeta, corrígela antes de volver a aplic
 los ajustes, puede fallar su carga: comprueba el estado antes de confiar en una copia nueva.
 
 Si **Copias de seguridad** indica que no se pueden usar los ajustes guardados, elige **Lo que ha
-registrado el equipo**. El panel enumera las lecturas fallidas de los ajustes de copias guardados
-desde que se inició el equipo, de la más reciente a la más antigua y como máximo cinco, cada una con
-lo que falló: por ejemplo, el número de clave con que se cerraron los ajustes y los números de clave
-que tiene este equipo. Después describe el registro guardado tal como está ahora: cuándo se escribió
-por última vez y, si se puede leer, las carpetas y los buckets que indica y si existe cada carpeta.
-Si el entorno del equipo fija sus copias, el panel lo dice en lugar de indicarlos. Indica si el
-equipo tiene una clave de recuperación de copias válida. Muestra el ID de la clave de acceso de un
-bucket, pero nunca su secreto, y la clave de recuperación solo por su huella. El panel solo lee y no
-cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las copias, y **Parar** cierra el
-panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los destinos y
-aplícalos. Conserva las claves de recuperación y los archivos de copia existentes.
+registrado el equipo**. El panel enumera las veces que el equipo no ha podido usar sus ajustes de
+copias guardados desde que se inició, de la más reciente a la más antigua y como máximo cinco, cada
+una con lo que falló: por ejemplo, el número de clave con que se cerraron los ajustes y los números
+de clave que tiene este equipo. Después describe el registro guardado tal como está ahora: cuándo se
+escribió por última vez y, si se puede leer, las carpetas y los buckets que indica y si existe cada
+carpeta. Si el entorno del equipo fija sus copias, el panel lo dice en lugar de indicarlos. Indica
+si el equipo tiene una clave de recuperación de copias válida. Muestra el ID de la clave de acceso
+de un bucket, pero nunca su secreto, y la clave de recuperación solo por su huella. El panel solo
+lee y no cambia nada: **Leer de nuevo** vuelve a leer los datos y no activa las copias, y **Parar**
+cierra el panel. Tampoco repara nada; para sustituir los ajustes guardados, elige de nuevo los
+destinos y aplícalos. Conserva las claves de recuperación y los archivos de copia existentes.
 
 Si la copia en el bucket indica que no se han podido usar sus ajustes de forma segura, elige
 **Cambiar de bucket** en **Copias de seguridad**. Corrige los campos señalados. **Probar** comprueba

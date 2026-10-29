@@ -103,7 +103,7 @@ If a folder is refused, correct it before applying again. A successful save can 
 loading error, so check the resulting status before relying on a new backup.
 
 When **Backups** says the saved settings can't be used, choose **What the box recorded**. The panel
-lists the box's failed reads of its saved backup settings since the box last started, newest first
+lists the times the box could not use its saved backup settings since it last started, newest first
 and at most five, each with what went wrong: for example, the key number the settings were locked
 with and the key numbers this box holds. It then describes the saved record as it is now: when it
 was last written and, if it reads, the folders and buckets it names and whether each folder exists.

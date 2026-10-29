@@ -792,20 +792,29 @@ error; the message does not promise that every apply starts the worker.
 reconciling key numbers, restoring an old credentials key, and rewriting the record. Do not replace
 recovery keys or discard backup files just because settings cannot be read.
 
-**2026-10-29, built on feat/a1089-backup-settings-evidence:** when Backups says the saved
-settings can't be used, a **What the box recorded** button opens a panel that reads
-`GET /api/backup/settings-evidence`. It lists the box's failed reads of the saved settings since
-it last started, newest first, at most five, each with a sentence about its cause (for example the
-key number the record was locked with against the numbers this box holds). It then shows the saved
-record now: when it was written and with which key number, the box's key numbers, and, when the
-record reads and the environment does not set backups, its folders (with whether each exists) and
-buckets (address, region, bucket, access key ID and archive folder, never the secret). It says
+**2026-10-29, built on feat/a1089-backup-settings-evidence:** when Backups says the saved settings
+can't be used, a **What the box recorded** button opens a panel that reads `GET
+/api/backup/settings-evidence`. It lists the times the box could not use its saved backup settings
+since it last started, newest first, at most five, each with a sentence about its cause (for example
+the key number the record was locked with against the numbers this box holds). It then shows the
+saved record now: when it was written and with which key number, the box's key numbers, and, when
+the record reads and the environment does not set backups, its folders (with whether each exists)
+and buckets (address, region, bucket, access key ID and archive folder, never the secret). It says
 whether the box holds a usable recovery key, by fingerprint only. **Read again** reads the facts
 again and does not turn backups on; **Stop** closes the panel; a refusal for lack of permission
 offers an administrator sign-in. The panel writes nothing and repairs nothing. Failures are kept in
 memory, so a restart empties the list (design decision 1):
 [design](../superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
 [plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md).
+
+### backups-admin-sign-in
+
+**Backups offers no administrator sign-in when it refuses for lack of `system.manage`.** It says
+"You don't have permission to do that" twice and names no next step, against the refusal rule.
+The screen's `admin-sign-in` event is already routed (`apps/dashboard/src/dashboard-app.ts`), so
+the fix is to offer the button there. Normally unreachable: the Backups entry is shown to the
+manager and admin roles only; it appears when the dashboard's role and the session's permissions
+disagree.
 
 ### backup-stream
 

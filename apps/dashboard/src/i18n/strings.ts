@@ -1723,7 +1723,7 @@ export const en = {
   "backup_evidence.heading": "What the box recorded",
   "backup_evidence.happened": "What happened",
   "backup_evidence.no_failures":
-    "No failed read of the saved settings is recorded since the box last started.",
+    "Since it last started, the box has recorded no time it could not use its saved backup settings.",
   "backup_evidence.again_rewritten":
     "This happened again after the settings were rewritten at {time}.",
   "backup_evidence.again_changed": "This happened again after the saved settings changed.",
@@ -5357,7 +5357,7 @@ export const es: Record<StringKey, string> = {
   "backup_evidence.heading": "Lo que ha registrado el equipo",
   "backup_evidence.happened": "Qué ha pasado",
   "backup_evidence.no_failures":
-    "No consta ninguna lectura fallida de los ajustes guardados desde que se inició el equipo.",
+    "Desde que se inició, el equipo no ha registrado ninguna vez en que no pudiera usar sus ajustes de copias guardados.",
   "backup_evidence.again_rewritten":
     "Volvió a pasar después de que los ajustes se reescribieran ({time}).",
   "backup_evidence.again_changed": "Volvió a pasar después de que cambiaran los ajustes guardados.",
