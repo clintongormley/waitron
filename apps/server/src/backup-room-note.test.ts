@@ -188,8 +188,8 @@ describe("readBackupRoomNote", () => {
     await write();
     await unlink(venueDb());
     // A filesystem that hands the freed inode straight to the new file (ext4 may) and stamps times
-    // from a clock coarser than its nanosecond field would make the two files look alike; real
-    // replacements are never this quick, so the test waits out such a tick.
+    // from a clock coarser than its nanosecond field would make the two files look alike, so the
+    // test waits out such a tick. That case is why every path that removes venue.db deletes the note.
     await new Promise((resolve) => setTimeout(resolve, 20));
     await writeFile(venueDb(), "new installation");
     expect(await read()).toEqual({ skipped: "identity_mismatch" });
