@@ -24,11 +24,12 @@ import {
 } from "@waitron/shared";
 import type { OriginConfig } from "./trading-context.js";
 import { createTable } from "./testing/live-table.js";
-import { createOpenOrder, parkOrder, moveOrderLines } from "./working-order.js";
+import { parkOrder, moveOrderLines } from "./working-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { openGroupedCounterOrder, writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { transferItems } from "./testing/bill-action-fixture.js";
 import { partyRevisionOfOrder } from "./parties.js";
 import { VENUE_SERVICE } from "./modules.js";
@@ -179,14 +180,20 @@ async function linesOf(tabId: string): Promise<
   }));
 }
 
-/** Open a tab on `tableId` with an initial round, returning its tab id. */
+/**
+ * Open a tab on `tableId` with an initial round, returning its tab id. Its lines are stored grouped,
+ * as a line written before portions holds them: this file moves part of a line.
+ */
 async function openTabWith(
   cfg: OriginConfig,
   tableId: string,
   lines: { menuItemId: string; quantity: string }[],
 ): Promise<string> {
-  const { tabId } = await asApp(cfg, (tx) => openPartyTab(tx, cfg, { tableId, lines }));
-  return tabId;
+  return asApp(cfg, async (tx) => {
+    const { tabId } = await openPartyTab(tx, cfg, { tableId });
+    await writeGroupedLines(tx, cfg, tabId, lines);
+    return tabId;
+  });
 }
 
 /** A second bill of `tabId`'s party with `lines`, in its service context unless `zoneless`. */
@@ -200,7 +207,7 @@ async function openBeside(
     const party = (await partyRevisionOfOrder(tx, tabId))!;
     const context = await VENUE_SERVICE.findOrderContext(tx, cfg, tabId);
     const id = randomUUID();
-    await createOpenOrder(tx, cfg, id, lines, null, {
+    await openGroupedCounterOrder(tx, cfg, id, lines, {
       partyId: party.id,
       zoneId: context!.zoneId,
     });
@@ -601,8 +608,7 @@ describe("transfer — extras children (FIX 2 cascade / FIX 4 split)", () => {
     return list.id;
   }
 
-  /** An OPEN bill of `partyId` with extras lines: `openTab` does not thread `extras`, so the bill is
-   *  built directly here. No fire. */
+  /** An OPEN bill of `partyId` with extras lines, stored grouped. No fire. */
   async function openExtrasTab(
     cfg: OriginConfig,
     zoneId: string,
@@ -611,7 +617,7 @@ describe("transfer — extras children (FIX 2 cascade / FIX 4 split)", () => {
   ): Promise<string> {
     return asApp(cfg, async (tx) => {
       const id = randomUUID();
-      await createOpenOrder(tx, cfg, id, lines, null, { zoneId, partyId });
+      await openGroupedCounterOrder(tx, cfg, id, lines, { zoneId, partyId });
       return id;
     });
   }

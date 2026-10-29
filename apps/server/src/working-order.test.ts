@@ -104,6 +104,7 @@ import {
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
+import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
@@ -6811,8 +6812,8 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     return { listId: list.id, productId: offered.id };
   }
 
-  /** An OPEN bill with extras lines for a party seated at a fresh table: `openTab` does not thread
-   *  `extras`, so the bill is built directly. Skips firing, so no station is required. */
+  /** An OPEN bill with extras lines for a party seated at a fresh table. Skips firing, so no station
+   *  is required. */
   async function openExtrasTab(
     tx: Transaction,
     cfg: DeviceRequestConfig,
@@ -6822,7 +6823,8 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     const id = randomUUID();
     const offers = await tableOffers(tx, cfg);
     const { partyId } = await openPartyTab(tx, cfg, { tableId });
-    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+    // Grouped, as a counter order written before portions: two cases here split or cancel part of a line.
+    await openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
       zoneId: offers.zoneId,
       partyId,
     });

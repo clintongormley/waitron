@@ -27,6 +27,7 @@ import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts } from "./testing/zone-offers.js";
 import "./errors.js";
 import { openPartyTab } from "./testing/serve-line.js";
+import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { createOpenOrder } from "./working-order.js";
 import { seedSessionDevice } from "./testing/session-device.js";
 
@@ -156,10 +157,9 @@ async function setupTabsApp(
   const cookie = `${SESSION_COOKIE}=${await openSession(suite.db)}`;
   const { tabA, tabB } = await withTransaction(suite.db, async (tx) => {
     const a = await createTable(tx, cfg, { label: `T-${randomUUID()}`, zoneId: tablesZoneId });
-    const tabAResult = await openPartyTab(tx, cfg, {
-      tableId: a.id,
-      lines: [{ menuItemId: cafeOffer, quantity: aQty }],
-    });
+    // Its line is stored grouped, as a line written before portions: the route moves part of it.
+    const tabAResult = await openPartyTab(tx, cfg, { tableId: a.id });
+    await writeGroupedLines(tx, cfg, tabAResult.tabId, [{ menuItemId: cafeOffer, quantity: aQty }]);
     const tabB = randomUUID();
     await createOpenOrder(tx, cfg, tabB, [], null, {
       partyId: tabAResult.partyId,

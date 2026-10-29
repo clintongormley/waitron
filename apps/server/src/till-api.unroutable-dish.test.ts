@@ -37,6 +37,7 @@ import {
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { offerProducts } from "./testing/zone-offers.js";
+import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
 import {
   carveOffLines,
   fireLines,
@@ -1149,11 +1150,16 @@ describe("paying a pay-first order, or an open counter order in a zone that send
     const made = await dish("Split lager");
     const chosen = await station("Split bar");
     const id = randomUUID();
-    await parkOrder({ db: suite.db }, v.cfg, {
-      id,
-      zoneId: v.counter.zoneId,
-      lines: [{ menuItemId: made.counterOffer, quantity: "2", makeAt: chosen }],
-    });
+    // Grouped, as a counter order written before portions holds it: the case splits part of a line.
+    await inTx(v, (tx) =>
+      openGroupedCounterOrder(
+        tx,
+        v.cfg,
+        id,
+        [{ menuItemId: made.counterOffer, quantity: "2", makeAt: chosen }],
+        { zoneId: v.counter.zoneId },
+      ),
+    );
     await inTx(v, (tx) =>
       carveOffLines(tx, v.cfg, id, id, [{ lineNo: 1, quantity: "1" }], { refuseHeld: false }),
     );
