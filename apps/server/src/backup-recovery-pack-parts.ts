@@ -83,7 +83,7 @@ async function orFailed(
 }
 
 /** The day `instant` falls on in the venue's zone, `YYYY-MM-DD`. */
-function dayIn(timeZone: string, instant: string): string {
+export function dayIn(timeZone: string, instant: string): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone, dateStyle: "short" }).format(
     new Date(instant),
   );

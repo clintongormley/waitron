@@ -1104,6 +1104,14 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Scheduled backups don't go to a bucket, so there is no recovery pack to download.",
     es: "Las copias programadas no van a un bucket, así que no hay paquete de recuperación que descargar.",
   },
+  "recovery.pack_connection_insecure": {
+    en: "Open the dashboard at its secure address (https://…) to make a recovery pack.",
+    es: "Abre el panel en su dirección segura (https://…) para hacer un paquete de recuperación.",
+  },
+  "recovery.pack_origin_refused": {
+    en: "Make the pack from the dashboard's own page, not from another site.",
+    es: "Haz el paquete desde la propia página del panel, no desde otro sitio.",
+  },
   "backup.stream_settings_unreadable": {
     en: "The saved settings for the bucket copy can't be read.",
     es: "No se pueden leer los ajustes guardados de la copia en el bucket.",

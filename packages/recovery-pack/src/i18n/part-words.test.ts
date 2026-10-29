@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { PART_WORDS, partFailure } from "./part-words.js";
+import { PART_WORDS } from "./pack-words.js";
+import { partFailure } from "./part-words.js";
 
 const CODES = [
   ["backup.archive_settings_unreadable", {}],

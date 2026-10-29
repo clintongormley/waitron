@@ -313,8 +313,12 @@ import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.j
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
-import { mountBackupRecoveryPackApi } from "./backup-recovery-pack-api.js";
+import {
+  mountBackupRecoveryPackApi,
+  mountBackupRecoveryPackMakeApi,
+} from "./backup-recovery-pack-api.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
+import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -2700,6 +2704,30 @@ async function bootServer(
       sealedState,
       readStream: () => streamHost.status(),
       turns: backupTurns,
+    },
+    log,
+  );
+  mountBackupRecoveryPackMakeApi(
+    app,
+    {
+      db,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
+      keyRing: totpKeyRing,
+      ring,
+      node: tradingContext,
+      venueId: tradingContext.locationId,
+      modules: setsToMigrate,
+      turns: backupTurns,
+      readBoxEnv: () => loadBoxEnv(base, config.stateDir),
+      managedByEnvironment: isBackupManagedByEnvironment,
+      documentEvidence: (module) =>
+        readRecoveryDocumentEvidence(
+          { stateDir: config.stateDir, venueDir: config.venueDir },
+          module,
+        ),
+      loadFont: async () => invoiceFontBytes,
+      now,
     },
     log,
   );
