@@ -4609,6 +4609,58 @@ describe("till-table-order-screen", () => {
       );
     });
 
+    it("no split help when every dish is a portion", async () => {
+      const first = { ...pendingLine, quantity: "1.000", portion: true };
+      const second = { ...pendingLine, id: "line-2", lineNo: 2, quantity: "1.000", portion: true };
+      const firstExtra = {
+        ...pendingLine,
+        id: "line-3",
+        lineNo: 3,
+        parentLineNo: 1,
+        quantity: "1.000",
+      };
+      const secondExtra = {
+        ...pendingLine,
+        id: "line-4",
+        lineNo: 4,
+        parentLineNo: 2,
+        quantity: "1.000",
+      };
+      const { el } = await mount({
+        lines: [first, second, firstExtra, secondExtra],
+        orderId: "wo-7",
+      });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-split-help]")).toBeNull();
+    });
+
+    it("split help for a weighed dish with extras, which moves only whole", async () => {
+      const octopus = { ...pendingLine, quantity: "0.800", unitPrecision: 3 };
+      const extra = { ...pendingLine, id: "line-2", lineNo: 2, parentLineNo: 1, quantity: "1.000" };
+      const { el } = await mount({ lines: [octopus, extra], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-split-help]")!.textContent).toContain(
+        t("table.split_options_together"),
+      );
+    });
+
+    it("no split help for a dish of two without extras", async () => {
+      const { el } = await mount({ lines: [pendingLine], orderId: "wo-7" });
+      await toMenu(el);
+      click(el, '[data-action="split"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-split-lines]")).not.toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-split-help]")).toBeNull();
+    });
+
     /** Ana at Mesa 4 (and Mesa 5 with `atTwo`), and the floor around her. */
     const partyTables = (atTwo = false) => {
       const ana: TableParty = {

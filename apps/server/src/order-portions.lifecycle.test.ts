@@ -13,15 +13,16 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { afterEach, describe, expect, it } from "vitest";
 import { mergeCheckedBills, splitBill, transferItems } from "./bill-actions.js";
-import { readBillEditState } from "./bill-editing.js";
+import { readBillEditState, readPartyBillIds } from "./bill-editing.js";
 import { recallToDraft } from "./draft-recall.js";
 import { cancelItem } from "./line-cancel.js";
 import { readCancellationContext } from "./line-cancel-context.js";
 import { VENUE_SERVICE } from "./modules.js";
-import { saveDraft, splitDraft, type BillEditExpected } from "./order-drafts.js";
+import { moveBill } from "./move-bill.js";
+import { saveDraft, splitDraft, submitDraft, type BillEditExpected } from "./order-drafts.js";
 import { expandPortionRows, registerPortions, type PortionRef } from "./order-portions.js";
 import { partyRevision, seatTable } from "./parties.js";
-import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
+import { inTx, provisionBillVenue, send, type BillVenue } from "./testing/bill-venue.js";
 import { cancelLine, cancelReasonId } from "./testing/cancel-line.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { createTable } from "./testing/live-table.js";
@@ -30,8 +31,10 @@ import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import {
   advanceTicketItem,
   insertTabRound,
+  parkOrder,
   priceTabRound,
   readTabLines,
+  storedOrderTotal,
   updateHeldOrder,
   type TabRoundLine,
 } from "./working-order.js";
@@ -201,7 +204,7 @@ async function command(p: Fixture) {
   return { partyId: p.partyId, expectedPartyRevision: row!.revision, operatorId: venue.adminId };
 }
 
-async function bothEdits(p: Fixture): Promise<BillEditExpected[]> {
+async function bothEdits(p: Pick<Fixture, "billId" | "otherId">): Promise<BillEditExpected[]> {
   return [await edit(p.billId), await edit(p.otherId)].sort((a, b) =>
     a.billId.localeCompare(b.billId),
   );
@@ -447,7 +450,13 @@ describe("A803 portion grouping: the bill line read", () => {
     const { unbound, measured } = await inTx(venue, async (tx) => {
       const plain = await priceTabRound(tx, venue.cfg, p.billId, burgersWithCheese("1"), "checked");
       await insertTabRound(tx, venue.cfg, plain, plain.rows);
-      const weighed = await priceTabRound(tx, venue.cfg, p.billId, burgersWithCheese("1"), "checked");
+      const weighed = await priceTabRound(
+        tx,
+        venue.cfg,
+        p.billId,
+        burgersWithCheese("1"),
+        "checked",
+      );
       const out = expandPortionRows(
         weighed.rows,
         weighed.lineContexts,
@@ -460,8 +469,7 @@ describe("A803 portion grouping: the bill line read", () => {
     });
     const lines = await inTx(venue, (tx) => readTabLines(tx, venue.cfg, p.billId));
     const portion = (lineNo: number) => lines.find((line) => line.lineNo === lineNo)!.portion;
-    const extraOf = (lineNo: number) =>
-      lines.find((line) => line.parentLineNo === lineNo)!.portion;
+    const extraOf = (lineNo: number) => lines.find((line) => line.parentLineNo === lineNo)!.portion;
     const firstNo = lines.find((line) => line.id === first!.lineId)!.lineNo;
     expect({
       bound: portion(firstNo),
@@ -470,5 +478,332 @@ describe("A803 portion grouping: the bill line read", () => {
       unbound: portion(unbound),
       unboundExtra: extraOf(unbound),
     }).toEqual({ bound: true, extra: false, measured: false, unbound: false, unboundExtra: false });
+  });
+});
+
+describe("A803 portion lifecycle: end to end through a submitted draft", () => {
+  /** A seated party at a fresh table whose first bill holds `quantity` burgers with cheese, sent
+   * by submitting the operator's draft, and an empty second bill; the portions in line order. */
+  async function submitted(quantity: string) {
+    const p = await inTx(venue, async (tx) => {
+      const table = await createTable(tx, venue.cfg, {
+        label: `Sub-${randomUUID().slice(0, 8)}`,
+        zoneId: venue.zoneId,
+      });
+      const seated = await seatTable(tx, venue.cfg, {
+        tableId: table.id,
+        operatorId: venue.operatorId,
+        guestCount: 2,
+      });
+      const [other] = await tx
+        .insert(workingOrders)
+        .values({
+          source: "dashboard",
+          status: "open",
+          nodeId: venue.cfg.nodeId,
+          orderNumber: 2,
+          partyId: seated.partyId,
+          locationId: venue.cfg.locationId,
+        })
+        .returning();
+      await VENUE_SERVICE.recordOrderContext(tx, venue.cfg, other!.id, venue.zoneId);
+      await VENUE_SERVICE.writePartyAllergy(
+        tx,
+        seated.partyId,
+        { answer: "none", guests: [] },
+        venue.operatorId,
+      );
+      return {
+        partyId: seated.partyId,
+        billId: seated.tabId,
+        otherId: other!.id,
+        tableId: table.id,
+      };
+    });
+    const saved = await inTx(venue, async (tx) =>
+      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+        billId: p.billId,
+        draftId: null,
+        revision: 0,
+        expectedEdit: await readBillEditState(tx, p.billId),
+        lines: burgersWithCheese(quantity),
+      }),
+    );
+    const draft = saved.draft!;
+    await inTx(venue, async (tx) =>
+      submitDraft(tx, venue.cfg, p.partyId, draft.id, {
+        submissionId: randomUUID(),
+        expectedPartyRevision: await partyRevision(tx, p.partyId),
+        operatorId: venue.adminId,
+        expectedEdit: await readBillEditState(tx, p.billId),
+        draftRevision: draft.revision,
+        groups: [{ lineIds: draft.lines.map((line) => line.id), release: "fire" }],
+      }),
+    );
+    const portions = venue.db.all<{ portionId: string; lineId: string; lineNo: number }>(
+      sql`select b.portion_id as portionId, l.id as lineId, l.line_no as lineNo
+          from working_order_lines l
+          join working_line_portions b on b.working_order_line_id = l.id
+          where l.working_order_id = ${p.billId} and l.parent_line_id is null
+          order by l.line_no`,
+    );
+    return { ...p, portions };
+  }
+  type Submitted = Awaited<ReturnType<typeof submitted>>;
+
+  async function ask(p: { partyId: string }) {
+    return inTx(venue, async (tx) => ({
+      partyId: p.partyId,
+      expectedPartyRevision: await partyRevision(tx, p.partyId),
+      operatorId: venue.adminId,
+    }));
+  }
+
+  async function splitOff(p: Submitted, lineNo: number): Promise<string> {
+    const command = { ...(await ask(p)), expectedEdit: await edit(p.billId) };
+    return (await inTx(venue, (tx) => splitBill(tx, venue.cfg, p.billId, [{ lineNo }], command)))
+      .billId;
+  }
+
+  async function payInCash(billId: string): Promise<void> {
+    const total = await inTx(venue, (tx) => storedOrderTotal(tx, billId));
+    const result = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${billId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "contribution",
+        amount: total,
+        method: "cash",
+        tendered: total,
+        applied: total,
+        tip: "0.00",
+      },
+    );
+    expect(result.status, JSON.stringify(result.json)).toBe(200);
+  }
+
+  /** The bill's filed rows in line order, each with the portions linked to it. */
+  function filedRows(billId: string) {
+    const rows = venue.db.all<{ id: string; name: string; quantity: number }>(
+      sql`select sl.id, sl.name, sl.quantity from sale_lines sl
+          join sales s on s.id = sl.sale_id
+          where s.working_order_id = ${billId} order by sl.line_no`,
+    );
+    return rows.map(({ id, ...row }) => ({
+      ...row,
+      portions: venue.db
+        .all<{ portion_id: string }>(
+          sql`select portion_id from sale_line_portions where sale_line_id = ${id}
+              order by portion_id`,
+        )
+        .map((link) => link.portion_id),
+    }));
+  }
+
+  const cents = (amount: string) => Math.round(Number(amount) * 100);
+
+  it("A803 portion lifecycle: moving one of two sent burgers with extras keeps its portion, ticket and extra ids and its kitchen state, both bills' totals add up, and paying for it as an item files it with its cheese", async () => {
+    const p = await submitted("2");
+    const [first] = p.portions;
+    const family = (await linesOf(p.billId)).filter(
+      (line) => line.id === first!.lineId || line.parentLineId === first!.lineId,
+    );
+    expect(family).toHaveLength(2);
+    const [ticket] = await venue.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, first!.lineId));
+    await inTx(venue, (tx) => advanceTicketItem(tx, venue.cfg, ticket!.id, "preparing"));
+    const total = await inTx(venue, (tx) => storedOrderTotal(tx, p.billId));
+
+    const command = { ...(await ask(p)), expectedEdits: await bothEdits(p) };
+    await inTx(venue, (tx) =>
+      transferItems(tx, venue.cfg, p.billId, p.otherId, [{ lineNo: first!.lineNo }], command),
+    );
+
+    expect((await linesOf(p.otherId)).map((line) => line.id).sort()).toEqual(
+      family.map((line) => line.id).sort(),
+    );
+    expect(bindingOf(first!.lineId)).toEqual([{ portion_id: first!.portionId }]);
+    const [moved] = await venue.db
+      .select({ id: ticketItems.id, state: ticketItems.state, billId: ticketItems.workingOrderId })
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderLineId, first!.lineId));
+    expect(moved).toEqual({ id: ticket!.id, state: "preparing", billId: p.otherId });
+    const [left, other] = await inTx(venue, async (tx) => [
+      await storedOrderTotal(tx, p.billId),
+      await storedOrderTotal(tx, p.otherId),
+    ]);
+    expect(cents(left!) + cents(other!)).toBe(cents(total));
+    expect(cents(other!)).toBe(cents(total) / 2);
+
+    const burgerNo = (await linesOf(p.otherId)).find((line) => line.id === first!.lineId)!.lineNo;
+    const paid = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/working-orders/${p.otherId}/payments`,
+      {
+        submissionId: randomUUID(),
+        kind: "items",
+        lines: [{ lineNo: burgerNo }],
+        method: "cash",
+        tendered: other!,
+        applied: other!,
+        tip: "0.00",
+      },
+    );
+    expect(paid.status, JSON.stringify(paid.json)).toBe(200);
+    expect(filedRows(p.otherId)).toEqual([
+      { name: "Burger", quantity: 1000, portions: [first!.portionId] },
+      { name: "Cheese", quantity: 1000, portions: [first!.portionId] },
+    ]);
+  });
+
+  it("A803 portion lifecycle: cheese cancelled on one of two burgers, then paid: two dish rows filed, each linked to its own portion, and the cheese left linked to its own burger's", async () => {
+    const p = await submitted("2");
+    const [first, second] = p.portions;
+    const cheese = (await linesOf(p.billId)).find((line) => line.parentLineId === first!.lineId);
+    await inTx(venue, (tx) =>
+      cancelLine(tx, venue.cfg, p.billId, cheese!.lineNo, undefined, venue.adminId),
+    );
+
+    await payInCash(p.billId);
+
+    expect(filedRows(p.billId)).toEqual([
+      { name: "Burger", quantity: 1000, portions: [first!.portionId] },
+      { name: "Burger", quantity: 1000, portions: [second!.portionId] },
+      { name: "Cheese", quantity: 1000, portions: [second!.portionId] },
+    ]);
+  });
+
+  it("A803 portion lifecycle: three checks split off a submitted bill file contiguous invoice numbers with every sale row linked", async () => {
+    const p = await submitted("3");
+    const [first, second, third] = p.portions;
+    const a = await splitOff(p, first!.lineNo);
+    const b = await splitOff(p, second!.lineNo);
+
+    for (const billId of [a, b, p.billId]) await payInCash(billId);
+
+    const issued = venue.db.all<{ bill: string; series: string; number: number }>(
+      sql`select working_order_id as bill, series_id as series, invoice_number as number
+          from sales where working_order_id in (${a}, ${b}, ${p.billId})
+          order by invoice_number`,
+    );
+    expect(issued.map((sale) => sale.bill)).toEqual([a, b, p.billId]);
+    expect(new Set(issued.map((sale) => sale.series)).size).toBe(1);
+    expect(issued.map((sale) => sale.number - issued[0]!.number)).toEqual([0, 1, 2]);
+    expect([a, b, p.billId].map((billId) => filedRows(billId))).toEqual(
+      [first, second, third].map((portion) => [
+        { name: "Burger", quantity: 1000, portions: [portion!.portionId] },
+        { name: "Cheese", quantity: 1000, portions: [portion!.portionId] },
+      ]),
+    );
+  });
+
+  it("A803 portion lifecycle: a move refused for a stale editor writes no registry, binding, link or event row", async () => {
+    const p = await submitted("2");
+    const [, second] = p.portions;
+    await payInCash(await splitOff(p, second!.lineNo));
+    const stale = await edit(p.billId);
+    const current = await edit(p.billId);
+    await inTx(venue, (tx) =>
+      saveDraft(tx, venue.cfg, p.partyId, venue.adminId, {
+        billId: p.billId,
+        draftId: current.draftId,
+        revision: current.draftRevision ?? 0,
+        expectedEdit: current,
+        lines: burgersWithCheese("1"),
+      }),
+    );
+    const tables = () => ({
+      ...portionTables(),
+      sale_line_portions: venue.db.all(sql`select * from sale_line_portions order by rowid`),
+    });
+    const before = tables();
+    expect(before.sale_line_portions).not.toEqual([]);
+
+    const command = { ...(await ask(p)), expectedEdit: stale };
+    await expect(
+      inTx(venue, (tx) =>
+        splitBill(tx, venue.cfg, p.billId, [{ lineNo: p.portions[0]!.lineNo }], command),
+      ),
+    ).rejects.toMatchObject({ code: "draft.out_of_date" });
+    expect(tables()).toEqual(before);
+  });
+
+  it("A803 portion lifecycle: a counter order moved to a table keeps its grouped lines, and a partial move of its dish with extras is still refused tab.transfer_modifier_line", async () => {
+    const p = await submitted("1");
+    const counter = await inTx(venue, (tx) =>
+      offerProducts(tx, venue.cfg, { zone: "counter", orderStart: "counter" }),
+    );
+    const movedId = randomUUID();
+    await parkOrder({ db: venue.db }, venue.cfg, {
+      id: movedId,
+      lines: counter.toOfferLines([
+        {
+          productId: ids.burger,
+          quantity: "2",
+          extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
+        },
+      ]),
+      zoneId: counter.zoneId,
+      operatorId: venue.operatorId,
+    });
+    await inTx(venue, async (tx) =>
+      moveBill(
+        tx,
+        venue.cfg,
+        movedId,
+        { tableId: p.tableId },
+        {
+          expectedEdits: await Promise.all(
+            [movedId, ...(await readPartyBillIds(tx, [p.partyId]))]
+              .sort()
+              .map((billId) => readBillEditState(tx, billId)),
+          ),
+          bills: "separate",
+          partyId: null,
+          otherPartyId: p.partyId,
+          expectedOtherPartyRevision: await partyRevision(tx, p.partyId),
+          operatorId: venue.adminId,
+        },
+      ),
+    );
+    expect(
+      (await venue.db.select().from(workingOrders).where(eq(workingOrders.id, movedId)))[0],
+    ).toMatchObject({ partyId: p.partyId, status: "open" });
+
+    const lines = venue.db.all<{ id: string; lineNo: number; quantity: number; dish: number }>(
+      sql`select id, line_no as lineNo, quantity, parent_line_id is null as dish
+          from working_order_lines where working_order_id = ${movedId} order by line_no`,
+    );
+    expect(lines.map((line) => [line.dish, line.quantity])).toEqual([
+      [1, 2000],
+      [0, 2000],
+    ]);
+    expect(lines.flatMap((line) => bindingOf(line.id))).toEqual([]);
+
+    const expectedEdits = [await edit(movedId), await edit(p.billId)].sort((x, y) =>
+      x.billId.localeCompare(y.billId),
+    );
+    const command = { ...(await ask(p)), expectedEdits };
+    const before = { ...portionTables(), lines: await linesOf(movedId) };
+    await expect(
+      inTx(venue, (tx) =>
+        transferItems(
+          tx,
+          venue.cfg,
+          movedId,
+          p.billId,
+          [{ lineNo: lines[0]!.lineNo, quantity: "1" }],
+          command,
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "tab.transfer_modifier_line" });
+    expect({ ...portionTables(), lines: await linesOf(movedId) }).toEqual(before);
   });
 });

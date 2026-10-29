@@ -2069,6 +2069,15 @@ export class TillTableOrderScreen extends LitElement {
     return (line.parentLineNo ?? null) !== null;
   }
 
+  /** The server will not move part of a dish line with extras (`carveLines`). A portion is one
+   * whole dish, so only a dish that is not one can be asked to part. */
+  #holdsDishWithExtrasToPart(): boolean {
+    return this.lines.some(
+      (line) =>
+        line.portion !== true && this.lines.some((extra) => extra.parentLineNo === line.lineNo),
+    );
+  }
+
   #nameFor(productId: string | null): string {
     if (productId === null) return "";
     const product = this.products.find((candidate) => candidate.id === productId);
@@ -5563,7 +5572,11 @@ export class TillTableOrderScreen extends LitElement {
     const errors = this.splitAttempted ? this.#splitErrors() : [];
     return html`<section class="actions" data-split-lines>
       <h2>${t("table.split_pick_lines")}</h2>
-      <p data-split-help>${t("table.split_options_together")}</p>
+      ${
+        this.#holdsDishWithExtrasToPart()
+          ? html`<p data-split-help>${t("table.split_options_together")}</p>`
+          : nothing
+      }
       ${
         rows.length === 0
           ? html`<p class="empty">${t("table.split_no_lines")}</p>`
