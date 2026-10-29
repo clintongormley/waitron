@@ -884,6 +884,18 @@ The owner's four answers: no reserved
   `docs/backlog/dashboard.md` → Decisions and deliberate limits.)
 
 
+- **Backups make room for themselves (A1167, owner 2026-10-28 and 2026-10-29).** Owner, 2026-10-28:
+  "our backup policy needs to delete old backups automatically when we're running out of disk space,
+  plus alert the administrator, plus refuse to do a backup if there still isn't enough space, and
+  alert the manager." Design:
+  [2026-10-28-a1167-backups-make-room-design.md](../superpowers/specs/2026-10-28-a1167-backups-make-room-design.md),
+  its four questions answered in `~/waitron-campaign/questions.md` ("OWNER ANSWERS — A1167"). On
+  2026-10-29 the owner chose that the deletion words give the days the deleted backups were taken
+  (the oldest and newest when they differ), and that both backup emails' subjects start with the
+  venue's name. How the run, the free-space watch and the start delete:
+  [conventions-data.md](../developers/conventions-data.md#a-backup-run-makes-room-for-itself-or-is-refused-before-it-copies)
+  and [the backup room note](../developers/conventions-data.md#the-backup-room-note).
+
 - **Every start deletes a cut-off backup run's leftovers in backup staging, whatever the free space
   (A978, owner 2026-10-21).** A backup run stages a plaintext copy of the whole venue database and
   its encrypted copy in `<state>/backup-staging`, and its own `finally` deletes them
