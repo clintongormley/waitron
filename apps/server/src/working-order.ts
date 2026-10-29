@@ -5831,12 +5831,17 @@ async function applyLineEdits(
         /** The sent dish whose kitchen decision the added units follow. */
         origin?: EditableParent;
         inheritMakeAt?: boolean;
-        /** Added units of a dish that is a portion: written as portions of a cohort of their own. */
+        /** Written as portions of a cohort of their own: units added apart from a dish that is a
+         * portion, or a new line on a party bill. */
         expand?: boolean;
       }
     | { kind: "extras" }
     | { kind: "check" }
-  )[] = plan.fresh.map(() => ({ kind: "line", kitchen: order.newWork }));
+  )[] = plan.fresh.map(() => ({
+    kind: "line",
+    kitchen: order.newWork,
+    expand: order.partyId !== null,
+  }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
   const paid = await readPaidQuantities(tx, orderId);

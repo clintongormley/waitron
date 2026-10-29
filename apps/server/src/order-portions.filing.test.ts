@@ -58,6 +58,7 @@ import {
   updateHeldOrder,
   updateOrderLine,
   type TabRoundLine,
+  type UpdateHeldOrderRequest,
 } from "./working-order.js";
 
 afterEach(() => yieldTurn());
@@ -1532,6 +1533,136 @@ describe("A803 portions: raising a dish", () => {
     ).toEqual([
       ["Burger", 2000, 666, null],
       ["Cheese", 2000, 70, null],
+    ]);
+  });
+
+  /** Save the bill as `lines` say, the whole request being its new state. */
+  async function saveLines(billId: string, lines: UpdateHeldOrderRequest["lines"]) {
+    const [revision, expectedEdit] = await inTx(venue, async (tx) => [
+      await readOrderRevision(tx, billId),
+      await readBillEditState(tx, billId),
+    ]);
+    await updateHeldOrder({ db: venue.db }, venue.cfg, billId, {
+      operatorId: venue.adminId,
+      expectedEdit,
+      revision,
+      lines,
+    });
+  }
+
+  /** Each burger and its cheese as written, by name, size, price, cohort and ordinal. */
+  const burgerLines = (billId: string) =>
+    linesOf(billId)
+      .filter((line) => line.name !== "Croqueta")
+      .map(({ name, quantity, lineTotal, dishNo, cohortId, ordinal }) => ({
+        name,
+        quantity,
+        lineTotal,
+        dishNo,
+        cohortId,
+        ordinal,
+      }));
+
+  it("A803 portions: a new 2 × burger on a party bill is written as two portions", async () => {
+    const bill = await billOf(croquetas("1"), { bound: true });
+    const [croqueta] = bill.portions;
+
+    await saveLines(bill.billId, [
+      { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+      ...burgersWithCheese("2"),
+    ]);
+
+    const written = burgerLines(bill.billId);
+    const cohort = written[0]!.cohortId;
+    expect(cohort).not.toBeNull();
+    expect(cohort).not.toBe(croqueta!.pricingCohortId);
+    expect(written).toEqual([
+      {
+        name: "Burger",
+        quantity: 1000,
+        lineTotal: 333,
+        dishNo: null,
+        cohortId: cohort,
+        ordinal: 1,
+      },
+      { name: "Cheese", quantity: 1000, lineTotal: 35, dishNo: 2, cohortId: null, ordinal: null },
+      {
+        name: "Burger",
+        quantity: 1000,
+        lineTotal: 333,
+        dishNo: null,
+        cohortId: cohort,
+        ordinal: 2,
+      },
+      { name: "Cheese", quantity: 1000, lineTotal: 35, dishNo: 4, cohortId: null, ordinal: null },
+    ]);
+
+    await payInCash(bill.billId);
+    expect((await filedRows(bill.billId)).map(({ name, quantity }) => [name, quantity])).toEqual([
+      ["Croqueta", 1000],
+      ["Burger", 2000],
+      ["Cheese", 2000],
+    ]);
+  });
+
+  it("A803 portions: a line whose product changed, on a party bill, is written as portions", async () => {
+    const bill = await billOf(croquetas("1"), { bound: true });
+    const [croqueta] = bill.portions;
+
+    await saveLines(bill.billId, [
+      { workingOrderLineId: croqueta!.lineId, ...burgersWithCheese("2")[0]! },
+    ]);
+
+    const written = linesOf(bill.billId);
+    expect(written.map((line) => line.name)).toEqual(["Burger", "Cheese", "Burger", "Cheese"]);
+    const dishes = written.filter((line) => line.dishNo === null);
+    expect(dishes.map((line) => [line.quantity, line.ordinal])).toEqual([
+      [1000, 1],
+      [1000, 2],
+    ]);
+    expect(dishes[0]!.cohortId).not.toBeNull();
+    expect(dishes[1]!.cohortId).toBe(dishes[0]!.cohortId);
+    expect(dishes[0]!.cohortId).not.toBe(croqueta!.pricingCohortId);
+  });
+
+  it("A803 portions: a new line of 100 burgers on a party bill is refused and writes nothing", async () => {
+    const bill = await billOf(croquetas("1"), { bound: true });
+    const [croqueta] = bill.portions;
+    const before = linesOf(bill.billId);
+
+    await expect(
+      saveLines(bill.billId, [
+        { workingOrderLineId: croqueta!.lineId, ...croquetas("1")[0]! },
+        ...burgersWithCheese("100"),
+      ]),
+    ).rejects.toMatchObject({ code: "tab.portions_too_many", params: { limit: 99 } });
+    expect(linesOf(bill.billId)).toEqual(before);
+  });
+
+  it("A803 portions: a new line on a counter order stays one line", async () => {
+    const bill = await billOf(croquetas("1"), { bound: false });
+    await toCounter(bill.billId, bill.partyId);
+    const [croqueta] = linesOf(bill.billId);
+    const croquetaId = venue.db.all<{ id: string }>(
+      sql`select id from working_order_lines
+          where working_order_id = ${bill.billId} and line_no = ${croqueta!.lineNo}`,
+    )[0]!.id;
+
+    await saveLines(bill.billId, [
+      { workingOrderLineId: croquetaId, ...croquetas("1")[0]! },
+      ...burgersWithCheese("2"),
+    ]);
+
+    expect(burgerLines(bill.billId)).toEqual([
+      {
+        name: "Burger",
+        quantity: 2000,
+        lineTotal: 666,
+        dishNo: null,
+        cohortId: null,
+        ordinal: null,
+      },
+      { name: "Cheese", quantity: 2000, lineTotal: 70, dishNo: 2, cohortId: null, ordinal: null },
     ]);
   });
 
