@@ -1,5 +1,10 @@
 # A1089: explain persistent AEAT certificate-check failures
 
+_2026-10-29: the owner approved option A for planning only at 01:58. The
+[implementation plan](../plans/2026-10-29-a1089-aeat-certificate-diagnosis.md)
+keeps persistent repair open; its build needs separate approval. The proposal and its
+measurements below remain the historical record._
+
 **Proposed, 2026-10-28. Not approved. No build authority.** This proposal follows A1089's requirement
 for an owner decision on a substantial missing recovery workflow. Its scope, limits and timings
 are the design writer's recommendations.
