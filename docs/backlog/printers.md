@@ -75,8 +75,10 @@ throwaway Android app, then a run at the owner's home:
   may fail (the owner's concern, shown).
 - It keeps both connections for some minutes, since Android may drop a Wi-Fi that has no internet.
 
-Java 21 (`openjdk@21`) and Google's command-line Android tools (`android-commandlinetools`) were
-installed through Homebrew on 2026-10-29 for building it; nothing else is built yet.
+Nothing is built or installed for it yet. Installing Java 21 (`openjdk@21`) and Google's
+command-line Android tools (`android-commandlinetools`) through Homebrew on 2026-10-29 hung for
+about 30 minutes, every Homebrew process idle at its sandboxed unpacking step, and was stopped;
+the cause was not found.
 
 ## A790: document and printer routing plan
 
