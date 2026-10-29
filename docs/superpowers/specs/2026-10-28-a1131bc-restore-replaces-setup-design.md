@@ -9,7 +9,13 @@ sent it back. This version deletes the failed setup first and then uses the rest
 has, which writes straight into the usual folders. The move step, the "one disk" rule and the copies
 of small files are gone. Git holds the old version.
 
-This design is docs only. Nothing is built until the owner answers the questions at the end.
+**Approved by the owner on 2026-10-29**, relayed by the supervising watcher: question 1, answer A (05:25
+CET) and question 2, answer A (05:27 CET). The answers are folded in below and marked at the end.
+The owner's words as the watcher relayed them: Q1, "anyone who can open the repair page may delete a
+failed setup. No setup password to delete a failed setup (Start again or Recover from backup), with the
+costs as you stated them"; Q2, "The box may delete a failed setup whose database is damaged, with the
+safety margin taken from when that setup last saved anything, so no series name it may have used is
+reused; a new setup or restore may wait for the margin."
 
 ## What the owner asked for
 
@@ -141,7 +147,8 @@ true to be false", "Tests 1 failed | 5 skipped (6)"). The first version of this 
   another record Waitron never deletes, when the setup saved `trading.env`, or when it finished.
 - **A setup database the box cannot read** blocks Start again (run by the review, R2: `setup.not_ready`)
   and, by reading, the repair-page recovery too (`module.operation_invalid`,
-  `apps/server/src/first-setup-backup-history.ts:38-51`). Question 2 asks what the wipe does instead.
+  `apps/server/src/first-setup-backup-history.ts:38-51`). Under question 2's answer A the wipe deletes it
+  (§5).
 - **Both Start again routes refuse plain HTTP** (`assertHttps`, `apps/server/src/setup-first-fiscal-api.ts:1022`,
   used at `:1031` and `:1060`). Only the summary route's refusal is tested ("the summary route refuses
   over plain HTTP"); the Start again route's is read, untested: review 3 commented it out and 213 tests
@@ -159,8 +166,8 @@ the person goes next.
    with the confirmation (pictures 1 and 2) or a refusal (picture 3). Nothing is written yet.
 2. On confirming, the box runs Start again's existing action. Slice 2 changes it in four ways only: no
    password for the wipe (§3); the case "the setup database holds rows" is offered with no stopped
-   recovery beside it; confirmation records say what was actually proved (§4); and question 2's rule
-   for a database it cannot read. The rest is as today: its checks (§1a), then, **before the wipe, the
+   recovery beside it; confirmation records say what was actually proved (§4); and the wipe of a
+   database it cannot read (question 2, answer A; §5). The rest is as today: its checks (§1a), then, **before the wipe, the
    box adds the setup's series names to its never-reuse note**, then the deletion marker, the deletion,
    and the marker cleared.
 3. The box restarts. With no setup left it shows the ordinary setup page (the boot test above).
@@ -186,7 +193,7 @@ is.** Every refusal has words (§9).
 | the setup database is empty, and the setup is unused | offered, as today | the confirmation |
 | the setup database is empty, but the setup went past being claimed (its status is not claimed, consumption-intent or abandoned, `first-setup-resolution.ts:296-300`, refused at `:103`), or the box cannot show the setup is unused (`:579`) | refused, as today | `wipeUnavailable`, plus the existing `consumed` line where the setup recorded it may have used its series assignment (`setup-app.ts:2887`) |
 | the setup database is missing | offered, with the existing missing-database tick ("Nothing was filed to AEAT and nothing was sold.") | the missing-database confirmation |
-| the setup database cannot be read (run by the review: R2) | question 2 | picture 4 under answer A |
+| the setup database cannot be read (run by the review: R2) | offered, with the floor of §5 (question 2, answer A) | picture 4 |
 | the box keeps public fiscal records outside its folders (`first-setup-resolution.ts:582`) | refused, as today | `wipeUnavailable` |
 | a restore is already waiting (`restore-request.json`, refused at `:585`), the files are not laid out as the deletion list expects, or the deletion marker would be too large (`:586-598`) | refused, as today | `wipeUnavailable`; the reason goes to the log |
 | a deletion is already marked (`assertNoStartAgainDeletion`, `first-setup-start-again-deletion.ts:424-426`) | not refused: the box restarts and the start finishes that deletion, as today (`setup-first-fiscal-api.ts:1115-1119`) | the ordinary setup page after the restart |
@@ -259,15 +266,15 @@ example, before making it.
     saved trading settings or a finished setup, so nothing filed or sold can be deleted this way.
 - **Both routes stay secure-connection-only**, today and in this design: the box keeps `assertHttps` on
   them. That protects what travels over the network, not who may press the button.
-- The owner's 15:35 answer was about someone with access to the box. The network angle is new, so it is
-  question 1.
+- The owner's 15:35 answer was about someone with access to the box. The network angle was new, so it
+  was question 1; the owner chose answer A on 2026-10-29.
 
 ### 4. The confirmation records
 
 Today Start again keeps a small record naming the setup's administrator in three cases: the database
 is missing, a stopped recovery is being discarded, or the database is present and the record of
 chosen series names is damaged (`first-setup-resolution.ts:631-632,664-673`; `deploy/README.md:385-388`
-lists the same three). Under answer A or B to question 2, a database the box cannot read is a fourth.
+lists the same three). A database the box cannot read is a fourth (question 2, answer A).
 Each is written only after the setup password was checked (run by the review for the missing
 database, R5; read for the other two, `:605-612`); `deploy/waitron.sh:742-744` calls them the records
 "of who confirmed a Start again". With no password, nobody proves who pressed the button.
@@ -289,7 +296,7 @@ and `docs/operations/first-live-fiscal-setup.md:106` ("the box records who confi
   `first-setup-backup-workspace.ts` from its allowed list.
 - The restore's new name is chosen no earlier than the note (`recovery-preparation.ts:211`; the two
   tests run above; R4c), so it comes after every name the failed setup used, with the one gap §2 names.
-- Under answer A or B to question 2, the floor for a database the box cannot read counts **every** file
+- Under question 2's answer A, the floor for a database the box cannot read counts **every** file
   the setup left: its databases (`venue.db`, `node.db`) and their side files (`-wal`, `-shm`,
   `-journal`) included. A committed write can move only the `-wal` file's time (the side-file check
   above). The A1099 rule as built leaves `venue.db` and `node.db` out
@@ -312,7 +319,7 @@ and `docs/operations/first-live-fiscal-setup.md:106` ("the box records who confi
 | --- | --- | --- |
 | the confirmation was shown, before confirming | the setup untouched | the repair page |
 | the checks, before anything is written | the setup untouched | the repair page |
-| a confirmation record (the three cases of §4, and an unreadable database under question 2 A or B), before the note | a record with no note change; the setup untouched | the repair page; the record is harmless and pressing again writes another |
+| a confirmation record (the three cases of §4, and an unreadable database), before the note | a record with no note change; the setup untouched | the repair page; the record is harmless and pressing again writes another |
 | the note, before the deletion marker | the setup untouched, the note later | the repair page; pressing again raises the note to the same minute and goes on |
 | the marker, part of the deletion done | the marker | finishes the deletion and shows the setup page's **first** screen (the choice of Recover is lost; the person picks "Join or recover"); or, if a listed file changed, deletes nothing and shows the "files found" page, which needs the setup password (§3) |
 | the wipe, before the person reaches the restore | no setup | the ordinary setup page's first screen; the person picks "Join or recover" |
@@ -411,7 +418,7 @@ facturas de esta configuración.»
 - `heldChanged`: EN "The setup changed after this page read it. Try again." ES «La configuración cambió
   después de que esta página la leyera. Inténtalo otra vez.»
 
-**d. A setup database the box cannot read** (picture 4; only with answer A to question 2). EN "This box
+**d. A setup database the box cannot read** (picture 4; question 2, answer A). EN "This box
 cannot read the setup database, so it cannot list the invoice series names that setup used." ES «Este
 equipo no puede leer la base de datos de configuración, así que no puede saber qué nombres de serie de
 facturas usó esa configuración.» Then the existing `namesFrom` line ("New series names can start from
@@ -455,7 +462,7 @@ one possible exception, in slice 2, goes to the owner first (§2).
 2. **One wipe, no password** (server, plus the words and docs that would otherwise be false). Start
    again's wipe-guarding password steps go (§3), the "files found" page's stays; the "database holds
    rows" case is offered with or without a stopped recovery; every row of §1a as a test, with §9c's
-   words; the confirmation records of §4; question 2's rule; the `module-evidence/` check of §2 (which
+   words; the confirmation records of §4; the wipe of a database it cannot read (question 2, answer A); the `module-evidence/` check of §2 (which
    stops for the owner if it finds a fiscal-module change is needed). Docs: every sentence in the user
    guide pair (`apps/server/src/guide/{en,es}/backup-recovery.md`), `docs/operations/first-live-fiscal-setup.md`,
    `deploy/README.md` and `deploy/waitron.sh` that says Start again asks for the setup password, times
@@ -467,7 +474,7 @@ one possible exception, in slice 2, goes to the owner first (§2).
    later than every name that database held (control: with the note step removed, a name from the setup
    database is accepted); each refusal deletes nothing; a cut after the marker is finished at start;
    a plain-HTTP request to the Start again route is refused (only the summary route's is tested today);
-   under question 2 A or B, the two floor controls of §5, the `-wal` one on its own. **Fiscal-adjacent** (it decides what
+   the two floor controls of §5, the `-wal` one on its own. **Fiscal-adjacent** (it decides what
    enters the never-reuse note): full review.
 3. **Recover from backup becomes the wipe** (setup page). The confirmation of §9b; after the restart the
    setup page opens on "Join or recover"; the repair page stops opening the old recovery for new
@@ -497,7 +504,7 @@ one possible exception, in slice 2, goes to the owner first (§2).
 - **Carrying "go to Join or recover" across the restart**: the page holds the choice; how it survives the
   reconnect is slice 3's to settle and test.
 
-## Questions for the owner
+## Questions for the owner (answered 2026-10-29)
 
 **Q1 of 2 — Who may delete a failed setup.** You said anyone with access to the box may delete a
 failed setup, because they could reinstall it anyway. The repair page can also be opened by anyone on
@@ -505,7 +512,7 @@ the venue's network, not only at the box. Deleting a failed setup loses only wha
 the setup holds an invoice, or saved its selling settings, the box refuses. Example: Marta's setup
 stops when the power goes. Before she is back, a guest on the café's Wi-Fi opens the box's page and
 presses Start again. Marta types her setup in again.
-- **A (recommended):** anyone who can open the repair page may delete it. The cost is the example
+- **A (recommended; CHOSEN by the owner, 2026-10-29 05:25 CET):** anyone who can open the repair page may delete it. The cost is the example
   above. Also, rarely: if the power goes again during the deletion, the box may then ask for the setup
   password before it can finish, which the person who pressed the button may not know.
 - **B:** ask for the setup password before deleting, for both Start again and Recover from backup. The
@@ -516,7 +523,7 @@ presses Start again. Marta types her setup in again.
 a failed setup used, and the setup's database can hold names the box keeps nowhere else. Example: Marta's setup stops
 when the power goes and its database is damaged, so the box cannot read which names the setup used.
 Today she can neither start again nor recover from a backup.
-- **A (recommended):** the box may still delete it, with a safety margin taken from when the setup last
+- **A (recommended; CHOSEN by the owner, 2026-10-29 05:27 CET):** the box may still delete it, with a safety margin taken from when the setup last
   saved anything, so it does not reuse a name that setup may have used. The cost: the damaged setup is
   gone for good, and a new setup or restore may have to wait a few minutes for the margin to pass.
 - **B:** the box moves the damaged setup into a folder instead of deleting it, with the same margin. The
