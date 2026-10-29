@@ -4765,7 +4765,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   the person has one set up: [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md),
   mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is planned
   ([plan](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md)); its first pull request, the
-  pack format and every reader, landed as #2250; the next is PR B (fresh sign-in at the button).
+  pack format and every reader, landed as #2250; PR B, the fresh sign-in at the button, landed as
+  #2257 (nothing calls it yet). Its review also made every passkey challenge record the ceremony
+  that created it (`webauthn_challenges.purpose`, identity migrations 0008-0010), closing a way to
+  finish adding a passkey with a challenge from a sign-in or the new check. The next is PR C (plan
+  Tasks 10-14): its make route must pass the origin and the key ring to `confirmFreshSignIn` and
+  build its own `createPasswordThrottle()`, never another route's.
   Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
   where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
   field's help says "paste the kit"; the look images were taken before the review changed the
