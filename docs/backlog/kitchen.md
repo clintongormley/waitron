@@ -17,12 +17,6 @@ does not exist.
 Left open:
 
 - A fired group with nothing for the kitchen (bottled water, say) never reads Ready.
-- `*** REPRINT HH:MM ***`, `GROUP n`, `*** HOLD ***`, `*** FIRE ***`, `*** HOLD CHANGED ***` and
-  `*** HOLD CANCELLED ***` print in English. Since B11g the extra-cancel slip's header word and
-  cancel line follow the server's locale (`WAITRON_TILL_LOCALE`, `es-ES`
-  when unset), so by default a held slip reads `*** HOLD CAMBIADO ***`, `GROUP n` and
-  `QUITAR:`, mixed on one slip. Since A683 a ticket for a named party also prints its order
-  line in that locale, so a held ticket reads `*** HOLD ***` above `Pedido 5 · Ana`.
 - A switched-off printer's printing problem keeps showing until the printer is switched on
   and a Reprint prints there; there is no way to dismiss one.
 - A failed ticket on a pass printer (one ticket for the whole order) shows on the card of
