@@ -39,15 +39,13 @@ import { buildManifest } from "./backup-manifest.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifact } from "./artifact-cipher.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { eq, max } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
 import { clockBehindChain } from "@waitron/fiscal-verifactu/src/clock-behind.js";
-import { nextCheckSeq } from "@waitron/fiscal-verifactu/src/clock-checks.js";
+import { openClockCheck } from "@waitron/fiscal-verifactu/src/clock-checks.js";
 import { confirmClockStop } from "@waitron/fiscal-verifactu/src/clock-confirmation.js";
-import { clockChecks } from "@waitron/fiscal-verifactu/src/schema/clock-checks.js";
-import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
 import {
   fakeClient,
   saleInput,
@@ -803,7 +801,10 @@ describe("a backup whose newest record and creation time are near or past the cl
       identity: string;
       input: unknown;
     };
-    expect(selected.status).toBe("selected");
+    expect(selected).toMatchObject({
+      status: "selected",
+      identity: encodeMinuteIdentity(Date.parse("2026-10-21T10:02:00Z")),
+    });
     await runRestoreHooks({
       db: suite.db,
       node,
@@ -843,31 +844,15 @@ describe("a backup whose newest record and creation time are near or past the cl
         .filter((row) => row.acknowledgedAt === null)
         .map(({ code, params }) => ({ code, params }));
     expect(await openIncidents()).toEqual([]);
-    await withTransaction(suite.db, async (tx) => {
-      const heads = Object.fromEntries(
-        (
-          await tx
-            .select({
-              node: registrosFacturacion.nodeId,
-              head: max(registrosFacturacion.secuencia),
-            })
-            .from(registrosFacturacion)
-            .groupBy(registrosFacturacion.nodeId)
-        ).map((row) => [row.node, row.head]),
-      );
-      await tx.insert(clockChecks).values({
-        seq: await nextCheckSeq(tx),
-        nodeId: node.nodeId,
-        openedAt: reading.instant,
-        reason: "behind_chain",
-        detail: { clockAt: reading.instant.toISOString(), heads },
-      });
-    });
+    const boot = { ms: 4 * 60_000, id: "boot-1" };
+    await withTransaction(suite.db, (tx) =>
+      openClockCheck(tx, { reading, boot, nodeId: node.nodeId }),
+    );
     const at = reading.instant.toISOString();
     const { confirmation } = await withTransaction(suite.db, (tx) =>
       confirmClockStop(tx, {
         reading,
-        boot: { ms: 5 * 60_000, id: null },
+        boot,
         witnesses: [
           { kind: "authority", id: "authority", boxAt: at, witnessAt: at, uncertaintyMs: 0 },
         ],
@@ -884,6 +869,7 @@ describe("a backup whose newest record and creation time are near or past the cl
       count: 1,
       from: "2026-10-22T20:15:00.000Z",
       to: "2026-10-22T20:15:00.000Z",
+      partial: false,
     });
   });
 

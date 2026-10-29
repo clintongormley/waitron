@@ -7,7 +7,10 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { initialSetupFor, withOperationAuthority } from "@waitron/module";
 import { readStartAgainMarker, type FirstSetupState } from "@waitron/provisioning";
-import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
+import {
+  decodeMinuteIdentity,
+  encodeMinuteIdentity,
+} from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { hourSetupInput } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { request, PASSWORD, MODULE } from "../test/first-fiscal.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
@@ -465,8 +468,13 @@ it("ordinary hour preparation retains earlier abandoned events for later", async
   expect(await restart.store.read()).toEqual(result.state);
   expect(await readFile(path)).toEqual(journal);
 });
-it("a new attempt may take a minute earlier than an abandoned attempt's name", async () => {
+it("an attempt after an abandoned one may take a minute earlier than the abandoned attempt's name", async () => {
   const f = await fixture(44, request.taxId, "production", false, 43, { previousIndex: 50 });
+  const identity = (state: Pick<FirstSetupState, "frozen">) =>
+    (state.frozen.modules.find((m) => m.module === MODULE)!.request as { identity: string })
+      .identity;
+  expect(f.old.previous.map(identity)).toEqual(["0CRHT"]);
+  expect(decodeMinuteIdentity(identity(f.old))).toBeLessThan(decodeMinuteIdentity("0CRHT"));
   const result = await choose(f.host, f.state, f.claim.capability);
   expect(result.state.consumptionIntent).toBe(true);
   expect(
