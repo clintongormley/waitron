@@ -4803,6 +4803,12 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   "You don't have permission to do that" twice and names no next step.
   [Detail](backlog/self-service-refusals.md#backups-admin-sign-in)
 
+- **Backups says "try again" after a saved-settings failure it has no words for.** The "Backups
+  are off because the saved settings can't be used" line appends the code's dashboard message
+  (`backup-screen.ts`, from #1642), and a code with none, such as `credentials.decrypt_failed`,
+  falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
+  recorded" panel saying Read again turns nothing on.
+
 - **Backups' Spanish names the box both "caja" and "equipo".** Both words appear across its
   strings (`strings.ts` `backup.*`) and its error messages (`codes.ts` `backup.*`); its alerts
   (`alert-messages.ts`) and the settings-evidence panel say "equipo". Pick one word across the
