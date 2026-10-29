@@ -24,7 +24,7 @@ const row = (over: Partial<PagePrinterRow> = {}): PagePrinterRow => ({
   resolutionDpi: 300,
   active: true,
   agentId: "a1",
-  agentName: "Cocina agent",
+  agentName: "Kitchen agent",
   ...over,
 });
 

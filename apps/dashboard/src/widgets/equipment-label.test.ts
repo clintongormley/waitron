@@ -17,7 +17,7 @@ describe("dashboard-equipment-label", () => {
     const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
       kind,
       itemId,
-      name: "Mano de sala",
+      name: "Dining room handheld",
     });
     const qr = () =>
       el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=equipment-label-qr]");
@@ -33,7 +33,7 @@ describe("dashboard-equipment-label", () => {
       const text = (selector: string) =>
         el.shadowRoot!.querySelector(selector)!.textContent!.trim();
       expect(text("[data-test=equipment-label-code]")).toBe(code);
-      expect(text("[data-test=equipment-label-name]")).toBe("Mano de sala");
+      expect(text("[data-test=equipment-label-name]")).toBe("Dining room handheld");
       expect(qr.alt).toBe(t("equipment.label_qr_alt"));
       expect(await decodeQrImage(qr.src)).toBe(code);
     },
@@ -43,11 +43,11 @@ describe("dashboard-equipment-label", () => {
     const { el } = await mountWidget<EquipmentLabel>("dashboard-equipment-label", {
       kind: "printer",
       itemId: ID,
-      name: "Barra $&",
+      name: "Counter $&",
     });
     expect(
       el.shadowRoot!.querySelector("[data-test=equipment-label-modal]")!.getAttribute("heading"),
-    ).toBe(t("equipment.label_title").split("{name}").join("Barra $&"));
+    ).toBe(t("equipment.label_title").split("{name}").join("Counter $&"));
   });
 
   it("draws a new QR when it is given another item", async () => {
@@ -63,13 +63,13 @@ describe("dashboard-equipment-label", () => {
   it("keeps its QR, and Print, when only the name changes", async () => {
     const { el, qr } = await mount("printer");
     const src = qr.src;
-    el.name = "Terraza";
+    el.name = "Terrace";
     await el.updateComplete;
     const shown = el.shadowRoot!.querySelector<HTMLImageElement>("[data-test=equipment-label-qr]");
     expect(shown?.src).toBe(src);
     expect(
       el.shadowRoot!.querySelector("[data-test=equipment-label-name]")!.textContent!.trim(),
-    ).toBe("Terraza");
+    ).toBe("Terrace");
     expect(
       el.shadowRoot!.querySelector<HTMLElement & { disabled: boolean }>(
         "[data-test=print-equipment-label]",
@@ -120,7 +120,7 @@ describe("dashboard-equipment-label", () => {
     watch.disconnect();
     const view = printed.mock.contexts[0] as Window;
     expect([...view.document.body.querySelectorAll("p")].map((p) => p.textContent)).toEqual([
-      "Mano de sala",
+      "Dining room handheld",
       formatEquipmentCode("reader", ID),
     ]);
     view.dispatchEvent(new Event("afterprint"));
@@ -135,7 +135,7 @@ describe("dashboard-equipment-label", () => {
         {
           kind: "printer",
           itemId: ID,
-          name: "Mano de sala",
+          name: "Dining room handheld",
           drawQr: () => new Promise<string>((resolve) => (made = resolve)),
         },
         theme,

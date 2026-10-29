@@ -41,12 +41,12 @@ const printer = (id: string, name: string, extra: Partial<Printer> = {}): Printe
   ...extra,
 });
 const printers = [
-  printer("pr1", "Barra"),
-  printer("pr2", "Cocina"),
-  printer("pr3", "Terraza"),
-  printer("pr4", "Cajón", { hasCashDrawer: true }),
+  printer("pr1", "Counter"),
+  printer("pr2", "Kitchen"),
+  printer("pr3", "Terrace"),
+  printer("pr4", "Drawer", { hasCashDrawer: true }),
   // Switched off since the slip list took it; the list keeps it.
-  printer("pr-old", "Vieja", { active: false }),
+  printer("pr-old", "Old", { active: false }),
 ];
 
 const readers: ReaderRow[] = [
@@ -54,7 +54,7 @@ const readers: ReaderRow[] = [
     printsOwnSlipAutomatically: false,
     id: "r1",
     provider: "acme",
-    name: "Barra",
+    name: "Counter",
     active: true,
     canEnable: true,
     deviceCount: 0,
@@ -64,7 +64,7 @@ const readers: ReaderRow[] = [
     printsOwnSlipAutomatically: false,
     id: "r2",
     provider: "acme",
-    name: "Terraza",
+    name: "Terrace",
     active: true,
     canEnable: true,
     deviceCount: 0,
@@ -74,7 +74,7 @@ const readers: ReaderRow[] = [
     printsOwnSlipAutomatically: false,
     id: "r-off",
     provider: "acme",
-    name: "Vieja",
+    name: "Old",
     active: false,
     canEnable: true,
     deviceCount: 0,
@@ -107,14 +107,14 @@ const person = (personId: string, displayName: string, role: PersonSummary["role
 
 const scopeChoices: ProfileScopeChoices = {
   departments: [
-    { id: "d1", name: "Restaurante", active: true },
+    { id: "d1", name: "Restaurant", active: true },
     { id: "d2", name: "Bar", active: true },
   ],
   zones: [
-    { id: "z1", name: "Comedor", departmentId: "d1", active: true },
-    { id: "z2", name: "Terraza", departmentId: "d1", active: true },
-    { id: "z4", name: "Barra vieja", departmentId: "d1", active: false },
-    { id: "z5", name: "Barra", departmentId: "d2", active: true },
+    { id: "z1", name: "Dining room", departmentId: "d1", active: true },
+    { id: "z2", name: "Terrace", departmentId: "d1", active: true },
+    { id: "z4", name: "Old counter", departmentId: "d1", active: false },
+    { id: "z5", name: "Counter", departmentId: "d2", active: true },
   ],
 };
 
@@ -184,9 +184,9 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     listStations: vi
       .fn()
       .mockResolvedValue([
-        station("s1", "Cocina"),
-        station("s2", "Plancha"),
-        station("s-off", "Horno", false),
+        station("s1", "Kitchen"),
+        station("s2", "Griddle"),
+        station("s-off", "Oven", false),
       ]),
     listProfileKitchenScreens: vi.fn().mockResolvedValue([
       {
@@ -200,7 +200,7 @@ function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
     getProfileScopeChoices: vi.fn().mockResolvedValue(scopeChoices),
     listStaff: vi
       .fn()
-      .mockResolvedValue([person("pe-ana", "Ana", "staff"), person("pe-luis", "Luis", "manager")]),
+      .mockResolvedValue([person("pe-ana", "Ann", "staff"), person("pe-luis", "Lewis", "manager")]),
     listReaders: vi.fn().mockResolvedValue(readers),
     getProfileReaders: vi.fn(async (id: string) =>
       id === "p1" ? storedReaders : { readerIds: [], defaultReaderId: null },
