@@ -1046,7 +1046,8 @@ cases, "shuts and fades the menu and the order, the bar included, while a round 
 than the paragraph: they put the screen in stand-ins for the shell's scroll area, not the real
 `till-shell`, the "keeps Send all on screen" cases measure Send all only, and the fade case reads
 computed opacity, not what is painted, on the menu, the order's lines, Move to… and the Fire / Send
-all group only.
+all group only, and the "newly added line" cases cover a line added after the bar is drawn and the
+phone's Review view opening, not a line revealed as the screen first draws.
 
 When the zones read offers another layout (`layoutDue`), a device that can change today shows a
 `role="status"` line above the map or the list, "{period} layout is ready." or, with no new period

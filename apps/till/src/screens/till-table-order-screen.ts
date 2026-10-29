@@ -2010,9 +2010,10 @@ export class TillTableOrderScreen extends LitElement {
     );
   }
 
-  /** Copies the draft bar's height to `--draft-bar-size` on its row, where the basket's lines read
-   * it. Measured at once when the bar is drawn or shown, because the basket reveals a line in the
-   * next frame, before a ResizeObserver would report; the observer follows later changes. */
+  /** Copies the draft bar's height to `--draft-bar-size` on `.round-bar`, the bar's parent, from
+   * which the basket's lines inherit it. Measured at once when the bar is drawn or shown, because
+   * the basket reveals a line in the next frame, before a ResizeObserver would report; the observer
+   * follows later changes. */
   #sizeDraftBar(): void {
     const bar = this.renderRoot.querySelector<HTMLElement>(".draft-bar") ?? undefined;
     const shown = this.wide || this.reviewing;

@@ -325,7 +325,6 @@ describe("till-table-order-screen: a newly added line is not hidden behind the a
 
   it("shows the newest line above the bar when the phone's Review view opens on a long order", async () => {
     const { el, host } = await orderedInWindow(390, 700);
-    // A real press, so the basket's reveal runs in the frame the press lands in, as on a till.
     await userEvent.click(el.shadowRoot!.querySelector<HTMLElement>("[data-review-open]")!);
     await el.updateComplete;
     await linesRendered(el);
