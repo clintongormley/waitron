@@ -4694,7 +4694,7 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 - **A1089: a stopped or refused bucket stream needs restart or ownership choices.** Distinguish an unavailable process from a conflicting writer; do not suggest resuming an unauthorised primary. Offer any required sign-in there and build a missing restart/ownership workflow separately.
   [Audit](backlog/self-service-refusals.md#backup-stream).
 
-- **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop.
+- **A1089: persistent archive-settings failures need guided diagnosis.** Backups exposes the load error and lets you replace unreadable settings or leave without applying. A repeated host/key failure still needs authenticated diagnosis and an applicable correction, with a safe Stop. Evidence-first design and plan (2026-10-29, awaiting the owner's build approval): `docs/superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md`, `docs/superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md`. Repair stays open.
   [Audit](backlog/self-service-refusals.md#backup-settings).
 
 - **A1167: the start deletes old backups by itself** in place of the full-disk page's button (owner's

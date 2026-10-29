@@ -792,6 +792,12 @@ error; the message does not promise that every apply starts the worker.
 The screen displays a code, but this wording change adds no authenticated host repair. Do not
 replace recovery keys or discard backup files just because settings cannot be read.
 
+**2026-10-29, proposed, not approved for building:** an evidence-first panel on Backups showing
+what the box recorded about each failed read and what the saved record looks like now, with Read
+again and Stop, changing nothing:
+[design](../superpowers/specs/2026-10-29-a1089-backup-settings-evidence-design.md),
+[plan](../superpowers/plans/2026-10-29-a1089-backup-settings-evidence.md). Repair stays open.
+
 ### backup-stream
 
 **2026-10-25 settings-refusal wording:** the alert explains **Change bucket**, **Test**,
