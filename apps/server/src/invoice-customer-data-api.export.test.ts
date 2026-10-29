@@ -51,7 +51,7 @@ function ask(taxId: string, patch: Partial<InvoiceCustomerDataDeps> = {}) {
     {
       db: suite.db,
       backend: fixture.venue.backend,
-      till: fixture.venue.cfg,
+      tradingContext: fixture.venue.cfg,
       nodeId: fixture.venue.cfg.nodeId,
       venueLocale: "es-ES",
       now: () => at,
@@ -223,7 +223,7 @@ it("exports the exact foreign identity and raw address in JSON and a real PDF", 
     {
       db: suite.db,
       backend: fixture.venue.backend,
-      till: fixture.venue.cfg,
+      tradingContext: fixture.venue.cfg,
       nodeId: fixture.venue.cfg.nodeId,
       venueLocale: "es-ES",
       onMirror: () => false,

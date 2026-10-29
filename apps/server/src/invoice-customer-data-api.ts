@@ -25,7 +25,7 @@ import type { TradingContext } from "./trading-context.js";
 export interface InvoiceCustomerDataDeps {
   db: Database;
   backend: FiscalBackend;
-  till: TradingContext;
+  tradingContext: TradingContext;
   /** The node whose time zone dates the download. */
   nodeId: string;
   venueLocale: string;
@@ -126,7 +126,7 @@ export function mountInvoiceCustomerDataApi(
         {
           db: deps.db,
           backend: deps.backend,
-          till: deps.till,
+          tradingContext: deps.tradingContext,
           log,
           render: deps.render,
           readDocument: deps.readDocument,

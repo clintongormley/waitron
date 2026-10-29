@@ -135,7 +135,7 @@ export interface OrdersApiDeps {
   db: Database;
   backend: FiscalBackend;
   cfg: { nodeId: string };
-  till: TradingContext;
+  tradingContext: TradingContext;
   devMode?: boolean;
   /** Whether a mail transport is set up to email invoices. */
   invoiceEmailAvailable: () => Promise<boolean>;
@@ -256,7 +256,9 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
         tx
           .select({ id: printers.id, name: printers.name })
           .from(printers)
-          .where(and(eq(printers.locationId, deps.till.locationId), eq(printers.active, true)))
+          .where(
+            and(eq(printers.locationId, deps.tradingContext.locationId), eq(printers.active, true)),
+          )
           .orderBy(asc(printers.name), asc(printers.id)),
       );
       return c.json(rows);
@@ -327,7 +329,7 @@ export function mountOrdersApi(app: Hono, deps: OrdersApiDeps, log: Logger): voi
           tx,
           {
             backend: deps.backend,
-            cfg: deps.till,
+            cfg: deps.tradingContext,
             onReceiptCopy: async (copy) => {
               await tx.insert(receiptReprints).values({ ...copy, personId });
             },

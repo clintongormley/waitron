@@ -95,7 +95,7 @@ useVenueDb({
         db,
         backend: venue.backend,
         cfg: { nodeId: venue.cfg.nodeId },
-        till: venue.cfg,
+        tradingContext: venue.cfg,
         invoiceEmailAvailable: () =>
           email.transport instanceof Error
             ? Promise.reject(email.transport)

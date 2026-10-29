@@ -10,7 +10,7 @@ import { readSettledTicket } from "./till-sale.js";
 /** A receipt copy files nothing and uses a document job, which cannot open the drawer. */
 export async function reprintOrderReceipt(
   tx: Transaction,
-  deps: { backend: FiscalBackend; till: TradingContext },
+  deps: { backend: FiscalBackend; tradingContext: TradingContext },
   billId: string,
   printerId: string,
   personId: string,
@@ -26,15 +26,15 @@ export async function reprintOrderReceipt(
     .where(
       and(
         eq(printers.id, printerId),
-        eq(printers.locationId, deps.till.locationId),
+        eq(printers.locationId, deps.tradingContext.locationId),
         eq(printers.active, true),
       ),
     );
   if (printer === undefined) throw new AppError("printer.not_found", { id: printerId });
-  const ticket = await readSettledTicket(deps.backend, tx, deps.till, billId);
+  const ticket = await readSettledTicket(deps.backend, tx, deps.tradingContext, billId);
   const copy = await enqueueReceiptCopy(
     tx,
-    deps.till,
+    deps.tradingContext,
     ticket,
     sale.id,
     printer,

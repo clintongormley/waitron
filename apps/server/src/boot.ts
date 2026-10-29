@@ -336,7 +336,7 @@ import { assertMirrorBindSafe } from "./mirror-bind-guard.js";
 import { acceptMembershipDocument } from "@waitron/membership";
 import { fetchPeerMembershipDocument, reconcileMembershipOnBoot } from "./membership-reconcile.js";
 import { runTunnelClient } from "@waitron/tunnel";
-import { readNodeLocation, readFilingModule } from "./node-config.js";
+import { readNodeLocation, readFilingModule, type NodeConfig } from "./node-config.js";
 import { offeredOperationDescriptionDefault } from "./operation-description-default.js";
 import type { TradingContext } from "./trading-context.js";
 import { readVenueContentLanguageRules, readVenueLocale } from "./venue-locale.js";
@@ -1555,6 +1555,7 @@ async function bootServer(
   const nodeLocationId = await readNodeLocation(db, config.node.nodeId);
   if (nodeLocationId === null)
     throw new AppError("server.node_config_invalid", { key: "WAITRON_NODE_ID" });
+  const node: NodeConfig = { ...config.node, locationId: nodeLocationId };
   assertSingleOperationalVenue(await readOperationalVenueIds(db), nodeLocationId);
 
   // Nothing reaches here as a `mirror` today: `adoptFromPrimary` writes `mode='mirror'` together with
@@ -1767,27 +1768,26 @@ async function bootServer(
   // Resolved through the generic slot so `boot.ts` names no regime package
   // (`scripts/module-seams.test.ts`).
   const enabledFiscal = fiscalSlot(setsToMigrate, filingModule);
-  const tillBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
+  const nodeBackend = makeFiscalBackend(setsToMigrate, filingModule, db, env);
   const operationDescriptionDefault = offeredOperationDescriptionDefault(
     enabledFiscal.venueFields?.defaults?.operationDescription,
   );
-  const till: TradingContext = {
-    ...config.node,
+  const tradingContext: TradingContext = {
+    ...node,
     ...config.tillApp,
-    locationId: nodeLocationId,
-    simplifiedInvoiceLimit: tillBackend.simplifiedInvoiceLimit,
+    simplifiedInvoiceLimit: nodeBackend.simplifiedInvoiceLimit,
     operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
     operationDescriptionDefault,
     practiceMode: config.onboardingIntent === "demo" || config.onboardingIntent === "prepare",
   };
-  // The venue's default DISPLAY locale. The override is the RAW `till.localeOverride`, not the
-  // defaulted `till.locale`, which would mask geography.
+  // The venue's default DISPLAY locale. The override is the RAW `tradingContext.localeOverride`, not the
+  // defaulted `tradingContext.locale`, which would mask geography.
   const venueLocale = await readVenueLocale(db, {
-    locationId: till.locationId,
-    override: till.localeOverride,
+    locationId: tradingContext.locationId,
+    override: tradingContext.localeOverride,
   });
   const contentLanguageRules = await readVenueContentLanguageRules(db, {
-    locationId: till.locationId,
+    locationId: tradingContext.locationId,
   });
   const cardProvider = await buildCardProvider(
     db,
@@ -1817,10 +1817,10 @@ async function bootServer(
     app,
     {
       db,
-      backend: tillBackend,
+      backend: nodeBackend,
       liveEvents,
       clock: tillClock,
-      cfg: till,
+      cfg: tradingContext,
       // From the ENABLED set: a disabled module's table is not migrated, so its annotator must not run.
       floorAnnotators: enabledFloorAnnotators(setsToMigrate),
       tableRemovals,
@@ -1845,7 +1845,7 @@ async function bootServer(
   mountNodeApi(
     app,
     {
-      nodeId: till.nodeId,
+      nodeId: tradingContext.nodeId,
       acceptingSales: isSingletonPrimary && !fencedOrMirror,
       environment: config.environment,
       readMembership: () => readNodeMembership(db),
@@ -1856,7 +1856,12 @@ async function bootServer(
   // gate, or `isPrimary` for a node the gate does not cover) sends the agent to the manual path.
   mountNodeEnrolApi(
     app,
-    { db, cfg: till, nodeId: till.nodeId, isPrimary: isSingletonPrimary && !fencedOrMirror },
+    {
+      db,
+      cfg: tradingContext,
+      nodeId: tradingContext.nodeId,
+      isPrimary: isSingletonPrimary && !fencedOrMirror,
+    },
     log,
   );
   let demoPrinterLoop: { stop(): Promise<void> } | undefined;
@@ -1869,12 +1874,15 @@ async function bootServer(
   let attendanceEmailLoop: Promise<void> | undefined;
   if (workforceEnabled && isSingletonPrimary) {
     await withTransaction(db, (tx) =>
-      beginAttendanceDiscovery(tx, { locationId: till.locationId, generation: randomUUID() }),
+      beginAttendanceDiscovery(tx, {
+        locationId: tradingContext.locationId,
+        generation: randomUUID(),
+      }),
     );
     attendanceLoop = runAttendanceLoop({
       db,
-      nodeId: till.nodeId,
-      locationId: till.locationId,
+      nodeId: tradingContext.nodeId,
+      locationId: tradingContext.locationId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
@@ -1888,19 +1896,19 @@ async function bootServer(
     const [location] = await db
       .select({ name: locations.name })
       .from(locations)
-      .where(eq(locations.id, till.locationId));
+      .where(eq(locations.id, tradingContext.locationId));
     attendanceEmailLoop = runAttendanceEmailLoop({
       db,
-      nodeId: till.nodeId,
-      locationId: till.locationId,
-      holder: till.nodeId,
+      nodeId: tradingContext.nodeId,
+      locationId: tradingContext.locationId,
+      holder: tradingContext.nodeId,
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: attendanceController.signal,
       venueLocale: venueLocale === "es-ES" ? "es" : "en",
       locationName: location!.name,
       resolveDelivery: () =>
-        resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true),
+        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
       send: createAttendanceEmailSender(),
       onError: (error) => log("error", "attendance.email_failed", { errorCode: codeOf(error) }),
     });
@@ -1917,14 +1925,14 @@ async function bootServer(
     const reminderLoop = runCertificateReminderLoop({
       db,
       seat: enabledFiscal.certificate,
-      nodeId: till.nodeId,
-      locationId: till.locationId,
+      nodeId: tradingContext.nodeId,
+      locationId: tradingContext.locationId,
       venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       now,
       isPrimary: () => holders.singletonRole.current === "primary",
       signal: reminderController.signal,
       resolveDelivery: () =>
-        resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true),
+        resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true),
       send: createCertificateReminderSender(),
       onError: (error) =>
         log("error", "fiscal.certificate_reminder_failed", { errorCode: codeOf(error) }),
@@ -1942,12 +1950,13 @@ async function bootServer(
     await withTransaction(db, (tx) => expireInvoiceDeliveryClaims(tx, now(), true));
     invoiceEmailLoop = runInvoiceEmailLoop({
       db,
-      holder: till.nodeId,
+      holder: tradingContext.nodeId,
       now,
       signal: invoiceEmailController.signal,
       isPrimary: () => holders.singletonRole.current === "primary",
-      readDocument: (tx, delivery) => readInvoiceDocument(tillBackend, tx, till, delivery.saleId),
-      readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(tillBackend, tx, delivery.saleId),
+      readDocument: (tx, delivery) =>
+        readInvoiceDocument(nodeBackend, tx, tradingContext, delivery.saleId),
+      readPrivacy: (tx, delivery) => readInvoiceEmailPrivacy(nodeBackend, tx, delivery.saleId),
       send: createRoutedInvoiceEmailSender({ db, ring, config }),
       onError: (error) =>
         log("error", "invoice_delivery.email_failed", { errorCode: codeOf(error) }),
@@ -1956,10 +1965,18 @@ async function bootServer(
       invoiceEmailController.abort();
       await invoiceEmailLoop;
     });
-    const demoPrinter = await configureDemoPrinter(db, till.locationId, till.practiceMode === true);
+    const demoPrinter = await configureDemoPrinter(
+      db,
+      tradingContext.locationId,
+      tradingContext.practiceMode === true,
+    );
     if (demoPrinter !== null) {
-      demoPrinterLoop = startDemoPrinterLoop(db, till.locationId, demoPrinter, 500, (error) =>
-        log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
+      demoPrinterLoop = startDemoPrinterLoop(
+        db,
+        tradingContext.locationId,
+        demoPrinter,
+        500,
+        (error) => log("error", "demo_printer.delivery_failed", { errorCode: codeOf(error) }),
       );
       undoOnFailure.push(() => demoPrinterLoop!.stop());
     }
@@ -1971,7 +1988,7 @@ async function bootServer(
       app,
       {
         db,
-        cfg: till,
+        cfg: tradingContext,
         secureCookies,
         pairingMode,
         devMode: config.devMode,
@@ -1979,7 +1996,7 @@ async function bootServer(
         disk: diskFull,
         notices: {
           sources: deviceNoticeSources({ disk: diskFull, space: freeSpace }, setsToMigrate),
-          deviceSources: devicePrinterNoticeSources({ now, locationId: till.locationId }),
+          deviceSources: devicePrinterNoticeSources({ now, locationId: tradingContext.locationId }),
           clock: tillClock,
           filing: () => ({ enabled: filesRecords() }),
         },
@@ -1988,18 +2005,23 @@ async function bootServer(
       },
       log,
     );
-    mountJoinApi(app, { db, cfg: till, pairingMode, deviceAddress: config.advertisedOrigin }, log);
+    mountJoinApi(
+      app,
+      { db, cfg: tradingContext, pairingMode, deviceAddress: config.advertisedOrigin },
+      log,
+    );
     mountPrintApi(
       app,
       {
         db,
-        cfg: till,
+        cfg: tradingContext,
         readMembership: () => readNodeMembership(db),
         pairingMode,
         venueLocale,
         listIpv4: boxAddresses,
-        receiptQrText: tillBackend.receiptQrText,
-        readInvoiceDocument: (tx, saleId) => readInvoiceDocument(tillBackend, tx, till, saleId),
+        receiptQrText: nodeBackend.receiptQrText,
+        readInvoiceDocument: (tx, saleId) =>
+          readInvoiceDocument(nodeBackend, tx, tradingContext, saleId),
         testPages,
       },
       log,
@@ -2008,9 +2030,9 @@ async function bootServer(
       app,
       {
         db,
-        backend: tillBackend,
+        backend: nodeBackend,
         clock: tillClock,
-        cfg: till,
+        cfg: tradingContext,
         ring,
         environment: config.environment,
         pool: cardPool,
@@ -2022,14 +2044,14 @@ async function bootServer(
     );
   }
   const resolveAccountEmail = () =>
-    resolveEmailDelivery(db, ring, config.devMode || till.practiceMode === true);
+    resolveEmailDelivery(db, ring, config.devMode || tradingContext.practiceMode === true);
   // Resolved on every send, so a newly configured or rotated SMTP gateway, a changed time zone
   // or a saved privacy page takes effect at once.
   const sendAccountEmail: AccountEmailSender = async (message) => {
     // Queue all three reads before an answered reset can reach shutdown's drain.
     const [delivery, timeZone, privacy] = await Promise.all([
       resolveAccountEmail(),
-      readVenueTimeZone(db, { locationId: till.locationId }),
+      readVenueTimeZone(db, { locationId: tradingContext.locationId }),
       withTransaction(db, readPrivacyContact),
     ]);
     if (delivery.mode === "unconfigured")
@@ -2048,15 +2070,20 @@ async function bootServer(
   mountThemesApi(app, { db }, log);
   mountLocationSettingsApi(
     app,
-    { db, cfg: till, fiscal: enabledFiscal, readBackupDeadlines: () => ({ ...backupDeadlines }) },
+    {
+      db,
+      cfg: tradingContext,
+      fiscal: enabledFiscal,
+      readBackupDeadlines: () => ({ ...backupDeadlines }),
+    },
     log,
   );
   mountReceiptPreviewApi(
     app,
     {
       db,
-      cfg: till,
-      receiptQrText: tillBackend.receiptQrText,
+      cfg: tradingContext,
+      receiptQrText: nodeBackend.receiptQrText,
       validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
     },
     log,
@@ -2065,8 +2092,8 @@ async function bootServer(
     app,
     {
       db,
-      cfg: { nodeId: till.nodeId },
-      venueCfg: till,
+      cfg: { nodeId: tradingContext.nodeId },
+      venueCfg: tradingContext,
       validateOperationDescription: enabledFiscal.venueFields?.validateOperationDescription,
       secureCookies,
       rpId: config.managementRpId,
@@ -2092,8 +2119,8 @@ async function bootServer(
       {
         db,
         cfg: {
-          locationId: till.locationId,
-          nodeId: till.nodeId,
+          locationId: tradingContext.locationId,
+          nodeId: tradingContext.nodeId,
         },
         modules: setsToMigrate,
         moduleVersions: appliedModuleVersions,
@@ -2109,8 +2136,8 @@ async function bootServer(
         db,
         ring,
         seat: enabledFiscal.certificate,
-        nodeId: till.nodeId,
-        locationId: till.locationId,
+        nodeId: tradingContext.nodeId,
+        locationId: tradingContext.locationId,
         environment: config.environment,
         filing: filesRecords,
         now,
@@ -2132,7 +2159,7 @@ async function bootServer(
     app,
     {
       db,
-      venueCfg: till,
+      venueCfg: tradingContext,
       managementOrigin: config.managementOrigin,
       contentLanguageRules,
       venueLocale,
@@ -2143,18 +2170,18 @@ async function bootServer(
   mountPurchasingApi(app, { db }, log);
   const drainWaker = createLoopWaker({ minTickMs: config.minTickMs });
   // Every ENABLED module's routes, so a module toggled off mounts nothing. `core.seatTable` closes
-  // over the full `till` here, so `nodeId` never enters a module's cfg.
+  // over the full `tradingContext` here, so `nodeId` never enters a module's cfg.
   const routeCtx: ModuleRouteContext = {
     db,
     cfg: {
-      locationId: till.locationId,
+      locationId: tradingContext.locationId,
       contentDefaultLanguage: venueLocale,
       operationDescriptionRequired: enabledFiscal.venueFields !== undefined,
       operationDescriptionDefault,
     },
     maxUploadBytes: MAX_UPLOAD_BYTES,
     renderReceiptLogo: drawLogoRasters,
-    core: moduleCoreServices(till, tableRemovals),
+    core: moduleCoreServices(tradingContext, tableRemovals),
     fiscalDrain: {
       filing: filesRecords,
       awaitingCertificate: () => awaitingFiscalCert.current,
@@ -2165,16 +2192,16 @@ async function bootServer(
   // `dataNodeId`, not this node's own id: see its declaration above.
   mountReportApi(
     app,
-    { db, cfg: { nodeId: dataNodeId, locationId: till.locationId }, venueLocale },
+    { db, cfg: { nodeId: dataNodeId, locationId: tradingContext.locationId }, venueLocale },
     log,
   );
   mountOrdersApi(
     app,
     {
       db,
-      backend: tillBackend,
+      backend: nodeBackend,
       cfg: { nodeId: dataNodeId },
-      till,
+      tradingContext,
       devMode: config.devMode,
       invoiceEmailAvailable,
     },
@@ -2184,8 +2211,8 @@ async function bootServer(
     app,
     {
       db,
-      backend: tillBackend,
-      till,
+      backend: nodeBackend,
+      tradingContext,
       nodeId: dataNodeId,
       venueLocale,
       onMirror: () => holders.mode.current === "mirror",
@@ -2193,13 +2220,13 @@ async function bootServer(
     },
     log,
   );
-  mountWorkforceApi(app, { db, cfg: { nodeId: till.nodeId } }, log);
+  mountWorkforceApi(app, { db, cfg: { nodeId: tradingContext.nodeId } }, log);
   if (workforceEnabled && isSingletonPrimary)
     mountManagementAttendanceApi(
       app,
       {
         db,
-        cfg: { nodeId: till.nodeId, locationId: till.locationId },
+        cfg: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
         now,
         exporter: selectTimeRecordExport(setsToMigrate),
       },
@@ -2220,7 +2247,7 @@ async function bootServer(
     {
       db,
       describeShifts,
-      cfg: { nodeId: till.nodeId },
+      cfg: { nodeId: tradingContext.nodeId },
       venueLocale,
       onboardingIntent: config.onboardingIntent,
       modules: setsToMigrate.map((m) => m.name),
@@ -2239,7 +2266,11 @@ async function bootServer(
     loadRecoveryKey(await loadBoxEnv(base, config.stateDir));
   const isBackupManagedByEnvironment = (): boolean => backupKeysInEnv(base);
   const stagingTurn = createStagingTurn();
-  const backupRoom = createBackupRoomHooks({ db, nodeId: till.nodeId, fiscal: enabledFiscal });
+  const backupRoom = createBackupRoomHooks({
+    db,
+    nodeId: tradingContext.nodeId,
+    fiscal: enabledFiscal,
+  });
   await recordStartDeletions({
     stateDir: config.stateDir,
     venueDir: config.venueDir,
@@ -2252,7 +2283,7 @@ async function bootServer(
         managedByEnvironment: isBackupManagedByEnvironment(),
         env: await loadBoxEnv(base, config.stateDir),
         readSealed: () => readArchiveSettings(db, ring),
-        venueId: till.locationId,
+        venueId: tradingContext.locationId,
       }),
     isManagedByEnvironment: isBackupManagedByEnvironment,
     readSingletonRole: () => holders.singletonRole.current,
@@ -2260,11 +2291,11 @@ async function bootServer(
     modules: availableModules,
     environment: config.environment,
     stateDir: config.stateDir,
-    jitterSeed: till.nodeId,
+    jitterSeed: tradingContext.nodeId,
     // The venue's wall clock, so a wall-clock schedule fires in the venue's local time.
     readClock: () =>
       withTransaction(db, async (tx) => {
-        return resolveVenueClock(tx, till.nodeId);
+        return resolveVenueClock(tx, tradingContext.nodeId);
       }),
     outcomes: backupOutcomes,
     onScheduled: (at) => {
@@ -2273,7 +2304,7 @@ async function bootServer(
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
     recordArchivesDeleted: backupRoom.recordArchivesDeleted,
-    nodeId: till.nodeId,
+    nodeId: tradingContext.nodeId,
     log,
   });
   undoOnFailure.push(() => backupSupervisor.stop());
@@ -2282,7 +2313,7 @@ async function bootServer(
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
     db,
-    nodeId: till.nodeId,
+    nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
     modules: availableModules,
@@ -2301,7 +2332,7 @@ async function bootServer(
   const streamHost = new StreamHost({
     db,
     ring,
-    nodeId: till.nodeId,
+    nodeId: tradingContext.nodeId,
     venueDir: config.venueDir,
     stateDir: config.stateDir,
     litestreamBin: config.litestreamBin,
@@ -2377,8 +2408,8 @@ async function bootServer(
     context: () =>
       readBoxEmailContext(db, {
         ring,
-        practiceMode: config.devMode || till.practiceMode === true,
-        locationId: till.locationId,
+        practiceMode: config.devMode || tradingContext.practiceMode === true,
+        locationId: tradingContext.locationId,
         venueLanguage: venueLocale === "es-ES" ? "es" : "en",
       }),
     send: createTextEmailSender(),
@@ -2388,11 +2419,11 @@ async function bootServer(
   });
   undoOnFailure.push(() => boxEmails.stop());
   const clockWatch = startClockWatch({
-    backend: tillBackend,
+    backend: nodeBackend,
     store: clockWitnesses,
     clock: tillClock,
     boot: boxBoot,
-    nodeId: till.nodeId,
+    nodeId: tradingContext.nodeId,
     read: (fn) => db.withWriteLock(() => fn(db)),
     transaction: (fn) => withTransaction(db, fn),
     filesRecords,
@@ -2411,7 +2442,7 @@ async function bootServer(
     authorityClockAlertSource(
       authorityClock.read,
       async (tx, at) =>
-        (await tillBackend.clockBehindLatestRecord(tx, {
+        (await nodeBackend.clockBehindLatestRecord(tx, {
           instant: at,
           offsetMinutes: tillClock.now().offsetMinutes,
         })) !== null,
@@ -2421,11 +2452,11 @@ async function bootServer(
     contentSuggestionsAlertSource(),
     invoiceDeliveryAlertSource({ testPages }),
     stationOutputAlertSource({
-      locationId: till.locationId,
+      locationId: tradingContext.locationId,
       stationStates: (tx, at) =>
-        VENUE_SERVICE.stationStates(tx, { locationId: till.locationId }, at),
+        VENUE_SERVICE.stationStates(tx, { locationId: tradingContext.locationId }, at),
     }),
-    passScreenAlertSource({ cfg: till }),
+    passScreenAlertSource({ cfg: tradingContext }),
     batteryAlertSource({
       providers: CARD_PROVIDERS,
       runtimeDeps: cardRuntimeDeps,
@@ -2435,8 +2466,8 @@ async function bootServer(
   if (certificateDutiesEnabled(enabledFiscal, config)) {
     serverAlertSources.push(
       certificateAlertSource(enabledFiscal.certificate, {
-        nodeId: till.nodeId,
-        locationId: till.locationId,
+        nodeId: tradingContext.nodeId,
+        locationId: tradingContext.locationId,
       }),
     );
   }
@@ -2451,7 +2482,7 @@ async function bootServer(
     app,
     {
       db,
-      cfg: { nodeId: till.nodeId },
+      cfg: { nodeId: tradingContext.nodeId },
       environment: config.environment,
       health,
       now,
@@ -2492,7 +2523,10 @@ async function bootServer(
     app,
     {
       db,
-      venue: { locationId: till.locationId, language: venueLocale === "es-ES" ? "es" : "en" },
+      venue: {
+        locationId: tradingContext.locationId,
+        language: venueLocale === "es-ES" ? "es" : "en",
+      },
       readHealth: () =>
         collectBoxHealth(db, {
           now,
@@ -2528,11 +2562,11 @@ async function bootServer(
           paymentsEnabled,
           canFree: () => !isReadOnly(),
           clockStop: clockStopReader({
-            backend: tillBackend,
+            backend: nodeBackend,
             witnesses: () => clockWitnesses.witnesses(),
             clock: tillClock,
           }),
-          clockCheckWaiting: clockCheckWaitingReader({ backend: tillBackend, clock: tillClock }),
+          clockCheckWaiting: clockCheckWaitingReader({ backend: nodeBackend, clock: tillClock }),
         }),
       freeSpace: createSpaceFreer({
         ...leftoverDeps,
@@ -2544,11 +2578,11 @@ async function bootServer(
         onFreed: () => diskUsageCache.clear(),
       }),
       clockConfirm: {
-        backend: tillBackend,
+        backend: nodeBackend,
         witnesses: () => clockWitnesses.witnesses(),
         clearWitnesses: () => clockWitnesses.clear(),
         clock: tillClock,
-        nodeId: till.nodeId,
+        nodeId: tradingContext.nodeId,
         steady: () => performance.now(),
         readBoot: boxBoot.readBoot,
         requestFromBox: seams.requestFromBox,
@@ -2559,18 +2593,18 @@ async function bootServer(
   );
 
   // Mounted on every node: `retireSelf`'s own guards refuse a serving node.
-  mountBoxRetireApi(app, { appDb: db, ring, nodeId: till.nodeId }, log);
+  mountBoxRetireApi(app, { appDb: db, ring, nodeId: tradingContext.nodeId }, log);
   // Mounted on every node: a mirror or fenced node's read-only gate refuses the removal, and a
   // node that is not the chart's serving primary refuses it itself.
-  mountMembershipRemovalApi(app, { db, ring, nodeId: till.nodeId }, log);
+  mountMembershipRemovalApi(app, { db, ring, nodeId: tradingContext.nodeId }, log);
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
   mountRecoveryPackApi(
     app,
     {
       db,
-      node: till,
-      venueId: till.locationId,
+      node: tradingContext,
+      venueId: tradingContext.locationId,
       modules: setsToMigrate,
       now,
       documentEvidence: (module) =>
@@ -2585,7 +2619,7 @@ async function bootServer(
     ? createCloudConnection({
         stateDir: config.stateDir,
         origin: cloudOrigin,
-        localVenueId: till.locationId,
+        localVenueId: tradingContext.locationId,
         environment: config.environment === "production" ? "production" : "test",
       })
     : undefined;
@@ -2594,8 +2628,8 @@ async function bootServer(
       ? createCloudReplacement({
           stateDir: config.stateDir,
           origin: cloudOrigin,
-          localVenueId: till.locationId,
-          nodeId: till.nodeId,
+          localVenueId: tradingContext.locationId,
+          nodeId: tradingContext.nodeId,
           connection: cloudConnection,
         })
       : undefined;
@@ -2649,7 +2683,7 @@ async function bootServer(
       supervisor: backupSupervisor,
       db,
       ring,
-      venueId: till.locationId,
+      venueId: tradingContext.locationId,
       stateDir: config.stateDir,
       readRecoveryKey,
       readBoxEnv: () => loadBoxEnv(base, config.stateDir),
@@ -2665,8 +2699,8 @@ async function bootServer(
       db,
       ring,
       stream: streamHost,
-      nodeId: till.nodeId,
-      venueId: till.locationId,
+      nodeId: tradingContext.nodeId,
+      venueId: tradingContext.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,
       loadedArchives: () => backupSupervisor.current().destinations,
@@ -2734,7 +2768,7 @@ async function bootServer(
     holders,
     log,
     ring,
-    nodeId: till.nodeId,
+    nodeId: tradingContext.nodeId,
   };
 
   // A note that cannot be deleted refuses the promotion.
@@ -2761,8 +2795,8 @@ async function bootServer(
         withModuleOperations,
         persistTradingEnv: async () => {
           const next: TradingConfig = {
-            nodeId: till.nodeId,
-            locationId: till.locationId,
+            nodeId: tradingContext.nodeId,
+            locationId: tradingContext.locationId,
             environment: config.environment,
             accountKey: accountKey.toString("base64"),
           };
@@ -2800,7 +2834,7 @@ async function bootServer(
       return { alreadyPrimary: result.alreadyPrimary, restarting: !result.alreadyPrimary };
     }
     const held = await readNodeMembership(db);
-    assertNotFenced(held, till.nodeId);
+    assertNotFenced(held, tradingContext.nodeId);
     return { alreadyPrimary: true, restarting: false };
   };
 
@@ -2808,7 +2842,7 @@ async function bootServer(
     app,
     {
       appDb: db,
-      nodeId: till.nodeId,
+      nodeId: tradingContext.nodeId,
       credentialKeyRing: totpKeyRing,
       modules: setsToMigrate,
       run: promoteRun,
@@ -2816,7 +2850,7 @@ async function bootServer(
       nodePreparation: createNodeOperationPreparation({
         testClock: seams.testClock,
         db,
-        node: { nodeId: till.nodeId, locationId: till.locationId },
+        node: { nodeId: tradingContext.nodeId, locationId: tradingContext.locationId },
         modules: enabledModules(ALL_MODULES, moduleConfig),
         credentialKeyRing: totpKeyRing,
         stateDir: config.stateDir,
@@ -2968,9 +3002,9 @@ async function bootServer(
           () =>
             recoverAutomaticCardPayments({
               db,
-              backend: tillBackend,
+              backend: nodeBackend,
               clock: tillClock,
-              cfg: till,
+              cfg: tradingContext,
               pool: cardPool,
               attendance: attendanceRecorder,
               log,
@@ -2984,9 +3018,9 @@ async function bootServer(
       () =>
         settlePendingBillPayments({
           db,
-          backend: tillBackend,
+          backend: nodeBackend,
           clock: tillClock,
-          cfg: till,
+          cfg: tradingContext,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           log,
         }),
@@ -3007,7 +3041,7 @@ async function bootServer(
     isSingletonPrimary && !fencedOrMirror
       ? runTenderRefundRecoveryLoop({
           db,
-          backend: tillBackend,
+          backend: nodeBackend,
           clock: tillClock,
           refundProviderFor: refundProvidersOf({ simulator: cardProvider, pool: cardPool }),
           attendance: attendanceRecorder,
@@ -3048,12 +3082,13 @@ async function bootServer(
         worker: createCloudSnapshotWorker({
           stateDir: config.stateDir,
           connection: cloudConnection,
-          sourceNodeId: till.nodeId,
+          sourceNodeId: tradingContext.nodeId,
           onScheduled: (at) => {
             backupDeadlines.cloud = at === null ? null : new Date(at).toISOString();
           },
           isPrimary: cloudPrimary,
-          readClock: () => withTransaction(db, (tx) => resolveVenueClock(tx, till.nodeId)),
+          readClock: () =>
+            withTransaction(db, (tx) => resolveVenueClock(tx, tradingContext.nodeId)),
           createArchive: (grant, at, signal) =>
             createCloudSnapshotArchive(
               {

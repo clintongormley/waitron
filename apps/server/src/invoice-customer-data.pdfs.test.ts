@@ -48,7 +48,7 @@ function deps(overrides: Partial<InvoiceCustomerFilesDeps> = {}): InvoiceCustome
   return {
     db: suite.db,
     backend: fixture.venue.backend,
-    till: fixture.venue.cfg,
+    tradingContext: fixture.venue.cfg,
     log: quiet,
     ...overrides,
   };
@@ -245,8 +245,10 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
       const { log, events } = recording();
       const error = await failure({
         log,
-        readDocument: (backend, tx, till, saleId) =>
-          saleId === j2 ? Promise.reject(original) : readInvoiceDocument(backend, tx, till, saleId),
+        readDocument: (backend, tx, tradingContext, saleId) =>
+          saleId === j2
+            ? Promise.reject(original)
+            : readInvoiceDocument(backend, tx, tradingContext, saleId),
       });
       expect(error).toBeInstanceOf(Error);
       expect(error).not.toBeInstanceOf(AppError);
@@ -277,10 +279,10 @@ describe("buildInvoiceCustomerFiles' PDFs", () => {
     it("keeps a full disk findable in the failure's cause chain", async () => {
       const { j2 } = fixture.sales;
       const error = await failure({
-        readDocument: (backend, tx, till, saleId) =>
+        readDocument: (backend, tx, tradingContext, saleId) =>
           saleId === j2
             ? Promise.reject(new AppError("storage.disk_full", {}))
-            : readInvoiceDocument(backend, tx, till, saleId),
+            : readInvoiceDocument(backend, tx, tradingContext, saleId),
       });
       expect(error).not.toBeInstanceOf(AppError);
       expect(diskFullIn(error)).toBe(true);

@@ -35,7 +35,35 @@ vi.mock("undici", async (original) => ({
   ),
 }));
 
-const observed = vi.hoisted(() => ({ cfg: undefined as TradingContext | undefined }));
+const observed = vi.hoisted(() => ({
+  cfg: undefined as TradingContext | undefined,
+  orders: undefined as Parameters<typeof import("./orders-api.js").mountOrdersApi>[1] | undefined,
+  customers: undefined as
+    | Parameters<typeof import("./invoice-customer-data-api.js").mountInvoiceCustomerDataApi>[1]
+    | undefined,
+}));
+vi.mock("./orders-api.js", async (original) => {
+  const actual = await original<typeof import("./orders-api.js")>();
+  return {
+    ...actual,
+    mountOrdersApi: (...args: Parameters<typeof actual.mountOrdersApi>) => {
+      observed.orders = args[1];
+      return actual.mountOrdersApi(...args);
+    },
+  };
+});
+vi.mock("./invoice-customer-data-api.js", async (original) => {
+  const actual = await original<typeof import("./invoice-customer-data-api.js")>();
+  return {
+    ...actual,
+    mountInvoiceCustomerDataApi: (
+      ...args: Parameters<typeof actual.mountInvoiceCustomerDataApi>
+    ) => {
+      observed.customers = args[1];
+      return actual.mountInvoiceCustomerDataApi(...args);
+    },
+  };
+});
 vi.mock("./till-api.js", async (original) => {
   const actual = await original<typeof import("./till-api.js")>();
   return {
@@ -206,6 +234,55 @@ it.each([
   60_000,
 );
 
+it.each([
+  ["demo", true],
+  ["prepare", true],
+  ["live", false],
+] as const)(
+  "%s retains app preferences and practice mode",
+  async (intent, practiceMode) => {
+    await source.db
+      .insert(tenants)
+      .values({ id: 1, country: "GB", taxId: "GB123456789", legalName: "British Test Ltd" });
+    await source.db.insert(locations).values({
+      id: LOCATION,
+      name: "Counter",
+      province: "London",
+      timeZone: "Europe/London",
+      invoiceLocales: ["en-GB"],
+      operationDescription: "Hospitality",
+    });
+    await source.db.insert(nodes).values({ id: NODE, locationId: LOCATION, name: "Own box" });
+    const server = await startServer({
+      ...(await environment(true)),
+      WAITRON_ENV: "dev",
+      WAITRON_ONBOARDING_INTENT: intent,
+      WAITRON_TILL_LOCALE: "en-GB",
+    });
+    try {
+      const reply = await fetch(`http://127.0.0.1:${httpPort()}/api/till`);
+      expect(reply.status).toBe(200);
+      expect(await reply.json()).toMatchObject({
+        locale: "en-GB",
+        tipsEnabled: true,
+        simplifiedInvoiceLimit: null,
+      });
+      expect(observed.cfg).toMatchObject({
+        nodeId: NODE,
+        locationId: LOCATION,
+        locale: "en-GB",
+        invoiceLocales: ["en-GB"],
+        tipsEnabled: true,
+        practiceMode,
+        operationDescriptionRequired: false,
+      });
+    } finally {
+      await server.close();
+    }
+  },
+  60_000,
+);
+
 it.each(["mirror", "primary"] as const)(
   "%s reads the correct node's rows while retaining its own box identity",
   async (mode) => {
@@ -297,6 +374,10 @@ it.each(["mirror", "primary"] as const)(
         acceptingSales: mode === "primary",
       });
       expect(observed.cfg).toMatchObject({ nodeId: NODE, locationId: LOCATION });
+      expect(observed.orders?.cfg).toStrictEqual({ nodeId: mode === "mirror" ? originNode : NODE });
+      expect(observed.orders?.tradingContext).toBe(observed.cfg);
+      expect(observed.customers?.nodeId).toBe(mode === "mirror" ? originNode : NODE);
+      expect(observed.customers?.tradingContext).toBe(observed.cfg);
       if (mode === "mirror") {
         const write = await fetch(`${base}/management-api/catalogues`, {
           method: "POST",
