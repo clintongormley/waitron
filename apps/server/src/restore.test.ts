@@ -1810,22 +1810,42 @@ describe("transactional series restore identity", () => {
 });
 
 it("resolves an archive node's own location through the read-only source database", async () => {
-  const path = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
-  const entries = [{ name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) }];
-  await expect(readArtifactNode({ secretEntries: entries, databasePath: path })).resolves.toEqual({
-    nodeId: T.nodeId,
-    locationId: T.locationId,
-  });
-  const missing = "c0000000-0000-4000-8000-0000000000ff";
-  await expect(
-    readArtifactNode({
-      secretEntries: [
-        {
-          name: "secrets/trading.env",
-          bytes: Buffer.from(formatEnvFile({ WAITRON_NODE_ID: missing })),
-        },
-      ],
+  const otherLocation = "c0000000-0000-4000-8000-000000000001";
+  const otherNode = "c0000000-0000-4000-8000-000000000009";
+  await suite.db
+    .insert(locations)
+    .values({
+      id: otherLocation,
+      name: "Other location",
+      invoiceLocales: ["en"],
+      operationDescription: "Hospitality",
+    });
+  await suite.db
+    .insert(nodes)
+    .values({ id: otherNode, locationId: otherLocation, name: "Other node" });
+  try {
+    const path = suite.db.all<{ file: string }>(sql`pragma database_list`)[0]!.file;
+    const copy = (id: string) => ({
       databasePath: path,
-    }),
-  ).rejects.toMatchObject({ code: "restore.identity_unknown", params: { nodeId: missing } });
+      secretEntries: [
+        { name: "secrets/trading.env", bytes: Buffer.from(formatEnvFile({ WAITRON_NODE_ID: id })) },
+      ],
+    });
+    await expect(readArtifactNode(copy(T.nodeId))).resolves.toEqual({
+      nodeId: T.nodeId,
+      locationId: T.locationId,
+    });
+    await expect(readArtifactNode(copy(otherNode))).resolves.toEqual({
+      nodeId: otherNode,
+      locationId: otherLocation,
+    });
+    const missing = "c0000000-0000-4000-8000-0000000000ff";
+    await expect(readArtifactNode(copy(missing))).rejects.toMatchObject({
+      code: "restore.identity_unknown",
+      params: { nodeId: missing },
+    });
+  } finally {
+    await suite.db.delete(nodes).where(eq(nodes.id, otherNode));
+    await suite.db.delete(locations).where(eq(locations.id, otherLocation));
+  }
 });

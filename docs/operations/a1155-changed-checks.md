@@ -33,3 +33,9 @@ Other environment fixtures omit the removed line. Shared boot fixtures move thei
 location literal into a separate constant for database seeding. Receipt-language and guest
 route fixtures keep their original database location when constructing runtime configuration.
 The protected hash and immutability test files are unchanged.
+
+The fresh branch review found a full-disk fixture added on main during this branch’s lifetime.
+`apps/server/src/start-from-spare.e2e.test.ts` now supplies only the node setting; all of its
+trading and full-disk assertions remain. New boot coverage pins the missing-node refusal, and
+the archive-reader case now contains two distinct nodes and locations so an unrelated location
+cannot satisfy the expected result.

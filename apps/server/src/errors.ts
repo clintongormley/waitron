@@ -125,7 +125,7 @@ declare module "@waitron/shared" {
      */
     "server.till_config_missing": { key: string };
     /**
-     * A node identity value is present but a branded-id constructor rejected it. `key` names the
+     * The node identity is malformed or has no location in the venue database. `key` names the
      * variable and is the only field; the rejected value is not carried, for the reason
      * `server.till_config_missing` gives.
      */

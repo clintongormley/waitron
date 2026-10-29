@@ -2494,6 +2494,22 @@ describe("startServer, against a migrated venue directory", () => {
     }, 60_000);
   });
 
+  it("refuses trading when the configured node is absent from the database", async () => {
+    await expect(
+      startServer({
+        ...KEY_ENV,
+        WAITRON_NODE_ID: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        WAITRON_VENUE_DIR: sharedVenueDir,
+        WAITRON_HTTP_PORT: String(await freePort()),
+        WAITRON_MIGRATIONS_DIR: migrationsRoot,
+        WAITRON_ENV: "production",
+      }),
+    ).rejects.toMatchObject({
+      code: "server.till_config_invalid",
+      params: { key: "WAITRON_NODE_ID" },
+    });
+  });
+
   it("refuses trading boot when the database holds a second venue", async () => {
     const other = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
     await sharedDb.insert(locations).values({
