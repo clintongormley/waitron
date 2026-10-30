@@ -860,7 +860,6 @@ export class BackupScreen extends LitElement {
     try {
       this.reloadErrorCode = reloadErrorCode;
       scope?.commit(submitted);
-      // The bucket copy's kit carries the key, so its panel has to read the new one now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
       this.savedIt = false;
       if (!scope?.isDirty()) {
