@@ -79,14 +79,9 @@ const spareOption = (roots: { stateDir: string; venueDir: string }) => ({
   logDir: join(roots.stateDir, "logs"),
 });
 
-type Owner = {
-  state: { attemptId: string; revision: number; ownerGeneration: number };
-  capability: string;
-};
-
 type Inspection = { inspectionId: string; revision: number; ownerGeneration: number };
 
-/** The repair page's Start-again flow over the box's real routes: inspection, password, summary, Start again. */
+/** The repair page's Start-again flow over the box's real routes: inspection, summary, Start again. */
 async function startAgainOverRoutes(
   app: Hono,
   confirmation: "confirmMissingDatabase" | "confirmRecoveryDiscard" = "confirmMissingDatabase",
@@ -101,28 +96,7 @@ async function startAgainOverRoutes(
       ownerGeneration: inspected.ownerGeneration,
     };
   };
-  const recovered = await app.request(
-    `${ROUTE}/recover`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...(await read()),
-        clientClaimNonce: randomBytes(32).toString("base64url"),
-        password: PASSWORD,
-      }),
-    },
-    tls(),
-  );
-  expect(recovered.status, await recovered.clone().text()).toBe(200);
-  const owner = (await recovered.json()) as Owner;
-  const headers = {
-    "Content-Type": "application/json",
-    "X-Waitron-Setup-Owner": owner.capability,
-    "X-Waitron-Setup-Attempt": owner.state.attemptId,
-    "X-Waitron-Setup-Revision": String(owner.state.revision),
-    "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
-  };
+  const headers = { "Content-Type": "application/json" };
   const ids = await read();
   const summary = await app.request(
     `${ROUTE}/start-again/summary`,
@@ -161,7 +135,7 @@ async function filesUnder(dir: string): Promise<string[]> {
   return names;
 }
 
-it("with the box's spare file, the password step, the summary and Start again all work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
+it("with the box's spare file, the summary and Start again both work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
   const small = needDisk(ctx);
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);

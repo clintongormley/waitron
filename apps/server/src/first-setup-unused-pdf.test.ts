@@ -57,13 +57,17 @@ async function fixture(workspace?: { root: string; stateDir: string; venueDir: s
     reference: f.staged.ref.bindingDigest,
     consultedAt: "2026-10-16T12:20:00.000Z",
   });
-  const start = async (register: RegisterAnswer = answer()) => {
+  const start = async (
+    register: RegisterAnswer = answer(),
+    shown: { recoveryRecordDamagedShown?: true } = {},
+  ) => {
     const inspected = await host.resolution.inspectFirstSetupResolution();
     return actions.startAgainFirstSetup({
       inspectionId: inspected.inspectionId,
       revision: inspected.revision!,
       ownerGeneration: inspected.ownerGeneration!,
       register,
+      ...shown,
     });
   };
   return { ...f, host, actions, start, answer };
@@ -128,7 +132,7 @@ async function abandonedWithMissingDatabase(
   ).identity;
   await rm(join(f.venueDir, "venue.db"));
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
+  await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -140,12 +144,6 @@ async function abandonedWithMissingDatabase(
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
-    owner: {
-      attemptId: recovered.state.attemptId,
-      revision: recovered.state.revision,
-      ownerGeneration: recovered.state.ownerGeneration,
-      capability: recovered.capability,
-    },
   };
   const startAgain = (shown?: StartAgainSummary) =>
     f.actions.startAgainFirstSetup({
@@ -269,15 +267,19 @@ it.each([
   expect(await readFile(join(f.venueDir, "venue.db"))).toEqual(before);
 });
 it.each(["manifest", "binding"] as const)(
-  "a damaged recovery-key record (%s) asks for the setup password instead of starting again without one, and nothing changes",
+  "a damaged recovery-key record (%s) without the warning shown is refused setup.attempt_conflict, and nothing changes; with it, Start again deletes the setup",
   async (why) => {
     const f = await fixture();
     await damageRecord(f, why);
     const unchanged = await startAgainUnchanged(f);
     await expect(f.start(f.answer())).rejects.toMatchObject({
-      code: "setup.start_again_password_required",
+      code: "setup.attempt_conflict",
     });
     await unchanged();
+    await expect(
+      f.start(f.answer(), { recoveryRecordDamagedShown: true }),
+    ).resolves.toBeUndefined();
+    await expectStartAgainDeleted(f);
   },
 );
 async function damageRecord(
@@ -304,7 +306,7 @@ async function damageRecord(
 /** The setup password step, with the venue database left in place. */
 async function withPassword(f: Awaited<ReturnType<typeof fixture>>) {
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
+  await f.host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -318,15 +320,9 @@ async function withPassword(f: Awaited<ReturnType<typeof fixture>>) {
       revision: current.revision!,
       ownerGeneration: current.ownerGeneration!,
     },
-    owner: {
-      attemptId: recovered.state.attemptId,
-      revision: recovered.state.revision,
-      ownerGeneration: recovered.state.ownerGeneration,
-      capability: recovered.capability,
-    },
   };
 }
-it("a rehashed document with an invalid module confirmation cannot authorise unused-PDF reset without the setup password", async () => {
+it("a rehashed document with an invalid module confirmation is refused without the warning shown, and starts again with it", async () => {
   const f = await fixture();
   const directory = join(f.stateDir, "first-fiscal-documents");
   const manifestPath = join(directory, `${f.module}.recovery.json`);
@@ -336,19 +332,20 @@ it("a rehashed document with an invalid module confirmation cannot authorise unu
   manifest.bindingDigest = publicDigest(manifest.statement);
   await writeFile(manifestPath, JSON.stringify(manifest));
   const unchanged = await startAgainUnchanged(f);
-  await expect(f.start()).rejects.toMatchObject({ code: "setup.start_again_password_required" });
+  await expect(f.start()).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await unchanged();
+  await expect(f.start(f.answer(), { recoveryRecordDamagedShown: true })).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f);
 });
 it.each(["manifest", "binding", "rehashed"] as const)(
-  "with the setup password and the warning shown, a damaged recovery-key record (%s) starts again",
+  "with the warning shown, a damaged recovery-key record (%s) starts again",
   async (why) => {
     const f = await fixture();
     await damageRecord(f, why);
-    const { ids, owner } = await withPassword(f);
+    const { ids } = await withPassword(f);
     await expect(
       f.actions.startAgainFirstSetup({
         ...ids,
-        owner,
         register: f.answer(),
         recoveryRecordDamagedShown: true,
       }),
@@ -356,24 +353,23 @@ it.each(["manifest", "binding", "rehashed"] as const)(
     await expectStartAgainDeleted(f);
   },
 );
-it("with the setup password but without the warning shown, a damaged record is refused, and nothing changes", async () => {
+it("without the warning shown, a damaged record is refused, and nothing changes", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
-  const { ids, owner } = await withPassword(f);
+  const { ids } = await withPassword(f);
   const unchanged = await startAgainUnchanged(f);
   await expect(
-    f.actions.startAgainFirstSetup({ ...ids, owner, register: f.answer() }),
+    f.actions.startAgainFirstSetup({ ...ids, register: f.answer() }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await unchanged();
 });
 it("the warning flag on a box whose record reads cleanly is refused, and nothing changes", async () => {
   const f = await fixture();
-  const { ids, owner } = await withPassword(f);
+  const { ids } = await withPassword(f);
   const unchanged = await startAgainUnchanged(f);
   await expect(
     f.actions.startAgainFirstSetup({
       ...ids,
-      owner,
       register: f.answer(),
       recoveryRecordDamagedShown: true,
     }),
@@ -398,7 +394,7 @@ it("the warning flag with the database missing is refused", async () => {
   expect(await confirmations()).toEqual([]);
 });
 it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
-  "with the setup password, other damaged evidence (%s) still refuses setup.not_ready",
+  "other damaged evidence (%s) still refuses setup.not_ready",
   async (why) => {
     const f = await fixture();
     const directory = join(f.stateDir, "first-fiscal-documents");
@@ -416,12 +412,11 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
       await writeFile(path, JSON.stringify(state));
     }
     if (why === "orphan-document") await writeFile(join(directory, "unknown.json"), "{}");
-    const { ids, owner } = await withPassword(f);
+    const { ids } = await withPassword(f);
     const unchanged = await startAgainUnchanged(f);
     await expect(
       f.actions.startAgainFirstSetup({
         ...ids,
-        owner,
         register: f.answer(),
         recoveryRecordDamagedShown: true,
       }),
@@ -429,17 +424,16 @@ it.each(["key", "stage", "unknown-input", "orphan-document"] as const)(
     await unchanged();
   },
 );
-it("with the setup password, a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
+it("a damaged record and no staged node key is refused setup.not_ready, and nothing changes", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
   await rm(join(f.stateDir, "first-setup-node-key.json"));
-  const { ids, owner } = await withPassword(f);
+  const { ids } = await withPassword(f);
   const unchanged = await startAgainUnchanged(f);
   const before = await readFile(join(f.stateDir, "first-setup.json"));
   await expect(
     f.actions.startAgainFirstSetup({
       ...ids,
-      owner,
       register: f.answer(),
       recoveryRecordDamagedShown: true,
     }),
@@ -447,7 +441,7 @@ it("with the setup password, a damaged record and no staged node key is refused 
   await unchanged();
   expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
 });
-it("a damaged record beside a refused artifact refuses setup.not_ready without asking for the password", async () => {
+it("a damaged record beside a refused artifact refuses setup.not_ready", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
   await writeFile(join(f.stateDir, "trading.env"), "X=1");
@@ -455,13 +449,15 @@ it("a damaged record beside a refused artifact refuses setup.not_ready without a
   await expect(f.start(f.answer())).rejects.toMatchObject({ code: "setup.not_ready" });
   await unchanged();
 });
-it("a damaged recovery-key record alone asks for the setup password with no params", async () => {
+it("a damaged recovery-key record alone is refused with no params without the warning shown, and starts again with it", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
   const refused = await f.start().then(
     () => null,
     (error: unknown) => error,
   );
-  expect(refused).toMatchObject({ code: "setup.start_again_password_required" });
+  expect(refused).toMatchObject({ code: "setup.attempt_conflict" });
   expect((refused as { params: unknown }).params).toEqual({});
+  await expect(f.start(f.answer(), { recoveryRecordDamagedShown: true })).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f);
 });

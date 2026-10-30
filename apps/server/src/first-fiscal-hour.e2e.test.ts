@@ -41,7 +41,7 @@ afterEach(async () => {
 });
 
 it.each(["src/bin.ts", "src/node-entry.ts"])(
-  "%s refuses a password-authorised Start again while a restore or reset request waits, then deletes the attempt in place and starts fresh in the same folders",
+  "%s refuses Start again while a restore or reset request waits, then deletes the attempt in place and starts fresh in the same folders",
   async (script) => {
     const f = await fixture();
     vi.useFakeTimers({ toFake: ["Date", "performance"] });
@@ -90,7 +90,6 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
         password: PASSWORD,
       });
       expect(recovered.status).toBe(200);
-      const owner = await recovered.json();
       await writeFile(join(f.stateDir, "restore-request.json"), "retired restore must not run");
       await writeFile(join(f.stateDir, "reset-request.json"), "retired reset must not run");
       const fresh = await (await get("/setup-api/first-setup/resolution")).json();
@@ -99,33 +98,16 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
         revision: fresh.revision,
         ownerGeneration: fresh.ownerGeneration,
       };
-      const ownerHeaders = {
-        "X-Waitron-Setup-Owner": owner.capability,
-        "X-Waitron-Setup-Attempt": owner.state.attemptId,
-        "X-Waitron-Setup-Revision": String(owner.state.revision),
-        "X-Waitron-Setup-Generation": String(owner.state.ownerGeneration),
-      };
-      const unconfirmed = await post(
-        "/setup-api/first-setup/resolution/start-again",
-        ids,
-        ownerHeaders,
-      );
+      const unconfirmed = await post("/setup-api/first-setup/resolution/start-again", ids);
       expect(unconfirmed.status).toBe(503);
       expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
-      const summary = await post(
-        "/setup-api/first-setup/resolution/start-again/summary",
-        ids,
-        ownerHeaders,
-      );
-      expect(summary.status, await summary.clone().text()).toBe(200);
-      const waiting = await post(
-        "/setup-api/first-setup/resolution/start-again",
-        {
-          ...ids,
-          confirmMissingDatabase: { nothingFiledOrSold: true, shown: await summary.json() },
-        },
-        ownerHeaders,
-      );
+      const summary = await post("/setup-api/first-setup/resolution/start-again/summary", ids);
+      expect(summary.status).toBe(503);
+      expect(await summary.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+      const waiting = await post("/setup-api/first-setup/resolution/start-again", {
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named" } },
+      });
       expect(waiting.status).toBe(503);
       expect(await waiting.json()).toMatchObject({ error: { code: "setup.not_ready" } });
       expect(await readFile(join(f.stateDir, "restore-request.json"), "utf8")).toBe(
@@ -146,15 +128,13 @@ it.each(["src/bin.ts", "src/node-entry.ts"])(
       const clearedSummary = await post(
         "/setup-api/first-setup/resolution/start-again/summary",
         clearedIds,
-        ownerHeaders,
       );
       expect(clearedSummary.status, await clearedSummary.clone().text()).toBe(200);
       const shown = await clearedSummary.json();
-      const selected = await post(
-        "/setup-api/first-setup/resolution/start-again",
-        { ...clearedIds, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
-        ownerHeaders,
-      );
+      const selected = await post("/setup-api/first-setup/resolution/start-again", {
+        ...clearedIds,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      });
       expect(selected.status, await selected.clone().text()).toBe(200);
       expect(await selected.json()).toEqual({ restarting: true });
       await closeAgent();

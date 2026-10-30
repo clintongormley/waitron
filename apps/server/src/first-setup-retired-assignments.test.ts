@@ -152,7 +152,7 @@ async function startAgainMissingDatabase(
   resolution: Host["resolution"] = host.resolution,
 ) {
   const inspected = await host.resolution.inspectFirstSetupResolution();
-  const recovered = await host.owner.recoverFirstSetupOwner({
+  await host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -164,7 +164,6 @@ async function startAgainMissingDatabase(
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
-    owner: { ...recovered.state, capability: recovered.capability },
   };
   const actions = createFirstSetupResolutionActions({ ...folders, host: { ...host, resolution } });
   const shown = await actions.startAgainSummary(ids);
@@ -358,7 +357,6 @@ it("password recovery starts an unused named replacement again in the same folde
       inspectionId: inspection.inspectionId,
       revision: recovered.state.revision,
       ownerGeneration: recovered.state.ownerGeneration,
-      owner: { ...recovered.state, capability: recovered.capability },
     }),
   ).resolves.toBeUndefined();
   expect({ stateDir: f.state.stateDir, venueDir: f.state.venueDir }).toEqual({

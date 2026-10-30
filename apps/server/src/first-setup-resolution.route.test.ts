@@ -108,18 +108,12 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         reference: "c".repeat(64),
         consultedAt: "2026-10-16T02:00:00.000Z",
       };
-      const ownerHeaders = {
-        "X-Waitron-Setup-Owner": recovered.capability,
-        "X-Waitron-Setup-Attempt": recovered.state.attemptId,
-        "X-Waitron-Setup-Revision": String(recovered.state.revision),
-        "X-Waitron-Setup-Generation": String(recovered.state.ownerGeneration),
-      };
-      const summary = await post("start-again/summary", ids, ownerHeaders);
+      const summary = await post("start-again/summary", ids);
       expect(summary.status, await summary.clone().text()).toBe(200);
       const shown = await summary.json();
       expect(shown).toEqual({ reached: "named" });
       const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
-      const unconfirmed = await post("start-again", { ...ids, register }, ownerHeaders);
+      const unconfirmed = await post("start-again", { ...ids, register });
       expect(unconfirmed.status).toBe(503);
       expect(await unconfirmed.json()).toMatchObject({ error: { code: "setup.not_ready" } });
       expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(attemptFile);
@@ -132,11 +126,11 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
         ),
       ).toEqual([]);
       const at = new Date().toISOString();
-      const response = await post(
-        "start-again",
-        { ...ids, register, confirmMissingDatabase: { nothingFiledOrSold: true, shown } },
-        ownerHeaders,
-      );
+      const response = await post("start-again", {
+        ...ids,
+        register,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+      });
       expect(response.status).toBe(200);
       const confirmations = join(f.stateDir, "first-setup-start-again-confirmations");
       const written = await readdir(confirmations);

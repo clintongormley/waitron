@@ -110,10 +110,6 @@ it("a first-setup request on a box whose earlier Waitron's selection appears aft
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": "synthetic",
-          "X-Waitron-Setup-Attempt": "synthetic",
-          "X-Waitron-Setup-Revision": "1",
-          "X-Waitron-Setup-Generation": "1",
         },
         body: JSON.stringify({ inspectionId: "synthetic", revision: 1, ownerGeneration: 1 }),
       },

@@ -80,12 +80,12 @@ const snapshot = async (f: Pick<Held, "roots">) => ({
 
 /**
  * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
- * publication completed cannot be signed into again, so with `signIn: false` it asks without an
- * owner.
+ * publication completed cannot be signed into again, so with `signIn: false` it asks without
+ * signing in.
  */
 async function signedIn(f: Held, host: Held["host"] = f.host, signIn = true) {
   const request = signIn
-    ? await f.signIn().then(({ owner, ids }) => ({ ...ids, owner }))
+    ? await f.signIn().then(({ ids }) => ids)
     : await host.resolution.inspectFirstSetupResolution().then((current) => ({
         inspectionId: current.inspectionId,
         revision: current.revision!,
@@ -136,7 +136,7 @@ it("a held setup database with an invoice record refuses the summary kept-record
 
 it("the summary's kept-records refusal logs the counts, not the answer", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const { owner, ids } = await f.signIn();
+  const { ids } = await f.signIn();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
@@ -160,10 +160,6 @@ it("the summary's kept-records refusal logs the counts, not the answer", async (
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": owner.capability,
-          "X-Waitron-Setup-Attempt": owner.attemptId,
-          "X-Waitron-Setup-Revision": String(owner.revision),
-          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
         },
         body: JSON.stringify(ids),
       },
@@ -250,20 +246,19 @@ it.each([
 
 /** Signs the owner in and asks for the summary; `run` sends Start again confirming it. */
 async function askStartAgain(f: Held, host: Held["host"] = f.host) {
-  const { owner, ids } = await f.signIn();
+  const { ids } = await f.signIn();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host,
     ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary({ ...ids });
   return {
     shown,
-    owner,
     ids,
     actions,
     run: (extra: Partial<StartAgainFirstSetupRequest> = { confirmRecoveryDiscard: { shown } }) =>
-      actions.startAgainFirstSetup({ ...ids, owner, ...extra }),
+      actions.startAgainFirstSetup({ ...ids, ...extra }),
   };
 }
 
@@ -379,10 +374,10 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
   });
   await expectRefused(f, { code: "setup.not_ready" });
   const { shown } = before;
-  const { owner, ids } = await f.signIn();
+  const { ids } = await f.signIn();
   await expectStartAgainRefused(
     f,
-    () => before.actions.startAgainFirstSetup({ ...ids, owner, confirmRecoveryDiscard: { shown } }),
+    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
     { code: "setup.not_ready" },
   );
 });
@@ -413,7 +408,6 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
   const ids = signIn
     ? await f.signIn()
     : {
-        owner: undefined,
         ids: await f.host.resolution.inspectFirstSetupResolution().then((current) => ({
           inspectionId: current.inspectionId,
           revision: current.revision!,
@@ -429,7 +423,6 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
   return () =>
     actions.startAgainFirstSetup({
       ...ids.ids,
-      ...(ids.owner === undefined ? {} : { owner: ids.owner }),
       ...(confirm && { confirmRecoveryDiscard: { shown } }),
     });
 }
@@ -499,10 +492,6 @@ it("in the held state, the Start again route passes the shown summary on, so con
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": startAgain.owner.capability,
-          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
-          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
-          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
         },
         body: JSON.stringify({
           ...startAgain.ids,
@@ -521,7 +510,7 @@ it("in the held state, the Start again route passes the shown summary on, so con
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const { owner, ids } = await f.signIn();
+  const { ids } = await f.signIn();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: f.host,
@@ -551,10 +540,6 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": owner.capability,
-          "X-Waitron-Setup-Attempt": owner.attemptId,
-          "X-Waitron-Setup-Revision": String(owner.revision),
-          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
         },
         body: JSON.stringify({
           ...ids,
