@@ -739,6 +739,81 @@ describe("making a pack", () => {
     },
   );
 
+  describe("a receipt confirmation that completes late", () => {
+    function watchUrls() {
+      const created: string[] = [];
+      const create = URL.createObjectURL.bind(URL);
+      vi.spyOn(URL, "createObjectURL").mockImplementation((blob) => {
+        const url = create(blob as Blob);
+        created.push(url);
+        return url;
+      });
+      const revoked: string[] = [];
+      const revoke = URL.revokeObjectURL.bind(URL);
+      vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => {
+        revoked.push(url);
+        revoke(url);
+      });
+      return { created, revoked };
+    }
+
+    it.each([
+      ["the card is removed", (el: RecoveryPackCard) => el.remove()],
+      [
+        "system.manage is taken away",
+        (el: RecoveryPackCard) => {
+          el.canManage = false;
+        },
+      ],
+    ] as const)("makes no link to the pack when %s while it is out", async (_what, change) => {
+      const { created, revoked } = watchUrls();
+      const api = stubApi(STATES.none);
+      const marked = deferred<void>();
+      api.markRecoveryPackReceived.mockReturnValue(marked.promise);
+      const el = await mount(api);
+      const { make } = await openDialog(el);
+      make();
+      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+      change(el);
+      await settle(el);
+      marked.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await settle(el);
+      expect(created).toEqual([]);
+      expect(revoked).toEqual([]);
+    });
+
+    it("never swaps a newer pack's link for an older one's", async () => {
+      const api = stubApi(STATES.none);
+      api.makeRecoveryPack
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced" })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced" });
+      const first = deferred<void>();
+      const second = deferred<void>();
+      api.markRecoveryPackReceived
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      const el = await mount(api);
+      (await openDialog(el)).make();
+      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+      dialogOf(el).dismiss();
+      await settle(el);
+      (await openDialog(el)).make();
+      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(2);
+      second.resolve();
+      const download = () =>
+        el
+          .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")
+          ?.getAttribute("download") ?? null;
+      await expect.poll(download).toBe("waitron-recovery-pack-2.pdf");
+      first.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await settle(el);
+      expect(download()).toBe("waitron-recovery-pack-2.pdf");
+      expect(words(el.shadowRoot!.querySelector("[data-test=pack-ready]"))).toContain("2");
+    });
+  });
+
   it("tells the screen when Make is pressed", async () => {
     const el = await mount(stubApi(STATES.none));
     const pressed = vi.fn();
