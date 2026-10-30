@@ -7005,6 +7005,7 @@ describe("A1208 a retrieved counter order's portions", () => {
             ? Promise.resolve({
                 ...held(1),
                 id: "wo-2",
+                kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
                 lines: [
                   {
                     workingOrderLineId: "t1",
@@ -7044,6 +7045,66 @@ describe("A1208 a retrieved counter order's portions", () => {
       expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
         ["Tostada", "1"],
       ]);
+    });
+
+    it("leaves a newer basket alone when a save sent from an earlier one is refused late", async () => {
+      let rejectSave!: (error: { code: string }) => void;
+      const updateWorkingOrder = vi.fn(
+        () =>
+          new Promise<{ revision: number }>((_resolve, reject) => {
+            rejectSave = reject;
+          }),
+      );
+      const savedReads = reads();
+      const { el, c } = await retrieved({
+        ...savedReads,
+        updateWorkingOrder,
+        listWorkingOrders: vi.fn().mockResolvedValue([{ ...summary(false), id: "wo-2" }]),
+        retrieveWorkingOrder: vi.fn((id: string) =>
+          id === "wo-2"
+            ? Promise.resolve({
+                ...held(1),
+                id: "wo-2",
+                kitchenNote: { ...held(1).kitchenNote, scope: { workingOrderId: "wo-2" } },
+                lines: [
+                  {
+                    workingOrderLineId: "t1",
+                    menuItemId: "menu-item-tostada-0",
+                    quantity: "1.000",
+                    product: tostada,
+                  },
+                ],
+              })
+            : savedReads.retrieveWorkingOrder(),
+        ),
+        recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      });
+      c.store.setLineQuantity(0, "4");
+      emit(c, "confirm-payment", { method: "cash", amount: "10" });
+      await vi.waitFor(() => expect(rejectSave).toBeTypeOf("function"));
+      c.orderList = "parked";
+      await c.updateComplete;
+      const heldList = c.shadowRoot!.querySelector("till-held-orders")!;
+      expect(heldList).not.toBeNull();
+      await heldList.updateComplete;
+      heldList.shadowRoot!.querySelector<HTMLElement>(".retrieve")!.click();
+      await flush(el);
+      const question = el.shadowRoot!.querySelector("wt-unsaved-changes")!;
+      expect(question.open).toBe(true);
+      question.shadowRoot!.querySelector<HTMLElement>("[data-choice=discard]")!.click();
+      await flush(el);
+      expect(c.store.id).toBe("wo-2");
+      expect(c.store.revision).toBe(1);
+      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+        ["Tostada", "1"],
+      ]);
+      rejectSave({ code: "working_order.out_of_date" });
+      await flush(el);
+      expect(c.store.id).toBe("wo-2");
+      expect(c.store.lines.map((line) => [line.product.name, line.quantity])).toEqual([
+        ["Tostada", "1"],
+      ]);
+      expect(banner(el)?.textContent ?? "").not.toContain(t("held.changed_elsewhere"));
     });
 
     it("names every stored portion in the next save, the ones the first save added included", async () => {
