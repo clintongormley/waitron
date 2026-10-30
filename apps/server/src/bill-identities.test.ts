@@ -2,8 +2,18 @@ import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { captureError } from "@waitron/db";
+import { AppError } from "@waitron/shared";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
-import { finishTable } from "./testing/party-close-fixture.js";
+import { closingEditsForTest, finishTable } from "./testing/party-close-fixture.js";
+import {
+  moveBill,
+  type MoveBillOptions,
+  type MoveBillResult,
+  type MoveTarget,
+} from "./testing/move-bill-fixture.js";
+import { finishPartyService } from "./finish-party-service.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { addTabRound } from "./testing/order-writer-fixture.js";
 import {
   allocationsOf,
@@ -13,13 +23,17 @@ import {
 } from "./testing/bill-identities.js";
 import {
   OPERATOR,
+  activeTablesOf,
+  billRow,
   commandFor,
   counterOrder,
   inTx,
   order,
   orderForParty,
   partyRow,
+  partyAt,
   pay,
+  revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
   split,
@@ -28,6 +42,7 @@ import {
 import { splitDraft } from "./order-drafts.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
 import "./errors.js";
 
 // A803 slice 2: each bill at a table keeps the number its seated party gave it.
@@ -215,6 +230,213 @@ describe("A803 bill numbers: created", () => {
       [1, tabId],
       [2, first.billId],
     ]);
+    await everyPartyBillNumbered();
+  });
+});
+
+async function moveTo(
+  billId: string,
+  to: MoveTarget,
+  opts: Partial<MoveBillOptions> = {},
+): Promise<MoveBillResult> {
+  const own = (await billRow(v, billId)).partyId;
+  const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
+  const options: MoveBillOptions = {
+    bills: "separate",
+    operatorId: OPERATOR,
+    ...(own === null ? {} : { expectedPartyRevision: await revisionOf(v, own) }),
+    ...(target === null || target === own
+      ? {}
+      : { otherPartyId: target, expectedOtherPartyRevision: await revisionOf(v, target) }),
+    ...opts,
+  };
+  return inTx(v, (tx) => moveBill(tx, v.cfg, billId, to, options));
+}
+
+async function nameBill(billId: string, name: string): Promise<void> {
+  await inTx(v, (tx) => VENUE_SERVICE.setBillName(tx, billId, name));
+}
+
+/** A seated table with Bills 1 to `count`, each holding one Agua. */
+async function tableWithBills(label: string, count: number) {
+  const seated = await seat(v, await v.table(label));
+  await order(v, seated.tabId, ...Array.from({ length: count }, () => "Agua"));
+  const bills = [seated.tabId];
+  for (let line = 1; line < count; line++)
+    bills.push(await split(v, seated.partyId, seated.tabId, [line]));
+  return { ...seated, bills };
+}
+
+describe("A803 bill numbers: move bill", () => {
+  it("a bill moved to a free table is Bill 1 there, and its old table never gives its number again", async () => {
+    const from = await tableWithBills("M1", 2);
+    const freeTable = await v.table("M1 free");
+
+    const moved = await moveTo(from.bills[1]!, { tableId: freeTable });
+
+    expect(await numbersOf(v, moved.partyId!)).toEqual([[from.bills[1], 1, null]]);
+    expect(await numbersOf(v, from.partyId)).toEqual([[from.tabId, 1, null]]);
+    const third = await split(v, from.partyId, from.tabId, [2]);
+    expect(await numbersOf(v, from.partyId)).toEqual([
+      [from.tabId, 1, null],
+      [third, 3, null],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a bill moved to a table with Bills 1–4 is Bill 5 there and keeps its name", async () => {
+    const from = await tableWithBills("M2", 2);
+    const to = await tableWithBills("M2 to", 4);
+    const toTable = (await activeTablesOf(v, to.partyId))[0]!;
+    await nameBill(from.bills[1]!, "Clint");
+
+    await moveTo(from.bills[1]!, { tableId: toTable });
+
+    expect((await numbersOf(v, to.partyId)).at(-1)).toEqual([from.bills[1], 5, "Clint"]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a bill moved with Merge the bills takes no number there, so the next new bill there is Bill 2, and its old table still never gives its old number again", async () => {
+    const from = await tableWithBills("M3", 2);
+    const to = await seat(v, await v.table("M3 to"));
+    await order(v, to.tabId, "Agua");
+    const toTable = (await activeTablesOf(v, to.partyId))[0]!;
+
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+
+    expect(moved).toMatchObject({ merged: true, billId: to.tabId });
+    expect(await allocationsOf(v, to.partyId)).toEqual([[1, to.tabId]]);
+    const next = await split(v, to.partyId, to.tabId, [1]);
+    expect(await numbersOf(v, to.partyId)).toEqual([
+      [to.tabId, 1, null],
+      [next, 2, null],
+    ]);
+    const third = await split(v, from.partyId, from.tabId, [2]);
+    expect((await numbersOf(v, from.partyId)).at(-1)).toEqual([third, 3, null]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a counter order moved to a table takes that table's next number, with no name", async () => {
+    const to = await tableWithBills("M4", 2);
+    const toTable = (await activeTablesOf(v, to.partyId))[0]!;
+    const orderId = await counterOrder(v, "Tarta");
+
+    await moveTo(orderId, { tableId: toTable }, { partyId: null });
+
+    expect((await numbersOf(v, to.partyId)).at(-1)).toEqual([orderId, 3, null]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a bill moved to the counter loses its number, keeps its name, and coming back to a table takes that table's next number with its name", async () => {
+    const from = await tableWithBills("M5", 2);
+    const back = await tableWithBills("M5 back", 3);
+    const backTable = (await activeTablesOf(v, back.partyId))[0]!;
+    const leaving = from.bills[1]!;
+    await nameBill(leaving, "Clint");
+
+    await moveTo(leaving, { counter: { zoneId: null } }, { partyId: from.partyId });
+
+    expect(await numbersOf(v, from.partyId)).toEqual([[from.tabId, 1, null]]);
+    expect(await inTx(v, (tx) => VENUE_SERVICE.readBillIdentities(tx, [leaving]))).toEqual(
+      new Map([[leaving, { number: null, name: "Clint" }]]),
+    );
+    expect(await allocationsOf(v, from.partyId)).toEqual([
+      [1, from.tabId],
+      [2, leaving],
+    ]);
+
+    await moveTo(leaving, { tableId: backTable }, { partyId: null });
+
+    expect((await numbersOf(v, back.partyId)).at(-1)).toEqual([leaving, 4, "Clint"]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a paid bill left for collection when its table finishes loses its number and keeps its name", async () => {
+    const { partyId, tabId } = await seat(v, await v.table("M6"));
+    await order(v, tabId, "Burger");
+    await pay(v, tabId, "12.00");
+    await nameBill(tabId, "Clint");
+    const finishBody = async () => {
+      const expectedEdits = await inTx(v, (tx) => closingEditsForTest(tx, partyId));
+      return {
+        partyId,
+        operatorId: OPERATOR,
+        expectedPartyRevision: await revisionOf(v, partyId),
+        expectedEdits,
+        submissionId: randomUUID(),
+      };
+    };
+    const asked = await finishBody();
+    const refusal = await captureError(() => inTx(v, (tx) => finishPartyService(tx, v.cfg, asked)));
+    expect(refusal).toMatchObject({ code: "party.unserved_dishes" });
+    const { dishes } = (refusal as AppError).params as unknown as {
+      dishes: { billId: string; billRevision: number }[];
+    };
+    const collecting = await finishBody();
+
+    await inTx(v, (tx) =>
+      finishPartyService(tx, v.cfg, {
+        ...collecting,
+        collect: {
+          bills: [{ billId: tabId, expectedBillRevision: dishes[0]!.billRevision }],
+        },
+      }),
+    );
+
+    expect((await billRow(v, tabId)).partyId).toBeNull();
+    expect(await inTx(v, (tx) => VENUE_SERVICE.readBillIdentities(tx, [tabId]))).toEqual(
+      new Map([[tabId, { number: null, name: "Clint" }]]),
+    );
+    expect(await allocationsOf(v, partyId)).toEqual([[1, tabId]]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a replayed move (same submissionId, the allergy path) numbers the bill once", async () => {
+    const to = await tableWithBills("M7", 1);
+    const toTable = (await activeTablesOf(v, to.partyId))[0]!;
+    const orderId = await counterOrder(v, "Tarta");
+    const ask = {
+      partyId: null,
+      submissionId: randomUUID(),
+      allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
+    };
+
+    const options: MoveBillOptions = {
+      bills: "separate",
+      operatorId: OPERATOR,
+      otherPartyId: to.partyId,
+      expectedOtherPartyRevision: await revisionOf(v, to.partyId),
+      expectedEdits: await inTx(v, async (tx) => [
+        ...(await partyBillEditsForTest(tx, [to.partyId])),
+        await readBillEditState(tx, orderId),
+      ]),
+      ...ask,
+    };
+    options.expectedEdits!.sort((a, b) => a.billId.localeCompare(b.billId));
+    const send = () => inTx(v, (tx) => moveBill(tx, v.cfg, orderId, { tableId: toTable }, options));
+
+    const first = await send();
+    const again = await send();
+
+    expect(again).toEqual(first);
+    expect(await allocationsOf(v, to.partyId)).toEqual([
+      [1, to.tabId],
+      [2, orderId],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a move refused for a stale revision changes no number or allocation row", async () => {
+    const from = await tableWithBills("M8", 2);
+    const freeTable = await v.table("M8 free");
+    const before = await billNumberTables(v);
+    const stale = (await revisionOf(v, from.partyId)) - 1;
+
+    await expect(
+      moveTo(from.bills[1]!, { tableId: freeTable }, { expectedPartyRevision: stale }),
+    ).rejects.toMatchObject({ code: "party.out_of_date" });
+
+    expect(await billNumberTables(v)).toEqual(before);
     await everyPartyBillNumbered();
   });
 });
