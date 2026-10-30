@@ -468,10 +468,8 @@ until A977).
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as does the split-extras venue's operation description.
   The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
-  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the zone-offer suite
-  still names its location and a station "Barra" and its products "Café", "Tostada", "Agua"
-  and "Azúcar"; the fiscal sale-path suite's
-  venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
+  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
+  suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The device-api suite still names kitchen screens and stations "Uno",
   "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
