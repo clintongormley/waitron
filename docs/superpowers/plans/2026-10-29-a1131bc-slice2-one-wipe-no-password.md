@@ -1,5 +1,17 @@
 # A1131b/c slice 2: one wipe, no password — Implementation Plan
 
+**Revision 7 (2026-10-30).** Folds the round-3 check of revision 6
+(`~/waitron-campaign/item-a1131bc-2-plan-review-6.md`, 0 critical, 3 important, 1 minor; probes and
+outputs in `~/waitron-campaign/a1131bc-2-rev6-check/`):
+- **I1:** Task 4b's journal test now deletes `state/modules.json` as well as `venue.db`, because a
+  setup that committed activation is refused before the wipe for that file. The test keeps only
+  "the wipe leaves no journal"; its restore half is dropped. D15 is narrowed to match.
+- **I2:** the `"rolls-back"` journal recipe gains `pragma synchronous = off`. Without it, inside a
+  test file that loads `hour-recovery-host.js`, the journal it copies is not hot.
+- **I3:** new D16: a missing database with `trading.env` saved stays `wipeUnavailable`. N1 lists it,
+  Task 3 pins it, and D8's reason is narrowed.
+- **M1:** "Current behaviour" and D8 name the disabled Start again button the page draws today.
+
 **Revision 6 (2026-10-30).** Folds the round-3 claim check of revision 5
 (`~/waitron-campaign/item-a1131bc-2-plan-review-5.md`, 0 critical, 4 important, 4 minor; probes in
 `~/waitron-campaign/a1131bc-2-rev5-review5/`) and the owner's words for OQ-B:
@@ -115,6 +127,10 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
     labels it `unknown` whoever's journal it is (run by review 5: P1, P2 and P3 all `unknown`), and
     then D3 rows c and e refuse it (read: a clean read is "label and read disagree"; a failed one
     meets the journal exception).
+  - a missing `venue.db` with `trading.env` saved (D16): the disk check refuses it `setup.not_ready`
+    (run, `~/waitron-campaign/a1131bc-2-rev6-check/server-output.txt`, case D), so the page draws
+    `wipeUnavailable`, not `tradingSaved`, whose words would send the person to a Continue that is
+    no longer offered.
   - a damaged `node.db`, whether `venue.db` is missing, readable or damaged: the disk check's
     "node.db unreadable" refusal stays exactly as today (D3, Task 4d).
 - **N2 — Damage beside a visible sale, still refused:** when the readable part of a damaged database
@@ -256,8 +272,9 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
   only after Continue's password, and only when the setup is not finished (`#resumeFirstSetup`
   `:1303-1365`, missing branch `:1339-1342`; a finished one goes to the first-owner screen,
   `:1344-1349`, where `authenticatedMissing` is false for a `complete` status (`:2502-2506`), so
-  the page draws `startUnavailable`, Recover from backup (`recoverBackup(unsettled)`, `:2823`),
-  Reconnect and the "Set up secure connection" link (`:2869-2884`)). Today Start again refuses a
+  the page draws a disabled Start again, `startUnavailable`, Recover from backup (`recoverBackup(unsettled)`, `:2823`),
+  Reconnect and the "Set up secure connection" link (`:2869-2884`); run,
+  `~/waitron-campaign/a1131bc-2-rev6-check/page-output.txt`, P1). Today Start again refuses a
   missing database whose setup is `complete` with `unavailable()`, i.e. `setup.not_ready`
   (`first-setup-resolution.ts:376-377`); the only `setup-finished` refusal is in
   `assertHeldStartAgainOffered` (`:83`), which runs only for a present database (`:310`, `:374`).
@@ -344,7 +361,9 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
    - **P2, a scratch database holding 50 committed rows that the transaction updates:** `nRec` 1,
      original size 52 pages. Real reader: label `unknown`, `"read failed: ERR_SQLITE_ERROR 11"`.
      Planner's re-run: the copy shrinks from 643072 to 212992 bytes and the schema read itself
-     fails `errcode 11`.
+     fails `errcode 11`. These numbers came from runs outside the test files that load
+     `hour-recovery-host.js`; inside them the recipe needs `pragma synchronous = off` (Task 4a's
+     fixture, round-3 check of revision 6, I2).
    - **P3, the held database's own hot journal** (the recipe at
      `first-setup-database-holdings.test.ts:219-237`): label `unknown`; the reader answers rows 105.
    - For P1 and P2 the real run printed the original file unchanged, and its control without the
@@ -424,8 +443,9 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
 - **D8 — With the database missing the page no longer offers Continue.** For a setup that is not
   finished, Continue's password led only to the Start again ask (`#resumeFirstSetup` `:1339-1342`),
   which now opens from Start again. For a finished one it led to the first-owner screen
-  (`:1344-1349`), which draws `startUnavailable`, Recover from backup, Reconnect and the "Set up
-  secure connection" link (Current behaviour; `setup-app.ts:2502-2506`, `:2823`, `:2869-2884`).
+  (`:1344-1349`), which draws a disabled Start again, `startUnavailable`, Recover from backup,
+  Reconnect and the "Set up secure connection" link (Current behaviour; `setup-app.ts:2502-2506`,
+  `:2823`, `:2869-2884`; run, `~/waitron-campaign/a1131bc-2-rev6-check/page-output.txt`, P1).
   Now pressing Start again reads the summary, which refuses `setup-finished` (the server step Task
   2a adds: database missing and status `complete` → `refused("setup-finished")`, in place of today's
   `unavailable()` at `first-setup-resolution.ts:376-377`), and the page draws `setupFinished` and
@@ -433,7 +453,9 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
   server step and not `wipeUnavailable`:** the approved spec's §1a table opens with "the setup
   finished | refused | `setupFinished`; Reconnect" (spec line 191) with no condition on the
   database, and §1 step 1 has the box answer with the refusal; without the step the page would
-  draw `wipeUnavailable` for a finished setup, which the spec does not allow.
+  draw `wipeUnavailable` for a finished setup, although `setupFinished`'s words stay true with the
+  database missing. Where a row's words would be false for a missing database, the page keeps
+  `wipeUnavailable` instead (D16).
 - **D9 — The kept-records log reason** is `rows=<n> kept=<n> records=<n> accepted=<n>` on the
   summary's refusal and on Start again's; when the read was `damaged` it adds `damaged=<code>`.
 - **D10 — The damaged-database line** (`setupDatabaseUnreadable`) goes where the recovery-key line
@@ -460,14 +482,30 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-
   `SIDE_FILES` (`first-setup-start-again-deletion.ts:36`), which are listed whenever present
   (`:297-300`) and deleted without comparison against the marker (`:516`). The database each journal
   belongs to is either deleted in the same pass or already missing. **The one path this covers:**
-  `venue.db` missing with a hot journal left where it was. The inspection labels a missing
-  `venue.db` `missing` without looking at side files
-  (`first-setup-resolution-inspection.ts:82`), so row a's wipe runs; today it leaves the journal,
-  and the fresh-box restore, which moves aside only `venue.db`, `-wal` and `-shm`
-  (`restore.ts:546-557`), places the restored database beside it, where the first read-write open
-  rolls it in (experiments 2 and 5: an intact database cut to 212992 bytes and failing code 11, or
-  to 0 bytes). A PRESENT database with a hot journal beside it never reaches the wipe: the
-  inspection labels it `unknown` (experiment 5, all three shapes) and D3 refuses it (N1).
+  `venue.db` missing with a hot journal left where it was, for a setup that never committed
+  activation (so `state/modules.json` is absent). The inspection labels a missing `venue.db`
+  `missing` without looking at side files (`first-setup-resolution-inspection.ts:82`), so row a's
+  wipe runs. A setup that did commit activation wrote `modules.json` after its commit
+  (`apps/server/src/provision.ts:183`), and the disk check refuses that file except on the held path
+  (`first-setup-start-again-deletion.ts:43`, `:456-462`), so it is refused before any wipe (run,
+  `~/waitron-campaign/a1131bc-2-rev6-check/server-output.txt`, case A and its control: "refused
+  artifact: state/modules.json"). With `modules.json` deleted the wipe runs and today leaves the
+  journal (run, `server-output-2.txt`, case E). The fresh-box restore moves aside only `venue.db`,
+  `-wal` and `-shm` (`restore.ts:546-557`, read), so it would place a restored database beside that
+  journal, where a read-write open rolls it in (experiments 2 and 5: an intact database cut to
+  212992 bytes and failing code 11, or to 0 bytes). No run has yet carried a restore through after
+  a missing-database wipe (case E's restore failed the same way with and without the journal). A
+  PRESENT database with a hot journal beside it never reaches the wipe: the inspection labels it
+  `unknown` (experiment 5, all three shapes) and D3 refuses it (N1).
+- **D16 — A missing database with `trading.env` saved stays `wipeUnavailable`.** The disk check
+  refuses it `setup.not_ready`, reason `refused artifact: state/trading.env`, both when called
+  directly and through today's Start again (run, `~/waitron-campaign/a1131bc-2-rev6-check/server-output.txt`,
+  case D, with `modules.json` also present: the check's list names `trading.env` before it,
+  `first-setup-start-again-deletion.ts:39`, `:43`). Today's summary answers there (same run); after
+  Task 2a the summary runs that check too, so the page draws `wipeUnavailable`. It is not changed to `tradingSaved`, because that row's second
+  sentence ("To finish it, continue with your setup password.") would be false: D8 removes
+  Continue for a missing database. A `trading-settings` refusal with new words is the owner's to
+  ask for (N1).
 
 ## Changed test checks (the PR description names each)
 
@@ -732,7 +770,14 @@ Work file by file, running each after editing it.
   - §1a refusal rows, each "refuses …, and deletes nothing" with `diskSnapshot` equal before and
     after and no confirmations folder, each through the SUMMARY as well as Start again: trading.env
     (no recovery) → `trading-settings`; complete → `setup-finished`; invoice record (no recovery) →
-    `kept-records`; a view-only database → `not_ready` (existing, unedited); in the inspection file:
+    `kept-records`; a view-only database → `not_ready` (existing, unedited); `venue.db` missing with
+    `trading.env` saved (`heldSetup({ tradingSettings: true, recovery: false })`, then `venue.db`,
+    `-wal` and `-shm` deleted) → `setup.not_ready` with reason `refused artifact: state/trading.env`
+    (D16). It already passes at Task 3, since Task 2a put the disk check in the summary; prove it
+    by deletion: drop `"trading.env"` from the check's state list (`first-setup-start-again-deletion.ts:39`),
+    see the reason become `refused artifact: state/modules.json` (run case A shows that reason for
+    this fixture without `trading.env`), restore, `git diff --exit-code` on that file; in the
+    inspection file:
     empty database past claimed (status beyond `PRESENT_START_AGAIN_STATUSES`) → `not_ready`;
     `restore-request.json` in state → `not_ready`; an unexpected folder in `first-setup-resolutions`
     → `not_ready`; `first-setup-workspaces` in state → `setup.workspace_unsupported`; in the
@@ -793,9 +838,17 @@ database in its own `mkdtemp` folder, copies its `-journal` mid-transaction to `
 closes and removes the scratch folder. Two shapes (experiment 5):
 - `"rolls-back"` (P2, the one every journal-exception test uses unless named): `journal_mode =
   delete`; `create table filler (b blob)` and insert 50 rows of `randomblob(4000)`, committed; then
-  `pragma cache_size = 2; begin; update filler set b = randomblob(4000)`, and copy the journal.
-  Header check before use: magic `d9 d5 05 f9 20 a1 63 d7` (bytes 0-7), `nRec` above 0 (bytes 8-11,
-  big-endian) and the original size in pages above 0 (bytes 16-19). Run: `nRec` 1, 52 pages.
+  `pragma synchronous = off; pragma cache_size = 2; begin; update filler set b = randomblob(4000)`,
+  and copy the journal. Header check before use: magic `d9 d5 05 f9 20 a1 63 d7` (bytes 0-7), `nRec`
+  above 0 (bytes 8-11) and the original size in pages above 0 (bytes 16-19), both read as unsigned
+  big-endian (`readUInt32BE`). Run inside a server test file that loads `hour-recovery-host.js`
+  (`~/waitron-campaign/a1131bc-2-rev6-check/variants-output.txt`, V2, beside
+  `heldSetup({ invoices: 1 })`): magic valid, `nRec` 0xffffffff (4294967295), 52 pages; label
+  `unknown`; the real reader rejects `read failed: ERR_SQLITE_ERROR 11`. `nRec` 0xffffffff passes
+  the check only as an unsigned read (`node -e`: `readUInt32BE` gives 4294967295, `readInt32BE`
+  gives -1). Without `synchronous = off` the same recipe in such a file gives magic all zeros and
+  `nRec` 0 (V1; label `occupied`, the read succeeds), so the check refuses it; the cause was not
+  found.
 - `"empty-original"` (P1, Task 4d only): the same with nothing committed first (`begin`, then create
   `filler` and insert 200 rows inside the transaction). Header check: magic valid, `nRec` 0 and
   original size 0 — the shape that empties the copy (experiment 5).
@@ -822,7 +875,7 @@ the fixture.
     beside it is not ready, never damaged" (`invoices: 1` plus `foreignHotJournal(…,
     "rolls-back")`; `rejects` `setup.not_ready` with the reason `journal beside a damaged read:
     errcode 11`; the original `venue.db` bytes unchanged). It passes today in the code only (the old
-    reader refuses everything, with reason `read failed: ERR_SQLITE_ERROR 11`, review 5's P2), so it
+    reader refuses everything, with reason `read failed: ERR_SQLITE_ERROR 11`, run, `a1131bc-2-rev6-check/variants-output.txt` V2), so it
     fails today at the reason; after the change, prove it by deletion: drop the journal exception,
     see it answer `kind: "damaged"`, `code: "errcode 11"`, restore. **Control:** the same database
     without the journal answers `kind: "read"` with `records: 1`.
@@ -848,25 +901,34 @@ the fixture.
   - provisioning: "finishing an interrupted deletion removes a leftover journal too" (the marker
     written, deletion cut by a `remove` that throws once, then `finishStartAgainDeletion`). Fails the
     same way.
-  - held (review 4, I1 fix 4; review 5, I2): "with the setup database missing and a hot journal
-    left where it was, the wipe and then the fresh-box restore leave no journal, and the restored
-    database passes integrity_check". The one shape where a wipe runs beside a hot journal (D15): a
-    present database with one is labelled `unknown` and refused, so a `heldSetup` with its journal
-    never reaches the wipe (review 5, run). Fixture, in the held file so it reuses Task 3's restore
-    scaffolding: `heldSetup({ recovery: false })`; delete `venue.db` and any `venue.db-wal` and
-    `venue.db-shm`; assert the inspection answers `database: "missing"`; then
-    `foreignHotJournal(<venueDir>/venue.db-journal, "rolls-back")` (header checked). Read the
-    summary, send Start again with `confirmMissingDatabase` and that summary, then stage and run the
-    fresh-box restore as Task 3 does. Assertions, in this order: `venue.db-journal` does not exist
-    (`access` rejects `ENOENT`); then open the restored `venue.db` read-write and
-    `pragma integrity_check` answers `ok`.
-    **Written down before running — what the failing run prints at the tip before this task:** the
-    first assertion fails, `access` resolving because the wipe left `venue.db-journal` (today's
-    `SIDE_FILES` has no journal, `first-setup-start-again-deletion.ts:36`, and the restore moves
-    only `""`, `-wal`, `-shm`, `restore.ts:546-557`). If instead the summary or Start again refuses,
-    or the restore rejects, record the code and STOP for the lead: the prediction was wrong.
-    **Control** (an ordinary test, green before and after): the same steps without the journal pass.
-    P1's `"empty-original"` journal is not used here (its effect on a restored database was not run).
+  - held (review 4, I1 fix 4; review 5, I2; round-3 check of revision 6, I1): "with the setup
+    database missing and a hot journal left where it was, Start again's wipe leaves no journal".
+    The one shape where a wipe runs beside a hot journal (D15): a present database with one is
+    labelled `unknown` and refused, so a `heldSetup` with its journal never reaches the wipe
+    (review 5, run). Fixture: `heldSetup({ recovery: false })`; delete `venue.db` and any
+    `venue.db-wal` and `venue.db-shm`, and delete `<stateDir>/modules.json`, because activation
+    wrote it after its commit (`apps/server/src/provision.ts:183`) and the missing-database path
+    refuses it (`first-setup-start-again-deletion.ts:43`, `:456-462`; run,
+    `~/waitron-campaign/a1131bc-2-rev6-check/server-output.txt`, case A and its control: "refused
+    artifact: state/modules.json", nothing wiped). Assert the inspection answers
+    `database: "missing"`; then `foreignHotJournal(<venueDir>/venue.db-journal, "rolls-back")`
+    (header checked). Read the summary, send Start again with `confirmMissingDatabase` and that
+    summary. Assertions: Start again resolves, `first-setup.json` is gone, and `venue.db-journal`
+    does not exist (`access` rejects `ENOENT`).
+    **No restore step.** In the check's run the restore after this wipe failed
+    `sif.allocation_invalid` the same way with and without the journal (`server-output-2.txt`,
+    case E and its control), so no run shows that restore working, and the journal's harm to a
+    restored database rests on experiments 2 and 5 instead.
+    **Written down before running — what the failing run prints at the tip before this task:**
+    the summary answers and Start again resolves with `first-setup.json` gone, then the last
+    assertion fails, `access` resolving because the wipe left `venue.db-journal` (today's
+    `SIDE_FILES` has no journal, `first-setup-start-again-deletion.ts:36`; run on today's code with
+    the owner signed in, `server-output-2.txt` case E: "journal after wipe true", "first-setup.json
+    after wipe false"). If instead the summary or Start again refuses, record the code and reason
+    and STOP for the lead: the prediction was wrong.
+    **Control** (an ordinary test, green before and after): the same steps without the journal:
+    Start again resolves and `first-setup.json` is gone (case E's control printed that).
+    P1's `"empty-original"` journal is not used here.
 - [ ] **Step 2:** run `… @waitron/provisioning exec vitest run src/first-setup-start-again-marker.test.ts`
   and the held file; the three cases fail as written down, and the control passes.
 - [ ] **Step 3: Implement**; apply the deletion row of the changed checks.
@@ -907,7 +969,7 @@ task's "deletes" checks are on the summary; 4c-2 adds the deleting send.
     damaged refuses kept-records" (experiment 3); fails today too (`not_ready`).
   - Review Focus 2: "an intact held database with an invoice and another database's hot journal
     beside it is refused setup.not_ready, and nothing changes" (`foreignHotJournal(…,
-    "rolls-back")`, header checked; the label is `unknown`, review 4 case C and review 5 P2).
+    "rolls-back")`, header checked; the label is `unknown`, review 4 case C and `a1131bc-2-rev6-check/variants-output.txt` V2).
     Passes before and after; prove it by deletion of 4a's journal exception (the read then answers
     `damaged` with nothing kept seen, so the summary carries `databaseUnreadable`). **Control:**
     without the journal the summary refuses `kept-records`.
