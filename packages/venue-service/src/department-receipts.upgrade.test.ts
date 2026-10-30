@@ -20,6 +20,18 @@ import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { departments } from "./schema/service.js";
 import { departmentReceipts } from "./schema/department-receipts.js";
 
+/** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */
+function removeMigrations(folder: string, entries: readonly { tag: string }[]): string[] {
+  const created = new Set<string>();
+  for (const { tag } of entries) {
+    const file = join(folder, `${tag}.sql`);
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/CREATE TABLE `(\w+)`/g))
+      created.add(name!);
+    rmSync(file);
+  }
+  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+}
+
 const predecessor = mkdtempSync(join(tmpdir(), "receipt-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
 cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
@@ -29,8 +41,10 @@ const receiptIntroduction = journal.entries.findIndex(({ tag }) =>
   /CREATE TABLE `department_receipts`/.test(readFileSync(join(predecessor, `${tag}.sql`), "utf8")),
 );
 if (receiptIntroduction < 0) throw new Error("Missing department receipt introduction migration");
-for (const candidate of journal.entries.splice(receiptIntroduction))
-  rmSync(join(predecessor, `${candidate.tag}.sql`));
+const predecessorAppendOnly = removeMigrations(
+  predecessor,
+  journal.entries.splice(receiptIntroduction),
+);
 writeFileSync(journalPath, JSON.stringify(journal));
 // Stops at this migration: a later table rebuild drops that table's change-feed triggers, which
 // the server's start reinstalls (`installChangeFeed`, apps/server/src/boot.ts).
@@ -41,8 +55,10 @@ const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
 const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
   entries: { tag: string }[];
 };
-for (const entry of upgradedJournal.entries.splice(receiptIntroduction + 1))
-  rmSync(join(upgraded, `${entry.tag}.sql`));
+const upgradedAppendOnly = removeMigrations(
+  upgraded,
+  upgradedJournal.entries.splice(receiptIntroduction + 1),
+);
 writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   // This single-case probe changes the schema after the opener captures its reset table set.
@@ -50,7 +66,11 @@ const suite = useVenueDb({
   migrations: [
     CORE_MIGRATIONS,
     CATALOGUE_MIGRATIONS,
-    { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: predecessor },
+    {
+      ...VENUE_SERVICE_MIGRATIONS,
+      migrationsFolder: predecessor,
+      appendOnlyTables: predecessorAppendOnly,
+    },
   ],
 });
 
@@ -100,7 +120,11 @@ it("upgrades a populated predecessor with its installed change-feed and append-o
       sql`select name from sqlite_master where type = 'table' and name = 'department_receipts'`,
     ),
   ).toEqual([]);
-  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
+  await applyMigrationSet(suite.db, {
+    ...VENUE_SERVICE_MIGRATIONS,
+    migrationsFolder: upgraded,
+    appendOnlyTables: upgradedAppendOnly,
+  });
   expect(
     suite.db.all(sql`select name from sqlite_master where type = 'trigger' order by name`),
   ).toEqual(before);

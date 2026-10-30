@@ -20,6 +20,18 @@ import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { kitchenNotices } from "./schema/kitchen-notices.js";
 import { readKitchenNotes, writeKitchenNote } from "./order-kitchen-notes.js";
 
+/** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */
+function removeMigrations(folder: string, entries: readonly { tag: string }[]): string[] {
+  const created = new Set<string>();
+  for (const { tag } of entries) {
+    const file = join(folder, `${tag}.sql`);
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/CREATE TABLE `(\w+)`/g))
+      created.add(name!);
+    rmSync(file);
+  }
+  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+}
+
 const predecessor = mkdtempSync(join(tmpdir(), "kitchen-note-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
 cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
@@ -29,8 +41,7 @@ const introduced = journal.entries.findIndex(({ tag }) =>
   /CREATE TABLE `order_kitchen_notes`/.test(readFileSync(join(predecessor, `${tag}.sql`), "utf8")),
 );
 if (introduced < 0) throw new Error("Missing whole-order kitchen note introduction");
-for (const entry of journal.entries.splice(introduced))
-  rmSync(join(predecessor, `${entry.tag}.sql`));
+const predecessorAppendOnly = removeMigrations(predecessor, journal.entries.splice(introduced));
 writeFileSync(journalPath, JSON.stringify(journal));
 // Stops at the migration adding `order_note_change`, the last this test is about: a later table
 // rebuild drops that table's change-feed triggers, which the server's start reinstalls
@@ -48,15 +59,21 @@ const changeIntroduced = upgradedJournal.entries.findIndex(({ tag }) =>
   ),
 );
 if (changeIntroduced < 0) throw new Error("Missing kitchen note change introduction");
-for (const entry of upgradedJournal.entries.splice(changeIntroduced + 1))
-  rmSync(join(upgraded, `${entry.tag}.sql`));
+const upgradedAppendOnly = removeMigrations(
+  upgraded,
+  upgradedJournal.entries.splice(changeIntroduced + 1),
+);
 writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
     CORE_MIGRATIONS,
     CATALOGUE_MIGRATIONS,
-    { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: predecessor },
+    {
+      ...VENUE_SERVICE_MIGRATIONS,
+      migrationsFolder: predecessor,
+      appendOnlyTables: predecessorAppendOnly,
+    },
   ],
 });
 
@@ -117,7 +134,11 @@ it("adds order instructions to a populated predecessor without changing its dish
       .map((r) => r.name),
   ).not.toContain("order_note_change");
 
-  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
+  await applyMigrationSet(suite.db, {
+    ...VENUE_SERVICE_MIGRATIONS,
+    migrationsFolder: upgraded,
+    appendOnlyTables: upgradedAppendOnly,
+  });
 
   expect(await suite.db.select().from(locations)).toEqual([location]);
   expect(await suite.db.select().from(workingOrderLines)).toEqual([line]);
