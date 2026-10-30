@@ -799,7 +799,7 @@ describe("printingAlertSource — agent.silent", () => {
   it("stays quiet for an agent seen 4 minutes ago", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    await seedAgent({ locationId, name: "Cocina", lastSeenAt: minsAgo(4) });
+    await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(4) });
     expect(await readAlerts()).toEqual([]);
   });
 
@@ -808,7 +808,7 @@ describe("printingAlertSource — agent.silent", () => {
     const locationId = await seedLocation();
     const agentId = await seedAgent({
       locationId,
-      name: "Cocina",
+      name: "Kitchen agent",
       lastSeenAt: minsAgo(6),
     });
 
@@ -816,7 +816,7 @@ describe("printingAlertSource — agent.silent", () => {
       {
         key: `agent.silent:${agentId}`,
         code: "agent.silent",
-        params: { agent: "Cocina" },
+        params: { agent: "Kitchen agent" },
         severity: "warning",
         since: minsAgo(6),
         screen: "printers",
@@ -830,10 +830,10 @@ describe("printingAlertSource — agent.silent", () => {
   it("gives two silent agents that share a name two distinct alerts", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const first = await seedAgent({ locationId, name: "Cocina", lastSeenAt: minsAgo(6) });
+    const first = await seedAgent({ locationId, name: "Kitchen agent", lastSeenAt: minsAgo(6) });
     const second = await seedAgent({
       locationId,
-      name: "Cocina",
+      name: "Kitchen agent",
       lastSeenAt: minsAgo(7),
     });
 
@@ -866,7 +866,7 @@ describe("stationOutputAlertSource", () => {
       .insert(kitchenStations)
       .values({
         locationId,
-        name: "Cocina",
+        name: "Kitchen",
         isDefault: true,
       })
       .returning({ id: kitchenStations.id });
@@ -877,7 +877,7 @@ describe("stationOutputAlertSource", () => {
     const source = stationOutputAlertSource({
       locationId,
       stationStates: async () =>
-        new Map([[station!.id, { open, isDefault: true, active: true, name: "Cocina" }]]),
+        new Map([[station!.id, { open, isDefault: true, active: true, name: "Kitchen" }]]),
     });
     expect(source.area).toBe("kitchen");
     expect(source.permission).toBe("venue_service.manage");
@@ -885,7 +885,7 @@ describe("stationOutputAlertSource", () => {
       {
         key: `station.printer_down:${station!.id}:${printerId}`,
         code: "station.default_printer_down",
-        params: { station: "Cocina", printer: "Epson" },
+        params: { station: "Kitchen", printer: "Epson" },
         severity: "error",
         since: minsAgo(3),
         screen: "prep-stations",
@@ -900,7 +900,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("raises for a document job queued 3 minutes ago, with the printer name and count", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(3) });
     await seedJob({ locationId, printerId, createdAt: minsAgo(5) });
 
@@ -908,7 +908,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       {
         key: `printer.jobs_waiting:${printerId}`,
         code: "printer.jobs_waiting",
-        params: { printer: "Barra", count: 2 },
+        params: { printer: "Bar printer", count: 2 },
         severity: "error",
         since: minsAgo(5), // the oldest waiting job
         screen: "printers",
@@ -919,7 +919,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("stays quiet for a job only 1 minute old", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(1) });
     expect(await readAlerts()).toEqual([]);
   });
@@ -927,7 +927,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("never counts a drawer job, however old", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(30), kind: "drawer" });
     expect(await readAlerts()).toEqual([]);
   });
@@ -935,7 +935,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("raises for a fresh failed job that has hit the delivery-attempt ceiling", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     // 1 minute old — below the stuck-time threshold — but exhausted, so it will never print again.
     await seedJob({
       locationId,
@@ -945,14 +945,14 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       attempts: 5,
     });
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
   });
 
   it("does not count a job ended because its printer was unpaired, and still counts an ordinary stuck job beside it", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({
       locationId,
       printerId,
@@ -968,7 +968,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     expect(await readAlerts()).toMatchObject([
       {
         code: "printer.jobs_waiting",
-        params: { printer: "Barra", count: 1 },
+        params: { printer: "Bar printer", count: 1 },
         since: minsAgo(3),
       },
     ]);
@@ -977,7 +977,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("still counts a job whose Bluetooth transport exhausted its attempts", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({
       locationId,
       printerId,
@@ -987,19 +987,19 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
       lastError: "Bluetooth send failed",
     });
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
   });
 
   it("stops counting a job that ran out of attempts once a resend of it has printed, and not while the resend waits", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
 
     const copy = await resend(failed);
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
 
     await setStatus(copy, { status: "done" });
@@ -1009,19 +1009,23 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("still counts a job whose resend also ran out of attempts, and the resend beside it", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
     await setStatus(await resend(failed), exhausted);
 
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 2 }, since: minsAgo(10) },
+      {
+        code: "printer.jobs_waiting",
+        params: { printer: "Bar printer", count: 2 },
+        since: minsAgo(10),
+      },
     ]);
   });
 
   it("stops counting a job and its failed resend once a resend of that resend has printed", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
     const first = await resend(failed);
     await setStatus(first, exhausted);
@@ -1033,7 +1037,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("stops counting a failed resend once a later resend of the same job has printed", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
     await setStatus(await resend(failed), exhausted);
 
@@ -1044,7 +1048,7 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
   it("still counts a resend that ran out of attempts though the job it copies printed before it", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const printed = await seedJob({
       locationId,
       printerId,
@@ -1054,33 +1058,33 @@ describe("printingAlertSource — printer.jobs_waiting", () => {
     await setStatus(await resend(printed), exhausted);
 
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
   });
 
   it("still counts a resend that ran out of attempts though an earlier resend of the same job printed", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     const failed = await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
     const printed = await resend(failed);
     await setStatus(printed, { status: "done" });
 
     await setStatus(await resend(printed), exhausted);
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
   });
 
   it("still counts a job that ran out of attempts beside a printed job with the same bytes that is not its resend", async () => {
     await seedTenant(suite.db);
     const locationId = await seedLocation();
-    const printerId = await seedPrinter({ locationId, name: "Barra" });
+    const printerId = await seedPrinter({ locationId, name: "Bar printer" });
     await seedJob({ locationId, printerId, createdAt: minsAgo(10), ...exhausted });
     await seedJob({ locationId, printerId, createdAt: minsAgo(5), status: "done" });
 
     expect(await readAlerts()).toMatchObject([
-      { code: "printer.jobs_waiting", params: { printer: "Barra", count: 1 } },
+      { code: "printer.jobs_waiting", params: { printer: "Bar printer", count: 1 } },
     ]);
   });
 

@@ -59,41 +59,41 @@ async function placesOf(orderId: string) {
 
 describe("readOrderPlaces", () => {
   it("names a party in a named group by the group once, with both its tables", async () => {
-    const t6 = await v.table("Mesa 6");
-    const t9 = await v.table("Mesa 9");
+    const t6 = await v.table("Table 6");
+    const t9 = await v.table("Table 9");
     const { partyId, tabId } = await seat(v, t6);
     await join(v, partyId, t9);
-    await group("Cumple Ana", [t6, t9]);
+    await group("Ana's birthday", [t6, t9]);
     await nameParty(v, partyId, "Ana");
     const places = await placesOf(tabId);
     expect(places).toEqual({
       orderNumber: (await billRow(v, tabId)).orderNumber,
       counter: false,
       tables: [
-        { id: t6, name: "Mesa 6" },
-        { id: t9, name: "Mesa 9" },
+        { id: t6, name: "Table 6" },
+        { id: t9, name: "Table 9" },
       ],
-      names: ["Cumple Ana"],
+      names: ["Ana's birthday"],
       partyName: "Ana",
     });
   });
 
   it("names a party holding one table of a group by the group, and lists that table by its own name", async () => {
-    const t77 = await v.table("Mesa 77");
-    const t78 = await v.table("Mesa 78");
+    const t77 = await v.table("Table 77");
+    const t78 = await v.table("Table 78");
     const { tabId } = await seat(v, t77);
     // Seating a grouped table seats the whole group, so the group forms after the party sits.
-    await group("Terraza", [t77, t78]);
+    await group("Terrace", [t77, t78]);
     const places = await placesOf(tabId);
-    expect(places.names).toEqual(["Terraza"]);
-    expect(places.tables).toEqual([{ id: t77, name: "Mesa 77" }]);
+    expect(places.names).toEqual(["Terrace"]);
+    expect(places.tables).toEqual([{ id: t77, name: "Table 77" }]);
     expect(places.counter).toBe(false);
     expect(places.partyName).toBeNull();
   });
 
   it("reads a paid bill of a party merged into another at the surviving party's tables", async () => {
-    const t1 = await v.table("Mesa 31");
-    const t2 = await v.table("Mesa 32");
+    const t1 = await v.table("Table 31");
+    const t2 = await v.table("Table 32");
     const a = await seat(v, t1);
     const b = await seat(v, t2);
     await order(v, b.tabId, "Burger");
@@ -110,7 +110,7 @@ describe("readOrderPlaces", () => {
     expect((await billRow(v, b.tabId)).partyId).toBe(b.partyId);
     const places = await placesOf(b.tabId);
     expect(places.tables.map((table) => table.id)).toEqual([t1, t2]);
-    expect(places.names).toEqual(["Mesa 31", "Mesa 32"]);
+    expect(places.names).toEqual(["Table 31", "Table 32"]);
     expect(places.counter).toBe(false);
     const both = await inTx(v, (tx) => readOrderPlaces(tx, [b.tabId, a.tabId]));
     expect(both.get(b.tabId)!.tables).toEqual(both.get(a.tabId)!.tables);
@@ -118,21 +118,21 @@ describe("readOrderPlaces", () => {
   });
 
   it("reads the bill of a finished party, which holds no table, at no table and by its own label", async () => {
-    const t1 = await v.table("Mesa 51");
+    const t1 = await v.table("Table 51");
     const { partyId, tabId } = await seat(v, t1);
     await order(v, tabId, "Burger");
     await pay(v, tabId, "12.00");
     const sent = await commandFor(v, partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
-    expect((await billRow(v, tabId)).label).toBe("Mesa 51");
+    expect((await billRow(v, tabId)).label).toBe("Table 51");
     const places = await placesOf(tabId);
     expect(places.tables).toEqual([]);
-    expect(places.names).toEqual(["Mesa 51"]);
+    expect(places.names).toEqual(["Table 51"]);
     expect(places.counter).toBe(false);
   });
 
   it("reads the empty bill a finished party abandoned at no table and no place name", async () => {
-    const t1 = await v.table("Mesa 52");
+    const t1 = await v.table("Table 52");
     const { partyId, tabId } = await seat(v, t1);
     const sent = await commandFor(v, partyId);
     await inTx(v, (tx) => finishTable(tx, { partyId, ...sent }));
@@ -149,8 +149,8 @@ describe("readOrderPlaces", () => {
   });
 
   it("reads a counter order delivered to a table at that table's shown name", async () => {
-    const t16 = await v.table("Mesa 16");
-    await group("Cumple Bea", [t16]);
+    const t16 = await v.table("Table 16");
+    await group("Bea's birthday", [t16]);
     const id = await counterOrder(v, "Burger");
     await inTx(v, (tx) =>
       tx.update(workingOrders).set({ deliveryTableId: t16 }).where(eq(workingOrders.id, id)),
@@ -159,8 +159,8 @@ describe("readOrderPlaces", () => {
     expect(places).toEqual({
       orderNumber: (await billRow(v, id)).orderNumber,
       counter: false,
-      tables: [{ id: t16, name: "Mesa 16" }],
-      names: ["Cumple Bea"],
+      tables: [{ id: t16, name: "Table 16" }],
+      names: ["Bea's birthday"],
       partyName: null,
     });
   });
@@ -181,12 +181,12 @@ describe("readOrderPlaces", () => {
   });
 
   it("reads several orders in one call, each keyed by its id", async () => {
-    const t1 = await v.table("Mesa 41");
+    const t1 = await v.table("Table 41");
     const { tabId } = await seat(v, t1);
     const counter = await counterOrder(v, "Burger");
     const places = await inTx(v, (tx) => readOrderPlaces(tx, [tabId, counter]));
     expect([...places.keys()].sort()).toEqual([tabId, counter].sort());
-    expect(places.get(tabId)!.names).toEqual(["Mesa 41"]);
+    expect(places.get(tabId)!.names).toEqual(["Table 41"]);
     expect(places.get(counter)!.counter).toBe(true);
     const unknown = "cccccccc-9999-4000-8000-0000000000c1";
     expect(await inTx(v, (tx) => readOrderPlaces(tx, [unknown]))).toEqual(new Map());
@@ -208,9 +208,9 @@ describe("partyNameOnPaper", () => {
 
 describe("readPartyNames", () => {
   it("names an order by its own party's name, and an unnamed party's and a counter order's by null", async () => {
-    const named = await seat(v, await v.table("Mesa 61"));
+    const named = await seat(v, await v.table("Table 61"));
     await nameParty(v, named.partyId, "Ana");
-    const unnamed = await seat(v, await v.table("Mesa 62"));
+    const unnamed = await seat(v, await v.table("Table 62"));
     const counter = await counterOrder(v, "Burger");
     const ids = [named.tabId, unnamed.tabId, counter];
     expect(await inTx(v, (tx) => readPartyNames(tx, ids))).toEqual(
@@ -225,8 +225,8 @@ describe("readPartyNames", () => {
   });
 
   it("names the order of a party merged into another by the surviving party's name, as a MOVED slip does", async () => {
-    const t1 = await v.table("Mesa 63");
-    const t2 = await v.table("Mesa 64");
+    const t1 = await v.table("Table 63");
+    const t2 = await v.table("Table 64");
     const a = await seat(v, t1);
     const b = await seat(v, t2);
     await nameParty(v, a.partyId, "Ana");

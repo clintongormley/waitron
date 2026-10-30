@@ -6255,6 +6255,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   establecimiento" and its Spanish alphabetical-order case. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
+  The print-alert suite (`apps/server/src/alert-sources.test.ts`) gives English print-agent,
+  station and printer names to what it creates, and the order-places suite
+  (`apps/server/src/order-places.test.ts`) English table and group names; the alert suite keeps
+  its es-ES locale and the printer name "Epson", and the order-places suite keeps the Spanish names
+  its shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
