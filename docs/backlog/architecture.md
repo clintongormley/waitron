@@ -444,7 +444,7 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
   naming sites remain in the till's boot and counter-payment suites
-  and the server's till-API and configuration-transfer fixtures.
+  and the server's till-API fixtures.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976, as do the service-period menu keys.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
