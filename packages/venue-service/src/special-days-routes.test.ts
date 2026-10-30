@@ -61,9 +61,9 @@ async function routed() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `Venue ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     })
@@ -71,7 +71,7 @@ async function routed() {
   const cfg = { locationId: brandLocationId(location!.id) };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Sala", displayOrder: 0 })
+    .values({ locationId: cfg.locationId, name: "Room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   const made = await scoped(async (tx) => {
     const restaurant = (
@@ -114,12 +114,12 @@ async function routed() {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-  return { ...made, cfg, sala: zone!.id, app, send };
+  return { ...made, cfg, room: zone!.id, app, send };
 }
 type Routed = Awaited<ReturnType<typeof routed>>;
 
 const christmas = (r: Routed) => ({
-  name: "Navidad",
+  name: "Christmas",
   repeatsYearly: false,
   dates: [
     { date: "2030-12-24", closedAllDay: false },
@@ -134,7 +134,7 @@ const christmas = (r: Routed) => ({
   ],
   zonePaint: [
     {
-      zoneId: r.sala,
+      zoneId: r.room,
       date: "2030-12-24",
       ranges: [{ kind: "closed", startsAt: "19:00", endsAt: "20:00" }],
     },
@@ -143,7 +143,7 @@ const christmas = (r: Routed) => ({
 
 const expectedDetail = (r: Routed, id: string) => ({
   id,
-  name: "Navidad",
+  name: "Christmas",
   repeatsYearly: false,
   dates: [
     { date: "2030-12-24", closedAllDay: false },
@@ -158,7 +158,7 @@ const expectedDetail = (r: Routed, id: string) => ({
   ],
   zonePaint: [
     {
-      zoneId: r.sala,
+      zoneId: r.room,
       date: "2030-12-24",
       ranges: [{ kind: "closed", startsAt: "19:00", endsAt: "20:00" }],
     },
@@ -204,14 +204,14 @@ describe("the special-day routes", () => {
 
   it("GET lists the venue's special days with their dates for a venue viewer, by name", async () => {
     const r = await routed();
-    const navidad = await seeded(r);
+    const christmasDay = await seeded(r);
     const fair = await scoped((tx) =>
       saveSpecialDay(
         tx,
         r.cfg,
         null,
         {
-          name: "Feria",
+          name: "Annual fair",
           repeatsYearly: true,
           dates: [{ date: "2030-04-20", closedAllDay: true }],
         },
@@ -224,13 +224,13 @@ describe("the special-day routes", () => {
     expect(await response.json()).toEqual([
       {
         id: fair.id,
-        name: "Feria",
+        name: "Annual fair",
         repeatsYearly: true,
         dates: [{ date: "2030-04-20", closedAllDay: true }],
       },
       {
-        id: navidad.id,
-        name: "Navidad",
+        id: christmasDay.id,
+        name: "Christmas",
         repeatsYearly: false,
         dates: [
           { date: "2030-12-24", closedAllDay: false },
@@ -252,7 +252,7 @@ describe("the special-day routes", () => {
     const r = await routed();
     const day = await seeded(r);
     const response = await r.send("PUT", `/${day.id}`, r.manager, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: false,
       dates: [{ date: "2030-12-24", closedAllDay: false }],
       expectedClockRevision: 0,
@@ -260,7 +260,7 @@ describe("the special-day routes", () => {
     expect(response.status).toBe(200);
     const expected = {
       ...expectedDetail(r, day.id),
-      name: "Nochebuena",
+      name: "Christmas Eve",
       dates: [{ date: "2030-12-24", closedAllDay: false }],
     };
     expect(await response.json()).toEqual(expected);
@@ -342,7 +342,7 @@ describe("the special-day routes", () => {
     for (const expectedClockRevision of [undefined, 0]) {
       const revision = expectedClockRevision === undefined ? {} : { expectedClockRevision };
       await answers(
-        await r.send("POST", "", r.manager, { ...christmas(r), name: "Nueva", ...revision }),
+        await r.send("POST", "", r.manager, { ...christmas(r), name: "New", ...revision }),
         409,
         error,
       );
@@ -366,7 +366,7 @@ describe("the special-day routes", () => {
     const day = await seeded(r);
     const error = { code: "hours.clock_changed", params: {} };
     await answers(
-      await r.send("POST", "", r.manager, { ...christmas(r), name: "Nueva" }),
+      await r.send("POST", "", r.manager, { ...christmas(r), name: "New" }),
       409,
       error,
     );
@@ -385,7 +385,7 @@ describe("the special-day routes", () => {
     const day = await seeded(r);
     await answers(
       await r.send("POST", "", r.manager, {
-        name: "Otra",
+        name: "Other",
         repeatsYearly: false,
         dates: [{ date: "2030-12-25", closedAllDay: false }],
         expectedClockRevision: 0,
@@ -393,7 +393,7 @@ describe("the special-day routes", () => {
       409,
       {
         code: "special_day.date_taken",
-        params: { date: "2030-12-25", specialDayId: day.id, name: "Navidad" },
+        params: { date: "2030-12-25", specialDayId: day.id, name: "Christmas" },
       },
     );
     expect(await countDays(r)).toBe(1);
@@ -405,7 +405,7 @@ describe("the special-day routes", () => {
       ...christmas(r),
       zonePaint: [
         {
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
@@ -417,7 +417,7 @@ describe("the special-day routes", () => {
       params: {
         field: "zonePaint.0.ranges.0",
         reason: "outside_hours",
-        zoneId: r.sala,
+        zoneId: r.room,
         date: "2030-12-24",
       },
     };
@@ -442,7 +442,7 @@ describe("the special-day routes", () => {
       ],
       zonePaint: [
         {
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
@@ -458,7 +458,7 @@ describe("the special-day routes", () => {
       ...christmas(r),
       zonePaint: [
         {
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
           ranges: [
             { kind: "open", startsAt: "06:00", endsAt: "07:00" },
@@ -475,7 +475,7 @@ describe("the special-day routes", () => {
       zonePaint: [
         ...christmas(other).zonePaint,
         {
-          zoneId: other.sala,
+          zoneId: other.room,
           date: "2030-12-25",
           ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
         },
@@ -487,7 +487,7 @@ describe("the special-day routes", () => {
 
   it("reads an upper-case zone id as the stored zone", async () => {
     const r = await routed();
-    const upper = r.sala.toUpperCase();
+    const upper = r.room.toUpperCase();
     const zonePaint = (startsAt: string) => [
       {
         zoneId: upper,
@@ -507,7 +507,7 @@ describe("the special-day routes", () => {
         params: {
           field: "zonePaint.0.ranges.0",
           reason: "outside_hours",
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
         },
       },
@@ -519,7 +519,7 @@ describe("the special-day routes", () => {
     });
     expect(response.status).toBe(201);
     const body = (await response.json()) as SpecialDayDetail;
-    expect(body.zonePaint.map((entry) => entry.zoneId)).toEqual([r.sala]);
+    expect(body.zonePaint.map((entry) => entry.zoneId)).toEqual([r.room]);
   });
 
   it("names a refused closure by its entry's and its range's places as sent", async () => {
@@ -529,7 +529,7 @@ describe("the special-day routes", () => {
         ...christmas(r),
         zonePaint: [
           {
-            zoneId: r.sala,
+            zoneId: r.room,
             date: "2030-12-24",
             ranges: [
               { kind: "open", startsAt: "06:00", endsAt: "07:00" },
@@ -545,7 +545,7 @@ describe("the special-day routes", () => {
         params: {
           field: "zonePaint.0.ranges.1",
           reason: "outside_hours",
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
         },
       },
@@ -555,12 +555,12 @@ describe("the special-day routes", () => {
         ...christmas(r),
         zonePaint: [
           {
-            zoneId: r.sala,
+            zoneId: r.room,
             date: "2030-12-25",
             ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
           },
           {
-            zoneId: r.sala,
+            zoneId: r.room,
             date: "2030-12-24",
             ranges: [{ kind: "closed", startsAt: "18:00", endsAt: "20:00" }],
           },
@@ -573,7 +573,7 @@ describe("the special-day routes", () => {
         params: {
           field: "zonePaint.1.ranges.0",
           reason: "outside_hours",
-          zoneId: r.sala,
+          zoneId: r.room,
           date: "2030-12-24",
         },
       },
@@ -584,7 +584,7 @@ describe("the special-day routes", () => {
   it("answers special_day.invalid with 400", async () => {
     const r = await routed();
     const response = await r.send("POST", "", r.manager, {
-      name: "Rota",
+      name: "Broken",
       repeatsYearly: false,
       dates: [{ date: "2030-13-40", closedAllDay: false }],
       expectedClockRevision: 0,
