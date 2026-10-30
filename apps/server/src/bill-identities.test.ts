@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { captureError } from "@waitron/db";
 import { AppError } from "@waitron/shared";
+import { billIdentities } from "@waitron/venue-service";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { closingEditsForTest, finishTable } from "./testing/party-close-fixture.js";
 import {
@@ -19,6 +21,7 @@ import {
   allocationsOf,
   billNumberTables,
   expectEveryPartyBillNumbered,
+  numberBill,
   numbersOf,
 } from "./testing/bill-identities.js";
 import {
@@ -42,7 +45,8 @@ import {
   statusOf,
   type PartyVenue,
 } from "./testing/party-venue.js";
-import { splitDraft } from "./order-drafts.js";
+import { readUnsentDrafts, splitDraft } from "./order-drafts.js";
+import { readBillsOfParties, readPartyBills } from "./parties.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import {
@@ -685,5 +689,179 @@ describe("A803 bill numbers: tables", () => {
     const numbers = (await numbersOf(v, ours.partyId)).map(([, number]) => number);
     expect(numbers).toEqual([1, 2, 3, 4]);
     await everyPartyBillNumbered();
+  });
+});
+
+/** Saves the dishes as `OPERATOR`'s unsent order on the bill. */
+async function saveUnsent(partyId: string, billId: string, ...names: string[]): Promise<void> {
+  await inTx(v, (tx) =>
+    saveDraftForTest(tx, v.cfg, partyId, OPERATOR, {
+      billId,
+      draftId: null,
+      revision: 0,
+      lines: names.map((name, index) => ({
+        menuItemId: v.item(name),
+        variantId: null,
+        menuVersionId: null,
+        quantity: "1",
+        options: [],
+        extras: [],
+        note: null,
+        courseId: null,
+        noMerge: false,
+        slot: index + 1,
+        joinGroupId: null,
+        afterGroupId: null,
+      })),
+    }),
+  );
+}
+
+/** The party's bills as its list reads them, as `[billId, billNumber, billName, status]`. */
+async function listOf(partyId: string): Promise<[string, number | null, string | null, string][]> {
+  const bills = await inTx(v, (tx) => readPartyBills(tx, partyId));
+  return bills.map((bill) => [bill.workingOrderId, bill.billNumber, bill.billName, bill.status]);
+}
+
+/** The floor's unsent orders of the party, as `[billId, billNumber]`, in the order it lists them. */
+async function unsentOf(partyId: string): Promise<[string, number][]> {
+  const unsent = await inTx(v, async (tx) =>
+    readUnsentDrafts(tx, [partyId], await readBillsOfParties(tx, [partyId])),
+  );
+  return unsent.get(partyId)!.map((draft) => [draft.billId, draft.billNumber]);
+}
+
+describe("A803 bill list", () => {
+  it("the bill list carries each bill's stored number and name", async () => {
+    const seated = await tableWithBills("L1", 3);
+    await nameBill(seated.bills[1]!, "Clint");
+
+    expect(await listOf(seated.partyId)).toEqual([
+      [seated.bills[0], 1, null, "open"],
+      [seated.bills[1], 2, "Clint", "open"],
+      [seated.bills[2], 3, null, "open"],
+    ]);
+    const family = await inTx(v, (tx) => readBillsOfParties(tx, [seated.partyId]));
+    expect(family.get(seated.partyId)!.map((bill) => [bill.billNumber, bill.billName])).toEqual([
+      [1, null],
+      [2, "Clint"],
+      [3, null],
+    ]);
+  });
+
+  it("after Bill 2 merges away the list shows Bill 1 and Bill 3, and the floor's unsent order on Bill 3 says Bill 3", async () => {
+    const seated = await tableWithBills("L2", 3);
+    const command = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
+    await saveUnsent(seated.partyId, seated.bills[2]!, "Flan");
+
+    expect(await unsentOf(seated.partyId)).toEqual([[seated.bills[2], 3]]);
+    expect(
+      (await listOf(seated.partyId)).filter(([, , , status]) => status !== "abandoned"),
+    ).toEqual([
+      [seated.bills[0], 1, null, "open"],
+      [seated.bills[2], 3, null, "open"],
+    ]);
+  });
+
+  it("a bill that arrived shows its new number while the list keeps its opening order", async () => {
+    const ana = await seat(v, await v.table("L3 ana"));
+    await order(v, ana.tabId, "Agua", "Flan");
+    const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
+    const luis = await seat(v, await v.table("L3 luis"));
+    await order(v, luis.tabId, "Agua");
+    const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
+
+    await moveTo(anaSecond, { tableId: luisTable });
+
+    expect(await listOf(luis.partyId)).toEqual([
+      [anaSecond, 2, null, "open"],
+      [luis.tabId, 1, null, "open"],
+    ]);
+  });
+
+  it("the floor lists unsent orders in number order", async () => {
+    const ana = await seat(v, await v.table("L4 ana"));
+    await order(v, ana.tabId, "Agua", "Flan");
+    const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
+    const luis = await seat(v, await v.table("L4 luis"));
+    await order(v, luis.tabId, "Agua");
+    const luisTable = (await activeTablesOf(v, luis.partyId))[0]!;
+    await moveTo(anaSecond, { tableId: luisTable });
+    await saveUnsent(luis.partyId, anaSecond, "Burger");
+    await saveUnsent(luis.partyId, luis.tabId, "Vino");
+
+    expect(await unsentOf(luis.partyId)).toEqual([
+      [luis.tabId, 1],
+      [anaSecond, 2],
+    ]);
+  });
+
+  it("after a join, the bills of the survivor's list that are not abandoned hold no number twice", async () => {
+    const ours = await tableWithBills("L5 ours", 2);
+    const theirs = await tableWithBills("L5 theirs", 3);
+    const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
+    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
+
+    const list = await listOf(ours.partyId);
+    expect(list.filter(([, , , status]) => status === "abandoned")).toEqual([
+      [theirs.tabId, null, null, "abandoned"],
+    ]);
+    const numbers = list
+      .filter(([, , , status]) => status !== "abandoned")
+      .map(([, number]) => number);
+    expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4]);
+  });
+
+  it("an abandoned bill is listed with billNumber null, including a counter order merged into a table's main bill on arrival, which has no row", async () => {
+    const seated = await tableWithBills("L6", 2);
+    const command = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
+    const counter = await counterOrder(v, "Burger");
+    const table = (await activeTablesOf(v, seated.partyId))[0]!;
+    await moveTo(counter, { tableId: table }, { bills: "merge" });
+    expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).not.toContain(
+      counter,
+    );
+
+    expect(await listOf(seated.partyId)).toEqual([
+      [seated.bills[0], 1, null, "open"],
+      [seated.bills[1], null, null, "abandoned"],
+      [counter, null, null, "abandoned"],
+    ]);
+  });
+
+  it("a party bill that is not abandoned and has no row makes the read throw, naming the bill", async () => {
+    const seated = await tableWithBills("L7", 2);
+    await inTx(v, (tx) =>
+      tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.bills[1]!)),
+    );
+
+    try {
+      const error = await captureError(() => listOf(seated.partyId));
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(AppError);
+      expect((error as Error).message).toContain(seated.bills[1]);
+    } finally {
+      await inTx(v, (tx) => numberBill(tx, seated.bills[1]!, seated.partyId));
+    }
+  });
+
+  it("a party bill that is not abandoned and whose row has a null number makes the read throw, naming the bill", async () => {
+    const seated = await tableWithBills("L8", 2);
+    await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, seated.bills[1]!));
+
+    try {
+      const error = await captureError(() =>
+        inTx(v, (tx) => readBillsOfParties(tx, [seated.partyId])),
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(AppError);
+      expect((error as Error).message).toContain(seated.bills[1]);
+    } finally {
+      await inTx(v, (tx) => numberBill(tx, seated.bills[1]!, seated.partyId));
+    }
   });
 });

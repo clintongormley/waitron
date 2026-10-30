@@ -813,6 +813,8 @@ describe("GET /api/parties/:id/bills", () => {
         recipient: null,
         partyId,
         label: null,
+        billNumber: 1,
+        billName: null,
         status: "open",
         total: "0.00",
         outstanding: "0.00",

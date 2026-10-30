@@ -1331,12 +1331,13 @@ export async function readUnsentDrafts(
     .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
   const byBill = new Map(rows.map((row) => [row.billId, row]));
   for (const [partyId, bills] of shown) {
-    for (const [index, bill] of bills.entries()) {
+    const inNumberOrder = [...bills].sort((a, b) => a.billNumber! - b.billNumber!);
+    for (const bill of inNumberOrder) {
       const draft = byBill.get(bill.workingOrderId);
       if (draft !== undefined) {
         unsent.get(partyId)!.push({
           billId: bill.workingOrderId,
-          billNumber: index + 1,
+          billNumber: bill.billNumber!,
           ownerId: draft.ownerId,
           ownerName: draft.ownerName ?? "",
           savedAt: draft.savedAt,

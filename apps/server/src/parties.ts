@@ -68,6 +68,10 @@ export interface PartyBill {
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
   label: string | null;
+  /** The number the bill holds at its table; null exactly when the bill is abandoned. */
+  billNumber: number | null;
+  /** The name staff gave the bill; null when it has none. */
+  billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   /**
@@ -610,6 +614,8 @@ export async function readPartyBills(tx: Transaction, partyId: string): Promise<
           : null,
       partyId: bill.partyId,
       label: bill.label,
+      billNumber: bill.billNumber,
+      billName: bill.billName,
       status: bill.status,
       total: bill.total,
       outstanding: bill.outstanding,
@@ -644,7 +650,8 @@ export type FamilyBill = Omit<
 
 /**
  * {@link readPartyBills} for several parties at once, keyed by each party asked about, without
- * reading whether each bill's receipt can be printed again.
+ * reading whether each bill's receipt can be printed again. Throws when a bill that is not abandoned
+ * has no number: every path that puts a bill on a table numbers it.
  */
 export async function readBillsOfParties(
   tx: Transaction,
@@ -671,13 +678,24 @@ export async function readBillsOfParties(
     tx,
     rows.map((row) => row.workingOrderId),
   );
+  const identities = await VENUE_SERVICE.readBillIdentities(
+    tx,
+    rows.map((row) => row.workingOrderId),
+  );
   const bills = rows.map((row): FamilyBill => {
     const total = rawCentsToDecimal(row.total);
     const owing = row.status === "open" || row.status === "placed";
+    const identity = identities.get(row.workingOrderId);
+    const abandoned = row.status === "abandoned";
+    if (!abandoned && identity?.number == null) {
+      throw new Error(`Bill ${row.workingOrderId} is on a table with no bill number`);
+    }
     return {
       workingOrderId: row.workingOrderId,
       partyId: row.partyId!,
       label: row.label,
+      billNumber: abandoned ? null : identity!.number,
+      billName: identity?.name ?? null,
       status: row.status,
       total,
       outstanding: owing

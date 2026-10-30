@@ -121,6 +121,7 @@ async function charges(billId: string) {
   const bill = { ...entry };
   delete bill.revision;
   delete bill.partyId;
+  delete bill.billNumber;
   const payments = await get(`/api/working-orders/${billId}/payments`);
   expect(payments.status).toBe(200);
   const lines = await get(`/api/working-orders/${billId}/lines`);
