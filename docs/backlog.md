@@ -2052,6 +2052,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   is a decision. The counter's Waiting list and department transfers (`counter-waiting.ts`,
   `department-transfers.ts`) show no bill number or name at all.
 
+- **A1238. A party named like a placeholder, such as "{into}", can come out wrong in four till
+  sentences (seen in A803 slice 2's review).** Each fills its placeholders one after another, so a
+  first name holding the second placeholder gets the second name written into it:
+  `partyScope` in `apps/till/src/widgets/table-targets.ts`, `table.combine_scope` in
+  `apps/till/src/screens/till-floor-screen.ts` and `till-table-order-screen.ts`, and the
+  `{table}`/`{party}` sentence in `till-table-order-screen.ts`. `git blame` dates each before the
+  slice. Use `fill` (`apps/till/src/i18n/t.ts`), as the slice did for bill names.
+
 - **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
   table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did
   not change; believed to predate it, not run on main.
