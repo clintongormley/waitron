@@ -35,7 +35,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
-import { newBreakGlassKeyName } from "./break-glass.js";
+import { newBreakGlassKeyName, takenKeyNames } from "./break-glass.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,
@@ -184,7 +184,8 @@ function makeRequest(body: unknown): MakeRequest {
 
 /**
  * The key in force and where it is printed: the pack that made it, else the sheet it was first
- * printed on. One pack at most: every key a pack makes gets a name no earlier key had.
+ * printed on. One pack at most: a new key made by a pack or by `mintBreakGlassKey` never takes the
+ * name of the key in force or any name an earlier pack recorded (`takenKeyNames`).
  */
 function keyInForceOf(
   name: string | null,
@@ -205,17 +206,6 @@ function keyInForceOf(
       received: pack.receivedAt !== null,
     },
   };
-}
-
-/** Every server key name this node's packs recorded, and the key in force. */
-function takenKeyNames(name: string | null, records: readonly RecoveryPackRecord[]): Set<string> {
-  const taken = new Set<string>(name === null ? [] : [name]);
-  for (const record of records) {
-    for (const part of record.parts) {
-      if (part.part === "server-key" && part.keyName !== undefined) taken.add(part.keyName);
-    }
-  }
-  return taken;
 }
 
 async function currentArchives(

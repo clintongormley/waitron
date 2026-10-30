@@ -4,9 +4,11 @@ import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   readBreakGlassVerifier,
   readBreakGlassKeyName,
+  readRecoveryPacks,
   setBreakGlassVerifierTx,
   withTransaction,
   type Database,
+  type RecoveryPackRecord,
 } from "@waitron/db";
 
 /**
@@ -28,6 +30,20 @@ export function newBreakGlassKeyName(day: string, taken: ReadonlySet<string>): s
   return next;
 }
 
+/** Every server key name this node's packs recorded, and the key in force. */
+export function takenKeyNames(
+  name: string | null,
+  records: readonly RecoveryPackRecord[],
+): Set<string> {
+  const taken = new Set<string>(name === null ? [] : [name]);
+  for (const record of records) {
+    for (const part of record.parts) {
+      if (part.part === "server-key" && part.keyName !== undefined) taken.add(part.keyName);
+    }
+  }
+  return taken;
+}
+
 export async function mintBreakGlassKey(
   ownerDb: Database,
   nodeId: string,
@@ -38,7 +54,7 @@ export async function mintBreakGlassKey(
     const previous = await readBreakGlassKeyName(tx, nodeId);
     const next = newBreakGlassKeyName(
       new Date().toISOString().slice(0, 10),
-      new Set(previous === null ? [] : [previous]),
+      takenKeyNames(previous, await readRecoveryPacks(tx, nodeId)),
     );
     await setBreakGlassVerifierTx(tx, nodeId, verifier, next);
     return next;
