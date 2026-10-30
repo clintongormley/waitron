@@ -6092,6 +6092,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
+  Catalogue import-validation samples use English menu, dessert and drink names;
+  accented-name collision and multilingual unit examples remain.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
