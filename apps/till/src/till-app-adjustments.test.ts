@@ -101,6 +101,8 @@ const bill: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "30.00",
   outstanding: "30.00",

@@ -275,7 +275,9 @@ describe("A773 bill document choices retain their editing observation", () => {
         .fn()
         .mockResolvedValue([
           billOf({ revision: 7 }),
-          ...(targetId === "wo-4" ? [] : [billOf({ workingOrderId: targetId, revision: 7 })]),
+          ...(targetId === "wo-4"
+            ? []
+            : [billOf({ workingOrderId: targetId, billNumber: 2, revision: 7 })]),
         ]),
       setOrderInvoiceChoice,
       setOrderReceiptLanguage,
@@ -1581,7 +1583,9 @@ describe("till-app: a bill payment's refusals and retries", () => {
     });
     const { el } = await mountApp({
       takeBillPayment,
-      getPartyBills: vi.fn().mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check" })]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check", billNumber: 2 })]),
     });
     await openTable(el);
     const contribute = async () => {
@@ -2320,7 +2324,9 @@ describe("till-app: a bill payment still out holds the bill (A796 default 7)", (
     });
     const { el } = await mountApp({
       takeBillPayment,
-      getPartyBills: vi.fn().mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check" })]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([billOf(), billOf({ workingOrderId: "wo-check", billNumber: 2 })]),
     });
     await openTable(el);
     await contribute(el);
@@ -2941,6 +2947,7 @@ describe("till-app: a change refused on a bill that holds money", () => {
   const partly = billOf({ outstanding: "70.00", hasPayments: true });
   const other = billOf({
     workingOrderId: "wo-9",
+    billNumber: 2,
     label: "B",
     total: "12.00",
     outstanding: "12.00",
@@ -4079,7 +4086,12 @@ describe("till-app: the owner's split after a contribution", () => {
       line({ lineNo: 2, name: "Vino", unitPriceGross: "18.00", id: "line-v" }),
     ];
     let split = false;
-    const newBill = billOf({ workingOrderId: "wo-check", total: "30.00", outstanding: "30.00" });
+    const newBill = billOf({
+      workingOrderId: "wo-check",
+      billNumber: 2,
+      total: "30.00",
+      outstanding: "30.00",
+    });
     const getPartyBills = vi.fn(async () =>
       split
         ? [billOf({ total: "90.00", outstanding: "40.00", hasPayments: true }), newBill]
@@ -6138,9 +6150,10 @@ describe("till-app: a party bill's receipt language", () => {
       ["wo-5", 2],
     ]);
     const getPartyBills = vi.fn().mockImplementation(async () =>
-      ["wo-4", "wo-5"].map((id) =>
+      ["wo-4", "wo-5"].map((id, index) =>
         billOf({
           workingOrderId: id,
+          billNumber: index + 1,
           revision: revisions.get(id)!,
           ...(stored.has(id) ? { receiptLanguage: stored.get(id)! } : {}),
         }),

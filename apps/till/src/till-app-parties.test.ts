@@ -133,6 +133,8 @@ const tabBill: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "14.00",
   outstanding: "14.00",
@@ -146,6 +148,8 @@ const checkBill: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 2,
+  billName: null,
   status: "open",
   total: "30.00",
   outstanding: "30.00",
@@ -3939,6 +3943,7 @@ describe("till-app: opening a seated table", () => {
     const last: PartyBill = {
       ...tabBill,
       workingOrderId: "wo-2",
+      billNumber: 2,
       status: "settled",
       outstanding: "0.00",
     };
@@ -8785,6 +8790,8 @@ describe("till-app: recording an unpaid departure", () => {
     recipient: null,
     partyId: "v1",
     label: null,
+    billNumber: 1,
+    billName: null,
     status: "placed",
     total: "18.00",
     outstanding: "18.00",
@@ -8804,7 +8811,9 @@ describe("till-app: recording an unpaid departure", () => {
   it("leaves out a presented bill whose credit notes cancel its invoice, and its amount from the total", async () => {
     drafts.bills.add("wo-credited");
     const { el } = await openDeparture({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-credited", "0.00")]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([tabBill, { ...creditedBill("wo-credited", "0.00"), billNumber: 2 }]),
     });
 
     expect(dialog(el)!.bills).toEqual([
@@ -8818,7 +8827,9 @@ describe("till-app: recording an unpaid departure", () => {
   it("shows a partly credited presented bill at what its invoice still owes", async () => {
     drafts.bills.add("wo-part");
     const { el } = await openDeparture({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, creditedBill("wo-part", "15.58")]),
+      getPartyBills: vi
+        .fn()
+        .mockResolvedValue([tabBill, { ...creditedBill("wo-part", "15.58"), billNumber: 2 }]),
     });
 
     expect(dialog(el)!.bills).toEqual([
@@ -9143,11 +9154,12 @@ describe("till-app: recording an unpaid departure", () => {
     const empty: PartyBill = {
       ...checkBill,
       workingOrderId: "wo-empty",
+      billNumber: 2,
       total: "0.00",
       outstanding: "0.00",
     };
     const { el } = await openDeparture({
-      getPartyBills: vi.fn().mockResolvedValue([tabBill, empty, checkBill]),
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, empty, { ...checkBill, billNumber: 3 }]),
     });
 
     expect(dialog(el)!.bills).toEqual([
@@ -9247,6 +9259,7 @@ describe("till-app: cancelling and crediting an invoiced bill", () => {
   };
   const cancelled: PartyBill = {
     ...invoiced,
+    billNumber: null,
     status: "abandoned",
     outstanding: "0.00",
     creditNotes: ["R/3"],
@@ -10591,7 +10604,10 @@ describe("till-app: closing editing observations", () => {
   it("Finish sends every family bill observation in bill-ID order, including settled bills", async () => {
     const { el } = await mountClosing({
       listDrafts: observations(),
-      getPartyBills: vi.fn().mockResolvedValue([checkBill, { ...tabBill, status: "settled" }]),
+      getPartyBills: vi.fn().mockResolvedValue([
+        { ...checkBill, billNumber: 1 },
+        { ...tabBill, billNumber: 2, status: "settled" },
+      ]),
     });
     const order = await openMesa(el);
     emit(order, "finish-table", {});

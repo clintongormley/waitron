@@ -897,7 +897,8 @@ export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 /** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
   billId: string;
-  billNumber: number;
+  /** Null when the bill was stored with no number, a fault in Waitron. */
+  billNumber: number | null;
   ownerId: string;
   ownerName: string;
   lineCount: number;
@@ -2132,6 +2133,11 @@ export interface PartyBill {
   } | null;
   partyId: string;
   label: string | null;
+  /** The number the bill holds at its table; null when the bill is abandoned, or when a bill at a
+   * table was stored with none, which is a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill; null when it has none. */
+  billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   outstanding: string;

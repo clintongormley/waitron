@@ -206,6 +206,8 @@ const smallPartyBill: PartyBill = {
   recipient: null,
   partyId: "v-2",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "12.00",
   outstanding: "12.00",
@@ -23779,7 +23781,10 @@ describe("A737 Find a bill page", () => {
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       getPartyBills: vi
         .fn()
-        .mockResolvedValue([smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-other" }]),
+        .mockResolvedValue([
+          smallPartyBill,
+          { ...smallPartyBill, workingOrderId: "wo-other", billNumber: 2 },
+        ]),
       getTabLines,
     });
     counter.store.addProduct(cafe, "1");

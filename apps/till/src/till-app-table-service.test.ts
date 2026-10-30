@@ -1408,6 +1408,8 @@ describe("till-app table ordering: refused and failed table actions", () => {
           recipient: null,
           partyId: "v-2",
           label: null,
+          billNumber: 1,
+          billName: null,
           status: "open",
           total: "3.00",
           outstanding: "3.00",
@@ -2843,6 +2845,8 @@ describe("till-app table ordering: the guests the receipt prints", () => {
     recipient: null,
     partyId: "v-2",
     label: null,
+    billNumber: 1,
+    billName: null,
     status: "open",
     total: "3.00",
     outstanding: "3.00",
@@ -2925,7 +2929,7 @@ describe("till-app table ordering: the guests the receipt prints", () => {
   it("a party with two bills shows the field empty and sends no guests line", async () => {
     const el = await openTableWith(tableWith(4, 2), [
       bill(),
-      bill({ workingOrderId: "wo-9", label: "B" }),
+      bill({ workingOrderId: "wo-9", billNumber: 2, label: "B" }),
     ]);
     expect(guests(el)!.value).toBe("");
 

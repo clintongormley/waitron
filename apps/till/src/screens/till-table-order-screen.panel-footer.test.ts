@@ -89,7 +89,16 @@ describe("the bill actions below Sent and New order", () => {
   it.each(["settled", "abandoned"] as const)(
     "offers no new payment or Discount on a %s bill",
     async (status) => {
-      const { el } = await mountFooter({ bills: [{ ...footerBill, status, outstanding: "0.00" }] });
+      const { el } = await mountFooter({
+        bills: [
+          {
+            ...footerBill,
+            billNumber: status === "abandoned" ? null : 1,
+            status,
+            outstanding: "0.00",
+          },
+        ],
+      });
       expect(q(el, "[data-bill-actions]")).not.toBeNull();
       expect(q(el, "till-tender-pay, .pay, [data-discount-bill], [data-open-bill-pay]")).toBeNull();
     },
@@ -197,7 +206,13 @@ describe("the bill actions below Sent and New order", () => {
     const { el } = await mountFooter({
       bills: [
         footerBill,
-        { ...footerBill, workingOrderId: "paid", status: "settled", outstanding: "0.00" },
+        {
+          ...footerBill,
+          workingOrderId: "paid",
+          billNumber: 2,
+          status: "settled",
+          outstanding: "0.00",
+        },
       ],
     });
     expect(q(el, "[data-bill-actions]")).not.toBeNull();

@@ -44,6 +44,8 @@ function bill(workingOrderId: string, status: PartyBill["status"]): PartyBill {
     recipient: null,
     partyId: "v1",
     label: null,
+    billNumber: status === "abandoned" ? null : 1,
+    billName: null,
     status,
     total: "10.00",
     outstanding: status === "open" ? "10.00" : "0.00",
@@ -479,7 +481,7 @@ describe("Current orders and Sent service", () => {
     });
     const { el } = await mountCurrent({
       currentOrders: current({ groups: [currentGroup("g3", 3, "held", [steaks, flan])] }),
-      bills: [bill("wo-4", "open"), bill("wo-check", "open")],
+      bills: [bill("wo-4", "open"), { ...bill("wo-check", "open"), billNumber: 2 }],
     });
     const moves = capture(el, "move-group-line");
     const splits = capture(el, "split-group-line");
@@ -507,7 +509,7 @@ describe("Current orders and Sent service", () => {
       currentOrders: current({
         groups: [currentGroup("g3", 3, "held", [onCheck, onPaid, unlisted, onShown])],
       }),
-      bills: [bill("wo-check", "open"), bill("wo-paid", "settled")],
+      bills: [bill("wo-check", "open"), { ...bill("wo-paid", "settled"), billNumber: 2 }],
     });
     const offered = (selector: string, attribute: string) =>
       all(el, selector).map((button) => button.getAttribute(attribute));
@@ -816,7 +818,7 @@ describe("held-line move editing observation", () => {
       orderId: "wo-4",
       billEdit: own,
       billEdits: [own, source],
-      bills: [bill("wo-4", "open"), bill("wo-check", "open")],
+      bills: [bill("wo-4", "open"), { ...bill("wo-check", "open"), billNumber: 2 }],
       currentOrders: current({
         groups: [
           currentGroup("g3", 3, "held", [

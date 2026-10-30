@@ -32,6 +32,8 @@ const paidTab: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "settled",
   total: "14.00",
   outstanding: "0.00",
@@ -45,6 +47,8 @@ const check: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 2,
+  billName: null,
   status: "open",
   total: "30.00",
   outstanding: "30.00",
@@ -58,6 +62,8 @@ const abandoned: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: null,
+  billName: null,
   status: "abandoned",
   total: "0.00",
   outstanding: "0.00",
@@ -430,7 +436,10 @@ describe("till-table-order-screen: Finish table", () => {
     const el = await mountScreen({
       finishRefused: true,
       orderId: "wo-check",
-      bills: [check, { ...paidTab, status: "open", outstanding: "14.00" }],
+      bills: [
+        { ...check, billNumber: 1 },
+        { ...paidTab, billNumber: 2, status: "open", outstanding: "14.00" },
+      ],
     });
     const asked = capture(el, "take-payment");
 

@@ -362,6 +362,8 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "14.00",
   outstanding: "14.00",
@@ -371,13 +373,28 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
 });
 /** The party's main bill, and a bill split off it, both untouched. */
 const tabBill = bill({});
-const checkBill = bill({ workingOrderId: "wo-check", total: "30.00", outstanding: "30.00" });
-const paidBill = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
-const placedBill = bill({ workingOrderId: "wo-placed", status: "placed" });
+const checkBill = bill({
+  workingOrderId: "wo-check",
+  billNumber: 2,
+  total: "30.00",
+  outstanding: "30.00",
+});
+const paidBill = bill({
+  workingOrderId: "wo-paid",
+  billNumber: 3,
+  status: "settled",
+  outstanding: "0.00",
+});
+const placedBill = bill({ workingOrderId: "wo-placed", billNumber: 4, status: "placed" });
 /** Open, with money already received against it. */
-const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00", hasPayments: true });
+const partlyPaidBill = bill({
+  workingOrderId: "wo-part",
+  billNumber: 5,
+  outstanding: "4.00",
+  hasPayments: true,
+});
 /** Open, but recorded on a party merged into this one. */
-const mergedPartyBill = bill({ workingOrderId: "wo-merged", partyId: "v0" });
+const mergedPartyBill = bill({ workingOrderId: "wo-merged", billNumber: 6, partyId: "v0" });
 const partyBills = () => ({
   party: anaParty,
   bills: [tabBill, checkBill, paidBill, placedBill, partlyPaidBill, mergedPartyBill],
@@ -3985,7 +4002,12 @@ describe("till-table-order-screen", () => {
     it("keeps the current store when only one bill is open", async () => {
       const { el } = await mount({
         party: anaParty,
-        bills: [tabBill, paidBill, placedBill, mergedPartyBill],
+        bills: [
+          tabBill,
+          { ...paidBill, billNumber: 2 },
+          { ...placedBill, billNumber: 3 },
+          { ...mergedPartyBill, billNumber: 4 },
+        ],
         orderId: "wo-4",
         courses,
       });
@@ -3996,7 +4018,7 @@ describe("till-table-order-screen", () => {
     it("does not invent a new bill when the party has no main bill", async () => {
       const { el } = await mount({
         party: { ...anaParty, mainBillId: null },
-        bills: [paidBill, checkBill],
+        bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
@@ -4030,7 +4052,7 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
       await ringCafe(el);
       (grid(el).store as DraftStore).billStatus = "abandoned";
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }];
       await el.updateComplete;
       expect(await submitDraft(el, "send-all")).toBeUndefined();
       expect(grid(el).store.lines.map((line) => line.quantity)).toEqual(["1"]);
@@ -4038,7 +4060,7 @@ describe("till-table-order-screen", () => {
     });
 
     it("keeps bill identity when a new sibling takes the abandoned bill's display number", async () => {
-      const thirdBill = bill({ workingOrderId: "wo-third" });
+      const thirdBill = bill({ workingOrderId: "wo-third", billNumber: 3 });
       const { el } = await mount({
         party: anaParty,
         bills: [tabBill, checkBill, thirdBill],
@@ -4048,7 +4070,7 @@ describe("till-table-order-screen", () => {
       await ringCafe(el);
       const own = grid(el).store;
       (own as DraftStore).billStatus = "abandoned";
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }, thirdBill];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }, thirdBill];
       await el.updateComplete;
       expect(await submitDraft(el, "send-all")).toBeUndefined();
       expect(grid(el).store).toBe(own);
@@ -4086,14 +4108,14 @@ describe("till-table-order-screen", () => {
     it("does not switch stores when another device creates the party's main bill", async () => {
       const { el } = await mount({
         party: { ...anaParty, mainBillId: null },
-        bills: [paidBill, checkBill],
+        bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
       await ringCafe(el);
       const own = grid(el).store;
       el.party = { ...anaParty, mainBillId: "wo-4" };
-      el.bills = [paidBill, checkBill, tabBill];
+      el.bills = [{ ...paidBill, billNumber: 1 }, checkBill, { ...tabBill, billNumber: 3 }];
       await el.updateComplete;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-check");
@@ -6069,6 +6091,7 @@ describe("till-table-order-screen", () => {
         total: "20.00",
         outstanding: "20.00",
         hasPayments: true,
+        billNumber: 3,
       });
       for (const verb of ["merge", "transfer"]) {
         const { el } = await mount({
@@ -6128,7 +6151,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="wo-check"]');
       await el.updateComplete;
 
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }];
       await el.updateComplete;
 
       expect(el.shadowRoot!.querySelector("[data-transfer-lines] h2")!.textContent!.trim()).toBe(
@@ -6474,7 +6497,7 @@ describe("till-table-order-screen", () => {
         lines: [pendingLine],
         orderId: "wo-4",
         party: anaParty,
-        bills: [tabBill, paidBill, placedBill],
+        bills: [tabBill, { ...paidBill, billNumber: 2 }, { ...placedBill, billNumber: 3 }],
       });
       await toMenu(el);
       click(el, '[data-action="merge"]');

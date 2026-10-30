@@ -258,6 +258,8 @@ it.each([
           recipient: null,
           partyId: "v1",
           label: null,
+          billNumber: change === "paid-bill" ? 1 : null,
+          billName: null,
           status: change === "paid-bill" ? "settled" : "abandoned",
           total: "2.00",
           outstanding: "0.00",
