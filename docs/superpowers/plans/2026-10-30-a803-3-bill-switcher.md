@@ -615,6 +615,13 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-api.move-bill.test.ts:976` (bad `bills` → 400) | B | "a `bills` key, of any value, is ignored": the same request answers 200 and the bill arrives separate | D13 | 4b |
 | `apps/server/src/bill-identities.test.ts:314`, `:334`, `:821` (move with Merge the bills) | B | the arriving bill takes the next number instead of merging | §6 | 2 |
 | `apps/server/src/order-drafts.db.test.ts:4863` (moveBill merge) | B | the arriving bill and its draft stay separate | §6 | 2 |
+| `apps/server/src/bill-editing.bill-moves.test.ts:240` ("refuses a merge even with a common foreign editor": a move asked to merge refused `draft.taken_over`, no row changed) | B (found at Task 2's red run) | the same move succeeds as `{partyId, billId: moved, merged: false}`; the moved bill's editor state, its draft row (now under the destination party, owner kept) and the destination bill's editor state are each pinned with `toEqual`/`toMatchObject`; then explicit `mergeBills` of the two still refuses `draft.taken_over` with the full conflict, no row changed | spec §6 bullet 2, §3.4 bullet 2 | 2 |
+| `apps/server/src/order-kitchen-note.moves.test.ts:194` (`it.each` merge/separate: `result.merged` was `bills === "merge"`) | B (found at Task 2's red run) | both rows `expect(result).toEqual({ partyId: target, billId: incoming, merged: false })`; the two note assertions unchanged | spec §6 bullet 2; D13 | 2 |
+| `apps/server/src/party-arriving-dishes.test.ts:716` (counter order merged into the main bill: answer `billId: main, merged: true`, Tarta's line on the main bill) | B (found at Task 2's red run) | answer `{partyId, billId: counter, merged: false}`; the groups assertion unchanged; the first bill's lines are exactly Burger/Vino as before; Tarta's line, in group 2, is on the counter bill, which is now the party's | spec §6 bullet 2 | 2 |
+| `party-arriving-dishes.test.ts:972` (now `:975`; HOLD ticket names the main bill the moved bill merged into) | B (found at Task 2's red run) | answer `toEqual {partyId, billId: moved, merged: false}` (was `toMatchObject`); the one HOLD ticket's header names the moved bill at the destination table (`head("Aviso 8", ana.tabId)`), every other line unchanged | spec §6 bullet 2; D13 | 2 |
+| `apps/server/src/print-problems.test.ts` helper `transferDish` (`:1320`, used by 9 cases of "a printing problem whose dishes move to another bill") | S, plus B for the helper's own answer check (found at Task 2's red run) | setup: the move is followed, in the same transaction, by explicit `mergeBills(tx, cfg, to.tabId, billId, …)` (imported as `mergeBillsCommand`, since the file has its own `mergeBills` join helper); the helper's `expect(moved)` goes from `{billId: to.tabId, merged: true}` to `{billId, merged: false}` (B); every `expect` in the 9 cases byte-identical. Deletion control: without the merge, 7 of the 9 fail on their `problemsOf`/`stationSees` assertions; the 2 that assert no failure travels ("…at a station none of the moved dishes go to", "…only dishes that stayed behind") pass either way | spec §3.4 bullet 2 "staff merge afterwards", §6 bullet 2 | 2 |
+| `apps/server/src/sent-order-number.test.ts:400` (a sent counter order merged on arrival keeps its sent-under number) | S, plus B for the move's answer check (found at Task 2's red run) | setup: the move is followed, in the same transaction, by explicit `mergeBills(tx, cfg, tabId, counter, …)`; the answer check goes from `toMatchObject({billId: tabId, merged: true})` to `toEqual({partyId, billId: counter, merged: false})` (B); the `kitchenItems` assertion byte-identical. Deletion control: without the merge, that assertion fails (only Paella on the table's bill) | spec §3.4 bullet 2, §6 bullet 2 | 2 |
+| `apps/server/src/till-api.allergy-move.test.ts:553` (`it.each` merge/separate: answer `billId`/`merged` followed `bills`) | B (found at Task 2's red run) | both rows answer `{partyId, billId: moved, merged: false}`; the allergy assertions unchanged | spec §6 bullet 2; D13 | 2 |
 | `apps/server/src/party-table-actions.test.ts` `:315`, `:977`, `:1328`, `:1550` (combine/join merges main bills, `mergedInto`) | B | every bill stays separate, numbered by slice 2's rule | §3.4 bullet 2 | 3a |
 | `party-table-actions.test.ts` `:349`, `:366`, `:383`, `:641`, `:659`, `:1004` (which main bill survives) | B | main-bill assertions → each bill's party, status and number | §3.4 | 3a (bills), 6b (`mainBillId`) |
 | `party-table-actions.test.ts:1101`, `:1124`, `:1138`, `:1183` (split takes chosen bill as main; new empty main bill; presented; `party.main_bill_stays`) | B | chosen bill moves with its number 1 at the new party; no bill chosen → one empty bill created (D1); choosing the bill that was main succeeds | §3.4, master plan "now allowing any eligible bill" | 4a |
@@ -664,6 +671,13 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-table-order-screen.panel-footer.test.ts:29-54` (one tender-pay, Full invoice count, Discount in the foot) | B, R | one Full invoice on the table's payment step (D8); `data-discount-bill` found in the ⋮ bill section, not the foot (D16) | amendment 1, amendment 4, Owner questions 3 and 7 | 12 |
 | `data-discount-bill` sites: `panel-footer.test.ts` (7), `till-table-order-screen.adjustments.test.ts` (4), `till-app-adjustments.test.ts` (2), `panel-footer.a11y.test.ts` (1) | R | open the ⋮ first, then the same button, same event and detail | D16, Owner question 7 | 12 |
 | Any case that pins the payment step's Full invoice on a presented bill that already has an invoice number | B | not drawn (D8 gate, matching the server's `working_order.not_open`); confirm at red, none found by reading | master plan "an issued/paid bill never opens that editor" | 12 |
+
+**The planning pass missed seven Task 2 rows** (the seven "found at Task 2's red run" rows above,
+15 red cases). All six files are in Task 2's trace command (`rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"'`),
+but the planning pass listed only the cases it read in the four files it named; these six files'
+cases each pinned a merge on arrival, through a move helper whose default or argument was
+`bills: "merge"`. A task's trace command lists files, not cases: every red case in a traced file
+needs reading at that task's red run.
 
 Kept unchanged on purpose: F and H2 (all files); every money, VAT, payment, permission and
 profile-action assertion (`till-api.profile-actions.test.ts` and `till-api.profile-zones.test.ts`
@@ -868,11 +882,13 @@ listed in the receipt). No test's `bills` property is removed in this task.
 - [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.move-bill.test.ts -t 'A803 no main bill'`.
       Expect the first case to fail on the receiving bill's lines (the merge moved them) and the
       second on `party.main_bill_stays`.
-- [ ] Implement. Then run every file the trace lists: `rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"' apps/server/src -g '*.test.ts' | sed 's#apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run`.
+- [x] Implement. Then run every file the trace lists: `rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"' apps/server/src -g '*.test.ts' | sed 's#apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run`.
       Each red assertion is either in the Changed test checks rows for Task 2 (change it as that row
       says) or a stop. `split-bill.test.ts` and the two Filing files must stay green unedited here.
-- [ ] GREEN: that list unfiltered; F; H2; Filing; server typecheck.
-- [ ] Commit: "Move this bill keeps the bill separate at its new table".
+- [x] GREEN: that list unfiltered; F; H2; Filing; server typecheck.
+- [x] Commit: "Move this bill keeps the bill separate at its new table" (committed red), then
+      "Keep separate bills separate in the tests that moved a bill onto a table" for the seven rows
+      found at the red run.
 
 ## Task 3a: Join and Move guests keep every bill (≈65 calls)
 

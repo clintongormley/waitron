@@ -713,7 +713,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect((await lineRows(b2)).map((l) => l.groupId)).toEqual([groups[0]!.id, groups[0]!.id]);
   });
 
-  it("groups a counter order merged into the main bill, and leaves the main bill's own lines as they were", async () => {
+  it("groups a counter order moved onto a seated table as a bill of its own, and leaves the party's first bill's lines as they were", async () => {
     const mesa = await v.table("Fusion 1");
     const ana = await seat(v, mesa);
     await orderForParty(v, ana.partyId, ["Burger"]);
@@ -725,7 +725,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
     const result = await move(counter, { tableId: mesa });
 
-    expect(result).toEqual({ partyId: ana.partyId, billId: ana.tabId, merged: true });
+    expect(result).toEqual({ partyId: ana.partyId, billId: counter, merged: false });
     const groups = await groupsOf(ana.partyId);
     expect(groups.map((g) => [g.id === own!.id, g.state, g.position])).toEqual([
       [true, "fired", 1],
@@ -734,8 +734,11 @@ describe("dishes arriving in a party (A96, P16)", () => {
     expect((await lineRows(ana.tabId)).map((l) => [l.name, l.groupId])).toEqual([
       ["Burger", own!.id],
       ["Vino", null],
+    ]);
+    expect((await lineRows(counter)).map((l) => [l.name, l.groupId])).toEqual([
       ["Tarta", groups[1]!.id],
     ]);
+    expect((await billRow(v, counter)).partyId).toBe(ana.partyId);
   });
 
   it("lets a dish's kitchen item decide whether it arrived released, and its sent time decide only for a dish with none", async () => {
@@ -969,7 +972,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     ]);
   });
 
-  it("names on the HOLD ticket the main bill a moved bill merged into, where its waiting dish now is", async () => {
+  it("names on the HOLD ticket the moved bill itself, kept apart from the destination's bill, when the move asks to merge", async () => {
     await printHeldWork(true);
     const ana = await coursedBill("Aviso 7");
     const mesa = await v.table("Aviso 8");
@@ -978,7 +981,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
 
     const result = await move(ana.tabId, { tableId: mesa }, { bills: "merge" });
 
-    expect(result).toMatchObject({ billId: luis.tabId, merged: true });
+    expect(result).toEqual({ partyId: luis.partyId, billId: ana.tabId, merged: false });
     const holds = (await jobs())
       .slice(before)
       .filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`);
@@ -987,7 +990,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
         kind: "document",
         lines: [
           `*** ${kitchenTicketWords("es").hold} ***`,
-          ...(await head("Aviso 8", luis.tabId)),
+          ...(await head("Aviso 8", ana.tabId)),
           `${kitchenTicketWords("es").group} 2`,
           "1.000 x FLAN",
         ],

@@ -191,7 +191,7 @@ describe("kitchen notes when bills and parties move", () => {
   );
 
   it.each(["merge", "separate"] as const)(
-    "combines a counter bill with the destination note when bills stay %s",
+    "combines a counter bill, kept as its own bill, with the destination note when the move asks for bills: %s",
     async (bills) => {
       const targetTable = await freshTable("Existing destination");
       const target = await seat(v, targetTable);
@@ -200,7 +200,7 @@ describe("kitchen notes when bills and parties move", () => {
       await save({ partyId: target.partyId }, "Destination first");
       await save({ workingOrderId: incoming }, "Incoming second");
       const result = await move(incoming, { tableId: targetTable }, bills);
-      expect(result.merged).toBe(bills === "merge");
+      expect(result).toEqual({ partyId: target.partyId, billId: incoming, merged: false });
       expect(await effective(result.billId)).toMatchObject({
         note: "Destination first; Incoming second",
         scope: { partyId: target.partyId },

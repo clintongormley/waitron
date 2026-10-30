@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { setRoutingCell } from "@waitron/venue-service";
-import { products, workingOrderLines } from "@waitron/db";
+import { parties, products, workingOrderLines } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { readFormerNumbers } from "./former-numbers.js";
@@ -397,7 +397,7 @@ describe("the order number a moved dish was sent under", () => {
     expect(kitchenItems(b28)).toEqual([{ name: "Vino", quantity: 1000, sent: null }]);
   });
 
-  it("is recorded as the counter order's number when a sent counter order merges into a table's bill", async () => {
+  it("is recorded as the counter order's number when a sent counter order moved to a table is merged into its bill", async () => {
     const movedTable = await v.table("Mesa sent 9");
     const { partyId, tabId } = await seat(v, movedTable);
     await send(partyId, tabId, [{ name: "Paella" }], "fire");
@@ -423,8 +423,8 @@ describe("the order number a moved dish was sent under", () => {
     const nCounter = await numberOf(counter);
 
     const expectedOtherPartyRevision = await revisionOf(v, partyId);
-    const result = await inTx(v, (tx) =>
-      moveBill(
+    const result = await inTx(v, async (tx) => {
+      const moved = await moveBill(
         tx,
         v.cfg,
         counter,
@@ -435,10 +435,20 @@ describe("the order number a moved dish was sent under", () => {
           otherPartyId: partyId,
           expectedOtherPartyRevision,
         },
-      ),
-    );
+      );
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, partyId));
+      await mergeBills(tx, v.cfg, tabId, counter, {
+        partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: OPERATOR,
+      });
+      return moved;
+    });
 
-    expect(result).toMatchObject({ billId: tabId, merged: true });
+    expect(result).toEqual({ partyId, billId: counter, merged: false });
     expect(kitchenItems(tabId)).toEqual([
       { name: "Paella", quantity: 1000, sent: null },
       { name: "Burger", quantity: 1000, sent: nCounter },
