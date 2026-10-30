@@ -659,7 +659,12 @@ refuses what CI refused. A803 slice 1 writes one line per dish. A1208 routed the
 growing with a counter order's dishes (the lines, their sale contexts and copies, portions and
 their bindings, cancellations, carried discounts, kitchen items and split extras, and the links
 from filed rows) through `insertInChunks` or `statementChunks`
-(`packages/db/src/insert-in-chunks.ts`). The table round's line insert, `insertTabRound`
+(`packages/db/src/insert-in-chunks.ts`). That sweep missed four. Its review refused one in a run
+and named three it had not run, and a test of each was refused "too many SQL variables" before
+its fix: an item payment's lines (6,554 rows), a whole-bill discount's lines (6,554), a kitchen
+ticket's line links (10,924 on one printer) and, on a bill with a party, its kitchen allergy
+snapshots (11,880 items fired in one call). These now go through the same helpers. No sweep has
+read every insert, so others may remain. The table round's line insert, `insertTabRound`
 (`apps/server/src/working-order.ts`), is still one statement: placing one round of waters through
 `placeGroups` passed at 11 lines of 99 (1,089 dishes) and was refused "too many SQL variables" in
 `insertTabRound` at 12 lines of 99 (1,188 dishes), 20 and 30, under the official Node v26.13.0 and

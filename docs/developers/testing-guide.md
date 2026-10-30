@@ -544,18 +544,25 @@ limit was not read: Docker was not running when this was written.
 
 `openVenueStore` (`packages/store/src/index.ts`) opens each file's writer and reader with
 `limits: { variableNumber: SQL_VARIABLE_LIMIT }` (32,766), so a local run on either Node refuses
-those statements too. With the setting in place, the four big-order cases in
-`apps/server/src/order-portions.counter.test.ts` and
-`apps/server/src/working-order.many-tickets.test.ts` failed under Homebrew's Node when their inserts
-were put back to one statement; with the setting deleted as well, they passed there.
+those statements too. With the setting in place, four big-order cases (in
+`apps/server/src/order-portions.counter.test.ts` the 17 croquetas raised to 99, the 4,700
+croquetas saved down to one and `carryLineReductions`' 6,554 copies; in
+`apps/server/src/working-order.many-tickets.test.ts` the send of 2,400 burgers) failed under
+Homebrew's Node when their inserts were put back to one statement; with the setting deleted as
+well, they passed there.
 
-An insert whose rows grow with an order goes through `insertInChunks`, or `statementChunks` where
-the inserted rows are needed back (`packages/db/src/insert-in-chunks.ts`); both count one bound
-value per column per row. The table round's line insert, `insertTabRound`, is still one statement;
-`docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one value more on the reader and
-the writer of both files" in `packages/store/src/index.test.ts`, failed with the setting deleted
-from the writer alone and from the reader alone. It is weaker than the rule: it proves the store's
-connections refuse, not that every growing insert is chunked, and other openers (the read-only
+An insert whose rows grow with an order must go through `insertInChunks`, or `statementChunks`
+where the inserted rows are needed back (`packages/db/src/insert-in-chunks.ts`); both count one
+bound value per column per row. No sweep has read every insert. After the first, PR #2265's run-it
+review found an item payment's lines unchunked, and a test of each further insert it named found
+three more: a discount's lines, a kitchen ticket's line links and a party bill's kitchen allergy
+snapshots. Each test failed "too many SQL variables" under Homebrew's Node before its fix, and
+again when its fix was taken out. The table round's line insert, `insertTabRound`, is still one
+statement; `docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one
+value more on the reader and the writer of both files" in `packages/store/src/index.test.ts`,
+failed with the setting deleted from the writer alone and from the reader alone. It is weaker
+than the rule: it proves the store's connections refuse, not that every growing insert is
+chunked, and other openers (the read-only
 copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
 `apps/server/src/backup-verification.ts` and `apps/server/src/first-setup-database-holdings.ts`, the
 lock files, the inline Node script in `deploy/waitron.sh`, and script and bench fixtures such as

@@ -602,11 +602,12 @@ browser test** — most of these rules exist because a test passed while proving
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
 - **Official Node's SQLite binds at most 32,766 values in one statement; Homebrew's binds 250,000.**
-  `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses; an
-  insert whose rows grow with an order goes through `insertInChunks` (the table round's
-  `insertTabRound` does not yet, see the backlog). Cost: a 2,001-dish order passed
-  locally and failed CI. Guard: the bound-value case in `packages/store/src/index.test.ts`, weaker
-  than the rule: it proves the store's connections, not that growing inserts are chunked. Receipt:
+  `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses. An
+  insert whose rows grow with an order must go through `insertInChunks`; the table round's
+  `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a
+  2,001-dish order passed locally and failed CI. Guard: the bound-value case in
+  `packages/store/src/index.test.ts`, weaker than the rule: it proves the store's connections, not
+  that growing inserts are chunked. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#the-store-caps-the-values-one-statement-binds-at-official-nodes-limit).
 - **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`
   yields after each test.** Guards: `packages/db/src/testing/venue-db.test.ts` and
