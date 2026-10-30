@@ -6190,7 +6190,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   printer, course, dish, extra, note and table names to what it creates; it keeps the default
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
   tickets), the party venue's dishes, the Spanish ticket words and unit
-  names its es-ES venue prints, and its Spanish alphabetical-order case. The fiscal sale-path
+  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print concurrency
+  suite (`kitchen-print.concurrency.test.ts`) still creates stations "Cocina" and "Barra" and a
+  printer "Cocina printer", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`)
+  a table "Mesa 7". The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The server's station-alert and party suites still hold Spanish sample names. The
