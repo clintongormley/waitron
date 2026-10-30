@@ -20,26 +20,26 @@ describe("VenueServiceApi", () => {
   it("createZone POSTs { name, departmentId } and returns the id (201)", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z1" }, 201));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.createZone({ name: "Comedor", departmentId: "d1" })).toEqual({ id: "z1" });
+    expect(await api.createZone({ name: "Dining room", departmentId: "d1" })).toEqual({ id: "z1" });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/zones", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Comedor", departmentId: "d1" }),
+      body: JSON.stringify({ name: "Dining room", departmentId: "d1" }),
     });
   });
 
   it("createZone can carry an optional displayOrder", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: "z2" }, 201));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    expect(await api.createZone({ name: "Terraza", departmentId: "d1", displayOrder: 3 })).toEqual({
+    expect(await api.createZone({ name: "Terrace", departmentId: "d1", displayOrder: 3 })).toEqual({
       id: "z2",
     });
     expect(fetchImpl).toHaveBeenCalledWith("/management-api/venue-service/zones", {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name: "Terraza", departmentId: "d1", displayOrder: 3 }),
+      body: JSON.stringify({ name: "Terrace", departmentId: "d1", displayOrder: 3 }),
     });
   });
 
@@ -48,9 +48,11 @@ describe("VenueServiceApi", () => {
       .fn()
       .mockResolvedValue(jsonResponse({ error: { code: "zone.name_taken" } }, 409));
     const api = new VenueServiceApi(createRequest({ fetchImpl: fetchImpl as typeof fetch }));
-    await expect(api.createZone({ name: "Comedor", departmentId: "d1" })).rejects.toMatchObject({
-      code: "zone.name_taken",
-    });
+    await expect(api.createZone({ name: "Dining room", departmentId: "d1" })).rejects.toMatchObject(
+      {
+        code: "zone.name_taken",
+      },
+    );
   });
 
   it("loads transfer settings and choices and sends the exact directional settings", async () => {

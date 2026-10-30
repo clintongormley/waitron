@@ -577,6 +577,7 @@ until A977).
   UI-core field-label and input accessibility samples use English price and contact text.
   UI combobox and row-menu suites use English sample staff names; deliberate bilingual
   trigger labels and accented-search examples remain.
+  Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
@@ -795,6 +796,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   UI-core field-label and input accessibility samples use English price and contact text.
   UI combobox and row-menu suites use English sample staff names; deliberate bilingual
   trigger labels and accented-search examples remain.
+  Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
