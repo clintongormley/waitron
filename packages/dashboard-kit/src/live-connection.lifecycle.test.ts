@@ -54,7 +54,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
-  connection.stop();
+  connection?.stop();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
