@@ -23,7 +23,8 @@ export const startAgainHoldings: NonNullable<
     );
     return { records, accepted };
   } catch (error) {
-    // Any record refuses Start again whatever `accepted` says, so a failed count must not lose it.
+    // Any record refuses Start again whatever `accepted` says, so a failed count must not lose it;
+    // `accepted` 0 here means not counted.
     if (records === 0) throw error;
     return { records, accepted: 0 };
   }

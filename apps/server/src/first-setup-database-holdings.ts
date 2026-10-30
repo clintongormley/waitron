@@ -130,8 +130,9 @@ export async function readSetupDatabase(
   }
 }
 
+// `rows` stays the copy's: a database with no rows is refused, so the main file's could offer it.
 const larger = (a: SetupDatabaseHoldings, b: SetupDatabaseHoldings): SetupDatabaseHoldings => ({
-  rows: Math.max(a.rows, b.rows),
+  rows: a.rows,
   kept: Math.max(a.kept, b.kept),
   records: Math.max(a.records, b.records),
   accepted: Math.max(a.accepted, b.accepted),

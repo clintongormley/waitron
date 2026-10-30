@@ -421,6 +421,54 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
   );
 });
 
+it("a setup database whose -wal holds no rows stays refused setup.not_ready when its main file alone still holds one, and nothing changes", async () => {
+  const f = await heldSetup();
+  const before = await askStartAgain(f);
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  const db = await openVenueDatabase(f.roots.venueDir);
+  try {
+    for (const set of TEST_MIGRATIONS) await applyMigrationSet(db.venue, set);
+    db.venue.run(sql`create table held_probe_rows (n)`);
+    db.venue.run(sql`insert into held_probe_rows values (1)`);
+  } finally {
+    await db.close();
+  }
+  // The row's deletion and a view stay in the -wal: the files are copied while the database is open.
+  const venueDb = join(f.roots.venueDir, "venue.db");
+  const writer = new DatabaseSync(venueDb);
+  let files: [Buffer, Buffer];
+  try {
+    writer.exec(
+      "pragma wal_autocheckpoint = 0; delete from held_probe_rows; create view held_probe as select 1 as one",
+    );
+    files = [await readFile(venueDb), await readFile(`${venueDb}-wal`)];
+  } finally {
+    writer.close();
+  }
+  await writeFile(venueDb, files[0]);
+  await writeFile(`${venueDb}-wal`, files[1]);
+  await rm(`${venueDb}-shm`, { force: true });
+  const main = new DatabaseSync(`file:${venueDb}?immutable=1`, { readOnly: true });
+  try {
+    expect(main.prepare("select count(*) as n from held_probe_rows").get()).toEqual({ n: 1 });
+  } finally {
+    main.close();
+  }
+  expect(await f.host.resolution.inspectFirstSetupResolution()).toMatchObject({
+    database: "no-venue-rows",
+    emptyDatabase: false,
+  });
+  await expectRefused(f, { code: "setup.not_ready" });
+  const { shown } = before;
+  const { ids } = await f.signIn();
+  await expectStartAgainRefused(
+    f,
+    () => before.actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+    { code: "setup.not_ready" },
+  );
+});
+
 it("in the held state, an invoice record refuses Start again kept-records even when the fiscal module lists its invoice table, and every other append-only table, as deletable, and nothing changes", async () => {
   // A sale also writes append-only rows outside the invoice table; listing them all leaves kept 0.
   const every = manifestSets().flatMap((set) => set.appendOnlyTables);

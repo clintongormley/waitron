@@ -60,6 +60,8 @@ it("openImmutable reads the main file alone, past a row committed only in the -w
   } finally {
     withWal.close();
   }
+  // That open made a -shm; without it, one the immutable open made would show.
+  await rm(`${path}-shm`, { force: true });
   const before = await Promise.all(
     (await readdir(dir)).sort().map(async (name) => [name, await readFile(join(dir, name))]),
   );

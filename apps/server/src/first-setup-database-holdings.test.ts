@@ -438,7 +438,6 @@ it.each([
     expect(answer).toMatchObject({ kind: "damaged", code, seen: { records: 1 } });
     const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;
     expect(seen.kept).toBeGreaterThanOrEqual(1);
-    expect(seen.rows).toBeGreaterThan(ACTIVATION_ROWS);
     expect(await files(held.roots.venueDir)).toEqual(before);
   },
 );
