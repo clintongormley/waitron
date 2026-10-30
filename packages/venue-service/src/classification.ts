@@ -42,6 +42,12 @@ export const VENUE_SERVICE_CLASSIFICATION: readonly ClassifiedTable[] = [
   classify("party_allergy", "state", STATE),
   classify("party_allergy_guests", "state", STATE),
   classify("allergy_line_ticks", "state", STATE),
+  classify("bill_identities", "state", STATE),
+  appendOnly(
+    "bill_number_allocations",
+    "ledger",
+    "each bill number a seated party has given, so none is given twice",
+  ),
   classify("holiday_geographies", "state", STATE),
   classify("seasons", "state", STATE),
   classify("special_days", "state", STATE),
