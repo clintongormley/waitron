@@ -464,10 +464,10 @@ until A977).
   stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
   seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
-- **A976 — remaining test-venue defaults.** The bill, party, adjustment,
-  split-extras, boot, stream and clock
+- **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults. Screen tests take translated expectations from their strings file.
+  still need English defaults, as do the split-extras venue's operation description and
+  pass-printer name. Screen tests take translated expectations from their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language
   marker and form message from
@@ -503,8 +503,9 @@ until A977).
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
-  The server's split-extras test venue and its suites use English customer and kitchen names;
-  staff names, language keys, the venue's locale and operation description stay.
+  The server's split-extras test venue and its suites use English customer, kitchen and location
+  names; staff names, language keys and the venue's locale stay, and its operation description and
+  pass-printer name remain.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
