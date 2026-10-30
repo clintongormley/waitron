@@ -4817,6 +4817,18 @@ describe("till-table-order-screen", () => {
         expect(billChoice(el)).toBeNull();
       });
 
+      it("names a bill called after a slot as typed when asking where it goes", async () => {
+        const { el } = await mount({
+          ...onCheck(),
+          bills: [tabBill, { ...checkBill, billName: "{into}" }, paidBill],
+        });
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+
+        expect(billChoice(el)!.scope).toBe("Ana · Bill 2 · {into} to Luis (Mesa 7)");
+      });
+
       it("sends the party the bill choice names, though the floor read since seats another there", async () => {
         const { el } = await mount(onCheck());
         const moved = heard(el, "move-bill");
@@ -6305,6 +6317,24 @@ describe("till-table-order-screen", () => {
         t("table.transfer_from_to").replace("{from}", anaBill(1)).replace("{to}", anaBill(2)),
       );
       expect(itemsHeading).toBe("Choose items to transfer from Ana · Bill 1 to Ana · Bill 2");
+    });
+
+    it("heads a transfer from a bill named after a slot with both bills' names as typed", async () => {
+      const { el } = await mount({
+        party: anaParty,
+        bills: [{ ...tabBill, billName: "{to}" }, { ...checkBill, billName: "{from}" }, paidBill],
+        lines: [pendingLine],
+        orderId: "wo-4",
+      });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-transfer-lines] h2")!.textContent!.trim()).toBe(
+        "Choose items to transfer from Ana · Bill 1 · {to} to Ana · Bill 2 · {from}",
+      );
     });
 
     it("heads the transfer's items plainly once the bill they go to leaves the party's bills", async () => {

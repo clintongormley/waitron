@@ -15475,15 +15475,18 @@ export class TillApp extends LitElement {
         return;
       }
       // Said only against the bill it was sent for: the waiter may have moved to another bill of
-      // the party while it was on its way.
+      // the party while it was on its way. A bill that is gone leaves the party's list whichever
+      // bill is shown.
       const onBill = () => live() && this.activeTabId === billId;
+      if (code === "tab.not_open") {
+        if (onBill()) this.errorKey = "table.bill_name_not_open";
+        await this.#loadPartyBills();
+        return;
+      }
       if (!onBill()) return;
       if (code === "management.request_invalid")
         this.billNameRefusal = { billId, name: name ?? "", message: t("table.name_too_long") };
-      else if (code === "tab.not_open") {
-        this.errorKey = "table.bill_name_not_open";
-        await this.#loadPartyBills();
-      } else {
+      else {
         this.errorKey =
           code === "draft.taken_over"
             ? { billNameTakenOver: refused?.ownerName ?? "" }

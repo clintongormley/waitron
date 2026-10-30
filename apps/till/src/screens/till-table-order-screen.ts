@@ -56,7 +56,7 @@ import {
   sumDecimals,
   type Decimal,
 } from "@waitron/shared";
-import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
+import { clockTime, countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
@@ -5583,13 +5583,13 @@ export class TillTableOrderScreen extends LitElement {
    * one of those bills is not among the party's shown bills. */
   #billsHeading(key: StringKey, bills: Record<string, string | null | undefined>): string {
     const shown = this.#shownBills();
-    let heading = t(key);
+    const names: Record<string, string> = {};
     for (const [slot, id] of Object.entries(bills)) {
       const bill = shown.find((row) => row.workingOrderId === id);
       if (bill === undefined) return t("table.actions_title");
-      heading = heading.replace(`{${slot}}`, () => this.#billName(bill));
+      names[slot] = this.#billName(bill);
     }
-    return heading;
+    return fill(t(key), names);
   }
 
   #transferLinesStep(): TemplateResult {

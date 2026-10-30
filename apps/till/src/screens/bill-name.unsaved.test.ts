@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { LeaveController } from "@waitron/ui";
 import { cleanupWidgets, mountWidget } from "../widgets/test-helpers.js";
-import { setLocale, t } from "../i18n/t.js";
+import { currentLocale, setLocale, t } from "../i18n/t.js";
 import type { PartyBill } from "../api/client.js";
 import "./till-table-order-screen.js";
 
@@ -49,7 +49,9 @@ class BillNameHost extends LitElement {
   }
 }
 customElements.define("bill-name-screen-test-host", BillNameHost);
+const originalLocale = currentLocale();
 afterEach(cleanupWidgets);
+afterEach(() => setLocale(originalLocale));
 beforeEach(() => setLocale("en"));
 it("the table screen protects a refused bill name against the bill's stored name and discards without submitting", async () => {
   const { el: app } = await mountWidget<BillNameHost>("bill-name-screen-test-host", {});
