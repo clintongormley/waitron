@@ -614,6 +614,11 @@ until A977).
   samples; Spanish starter-season names, locale keys, clock revisions and refusal checks stay.
   Native kitchen-notice samples use English menu, dish, table, note and removed-extra text;
   unit translations, unit identities, quantities and all six day-boundary readings stay.
+  The server's report suites (`apps/server/src/report-api*.test.ts`, all but the
+  categories-reconcile suite) give English location, node, device, table, printer, category,
+  product and station names to what they create; they keep their `es-ES` invoice locale and
+  `es-ES` description values, the operation description "Venta en establecimiento", the supplier
+  name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
@@ -902,6 +907,11 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   samples; Spanish starter-season names, locale keys, clock revisions and refusal checks stay.
   Native kitchen-notice samples use English menu, dish, table, note and removed-extra text;
   unit translations, unit identities, quantities and all six day-boundary readings stay.
+  The server's report suites (`apps/server/src/report-api*.test.ts`, all but the
+  categories-reconcile suite) give English location, node, device, table, printer, category,
+  product and station names to what they create; they keep their `es-ES` invoice locale and
+  `es-ES` description values, the operation description "Venta en establecimiento", the supplier
+  name "Café del Puerto SL", the modelo 303 terms and the Spanish category-print heading check.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

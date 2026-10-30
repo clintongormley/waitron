@@ -62,7 +62,7 @@ const SEED = {
     // shows the staff name (see `docs/developers/products.md`), so a test reading the customer
     // text instead of the staff name would fail here.
     line: {
-      name: "Tortilla",
+      name: "Omelette",
       descriptions: { "es-ES": "Tortilla francesa" },
       quantity: "2.000",
       total: "10.00",
@@ -77,7 +77,7 @@ const SEED = {
     tenderAmount: "55.00",
     tipAmount: "1.00",
     line: {
-      name: "Agua",
+      name: "Mineral water",
       descriptions: { "es-ES": "Agua mineral" },
       quantity: "1.000",
       total: "2.00",
@@ -165,7 +165,7 @@ async function seedVariantDay(db: Database, invoiceNumber: number): Promise<void
   const parent = {
     name: "Wine by the glass",
     descriptions: { "es-ES": "Vino por copas" },
-    kitchenName: "VINO",
+    kitchenName: "WINE",
   };
   await db.insert(saleLines).values([
     {
@@ -204,16 +204,16 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Sala principal",
+        name: "Main dining room",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
     locationId = loc!.id;
-    ({ deviceId } = await seedDevice(db, { locationId, label: "Barra 1" }));
+    ({ deviceId } = await seedDevice(db, { locationId, label: "Bar 1" }));
     const [node] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 1" })
+      .values({ locationId, name: "Node 1" })
       .returning({ id: nodes.id });
     nodeId = node!.id;
     const [series] = await db
@@ -317,7 +317,7 @@ describe("mountReportApi — /reports/daily-close", () => {
     expect(body.cash.byOrigin[0]).toMatchObject({
       source: "device",
       deviceId,
-      deviceName: "Barra 1",
+      deviceName: "Bar 1",
     });
     expect(body.cash.tenderTotal).toBe("121.00");
     expect(body.cash.tipTotal).toBe("3.00");
@@ -334,7 +334,7 @@ describe("mountReportApi — /reports/daily-close", () => {
     try {
       const res = await get(mountApp(), `/management-api/reports/daily-close?businessDay=${DAY1}`);
       const body = (await res.json()) as DailyCloseBody;
-      expect(body.cash.byOrigin.map((row) => row.deviceName)).toEqual(["Barra 1"]);
+      expect(body.cash.byOrigin.map((row) => row.deviceName)).toEqual(["Bar 1"]);
     } finally {
       await suite.db.update(devices).set({ active: true }).where(eq(devices.id, deviceId));
     }
@@ -396,7 +396,7 @@ describe("mountReportApi — /reports/period", () => {
     expect(body.vat.baseTotal).toBe("150.00");
     expect(body.vat.taxTotal).toBe("26.00");
     expect(body.vat.grossTotal).toBe("176.00");
-    // Both lines, ranked by quantity desc: Tortilla (2.000) before Agua (1.000).
+    // Both lines, ranked by quantity desc: Omelette (2.000) before Mineral water (1.000).
     expect(body.topSellers).toEqual([
       { name: SEED.day1.line.name, quantity: "2.000", total: "10.00", variants: [] },
       { name: SEED.day2.line.name, quantity: "1.000", total: "2.00", variants: [] },

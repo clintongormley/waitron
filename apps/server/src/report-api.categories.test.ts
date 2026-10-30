@@ -143,7 +143,7 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Sala principal",
+        name: "Main dining room",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -152,7 +152,7 @@ const suite = useVenueDb({
     const [other] = await db
       .insert(locations)
       .values({
-        name: "Terraza",
+        name: "Terrace",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -160,7 +160,7 @@ const suite = useVenueDb({
     ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 1" })
+      .values({ locationId, name: "Node 1" })
       .returning({ id: nodes.id });
     nodeId = node!.id;
     const [series] = await db
@@ -189,17 +189,17 @@ const suite = useVenueDb({
         .returning({ id: printers.id });
       return row!.id;
     };
-    barPrinter = await printer({ name: "Barra" });
-    narrowPrinter = await printer({ name: "Almacén", paperWidth: "58mm" });
-    inactivePrinter = await printer({ name: "Antigua", active: false });
-    elsewherePrinter = await printer({ name: "Terraza", location: other!.id });
+    barPrinter = await printer({ name: "Main bar" });
+    narrowPrinter = await printer({ name: "Cellar", paperWidth: "58mm" });
+    inactivePrinter = await printer({ name: "Old", active: false });
+    elsewherePrinter = await printer({ name: "Terrace", location: other!.id });
 
     await withTransaction(db, async (tx) => {
       const menu = await createCatalogue(tx, { name: "Bar" });
-      const drinks = await createCategory(tx, { name: "Bebidas" });
-      const softs = await createCategory(tx, { name: "Refrescos", parentId: drinks.id });
-      const loopA = await createCategory(tx, { name: "Bucle A" });
-      const loopB = await createCategory(tx, { name: "Bucle B", parentId: loopA.id });
+      const drinks = await createCategory(tx, { name: "Beverages" });
+      const softs = await createCategory(tx, { name: "Soft drinks", parentId: drinks.id });
+      const loopA = await createCategory(tx, { name: "Loop A" });
+      const loopB = await createCategory(tx, { name: "Loop B", parentId: loopA.id });
       const product = async (name: string, categoryId: string | null) =>
         (
           await createProduct(tx, {
@@ -386,8 +386,8 @@ describe("GET /management-api/reports/categories", () => {
     const body = (await res.json()) as CategoryReport;
     expect(body.mode).toBe("current");
     expect(treeRows(body.tree)).toEqual([
-      "Bebidas: 5.83/5.00 (1)",
-      "  Refrescos: 3.63/3.00 (1)",
+      "Beverages: 5.83/5.00 (1)",
+      "  Soft drinks: 3.63/3.00 (1)",
       "(uncategorised): 1.65/1.50 (2)",
     ]);
   });
@@ -466,8 +466,8 @@ describe("GET /management-api/reports/printers", () => {
     const res = await request("/management-api/reports/printers", { cookie: supervisorCookie });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual([
-      { id: narrowPrinter, name: "Almacén" },
-      { id: barPrinter, name: "Barra" },
+      { id: narrowPrinter, name: "Cellar" },
+      { id: barPrinter, name: "Main bar" },
     ]);
   });
 
@@ -504,7 +504,7 @@ describe("POST /management-api/reports/categories/print", () => {
     const lines = printedLines(new Uint8Array(job.payload));
     expect(lines[0]).toBe("Current categories");
     expect(lines).toContain("From 2026-06-10 to 2026-06-11");
-    expect(lines.find((l) => l.startsWith("Bebidas"))).toBeDefined();
+    expect(lines.find((l) => l.startsWith("Beverages"))).toBeDefined();
     expect(lines.join(" ")).toContain(
       "Gross total incomplete: 1 line recorded before classification began",
     );

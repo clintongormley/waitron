@@ -124,7 +124,7 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Sala principal",
+        name: "Main dining room",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -132,12 +132,12 @@ const suite = useVenueDb({
     locationId = loc!.id;
     const [node] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 1" })
+      .values({ locationId, name: "Node 1" })
       .returning({ id: nodes.id });
     nodeId = node!.id;
     const [station] = await db
       .insert(kitchenStations)
-      .values({ locationId, name: "Cocina", isDefault: true })
+      .values({ locationId, name: "Kitchen", isDefault: true })
       .returning({ id: kitchenStations.id });
     const stationId = station!.id;
 
@@ -202,7 +202,7 @@ describe("mountReportApi — /reports/overdue-orders", () => {
     expect(body.orders[0]).toMatchObject({
       orderNumber: 1,
       tableLabel: "12",
-      stationName: "Cocina",
+      stationName: "Kitchen",
       band: "forgotten",
     });
     expect(body.orders[0]!.ageMinutes).toBeGreaterThanOrEqual(20);
