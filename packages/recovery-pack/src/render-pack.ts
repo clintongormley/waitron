@@ -44,6 +44,11 @@ const QR_SIZE = 160;
 const GREY = "#555555";
 const LINE = "#bbbbbb";
 const FILL = "#eeeeee";
+/** The text sizes a page is tried at, largest first; a part's secret is always drawn full size. */
+const SCALES = [1, 0.9, 0.8, 0.7];
+/** The tallest a name or table cell is drawn; past it, the text is cut and marked. */
+const TALLEST_CELL = 96;
+const ELLIPSIS = "\u2026";
 
 /** The page each printed part is on: the cover is page 1, then one page per included or failed part. */
 export function packPageNumbers(parts: readonly PackPart[]): Map<PackPart, number> {
@@ -124,23 +129,33 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const pageCount = pageOf.size + 1;
   const serverKeyPage = [...pageOf].find(([part]) => part.kind === "server-key")?.[1];
 
-  const pdf = new PDFDocument({
+  const layout = {
     size: "A4",
     autoFirstPage: false,
     margins: { top: TOP, bottom: BOTTOM, left: LEFT, right: LEFT },
     font: fontBytes as unknown as string,
+  };
+  const real = new PDFDocument({
+    ...layout,
     info: { Title: words.title, WaitronRecoveryDigest: await digestOf(fileBytes) } as never,
   });
+  // Each page is drawn here first, to find the largest text size at which it fits on one sheet.
+  const scratch = new PDFDocument(layout);
+  let scratchPages = 0;
+  scratch.on("pageAdded", () => scratchPages++);
+  let realPages = 0;
+  real.on("pageAdded", () => realPages++);
+  let pdf = real;
   const limit = input.maxBytes ?? MAX_PACK_PDF;
   const chunks: Uint8Array[] = [];
   let length = 0;
   const result = new Promise<Uint8Array<ArrayBuffer>>((resolve, reject) => {
-    pdf.on("data", (data: Uint8Array) => {
+    real.on("data", (data: Uint8Array) => {
       length += data.length;
       if (length > limit) reject(new RecoveryPackFileError("size"));
       else chunks.push(data);
     });
-    pdf.on("end", () => {
+    real.on("end", () => {
       const bytes = new Uint8Array(length);
       let offset = 0;
       for (const chunk of chunks) {
@@ -156,21 +171,62 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
 
   const width = () => pdf.page.width - 2 * LEFT;
   let inset = 0;
+  let scale = 1;
+  let cut = false;
+  /** `text` as drawn, or the most of it that `fits`, ended with a mark. */
+  const cutToFit = (text: string, fits: (drawn: string) => boolean) => {
+    const whole = safe(text);
+    if (fits(whole)) return whole;
+    const chars = Array.from(text);
+    const cutAt = (n: number) => safe(chars.slice(0, n).join("")) + ELLIPSIS;
+    let low = 0;
+    let high = 1;
+    while (high < chars.length && fits(cutAt(high))) {
+      low = high;
+      high *= 2;
+    }
+    high = Math.min(high, chars.length) - 1;
+    while (low < high) {
+      const middle = Math.ceil((low + high) / 2);
+      if (fits(cutAt(middle))) low = middle;
+      else high = middle - 1;
+    }
+    return cutAt(low);
+  };
+  /** At the current font size; cutting marks the page to be tried again smaller. */
+  const tallest = (text: string, width: number) => {
+    // Wrapping only adds lines, so text wider than this many full lines cannot fit; ruling it out
+    // by width first keeps the slow wrapped measure to short text.
+    const widest = width * (TALLEST_CELL / pdf.currentLineHeight(true) + 1);
+    const shown = cutToFit(
+      text,
+      (t) => pdf.widthOfString(t) <= widest && pdf.heightOfString(t, { width }) <= TALLEST_CELL,
+    );
+    if (shown !== safe(text)) cut = true;
+    return shown;
+  };
   const write = (text: string, size = 10, colour = "black", gap = 6) => {
     pdf
       .fillColor(colour)
-      .fontSize(size)
+      .fontSize(size * scale)
       .text(safe(text), LEFT + inset, pdf.y, { width: width() - 2 * inset });
-    pdf.y += gap;
+    pdf.y += gap * scale;
   };
-  const header = safe(words.header(cover.venueName, cover.number, when.shortAt(cover.madeAt)));
+  let header: string | undefined;
   const chrome = (n: number) => {
     const bottom = pdf.page.margins.bottom;
     pdf.page.margins.bottom = 0;
     const right = { width: width(), align: "right" as const, lineBreak: false };
     const footerY = pdf.page.height - 44;
     pdf.fillColor("black").fontSize(9);
-    pdf.text(header, LEFT, 40, { lineBreak: false });
+    const room = width() - pdf.widthOfString(safe(words.page(pageCount, pageCount))) - 12;
+    const day = when.shortAt(cover.madeAt);
+    header ??= cutToFit(
+      cover.venueName,
+      (venue) => pdf.widthOfString(safe(words.header(venue, cover.number, day))) <= room,
+    );
+    const line = safe(words.header(header, cover.number, day));
+    pdf.text(line, LEFT, 40, { lineBreak: false });
     pdf.text(safe(words.page(n, pageCount)), LEFT, 40, right);
     pdf
       .moveTo(LEFT, 56)
@@ -178,7 +234,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       .lineWidth(1)
       .stroke("black");
     pdf.fillColor(GREY).fontSize(8);
-    pdf.text(header, LEFT, footerY, { lineBreak: false });
+    pdf.text(line, LEFT, footerY, { lineBreak: false });
     pdf.text(safe(words.page(n, pageCount)), LEFT, footerY, right);
     pdf
       .moveTo(LEFT, footerY - 8)
@@ -190,14 +246,27 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     pdf.y = TOP;
   };
   let drawn = 0;
-  let added = 0;
-  pdf.on("pageAdded", () => added++);
-  const newPage = () => {
+  /** Draws a page at the largest size at which it fits one sheet with nothing cut; else smallest. */
+  const drawPage = (draw: () => void) => {
+    const fitting = SCALES.find((size, index) => {
+      pdf = scratch;
+      scale = size;
+      cut = false;
+      const before = scratchPages;
+      scratch.addPage();
+      chrome(drawn + 1);
+      draw();
+      pdf = real;
+      return scratchPages === before + 1 && (!cut || index === SCALES.length - 1);
+    });
+    if (fitting === undefined) refuse("overflow");
+    scale = fitting;
     pdf.addPage();
     chrome(++drawn);
+    draw();
   };
   const table = (columns: number[], rows: string[][], options: { head?: boolean } = {}) => {
-    pdf.fontSize(9.5);
+    pdf.fontSize(9.5 * scale);
     const total = width();
     rows.forEach((cells, index) => {
       const head = options.head === true && index === 0;
@@ -206,16 +275,16 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
           ? total - columns.slice(0, i).reduce((a, b) => a + b, 0) - 16 * i
           : columns[i]!,
       );
+      const shown = cells.map((cell, i) => tallest(cell, widths[i]! - 12));
       const height =
-        Math.max(
-          ...cells.map((cell, i) => pdf.heightOfString(safe(cell), { width: widths[i]! - 12 })),
-        ) + 14;
+        Math.max(...shown.map((cell, i) => pdf.heightOfString(cell, { width: widths[i]! - 12 }))) +
+        14 * scale;
       const y = pdf.y;
       if (head) pdf.rect(LEFT, y, total, height).fill(FILL);
       let x = LEFT;
-      cells.forEach((cell, i) => {
+      shown.forEach((cell, i) => {
         pdf.fillColor(head ? "black" : i === 0 ? GREY : "black");
-        pdf.text(safe(cell), x + 6, y + 7, { width: widths[i]! - 12 });
+        pdf.text(cell, x + 6, y + 7 * scale, { width: widths[i]! - 12 });
         x += widths[i]! + 16;
       });
       pdf
@@ -225,7 +294,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
         .stroke(LINE);
       pdf.y = y + height;
     });
-    pdf.y += 12;
+    pdf.y += 12 * scale;
   };
   const boxed = (draw: () => void, padding = 12) => {
     const top = pdf.y;
@@ -303,96 +372,109 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
     boxed(() => write(text, 12, "black", 0));
   };
 
-  newPage();
-  write(words.title, 24, "black", 4);
-  write(
-    cover.madeBy === null
-      ? words.madeDuringSetup(when.longAt(cover.madeAt), when.timeAt(cover.madeAt))
-      : words.madeBy(when.longAt(cover.madeAt), when.timeAt(cover.madeAt), cover.madeBy),
-    10,
-    GREY,
-    0,
-  );
-  write(`${cover.legalName} · NIF ${cover.taxId} · ${cover.venueName}`, 10, GREY, 18);
-  write(words.whichPage, 12, "black", 4);
-  table(
-    [width() - 80],
-    [
-      [words.whatHappened, words.pageColumn],
-      ...[...pageOf].map(([part, page]) => [words.situation[part.kind], String(page)]),
-    ],
-    { head: true },
-  );
-  write(words.whatIsIn, 12, "black", 4);
-  table(
-    [150, 110, width() - 150 - 110 - 80 - 48],
-    [
-      [words.partColumn, words.lastChangedColumn, words.checkColumn, words.pageColumn],
-      ...parts.map((part) => {
-        const page = pageOf.get(part);
-        if (part.state === "included")
-          return [
-            words.part[part.kind],
-            part.lastChanged ? when.shortDay(part.lastChanged) : "",
-            part.check ?? "",
-            String(page),
-          ];
-        if (part.state === "failed")
-          return [words.part[part.kind], words.couldNotBeDrawn, "", String(page)];
-        const reason =
-          part.absentReason ?? (part.state === "absent" ? words.absent : words.notSetUp)[part.kind];
-        return [words.part[part.kind], reason];
-      }),
-    ],
-    { head: true },
-  );
-  write(words.sameChecks, 9, GREY, 14);
-  boxed(() => {
-    write(words.lockedAway, 12, "black", 2);
-    const opens =
-      input.file.bucketCode !== null ||
-      input.file.archiveCode !== null ||
-      input.file.backupKey !== null
-        ? words.anyoneHolding
-        : input.file.serverKey !== null
-          ? words.anyoneHoldingServerKey
-          : undefined;
+  drawPage(() => {
+    write(words.title, 24, "black", 4);
+    pdf.fontSize(10 * scale);
     write(
-      [
-        opens,
-        words.whichToKeep,
-        serverKeyPage === undefined ? undefined : words.serverKeyPage(serverKeyPage),
-      ]
-        .filter((sentence) => sentence !== undefined)
-        .join(" "),
-      11,
-      "black",
+      cover.madeBy === null
+        ? words.madeDuringSetup(when.longAt(cover.madeAt), when.timeAt(cover.madeAt))
+        : words.madeBy(
+            when.longAt(cover.madeAt),
+            when.timeAt(cover.madeAt),
+            tallest(cover.madeBy, width()),
+          ),
+      10,
+      GREY,
       0,
     );
+    write(
+      `${tallest(cover.legalName, width())} · NIF ${cover.taxId} · ${tallest(cover.venueName, width())}`,
+      10,
+      GREY,
+      18,
+    );
+    write(words.whichPage, 12, "black", 4);
+    table(
+      [width() - 80],
+      [
+        [words.whatHappened, words.pageColumn],
+        ...[...pageOf].map(([part, page]) => [words.situation[part.kind], String(page)]),
+      ],
+      { head: true },
+    );
+    write(words.whatIsIn, 12, "black", 4);
+    table(
+      [150, 110, width() - 150 - 110 - 80 - 48],
+      [
+        [words.partColumn, words.lastChangedColumn, words.checkColumn, words.pageColumn],
+        ...parts.map((part) => {
+          const page = pageOf.get(part);
+          if (part.state === "included")
+            return [
+              words.part[part.kind],
+              part.lastChanged ? when.shortDay(part.lastChanged) : "",
+              part.check ?? "",
+              String(page),
+            ];
+          if (part.state === "failed")
+            return [words.part[part.kind], words.couldNotBeDrawn, "", String(page)];
+          const reason =
+            part.absentReason ??
+            (part.state === "absent" ? words.absent : words.notSetUp)[part.kind];
+          return [words.part[part.kind], reason];
+        }),
+      ],
+      { head: true },
+    );
+    write(words.sameChecks, 9, GREY, 14);
+    boxed(() => {
+      write(words.lockedAway, 12, "black", 2);
+      const { bucketCode, archiveCode, backupKey, serverKey } = input.file;
+      const backups = bucketCode !== null || archiveCode !== null || backupKey !== null;
+      const opens = backups
+        ? serverKey !== null
+          ? words.anyoneHoldingBackupsAndServerKey
+          : words.anyoneHoldingBackups
+        : serverKey !== null
+          ? words.anyoneHoldingServerKey
+          : undefined;
+      write(
+        [
+          opens,
+          words.whichToKeep,
+          serverKeyPage === undefined ? undefined : words.serverKeyPage(serverKeyPage),
+        ]
+          .filter((sentence) => sentence !== undefined)
+          .join(" "),
+        11,
+        "black",
+        0,
+      );
+    });
   });
 
-  for (const [part] of pageOf) {
-    newPage();
-    if (part.state === "failed") {
-      write(words.failedTitle(words.part[part.kind]), 18, "black", 10);
-      write(part.failure!.what, 11);
-      write(part.failure!.todo, 11, "black", 12);
+  for (const [part] of pageOf)
+    drawPage(() => {
+      if (part.state === "failed") {
+        write(words.failedTitle(words.part[part.kind]), 18, "black", 10);
+        write(part.failure!.what, 11);
+        write(part.failure!.todo, 11, "black", 12);
+        if (part.serverKeyLocation) location(part.serverKeyLocation);
+        return;
+      }
+      const page = part.page!;
+      write(page.title, 18, "black", 8);
+      if (page.intro) write(page.intro, 10, "black", 12);
+      if (page.secret) secret(page.secret);
+      if (page.rows.length > 0)
+        table(
+          [180],
+          page.rows.map((row) => [row.label, row.value]),
+        );
       if (part.serverKeyLocation) location(part.serverKeyLocation);
-      continue;
-    }
-    const page = part.page!;
-    write(page.title, 18, "black", 8);
-    if (page.intro) write(page.intro, 10, "black", 12);
-    if (page.secret) secret(page.secret);
-    if (page.rows.length > 0)
-      table(
-        [180],
-        page.rows.map((row) => [row.label, row.value]),
-      );
-    if (part.serverKeyLocation) location(part.serverKeyLocation);
-    for (const note of page.notes) write(note, 10, "black", 3);
-  }
-  if (added !== pageCount) refuse("overflow");
+      for (const note of page.notes) write(note, 10, "black", 3);
+    });
+  if (realPages !== pageCount) refuse("overflow");
   pdf.file(fileBytes.buffer, { name: PACK_ATTACHMENT, type: "application/json" });
   pdf.end();
   return result;
