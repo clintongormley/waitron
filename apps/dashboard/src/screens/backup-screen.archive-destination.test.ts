@@ -1572,8 +1572,8 @@ describe("switching off", () => {
   it("pressing make-recovery-pack disarms it", async () => {
     const { el, api } = await mount(TWO, {
       disableBackup: vi.fn(),
-      getRecoveryPackStatus: vi.fn(() => new Promise(() => undefined)),
-      getProfile: vi.fn(() => new Promise(() => undefined)),
+      getRecoveryPackStatus: vi.fn(() => new Promise<never>(() => undefined)),
+      getProfile: vi.fn(() => new Promise<never>(() => undefined)),
     });
     el.canManage = true;
     await el.updateComplete;
