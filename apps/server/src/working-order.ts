@@ -3976,19 +3976,6 @@ export async function assertServiceModesMatch(
   }
 }
 
-/** {@link assertServiceModesMatch} as an answer rather than a refusal. */
-export async function serviceModesMatch(
-  tx: Transaction,
-  cfg: TradingContext,
-  fromOrderId: string,
-  toOrderId: string,
-): Promise<boolean> {
-  return modesMatch(
-    await VENUE_SERVICE.findOrderContext(tx, cfg, fromOrderId),
-    await VENUE_SERVICE.findOrderContext(tx, cfg, toOrderId),
-  );
-}
-
 function modesMatch(
   from: { serviceMode: string } | null,
   to: { serviceMode: string } | null,

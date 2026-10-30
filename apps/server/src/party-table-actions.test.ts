@@ -1588,7 +1588,6 @@ describe("combineParties", () => {
     expect(result).toEqual({
       merged: false,
       mainBillId: luis.tabId,
-      mergedInto: new Map(),
     });
     expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
     expect(await numbersOf(v, luis.partyId)).toEqual([

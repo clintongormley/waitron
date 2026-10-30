@@ -1876,21 +1876,15 @@ export async function readSentWorkAt(
 }
 
 /**
- * {@link enqueueMovedSlips} for each bill `before` read, onto the bill at the end of its chain in
- * `mergedInto`, else onto itself, reading every destination's places and ticket items, and what
- * the slips print with, once.
+ * {@link enqueueMovedSlips} for each bill `before` read, onto the bill itself, reading every
+ * bill's places and ticket items, and what the slips print with, once.
  */
 export async function enqueueMovedSlipsFor(
   tx: Transaction,
   cfg: TradingContext,
   before: ReadonlyMap<string, SentWork>,
-  mergedInto: ReadonlyMap<string, string> = new Map(),
 ): Promise<void> {
-  const endOf = (billId: string): string => {
-    const into = mergedInto.get(billId);
-    return into === undefined ? billId : endOf(into);
-  };
-  const moves = [...before].map(([billId, work]) => ({ work, to: endOf(billId) }));
+  const moves = [...before].map(([billId, work]) => ({ work, to: billId }));
   if (moves.length === 0) return;
   const now = await readPlacedOrders(tx, [...new Set(moves.map((move) => move.to))]);
   const changed = moves.filter((move) => kitchenToBeTold(move.work, now.get(move.to)!.places));

@@ -652,7 +652,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `apps/server/src/order-portions.filing.test.ts:1159` (`bills: "separate"` passed to `moveBill`) | **F, Q5 item 2** | the property line goes; no other line; no `expect` changes ("separate" is now the only behaviour) | D13 | 4b |
 | `apps/server/src/split-bill.test.ts:539` (`bills: "separate"`), `:1019` (`bills: "merge"`) | F | the property lines go, no other change — provided both files' cases are green at Task 3a's run (where `bills: "merge"` stops merging); if `:1019`'s case goes red there, it is a stop (this file was meant to stay unchanged) | D13 | 4b |
 | every other `bills: "merge" \| "separate"` property in the 61 server files | F | property deletion only; a file whose behaviour changed was handled, with its own row, in Tasks 2–3a | D13 | 4b |
-| `apps/server/src/moved-slips.test.ts:108`, `:116` (`inner.mergedInto.set(...)`, `outer!.mergedInto.get(...)`) | **B, Q5 item 6a** | the two lines go with the map they set and read; the case's other checks (the inner call gets the outer's slips; the kitchen is told once) stay | master plan "remove its implicit-bill-merge mapping consumers" | 3b |
+| `apps/server/src/moved-slips.test.ts:108`, `:116` (`inner.mergedInto.set(...)`, `outer!.mergedInto.get(...)`) | **B, Q5 item 6a** | the two lines go with the map they set and read; the case's other checks (the inner call gets the outer's slips; the kitchen is told once) stay. As built: the `notABill`, `into` and `outer` locals and `outer = slips;` go with them (unused otherwise), and the title loses "writes into them" (nothing is written into the token now) | master plan "remove its implicit-bill-merge mapping consumers" | 3b |
+| `party-table-actions.test.ts:1591` (the combine answer's `mergedInto: new Map()`, a Task 3a row) | W (Task 3b) | the key goes with `CombineResult.mergedInto`; `merged: false` and `mainBillId` unchanged in the same `toEqual` | master plan "remove its implicit-bill-merge mapping consumers" | 3b |
 | `apps/server/src/till-api.table-actions.test.ts:97`, `:111`, `:156`, `:172`, `:243`, `:509`/`:536`/`:691` | B, W | answers `{partyId, billIds[, zoneRevisions]}`, split `{partyId, billId}`; "merges by default" → "keeps every bill"; `party.main_bill_stays` rows → those splits succeed | §3.4, master plan interfaces | 4a |
 | `till-api.table-actions.test.ts` bad `bills` value → 400 | B | ignored, answered 200 | D13 | 4b |
 | `apps/server/src/till-api.today-joins.test.ts:201`, `:630-652`, `:696`, `:712-717`, `:908`, `:923`, `:949` | B, W | answer shape; the default-merge join keeps bills | §3.4 | 4a |
@@ -973,17 +974,31 @@ stays as the token an outer call hands down, with no field); `kitchen-print.ts:1
 `moved-slips.test.ts:108`, `:116` (Q5 item 6a, built on the default). The explicit Merge's own slips
 (`bill-actions.ts:281`) are untouched (review-1 minor 2).
 
-- [ ] Before editing: `rg -n '\bisUntouched\b|\breadBillState\b|\bserviceModesMatch\b|mergedInto\b|enqueueMovedSlipsFor' apps/server/src`
+- [x] Before editing: `rg -n '\bisUntouched\b|\breadBillState\b|\bserviceModesMatch\b|mergedInto\b|enqueueMovedSlipsFor' apps/server/src`
       — every hit is in the files above, `party-table-actions.test.ts:1569` (already a Task 3a row)
-      or `mergedIntoPartyId` (a different column, untouched).
-- [ ] Remove `combineParties`' unused `_attendance` parameter and its `void _attendance;`
-      (`table-actions.ts:256-259`), and the argument its callers pass to it.
-- [ ] RED is the deletion itself: the server typecheck fails on the removed names until each
-      caller is updated (record the first run's errors).
-- [ ] GREEN: `pnpm --filter @waitron/server exec vitest run src/moved-slips.test.ts src/kitchen-print.test.ts src/party-table-actions.test.ts src/move-merge.test.ts src/party-move-bill.test.ts src/party-bill-actions.test.ts`
+      or `mergedIntoPartyId` (a different column, untouched). (Run: as said; the test hit was at
+      `:1591`; `serviceModesMatch`'s imports in `move-bill.ts` and `table-actions.ts` had already
+      gone in Tasks 2/3a, leaving only its definition; `mergedInto` also named
+      `CombineResult.mergedInto`, now always empty, which goes too.)
+- [x] Remove `combineParties`' unused `_attendance` parameter and its `void _attendance;`
+      (`table-actions.ts:256-259`), and the argument its callers pass to it. (Built: with
+      `noUnusedParameters` on, removing the argument left `combineAt`'s `attendance` unread, and
+      then `moveGuests`' and `joinTables`'; each went in turn, with the recorder argument the
+      move/join route passed (`till-api.ts:3091`) and the test fixture's pass-throughs
+      (`testing/table-action-fixture.ts`). `splitTable` keeps its `attendance`, which it reads.)
+- [x] RED is the deletion itself: the server typecheck fails on the removed names until each
+      caller is updated (record the first run's errors). (First run: `moved-slips.test.ts(108,17)`
+      and `(116,19)` TS2339 `mergedInto` does not exist on `SlipsLater`; `table-actions.ts(201,3)`
+      TS6133 `attendance` never read; `testing/table-action-fixture.ts(97,5)` TS2554 expected 3
+      arguments, got 4.)
+- [x] GREEN: `pnpm --filter @waitron/server exec vitest run src/moved-slips.test.ts src/kitchen-print.test.ts src/party-table-actions.test.ts src/move-merge.test.ts src/party-move-bill.test.ts src/party-bill-actions.test.ts`
       (add any file the `rg` above names); F; Filing; server typecheck; the `rg` prints only
-      `mergedIntoPartyId` lines.
-- [ ] Commit: "Retire the helpers and the slip map only the automatic merge used".
+      `mergedIntoPartyId` lines. (Run: 341 passed in 6 files; F 267 in 5; H2 20 in 2; Filing 67
+      in 2; every test file naming a join, move, combine, the slip helpers or the fixture, 2672 in
+      61; the other test files importing `kitchen-print`, `moved-slips`, `move-bill` or `working-order`, 4822 in 153; server and till typechecks clean. The `rg` prints `enqueueMovedSlipsFor`'s definition and
+      its one call in `moved-slips.ts`, which stay as planned, and `mergedInto` keys holding
+      `parties.mergedIntoPartyId` in `receipt-guests.ts` and `testing/bill-identities.ts`.)
+- [x] Commit: "Retire the helpers and the slip map only the automatic merge used".
 
 ## Task 4a: action answers name their bills; Split a table takes any bill; the code goes (≈65 calls)
 

@@ -50,16 +50,8 @@ export async function joinTables(
   partyId: string,
   tableId: string,
   options: TableActionOptions,
-  attendance?: OrderAttendance,
 ) {
-  return join(
-    tx,
-    cfg,
-    partyId,
-    tableId,
-    await fixtureOptions(tx, partyId, tableId, options),
-    attendance,
-  );
+  return join(tx, cfg, partyId, tableId, await fixtureOptions(tx, partyId, tableId, options));
 }
 export async function moveGuests(
   tx: Transaction,
@@ -67,16 +59,8 @@ export async function moveGuests(
   partyId: string,
   tableId: string,
   options: TableActionOptions,
-  attendance?: OrderAttendance,
 ) {
-  return move(
-    tx,
-    cfg,
-    partyId,
-    tableId,
-    await fixtureOptions(tx, partyId, tableId, options),
-    attendance,
-  );
+  return move(tx, cfg, partyId, tableId, await fixtureOptions(tx, partyId, tableId, options));
 }
 export async function combineParties(
   tx: Transaction,
@@ -84,18 +68,11 @@ export async function combineParties(
   args: Omit<Parameters<typeof combine>[2], "expectedEdits"> & {
     expectedEdits?: BillEditExpected[];
   },
-  attendance?: OrderAttendance,
 ) {
-  return combine(
-    tx,
-    cfg,
-    {
-      ...args,
-      expectedEdits:
-        args.expectedEdits ?? (await partyBillEditsForTest(tx, [args.from, args.into])),
-    },
-    attendance,
-  );
+  return combine(tx, cfg, {
+    ...args,
+    expectedEdits: args.expectedEdits ?? (await partyBillEditsForTest(tx, [args.from, args.into])),
+  });
 }
 
 export async function splitTable(

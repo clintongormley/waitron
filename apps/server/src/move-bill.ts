@@ -14,7 +14,6 @@ import type { Transaction } from "@waitron/db";
 import type { AllergyMoveRead, AllergyPatch } from "@waitron/module";
 import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
 import { guardPathParty } from "./bill-actions.js";
-import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, firedQuantity, readSentWork, type SentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
 import {
@@ -481,29 +480,6 @@ async function counterLabel(tx: Transaction, party: SourceParty): Promise<string
 export interface BillState {
   status: (typeof workingOrders.$inferSelect)["status"];
   attemptAt: string | null;
-}
-
-/**
- * Whether the bill is untouched: open, not being paid in full at a reader, and holding no payment,
- * one given back in full or being given back included. Stricter than `requireUntouched`
- * (bill-actions.ts), which does not count a card payment in full at the reader (`payment_attempt_at`
- * set) as touching the bill. `known` is the bill's state when the caller has just read it.
- */
-export async function isUntouched(
-  tx: Transaction,
-  billId: string,
-  known?: BillState,
-): Promise<boolean> {
-  const bill = known ?? (await readBillState(tx, billId));
-  return bill.status === "open" && bill.attemptAt === null && !(await holdsPayment(tx, billId));
-}
-
-async function readBillState(tx: Transaction, billId: string): Promise<BillState> {
-  const [bill] = await tx
-    .select({ status: workingOrders.status, attemptAt: workingOrders.paymentAttemptAt })
-    .from(workingOrders)
-    .where(eq(workingOrders.id, billId));
-  return bill!;
 }
 
 /**

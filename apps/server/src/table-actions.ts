@@ -70,8 +70,6 @@ export interface TableActionResult {
 export interface CombineResult {
   merged: boolean;
   mainBillId: string | null;
-  /** Each bill merged away, mapped to the bill it merged into. */
-  mergedInto: Map<string, string>;
 }
 
 /**
@@ -85,7 +83,6 @@ export async function moveGuests(
   partyId: string,
   toTableId: string,
   options: TableActionOptions,
-  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, toTableId, partyId, options);
@@ -94,16 +91,7 @@ export async function moveGuests(
     await VENUE_SERVICE.assertZoneTakesNewOrders(tx, cfg, table.zoneId, new Date());
   const held = await memberTables(tx, partyId);
   if (table.holding !== null && table.holding !== partyId) {
-    const combined = await combineAt(
-      tx,
-      cfg,
-      partyId,
-      table.holding,
-      "leave",
-      options,
-      undefined,
-      attendance,
-    );
+    const combined = await combineAt(tx, cfg, partyId, table.holding, "leave", options);
     await leaveMergeOf(tx, toTableId, held);
     return combined;
   }
@@ -159,7 +147,6 @@ export async function joinTables(
   partyId: string,
   tableId: string,
   options: TableActionOptions,
-  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   await checkAndBumpParty(tx, partyId, options.expectedPartyRevision, "open");
   const table = await readTargetTable(tx, cfg, tableId, partyId, options);
@@ -172,7 +159,7 @@ export async function joinTables(
     });
   }
   if (table.holding !== null) {
-    return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId, attendance);
+    return combineAt(tx, cfg, table.holding, partyId, "join", options, zoneId);
   }
   await refuseUnseatable(tx, cfg, table);
 
@@ -200,27 +187,19 @@ async function combineAt(
   tables: "leave" | "join",
   options: TableActionOptions,
   intoZoneId?: string | null,
-  attendance?: OrderAttendance,
 ): Promise<TableActionResult> {
   const reach =
     options.slipsLater === undefined ? { parties: [from, into] } : { later: options.slipsLater };
-  return withMovedSlips(tx, cfg, reach, async (slips) => {
-    const combined = await combineParties(
-      tx,
-      cfg,
-      {
-        from,
-        into,
-        bills: options.bills,
-        tables,
-        operatorId: options.operatorId,
-        expectedEdits: options.expectedEdits,
-        intoZoneId,
-      },
-      attendance,
-    );
-    for (const [billId, intoBillId] of combined.mergedInto)
-      slips.mergedInto.set(billId, intoBillId);
+  return withMovedSlips(tx, cfg, reach, async () => {
+    const combined = await combineParties(tx, cfg, {
+      from,
+      into,
+      bills: options.bills,
+      tables,
+      operatorId: options.operatorId,
+      expectedEdits: options.expectedEdits,
+      intoZoneId,
+    });
     return { partyId: into, mainBillId: combined.mainBillId, merged: combined.merged };
   });
 }
@@ -253,10 +232,7 @@ export async function combineParties(
     /** `into`'s zone, when the caller has just read it. */
     intoZoneId?: string | null;
   },
-  /** Unread since no bill merges here; removed in A803 slice 3 Task 3b. */
-  _attendance?: OrderAttendance,
 ): Promise<CombineResult> {
-  void _attendance;
   const { from, into } = args;
   const mains = await tx
     .select({ id: parties.id, mainBillId: parties.mainBillId, guestCount: parties.guestCount })
@@ -313,7 +289,7 @@ export async function combineParties(
     .where(eq(parties.id, from));
   await closePartyTables(tx, from);
 
-  return { merged: false, mainBillId: await readMainBill(tx, into), mergedInto: new Map() };
+  return { merged: false, mainBillId: await readMainBill(tx, into) };
 }
 
 export interface SplitGuestCounts {

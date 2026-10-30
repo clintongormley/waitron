@@ -3082,16 +3082,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
           const check = sent === undefined ? undefined : { tableId, sent };
           return movingRooms(tx, deps.cfg, [...heldBefore, tableId], check, async () => {
             const actAndMerge = async (slipsLater?: SlipsLater) => {
-              const acted = await act(
-                tx,
-                sendCfg,
-                partyId,
-                tableId,
-                { ...command, slipsLater },
-                deps.attendance === undefined
-                  ? undefined
-                  : { recorder: deps.attendance, clock: deps.clock },
-              );
+              const acted = await act(tx, sendCfg, partyId, tableId, { ...command, slipsLater });
               await joinMergeMembers(tx, sendCfg, acted.partyId, tableId, personId, slipsLater);
               if (merge !== null) {
                 const held = merge.moving === tableId ? merge.target : merge.moving;
