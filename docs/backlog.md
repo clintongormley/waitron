@@ -6180,6 +6180,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   their deliberate staff-language cases, dates and clock settings stay.
   The native special-day save/delete suite uses English venue, operation, zone and custom-day
   samples; official holiday names, dates, locale settings and behavior checks stay.
+  Opening-hours route samples use English venue, station, zone, menu, period and custom-date
+  names; locale settings, dates, permissions and refusal checks stay.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
