@@ -466,8 +466,14 @@ until A977).
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults, as does the split-extras venue's operation description. The
-  device-api suite still names kitchen screens and stations "Uno",
+  still need English defaults, as does the split-extras venue's operation description.
+  The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
+  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the zone-offer suite
+  still names its location and a station "Barra" and its products "Café", "Tostada", "Agua"
+  and "Azúcar"; the fiscal sale-path suite's
+  venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
+  "Venta en establecimiento".
+  The device-api suite still names kitchen screens and stations "Uno",
   "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
   and configuration-transfer suites still hold other Spanish samples, among them station, till,
   table, zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The
