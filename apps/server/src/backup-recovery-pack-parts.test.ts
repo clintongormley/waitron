@@ -553,7 +553,7 @@ describe("the server key part", () => {
   it.each([
     [
       { kind: "pack" as const, number: 4, madeOn: "2026-10-01", received: false },
-      "The current server key is on recovery pack 4, made on 1 October 2026, which never reached a browser. If you do not have pack 4, make a new pack with Also make a new server key ticked.",
+      "The current server key is on recovery pack 4, made on 1 October 2026, but the box was never told that pack 4 arrived. If you do not have pack 4, make a new pack with Also make a new server key ticked.",
     ],
     [
       { kind: "sheet" as const, keyName: "2026-09-02 · OLD", madeOn: "2026-09-02" },

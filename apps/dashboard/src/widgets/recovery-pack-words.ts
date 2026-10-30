@@ -40,7 +40,7 @@ export function withStrong(
   return html`${before}<strong>${strong}</strong>${after ?? ""}`;
 }
 
-/** Decision 10's words for a pack holding the current server key that never reached a browser. */
+/** Decision 10's words for a pack holding the current server key no browser confirmed receiving. */
 export function unreceivedWords(
   holder: { number: number; madeAt: string },
   timeZone: string | undefined,

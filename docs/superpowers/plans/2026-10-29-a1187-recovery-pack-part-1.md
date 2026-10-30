@@ -279,6 +279,9 @@ days), the interval default at `:47`; `keyFingerprint` at `apps/server/src/backu
     Pack 1 from setup is recorded received, because setup's "I kept it" step confirms it. Chosen over
     a card that always hedges, because an always-on hedge would tell every venue on every visit that
     they may not have their key.
+    *(2026-10-30, after PR D's PDF look:* "never reached a browser" claimed more than the box knows,
+    which is only that no browser confirmed it. The words became "but the box was never told that
+    pack N arrived", and the matching sentences on the card, the dialog and setup's reader.)
 11. **No server key in force** (`readBreakGlassKeyName` null): the server-key part is `failed`
     ("this box has no server key yet"), ticked or not, and no key is made, as today's reissue
     refuses `key_missing` (`recovery-document-api.ts:96-97`).
@@ -1300,6 +1303,8 @@ Each was decided here with a conservative default; the owner may change any.
 9. **The server key's name format for a key made by a pack.** Default: unchanged from today's
    dashboard route (`YYYY-MM-DD · <uuid>`, `recovery-document-api.ts:101`), although setup and adopt
    use a four-letter suffix and the mock-up shows one.
+   *(2026-10-30, after PR D's PDF look:* changed to the day and four characters, drawn as the box's
+   key mint draws them, and never a name the key in force or an earlier pack's key had.)
 10. **The old recovery PDF renderer.** Default: kept, because the reader still accepts old sheets and
     its existing tests draw with it; no production code calls it after PR E.
 11. **A lost answer.** Default: a browser confirmation (`received_at`) decides whether a pack counts

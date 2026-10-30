@@ -93,7 +93,7 @@ describe("part failure words", () => {
       "The current key, on recovery pack 3 made on 2 September 2026, still works.",
     );
     expect(PART_WORDS.en.currentKeyOnUnreceivedPack(3, "2 September 2026")).toBe(
-      "The current server key is on recovery pack 3, made on 2 September 2026, which never reached a browser. If you do not have pack 3, make a new pack with Also make a new server key ticked.",
+      "The current server key is on recovery pack 3, made on 2 September 2026, but the box was never told that pack 3 arrived. If you do not have pack 3, make a new pack with Also make a new server key ticked.",
     );
   });
 

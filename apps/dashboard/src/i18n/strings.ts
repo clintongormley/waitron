@@ -1148,7 +1148,7 @@ export const en = {
   "recovery_pack_dialog.new_key_effect":
     "New backups will use the new key; older backups still need the old one.",
   "recovery_pack_dialog.unreceived":
-    "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
+    "The current server key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
   "recovery_pack_dialog.make": "Make pack",
   "recovery_pack_dialog.key_failed":
     "The pack was made, but the server key was {not} replaced. The server key page in the pack says why.",
@@ -1177,7 +1177,7 @@ export const en = {
   "recovery_pack.incomplete":
     "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
   "recovery_pack.not_received":
-    "Recovery pack {number}, made on {date}, never reached a browser. If you do not have it, make a new pack.",
+    "Recovery pack {number}, made on {date}: the box was never told it arrived. If you do not have it, make a new pack.",
   "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
   "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
   "recovery_pack.reason.archives_settings": "The archive settings changed.",
@@ -1208,7 +1208,7 @@ export const en = {
   "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
   "recovery_pack.server_key_on": "On pack {number}, made on {date}",
   "recovery_pack.server_key_on_unreceived":
-    "On pack {number}, made on {date}, which never reached a browser",
+    "On pack {number}, made on {date} (the box was never told it arrived)",
   "recovery_pack.server_key_none": "This venue keeps no server key",
   "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
   "recovery_pack.make": "Make recovery pack",
@@ -4852,7 +4852,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.new_key_effect":
     "Las copias nuevas usarán la clave nueva; las copias anteriores siguen necesitando la antigua.",
   "recovery_pack_dialog.unreceived":
-    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, que nunca llegó a un navegador. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
+    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, pero la caja nunca recibió la confirmación de que el paquete {number} llegó. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
   "recovery_pack_dialog.key_failed":
     "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
@@ -4885,7 +4885,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.incomplete":
     "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
   "recovery_pack.not_received":
-    "El paquete de recuperación {number}, hecho el {date}, nunca llegó a un navegador. Si no lo tienes, haz un paquete nuevo.",
+    "El paquete de recuperación {number}, hecho el {date}: la caja nunca recibió la confirmación de que llegó. Si no lo tienes, haz un paquete nuevo.",
   "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
   "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
   "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
@@ -4919,7 +4919,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
   "recovery_pack.server_key_on": "En el paquete {number}, hecho el {date}",
   "recovery_pack.server_key_on_unreceived":
-    "En el paquete {number}, hecho el {date}, que nunca llegó a un navegador",
+    "En el paquete {number}, hecho el {date} (la caja nunca recibió la confirmación de que llegó)",
   "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
   "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
   "recovery_pack.make": "Hacer paquete de recuperación",
