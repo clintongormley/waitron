@@ -719,11 +719,11 @@ describe("sale-time device from the authenticated session (SP-A.2 cutover)", () 
 
     // A `kds_station` device's profile carries no `take-cash`. Provisioning already seeds "Cocina".
     const station = await withTransaction(suite.db, async (tx) => {
-      return createStation(tx, cfg, { name: "Pase", isDefault: false });
+      return createStation(tx, cfg, { name: "Pass", isDefault: false });
     });
     const profileId = await seedProfileFF("kds");
     const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Pantalla",
+      name: "Pass screen",
       profileId,
       stationId: station.id,
     });
@@ -3082,10 +3082,10 @@ describe("POST /api/session by device kind", () => {
     const app = new Hono();
     mountTillApi(app, apiDeps(cfg), noopLog);
     const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Pase", isDefault: false }),
+      createStation(tx, cfg, { name: "Pass", isDefault: false }),
     );
     const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Pantalla",
+      name: "Pass screen",
       profileId: await seedProfileFF("kds"),
       stationId: station.id,
     });

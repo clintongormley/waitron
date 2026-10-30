@@ -103,7 +103,7 @@ export async function setupSplitExtrasVenue() {
       tx,
       { locationId: cfg.locationId },
       {
-        name: "Pase",
+        name: "Pass",
         transport: "cloud_poll",
         pollId: `poll-${randomUUID()}`,
       },

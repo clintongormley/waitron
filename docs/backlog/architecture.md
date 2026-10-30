@@ -466,10 +466,8 @@ until A977).
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
 - **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults, as do the split-extras venue's operation description and
-  pass-printer name, and the "Pase" pass names in the kitchen-print, zone-offer and fiscal
-  sale-path suites, and the fiscal sale-path suite's
-  "Pantalla" screen names. The device-api suite still names kitchen screens and stations "Uno",
+  still need English defaults, as does the split-extras venue's operation description. The
+  device-api suite still names kitchen screens and stations "Uno",
   "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
   and configuration-transfer suites still hold other Spanish samples, among them station, till,
   table, zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The
@@ -521,8 +519,8 @@ until A977).
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
   The server's split-extras test venue and its suites use English customer, kitchen and location
-  names; staff names, language keys and the venue's locale stay, and its operation description and
-  pass-printer name remain.
+  names; staff names, language keys and the venue's locale stay, and its operation description
+  remains.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
   The device, device-delete, join-request, join-api, join-api database and device-session suites
