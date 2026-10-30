@@ -55,14 +55,13 @@ const scoped = <T>(fn: (tx: Transaction) => Promise<T>): Promise<T> => withTrans
 const BASE = "/management-api/venue-service";
 const noopLog: Logger = () => {};
 
-/** A venue whose restaurant serves dinner every day in every season. */
 async function routed() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `Venue ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     })
@@ -370,16 +369,16 @@ describe("the season routes", () => {
     const response = await put(
       r,
       r.manager,
-      change({ save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }] }),
+      change({ save: [{ name: "Fair", startsOn: "04-20", colour: "teal" }] }),
     );
     expect(response.status).toBe(200);
     const answered = (await response.json()) as { id: string; name: string }[];
-    const feria = answered.find((season) => season.name === "Feria")!;
-    expect(feria).toEqual({ id: feria.id, name: "Feria", startsOn: "04-20", colour: "teal" });
+    const feria = answered.find((season) => season.name === "Fair")!;
+    expect(feria).toEqual({ id: feria.id, name: "Fair", startsOn: "04-20", colour: "teal" });
     expect(await stored(r)).toEqual(answered);
     expect((await stored(r)).map(({ name }) => name)).toEqual([
       starterSeasonName("Spring", "es"),
-      "Feria",
+      "Fair",
       starterSeasonName("Summer", "es"),
       starterSeasonName("Autumn", "es"),
       starterSeasonName("Winter", "es"),
@@ -514,7 +513,7 @@ describe("the season routes", () => {
       [change({ delete: ["not-a-uuid"] }), "delete.0"],
       [change({ delete: [7] }), "delete.0"],
       [change({ delete: [null] }), "delete.0"],
-      [change({ save: [summer, { ...summer, name: "Verano" }] }), "save.1.id"],
+      [change({ save: [summer, { ...summer, name: "Late summer" }] }), "save.1.id"],
       [change({ delete: [r.seasons.Autumn, r.seasons.Autumn] }), "delete.1"],
       [change({ save: [summer], delete: [r.seasons.Autumn, r.seasons.Summer] }), "delete.1"],
     ] as const)
@@ -536,7 +535,7 @@ describe("the season routes", () => {
     );
     await answers(
       await put(r, r.manager, {
-        save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }],
+        save: [{ name: "Fair", startsOn: "04-20", colour: "teal" }],
         delete: [],
       }),
       409,
@@ -575,7 +574,7 @@ describe("the season routes", () => {
       await put(
         r,
         r.manager,
-        change({ save: [{ name: "Feria", startsOn: "04-20", colour: "teal" }] }),
+        change({ save: [{ name: "Fair", startsOn: "04-20", colour: "teal" }] }),
       ),
       409,
       error,
