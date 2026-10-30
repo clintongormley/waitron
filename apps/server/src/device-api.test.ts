@@ -866,7 +866,7 @@ describe("Device API — the device-guarded routes", () => {
   it("the station screen's read carries its kitchen notices, and the display acknowledges its own only", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const fria = await withTransaction(suite.db, (tx) =>
+    const cold = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
     );
     const { orderId } = await fireOrder(venue);
@@ -887,7 +887,7 @@ describe("Device API — the device-guarded routes", () => {
           },
           {
             workingOrderLineId: rows[1]!.id,
-            stationId: fria.id,
+            stationId: cold.id,
             quantity: decimal("1"),
             wasStarted: false,
           },
@@ -897,7 +897,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     const foreignNotice = (
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+        VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
       )
     )[0]!.id;
     const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
@@ -928,7 +928,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(await notices()).toEqual([]);
     expect(
       await withTransaction(suite.db, (tx) =>
-        VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+        VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
       ),
     ).toHaveLength(1);
 
@@ -961,12 +961,12 @@ describe("Device API — the device-guarded routes", () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
 
-    const fria = await withTransaction(suite.db, async (tx) => {
+    const cold = await withTransaction(suite.db, async (tx) => {
       return createStation(tx, venue.cfg, { name: "Cold", isDefault: false });
     });
     const { items } = await fireOrder(venue);
     const [ownItem, foreignItem] = items;
-    await moveItemToStation(foreignItem!, fria.id);
+    await moveItemToStation(foreignItem!, cold.id);
 
     const { deviceId, jar } = await enrolStationScreen(app, venue, [venue.defaultStationId]);
 
@@ -974,7 +974,7 @@ describe("Device API — the device-guarded routes", () => {
     const foreignPrinter = await seedPrinter(venue.cfg);
     await suite.db.insert(stationPrinters).values([
       { stationId: venue.defaultStationId, printerId: ownPrinter },
-      { stationId: fria.id, printerId: foreignPrinter },
+      { stationId: cold.id, printerId: foreignPrinter },
     ]);
     for (const printerId of [ownPrinter, foreignPrinter]) {
       await suite.db.insert(printJobs).values({
@@ -1016,7 +1016,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(
       (await foreign.json()) as { error: { code: string; params: { stationId: string } } },
     ).toMatchObject({
-      error: { code: "device.forbidden_station", params: { stationId: fria.id } },
+      error: { code: "device.forbidden_station", params: { stationId: cold.id } },
     });
 
     const revoke = await send(app, "POST", `/management-api/devices/${deviceId}/revoke`, {
@@ -1090,16 +1090,16 @@ describe("Device API — the device-guarded routes", () => {
   it("a station screen lists its stations in display order, each with its own queue, and a narrowed one unavailable in its place", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+    const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
       await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
       await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
     ]);
     const { items } = await fireOrder(venue);
-    await moveItemToStation(items[1]!, fria!.id);
-    const all = [venue.defaultStationId, fria!.id, postre!.id];
+    await moveItemToStation(items[1]!, cold!.id);
+    const all = [venue.defaultStationId, cold!.id, pastry!.id];
     const { jar, profileId } = await enrolStationScreen(app, venue, [
-      postre!.id,
-      fria!.id,
+      pastry!.id,
+      cold!.id,
       venue.defaultStationId,
     ]);
     type Read = {
@@ -1121,20 +1121,20 @@ describe("Device API — the device-guarded routes", () => {
 
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
-        station: { stationIds: [venue.defaultStationId, postre!.id], zoneIds: null },
+        station: { stationIds: [venue.defaultStationId, pastry!.id], zoneIds: null },
       }),
     );
     const after = await read();
     expect(after.stations[1]).toEqual({
-      id: fria!.id,
+      id: cold!.id,
       name: "Cold",
       available: false,
       switchedOff: false,
     });
     expect(after.stations.map((s) => [s.id, s.available])).toEqual([
       [venue.defaultStationId, true],
-      [fria!.id, false],
-      [postre!.id, true],
+      [cold!.id, false],
+      [pastry!.id, true],
     ]);
     const narrowed = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
       cookie: jar,
@@ -1142,7 +1142,7 @@ describe("Device API — the device-guarded routes", () => {
     });
     expect(narrowed.status).toBe(403);
     expect(await narrowed.json()).toMatchObject({
-      error: { code: "device.forbidden_station", params: { stationId: fria!.id } },
+      error: { code: "device.forbidden_station", params: { stationId: cold!.id } },
     });
   });
 
@@ -1163,11 +1163,11 @@ describe("Device API — the device-guarded routes", () => {
     async function seed() {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
-      const fria = await withTransaction(suite.db, (tx) =>
+      const cold = await withTransaction(suite.db, (tx) =>
         createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
       );
       const { orderId, items } = await fireOrder(venue);
-      await moveItemToStation(items[1]!, fria.id);
+      await moveItemToStation(items[1]!, cold.id);
       await withTransaction(suite.db, async (tx) => {
         const { rows } = await tx.execute<{ id: string }>(sql`
           select id from working_order_lines where working_order_id = ${orderId} order by line_no`);
@@ -1178,7 +1178,7 @@ describe("Device API — the device-guarded routes", () => {
           [
             {
               workingOrderLineId: rows[1]!.id,
-              stationId: fria.id,
+              stationId: cold.id,
               quantity: decimal("1"),
               wasStarted: false,
             },
@@ -1188,10 +1188,10 @@ describe("Device API — the device-guarded routes", () => {
       });
       const notice = (
         await withTransaction(suite.db, (tx) =>
-          VENUE_SERVICE.listStationNotices(tx, venue.cfg, fria.id),
+          VENUE_SERVICE.listStationNotices(tx, venue.cfg, cold.id),
         )
       )[0]!.id;
-      return { venue, app, fria: fria.id, orderId, items, notice };
+      return { venue, app, cold: cold.id, orderId, items, notice };
     }
 
     const read = async (app: Hono, jar: string) => {
@@ -1205,16 +1205,16 @@ describe("Device API — the device-guarded routes", () => {
       send(app, "POST", `/api/device/kitchen-notices/${notice}/acknowledge`, { cookie: jar });
 
     it("shows ready dishes and notices after actual station deletion on an Every screen until collection", async () => {
-      const { venue, app, fria, orderId, items, notice } = await seed();
+      const { venue, app, cold, orderId, items, notice } = await seed();
       const { jar } = await enrolStationScreen(app, venue, null);
       expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
       expect((await advance(app, jar, items[1]!, "ready")).status).toBe(204);
       const before = await suite.db.select().from(ticketItems).where(eq(ticketItems.id, items[1]!));
-      await withTransaction(suite.db, (tx) => deleteStation(tx, venue.cfg, fria));
+      await withTransaction(suite.db, (tx) => deleteStation(tx, venue.cfg, cold));
 
-      const off = (await read(app, jar)).find((entry) => entry.id === fria);
+      const off = (await read(app, jar)).find((entry) => entry.id === cold);
       expect(off).toMatchObject({
-        id: fria,
+        id: cold,
         name: "Cold",
         available: false,
         switchedOff: true,
@@ -1233,13 +1233,13 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("sends it with its queue, notices and today, and its dish and notice can still be worked", async () => {
-      const { venue, app, fria, orderId, items, notice } = await seed();
+      const { venue, app, cold, orderId, items, notice } = await seed();
       const { jar } = await enrolStationScreen(app, venue, null);
-      await switchStationOff(fria);
+      await switchStationOff(cold);
 
       const [, off] = await read(app, jar);
       expect(off).toMatchObject({
-        id: fria,
+        id: cold,
         name: "Cold",
         available: false,
         switchedOff: true,
@@ -1259,7 +1259,7 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("reads every station's notices together, each station its own", async () => {
-      const { venue, app, fria, orderId, notice } = await seed();
+      const { venue, app, cold, orderId, notice } = await seed();
       const [grillNotice] = await suite.db
         .insert(kitchenNotices)
         .values({
@@ -1271,14 +1271,14 @@ describe("Device API — the device-guarded routes", () => {
           quantity: 1000,
         })
         .returning({ id: kitchenNotices.id });
-      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, fria]);
+      const { jar } = await enrolStationScreen(app, venue, [venue.defaultStationId, cold]);
       const perStation = vi.spyOn(VENUE_SERVICE, "listStationNotices");
       const batched = vi.spyOn(VENUE_SERVICE, "listStationsNotices");
       try {
         const stations = await read(app, jar);
         expect(stations.map((entry) => [entry.id, entry.notices?.map((n) => n.id)])).toEqual([
           [venue.defaultStationId, [grillNotice!.id]],
-          [fria, [notice]],
+          [cold, [notice]],
         ]);
         expect(perStation).not.toHaveBeenCalled();
         expect(batched).toHaveBeenCalledTimes(1);
@@ -1289,9 +1289,9 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("keeps its printers-down line with its waiting dishes", async () => {
-      const { venue, app, fria, items } = await seed();
+      const { venue, app, cold, items } = await seed();
       const printerId = await seedPrinter(venue.cfg);
-      await suite.db.insert(stationPrinters).values({ stationId: fria, printerId });
+      await suite.db.insert(stationPrinters).values({ stationId: cold, printerId });
       await suite.db.insert(printJobs).values({
         locationId: venue.cfg.locationId,
         printerId,
@@ -1303,11 +1303,11 @@ describe("Device API — the device-guarded routes", () => {
       const { jar } = await enrolStationScreen(app, venue, null);
       const printersDown = async () =>
         ((await read(app, jar)) as (Entry & { printersDown?: { printerId: string }[] })[]).find(
-          (entry) => entry.id === fria,
+          (entry) => entry.id === cold,
         );
       expect((await printersDown())!.printersDown).toMatchObject([{ printerId }]);
 
-      await switchStationOff(fria);
+      await switchStationOff(cold);
 
       const off = await printersDown();
       expect(off).toMatchObject({ switchedOff: true, printersDown: [{ printerId }] });
@@ -1315,10 +1315,10 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("sends one a narrowing took with no queue, and refuses its dish and its notice", async () => {
-      const { venue, app, fria, items, notice } = await seed();
+      const { venue, app, cold, items, notice } = await seed();
       const { jar, profileId } = await enrolStationScreen(app, venue, [
         venue.defaultStationId,
-        fria,
+        cold,
       ]);
       await withTransaction(suite.db, (tx) =>
         VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
@@ -1326,11 +1326,11 @@ describe("Device API — the device-guarded routes", () => {
         }),
       );
       const [, taken] = await read(app, jar);
-      expect(taken).toEqual({ id: fria, name: "Cold", available: false, switchedOff: false });
+      expect(taken).toEqual({ id: cold, name: "Cold", available: false, switchedOff: false });
       const refused = await advance(app, jar, items[1]!, "preparing");
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({
-        error: { code: "device.forbidden_station", params: { stationId: fria } },
+        error: { code: "device.forbidden_station", params: { stationId: cold } },
       });
       const ack = await acknowledge(app, jar, notice);
       expect(ack.status).toBe(404);
@@ -1338,7 +1338,7 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("A725 every-station screens list active and historical work by name", async () => {
-      const { venue, app, fria, items } = await seed();
+      const { venue, app, cold, items } = await seed();
       await suite.db
         .update(kitchenStations)
         .set({ name: "Kitchen" })
@@ -1346,12 +1346,12 @@ describe("Device API — the device-guarded routes", () => {
       await suite.db
         .update(kitchenStations)
         .set({ name: "Éclairs" })
-        .where(eq(kitchenStations.id, fria));
+        .where(eq(kitchenStations.id, cold));
       const { jar } = await enrolStationScreen(app, venue, null);
-      await switchStationOff(fria);
+      await switchStationOff(cold);
       const rows = await read(app, jar);
       expect(rows.map(({ name }) => name)).toEqual(["Éclairs", "Kitchen"]);
-      expect(rows[0]).toMatchObject({ id: fria, available: false, switchedOff: true });
+      expect(rows[0]).toMatchObject({ id: cold, available: false, switchedOff: true });
       expect(queued(rows[0]!)).toEqual([items[1]]);
     });
 
@@ -1381,17 +1381,17 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("lists it on an every-station screen under an every-station profile only while dishes wait there", async () => {
-      const { venue, app, fria, orderId, items } = await seed();
-      const postre = await withTransaction(suite.db, (tx) =>
+      const { venue, app, cold, orderId, items } = await seed();
+      const pastry = await withTransaction(suite.db, (tx) =>
         createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
       );
       const { jar } = await enrolStationScreen(app, venue, null);
-      await switchStationOff(fria);
-      await switchStationOff(postre.id);
+      await switchStationOff(cold);
+      await switchStationOff(pastry.id);
 
       const waiting = await read(app, jar);
-      expect(waiting.map((entry) => entry.id)).not.toContain(postre.id);
-      const off = waiting.find((entry) => entry.id === fria);
+      expect(waiting.map((entry) => entry.id)).not.toContain(pastry.id);
+      const off = waiting.find((entry) => entry.id === cold);
       expect(off).toMatchObject({ name: "Cold", available: false, switchedOff: true });
       expect(queued(off!)).toEqual([items[1]]);
       expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
@@ -1407,32 +1407,32 @@ describe("Device API — the device-guarded routes", () => {
     });
 
     it("refuses, on an every-station screen, a switched-off station's dish at another location", async () => {
-      const { venue, app, fria, items } = await seed();
+      const { venue, app, cold, items } = await seed();
       const { jar } = await enrolStationScreen(app, venue, null);
       const [elsewhere] = await suite.db
         .insert(locations)
         .values({ name: "Other venue", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
         .returning({ id: locations.id });
-      await switchStationOff(fria);
+      await switchStationOff(cold);
       await suite.db
         .update(kitchenStations)
         .set({ locationId: elsewhere!.id })
-        .where(eq(kitchenStations.id, fria));
+        .where(eq(kitchenStations.id, cold));
 
       const refused = await advance(app, jar, items[1]!, "preparing");
       expect(refused.status).toBe(403);
       expect(await refused.json()).toMatchObject({
-        error: { code: "device.forbidden_station", params: { stationId: fria } },
+        error: { code: "device.forbidden_station", params: { stationId: cold } },
       });
     });
 
     it("reads the device's kitchen screens once per request, on an every-station screen too", async () => {
-      const { venue, app, fria, items, notice } = await seed();
+      const { venue, app, cold, items, notice } = await seed();
       const { jar } = await enrolStationScreen(app, venue, null);
-      await switchStationOff(fria);
+      await switchStationOff(cold);
       const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
       try {
-        expect((await read(app, jar)).map((entry) => entry.id)).toContain(fria);
+        expect((await read(app, jar)).map((entry) => entry.id)).toContain(cold);
         expect((await advance(app, jar, items[1]!, "preparing")).status).toBe(204);
         expect((await acknowledge(app, jar, notice)).status).toBe(204);
         expect(single).toHaveBeenCalledTimes(3);
@@ -1475,7 +1475,7 @@ describe("Device API — the device-guarded routes", () => {
   it("a till whose station choice a narrowing emptied reads the kind as kept and every station of it as taken", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const fria = await withTransaction(suite.db, (tx) =>
+    const cold = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
     );
     const { jar, profileId } = await enrolStationScreen(
@@ -1487,7 +1487,7 @@ describe("Device API — the device-guarded routes", () => {
     );
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
-        station: { stationIds: [fria.id], zoneIds: null },
+        station: { stationIds: [cold.id], zoneIds: null },
       }),
     );
     const me = await send(app, "GET", "/api/device/me", { cookie: jar });
@@ -1515,18 +1515,18 @@ describe("Device API — the device-guarded routes", () => {
   it("a station screen reads its stations' queues and printers together, each station its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+    const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
       await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
       await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
     ]);
     const { orderId, items } = await fireOrder(venue);
-    await moveItemToStation(items[1]!, fria!.id);
+    await moveItemToStation(items[1]!, cold!.id);
     await suite.db
       .update(kitchenStations)
       .set({ showsRestOfOrder: true })
-      .where(eq(kitchenStations.id, fria!.id));
+      .where(eq(kitchenStations.id, cold!.id));
     const printerAt = new Map<string, string>();
-    for (const stationId of [venue.defaultStationId, postre!.id]) {
+    for (const stationId of [venue.defaultStationId, pastry!.id]) {
       const printerId = await seedPrinter(venue.cfg);
       printerAt.set(stationId, printerId);
       await suite.db.insert(stationPrinters).values({ stationId, printerId });
@@ -1541,8 +1541,8 @@ describe("Device API — the device-guarded routes", () => {
     }
     const { jar } = await enrolStationScreen(app, venue, [
       venue.defaultStationId,
-      fria!.id,
-      postre!.id,
+      cold!.id,
+      pastry!.id,
     ]);
     type Station = {
       id: string;
@@ -1565,36 +1565,36 @@ describe("Device API — the device-guarded routes", () => {
     const queued = (id: string) =>
       byId.get(id)!.queue.flatMap((group) => group.items.map((item) => item.id));
     expect(queued(venue.defaultStationId)).toEqual([items[0]]);
-    expect(queued(fria!.id)).toEqual([items[1]]);
-    expect(queued(postre!.id)).toEqual([]);
+    expect(queued(cold!.id)).toEqual([items[1]]);
+    expect(queued(pastry!.id)).toEqual([]);
     expect(byId.get(venue.defaultStationId)!.queue[0]!.elsewhere).toBeUndefined();
-    expect(byId.get(fria!.id)!.queue).toMatchObject([{ orderId, elsewhere: [{ id: items[0] }] }]);
+    expect(byId.get(cold!.id)!.queue).toMatchObject([{ orderId, elsewhere: [{ id: items[0] }] }]);
     expect(byId.get(venue.defaultStationId)!.printersDown).toMatchObject([
       { printerId: printerAt.get(venue.defaultStationId) },
     ]);
-    expect(byId.get(fria!.id)!.printersDown).toEqual([]);
-    expect(byId.get(postre!.id)!.printersDown).toMatchObject([
-      { printerId: printerAt.get(postre!.id) },
+    expect(byId.get(cold!.id)!.printersDown).toEqual([]);
+    expect(byId.get(pastry!.id)!.printersDown).toMatchObject([
+      { printerId: printerAt.get(pastry!.id) },
     ]);
   });
 
   it("advance refuses an item at a station outside the screen, and an every-station screen advances it", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const [fria, postre] = await withTransaction(suite.db, async (tx) => [
+    const [cold, pastry] = await withTransaction(suite.db, async (tx) => [
       await createStation(tx, venue.cfg, { name: "Cold", isDefault: false }),
       await createStation(tx, venue.cfg, { name: "Pastry", isDefault: false }),
     ]);
     const { items } = await fireOrder(venue);
-    await moveItemToStation(items[1]!, postre!.id);
-    const two = await enrolStationScreen(app, venue, [venue.defaultStationId, fria!.id]);
+    await moveItemToStation(items[1]!, pastry!.id);
+    const two = await enrolStationScreen(app, venue, [venue.defaultStationId, cold!.id]);
     const refused = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
       cookie: two.jar,
       body: { to: "preparing" },
     });
     expect(refused.status).toBe(403);
     expect(await refused.json()).toMatchObject({
-      error: { code: "device.forbidden_station", params: { stationId: postre!.id } },
+      error: { code: "device.forbidden_station", params: { stationId: pastry!.id } },
     });
     const every = await enrolStationScreen(app, venue, null, "kds", "All stations screen");
     const advanced = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
@@ -1804,11 +1804,11 @@ describe("Device management routes (device.manage)", () => {
   it("GET /management-api/devices reads every device's kitchen screens in one batch, each its own", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const fria = await withTransaction(suite.db, (tx) =>
+    const cold = await withTransaction(suite.db, (tx) =>
       createStation(tx, venue.cfg, { name: "Cold" }),
     );
     const one = await enrolStationScreen(app, venue, [venue.defaultStationId], "kds", "One");
-    const two = await enrolStationScreen(app, venue, [fria.id], "kds", "Two");
+    const two = await enrolStationScreen(app, venue, [cold.id], "kds", "Two");
     const every = await enrolStationScreen(app, venue, null, "kds", "All");
     const till = await enrolTill(app, venue, "Till");
     const ids = [one, two, every, till].map((device) => device.deviceId);
