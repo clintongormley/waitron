@@ -6202,7 +6202,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.** Bookings’ native suites use English
-  sample location, operation, contact and note text. UI switch behavior and accessibility suites
+  sample location, operation, contact and note text. Native provisioning and floor-plan-set route
+  suites use English venue, operation and menu samples; their Spanish locale and starter-content
+  checks remain. UI switch behavior and accessibility suites
   use English sample labels and descriptions. Disclosure accessibility samples use English headings,
   summaries and body text; deliberate EN/ES summary examples remain. Printing layout and printer
   samples use English, with the layout samples retaining their character counts and word boundaries.

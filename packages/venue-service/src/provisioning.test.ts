@@ -102,9 +102,9 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
     const [location] = await db
       .insert(locations)
       .values({
-        name: "La Plaza",
+        name: "The Square",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurante",
+        operationDescription: "Restaurant",
         catalogueId: menu!.id,
       })
       .returning({ id: locations.id });
@@ -115,7 +115,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
 
     const rows = await db.execute<{ name: string; trading_name: string }>(sql`
       select name, trading_name from departments where location_id = ${locationId}`);
-    expect(rows.rows).toEqual([{ name: "La Plaza", trading_name: "La Plaza" }]);
+    expect(rows.rows).toEqual([{ name: "The Square", trading_name: "The Square" }]);
     const zones = await db.execute<{ name: string }>(sql`
       select z.name from zone_service_policies p join floor_zones z on z.id = p.zone_id
       where p.location_id = ${locationId} and p.is_counter_default = 1`);
@@ -395,7 +395,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       .values({
         name: "Holiday Venue",
         invoiceLocales: ["es-ES"],
-        operationDescription: "Restaurante",
+        operationDescription: "Restaurant",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00:00",
         province: "Sevilla",
@@ -464,7 +464,7 @@ describe("VENUE_SERVICE_PROVISIONING", () => {
       await seedTenant(db);
       const [location] = await db
         .insert(locations)
-        .values({ name: "Bar Sol", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
+        .values({ name: "Sun Bar", invoiceLocales: ["es-ES"], operationDescription: "Bar" })
         .returning({ id: locations.id });
       const locationId = brandLocationId(location!.id);
       const node = { locationId, nodeId: await seedNode(db, locationId) };
