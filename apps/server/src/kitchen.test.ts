@@ -57,7 +57,7 @@ async function setupVenue(): Promise<TradingContext> {
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
@@ -198,15 +198,15 @@ describe("kitchen-station config", () => {
   it("creates/lists stations and flips the default atomically", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Cocina", isDefault: true }),
+      createStation(tx, cfg, { name: "Kitchen", isDefault: true }),
     );
-    const { id: b } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    const { id: b } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
     await asApp(cfg, (tx) => setDefaultStation(tx, cfg, b)); // must clear a's default in the same tx
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     expect(list.find((s) => s.id === b)!.isDefault).toBe(true);
     expect(list.find((s) => s.id === a)!.isDefault).toBe(false);
     await expect(
-      asApp(cfg, (tx) => createStation(tx, cfg, { name: "Cocina" })),
+      asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen" })),
     ).rejects.toMatchObject({ code: "station.name_taken" });
   });
 
@@ -214,7 +214,7 @@ describe("kitchen-station config", () => {
     const cfg = await setupVenue();
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Zebra" }));
     await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Alpha" }));
-    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     const defaultThresholds = {
       warmAfterMinutes: 5,
@@ -239,7 +239,7 @@ describe("kitchen-station config", () => {
       },
       {
         id: expect.any(String),
-        name: "Barra",
+        name: "Bar",
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -270,7 +270,7 @@ describe("kitchen-station config", () => {
 
   it("a new station groups identical dishes, prints no held work in advance and prints MOVED slips", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Griddle" }));
     const [row] = await db
       .select({
         ticketGrouping: kitchenStations.ticketGrouping,
@@ -337,7 +337,7 @@ describe("kitchen-station config", () => {
 
   it("a station stored with no MOVED slips choice answers that it prints them", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Griddle" }));
     await db.execute(sql`update kitchen_stations set print_moved_slips = null where id = ${id}`);
     const [row] = await db
       .select({ printMovedSlips: kitchenStations.printMovedSlips })
@@ -351,8 +351,8 @@ describe("kitchen-station config", () => {
 
   it("updateStation writes a station's three printing choices and leaves the others", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
-    const { id: other } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Griddle" }));
+    const { id: other } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
     const before = await asApp(cfg, (tx) => listStations(tx, cfg));
     await asApp(cfg, (tx) =>
       updateStation(tx, cfg, id, {
@@ -381,10 +381,10 @@ describe("kitchen-station config", () => {
   it("createStation with isDefault adopts the station as THE default, clearing any prior (single default kept)", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Cocina", isDefault: true }),
+      createStation(tx, cfg, { name: "Kitchen", isDefault: true }),
     );
     const { id: c } = await asApp(cfg, (tx) =>
-      createStation(tx, cfg, { name: "Plancha", isDefault: true }),
+      createStation(tx, cfg, { name: "Griddle", isDefault: true }),
     );
     const list = await asApp(cfg, (tx) => listStations(tx, cfg));
     expect(list.find((s) => s.id === a)!.isDefault).toBe(false);
@@ -394,15 +394,13 @@ describe("kitchen-station config", () => {
 
   it("updateStation renames but cannot reactivate a removed station", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Plancha" }));
-    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Parrilla" }));
-    expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual([
-      "Parrilla",
-    ]);
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Griddle" }));
+    await asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Grill" }));
+    expect((await asApp(cfg, (tx) => listStations(tx, cfg))).map((s) => s.name)).toEqual(["Grill"]);
     expect(await asApp(cfg, (tx) => listStations(tx, cfg))).toEqual([
       {
         id,
-        name: "Parrilla",
+        name: "Grill",
         isDefault: false,
         active: true,
         showsRestOfOrder: false,
@@ -431,11 +429,11 @@ describe("kitchen-station config", () => {
 
   it("updateStation surfaces a name collision as station.name_taken", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Cocina" }));
-    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Barra" }));
+    await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Kitchen" }));
+    const { id } = await asApp(cfg, (tx) => createStation(tx, cfg, { name: "Bar" }));
     await expect(
-      asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Cocina" })),
-    ).rejects.toMatchObject({ code: "station.name_taken", params: { name: "Cocina" } });
+      asApp(cfg, (tx) => updateStation(tx, cfg, id, { name: "Kitchen" })),
+    ).rejects.toMatchObject({ code: "station.name_taken", params: { name: "Kitchen" } });
   });
 
   it("updateStation and deleteStation throw station.not_found for an unknown id", async () => {
@@ -692,21 +690,21 @@ describe("kitchen-course config", () => {
   it("creates/lists/updates/deletes a course and orders by display_order then name", async () => {
     const cfg = await setupVenue();
     const { id: a } = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Principales", displayOrder: 1 }),
+      createCourse(tx, cfg, { name: "Mains", displayOrder: 1 }),
     );
-    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 }));
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Starters", displayOrder: 0 }));
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Zebra", displayOrder: 0 }));
     await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Alpha", displayOrder: 0 }));
     const list = await asApp(cfg, (tx) => listCourses(tx, cfg));
-    expect(list.map((c) => c.name)).toEqual(["Alpha", "Entrantes", "Zebra", "Principales"]);
+    expect(list.map((c) => c.name)).toEqual(["Alpha", "Starters", "Zebra", "Mains"]);
     expect(list[3]).toEqual({
       id: a,
-      name: "Principales",
+      name: "Mains",
       displayOrder: 1,
       active: true,
       heldUntilFired: true,
     });
-    await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Segundos", displayOrder: 9 }));
+    await asApp(cfg, (tx) => updateCourse(tx, cfg, a, { name: "Seconds", displayOrder: 9 }));
     const productId = await seedProduct();
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, a));
     await asApp(cfg, (tx) => deleteCourse(tx, cfg, a));
@@ -714,7 +712,7 @@ describe("kitchen-course config", () => {
     expect(await productCourse(productId)).toBeNull();
     expect(
       await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, a))),
-    ).toMatchObject([{ id: a, name: "Segundos", displayOrder: 9, active: false }]);
+    ).toMatchObject([{ id: a, name: "Seconds", displayOrder: 9, active: false }]);
     await expect(asApp(cfg, (tx) => updateCourse(tx, cfg, a, {}))).rejects.toMatchObject({
       code: "course.not_found",
       params: { courseId: a },
@@ -723,11 +721,11 @@ describe("kitchen-course config", () => {
 
   it("createCourse defaults displayOrder to 0", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Desserts" }));
     const [only] = await asApp(cfg, (tx) => listCourses(tx, cfg));
     expect(only).toEqual({
       id,
-      name: "Postres",
+      name: "Desserts",
       displayOrder: 0,
       active: true,
       heldUntilFired: true,
@@ -736,14 +734,14 @@ describe("kitchen-course config", () => {
 
   it("createCourse and updateCourse surface a duplicate name as course.name_taken", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
+    await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Starters" }));
     await expect(
-      asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" })),
-    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
-    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Principales" }));
+      asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Starters" })),
+    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Starters" } });
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Mains" }));
     await expect(
-      asApp(cfg, (tx) => updateCourse(tx, cfg, id, { name: "Entrantes" })),
-    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Entrantes" } });
+      asApp(cfg, (tx) => updateCourse(tx, cfg, id, { name: "Starters" })),
+    ).rejects.toMatchObject({ code: "course.name_taken", params: { name: "Starters" } });
   });
 
   it("updateCourse and deleteCourse throw course.not_found for an unknown id", async () => {
@@ -761,7 +759,7 @@ describe("kitchen-course config", () => {
   it("refuses to edit another venue's course with course.not_found, changing nothing", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Postres", displayOrder: 3 }),
+      createCourse(tx, cfg, { name: "Desserts", displayOrder: 3 }),
     );
     await asApp(cfg, (tx) =>
       tx.update(kitchenCourses).set({ active: false }).where(eq(kitchenCourses.id, id)),
@@ -773,7 +771,7 @@ describe("kitchen-course config", () => {
     ).rejects.toMatchObject({ code: "course.not_found", params: { courseId: id } });
     expect(
       await asApp(cfg, (tx) => tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id))),
-    ).toMatchObject([{ id, name: "Postres", active: false }]);
+    ).toMatchObject([{ id, name: "Desserts", active: false }]);
   });
 
   it("createCourse rethrows a NON-unique DB error raw, not as course.name_taken", async () => {
@@ -892,9 +890,7 @@ describe("product-course config", () => {
   it("setProductCourse sets then clears the product's default course", async () => {
     const cfg = await setupVenue();
     const productId = await seedProduct();
-    const { id: courseId } = await asApp(cfg, (tx) =>
-      createCourse(tx, cfg, { name: "Principales" }),
-    );
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Mains" }));
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, courseId));
     expect(await productCourse(productId)).toBe(courseId);
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, productId, null));
@@ -906,7 +902,7 @@ describe("product-course config", () => {
     const productId = await seedProduct();
     const variantId = await seedVariant(productId);
     const missing = randomUUID();
-    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Desserts" }));
     await expect(
       asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId)),
     ).rejects.toMatchObject({ code: "product.not_found", params: { productId: variantId } });
@@ -921,7 +917,7 @@ describe("product-course config", () => {
   it('setProductCourse writes to a variant under scope "any"', async () => {
     const cfg = await setupVenue();
     const variantId = await seedVariant(await seedProduct());
-    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+    const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Desserts" }));
     await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId, "any"));
     expect(await productCourse(variantId)).toBe(courseId);
   });
@@ -932,7 +928,9 @@ describe("product-course config", () => {
       const cfg = await setupVenue();
       const productId = await seedProduct();
       const variantId = await seedVariant(productId);
-      const { id: courseId } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Postres" }));
+      const { id: courseId } = await asApp(cfg, (tx) =>
+        createCourse(tx, cfg, { name: "Desserts" }),
+      );
       await asApp(cfg, (tx) => setProductCourse(tx, cfg, variantId, courseId, "any"));
       await db
         .update(products)
@@ -991,14 +989,14 @@ describe("product-course config", () => {
 describe("updateCourse with a refusal that is not the name unique", () => {
   it("rethrows it raw rather than relabelling it course.name_taken", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Entrantes" }));
+    const { id } = await asApp(cfg, (tx) => createCourse(tx, cfg, { name: "Starters" }));
     // `kitchen_courses` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
     await db.execute(sql`
       create trigger kitchen_courses_refuse_update before update on kitchen_courses
       begin select raise(abort, 'course update refused'); end`);
     try {
       const refusal = await asApp(cfg, (tx) =>
-        updateCourse(tx, cfg, id, { name: "Primeros" }),
+        updateCourse(tx, cfg, id, { name: "First courses" }),
       ).catch((error: unknown) => error);
       expect(refusal).toBeInstanceOf(Error);
       expect(refusal).not.toBeInstanceOf(AppError);
