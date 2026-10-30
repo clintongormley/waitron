@@ -45,9 +45,9 @@ async function venue() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `Venue ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Restaurant service",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     })
@@ -55,7 +55,7 @@ async function venue() {
   const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Sala", displayOrder: 0 })
+    .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   return scoped(async (tx) => {
     const restaurant = (
@@ -211,7 +211,11 @@ describe("saveSpecialDay", () => {
     const other = await christmasDinners(v);
     expect(
       await refusal(
-        save(v, null, { name: "Nochebuena", repeatsYearly: false, dates: dates(["2030-12-18"]) }),
+        save(v, null, {
+          name: "Christmas Eve",
+          repeatsYearly: false,
+          dates: dates(["2030-12-18"]),
+        }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
@@ -222,20 +226,20 @@ describe("saveSpecialDay", () => {
   it("a repeating date collides with a one-off date only from its first year", async () => {
     const v = await venue();
     const oneOff = await save(v, null, {
-      name: "Cena 2031",
+      name: "Dinner 2031",
       repeatsYearly: false,
       dates: dates(["2031-12-24"]),
     });
     expect(
       await refusal(
-        save(v, null, { name: "Nochebuena", repeatsYearly: true, dates: dates(["2030-12-24"]) }),
+        save(v, null, { name: "Christmas Eve", repeatsYearly: true, dates: dates(["2030-12-24"]) }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
-      params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Cena 2031" },
+      params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Dinner 2031" },
     });
     const later = await save(v, null, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: true,
       dates: dates(["2032-12-24"]),
     });
@@ -245,26 +249,26 @@ describe("saveSpecialDay", () => {
   it("turning a special day repeating rechecks its kept dates", async () => {
     const v = await venue();
     const oneOff = await save(v, null, {
-      name: "Cena 2031",
+      name: "Dinner 2031",
       repeatsYearly: false,
       dates: dates(["2031-12-24"]),
     });
     const nochebuena = await save(v, null, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: false,
       dates: dates(["2030-12-24"]),
     });
     expect(
       await refusal(
         save(v, nochebuena.id, {
-          name: "Nochebuena",
+          name: "Christmas Eve",
           repeatsYearly: true,
           dates: dates(["2030-12-24"]),
         }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
-      params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Cena 2031" },
+      params: { date: "2031-12-24", specialDayId: oneOff.id, name: "Dinner 2031" },
     });
   });
 
@@ -491,7 +495,7 @@ describe("saveSpecialDay", () => {
 
   it("refuses an input that is not an object", async () => {
     const v = await venue();
-    expect(await refusal(save(v, null, ["Nochebuena"]))).toEqual({
+    expect(await refusal(save(v, null, ["Christmas Eve"]))).toEqual({
       code: "special_day.invalid",
       params: { field: "input" },
     });
@@ -500,25 +504,25 @@ describe("saveSpecialDay", () => {
   it("refuses a one-off date a repeating special day reaches in a later year", async () => {
     const v = await venue();
     const every = await save(v, null, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: true,
       dates: dates(["2030-12-24"]),
     });
     expect(
       await refusal(
-        save(v, null, { name: "Cena", repeatsYearly: false, dates: dates(["2033-12-24"]) }),
+        save(v, null, { name: "Dinner", repeatsYearly: false, dates: dates(["2033-12-24"]) }),
       ),
     ).toEqual({
       code: "special_day.date_taken",
-      params: { date: "2033-12-24", specialDayId: every.id, name: "Nochebuena" },
+      params: { date: "2033-12-24", specialDayId: every.id, name: "Christmas Eve" },
     });
   });
 
   it("saves and reads a special day with no dates, and clears a zone's paint given empty ranges", async () => {
     const v = await venue();
     expect(
-      await save(v, null, { name: "Sin fechas", repeatsYearly: false, dates: [] }),
-    ).toMatchObject({ name: "Sin fechas", dates: [], paint: [], zonePaint: [] });
+      await save(v, null, { name: "No dates", repeatsYearly: false, dates: [] }),
+    ).toMatchObject({ name: "No dates", dates: [], paint: [], zonePaint: [] });
     const before = await christmasDinners(v);
     const after = await save(v, before.id, {
       name: "Christmas company dinners",
@@ -613,7 +617,7 @@ describe("saveSpecialDay", () => {
       v,
       null,
       {
-        name: "Cambio de hora",
+        name: "Clock change",
         repeatsYearly: false,
         dates: dates(["2026-03-28"]),
         paint: [
@@ -712,7 +716,7 @@ describe("saveSpecialDay", () => {
 
   describe("clock skips (Europe/Madrid, changeover 06:00)", () => {
     const skipping = (date: string, repeatsYearly: boolean, v: Venue) => ({
-      name: "Cambio de hora",
+      name: "Clock change",
       repeatsYearly,
       dates: dates([date]),
       paint: [
@@ -792,7 +796,7 @@ describe("saveSpecialDay", () => {
         v,
         null,
         {
-          name: "Cambio de hora",
+          name: "Clock change",
           repeatsYearly: false,
           dates: dates(["2025-03-28"]),
           zonePaint: [
@@ -854,7 +858,7 @@ describe("saveSpecialDay", () => {
         v,
         null,
         {
-          name: "Nochebuena",
+          name: "Christmas Eve",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
           paint: [
@@ -884,7 +888,7 @@ describe("saveSpecialDay", () => {
         v,
         null,
         {
-          name: "Nochebuena",
+          name: "Christmas Eve",
           repeatsYearly: false,
           dates: dates(["2030-12-24"]),
           zonePaint: [
