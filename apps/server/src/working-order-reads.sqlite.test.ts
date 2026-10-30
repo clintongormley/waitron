@@ -24,6 +24,7 @@ import type { TradingContext } from "./trading-context.js";
 import { listTables } from "./tables.js";
 import { listExpoQueue, listStationQueue, listTablesWithState } from "./working-order.js";
 import { dashboardOrderAt } from "./testing/session-device.js";
+import { numberBill } from "./testing/bill-identities.js";
 
 /** The three kitchen/floor read models, run against a real migrated venue database. */
 
@@ -69,6 +70,7 @@ beforeAll(async () => {
     status: "open",
     partyId: party!.id,
   });
+  await withTransaction(db, (tx) => numberBill(tx, orderId, party!.id));
   const lineId = randomUUID();
   await db.insert(workingOrderLines).values({
     id: lineId,

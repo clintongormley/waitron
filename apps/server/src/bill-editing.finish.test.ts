@@ -11,6 +11,7 @@ import { saveDraft, type BillEditExpected } from "./order-drafts.js";
 import { fireAll } from "./testing/serve-line.js";
 import { SESSION_COOKIE } from "./till-session.js";
 import { inTx, provisionBillVenue, tabWith, type BillVenue } from "./testing/bill-venue.js";
+import { numberBill } from "./testing/bill-identities.js";
 
 let venue: BillVenue;
 let adminCookie: string;
@@ -48,9 +49,10 @@ async function own(p: Fixture, personId = venue.adminId) {
     }),
   );
 }
-async function sibling(p: Fixture) {
-  const [bill] = await inTx(venue, (tx) =>
-    tx
+/** A second bill on `p`'s party, numbered in `shownBy`, the party whose list shows it. */
+async function sibling(p: Fixture, shownBy = p.partyId) {
+  const [bill] = await inTx(venue, async (tx) => {
+    const rows = await tx
       .insert(workingOrders)
       .values({
         source: "dashboard",
@@ -58,8 +60,10 @@ async function sibling(p: Fixture) {
         partyId: p.partyId,
         locationId: venue.cfg.locationId,
       })
-      .returning(),
-  );
+      .returning();
+    await numberBill(tx, rows[0]!.id, shownBy);
+    return rows;
+  });
   return bill!.id;
 }
 async function ask(p: Fixture, mode: Mode, expectedEdits: unknown, actor = venue.adminId) {
@@ -213,7 +217,7 @@ for (const mode of modes)
           })
           .returning(),
       );
-      const second = await sibling({ ...p, partyId: ancestor!.id });
+      const second = await sibling({ ...p, partyId: ancestor!.id }, p.partyId);
       await refused(p, mode, [await edit(p.billId)], "management.request_invalid", {
         field: "expectedEdits",
       });
