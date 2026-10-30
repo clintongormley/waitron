@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { openVenueDatabase } from "@waitron/db";
 import { emptyDrainResult } from "@waitron/fiscal";
+import { PACK_ATTACHMENT, parseRecoveryPackFile } from "@waitron/recovery-pack";
 import { PDFDocument } from "pdf-lib";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import { chromium } from "playwright";
@@ -282,20 +283,27 @@ it.each(["en", "es"] as const)(
       let pagePng: Buffer;
       try {
         const pdf = await task.promise;
-        attachment = (await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!;
+        attachment = (await pdf.getAttachmentContent(PACK_ATTACHMENT))!;
         expect(attachment).toBeInstanceOf(Uint8Array);
-        decoded = JSON.parse(new TextDecoder().decode(attachment));
+        decoded = parseRecoveryPackFile(attachment).serverKey as typeof decoded;
         expect(decoded.scope).toMatchObject({
           taxpayerNif: "50000000R",
           environment: "production",
         });
-        const sheet = await pdf.getPage(1);
-        const text = (await sheet.getTextContent()).items
-          .map((item) => ("str" in item ? item.str : ""))
-          .join(" ");
-        keyText = text
-          .match(/(?:Key|Clave): ([0-9A-Z]{4}(?: [0-9A-Z]{4}){9} [0-9A-Z])/)![1]!
-          .trim();
+        const keyPages: { page: Awaited<ReturnType<typeof pdf.getPage>>; key: string }[] = [];
+        for (let n = 1; n <= pdf.numPages; n++) {
+          const candidate = await pdf.getPage(n);
+          const text = (await candidate.getTextContent()).items
+            .map((item) => ("str" in item ? item.str : ""))
+            .join(" ");
+          const key = text.match(
+            /(?:Key|Clave)\s+([0-9A-Z]{4}(?:\s+[0-9A-Z]{4}){9}\s+[0-9A-Z])(?![0-9A-Z])/,
+          )?.[1];
+          if (key) keyPages.push({ page: candidate, key: key.split(/\s+/).join(" ") });
+        }
+        expect(keyPages).toHaveLength(1);
+        const sheet = keyPages[0]!.page;
+        keyText = keyPages[0]!.key;
         const viewport = sheet.getViewport({ scale: 1.5 });
         const canvas = createCanvas(Math.ceil(viewport.width), Math.ceil(viewport.height));
         await sheet.render({ canvas: canvas as unknown as HTMLCanvasElement, viewport }).promise;
@@ -350,9 +358,9 @@ it.each(["en", "es"] as const)(
         useWasm: false,
       });
       try {
-        expect(
-          await (await annotatedTask.promise).getAttachmentContent("waitron-recovery-key-v1.json"),
-        ).toEqual(attachment);
+        expect(await (await annotatedTask.promise).getAttachmentContent(PACK_ATTACHMENT)).toEqual(
+          attachment,
+        );
       } finally {
         await annotatedTask.destroy();
       }
