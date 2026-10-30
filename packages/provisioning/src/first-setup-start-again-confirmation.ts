@@ -12,6 +12,8 @@ const REACHED = ["claimed", "named", "fiscal-started", "fiscal-finished"] as con
 export type StartAgainSummary = {
   readonly reached: (typeof REACHED)[number];
   readonly recoveryRecordDamaged?: true;
+  /** The setup database is present and some of it could not be read. */
+  readonly databaseUnreadable?: true;
   readonly recovery?: StartAgainRecoveryShown;
 };
 

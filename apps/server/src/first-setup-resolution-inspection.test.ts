@@ -19,7 +19,9 @@ import {
   createFirstSetupStore,
   type StartAgainSummary,
 } from "@waitron/provisioning";
+import type { WaitronModule } from "@waitron/module";
 import { createFirstSetupOwner } from "./first-setup-owner.js";
+import { ALL_MODULES } from "./modules.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
 import {
@@ -86,7 +88,8 @@ async function fixture(phase: "claim" | "abandon" | "active" = "claim") {
     service,
   };
 }
-async function actionsFixture() {
+/** `modules`: the box's modules, which a read of the setup database needs. */
+async function actionsFixture({ modules }: { modules?: readonly WaitronModule[] } = {}) {
   const f = await fixture("active");
   const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const service = createFirstSetupResolutionActions({
@@ -98,6 +101,7 @@ async function actionsFixture() {
       coordinator: f.coordinator,
       evidence: { invalidate: () => {} },
       delivery: { invalidate: () => {} },
+      ...(modules !== undefined && { modules }),
     },
   });
   const request = async () => {
@@ -337,21 +341,22 @@ it("retirement snapshots retain configured public files, receipt directories and
   );
 });
 
-it.each(["missing", "corrupt", "partial"] as const)(
-  "password-free Start again refuses a %s database",
-  async (kind) => {
-    const f = await actionsFixture();
-    const unchanged = await startAgainUnchanged(f);
-    const path = join(f.venueDir, "venue.db");
-    await rm(path);
-    if (kind === "corrupt") await writeFile(path, "not a database");
-    if (kind === "partial") await writeFile(path, Buffer.alloc(0));
-    await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
-    await unchanged();
-  },
-);
+it.each([
+  ["missing", "setup.not_ready"],
+  ["corrupt", "setup.attempt_conflict"],
+  ["partial", "setup.not_ready"],
+] as const)("password-free Start again refuses a %s database %s", async (kind, code) => {
+  const f = await actionsFixture({ modules: ALL_MODULES });
+  const unchanged = await startAgainUnchanged(f);
+  const path = join(f.venueDir, "venue.db");
+  await rm(path);
+  if (kind === "corrupt") await writeFile(path, "not a database");
+  if (kind === "partial") await writeFile(path, Buffer.alloc(0));
+  await expect(f.actions.startAgainFirstSetup(await f.startRequest())).rejects.toMatchObject({
+    code,
+  });
+  await unchanged();
+});
 it("Start again from two browsers deletes the attempt once and refuses the second with setup.attempt_conflict", async () => {
   const f = await actionsFixture(),
     request = await f.startRequest();

@@ -32,7 +32,11 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import { readSetupDatabase, type SetupDatabaseHoldings } from "./first-setup-database-holdings.js";
+import {
+  readSetupDatabase,
+  type SetupDatabaseHoldings,
+  type SetupDatabaseRead,
+} from "./first-setup-database-holdings.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -62,13 +66,21 @@ function refused(
   );
 }
 /** Counts only, for the log: the answer carries the cause alone. */
-function assertNoKeptRecords({ rows, kept, records, accepted }: SetupDatabaseHoldings): void {
+function assertNoKeptRecords(read: SetupDatabaseRead): void {
+  const { rows, kept, records, accepted }: SetupDatabaseHoldings =
+    read.kind === "read" ? read.holdings : read.seen;
   if (kept > 0 || records > 0)
-    refused("kept-records", `rows=${rows} kept=${kept} records=${records} accepted=${accepted}`);
+    refused(
+      "kept-records",
+      `rows=${rows} kept=${kept} records=${records} accepted=${accepted}` +
+        (read.kind === "damaged" ? ` damaged=${read.code}` : ""),
+    );
 }
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
+/** Labels the inspection gives a database that may be damaged, which only a read can tell. */
+const DAMAGED_LABELS: readonly string[] = ["corrupt", "unknown"];
 /** The held state's refusals made before what its database holds is read, in this order. */
 function assertHeldStartAgainOffered(
   inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
@@ -76,7 +88,8 @@ function assertHeldStartAgainOffered(
 ): void {
   const holdsRecords =
     inspection.database === "occupied" ||
-    (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
+    (inspection.database === "no-venue-rows" && !inspection.emptyDatabase) ||
+    DAMAGED_LABELS.includes(inspection.database);
   if (!holdsRecords) unavailable();
   if (
     inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
@@ -160,10 +173,12 @@ function summaryOf(
   state: FirstSetupState,
   recoveryRecordDamaged: boolean,
   recovery: StartAgainRecoveryShown | undefined,
+  databaseUnreadable = false,
 ): StartAgainSummary {
   return {
     ...startAgainSummary(state),
     ...(recoveryRecordDamaged && { recoveryRecordDamaged: true as const }),
+    ...(databaseUnreadable && { databaseUnreadable: true as const }),
     ...(recovery !== undefined && { recovery }),
   };
 }
@@ -307,51 +322,72 @@ export function createFirstSetupResolutionActions(
     if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
     const discardsStopped = !missing && found?.kind === "stopped";
     if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
-    const held =
-      !missing &&
-      (inspection.database !== "no-venue-rows" ||
-        !PRESENT_START_AGAIN_STATUSES.includes(state.status));
+    const label = inspection.database;
+    const presentStatus = PRESENT_START_AGAIN_STATUSES.includes(state.status);
+    if (label === "unreadable" || label === "partial") unavailable();
+    const held = !missing && (label === "occupied" || !presentStatus);
+    // The unused setup's database that the inspection could not show empty: only a read that
+    // finds damage lets it go further, as an empty one.
+    const readFirst = !missing && !held && !(label === "no-venue-rows" && inspection.emptyDatabase);
     if (held) assertHeldStartAgainOffered(inspection, state.status);
     else if (missing) {
       if (state.status === "complete") refused("setup-finished");
       if (kind === "start-again" && request.confirmMissingDatabase === undefined) unavailable();
-    } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
+    }
     const snapshot = await host.resolution.captureFirstSetupOriginals();
     if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-    const { emptyWorkspace, assignment, eligible } = await presentAttemptEligibility(
-      inspection,
-      state,
-      snapshot.originals,
-      host.modules,
-      request.register,
-    );
-    if (held) {
-      if (request.register?.kind === "no-current-master") unavailable();
-    } else {
+    const eligibility = (asEmpty: boolean) =>
+      presentAttemptEligibility(
+        asEmpty ? { ...inspection, emptyDatabase: true } : inspection,
+        state,
+        snapshot.originals,
+        host.modules,
+        request.register,
+      );
+    const assertEligible = ({
+      emptyWorkspace,
+      eligible,
+    }: {
+      emptyWorkspace: boolean;
+      eligible: boolean;
+    }) => {
       if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
       if (!missing && !eligible) unavailable();
-    }
+    };
+    let present = held || readFirst ? undefined : await eligibility(false);
+    if (held) {
+      if (request.register?.kind === "no-current-master") unavailable();
+    } else if (present !== undefined) assertEligible(present);
     if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
       unavailable();
     const heldOption = held ? { held: true as const } : {};
     // Before the read, which may copy the whole database: a refusal here costs nothing.
     const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
-    if (held) {
+    let databaseUnreadable = false;
+    if (held || readFirst) {
       if (host.modules === undefined) unavailable();
       const read = await readSetupDatabase(roots, host.modules);
-      if (read.kind === "damaged")
-        throw new AppError("setup.not_ready", {}, { reason: `database damaged: ${read.code}` });
-      const { holdings } = read;
-      // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
-      if (holdings.rows === 0) unavailable();
-      assertNoKeptRecords(holdings);
+      // An unused setup's database read whole is not empty, so it is not unused.
+      if (readFirst && read.kind === "read") unavailable();
+      assertNoKeptRecords(read);
+      if (read.kind === "read") {
+        // Not empty yet no rows (a view, a part-applied setup), or read whole where the
+        // inspection could not: not what the held state names.
+        if (read.holdings.rows === 0 || DAMAGED_LABELS.includes(label)) unavailable();
+      } else {
+        databaseUnreadable = true;
+        if (readFirst) {
+          present = await eligibility(true);
+          assertEligible(present);
+        }
+      }
     }
     const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
     // With the database present and not held, Start again compares the assignment's own reading.
     const recoveryRecordDamaged =
       missing || held
         ? recordDamaged
-        : typeof assignment === "object" && assignment.recoveryRecordDamaged;
+        : typeof present?.assignment === "object" && present.assignment.recoveryRecordDamaged;
     return {
       state,
       found,
@@ -362,6 +398,7 @@ export function createFirstSetupResolutionActions(
       heldOption,
       box,
       recoveryRecordDamaged,
+      databaseUnreadable,
     };
   };
   return {
@@ -369,11 +406,9 @@ export function createFirstSetupResolutionActions(
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
           exactKeys(request, ["inspectionId", "revision", "ownerGeneration"]);
-          const { state, recoveryRecordDamaged, recovery } = await assessStartAgain(
-            request,
-            "summary",
-          );
-          return summaryOf(state, recoveryRecordDamaged, recovery);
+          const { state, recoveryRecordDamaged, recovery, databaseUnreadable } =
+            await assessStartAgain(request, "summary");
+          return summaryOf(state, recoveryRecordDamaged, recovery, databaseUnreadable);
         }),
       );
     },
@@ -390,6 +425,8 @@ export function createFirstSetupResolutionActions(
             "recoveryRecordDamagedShown",
           ]);
           const assessed = await assessStartAgain(request, "start-again");
+          // The page has no way yet to confirm a database that cannot be read.
+          if (assessed.databaseUnreadable) conflict();
           const { state, found, recovery, discarding, missing, discardsStopped, heldOption, box } =
             assessed;
           let marker = await markerFor(box, state, { ...discarding, ...heldOption });

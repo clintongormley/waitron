@@ -378,30 +378,30 @@ it.each([
   },
 );
 
-it.each(["missing", "corrupt"])(
-  "password-free hour restart refuses a %s database",
-  async (kind) => {
-    const f = await fixture();
-    if (kind === "corrupt") await writeFile(join(f.venueDir, "venue.db"), "not a database");
-    const snapshot = await f.host.resolution.captureFirstSetupOriginals();
-    expect(snapshot.inspection.database).toBe(kind);
-    const actions = createFirstSetupResolutionActions({
-      stateDir: f.stateDir,
-      venueDir: f.venueDir,
-      host: f.host,
-    });
-    await expect(
-      actions.startAgainFirstSetup({
-        inspectionId: snapshot.inspection.inspectionId,
-        revision: snapshot.inspection.revision!,
-        ownerGeneration: snapshot.inspection.ownerGeneration!,
-      }),
-    ).rejects.toMatchObject({ code: "setup.not_ready" });
-    expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
-      snapshot.originals,
-    );
-  },
-);
+it.each([
+  ["missing", "setup.not_ready"],
+  ["corrupt", "setup.attempt_conflict"],
+])("password-free hour restart refuses a %s database %s", async (kind, code) => {
+  const f = await fixture();
+  if (kind === "corrupt") await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  const snapshot = await f.host.resolution.captureFirstSetupOriginals();
+  expect(snapshot.inspection.database).toBe(kind);
+  const actions = createFirstSetupResolutionActions({
+    stateDir: f.stateDir,
+    venueDir: f.venueDir,
+    host: f.host,
+  });
+  await expect(
+    actions.startAgainFirstSetup({
+      inspectionId: snapshot.inspection.inspectionId,
+      revision: snapshot.inspection.revision!,
+      ownerGeneration: snapshot.inspection.ownerGeneration!,
+    }),
+  ).rejects.toMatchObject({ code });
+  expect((await f.host.resolution.captureFirstSetupOriginals()).originals).toEqual(
+    snapshot.originals,
+  );
+});
 
 it("HTTPS hour restart takes local observations without a register declaration", async () => {
   const f = await fixture();

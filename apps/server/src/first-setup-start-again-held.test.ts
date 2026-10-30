@@ -2,7 +2,7 @@ import { heldSetup } from "../test/held-setup-database.js";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, readFile, readdir, rm, rmdir, unlink, writeFile } from "node:fs/promises";
+import { access, chmod, readFile, readdir, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName, sql } from "drizzle-orm";
@@ -30,6 +30,7 @@ import {
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { foreignHotJournal } from "../test/foreign-journal.js";
+import { damagePages } from "../test/damaged-database.js";
 import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
@@ -63,6 +64,23 @@ vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
       return actual.readSetupDatabase(...args);
     },
   };
+});
+
+const copyFails = vi.hoisted(() => ({ on: false, calls: 0 }));
+vi.mock("./venue-private-copy.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./venue-private-copy.js")>();
+  return {
+    ...actual,
+    copyVenueFiles: (...args: Parameters<typeof actual.copyVenueFiles>) => {
+      if (!copyFails.on) return actual.copyVenueFiles(...args);
+      copyFails.calls += 1;
+      return Promise.reject(Object.assign(new Error("no space"), { code: "ENOSPC" }));
+    },
+  };
+});
+afterEach(() => {
+  copyFails.on = false;
+  copyFails.calls = 0;
 });
 
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
@@ -215,14 +233,19 @@ it.each([
   },
 );
 
+const notReady = { code: "setup.not_ready" };
 it.each([
-  ["unknown", {}],
-  ["partial", {}],
-  ["unknown", { tradingSettings: true }],
-  ["partial", { tradingSettings: true }],
+  ["unknown", {}, notReady],
+  ["partial", {}, notReady],
+  [
+    "unknown",
+    { tradingSettings: true },
+    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
+  ],
+  ["partial", { tradingSettings: true }, notReady],
 ] as const)(
-  "a database read as %s beside a stopped recovery (%o) is still refused setup.not_ready, and nothing changes",
-  async (database, options) => {
+  "a database read as %s beside a stopped recovery (%o) is refused as %o, and nothing changes",
+  async (database, options, refusal) => {
     const f = await heldSetup(options);
     const inspect = f.host.resolution.inspectFirstSetupResolution;
     const host = {
@@ -232,7 +255,7 @@ it.each([
         inspectFirstSetupResolution: async () => ({ ...(await inspect()), database }),
       },
     } as Held["host"];
-    await expectRefused(f, { code: "setup.not_ready" }, { host });
+    await expectRefused(f, refusal, { host });
   },
 );
 
@@ -750,3 +773,188 @@ it("a deletion already marked: Start again answers setup.start_again_incomplete 
   }
   await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledOnce());
 });
+
+const venueDb = (f: Pick<Held, "roots">) => join(f.roots.venueDir, "venue.db");
+const invoiceTable = getTableName(registrosFacturacion);
+const labelOf = async (f: Held) => (await f.host.resolution.inspectFirstSetupResolution()).database;
+/** The summary with nobody signed in; Start again then refuses until the page can confirm it. */
+async function unreadableSummary(f: Held, host: Held["host"] = f.host) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  const shown = await actions.startAgainSummary(ids);
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), {
+    code: "setup.attempt_conflict",
+  });
+  return shown;
+}
+async function expectHeldRefused(f: Held, refusal: object, host: Held["host"] = f.host) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), refusal);
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), refusal);
+}
+const keptRecords = { code: "setup.start_again_refused", params: { cause: "kept-records" } };
+
+it("a held database with a damaged table (no recovery): the summary says it cannot be read", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  expect(await labelOf(f)).toBe("occupied");
+  expect(await unreadableSummary(f)).toEqual({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+  });
+});
+
+/** The modules, with the fiscal module's holdings seat recording what it answered. */
+function recordingFiscalSeat(f: Held) {
+  const answers: unknown[] = [];
+  const modules = f.host.modules.map((module) => {
+    const initialSetup = module.provisioning?.initialSetup;
+    const seat = initialSetup?.startAgainHoldings;
+    if (module.name !== "fiscal-verifactu" || seat === undefined) return module;
+    return {
+      ...module,
+      provisioning: {
+        ...module.provisioning,
+        initialSetup: {
+          ...initialSetup,
+          startAgainHoldings: async (...args: Parameters<typeof seat>) => {
+            try {
+              const resolved = await seat(...args);
+              answers.push({ resolved });
+              return resolved;
+            } catch (error) {
+              answers.push({ rejected: true, errcode: (error as { errcode?: number }).errcode });
+              throw error;
+            }
+          },
+        },
+      },
+    };
+  });
+  expect(answers).toEqual([]);
+  return { host: { ...f.host, modules } as Held["host"], answers };
+}
+
+it("a held database whose invoice table is damaged, with no sale: the summary says it cannot be read, and the fiscal module's own reader failed with code 11", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), invoiceTable);
+  expect(await labelOf(f)).toBe("occupied");
+  const { host, answers } = recordingFiscalSeat(f);
+  expect(await unreadableSummary(f, host)).toEqual({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+  });
+  expect(answers[0]).toEqual({ rejected: true, errcode: 11 });
+});
+
+it("control: the same held database undamaged: the summary does not say it cannot be read, and the fiscal module's reader counted nothing", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { host, answers } = recordingFiscalSeat(f);
+  const { ids, actions } = await withoutSignIn(f, host);
+  expect(await actions.startAgainSummary(ids)).toEqual({ reached: "fiscal-finished" });
+  expect(answers).toEqual([{ resolved: { records: 0, accepted: 0 } }]);
+});
+
+it.each([
+  ["its first page damaged", (f: Held) => damagePages(venueDb(f), null)],
+  ["junk bytes for a database", (f: Held) => writeFile(venueDb(f), "not a database")],
+])(
+  "a held setup database with %s (attempt committed): the summary says it cannot be read",
+  async (_label, damage) => {
+    const f = await heldSetup({ recovery: false });
+    await damage(f);
+    expect(await labelOf(f)).toBe("corrupt");
+    expect(await unreadableSummary(f)).toEqual({
+      reached: "fiscal-finished",
+      databaseUnreadable: true,
+    });
+  },
+);
+
+it("a damaged tenants page beside an invoice refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damagePages(venueDb(f), "tenants");
+  expect(await labelOf(f)).toBe("corrupt");
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("the same sale with only the invoice table and its indexes damaged refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damagePages(venueDb(f), invoiceTable);
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("an intact held database with an invoice and another database's hot journal beside it is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
+  expect(await labelOf(f)).toBe("unknown");
+  await expectHeldRefused(f, { code: "setup.not_ready" });
+});
+
+it("control: without the journal, the same held database refuses kept-records", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("a damaged held database whose private copy fails is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const wal = await readFile(`${venueDb(f)}-wal`);
+  damagePages(venueDb(f), "department_days");
+  // The damage is written with the -wal checkpointed; putting it back keeps the copy path.
+  await writeFile(`${venueDb(f)}-wal`, wal);
+  copyFails.on = true;
+  await expectHeldRefused(f, { code: "setup.not_ready", reason: "copy failed: ENOSPC" });
+  expect(copyFails.calls).toBeGreaterThan(0);
+});
+
+it("a venue.db the box may not open is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const before = await snapshot(f);
+  await chmod(venueDb(f), 0o000);
+  try {
+    expect(await labelOf(f)).toBe("unreadable");
+    const { ids, actions } = await withoutSignIn(f);
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
+  } finally {
+    await chmod(venueDb(f), 0o644);
+  }
+  expect(await snapshot(f)).toEqual(before);
+  expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
+  await noConfirmations(f);
+});
+
+it.each([
+  ["with an invoice", { invoices: 1 }, keptRecords],
+  ["without one", {}, { code: "setup.not_ready" }],
+] as const)(
+  "a readable held database labelled corrupt %s refuses as its contents say, and nothing changes",
+  async (_label, options, refusal) => {
+    const f = await heldSetup({ ...options, recovery: false });
+    const inspect = f.host.resolution.inspectFirstSetupResolution;
+    const host = {
+      ...f.host,
+      resolution: {
+        ...f.host.resolution,
+        inspectFirstSetupResolution: async () => ({
+          ...(await inspect()),
+          database: "corrupt" as const,
+        }),
+      },
+    } as Held["host"];
+    await expectHeldRefused(f, refusal, host);
+  },
+);
+
+it.each([
+  ["saved trading settings", { tradingSettings: true }, "trading-settings"],
+  ["a finished setup", { status: "complete" }, "setup-finished"],
+] as const)(
+  "%s beside a damaged database refuse %s, and nothing changes",
+  async (_label, options, cause) => {
+    const f = await heldSetup({ ...options, recovery: false });
+    damagePages(venueDb(f), "department_days");
+    await expectHeldRefused(f, { code: "setup.start_again_refused", params: { cause } });
+  },
+);

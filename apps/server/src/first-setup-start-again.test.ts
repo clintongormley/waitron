@@ -1027,7 +1027,7 @@ it.each(["first-setup.json", "first-setup-claim.json"])(
   },
 );
 
-it("a corrupt venue database beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
+it("a corrupt venue database beside a damaged picks file is refused setup.attempt_conflict without the page's confirmation, and nothing changes", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damagePicks(f);
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
@@ -1042,6 +1042,46 @@ it("a corrupt venue database beside a damaged picks file is refused setup.not_re
         revision: inspected.revision!,
         ownerGeneration: inspected.ownerGeneration!,
       }),
+    "setup.attempt_conflict",
+  );
+});
+
+it("an unused attempt whose database cannot be read: the summary says so, and Start again refuses until the page confirms it", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("corrupt");
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
+  await expect(actions.startAgainSummary(ids)).resolves.toMatchObject({
+    databaseUnreadable: true,
+  });
+  await expectRefusedUnchanged(
+    f,
+    () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
+    "setup.attempt_conflict",
+  );
+});
+
+it("an unused attempt whose database cannot be read, beside saved trading settings, is refused setup.not_ready by the disk check, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  await writeFile(join(f.stateDir, "trading.env"), "WAITRON_ENV=preproduction\n");
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("corrupt");
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
+  const refusal = { code: "setup.not_ready", reason: "refused artifact: state/trading.env" };
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
+  await expectRefusedUnchanged(
+    f,
+    () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
     "setup.not_ready",
   );
 });
