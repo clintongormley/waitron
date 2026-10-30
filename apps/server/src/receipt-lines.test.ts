@@ -42,7 +42,7 @@ describe("groupByParent", () => {
 function filed(quantity: string, lineGross: string) {
   return {
     lineNo: 1,
-    descriptions: { "es-ES": "Merluza" },
+    descriptions: { "es-ES": "Hake" },
     variantDescriptions: null,
     variantName: null,
     optionSnapshots: [],
@@ -125,7 +125,7 @@ describe("ticketLinesFrom", () => {
     const dish = filed("1.000", "2.00");
     const child = {
       ...filed("0.150", "0.03"),
-      descriptions: { "es-ES": "Jamón" },
+      descriptions: { "es-ES": "Ham" },
       unitName: { es: "kg" },
       parentLineNo: 1,
     };
@@ -140,8 +140,8 @@ describe("ticketLinesFrom", () => {
   it("prints a whole-unit extra without thousandths", () => {
     const child = {
       ...filed("3.000", "0.90"),
-      descriptions: { "es-ES": "Aceitunas" },
-      unitName: { es: "ud" },
+      descriptions: { "es-ES": "Olives" },
+      unitName: { es: "pc" },
       unitPrecision: 0,
       parentLineNo: 1,
     };
@@ -150,7 +150,7 @@ describe("ticketLinesFrom", () => {
       { listUnitGross: null },
     ]);
 
-    expect(lines[1]).toMatchObject({ quantity: "3", unitName: { es: "ud" } });
+    expect(lines[1]).toMatchObject({ quantity: "3", unitName: { es: "pc" } });
   });
 
   it("carries a line's total at its list price only where a comp or a discount changed it", () => {
@@ -171,7 +171,7 @@ describe("ticketLinesFrom", () => {
   it("shows the list total for a discounted extra priced by frozen portions", () => {
     const child = {
       ...filed("0.150", "0.02"),
-      descriptions: { "es-ES": "Jamón" },
+      descriptions: { "es-ES": "Ham" },
       unitName: { "es-ES": "kg" },
       priceQuantity: "0.050",
       parentLineNo: 1,
@@ -211,44 +211,44 @@ describe("mergeIdenticalGroups", () => {
       ...options.map((option) => [option.descriptions["es-ES"], option.quantity, option.gross]),
     ]);
 
-  it("A803 portion grouping: two filed rows of Caña at 1.50 print as one row of 2 at 3.00", () => {
+  it("A803 portion grouping: two filed rows of Beer at 1.50 print as one row of 2 at 3.00", () => {
     expect(
-      printed([row("Caña", "1", "1.50"), row("Bravas", "1", "6.00"), row("Caña", "1", "1.50")]),
+      printed([row("Beer", "1", "1.50"), row("Anchovies", "1", "6.00"), row("Beer", "1", "1.50")]),
     ).toEqual([
-      ["Caña", "2", "3.00"],
-      ["Bravas", "1", "6.00"],
+      ["Beer", "2", "3.00"],
+      ["Anchovies", "1", "6.00"],
     ]);
   });
 
   it("A803 portion grouping: rows at one unit price group whatever each row's count", () => {
-    expect(printed([row("Caña", "2", "3.00"), row("Caña", "1", "1.50")])).toEqual([
-      ["Caña", "3", "4.50"],
+    expect(printed([row("Beer", "2", "3.00"), row("Beer", "1", "1.50")])).toEqual([
+      ["Beer", "3", "4.50"],
     ]);
   });
 
   it("A803 portion grouping: a different price, VAT rate, list price or adjustment entry keeps rows apart", () => {
-    const caña = row("Caña", "1", "1.50");
+    const beer = row("Beer", "1", "1.50");
     const apart = (other: TillSaleLine, oneRate = true) =>
-      expect(printed([caña, other], oneRate)).toEqual([
-        ["Caña", "1", "1.50"],
-        ["Caña", other.quantity, other.gross],
+      expect(printed([beer, other], oneRate)).toEqual([
+        ["Beer", "1", "1.50"],
+        ["Beer", other.quantity, other.gross],
       ]);
-    apart(row("Caña", "1", "1.60"));
-    apart(row("Caña", "2", "3.10"));
-    apart(row("Caña", "1", "1.50", { listGross: "2.00" }));
-    apart(row("Caña", "1", "1.50", { adjustments: [{ kind: "discount", amount: "0.50" }] }));
-    apart(row("Caña", "1", "1.50", { descriptions: { "es-ES": "Caña", en: "Small beer" } }));
+    apart(row("Beer", "1", "1.60"));
+    apart(row("Beer", "2", "3.10"));
+    apart(row("Beer", "1", "1.50", { listGross: "2.00" }));
+    apart(row("Beer", "1", "1.50", { adjustments: [{ kind: "discount", amount: "0.50" }] }));
+    apart(row("Beer", "1", "1.50", { descriptions: { "es-ES": "Beer", en: "Small beer" } }));
     // A sale filing several rates gives the receipt no rate per row, so none of its rows group.
-    apart(row("Caña", "1", "1.50"), false);
+    apart(row("Beer", "1", "1.50"), false);
     const rated = (rate: string) =>
-      row("Caña", "1", "1.50", {
+      row("Beer", "1", "1.50", {
         net: { unitPrice: "1.36", priceQuantity: "1.000", base: "1.36", rate },
       });
     expect(printed([rated("10"), rated("21")], false)).toEqual([
-      ["Caña", "1", "1.50"],
-      ["Caña", "1", "1.50"],
+      ["Beer", "1", "1.50"],
+      ["Beer", "1", "1.50"],
     ]);
-    expect(printed([rated("10"), rated("10.00")], false)).toEqual([["Caña", "2", "3.00"]]);
+    expect(printed([rated("10"), rated("10.00")], false)).toEqual([["Beer", "2", "3.00"]]);
   });
 
   it("A803 portion grouping: dishes group only with identical extras, whose quantities add", () => {
@@ -280,7 +280,7 @@ describe("mergeIdenticalGroups", () => {
       row("Steak", "1", "20.00", {
         optionSnapshots: [
           {
-            listName: { es: "Punto" },
+            listName: { es: "Doneness" },
             listCustomerName: null,
             listKitchenName: null,
             labelName: { es: choice },
@@ -289,46 +289,46 @@ describe("mergeIdenticalGroups", () => {
           },
         ],
       });
-    expect(printed([answered("Poco"), answered("Hecho"), answered("Poco")])).toEqual([
+    expect(printed([answered("Rare"), answered("Well done"), answered("Rare")])).toEqual([
       ["Steak", "2", "40.00"],
       ["Steak", "1", "20.00"],
     ]);
-    const [snapshot] = answered("Poco").optionSnapshots!;
+    const [snapshot] = answered("Rare").optionSnapshots!;
     const reordered = Object.fromEntries(Object.entries(snapshot!).reverse()) as typeof snapshot;
     const sameAnswer = row("Steak", "1", "20.00", { optionSnapshots: [reordered!] });
-    expect(printed([answered("Poco"), sameAnswer])).toEqual([["Steak", "2", "40.00"]]);
+    expect(printed([answered("Rare"), sameAnswer])).toEqual([["Steak", "2", "40.00"]]);
   });
 
   it("A803 portion grouping: measured rows never group", () => {
-    const ham = row("Jamón", "0.150", "4.50", { unitName: { es: "kg" }, unitPrecision: 3 });
+    const ham = row("Ham", "0.150", "4.50", { unitName: { es: "kg" }, unitPrecision: 3 });
     expect(printed([ham, ham])).toEqual([
-      ["Jamón", "0.150", "4.50"],
-      ["Jamón", "0.150", "4.50"],
+      ["Ham", "0.150", "4.50"],
+      ["Ham", "0.150", "4.50"],
     ]);
-    const kilo = row("Jamón", "1", "30.00", { unitName: { es: "kg" }, unitPrecision: 3 });
+    const kilo = row("Ham", "1", "30.00", { unitName: { es: "kg" }, unitPrecision: 3 });
     expect(printed([kilo, kilo])).toEqual([
-      ["Jamón", "1", "30.00"],
-      ["Jamón", "1", "30.00"],
+      ["Ham", "1", "30.00"],
+      ["Ham", "1", "30.00"],
     ]);
-    const half = row("Tortilla", "0.5", "5.00");
+    const half = row("Omelette", "0.5", "5.00");
     expect(printed([half, half])).toEqual([
-      ["Tortilla", "0.5", "5.00"],
-      ["Tortilla", "0.5", "5.00"],
+      ["Omelette", "0.5", "5.00"],
+      ["Omelette", "0.5", "5.00"],
     ]);
     const weighed = (lineNo: number) => ({
-      ...row("Jamón", "0.050", "1.50", { unitName: { es: "kg" }, unitPrecision: 3 }),
+      ...row("Ham", "0.050", "1.50", { unitName: { es: "kg" }, unitPrecision: 3 }),
       parentLineNo: lineNo,
     });
     expect(
       printed([row("Toast", "1", "3.00"), weighed(1), row("Toast", "1", "3.00"), weighed(3)]),
     ).toEqual([
-      ["Toast", "1", "3.00", ["Jamón", "0.050", "1.50"]],
-      ["Toast", "1", "3.00", ["Jamón", "0.050", "1.50"]],
+      ["Toast", "1", "3.00", ["Ham", "0.050", "1.50"]],
+      ["Toast", "1", "3.00", ["Ham", "0.050", "1.50"]],
     ]);
   });
 
   it("A803 portion grouping: leaves the groups it is given untouched", () => {
-    const lines = [row("Caña", "1", "1.50"), row("Caña", "1", "1.50")];
+    const lines = [row("Beer", "1", "1.50"), row("Beer", "1", "1.50")];
     const groups = groupByParent(lines);
     const before = structuredClone(groups);
     mergeIdenticalGroups(groups, true);
