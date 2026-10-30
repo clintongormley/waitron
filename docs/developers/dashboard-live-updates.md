@@ -6,6 +6,23 @@ condition: a change reaches the dashboard only when the write went through `with
 server process. What falls outside that, and what it costs, is in `workflow-guide.md` under _The
 development stack from a worktree_.
 
+The shared `LiveConnection` owns the document lifecycle. When you leave the document, `pagehide`
+closes its stream and pauses the shared cache's queued and timed reads without clearing observers
+or snapshots. `pageshow` reconnects; the new stream's `open` refreshes the retained views once.
+If the cache has no stream interests, `pageshow` refreshes it directly. A cancelled leave prompt
+never reaches `pagehide`, so its views keep receiving updates.
+
+`stop()` clears session data and detaches the lifecycle listeners in a visible document. When you
+stop it while the document is away, it retains only the return listener. That listener records the
+return and detaches itself without reading or reconnecting. A later explicit `start()` can then
+release the cache pause. A stop and start before that return keep both reads and streams paused.
+
+An EventSource error recovery waits one task before refreshing and rechecks its stream and session
+generation. The task lets `pagehide` cancel recovery during unload. Keep that delay: the native
+Chromium reload regression in `apps/dashboard/test/live-connection-native.test.ts` catches the
+error-before-pagehide ordering. `packages/dashboard-kit/src/live-connection.lifecycle.test.ts`
+also covers queued reads, timers, cached restoration and a generation change during that wait.
+
 Declare the API method's dependencies in `apps/dashboard/src/api/live-queries.ts`. Include every
 source of computed fields: a printer's pending count depends on print jobs, not just its printer
 record. Use `DashboardQueries.watch` to assign the resulting snapshot to the screen's data fields.

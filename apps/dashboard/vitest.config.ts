@@ -50,6 +50,7 @@ const browserProject = {
       "**/.stryker-tmp/**",
       "src/date-utils.test.ts",
       "src/dashboard-app.touch.test.ts",
+      "test/live-connection-native.test.ts",
     ],
     provide: {
       startupEngines: startupEnginesFromEnv(),
@@ -97,7 +98,7 @@ const nodeTimezoneProject = {
     globals: true,
     clearMocks: false,
     environment: "node",
-    include: ["src/date-utils.test.ts"],
+    include: ["src/date-utils.test.ts", "test/live-connection-native.test.ts"],
     env: { TZ: "America/New_York" },
   },
 } as const;

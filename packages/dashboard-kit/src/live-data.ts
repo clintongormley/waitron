@@ -34,6 +34,7 @@ interface Entry {
  * its parameters, dependencies and refresh interval; every observer of that key shares its first read. */
 export class LiveData {
   #entries = new Map<string, Entry>();
+  #paused = false;
   #interestListeners = new Set<() => void>();
 
   get interests(): ResourceIdentity[] {
@@ -108,6 +109,16 @@ export class LiveData {
     };
   }
 
+  pause(): void {
+    this.#paused = true;
+  }
+
+  resume(): boolean {
+    const paused = this.#paused;
+    this.#paused = false;
+    return paused;
+  }
+
   refresh(): void {
     for (const entry of this.#entries.values()) {
       entry.dirty = true;
@@ -148,11 +159,12 @@ export class LiveData {
   }
 
   #schedule(entry: Entry): void {
-    if (!entry.active || !entry.dirty || entry.scheduled || entry.snapshot.loading) return;
+    if (this.#paused || !entry.active || !entry.dirty || entry.scheduled || entry.snapshot.loading)
+      return;
     entry.scheduled = true;
     queueMicrotask(() => {
       entry.scheduled = false;
-      if (entry.active) void this.#read(entry);
+      if (entry.active && !this.#paused) void this.#read(entry);
     });
   }
 
