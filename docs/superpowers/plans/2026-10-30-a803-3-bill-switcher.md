@@ -634,8 +634,8 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `table-actions.refund-pending.test.ts:177`, `:306` (answer shapes) | W | shapes → `billIds`/`billId` | master plan interfaces | 4a |
 | `apps/server/src/bill-identities.test.ts:595` (join with Merge the bills), `:167` (main bill after all paid) | B | separate numbering; `:167` → no main bill, `openingBillId` | §3.4, D7 | 3a, 6c |
 | `apps/server/src/move-merge.test.ts:493` ("the main bill of the party taken in, which merges") | B | both bills kept; kitchen told of the moved bills' dishes | §3.4 | 3a |
-| `apps/server/src/move-merge.filing.test.ts:300-331`, `:333-` ("parties combined, bills merged → one registro (H2)", "tables joined across parties, bills merged"), and its helper's `bills: "merge" as const` (`:215`) | **S, Q5 item 1** | the combine no longer merges, so the setup adds an explicit `mergeBills(tx, cfg, intoTab, fromTab, …)` in the same transaction after `moveGuests`/`joinTables`, and the `:215` property goes; **every `expect` byte-identical** (`git diff` of the file shows only setup lines) | §3.4 "staff merge afterwards" | 3a |
-| Task 3a's planned rows, as built | B / S | `party-table-actions.test.ts:316`, `:994`, `:1350`, `:1572` (B): `merged: false`, the incoming bill open on the receiving party with its own lines and `numbersOf` `[[receiving, 1], [incoming, 2]]`; `:1350`'s MOVED notice is on the incoming bill itself. `table-actions.refund-pending.test.ts:248` (B): both bills open on the receiving party, each "3.00" total and outstanding (each bill's own Caña; the merged total was "6.00"); the refund's bill unchanged as before. `bill-identities.test.ts:599` (B): no bill abandoned; incoming bills numbered 2 and 3. `move-merge.test.ts:514` (B, plan said "kitchen told of the moved bills' dishes"; the run shows a join tells the kitchen nothing, as `party-table-actions.test.ts`' paid-bill join case already pins): notices `toEqual(before)`, both incoming bills open on the receiving party. `order-drafts.db.test.ts` `merge()` helper `:3420` (S): join, then `mergeBills(into.tabId, from.tabId)` in the same transaction; `:4494` byte-identical under it. `move-merge.filing.test.ts:300`, `:339` (S, Q5 item 1): as the row above | spec §3.4 bullet 2, §6 | 3a |
+| `apps/server/src/move-merge.filing.test.ts:300-331`, `:333-` ("parties combined, bills merged → one registro (H2)", "tables joined across parties, bills merged"), and its helper's `bills: "merge" as const` (`:215`) | **S, Q5 item 1** | the combine no longer merges, so the setup adds an explicit `mergeBills(tx, cfg, intoTab, fromTab, …)` in the same transaction after `moveGuests`/`joinTables`, and the `:215` property goes; **every existing `expect` byte-identical**. Before this branch `:339` did not check that one sale covers both bills (its two sale counts also hold when nothing merges); the branch adds `expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" })`, `registroCount(intoTab)` 1, `registroCount(fromTab)` 0 and `filedSaleTotal(intoTab)` "3.50" (café 1.50 + agua 2.00), which fail with its Merge bills step deleted. The additions are built on the default, pending the owner's yes | §3.4 "staff merge afterwards" | 3a |
+| Task 3a's planned rows, as built | B / S | `party-table-actions.test.ts:316`, `:994`, `:1350`, `:1572` (B): `merged: false`, the incoming bill open on the receiving party with its own lines and `numbersOf` `[[receiving, 1], [incoming, 2]]`; `:1350`'s MOVED notice is on the incoming bill itself. `table-actions.refund-pending.test.ts:248` (B): both bills open on the receiving party, each "3.00" total and outstanding (each bill's own Caña; the merged total was "6.00"); the refund's bill unchanged as before. `bill-identities.test.ts:599` (B): no bill abandoned; incoming bills numbered 2 and 3. `move-merge.test.ts:514` (B: a notice goes out only when an order loses a table or a place name, or changes number (`kitchenToBeTold`, `kitchen-print.ts:1563-1579`), and a join does neither): notices `toEqual(before)`, both incoming bills open on the receiving party. `order-drafts.db.test.ts` `merge()` helper `:3420` (S): join, then `mergeBills(into.tabId, from.tabId)` in the same transaction; `:4494` byte-identical under it. Its user at `:3600` ("answers the first result when the draft was added into its owner's draft on the target and discarded") passes either way: it passes with the merge step deleted. `move-merge.filing.test.ts:300`, `:339` (S, Q5 item 1): as the row above | spec §3.4 bullet 2, §6 | 3a |
 | `order-drafts.db.test.ts:3474`, `:3565`, `:3627` (draft details of the merge-on-join, under the S helper) | B (found at Task 3a's red run) | join-then-Merge moves the incoming draft to the receiving party before Merge bills discards it: the discarded draft's row is on the receiving party at revision +2 (was the closed party, +1); saving it on the receiving party refuses `draft.out_of_date` (was `draft.not_found`); the retried submission's refusal names revision +3 (was +2); Sam's bill is number 3 (was 2: the merged-away bill had already taken 2, numbers are never reused — the plan row's "confirm at red") | spec §3.4 bullet 2 "staff merge afterwards"; slice 2's numbering | 3a |
 | `party-table-actions.test.ts:915` ("adds the operator's draft on the moving party to their draft on the receiving one") | B (found at Task 3a's red run) | two drafts on the receiving party, each on its own bill with its own line (`{partyId, billId, ownerId, items}` per draft) | spec §3.4 | 3a |
 | `till-api.table-actions.test.ts:111` ("merges the bills by default", planned for 4a) | B (red at 3a) | the default request answers `merged: false`; both bills open | §3.4 | 3a |
@@ -692,6 +692,13 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 `rg -l 'joinTables\(|moveGuests\(|combineParties\(|/join|/move-guests'`, 84 files); the rows
 marked "found at Task 3a's red run" above are the ones planning did not list.
 
+**Merge-after-join cases that pass without their merge step.** With every added Merge bills step
+skipped (the Task 3a review's deletion control), these still pass, as they did before the branch:
+3 of the 6 `parties.test.ts` `merge()` users and 3 of the 7 `print-problems.test.ts` `mergeBills`
+cases (both named in their rows), and `order-drafts.db.test.ts:3600`. They check negatives or a
+repeat, not that a merge happened. `move-merge.filing.test.ts:339` also passed without it until
+the checks its row lists were added.
+
 **The planning pass missed seven Task 2 rows** (the seven "found at Task 2's red run" rows above,
 15 red cases). All six files are in Task 2's trace command (`rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"'`),
 but the planning pass listed only the cases it read in the four files it named; these six files'
@@ -742,6 +749,11 @@ is written to `questions.md` at Task 0, before any file it names is edited.** Th
    the PR cannot land until you answer. A "no" to item 1 means the two filing cases need a decision
    (they cannot stay as they are: joining no longer merges); a "no" to items 3–5 means keeping the
    `main_bill_id` column (see the alternative in the question) and changes Tasks 6c, 7 and 14.
+   Item 1 also covers four checks added to the `:339` case. Before this branch, `:339` did not
+   check that one sale covers both bills: it checked only the two sale counts, which also hold
+   when nothing merges. That weakness predates the branch. The branch adds, copied from `:300`:
+   `expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" })`, `registroCount(intoTab)` 1, `registroCount(fromTab)` 0 and `filedSaleTotal(intoTab)` "3.50" (café 1.50 + agua 2.00). They fail when the case's Merge bills step is deleted. They stay only if you
+   say yes.
 6. **A paid bill on screen.** Default: the switcher lists paid bills and choosing one puts it on
    screen (as A1233 suggests), where the ⋮ offers Name this bill and Receipt copy, and New order
    refuses as it does for a paid bill today (`bill.paid`, `apps/till/src/state/draft-sync.ts:471-480`).
@@ -799,11 +811,17 @@ is written to `questions.md` at Task 0, before any file it names is edited.** Th
       >
       > 1. **`apps/server/src/move-merge.filing.test.ts`**, cases at `:300-331` ("parties combined,
       >    bills merged → one registro") and `:333-` ("tables joined across parties, bills merged").
-      >    They join two tables so the bills merge by themselves, then check one sale covers both.
-      >    Joining no longer merges. Before: the join, with `bills: "merge" as const` (the helper at
-      >    `:215`). After: the same join, then the explicit Merge bills command staff will use
-      >    (`mergeBills(tx, cfg, intoTab, fromTab, …)`) in the same transaction; the `:215` line goes.
-      >    Every `expect` stays byte-for-byte; the diff shows only setup lines. Recommended: yes.
+      >    They join two tables so the bills merge by themselves. The `:300` case then checks one
+      >    sale covers both (its filed total is "3.50"). The `:339` case did not, before this
+      >    branch: it checked only that the receiving bill files one sale and the other none,
+      >    which also holds when nothing merges. Joining no longer merges. Before: the join, with
+      >    `bills: "merge" as const` (the helper at `:215`). After: the same join, then the
+      >    explicit Merge bills command staff will use (`mergeBills(tx, cfg, intoTab, fromTab, …)`)
+      >    in the same transaction; the `:215` line goes. Every existing `expect` stays
+      >    byte-for-byte. The `:339` case also gains four checks copied from `:300`: the other
+      >    bill is abandoned, the receiving bill has one filing record and the other none, and the
+      >    filed total is "3.50" (café 1.50 + agua 2.00). They fail when the Merge bills step is
+      >    deleted. Recommended: yes, to both the setup change and the added checks.
       > 2. **`apps/server/src/order-portions.filing.test.ts:1159`**: `bills: "separate",` passed to
       >    `moveBill`. The option no longer exists and "separate" is now the only behaviour. Before →
       >    after: that one line deleted; nothing else. Recommended: yes.
@@ -957,6 +975,8 @@ stays as the token an outer call hands down, with no field); `kitchen-print.ts:1
 - [ ] Before editing: `rg -n '\bisUntouched\b|\breadBillState\b|\bserviceModesMatch\b|mergedInto\b|enqueueMovedSlipsFor' apps/server/src`
       — every hit is in the files above, `party-table-actions.test.ts:1569` (already a Task 3a row)
       or `mergedIntoPartyId` (a different column, untouched).
+- [ ] Remove `combineParties`' unused `_attendance` parameter and its `void _attendance;`
+      (`table-actions.ts:256-259`), and the argument its callers pass to it.
 - [ ] RED is the deletion itself: the server typecheck fails on the removed names until each
       caller is updated (record the first run's errors).
 - [ ] GREEN: `pnpm --filter @waitron/server exec vitest run src/moved-slips.test.ts src/kitchen-print.test.ts src/party-table-actions.test.ts src/move-merge.test.ts src/party-move-bill.test.ts src/party-bill-actions.test.ts`

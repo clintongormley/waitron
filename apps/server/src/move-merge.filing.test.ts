@@ -364,5 +364,9 @@ describe("tables joined across parties, bills merged → one bill covering both 
     });
     expect(await saleCount(intoTab)).toBe(1); // one bill for both tables
     expect(await saleCount(fromTab)).toBe(0); // the abandoned source files nothing
+    expect(await orderState(fromTab)).toMatchObject({ status: "abandoned" });
+    expect(await registroCount(intoTab)).toBe(1);
+    expect(await registroCount(fromTab)).toBe(0);
+    expect(await filedSaleTotal(intoTab)).toBe("3.50"); // café 1.50 + agua 2.00
   });
 });
