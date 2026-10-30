@@ -31,15 +31,15 @@ const KITCHEN_58: EscSetting = { paperWidth: "58mm", resolution: "180dpi" };
 
 describe("crossRefText", () => {
   it.each([
-    ["en-GB", "with CHIPS from Fryer", "for BURG at Grill", "for AGUA, no preparation"],
-    ["es-ES", "con CHIPS de Fryer", "para BURG en Grill", "para AGUA, sin preparación"],
-    ["fr-FR", "with CHIPS from Fryer", "for BURG at Grill", "for AGUA, no preparation"],
+    ["en-GB", "with CHIPS from Fryer", "for BURG at Grill", "for WATER, no preparation"],
+    ["es-ES", "con CHIPS de Fryer", "para BURG en Grill", "para WATER, sin preparación"],
+    ["fr-FR", "with CHIPS from Fryer", "for BURG at Grill", "for WATER, no preparation"],
   ])("words both references for %s", (locale, withText, forText, unpreparedText) => {
     expect(crossRefText({ kind: "with", name: "CHIPS", stationName: "Fryer" }, locale)).toBe(
       withText,
     );
     expect(crossRefText({ kind: "for", name: "BURG", stationName: "Grill" }, locale)).toBe(forText);
-    expect(crossRefText({ kind: "for", name: "AGUA", stationName: null }, locale)).toBe(
+    expect(crossRefText({ kind: "for", name: "WATER", stationName: null }, locale)).toBe(
       unpreparedText,
     );
   });
@@ -56,7 +56,7 @@ describe("formatKitchenTicket", () => {
           locale: "en-GB",
           scope: "station",
           stationName: "Grill",
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [{ qty: 1, name: "Steak" }],
@@ -69,7 +69,7 @@ describe("formatKitchenTicket", () => {
     expect(lines).toEqual([
       "*** HOLD ***",
       "Grill",
-      "Mesa 4",
+      "Table 4",
       "A-17",
       "14:30",
       origin,
@@ -84,7 +84,7 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "stations",
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           stations: [{ stationName: "Grill", items: [{ qty: 1, name: "Steak" }] }],
@@ -95,7 +95,7 @@ describe("formatKitchenTicket", () => {
     );
     expect(lines).toEqual([
       "Grill",
-      "Mesa 4",
+      "Table 4",
       "A-17",
       "14:30",
       "From Bar",
@@ -112,7 +112,7 @@ describe("formatKitchenTicket", () => {
             locale: "en-GB",
             scope: "station",
             stationName: "Grill",
-            tableLabel: "Mesa 1",
+            tableLabel: "Table 1",
             orderNumber: "A-1",
             firedAt: new Date(2026, 7, 17, 9, 5),
             items: [
@@ -135,7 +135,7 @@ describe("formatKitchenTicket", () => {
               locale: "en-GB",
               scope: "station",
               stationName: "Grill",
-              tableLabel: "Mesa 1",
+              tableLabel: "Table 1",
               orderNumber: "A-1",
               firedAt: new Date(2026, 7, 17, 9, 5),
               items: [
@@ -162,8 +162,8 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "station",
-          stationName: "Cocina",
-          tableLabel: "Mesa 4",
+          stationName: "Kitchen",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [
@@ -175,8 +175,8 @@ describe("formatKitchenTicket", () => {
       );
 
       const text = decodeTicket(bytes);
-      expect(text).toContain("Cocina");
-      expect(text).toContain("Mesa 4");
+      expect(text).toContain("Kitchen");
+      expect(text).toContain("Table 4");
       expect(text).toContain("A-17");
       expect(text).toContain("14:30");
       expect(text).toContain("2 x Steak");
@@ -192,11 +192,11 @@ describe("formatKitchenTicket", () => {
           {
             locale: "en-GB",
             scope: "station",
-            stationName: "Cocina",
-            tableLabel: "Mesa 1",
+            stationName: "Kitchen",
+            tableLabel: "Table 1",
             orderNumber: "A-1",
             firedAt: new Date(2026, 7, 17, 9, 5),
-            items: [{ qty: 1, name: "Cafe" }],
+            items: [{ qty: 1, name: "Coffee" }],
           },
           KITCHEN_80,
         ),
@@ -210,16 +210,16 @@ describe("formatKitchenTicket", () => {
           {
             locale: "en-GB",
             scope: "station",
-            stationName: "Cocina",
-            tableLabel: "Mesa 1",
+            stationName: "Kitchen",
+            tableLabel: "Table 1",
             orderNumber: "A-1",
             firedAt: new Date(2026, 7, 17, 9, 5),
-            items: [{ qty: "0.375", unit: "kg", name: "Jamón", printedAsSold: true }],
+            items: [{ qty: "0.375", unit: "kg", name: "Ham", printedAsSold: true }],
           },
           KITCHEN_80,
         ),
       );
-      expect(text).toContain("0.375 kg x Jamón");
+      expect(text).toContain("0.375 kg x Ham");
     });
 
     it("prints the note as an indented sub-line beneath the dish", () => {
@@ -228,16 +228,16 @@ describe("formatKitchenTicket", () => {
           {
             locale: "en-GB",
             scope: "station",
-            stationName: "Cocina",
-            tableLabel: "Mesa 4",
+            stationName: "Kitchen",
+            tableLabel: "Table 4",
             orderNumber: "A-17",
             firedAt: new Date(2026, 7, 17, 14, 30),
             items: [
               {
                 qty: 1,
                 name: "Steak",
-                note: "sin sal",
-                modifiers: ["Grande"],
+                note: "no salt",
+                modifiers: ["Large"],
               },
             ],
           },
@@ -249,8 +249,8 @@ describe("formatKitchenTicket", () => {
       expect(dish).toBeGreaterThanOrEqual(0);
       // The modifiers sit directly beneath the dish, and the free-text note prints as its own
       // indented sub-line after them, distinct from a `+ modifier`.
-      expect(lines[dish + 1]).toBe("  + Grande");
-      expect(lines[dish + 2]).toBe("  * sin sal");
+      expect(lines[dish + 1]).toBe("  + Large");
+      expect(lines[dish + 2]).toBe("  * no salt");
     });
 
     it("sanitizes a free-text note with a newline so it prints on ONE ticket line", () => {
@@ -259,17 +259,17 @@ describe("formatKitchenTicket", () => {
           {
             locale: "en-GB",
             scope: "station",
-            stationName: "Cocina",
-            tableLabel: "Mesa 4",
+            stationName: "Kitchen",
+            tableLabel: "Table 4",
             orderNumber: "A-17",
             firedAt: new Date(2026, 7, 17, 14, 30),
-            items: [{ qty: 1, name: "Steak", note: "sin sal\nmuy hecho" }],
+            items: [{ qty: 1, name: "Steak", note: "no salt\nwell done" }],
           },
           KITCHEN_80,
         ),
       );
       const lines = text.split("\n");
-      expect(lines).toContain("  * sin sal muy hecho");
+      expect(lines).toContain("  * no salt well done");
       expect(lines.filter((l) => l.includes("* "))).toHaveLength(1);
     });
 
@@ -278,8 +278,8 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "station",
-          stationName: "Cocina",
-          tableLabel: "Mesa 4",
+          stationName: "Kitchen",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [{ qty: 1, name: "Chips", note: undefined }],
@@ -290,8 +290,8 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "station",
-          stationName: "Cocina",
-          tableLabel: "Mesa 4",
+          stationName: "Kitchen",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [{ qty: 1, name: "Chips" }],
@@ -306,15 +306,15 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "station",
-          stationName: "Cocina",
-          tableLabel: "Mesa 4",
+          stationName: "Kitchen",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [],
         },
         KITCHEN_80,
       );
-      expect(decodeTicket(bytes)).toContain("Cocina");
+      expect(decodeTicket(bytes)).toContain("Kitchen");
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
   });
@@ -325,34 +325,34 @@ describe("formatKitchenTicket", () => {
         {
           locale: "en-GB",
           scope: "stations",
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           stations: [
-            { stationName: "Cocina", items: [{ qty: 2, name: "Steak" }] },
-            { stationName: "Parrilla", items: [{ qty: 1, name: "Chips" }] },
+            { stationName: "Kitchen", items: [{ qty: 2, name: "Steak" }] },
+            { stationName: "Grill", items: [{ qty: 1, name: "Chips" }] },
           ],
         },
         KITCHEN_80,
       );
 
       const text = decodeTicket(bytes);
-      expect(text).toContain("Cocina · Parrilla");
-      expect(text).toContain("Mesa 4");
+      expect(text).toContain("Kitchen · Grill");
+      expect(text).toContain("Table 4");
       expect(text).toContain("A-17");
       expect(text).toContain("14:30");
 
       // The header names both stations, so the sections are read from below it.
       const body = text.slice(text.indexOf("14:30"));
       // Each station's item appears UNDER that station's sub-header...
-      expect(body.indexOf("Cocina")).toBeGreaterThanOrEqual(0);
-      expect(body.indexOf("Cocina")).toBeLessThan(body.indexOf("2 x Steak"));
-      expect(body.indexOf("Parrilla")).toBeLessThan(body.indexOf("1 x Chips"));
+      expect(body.indexOf("Kitchen")).toBeGreaterThanOrEqual(0);
+      expect(body.indexOf("Kitchen")).toBeLessThan(body.indexOf("2 x Steak"));
+      expect(body.indexOf("Grill")).toBeLessThan(body.indexOf("1 x Chips"));
 
       // ...and the stations appear in the order they were passed, with the first station's item
       // grouped before the second station begins (not floating past its own header).
-      expect(body.indexOf("Cocina")).toBeLessThan(body.indexOf("Parrilla"));
-      expect(body.indexOf("2 x Steak")).toBeLessThan(body.indexOf("Parrilla"));
+      expect(body.indexOf("Kitchen")).toBeLessThan(body.indexOf("Grill"));
+      expect(body.indexOf("2 x Steak")).toBeLessThan(body.indexOf("Grill"));
 
       expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
     });
@@ -370,7 +370,7 @@ describe("one ticket for several stations sharing a printer", () => {
             { stationName: "Grill", items: [{ qty: 2, name: "Steak" }] },
             { stationName: "Pastry", items: [{ qty: 1, name: "Tart" }] },
           ],
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           alsoOnOrder: {
@@ -383,7 +383,7 @@ describe("one ticket for several stations sharing a printer", () => {
     );
     expect(lines).toEqual([
       "Grill · Pastry",
-      "Mesa 4",
+      "Table 4",
       "A-17",
       "14:30",
       "Grill",
@@ -406,7 +406,7 @@ describe("joinKitchenTickets", () => {
         mark,
         scope: "station",
         stationName: "Grill",
-        tableLabel: "Mesa 4",
+        tableLabel: "Table 4",
         orderNumber: "A-17",
         firedAt: new Date(2026, 7, 17, 14, 30),
         items: [{ qty: 1, name }],
@@ -424,14 +424,14 @@ describe("joinKitchenTickets", () => {
     expect(printedLines(joined)).toEqual([
       "*** REPRINT 15:20 ***",
       "Grill",
-      "Mesa 4",
+      "Table 4",
       "A-17",
       "14:30",
       "1 x Steak",
       "*** REPRINT 15:20 ***",
       "*** HOLD ***",
       "Grill",
-      "Mesa 4",
+      "Table 4",
       "A-17",
       "14:30",
       "1 x Tart",
@@ -557,7 +557,7 @@ describe("the rest of the order on a station's ticket", () => {
 describe("formatCorrectionSlip", () => {
   it.each([
     ["en-GB", "Grill", "*** MOVED TO GRILL ***"],
-    ["es-ES", "Parrilla", "*** PASADO A PARRILLA ***"],
+    ["es-ES", "Grill", "*** PASADO A GRILL ***"],
   ])("prints the destination and old station for %s", (locale, toStation, header) => {
     const lines = printedLines(
       formatCorrectionSlip(
@@ -566,7 +566,7 @@ describe("formatCorrectionSlip", () => {
           toStation,
           locale,
           stationName: "Bar",
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           at: new Date(2026, 7, 17, 14, 30).toISOString(),
           item: { qty: 1, name: "Steak" },
@@ -574,30 +574,30 @@ describe("formatCorrectionSlip", () => {
         KITCHEN_80,
       ),
     );
-    expect(lines).toEqual([header, "Bar", "Mesa 4", "A-17", "14:30", "1 x Steak", ""]);
+    expect(lines).toEqual([header, "Bar", "Table 4", "A-17", "14:30", "1 x Steak", ""]);
   });
   it("prints a VOID header, station, table, order, time, and the item via emitItem, ending in a cut", () => {
     const bytes = formatCorrectionSlip(
       {
         locale: "en-GB",
         kind: "VOID",
-        stationName: "Cocina",
-        tableLabel: "Mesa 6",
+        stationName: "Kitchen",
+        tableLabel: "Table 6",
         orderNumber: "A-12",
         at: new Date(2026, 7, 17, 14, 30).toISOString(),
-        item: { qty: 2, name: "Tiramisu", modifiers: ["extra nata x2"] },
+        item: { qty: 2, name: "Tiramisu", modifiers: ["extra cream x2"] },
       },
       KITCHEN_80,
     );
 
     const text = decodeTicket(bytes);
     expect(text).toContain("*** VOID ***");
-    expect(text).toContain("Cocina");
-    expect(text).toContain("Mesa 6");
+    expect(text).toContain("Kitchen");
+    expect(text).toContain("Table 6");
     expect(text).toContain("A-12");
     expect(text).toContain("14:30");
     expect(text).toContain("2 x Tiramisu");
-    expect(text).toContain("  + extra nata x2");
+    expect(text).toContain("  + extra cream x2");
 
     expect([...bytes.slice(-CUT_BYTES.length)]).toEqual(CUT_BYTES);
   });
@@ -608,8 +608,8 @@ describe("formatCorrectionSlip", () => {
         {
           locale: "en-GB",
           kind: "RECALLED",
-          stationName: "Parrilla",
-          tableLabel: "Mesa 2",
+          stationName: "Grill",
+          tableLabel: "Table 2",
           orderNumber: "A-5",
           at: new Date(2026, 7, 17, 9, 5).toISOString(),
           item: { qty: 1, name: "Chips" },
@@ -628,18 +628,18 @@ describe("formatCorrectionSlip", () => {
         {
           locale: "en-GB",
           kind: "VOID",
-          stationName: "Cocina",
+          stationName: "Kitchen",
           tableLabel: null,
           orderNumber: "A-9",
           at: new Date(2026, 7, 17, 12, 0).toISOString(),
-          item: { qty: 1, name: "Cafe" },
+          item: { qty: 1, name: "Coffee" },
         },
         KITCHEN_80,
       ),
     );
     expect(text).toContain("VOID");
     expect(text).toContain("A-9");
-    expect(text).not.toContain("Mesa");
+    expect(text).not.toContain("Table");
   });
 });
 
@@ -647,8 +647,8 @@ describe("formatMovedSlip", () => {
   const sameNumberNoName: MovedSlip = {
     stationName: "Grill",
     fromNumber: "28",
-    fromText: "Mesa 91",
-    toText: "Mesa 91",
+    fromText: "Table 91",
+    toText: "Table 91",
     at: new Date(2026, 9, 14, 13, 24).toISOString(),
     items: [{ qty: "1.000", name: "BURG" }],
     held: [],
@@ -662,8 +662,8 @@ describe("formatMovedSlip", () => {
       "*** MOVED ***",
       "Grill",
       "Order 28 -> 27 · Ana",
-      "From: Mesa 91",
-      "To:   Mesa 91",
+      "From: Table 91",
+      "To:   Table 91",
       "13:24",
       "1.000 x BURG",
       "",
@@ -676,8 +676,8 @@ describe("formatMovedSlip", () => {
       "*** MOVIDO ***",
       "Grill",
       "Pedido 28 -> 27 · Ana",
-      "De: Mesa 91",
-      "A:  Mesa 91",
+      "De: Table 91",
+      "A:  Table 91",
       "13:24",
       "1.000 x BURG",
       "",
@@ -687,7 +687,7 @@ describe("formatMovedSlip", () => {
   it("prints the order number alone when it did not change and the party has no name", () => {
     const lines = printedLines(
       formatMovedSlip(
-        { ...sameNumberNoName, fromNumber: "26", fromText: "Fiesta", toText: "Fiesta 2" },
+        { ...sameNumberNoName, fromNumber: "26", fromText: "Party", toText: "Party 2" },
         KITCHEN_80,
       ),
     );
@@ -695,18 +695,18 @@ describe("formatMovedSlip", () => {
       "*** MOVED ***",
       "Grill",
       "Order 26",
-      "From: Fiesta",
-      "To:   Fiesta 2",
+      "From: Party",
+      "To:   Party 2",
     ]);
   });
 
   it.each([
-    ["en-GB", ["From: Cumpleaños de la abuela", "      García", "To:   Mesa 6, 9"]],
-    ["es-ES", ["De: Cumpleaños de la abuela", "    García", "A:  Mesa 6, 9"]],
+    ["en-GB", ["From: Cumpleaños de la abuela", "      García", "To:   Table 6, 9"]],
+    ["es-ES", ["De: Cumpleaños de la abuela", "    García", "A:  Table 6, 9"]],
   ])("wraps a long From name under itself at 58 mm for %s", (locale, expected) => {
     const lines = printedLines(
       formatMovedSlip(
-        { ...slip, locale, fromText: "Cumpleaños de la abuela García", toText: "Mesa 6, 9" },
+        { ...slip, locale, fromText: "Cumpleaños de la abuela García", toText: "Table 6, 9" },
         KITCHEN_58,
       ),
     );
@@ -728,7 +728,7 @@ describe("formatMovedSlip", () => {
     expect(lines.slice(2, 5)).toEqual([
       "Pedido 7 · Cumpleaños de la",
       "           abuela",
-      "De: Mesa 91",
+      "De: Table 91",
     ]);
   });
 
@@ -740,7 +740,7 @@ describe("formatMovedSlip", () => {
           locale: "es-ES",
           held: [
             { group: 2, items: [{ qty: "1.000", name: "STEAK" }] },
-            { group: 3, items: [{ qty: "2.000", name: "FLAN", note: "sin nata" }] },
+            { group: 3, items: [{ qty: "2.000", name: "FLAN", note: "no cream" }] },
           ],
         },
         KITCHEN_80,
@@ -754,7 +754,7 @@ describe("formatMovedSlip", () => {
       "1.000 x STEAK",
       `${kitchenTicketWords("es").group} 3`,
       "2.000 x FLAN",
-      "  * sin nata",
+      "  * no cream",
       "",
     ]);
   });
@@ -771,9 +771,9 @@ describe("formatMovedSlip", () => {
 
   it("prints the place text the caller gives, such as the counter", () => {
     const lines = printedLines(
-      formatMovedSlip({ ...slip, fromText: "Mesa 43", toText: "(counter)" }, KITCHEN_80),
+      formatMovedSlip({ ...slip, fromText: "Table 43", toText: "(counter)" }, KITCHEN_80),
     );
-    expect(lines.slice(3, 5)).toEqual(["From: Mesa 43", "To:   (counter)"]);
+    expect(lines.slice(3, 5)).toEqual(["From: Table 43", "To:   (counter)"]);
   });
 
   it("heads each group's run of fired dishes with GROUP n when they span groups", () => {
@@ -827,10 +827,10 @@ describe("movedPlaceText", () => {
   });
 
   it("joins an order's place names as its tickets name them", () => {
-    expect(movedPlaceText({ counter: false, names: ["Mesa 6", "Mesa 9"] }, "es-ES")).toBe(
-      "Mesa 6, 9",
+    expect(movedPlaceText({ counter: false, names: ["Table 6", "Table 9"] }, "es-ES")).toBe(
+      "Table 6, 9",
     );
-    expect(movedPlaceText({ counter: false, names: ["Cumple Ana"] }, "en-GB")).toBe("Cumple Ana");
+    expect(movedPlaceText({ counter: false, names: ["Ana's party"] }, "en-GB")).toBe("Ana's party");
   });
 });
 
@@ -838,16 +838,16 @@ describe("kitchen paper layout", () => {
   const ticket: KitchenTicket = {
     locale: "en-GB",
     scope: "station",
-    stationName: "Cocina",
-    tableLabel: "Mesa 4",
+    stationName: "Kitchen",
+    tableLabel: "Table 4",
     orderNumber: "A-17",
     firedAt: new Date(2026, 7, 17, 14, 30),
     items: [
       {
         qty: 2,
-        name: "Chuletón de buey madurado a la brasa",
-        modifiers: ["Grande", "Salsa de setas silvestres con trufa negra"],
-        note: "sin sal y con la guarnición aparte por favor",
+        name: "Dry-aged beef rib from the wood fire",
+        modifiers: ["Large", "Wild mushroom sauce with black truffle"],
+        note: "no salt and the roast potatoes served on the side please",
       },
     ],
   };
@@ -858,23 +858,23 @@ describe("kitchen paper layout", () => {
       const lines = printedLines(formatKitchenTicket(ticket, layout));
       const columns = columnsFor(layout.paperWidth);
       for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(columns);
-      expect(lines).toContain("  + Grande");
+      expect(lines).toContain("  + Large");
     },
   );
 
   it("wraps item, modifier and note lines at 30 columns with their indents", () => {
     const lines = printedLines(formatKitchenTicket(ticket, KITCHEN_58));
-    const first = lines.indexOf("2 x Chuletón de buey madurado");
+    const first = lines.indexOf("2 x Dry-aged beef rib from the");
     expect(first).toBeGreaterThan(0);
     expect(lines.slice(first)).toEqual([
-      "2 x Chuletón de buey madurado",
-      "    a la brasa",
-      "  + Grande",
-      "  + Salsa de setas silvestres",
-      "    con trufa negra",
-      "  * sin sal y con la",
-      "    guarnición aparte por",
-      "    favor",
+      "2 x Dry-aged beef rib from the",
+      "    wood fire",
+      "  + Large",
+      "  + Wild mushroom sauce with",
+      "    black truffle",
+      "  * no salt and the roast",
+      "    potatoes served on the",
+      "    side please",
       "",
     ]);
   });
@@ -907,7 +907,7 @@ describe("kitchen paper layout", () => {
         {
           locale: "en-GB",
           kind: "VOID",
-          stationName: "Cocina",
+          stationName: "Kitchen",
           tableLabel: null,
           orderNumber: "A-17",
           at: "2026-08-17T12:30:00.000Z",
@@ -917,7 +917,7 @@ describe("kitchen paper layout", () => {
       ),
     );
     for (const line of lines) expect(line.length, line).toBeLessThanOrEqual(30);
-    expect(lines).toContain("  + Salsa de setas silvestres");
+    expect(lines).toContain("  + Wild mushroom sauce with");
   });
 });
 
@@ -928,8 +928,8 @@ describe("a note made only of control characters", () => {
         {
           locale: "en-GB",
           scope: "station",
-          stationName: "Cocina",
-          tableLabel: "Mesa 4",
+          stationName: "Kitchen",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: new Date(2026, 7, 17, 14, 30),
           items: [{ qty: 1, name: "Steak", ...(note === undefined ? {} : { note }) }],
@@ -946,8 +946,8 @@ describe("the reprint mark and a party's group numbers", () => {
     ({
       locale: "en-GB",
       scope: "station",
-      stationName: "Cocina",
-      tableLabel: "Mesa 4",
+      stationName: "Kitchen",
+      tableLabel: "Table 4",
       orderNumber: "A-17",
       firedAt: at,
       items,
@@ -980,8 +980,8 @@ describe("the reprint mark and a party's group numbers", () => {
       ),
     );
     expect(lines).toEqual([
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 2",
@@ -1005,8 +1005,8 @@ describe("the reprint mark and a party's group numbers", () => {
       ),
     );
     expect(lines).toEqual([
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "1 x Bread",
@@ -1023,7 +1023,7 @@ describe("the reprint mark and a party's group numbers", () => {
     const lines = printedLines(
       formatKitchenTicket(station([{ qty: 1, name: "Chips" }]), KITCHEN_80),
     );
-    expect(lines).toEqual(["Cocina", "Mesa 4", "A-17", "14:30", "1 x Chips", ""]);
+    expect(lines).toEqual(["Kitchen", "Table 4", "A-17", "14:30", "1 x Chips", ""]);
   });
 
   it("names a combined ticket's one group once under the header, and heads each group within a station otherwise", () => {
@@ -1035,7 +1035,7 @@ describe("the reprint mark and a party's group numbers", () => {
           {
             locale: "en-GB",
             scope: "stations",
-            tableLabel: "Mesa 4",
+            tableLabel: "Table 4",
             orderNumber: "A-17",
             firedAt: at,
             stations,
@@ -1045,26 +1045,26 @@ describe("the reprint mark and a party's group numbers", () => {
       );
     expect(
       pass([
-        { stationName: "Barra", items: [{ qty: 2, name: "Beer", group: 3 }] },
-        { stationName: "Cocina", items: [{ qty: 1, name: "Steak", group: 3 }] },
+        { stationName: "Bar", items: [{ qty: 2, name: "Beer", group: 3 }] },
+        { stationName: "Kitchen", items: [{ qty: 1, name: "Steak", group: 3 }] },
       ]),
     ).toEqual([
-      "Barra · Cocina",
-      "Mesa 4",
+      "Bar · Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 3",
-      "Barra",
+      "Bar",
       "2 x Beer",
-      "Cocina",
+      "Kitchen",
       "1 x Steak",
       "",
     ]);
     expect(
       pass([
-        { stationName: "Barra", items: [{ qty: 2, name: "Beer", group: 1 }] },
+        { stationName: "Bar", items: [{ qty: 2, name: "Beer", group: 1 }] },
         {
-          stationName: "Cocina",
+          stationName: "Kitchen",
           items: [
             { qty: 4, name: "Croquettes", group: 2 },
             { qty: 1, name: "Steak", group: 4 },
@@ -1072,14 +1072,14 @@ describe("the reprint mark and a party's group numbers", () => {
         },
       ]),
     ).toEqual([
-      "Barra · Cocina",
-      "Mesa 4",
+      "Bar · Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
-      "Barra",
+      "Bar",
       "GROUP 1",
       "2 x Beer",
-      "Cocina",
+      "Kitchen",
       "GROUP 2",
       "4 x Croquettes",
       "GROUP 4",
@@ -1208,16 +1208,16 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     ({
       locale: "en-GB",
       scope: "station",
-      stationName: "Cocina",
-      tableLabel: "Mesa 4",
+      stationName: "Kitchen",
+      tableLabel: "Table 4",
       orderNumber: "A-17",
       firedAt: at,
       items,
     }) as const;
   const slip = {
     locale: "en-GB",
-    stationName: "Cocina",
-    tableLabel: "Mesa 4",
+    stationName: "Kitchen",
+    tableLabel: "Table 4",
     orderNumber: "A-17",
     at: at.toISOString(),
   };
@@ -1244,22 +1244,22 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
           locale: "en-GB",
           scope: "stations",
           mark: "HOLD",
-          tableLabel: "Mesa 4",
+          tableLabel: "Table 4",
           orderNumber: "A-17",
           firedAt: at,
-          stations: [{ stationName: "Cocina", items: [{ qty: 1, name: "Fish", group: 4 }] }],
+          stations: [{ stationName: "Kitchen", items: [{ qty: 1, name: "Fish", group: 4 }] }],
         },
         KITCHEN_80,
       ),
     );
     expect(lines).toEqual([
       "*** HOLD ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 4",
-      "Cocina",
+      "Kitchen",
       "1 x Fish",
       "",
     ]);
@@ -1283,8 +1283,8 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     );
     expect(lines).toEqual([
       "*** HOLD CHANGED ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 4",
@@ -1304,8 +1304,8 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
     );
     expect(lines).toEqual([
       "*** HOLD CANCELLED ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 4",
@@ -1334,14 +1334,14 @@ describe("advance HOLD tickets, FIRE slips and HOLD corrections", () => {
 describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
   const at = new Date(2026, 7, 17, 14, 30);
   const slip = {
-    stationName: "Cocina",
-    tableLabel: "Mesa 4",
+    stationName: "Kitchen",
+    tableLabel: "Table 4",
     orderNumber: "A-17",
     at: at.toISOString(),
   };
   const burger: KitchenTicketItem = {
     qty: "1.000",
-    name: "HAMB",
+    name: "BURG",
     modifiers: ["Fries", "Salad x2"],
     note: "well done",
   };
@@ -1363,11 +1363,11 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
     );
     expect(lines).toEqual([
       "*** CHANGED ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
-      "1.000 x HAMB",
+      "1.000 x BURG",
       "  + Fries",
       "  + Salad x2",
       "  * well done",
@@ -1392,12 +1392,12 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
     );
     expect(lines).toEqual([
       "*** HOLD CHANGED ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       "A-17",
       "14:30",
       "GROUP 2",
-      "1.000 x HAMB",
+      "1.000 x BURG",
       "  + Fries",
       "  + Salad x2",
       "  CANCEL: Gherkins",
@@ -1417,15 +1417,15 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
             ...slip,
             kind: "EXTRA CANCELLED",
             held,
-            cancelledExtra: "Pepinillos",
+            cancelledExtra: "Pickles",
             locale: "es-ES",
-            item: { qty: "1.000", name: "HAMB" },
+            item: { qty: "1.000", name: "BURG" },
           },
           KITCHEN_80,
         ),
       );
       expect(lines[0]).toBe(head);
-      expect(lines).toContain("  QUITAR: Pepinillos");
+      expect(lines).toContain("  QUITAR: Pickles");
       expect(lines.join("\n")).not.toContain("CANCEL");
     },
   );
@@ -1439,7 +1439,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
           held: false,
           cancelledExtra: "Cornichons",
           locale: "fr-FR",
-          item: { qty: "1.000", name: "HAMB" },
+          item: { qty: "1.000", name: "BURG" },
         },
         KITCHEN_80,
       ),
@@ -1456,7 +1456,7 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
         held: false,
         cancelledExtra: "Jalapeños en vinagre con eneldo",
         locale: "es-ES",
-        item: { qty: "1.000", name: "HAMB" },
+        item: { qty: "1.000", name: "BURG" },
       },
       KITCHEN_58,
     );
@@ -1469,9 +1469,9 @@ describe("a slip for an extra taken off a dish the kitchen has (B11g)", () => {
 it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth", (printer) => {
   const name = kitchenPresentationName({
     name: "Staff gin",
-    kitchenName: "SEAGRAMS GIN RESERVA ESPECIAL DE LA CASA",
+    kitchenName: "SEAGRAMS GIN SPECIAL RESERVE OF THE HOUSE",
     variantName: "Single",
-    variantKitchenName: "SINGLE CON HIELO Y RODAJA DE LIMA",
+    variantKitchenName: "SINGLE WITH ICE AND A SLICE OF LIME",
   });
   const lines = printedLines(
     formatKitchenTicket(
@@ -1479,7 +1479,7 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
         locale: "en-GB",
         scope: "station",
         stationName: "BAR",
-        tableLabel: "Mesa 4",
+        tableLabel: "Table 4",
         orderNumber: "17",
         firedAt: new Date(2026, 9, 7, 12, 0),
         items: [{ qty: 1, name }],
@@ -1490,7 +1490,7 @@ it.each([KITCHEN_58, KITCHEN_80])("wraps a complete kitchen pair on $paperWidth"
   for (const line of lines)
     expect(line.length, line).toBeLessThanOrEqual(columnsFor(printer.paperWidth));
   expect(lines.map((line) => line.trim()).join(" ")).toContain(
-    "SEAGRAMS GIN RESERVA ESPECIAL DE LA CASA (SINGLE CON HIELO Y RODAJA DE LIMA)",
+    "SEAGRAMS GIN SPECIAL RESERVE OF THE HOUSE (SINGLE WITH ICE AND A SLICE OF LIME)",
   );
 });
 
@@ -1499,7 +1499,7 @@ describe("a kitchen ticket for a named party", () => {
     locale: "en-GB",
     scope: "station",
     stationName: "Grill",
-    tableLabel: "Mesa 4",
+    tableLabel: "Table 4",
     orderNumber: "5",
     firedAt: new Date(2026, 9, 14, 13, 24),
     items: [{ qty: 1, name: "BURG" }],
@@ -1510,7 +1510,7 @@ describe("a kitchen ticket for a named party", () => {
       printedLines(
         formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "en-GB" } }, KITCHEN_80),
       ),
-    ).toEqual(["Grill", "Mesa 4", "Order 5 · Ana", "13:24", "1 x BURG", ""]);
+    ).toEqual(["Grill", "Table 4", "Order 5 · Ana", "13:24", "1 x BURG", ""]);
   });
 
   it("prints the Spanish order word at 58 mm", () => {
@@ -1518,7 +1518,7 @@ describe("a kitchen ticket for a named party", () => {
       printedLines(
         formatKitchenTicket({ ...unnamed, party: { name: "Ana", locale: "es-ES" } }, KITCHEN_58),
       ),
-    ).toEqual(["Grill", "Mesa 4", "Pedido 5 · Ana", "13:24", "1 x BURG", ""]);
+    ).toEqual(["Grill", "Table 4", "Pedido 5 · Ana", "13:24", "1 x BURG", ""]);
   });
 
   it("wraps a long name under the text after the order number at 58 mm, as a MOVED slip does", () => {
@@ -1537,8 +1537,8 @@ describe("a kitchen ticket for a named party", () => {
           stationName: "Grill",
           fromNumber: "7",
           partyName: party.name,
-          fromText: "Mesa 4",
-          toText: "Mesa 4",
+          fromText: "Table 4",
+          toText: "Table 4",
           at: unnamed.firedAt.toISOString(),
           items: [],
           held: [],
@@ -1559,12 +1559,12 @@ describe("a kitchen ticket for a named party", () => {
             scope: "stations",
             reprintedAt: new Date(2026, 7, 17, 13, 40),
             mark: "HOLD",
-            tableLabel: "Mesa 4",
+            tableLabel: "Table 4",
             orderNumber: "5",
             firedAt: unnamed.firedAt,
             stations: [
-              { stationName: "Cocina", items: [{ qty: 2, name: "Steak" }] },
-              { stationName: "Parrilla", items: [{ qty: 1, name: "Chips" }] },
+              { stationName: "Kitchen", items: [{ qty: 2, name: "Steak" }] },
+              { stationName: "Grill", items: [{ qty: 1, name: "Chips" }] },
             ],
             party: { name: "Ana", locale: "en-GB" },
           },
@@ -1574,13 +1574,13 @@ describe("a kitchen ticket for a named party", () => {
     ).toEqual([
       "*** REPRINT 13:40 ***",
       "*** HOLD ***",
-      "Cocina · Parrilla",
-      "Mesa 4",
+      "Kitchen · Grill",
+      "Table 4",
       "Order 5 · Ana",
       "13:24",
-      "Cocina",
+      "Kitchen",
       "2 x Steak",
-      "Parrilla",
+      "Grill",
       "1 x Chips",
       "",
     ]);
@@ -1594,12 +1594,12 @@ describe("a kitchen ticket for a named party", () => {
           KITCHEN_80,
         ),
       ).slice(0, 4),
-    ).toEqual(["*** FIRE ***", "Grill", "Mesa 4", "Order 5 · Ana"]);
+    ).toEqual(["*** FIRE ***", "Grill", "Table 4", "Order 5 · Ana"]);
   });
 
   it("prints a ticket with no party name with the bare order number", () => {
     const bytes = formatKitchenTicket(unnamed, KITCHEN_80);
-    expect(printedLines(bytes)).toEqual(["Grill", "Mesa 4", "5", "13:24", "1 x BURG", ""]);
+    expect(printedLines(bytes)).toEqual(["Grill", "Table 4", "5", "13:24", "1 x BURG", ""]);
     expect(formatKitchenTicket({ ...unnamed, party: undefined }, KITCHEN_80)).toEqual(bytes);
   });
 });
@@ -1681,7 +1681,7 @@ describe("a dish sent after its period", () => {
   });
 
   it("keeps a marked and an unmarked identical dish apart when combined", () => {
-    const omelette: KitchenTicketItem = { qty: "1.000", name: "Tortilla" };
+    const omelette: KitchenTicketItem = { qty: "1.000", name: "Omelette" };
     expect(
       arrangeTicketItems(
         [
