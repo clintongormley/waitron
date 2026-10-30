@@ -5455,12 +5455,11 @@ Not in any track until the standalone primary is done.
   Exact formats, compatible A947 amendments, separate build authority and physical runtime qualification remain open.
   [Detail](backlog/replication-cloud.md#a1018-agree-and-build-the-hosted-writer-stop-proof-contract)
 
-- **A1185. The Cloud services screen shows the venue's billing level and prices (owner,
-  2026-10-29).** Show the venue's level (registered, connected or hosted), its billing state
-  (trial, active, payment failing, lapsed), the trial or paid period's end date, the other
-  levels and their prices, and a link to the owner's Cloud account, where everything is
-  managed. Display only: the box never switches a service on or off from these values. Needs
-  the billing section Cloud adds to the shared contract. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §5.
+- **A1185: a venue not yet connected sees no prices.** The Cloud services screen shows the plan
+  and prices only once connected, because Cloud's "Venue billing display, version 1" answers a
+  paired installation alone; whether Cloud publishes a price list anyone can read is an open owner
+  question (2026-10-29). Until then the screen offers only "Create a Cloud
+  account". Left open by A1185.
 
 - **A1188. Someone at the venue can start the venue in the cloud when the box has died (owner,
   2026-10-29).** Part of A1018 and Cloud's P6. The tills learn the venue's cloud address and

@@ -1653,6 +1653,48 @@ export interface CloudConnectionStatus {
     organisationId: string;
     legalBusinessId: string;
   };
+  /** Configured Cloud origin + `/signup`, while the venue is not connected. */
+  signupUrl?: string;
+  /** Configured Cloud origin + `/account`, while connected and Cloud access has not been stopped. */
+  accountUrl?: string;
+}
+
+type CloudLevel = "registered" | "connected" | "hosted";
+/** `GET /management-api/cloud/billing`: Cloud's "Venue billing display, version 1", checked by
+ * the server (`apps/server/src/cloud-billing.ts`). Display only. */
+export interface CloudBilling {
+  asOf: string;
+  calendarTimeZone: string;
+  billing:
+    | {
+        status: "ready";
+        level: CloudLevel;
+        state: "trial" | "active" | "payment_failing" | "lapsed";
+        period: null | {
+          kind: "trial" | "paid";
+          level: Exclude<CloudLevel, "registered">;
+          from: string;
+          /** The first day the period excludes. */
+          until: string;
+          coversAsOf: boolean;
+        };
+      }
+    | { status: "unavailable"; reason: "state_not_ready" };
+  prices:
+    | {
+        status: "published";
+        revision: number;
+        effectiveFrom: string;
+        currency: "EUR";
+        taxExclusive: true;
+        vatRateBasisPoints: number;
+        registeredMonthlyCents: 0;
+        connectedMonthlyCents: number;
+        hostedMonthlyCents: number;
+        hostedDayDivisor: 30;
+      }
+    | { status: "unavailable"; reason: "not_published" };
+  accountUrl: string;
 }
 
 /** One machine in the venue's signed membership chart (`listServers`,
@@ -4394,6 +4436,9 @@ export class DashboardApi {
   }
   getCloudStatus(): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/status", "GET");
+  }
+  getCloudBilling(): Promise<CloudBilling> {
+    return this.#request("/management-api/cloud/billing", "GET");
   }
   startCloudConnection(restart = false): Promise<CloudConnectionStatus> {
     return this.#request("/management-api/cloud/start", "POST", { restart });

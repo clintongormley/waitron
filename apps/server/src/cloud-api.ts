@@ -96,6 +96,19 @@ export function mountCloudApi(app: Hono, deps: CloudApiDeps, log: Logger): void 
       });
     }),
   );
+  // Display only: nothing on the box reads these values to switch a service on or off.
+  app.get("/management-api/cloud/billing", (c) =>
+    run(c, log, async () => {
+      await authorize(c, true);
+      primary();
+      const { asOf, calendarTimeZone, billing, prices, accountUrl } = await connection().billing(
+        c.req.raw.signal,
+      );
+      await authorize(c, true);
+      primary();
+      return c.json({ asOf, calendarTimeZone, billing, prices, accountUrl });
+    }),
+  );
   for (const action of ["prepare", "check"] as const)
     app.post(`/management-api/cloud/replacement/${action}`, (c) =>
       run(c, log, async () => {

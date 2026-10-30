@@ -14,6 +14,7 @@ import {
   type CloudInstallationStatus,
   type CloudObservation,
 } from "./cloud-installation.js";
+import { fetchBillingDisplay, type BillingDisplay, type BillingRefusal } from "./cloud-billing.js";
 import {
   collectTranslation,
   type OnRefusal,
@@ -57,6 +58,8 @@ export interface CloudConnectionStatus extends Partial<Omit<CloudPairingView, "s
   code: string;
   installation?: CloudInstallationStatus;
   openCloudUrl?: string;
+  signupUrl?: string;
+  accountUrl?: string;
 }
 export interface CloudChoice {
   requestId: string;
@@ -241,7 +244,7 @@ export function createCloudConnection(options: CloudConnectionOptions) {
     }
   }
   function project(state: SavedCloudState | undefined): CloudConnectionStatus {
-    if (!state) return { state: "not_connected", code: "" };
+    if (!state) return { state: "not_connected", code: "", signupUrl: `${options.origin}/signup` };
     return {
       state: "awaiting_cloud",
       requestId: state.requestId,
@@ -250,7 +253,12 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       ...state.view,
       code: state.view?.state === "complete" ? "" : state.code,
       openCloudUrl: `${options.origin}/connect#request=${state.requestId}`,
-      ...(state.view?.registration ? { installation: projectCloudInstallation(state) } : {}),
+      ...(state.view?.registration
+        ? {
+            installation: projectCloudInstallation(state),
+            ...(state.lifecycle?.revoked ? {} : { accountUrl: `${options.origin}/account` }),
+          }
+        : { signupUrl: `${options.origin}/signup` }),
     };
   }
   async function exchange(
@@ -389,7 +397,70 @@ export function createCloudConnection(options: CloudConnectionOptions) {
       else return;
       await save(state);
     }, true);
+  // Cloud's billing contract allows one read a minute across every dashboard (Retry-After may ask
+  // for longer) and no snapshot on disk, so the last read and its outcome live here, per registration.
+  let billingRead:
+    { registration: string; notBefore: number; outcome: Promise<BillingDisplay> } | undefined;
+  const registrationOf = (state: SavedCloudState | undefined) =>
+    state?.view?.registration && !state.lifecycle?.revoked
+      ? `${state.publicKey} ${state.view.registration.installationId}`
+      : undefined;
   return {
+    async billing(signal?: AbortSignal): Promise<BillingDisplay> {
+      const registration = registrationOf(await read());
+      if (!registration) throw new AppError("cloud.not_configured", {});
+      const startedAt = Date.now();
+      if (
+        !billingRead ||
+        billingRead.registration !== registration ||
+        startedAt >= billingRead.notBefore
+      ) {
+        let sentAt: number | undefined;
+        // Bound only by the read's own limit: one caller leaving must not fail it for the others.
+        const outcome = (async () => {
+          const state = await leaseState();
+          if (registrationOf(state) !== registration) throw new AppError("cloud.unavailable", {});
+          sentAt = Date.now();
+          return fetchBillingDisplay(state, { onRefusal: recordRefusal });
+        })();
+        // Shared until it settles, however long the lease renewal before it takes.
+        const entry = { registration, notBefore: Infinity, outcome };
+        billingRead = entry;
+        // The minute counts from the read Cloud received, and a 429's wait from its arrival.
+        const settle = (error?: BillingRefusal) => {
+          entry.notBefore =
+            sentAt === undefined
+              ? startedAt + 60_000
+              : Math.max(
+                  sentAt + 60_000,
+                  error?.retryAfterMs ? Date.now() + Math.min(error.retryAfterMs, 3_600_000) : 0,
+                );
+        };
+        outcome.then(() => settle(), settle);
+      }
+      const { outcome } = billingRead;
+      let display: BillingDisplay;
+      if (signal) {
+        let remove = () => {};
+        try {
+          display = await Promise.race([
+            outcome,
+            new Promise<never>((_resolve, reject) => {
+              const abort = () => reject(new AppError("cloud.unavailable", {}));
+              if (signal.aborted) abort();
+              signal.addEventListener("abort", abort, { once: true });
+              remove = () => signal.removeEventListener("abort", abort);
+            }),
+          ]);
+        } finally {
+          remove();
+        }
+      } else display = await outcome;
+      const now = registrationOf(await read());
+      if (now !== registration)
+        throw new AppError(now ? "cloud.unavailable" : "cloud.not_configured", {});
+      return display;
+    },
     translation: {
       submit: async (operationId: string, body: string, signal?: AbortSignal) =>
         submitTranslation(await leaseState(signal), operationId, body, signal, recordRefusal),

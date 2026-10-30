@@ -167,14 +167,15 @@ Read at `main` `b39e13526`, not run, unless a line says otherwise.
 | A till that reloads | Has nothing to load: the till registers no offline copy of its page (`apps/till/src/trust-check.ts:43-45` registers a probe script no box serves). |
 | A till's identity | An `httpOnly`, `SameSite=Strict` cookie scoped to the venue's own domain (`apps/server/src/device-session.ts:53-67`). A browser does not send it to a different site, so a till reaching a Cloud address arrives there as a device the copy does not know (§7). |
 | The venue's Cloud address | **Not stored anywhere in the code.** The staff address exists only as `WAITRON_MANAGEMENT_ORIGIN` and an argument to the certificate request (`apps/server/src/cloud-remote.ts:24-25`; `docs/developers/cloud-connection.md:190-192`). Nothing sends it to tills. The setup doc tells operators they may also point the staff address at the box on the venue's own network (`cloud-connection.md:200-202`), as the contract allows (`:140-141`). |
-| The billing values from Cloud | Not built. They are A1185 (`docs/backlog.md`, open), which waits for Cloud's billing section of the contract. |
+| The billing values from Cloud | Not built. They are A1185 (`docs/backlog.md`, open), which waits for Cloud's billing section of the contract. 2026-10-30: built by A1185 — `apps/server/src/cloud-billing.ts`, `billing()` in `apps/server/src/cloud-client.ts`, `GET /management-api/cloud/billing`. |
 | The emergency code | Not in the code ("emergency" there means the fiscal emergency identity, `allocation-envelope.ts:62`). |
 
 ## 1. What the box learns from Cloud, and what it keeps
 
 **(default)** The box learns three facts from Cloud alongside the billing values that A1185 will
 fetch for display (Cloud billing design §5, "What the box learns"; A1185 is open and not built, so
-part 1 below shares its groundwork):
+part 1 below shares its groundwork; 2026-10-30: A1185 is now built, see `fetchBillingDisplay` in
+`apps/server/src/cloud-billing.ts` and `billing()` in `apps/server/src/cloud-client.ts`):
 
 - whether the emergency start is open: the owner's setting is on, level 2 is active and a payment
   method is on file (Cloud billing design §7, last paragraph);
@@ -561,7 +562,8 @@ put to Cloud's builders as a question:
 
 1. **Facts for the box** (§1): whether the emergency start is open, the emergency address, the hosted
    daily price — in the billing section Cloud billing design §5 already adds (the section A1185 also
-   waits for).
+   waits for). 2026-10-30: that section has landed as "Venue billing display, version 1", and
+   A1185 reads it.
 2. **The code on request** (§2): an answer to the box, authenticated as the installation, holding the
    current code **and the date it was issued**. The box shows it and does not keep it.
 3. **Where the code page lives, and the emergency address** (§4): the person's Waitron password never

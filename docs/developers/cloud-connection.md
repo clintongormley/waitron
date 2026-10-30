@@ -160,6 +160,27 @@ The submit signature covers a fingerprint of the job (`jobSha256`, `jobBytes`), 
 itself. The signing vectors are `apps/server/test/cloud-translation-vector.json` and the
 contract's "Shared test vectors" section.
 
+## Plan and prices
+
+The Cloud services screen's **Plan and prices** section shows the venue's level, its billing
+state, the last day of its trial or paid period and Cloud's published prices, with an **Open
+Cloud account** link. A venue not yet connected has no **Plan and prices** section; the screen
+offers a **Create a Cloud account** link instead: version 1 of Cloud's "Venue billing display" read answers a paired installation alone, so it
+shows no prices. The box only displays these values; it switches nothing on or off from them.
+
+The dashboard reads `GET /management-api/cloud/billing` (`system.manage`, on the primary only).
+The server asks Cloud with the signed `billing-display` read (`fetchBillingDisplay` in
+`apps/server/src/cloud-billing.ts`) at most once a minute per pairing for every dashboard together,
+counted from when the read went to Cloud (from when it started, if the lease could not be renewed
+first); a 429's `Retry-After` can make the wait longer, up to an hour
+(`billing()` in `apps/server/src/cloud-client.ts`). The answer is kept in memory only, never on
+disk. A reply outside the contract's shape is refused as `cloud.unavailable`, and so is one
+whose `asOf` lies more than 60 seconds before the read was sent or after its reply arrived, and one whose
+published prices take effect after the reply's own calendar day.
+When the read fails, the screen clears the values it showed and says the details are not
+available. The signing vector is `apps/server/test/billing-display-vector.json`, a copy of the
+contract's.
+
 ## Local remote-access integration
 
 Cloud's [local remote-access runner](https://github.com/waitron-io/waitron-cloud/blob/main/docs/local-remote-access.md)

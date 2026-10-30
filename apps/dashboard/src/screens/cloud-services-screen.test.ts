@@ -264,10 +264,15 @@ it("offers explicit start, check and final confirmation; uses the offered busine
   click(el, "confirm");
   await flush(el);
   await expect.poll(() => el.shadowRoot!.textContent).toContain("Connected");
-  expect(calls.at(-1)).toEqual({
-    url: "/management-api/cloud/complete",
-    body: { requestId, organisationId, legalBusinessId },
-  });
+  // Once connected the screen reads the plan (A1185); nothing else follows the confirmation.
+  await expect.poll(() => calls.at(-1)?.url).toBe("/management-api/cloud/billing");
+  expect(calls.slice(calls.findIndex((c) => c.url.endsWith("/complete")))).toEqual([
+    {
+      url: "/management-api/cloud/complete",
+      body: { requestId, organisationId, legalBusinessId },
+    },
+    { url: "/management-api/cloud/billing", body: null },
+  ]);
   expect(el.shadowRoot!.textContent).toContain("Connected");
   expect(el.shadowRoot!.textContent).toContain("Remote access");
   expect(el.shadowRoot!.textContent).toContain("Not configured");
@@ -462,11 +467,11 @@ for (const locale of ["en", "es"] as const)
     expect(el.shadowRoot!.querySelector("#stop-access")).toBeNull();
   });
 
-it("ages a displayed observation without extending the login or requesting Cloud", async () => {
+it("ages a displayed observation without extending the login or reading the status again", async () => {
   setLocale("en");
-  let calls = 0;
-  const api = new DashboardApi("", async () => {
-    calls++;
+  const calls: string[] = [];
+  const api = new DashboardApi("", async (url) => {
+    calls.push(String(url));
     return Response.json({
       state: "complete",
       configured: true,
@@ -494,7 +499,8 @@ it("ages a displayed observation without extending the login or requesting Cloud
   expect(el.shadowRoot!.textContent).toContain("Working");
   await expect.poll(() => el.shadowRoot!.textContent, { timeout: 2000 }).not.toContain("Working");
   expect(el.shadowRoot!.textContent).toContain("Health unknown");
-  expect(calls).toBe(1);
+  // The plan's one opening read (A1185) is the only request besides the status.
+  expect(calls).toEqual(["/management-api/cloud/status", "/management-api/cloud/billing"]);
 });
 
 it("draws each label at the normal weight, small and muted, and each value bold, as the typography roles say", async () => {

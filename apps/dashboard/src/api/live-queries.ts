@@ -527,6 +527,8 @@ export const QUERY_DEPENDENCIES = {
   getStreamSettings: ["backup_status"],
   // The answer is built from the box's own files and the process's role, not from any table.
   getCloudStatus: [],
+  // Read from Cloud, which no table change reports; the server lets one read a minute through.
+  getCloudBilling: [],
   // Mostly the box's disk, clock and processes, which no table change reports, so the timer
   // refreshes it; its sales, printer and reader rows wait for the timer too.
   getBoxHealth: [],

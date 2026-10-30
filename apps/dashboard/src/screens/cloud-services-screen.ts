@@ -5,10 +5,16 @@ import "@waitron/ui/src/components/wt-card.js";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import { QueryController } from "@waitron/dashboard-kit";
-import type { CloudConnectionStatus, DashboardApi } from "../api/client.js";
+import { centsToDecimal, formatMoney } from "@waitron/shared";
+import type { CloudBilling, CloudConnectionStatus, DashboardApi } from "../api/client.js";
 import { dashboardQuery } from "../api/live-queries.js";
-import { currentLocale, t } from "../i18n/t.js";
+import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
+import { lastIncludedDay } from "./cloud-billing-day.js";
+
+/** Billing is read only where the server answers it: a live connection, on the primary. */
+const readsBilling = (s: CloudConnectionStatus | undefined) =>
+  s?.state === "complete" && s.isPrimary && s.installation?.state !== "revoked";
 @customElement("dashboard-cloud-services-screen")
 export class CloudServicesScreen extends LitElement {
   static override styles = [
@@ -20,6 +26,10 @@ export class CloudServicesScreen extends LitElement {
       h1 {
         font-size: var(--wt-font-size-lg);
         margin: 0 0 var(--wt-space-4);
+      }
+      h2 {
+        font-size: var(--wt-font-size-md);
+        margin: var(--wt-space-5) 0 0;
       }
       wt-card {
         max-width: calc(var(--wt-space-6) * 18);
@@ -74,6 +84,19 @@ export class CloudServicesScreen extends LitElement {
       this.readError = codeOf(error);
     },
   );
+  /** Undefined until the first answer, and again after a failure, so no old value stays shown. */
+  @state() private billing: CloudBilling | undefined;
+  @state() private billingUnavailable = false;
+  #billingWatched = false;
+  // Its own controller, so a billing failure never becomes the status read's `readError`.
+  readonly #billingQueries = new QueryController(
+    this,
+    () => this.api.liveData,
+    () => {
+      this.billing = undefined;
+      this.billingUnavailable = true;
+    },
+  );
   override connectedCallback() {
     super.connectedCallback();
     this.busy = false;
@@ -104,7 +127,30 @@ export class CloudServicesScreen extends LitElement {
   override disconnectedCallback() {
     clearTimeout(this.#clock);
     this.#generation++;
+    this.#stopBilling();
     super.disconnectedCallback();
+  }
+  protected override willUpdate() {
+    // Watched once while billing applies: `watch` would replace the slot and read again. A
+    // detached screen's last update must not start a watch nobody releases.
+    if (!this.isConnected || readsBilling(this.status) === this.#billingWatched) return;
+    if (this.#billingWatched) {
+      this.#stopBilling();
+      return;
+    }
+    this.#billingWatched = true;
+    void this.#billingQueries
+      .watch("getCloudBilling", dashboardQuery(this.api, "getCloudBilling", []), (billing) => {
+        this.billing = billing;
+        this.billingUnavailable = false;
+      })
+      .catch(() => undefined);
+  }
+  #stopBilling() {
+    this.#billingQueries.release("getCloudBilling");
+    this.#billingWatched = false;
+    this.billing = undefined;
+    this.billingUnavailable = false;
   }
   protected override updated() {
     clearTimeout(this.#clock);
@@ -152,6 +198,79 @@ export class CloudServicesScreen extends LitElement {
         legalBusinessId: s.legalBusinessId!,
       }),
     );
+  }
+  #billing(s: CloudConnectionStatus) {
+    const answer = this.billing;
+    const locale = currentLocale();
+    const level = (value: string) =>
+      t(`cloud.billing_level_${value}` as "cloud.billing_level_hosted");
+    const facts = answer?.billing;
+    const prices = answer?.prices;
+    const money = (cents: number) => formatMoney(String(centsToDecimal(cents)), locale);
+    const vat =
+      prices?.status === "published"
+        ? new Intl.NumberFormat(locale, { style: "percent", maximumFractionDigits: 2 }).format(
+            prices.vatRateBasisPoints / 10000,
+          )
+        : "";
+    return html`<section data-test="cloud-billing" aria-labelledby="cloud-billing-heading">
+      <h2 id="cloud-billing-heading">${t("cloud.billing")}</h2>
+      ${
+        this.billingUnavailable || facts?.status === "unavailable"
+          ? html`<p>${t("cloud.billing_unavailable")}</p>`
+          : facts?.status === "ready"
+            ? html`<dl>
+                <dt>${t("cloud.billing_plan")}</dt>
+                <dd>${level(facts.level)}</dd>
+                <dt>${t("cloud.billing_status")}</dt>
+                <dd>${t(`cloud.billing_state_${facts.state}`)}</dd>
+                ${
+                  facts.period
+                    ? html`<dt>
+                          ${t(facts.period.kind === "trial" ? "cloud.billing_last_trial" : "cloud.billing_last_paid")}
+                        </dt>
+                        <dd>
+                          ${lastIncludedDay(facts.period.until, locale)}${
+                            facts.period.level === facts.level
+                              ? ""
+                              : ` (${level(facts.period.level)})`
+                          }
+                        </dd>`
+                    : nothing
+                }
+              </dl>`
+            : nothing
+      }
+      ${
+        prices?.status === "published"
+          ? html`<dl>
+              <dt>${level("registered")}</dt>
+              <dd>${t("cloud.billing_free")}</dd>
+              <dt>${level("connected")}</dt>
+              <dd>
+                ${fill("cloud.billing_monthly", { price: money(prices.connectedMonthlyCents), vat })}
+              </dd>
+              <dt>${level("hosted")}</dt>
+              <dd>
+                ${fill("cloud.billing_daily", { price: money(prices.hostedMonthlyCents), vat })}
+              </dd>
+            </dl>`
+          : prices?.status === "unavailable" && !this.billingUnavailable
+            ? html`<p>${t("cloud.billing_prices_unpublished")}</p>`
+            : nothing
+      }
+      ${
+        s.accountUrl
+          ? html`<a
+              id="cloud-account"
+              href=${s.accountUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              >${t("cloud.account")}</a
+            >`
+          : nothing
+      }
+    </section>`;
   }
   #installation(s: CloudConnectionStatus) {
     const installation = s.installation;
@@ -333,11 +452,22 @@ export class CloudServicesScreen extends LitElement {
                                     : nothing
                             }`
                         : html`<p>${t("cloud.intro")}</p>
-                            ${s.isPrimary ? button("connect", t("cloud.connect"), () => this.api.startCloudConnection()) : nothing}`
+                            ${s.isPrimary ? button("connect", t("cloud.connect"), () => this.api.startCloudConnection()) : nothing}
+                            ${
+                              s.signupUrl
+                                ? html`<a
+                                    id="cloud-signup"
+                                    href=${s.signupUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    >${t("cloud.signup")}</a
+                                  >`
+                                : nothing
+                            }`
                     : s.state === "complete"
                       ? html`<p role="status">${t("cloud.connected")}</p>
                           <p>${s.legalBusinessName}</p>
-                          ${this.#installation(s)}`
+                          ${this.#installation(s)} ${readsBilling(s) ? this.#billing(s) : nothing}`
                       : html`
                           ${
                             s.state === "awaiting_cloud"
