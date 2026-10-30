@@ -26,8 +26,8 @@ export async function allocateBillNumber(
 }
 
 /**
- * Number every bill of `fromPartyId` that is not abandoned in `intoPartyId`, in their old number
- * order. The caller runs it after any merge, so a bill merged away keeps its old row.
+ * Give every bill numbered in `fromPartyId` that is not abandoned the next numbers of `intoPartyId`,
+ * in their old number order. Run it after any merge, so a bill merged away keeps its old row.
  */
 export async function rescopeBillNumbers(
   tx: Transaction,

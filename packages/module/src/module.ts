@@ -1491,9 +1491,9 @@ export interface VenueServiceContribution {
     billId: string | null,
     operatorId: string,
   ): Promise<void>;
-  /** Give a bill the party's next number; a number once given is never given again. */
+  /** Give a bill the party's next number; a number the party has given and committed is never given again. */
   allocateBillNumber(tx: Transaction, billId: string, partyId: string): Promise<number>;
-  /** Renumber, after any merge, every bill numbered in `fromPartyId` that is not abandoned. */
+  /** Run after any merge: renumber in `intoPartyId` every bill numbered in `fromPartyId` that is not abandoned. */
   rescopeBillNumbers(tx: Transaction, fromPartyId: string, intoPartyId: string): Promise<void>;
   /** Drop a bill's number as it leaves for the counter, keeping its name. */
   releaseBillNumber(tx: Transaction, billId: string): Promise<void>;

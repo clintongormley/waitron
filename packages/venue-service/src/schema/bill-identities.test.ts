@@ -108,7 +108,7 @@ describe("A803 bill identities", () => {
     ).toBe(true);
   });
 
-  it("A803 bill identities: a number below 1 is refused", async () => {
+  it("A803 bill identities: a number below 1, or not a whole number, is refused", async () => {
     const bill = await newBill();
     expect(
       checkFailed(
@@ -128,9 +128,9 @@ describe("A803 bill identities", () => {
     ).toBe(true);
   });
 
-  it("A803 bill identities: a name of 41 characters, an empty name or one with a leading space is refused, and one of 40 is kept", async () => {
+  it("A803 bill identities: a name of 41 characters, an empty name or one with a leading or trailing space is refused, and one of 40 is kept", async () => {
     const bill = await newBill();
-    for (const name of ["a".repeat(41), "", " Clint"]) {
+    for (const name of ["a".repeat(41), "", " Clint", "Clint "]) {
       expect(
         checkFailed(
           await identify({ workingOrderId: bill, partyId, number: 1, name }),
@@ -216,6 +216,20 @@ describe("A803 bill identities", () => {
       ),
     );
     expect(triggerRaised(replace, raised)).toBe(true);
+  });
+
+  it("A803 bill identities: an allocation number below 1, or not a whole number, is refused", async () => {
+    const bill = await newBill();
+    const zero = await captureError(() =>
+      suite.db.insert(billNumberAllocations).values({ partyId, number: 0, workingOrderId: bill }),
+    );
+    expect(checkFailed(zero, "bill_number_allocations_number_ck")).toBe(true);
+    const fraction = await captureError(() =>
+      suite.db.run(
+        sql`insert into bill_number_allocations (id, party_id, number, working_order_id, allocated_at) values (${randomUUID()}, ${partyId}, 1.5, ${bill}, '2026-10-30T10:00:00.000Z')`,
+      ),
+    );
+    expect(checkFailed(fraction, "bill_number_allocations_number_ck")).toBe(true);
   });
 
   it("A803 bill identities: a party cannot be given one number twice in the allocation history", async () => {

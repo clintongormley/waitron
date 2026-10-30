@@ -13,14 +13,15 @@ import {
 } from "@waitron/db";
 
 /**
- * A bill's number within the seated party that shows it, and the name a waiter gave it. A bill at
- * the counter keeps its name and has neither party nor number.
+ * A bill's number within the seated party that shows it, and the name a waiter gave it. A row with
+ * no party has no number.
  */
 export const billIdentities = table(
   "bill_identities",
   {
     // No delete rule on either key: a drizzle rebuild of the parent runs with foreign keys on, so a
-    // cascading child would be emptied without a word, where this one makes the rebuild fail.
+    // cascading child would be emptied without a word, where this one makes the rebuild fail while
+    // it holds rows.
     workingOrderId: id("working_order_id")
       .primaryKey()
       .references(() => workingOrders.id),
