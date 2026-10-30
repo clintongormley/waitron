@@ -1122,6 +1122,19 @@ export const en = {
   "profile.confirm_identity": "Enter your current password to confirm this change.",
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
+  "fresh_sign_in.password": "Password",
+  "fresh_sign_in.code": "Authenticator or recovery code",
+  "fresh_sign_in.code_hint": "6-digit code from your app, or one of your recovery codes",
+  "fresh_sign_in.code_required": "Enter a code from your authenticator app or a recovery code",
+  "fresh_sign_in.use_passkey": "Use your passkey",
+  "fresh_sign_in.use_passkey_instead": "Use a passkey instead of the password",
+  "fresh_sign_in.no_way_in":
+    "To make a recovery pack you need to sign in again with a password or a passkey.",
+  "fresh_sign_in.passkey_not_registered":
+    "You have no passkey on your account yet. To add one, open Account settings from the person icon at the top of the page and choose Add passkey; or sign in with your password here.",
+  "fresh_sign_in.profile_failed":
+    "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
+  "fresh_sign_in.retry": "Try again",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
   "profile.passkey_name": "Passkey name",
@@ -4779,6 +4792,20 @@ export const es: Record<StringKey, string> = {
   "profile.confirm_identity": "Introduce tu contraseña actual para confirmar este cambio.",
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
+  "fresh_sign_in.password": "Contraseña",
+  "fresh_sign_in.code": "Código del autenticador o de recuperación",
+  "fresh_sign_in.code_hint": "Código de 6 cifras de tu app, o uno de tus códigos de recuperación",
+  "fresh_sign_in.code_required":
+    "Introduce un código de tu app de autenticación o un código de recuperación",
+  "fresh_sign_in.use_passkey": "Usar tu passkey",
+  "fresh_sign_in.use_passkey_instead": "Usar una passkey en lugar de la contraseña",
+  "fresh_sign_in.no_way_in":
+    "Para hacer un paquete de recuperación tienes que volver a identificarte con una contraseña o una passkey.",
+  "fresh_sign_in.passkey_not_registered":
+    "Todavía no tienes ninguna passkey en tu cuenta. Para añadir una, abre Configuración de la cuenta desde el icono de persona en la parte superior de la página y elige Añadir passkey; o identifícate aquí con tu contraseña.",
+  "fresh_sign_in.profile_failed":
+    "No se han podido leer tus datos de acceso, así que este formulario aún no puede pedirte que vuelvas a identificarte. Volver a intentarlo los lee otra vez.",
+  "fresh_sign_in.retry": "Volver a intentarlo",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
   "profile.passkey_name": "Nombre de la llave de acceso",
