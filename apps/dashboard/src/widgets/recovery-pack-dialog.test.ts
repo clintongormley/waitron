@@ -44,9 +44,9 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
   };
 }
 
-/** The current server key is on pack 3, which reached a browser. */
+/** The current server key is on pack 3, which a browser confirmed receiving. */
 const HELD = status({ keep: [{ number: 3, madeAt: MADE_AT, until: null, why: "server_key" }] });
-/** The current server key is on pack 3, which never reached a browser. */
+/** The current server key is on pack 3, which no browser confirmed receiving. */
 const UNRECEIVED = status({
   unreceived: { number: 3, madeAt: MADE_AT, holdsCurrentServerKey: true },
 });
@@ -200,7 +200,7 @@ describe("the form", () => {
     },
   );
 
-  it("says the pack holding the current key never reached a browser, when the status says so", async () => {
+  it("says the pack holding the current key was never confirmed received, when the status says so", async () => {
     const { el } = await open({ at: UNRECEIVED });
     const why = words(el.shadowRoot!.querySelector("[data-test=new-key-why]"));
     expect(why).toBe(`${unreceivedWords()} ${t("recovery_pack_dialog.new_key_effect")}`);
@@ -486,7 +486,7 @@ describe("the server key was not replaced", () => {
     );
   });
 
-  it("uses the unreceived wording when the pack holding the key never reached a browser", async () => {
+  it("uses the unreceived wording when the pack holding the key was never confirmed received", async () => {
     const { el } = await failedKey(UNRECEIVED);
     expect(words(el.shadowRoot!.querySelector("[data-test=key-failed]"))).toBe(
       `${first()} ${unreceivedWords()}`,
@@ -819,7 +819,7 @@ describe("the words", () => {
 
   it("uses the plan's unreceived wording", () => {
     expect(en["recovery_pack_dialog.unreceived"]).toBe(
-      "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
+      "The current server key is on recovery pack {number}, made on {date}, but the box was never told that pack {number} arrived. If you do not have pack {number}, make a new pack with {option} ticked.",
     );
   });
 

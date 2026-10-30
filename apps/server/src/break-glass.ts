@@ -4,9 +4,11 @@ import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   readBreakGlassVerifier,
   readBreakGlassKeyName,
+  readRecoveryPacks,
   setBreakGlassVerifierTx,
   withTransaction,
   type Database,
+  type RecoveryPackRecord,
 } from "@waitron/db";
 
 /**
@@ -17,6 +19,31 @@ export async function mintBreakGlassSecret(ownerDb: Database, nodeId: string): P
   return (await mintBreakGlassKey(ownerDb, nodeId)).secret;
 }
 
+/** A key name for the UTC `day`: the day and four characters, drawn again while the name is `taken`. */
+export function newBreakGlassKeyName(day: string, taken: ReadonlySet<string>): string {
+  const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
+  let next: string;
+  do {
+    const code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
+    next = `${day} · ${code}`;
+  } while (taken.has(next));
+  return next;
+}
+
+/** Every server key name this node's packs recorded, and the key in force. */
+export function takenKeyNames(
+  name: string | null,
+  records: readonly RecoveryPackRecord[],
+): Set<string> {
+  const taken = new Set<string>(name === null ? [] : [name]);
+  for (const record of records) {
+    for (const part of record.parts) {
+      if (part.part === "server-key" && part.keyName !== undefined) taken.add(part.keyName);
+    }
+  }
+  return taken;
+}
+
 export async function mintBreakGlassKey(
   ownerDb: Database,
   nodeId: string,
@@ -25,13 +52,10 @@ export async function mintBreakGlassKey(
   const verifier = hashSecret(secret);
   const name = await withTransaction(ownerDb, async (tx) => {
     const previous = await readBreakGlassKeyName(tx, nodeId);
-    const day = new Date().toISOString().slice(0, 10);
-    const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
-    let next: string;
-    do {
-      const code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
-      next = `${day} · ${code}`;
-    } while (next === previous);
+    const next = newBreakGlassKeyName(
+      new Date().toISOString().slice(0, 10),
+      takenKeyNames(previous, await readRecoveryPacks(tx, nodeId)),
+    );
     await setBreakGlassVerifierTx(tx, nodeId, verifier, next);
     return next;
   });

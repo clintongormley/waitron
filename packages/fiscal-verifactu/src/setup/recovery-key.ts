@@ -25,8 +25,8 @@ function keyElsewhere(error: RecoveryPackWithoutKeyError, en: boolean): string {
       : `Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación ${held.number}, hecho el ${day}: elige ese paquete o introduce su clave.`;
     if (held.received) return where;
     return en
-      ? `${where} That pack never reached a browser when it was made: if you do not have it, the key cannot be read from any pack.`
-      : `${where} Ese paquete nunca llegó a un navegador cuando se hizo: si no lo tienes, la clave no se puede leer de ningún paquete.`;
+      ? `${where} When this pack was made, the box that made it had not been told that pack ${held.number} arrived: if you do not have it, the key cannot be read from any pack.`
+      : `${where} Cuando se hizo este paquete, la caja que lo hizo no había recibido la confirmación de que el paquete ${held.number} había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.`;
   }
   if (error.serverKeyName !== null)
     return en

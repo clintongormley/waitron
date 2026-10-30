@@ -15,7 +15,7 @@ export function packDate(iso: string, timeZone: string | undefined): string {
 }
 
 /**
- * The pack the status names as holding the current server key, and whether it reached a browser.
+ * The pack the status names as holding the current server key, and whether a browser confirmed receiving it.
  * An unreceived holder comes first: its warning is the one a person must not miss.
  */
 export function keyHolder(
@@ -40,7 +40,7 @@ export function withStrong(
   return html`${before}<strong>${strong}</strong>${after ?? ""}`;
 }
 
-/** Decision 10's words for a pack holding the current server key that never reached a browser. */
+/** Decision 10's words for a pack holding the current server key no browser confirmed receiving. */
 export function unreceivedWords(
   holder: { number: number; madeAt: string },
   timeZone: string | undefined,

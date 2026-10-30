@@ -1,3 +1,4 @@
+import { randomInt } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
@@ -6,7 +7,7 @@ import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadKeyRing, putCredential } from "@waitron/credentials";
 import {
   insertRecoveryPack,
@@ -62,6 +63,13 @@ const ARCHIVES: Omit<ArchiveSettings, "revision"> = {
 };
 const PAGE: RecoveryPackPage = { title: "Server key", rows: [], notes: [] };
 
+vi.mock("node:crypto", async (original) => {
+  const actual = await original<typeof import("node:crypto")>();
+  return { ...actual, randomInt: vi.fn(actual.randomInt) };
+});
+
+const drawCodeIndex = vi.mocked(randomInt as (max: number) => number);
+
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 let node: ProvisionedNode;
 let keyInForce: { secret: string; name: string };
@@ -74,6 +82,7 @@ const logs: unknown[][] = [];
 
 afterEach(() => {
   for (const socket of sockets.splice(0)) socket.destroy();
+  drawCodeIndex.mockReset();
 });
 
 beforeEach(async () => {
@@ -413,7 +422,7 @@ describe("a made pack", () => {
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     const carried = (file.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
     expect(carried.name).toBe(file.serverKeyName);
-    expect(carried.name).toMatch(/^2026-10-30 · [0-9a-f-]{36}$/);
+    expect(carried.name).toMatch(/^2026-10-30 · [34679ACDEFHJKMNPQRTUVWXY]{4}$/);
     expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(carried.name);
     const verifier = (await readBreakGlassVerifier(suite.db, node.nodeId))!;
     expect(await verifySecretAsync(carried.secret, verifier)).toBe(true);
@@ -423,7 +432,22 @@ describe("a made pack", () => {
     expect(JSON.stringify(record)).not.toContain(carried.secret);
   });
 
-  it("names the received pack holding the key, and an unreceived one as never reaching a browser", async () => {
+  it("never gives a new key the name of the key in force or of a key an earlier pack carried", async () => {
+    const f = fixture();
+    const keyName = async (response: Response) =>
+      (await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()))).serverKeyName;
+    const draws = (...indexes: number[]) => {
+      for (const index of indexes) drawCodeIndex.mockReturnValueOnce(index);
+    };
+    draws(0, 0, 0, 0);
+    expect(await keyName(await f.make(true))).toBe("2026-10-30 · 3333");
+    draws(0, 0, 0, 0, 1, 1, 1, 1);
+    expect(await keyName(await f.make(true))).toBe("2026-10-30 · 4444");
+    draws(0, 0, 0, 0, 2, 2, 2, 2);
+    expect(await keyName(await f.make(true))).toBe("2026-10-30 · 6666");
+  });
+
+  it("names the received pack holding the key, and one no browser confirmed receiving", async () => {
     const f = fixture();
     await (await f.make(true)).arrayBuffer();
     const unreceived = await readRecoveryPackPdf(

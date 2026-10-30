@@ -246,7 +246,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
-  it("names a pack holding the server key that never reached a browser, in decision 10's words", async () => {
+  it("names a pack holding the server key no browser confirmed receiving, in decision 10's words", async () => {
     setLocale(locale);
     const el = await mount(stubApi(STATES.unreceived));
     expect(line(el)).toBe(
@@ -257,7 +257,7 @@ describe.each(["en-GB", "es-ES"] as const)("the status line in %s", (locale) => 
     );
   });
 
-  it("names a newest pack that never reached a browser and holds no server key", async () => {
+  it("names a newest pack no browser confirmed receiving and holds no server key", async () => {
     setLocale(locale);
     const el = await mount(
       stubApi(

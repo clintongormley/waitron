@@ -210,7 +210,7 @@ describe("the latest pack", () => {
   });
 });
 
-describe("a pack that never reached a browser", () => {
+describe("a pack no browser confirmed receiving", () => {
   it("is never up to date and never kept as the server key's holder", () => {
     const answer = status(
       [

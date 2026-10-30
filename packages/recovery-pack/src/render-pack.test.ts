@@ -215,7 +215,7 @@ describe("the Spanish pack's other wording", () => {
       (await rendered(await es([{ ...serverKey, serverKeyLocation }])))[1]!.text;
     expect(await at({ kind: "this-pack" })).toContain("Este paquete tiene la clave del servidor.");
     expect(await at({ kind: "pack", number: 1, madeOn: "2026-09-02", received: false })).toContain(
-      "Este paquete no creó una clave del servidor nueva. La clave está en el paquete de recuperación 1, hecho el 2 de septiembre de 2026, que nunca llegó a un navegador. Si no tienes el paquete 1, haz un paquete nuevo marcando También crear una clave del servidor nueva.",
+      `${PACK_WORDS.es.noNewKey} ${PACK_WORDS.es.keyOnUnreceivedPack(1, "2 de septiembre de 2026")}`,
     );
     expect(
       await at({ kind: "sheet", keyName: "2026-09-02 · K7QF", madeOn: "2026-09-02" }),
@@ -342,21 +342,21 @@ describe("the server-key page says where the key is", () => {
     expect(pages[3]!.text).toContain("This pack holds the server key.");
   });
 
-  it("on an earlier pack that reached a browser: keep that pack", async () => {
+  it("on an earlier pack a browser confirmed receiving: keep that pack", async () => {
     const pages = await rendered(await renderRecoveryPack(input()));
     expect(pages[3]!.text).toContain(
       "This pack did not make a new server key. The key itself is on recovery pack 1, made on 2 September 2026. Keep that pack.",
     );
   });
 
-  it("on an earlier pack that never reached a browser: never 'keep that pack'", async () => {
+  it("on an earlier pack no browser confirmed receiving: never 'keep that pack'", async () => {
     const pages = await rendered(
       await renderRecoveryPack(
         withLocation({ kind: "pack", number: 1, madeOn: "2026-09-02", received: false }),
       ),
     );
     expect(pages[3]!.text).toContain(
-      "The key itself is on recovery pack 1, made on 2 September 2026, which never reached a browser. If you do not have pack 1, make a new pack with Also make a new server key ticked.",
+      "The key itself is on recovery pack 1, made on 2 September 2026, but when this pack was made the box had not been told that pack 1 arrived. If you do not have pack 1, make a new pack with Also make a new server key ticked.",
     );
     expect(pages[3]!.text).not.toContain("Keep that pack");
   });
