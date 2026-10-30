@@ -199,6 +199,56 @@ it("rejects with server.internal when the body is the literal JSON null", async 
   await expect(request("/thing", "GET")).rejects.toEqual({ code: "server.internal", status: 500 });
 });
 
+describe('with refusals: "envelope"', () => {
+  it.each([
+    [
+      "a gateway's plain-text 502",
+      () => new Response("Bad Gateway", { status: 502, headers: { "content-type": "text/plain" } }),
+    ],
+    ["an empty 504", () => new Response(null, { status: 504 })],
+    ["a JSON body with no error", () => jsonResponse({ message: "upstream" }, 500)],
+    ["an error that names no code", () => jsonResponse({ error: { message: "x" } }, 500)],
+    ["the literal JSON null", () => jsonResponse(null, 500)],
+  ])("rejects %s as connection.failed, with no status", async (_label, answer) => {
+    const onError = vi.fn();
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockResolvedValue(answer()),
+      onError,
+    });
+
+    await expect(
+      request("/api/backup/recovery-pack", "POST", {}, { refusals: "envelope" }),
+    ).rejects.toEqual({ code: "connection.failed" });
+    expect(onError.mock.calls).toEqual([["connection.failed"]]);
+  });
+
+  it("still rejects a refusal envelope as its code with its status and params", async () => {
+    const request = createRequest({
+      fetchImpl: vi
+        .fn<FetchLike>()
+        .mockResolvedValue(
+          jsonResponse({ error: { code: "recovery.pack_invalid", params: { reason: "x" } } }, 400),
+        ),
+    });
+
+    await expect(
+      request("/api/backup/recovery-pack", "POST", {}, { refusals: "envelope" }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid", params: { reason: "x" }, status: 400 });
+  });
+
+  it("still rejects an envelope naming server.internal with its status", async () => {
+    const request = createRequest({
+      fetchImpl: vi
+        .fn<FetchLike>()
+        .mockResolvedValue(jsonResponse({ error: { code: "server.internal" } }, 500)),
+    });
+
+    await expect(
+      request("/api/backup/recovery-pack", "POST", {}, { refusals: "envelope" }),
+    ).rejects.toEqual({ code: "server.internal", status: 500 });
+  });
+});
+
 it("defaults baseUrl to '' and fetchImpl to the global fetch", async () => {
   const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(jsonResponse({ ok: true }));
   const request = createRequest();

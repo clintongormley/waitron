@@ -1,11 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WtDialog } from "@waitron/ui";
-import type {
-  DashboardApi,
-  MadeRecoveryPack,
-  OwnProfile,
-  RecoveryPackStatus,
-} from "../api/client.js";
+import { DashboardApi } from "../api/client.js";
+import type { MadeRecoveryPack, OwnProfile, RecoveryPackStatus } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { fill, setLocale, t } from "../i18n/t.js";
 import { en, es } from "../i18n/strings.js";
@@ -631,6 +627,67 @@ describe("a lost answer", () => {
     expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
       t("recovery_pack_dialog.lost_new_key"),
     );
+  });
+
+  describe("through the real client", () => {
+    function boxApi(makeAnswer: () => Response) {
+      const json = (body: unknown, status = 200) =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "Content-Type": "application/json" },
+        });
+      const calls: string[] = [];
+      const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const call = `${init?.method ?? "GET"} ${String(input)}`;
+        calls.push(call);
+        if (call === "POST /api/backup/recovery-pack") return makeAnswer();
+        if (call === "GET /api/backup/recovery-pack") return json(status());
+        return json(profile());
+      });
+      return { api: new DashboardApi("", fetchImpl as typeof fetch), calls };
+    }
+
+    async function press(api: DashboardApi) {
+      const { el } = await mountWidget<RecoveryPackDialog>("dashboard-recovery-pack-dialog", {
+        api,
+      });
+      el.show(HELD);
+      await el.updateComplete;
+      const signIn = await signInOf(el);
+      type(signIn, "current-password", "hunter2-hunter2");
+      tick(el);
+      await el.updateComplete;
+      button(el, "make-pack")!.click();
+      return el;
+    }
+
+    it("counts a gateway's plain-text 502 as lost, not as the box's refusal", async () => {
+      const { api, calls } = boxApi(
+        () =>
+          new Response("Bad Gateway", { status: 502, headers: { "Content-Type": "text/plain" } }),
+      );
+      const el = await press(api);
+      await expect.poll(() => el.shadowRoot!.querySelector("[data-test=lost]")).not.toBeNull();
+      expect(words(el.shadowRoot!.querySelector("[data-test=lost]"))).toContain(
+        t("recovery_pack_dialog.lost_new_key"),
+      );
+      expect(calls.filter((call) => call === "GET /api/backup/recovery-pack")).toHaveLength(1);
+      expect(bottom(el)).toBe("");
+    });
+
+    it("keeps the box's own refusal envelope a refusal", async () => {
+      const { api, calls } = boxApi(
+        () =>
+          new Response(JSON.stringify({ error: { code: "password.throttled" } }), {
+            status: 429,
+            headers: { "Content-Type": "application/json" },
+          }),
+      );
+      const el = await press(api);
+      await expect.poll(() => bottom(el)).toBe(codeMessage("password.throttled"));
+      expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
+      expect(calls).not.toContain("GET /api/backup/recovery-pack");
+    });
   });
 
   it("still warns when the status cannot be read again", async () => {

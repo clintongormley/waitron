@@ -1907,9 +1907,13 @@ describe("the recovery pack calls", () => {
     return new Response(body, { status: 200, headers });
   }
 
+  /** A whole PDF as small as the format allows: its header, one object, its trailer and end mark. */
+  const MINIMAL_PDF =
+    "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
+
   it("makes a pack, handing back the PDF, its number and what happened to the server key", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
-      packResponse(new Uint8Array([37, 80, 68, 70]), {
+      packResponse(MINIMAL_PDF, {
         "Content-Type": "application/pdf",
         "X-Waitron-Recovery-Pack": "4",
         "X-Waitron-Recovery-Pack-Key": "replaced",
@@ -1921,7 +1925,7 @@ describe("the recovery pack calls", () => {
 
     expect(made.number).toBe(4);
     expect(made.key).toBe("replaced");
-    expect([...new Uint8Array(await made.pdf.arrayBuffer())]).toEqual([37, 80, 68, 70]);
+    expect(await made.pdf.text()).toBe(MINIMAL_PDF);
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true, signIn: SIGN_IN }],
     ]);
@@ -1930,9 +1934,30 @@ describe("the recovery pack calls", () => {
   it.each([
     ["a body that is not a PDF", "<html></html>", "text/html", "4", "unchanged"],
     ["an empty PDF", "", "application/pdf", "4", "unchanged"],
-    ["a missing pack number", "%PDF", "application/pdf", null, "unchanged"],
-    ["a pack number that is not a whole number", "%PDF", "application/pdf", "4a", "unchanged"],
-    ["an unknown key state", "%PDF", "application/pdf", "4", "rotated"],
+    ["a missing pack number", MINIMAL_PDF, "application/pdf", null, "unchanged"],
+    ["a pack number that is not a whole number", MINIMAL_PDF, "application/pdf", "4a", "unchanged"],
+    ["an unknown key state", MINIMAL_PDF, "application/pdf", "4", "rotated"],
+    [
+      "a PDF-typed body that is not a PDF",
+      "this is not a PDF",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
+    [
+      "a PDF cut off before its end mark",
+      "%PDF-1.7\nTRUNCATED",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
+    [
+      "a body that ends like a PDF but does not start like one",
+      "trailer\n%%EOF\n",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
   ])("refuses %s as recovery.pack_invalid", async (_label, body, type, number, key) => {
     const headers: Record<string, string> = { "Content-Type": type };
     if (number !== null) headers["X-Waitron-Recovery-Pack"] = number;
@@ -1959,6 +1984,48 @@ describe("the recovery pack calls", () => {
     await expect(
       api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
     ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
+  it.each([
+    ["with no line end", MINIMAL_PDF.trimEnd()],
+    ["with CR LF", `${MINIMAL_PDF.trimEnd()}\r\n`],
+  ])(
+    "accepts a PDF whose end mark is followed by nothing or by line ends (%s)",
+    async (_how, body) => {
+      const api = new DashboardApi(
+        "",
+        vi.fn().mockResolvedValue(
+          packResponse(body, {
+            "Content-Type": "application/pdf",
+            "X-Waitron-Recovery-Pack": "4",
+            "X-Waitron-Recovery-Pack-Key": "unchanged",
+          }),
+        ),
+      );
+
+      const made = await api.makeRecoveryPack({
+        locale: "en",
+        newServerKey: false,
+        signIn: SIGN_IN,
+      });
+
+      expect(made.number).toBe(4);
+    },
+  );
+
+  it("counts a gateway's own answer as no answer from the box: connection.failed, with no status", async () => {
+    const api = new DashboardApi(
+      "",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Bad Gateway", { status: 502, headers: { "Content-Type": "text/plain" } }),
+        ),
+    );
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: true, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "connection.failed" });
   });
 
   it("passes a refusal through with its code", async () => {

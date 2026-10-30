@@ -20,9 +20,12 @@ export interface DownloadedFile {
  * of any response `headers` the call names. A refusal is
  * decoded exactly as without either. Explicit deadlines apply to any method; ordinary reads
  * retain their default deadline. Cancellation bounds both fetch and response-body waits.
+ * `refusals: "envelope"` rejects a non-2xx whose body names no `{ error: { code } }` as
+ * `connection.failed`, with no status: a gateway's own page says nothing of whether the server acted.
  */
 export interface RequestOptions {
   passive?: boolean;
+  refusals?: "envelope";
   as?: "blob" | "file";
   headers?: readonly string[];
   timeLimitMs?: number;
@@ -151,6 +154,8 @@ export function createRequest(
         if (stopped !== undefined) throw fail(stopped);
         const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
         const rawCode = envelope?.code;
+        if (typeof rawCode !== "string" && options?.refusals === "envelope")
+          throw fail("connection.failed");
         const code = typeof rawCode === "string" ? rawCode : "server.internal";
         reportError(code, res.status);
         // Carry the envelope's `params` through so a caller that needs a code's structured detail can

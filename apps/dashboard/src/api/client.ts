@@ -4619,7 +4619,11 @@ export class DashboardApi {
     });
   }
 
-  /** Refuses, as `recovery.pack_invalid`, an answer that is not a whole PDF with its pack headers. */
+  /**
+   * Refuses, as `recovery.pack_invalid`, an answer without its pack headers or whose body does not
+   * start `%PDF-` and end `%%EOF` (whitespace after it allowed); nothing between is read. A non-2xx
+   * that is not the box's refusal rejects as `connection.failed`.
+   */
   async makeRecoveryPack(body: {
     locale: "en" | "es";
     newServerKey: boolean;
@@ -4628,6 +4632,7 @@ export class DashboardApi {
     const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
       as: "file",
       headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+      refusals: "envelope",
     });
     const pdf = file.blob;
     const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
@@ -4637,7 +4642,9 @@ export class DashboardApi {
       pdf.size === 0 ||
       pdf.size > 8 * 1024 * 1024 ||
       !/^[1-9][0-9]*$/.test(number) ||
-      (key !== "replaced" && key !== "unchanged" && key !== "failed")
+      (key !== "replaced" && key !== "unchanged" && key !== "failed") ||
+      (await pdf.slice(0, 5).text()) !== "%PDF-" ||
+      !/%%EOF\s*$/.test(await pdf.slice(-16).text())
     )
       throw { code: "recovery.pack_invalid" };
     return { pdf, number: Number(number), key };
