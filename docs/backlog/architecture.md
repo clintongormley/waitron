@@ -490,7 +490,10 @@ until A977).
   concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, catalogue,
   station, printer and product but keeps its es-ES locale and the operation description "Venta en
   establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
-  only English names. The fiscal sale-path
+  only English names. The print-problems suite (`apps/server/src/print-problems.test.ts`)
+  gives English location, menu, category, station, printer and table names to what it creates,
+  and names its kitchen station itself instead of taking the shared seed's default "Cocina"; it
+  keeps its es-ES locale and the operation description "Restaurante". The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
