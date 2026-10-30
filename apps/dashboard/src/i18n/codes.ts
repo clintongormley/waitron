@@ -1108,6 +1108,12 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Open the dashboard at its secure address (https://…) to make a recovery pack.",
     es: "Abre el panel en su dirección segura (https://…) para hacer un paquete de recuperación.",
   },
+  // A fault in Waitron: `makeRecoveryPack` sends the make route's exact JSON, and no screen shows
+  // the received route's answer.
+  "recovery.pack_invalid": {
+    en: "The box could not read the request to make a recovery pack. This is a fault in Waitron. Reload the page and make the pack again.",
+    es: "La caja no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
+  },
   "recovery.pack_origin_refused": {
     en: "Make the pack from the dashboard's own page, not from another site.",
     es: "Haz el paquete desde la propia página del panel, no desde otro sitio.",

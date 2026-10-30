@@ -1137,6 +1137,36 @@ export const en = {
   "fresh_sign_in.profile_failed":
     "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
   "fresh_sign_in.retry": "Try again",
+  "recovery_pack_dialog.heading": "Make recovery pack",
+  "recovery_pack_dialog.intro":
+    "The pack holds every key this venue has. Sign in again to make it. It is made once, for this download; the box keeps no copy.",
+  "recovery_pack_dialog.new_key": "Also make a new server key",
+  "recovery_pack_dialog.new_key_held":
+    "Only if the pack or sheet holding the current key (recovery pack {number}, made on {date}) is lost.",
+  "recovery_pack_dialog.new_key_unknown":
+    "Only if the pack or sheet holding the current key is lost.",
+  "recovery_pack_dialog.new_key_effect":
+    "New backups will use the new key; older backups still need the old one.",
+  "recovery_pack_dialog.unreceived":
+    "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
+  "recovery_pack_dialog.make": "Make pack",
+  "recovery_pack_dialog.key_failed":
+    "The pack was made, but the server key was {not} replaced: its page could not be drawn. The server key page in the pack says why.",
+  "recovery_pack_dialog.not": "not",
+  "recovery_pack_dialog.key_still_works":
+    "The current key, on recovery pack {number} made on {date}, still works.",
+  "recovery_pack_dialog.lost_new_key":
+    "The box may have made a recovery pack with a new server key that did not reach this browser. If it did, the only copy of your current server key is on a pack you do not have.",
+  "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
+  "recovery_pack_dialog.lost_new_key_choices":
+    "Make a new pack with a new server key replaces the key again and puts it on a pack you download now; you sign in again first. Stop closes this window and changes nothing.",
+  "recovery_pack_dialog.lost":
+    "The box may have made the recovery pack, but it did not reach this browser.",
+  "recovery_pack_dialog.lost_choices":
+    "Try again asks the box for a new pack. Stop closes this window and changes nothing.",
+  "recovery_pack_dialog.remake": "Make a new pack with a new server key",
+  "recovery_pack_dialog.try_again": "Try again",
+  "recovery_pack_dialog.stop": "Stop",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
   "profile.passkey_name": "Passkey name",
@@ -4810,6 +4840,37 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.profile_failed":
     "No se han podido leer tus datos de acceso, así que este formulario aún no puede pedirte que vuelvas a identificarte. Volver a intentarlo los lee otra vez.",
   "fresh_sign_in.retry": "Volver a intentarlo",
+  "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
+  "recovery_pack_dialog.intro":
+    "El paquete contiene todas las claves de este local. Vuelve a iniciar sesión para hacerlo. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
+  "recovery_pack_dialog.new_key": "Hacer también una nueva clave del servidor",
+  "recovery_pack_dialog.new_key_held":
+    "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",
+  "recovery_pack_dialog.new_key_unknown":
+    "Solo si se ha perdido el paquete o la hoja con la clave actual.",
+  "recovery_pack_dialog.new_key_effect":
+    "Las copias nuevas usarán la clave nueva; las copias anteriores siguen necesitando la antigua.",
+  "recovery_pack_dialog.unreceived":
+    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, que nunca llegó a un navegador. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
+  "recovery_pack_dialog.make": "Hacer paquete",
+  "recovery_pack_dialog.key_failed":
+    "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido: no se pudo dibujar su página. La página de la clave del servidor del paquete explica por qué.",
+  "recovery_pack_dialog.not": "no",
+  "recovery_pack_dialog.key_still_works":
+    "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
+  "recovery_pack_dialog.lost_new_key":
+    "Puede que la caja haya hecho un paquete de recuperación con una nueva clave del servidor que no llegó a este navegador. Si fue así, la única copia de tu clave actual del servidor está en un paquete que no tienes.",
+  "recovery_pack_dialog.lost_new_key_named":
+    "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
+  "recovery_pack_dialog.lost_new_key_choices":
+    "Hacer un paquete nuevo con una nueva clave del servidor vuelve a sustituir la clave y la pone en un paquete que descargas ahora; antes vuelves a iniciar sesión. Parar cierra esta ventana y no cambia nada.",
+  "recovery_pack_dialog.lost":
+    "Puede que la caja haya hecho el paquete de recuperación, pero no llegó a este navegador.",
+  "recovery_pack_dialog.lost_choices":
+    "Volver a intentarlo pide a la caja un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
+  "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
+  "recovery_pack_dialog.try_again": "Volver a intentarlo",
+  "recovery_pack_dialog.stop": "Parar",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
   "profile.passkey_name": "Nombre de la llave de acceso",

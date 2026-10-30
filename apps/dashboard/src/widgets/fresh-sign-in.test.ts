@@ -173,6 +173,59 @@ describe("the sign-in body", () => {
   });
 });
 
+describe("what the holding form reads", () => {
+  it("says whether anything is typed, and announces each edit", async () => {
+    const { el, root } = await mount(profile({ hasTotp: true }));
+    const edits = vi.fn();
+    el.addEventListener("sign-in-change", edits);
+    expect(el.typed).toBe(false);
+    type(root, "totp", "1");
+    expect(el.typed).toBe(true);
+    expect(edits).toHaveBeenCalledOnce();
+    type(root, "totp", "");
+    expect(el.typed).toBe(false);
+    type(root, "current-password", "x");
+    expect(el.typed).toBe(true);
+    expect(edits).toHaveBeenCalledTimes(3);
+    el.clear();
+    expect(el.typed).toBe(false);
+  });
+
+  it("is invalid only after a press found an empty required field, until it is filled", async () => {
+    const { el, root } = await mount(profile({ hasTotp: true }));
+    expect(el.invalid).toBe(false);
+    expect(await el.signIn()).toBeNull();
+    expect(el.invalid).toBe(true);
+    type(root, "current-password", "x");
+    expect(el.invalid).toBe(true);
+    type(root, "totp", "123456");
+    expect(el.invalid).toBe(false);
+    el.clear();
+    expect(el.invalid).toBe(false);
+  });
+
+  it("gives an emptied field its sentence back after a press", async () => {
+    const { el, root } = await mount(profile());
+    type(root, "current-password", "x");
+    expect(await el.signIn()).not.toBeNull();
+    type(root, "current-password", "");
+    await el.updateComplete;
+    expect(field(root, "current-password")!.error).toBe(t("form.password_required"));
+    expect(el.invalid).toBe(true);
+  });
+
+  it("does not count a refusal under a field as the form's own check", async () => {
+    const { el, root } = await mount(profile());
+    type(root, "current-password", "x");
+    await el.signIn();
+    el.refuse({ code: "password.invalid", status: 401 });
+    expect(el.marked).toBe(true);
+    expect(el.invalid).toBe(false);
+    type(root, "current-password", "y");
+    expect(el.marked).toBe(false);
+  });
+});
+
 describe("the ways in", () => {
   it("offers the passkey instead of the password to a person who has a password", async () => {
     const { el, root } = await mount(profile({ passkeys: [PASSKEY] }));

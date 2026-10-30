@@ -25,8 +25,8 @@ type Field = "password" | "code";
  * Asks the signed-in person to prove again who they are, by their password or a passkey, plus their
  * authenticator or a recovery code when they have one. The screen holding it owns the action: it
  * calls `signIn()` for the body to send, hands any failure to `refuse()`, and calls `clear()` on
- * close. Fires `sign-in-ways` once the profile is read and `sign-in-passkey` when the passkey
- * button is pressed.
+ * close. Fires `sign-in-ways` once the profile is read, `sign-in-passkey` when the passkey button is
+ * pressed, and `sign-in-change` on every edit.
  */
 @customElement("dashboard-fresh-sign-in")
 export class FreshSignIn extends LitElement {
@@ -69,6 +69,8 @@ export class FreshSignIn extends LitElement {
   #attempt = 0;
   #prompting = false;
   #reads = 0;
+  /** The way the last press checked, so later edits re-check the fields that way needs. */
+  #checked: "password" | "passkey" | null = null;
 
   constructor() {
     super();
@@ -79,6 +81,29 @@ export class FreshSignIn extends LitElement {
   get ways(): SignInWays | null {
     const own = this.profile;
     return own === null ? null : { password: own.hasPassword, passkey: own.passkeys.length > 0 };
+  }
+
+  /** Whether anything is typed into the password or the code. */
+  get typed(): boolean {
+    return this.password !== "" || this.code !== "";
+  }
+
+  /** Whether, since a press, a field the form needs is empty. A refusal under a field is not this. */
+  get invalid(): boolean {
+    return this.#checked !== null && Object.keys(this.#ownErrors(this.#checked)).length > 0;
+  }
+
+  /** Whether any field shows a sentence, the form's own or a refusal's. */
+  get marked(): boolean {
+    return Object.keys(this.errors).length > 0;
+  }
+
+  #ownErrors(way: "password" | "passkey"): Partial<Record<Field, string>> {
+    const errors: Partial<Record<Field, string>> = {};
+    if (way === "password" && this.password === "") errors.password = t("form.password_required");
+    if (this.profile?.hasTotp && this.code.trim() === "")
+      errors.code = t("fresh_sign_in.code_required");
+    return errors;
   }
 
   override connectedCallback(): void {
@@ -133,11 +158,10 @@ export class FreshSignIn extends LitElement {
     if (way === "password" && !ways.password) return null;
     if (!ways.password && !ways.passkey) return null;
     this.message = "";
-    const errors: Partial<Record<Field, string>> = {};
-    if (way === "password" && this.password === "") errors.password = t("form.password_required");
+    this.#checked = way;
+    const errors = this.#ownErrors(way);
     const code = this.code.trim();
     const digits = code.replace(/\s+/g, "");
-    if (this.profile!.hasTotp && code === "") errors.code = t("fresh_sign_in.code_required");
     this.errors = errors;
     if (Object.keys(errors).length > 0) return null;
     const codes = !this.profile!.hasTotp
@@ -196,6 +220,7 @@ export class FreshSignIn extends LitElement {
   /** Forgets everything typed, and closes a passkey prompt still open, dropping its answer. */
   clear(): void {
     this.#closePrompt();
+    this.#checked = null;
     this.password = "";
     this.code = "";
     this.revealed = false;
@@ -207,10 +232,10 @@ export class FreshSignIn extends LitElement {
     if (field === "password") this.password = value;
     else this.code = value;
     this.message = "";
-    if (field in this.errors)
-      this.errors = Object.fromEntries(
-        Object.entries(this.errors).filter(([key]) => key !== field),
-      );
+    const own = this.#checked === null ? undefined : this.#ownErrors(this.#checked)[field];
+    const rest = Object.fromEntries(Object.entries(this.errors).filter(([key]) => key !== field));
+    this.errors = own === undefined ? rest : { ...rest, [field]: own };
+    this.dispatchEvent(new CustomEvent("sign-in-change", { bubbles: true, composed: true }));
   }
 
   override render() {
