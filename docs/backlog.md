@@ -4819,7 +4819,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
     keep both current. The fresh sign-in widget asks only the recovery pack's passkey route, so the
     next action that needs a fresh sign-in has to widen it.
   - A pack whose receipt the box confirmed after the card left the page, or after the person lost
-    system.manage, is counted received though no link to it was offered.
+    system.manage, is counted received though no link to it was offered. So is an older pack whose
+    receipt lands while a newer pack's link is on offer, unless only the older one holds a new
+    server key.
 
 - **At 390 px wide, the configuration export's password label overlaps its Show password button.**
   Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is

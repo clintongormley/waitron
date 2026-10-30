@@ -266,7 +266,7 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
   "shell.bucket.kit_invalid":
     "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
   "shell.bucket.key_does_not_open":
-    "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el paquete de recuperación o el kit más reciente.",
+    "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit.",
   "shell.bucket.newer_software":
     "La copia del bucket la hizo una versión de Waitron más nueva que la de este servidor. Actualiza este servidor e inténtalo de nuevo.",
   "shell.bucket.pointer_missing":
