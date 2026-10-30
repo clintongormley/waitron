@@ -495,6 +495,8 @@ until A977).
   zone and custom-season samples, keeping staff-language cases, dates and clock settings.
   The native special-day save/delete suite uses English venue, operation, zone and custom-day
   samples, keeping official holiday names, dates, locale settings and behavior checks.
+  Opening-hours route samples use English venue, station, zone, menu, period and custom-date
+  names, keeping locale settings, dates, permissions and refusal checks.
   Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
