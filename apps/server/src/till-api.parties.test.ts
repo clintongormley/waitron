@@ -4,6 +4,9 @@ import { createZone } from "./testing/service-zone.js";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
+import { billIdentities } from "@waitron/venue-service";
+import type { Logger } from "./logger.js";
+import { numberBill } from "./testing/bill-identities.js";
 import { describe, expect, it } from "vitest";
 import {
   diningTables,
@@ -91,7 +94,7 @@ const clock: TrustedClock = {
   currentAnchor: () => null,
 };
 
-function app(db: Database): Hono {
+function app(db: Database, log: Logger = () => {}): Hono {
   const deps: TillApiDeps = {
     db,
     // Unused: seating and finishing file nothing.
@@ -102,7 +105,7 @@ function app(db: Database): Hono {
     venueLocale: "es-ES",
   };
   const hono = new Hono();
-  mountTillApi(hono, deps, () => {});
+  mountTillApi(hono, deps, log);
   return hono;
 }
 
@@ -929,5 +932,55 @@ describe("the tab routes are gone", () => {
     expect(await res.text()).toBe("404 Not Found");
     expect(await partyRow(a.partyId)).toMatchObject({ state: "open", revision: 0 });
     expect(await partyRow(b.partyId)).toMatchObject({ state: "open", revision: 0 });
+  });
+});
+
+describe("A803 a bill at a table stored with no number", () => {
+  async function unnumbered() {
+    const seated = await seat();
+    await withTransaction(suite.db, (tx) =>
+      tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId)),
+    );
+    return seated;
+  }
+  function renumber(seated: { partyId: string; tabId: string }) {
+    return withTransaction(suite.db, (tx) => numberBill(tx, seated.tabId, seated.partyId));
+  }
+  const fault = (seated: { partyId: string; tabId: string }) => [
+    "error",
+    "bill.number_missing",
+    { billId: seated.tabId, partyId: seated.partyId },
+  ];
+
+  it("is listed with no number, and the bills route logs it as a fault in Waitron", async () => {
+    const seated = await unnumbered();
+    const logged: unknown[][] = [];
+    try {
+      const res = await app(suite.db, (...line) => logged.push(line)).request(
+        `/api/parties/${seated.partyId}/bills`,
+        { headers: { cookie: await cookie() } },
+      );
+      expect(res.status).toBe(200);
+      expect(await res.json()).toMatchObject([{ workingOrderId: seated.tabId, billNumber: null }]);
+      expect(logged).toContainEqual(fault(seated));
+    } finally {
+      await renumber(seated);
+    }
+  });
+
+  it("leaves the floor answering, and the floor route logs it as a fault in Waitron", async () => {
+    const seated = await unnumbered();
+    const logged: unknown[][] = [];
+    try {
+      const res = await app(suite.db, (...line) => logged.push(line)).request("/api/tables/state", {
+        headers: { cookie: await cookie() },
+      });
+      expect(res.status).toBe(200);
+      const tables = (await res.json()) as { id: string; party: { id: string } | null }[];
+      expect(tables.find((t) => t.id === seated.tableId)!.party!.id).toBe(seated.partyId);
+      expect(logged).toContainEqual(fault(seated));
+    } finally {
+      await renumber(seated);
+    }
   });
 });

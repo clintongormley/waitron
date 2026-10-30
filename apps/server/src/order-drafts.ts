@@ -346,7 +346,8 @@ export interface SaveDraftInput {
 /** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
   billId: string;
-  billNumber: number;
+  /** Null when the bill was stored with no number, a fault in Waitron. */
+  billNumber: number | null;
   ownerId: string;
   ownerName: string;
   savedAt: string;
@@ -1331,13 +1332,16 @@ export async function readUnsentDrafts(
     .having(sql`count(${orderDraftLines.id}) + count(${orderDraftRecalledLines.id}) > 0`);
   const byBill = new Map(rows.map((row) => [row.billId, row]));
   for (const [partyId, bills] of shown) {
-    const inNumberOrder = [...bills].sort((a, b) => a.billNumber! - b.billNumber!);
+    // A bill with no number (a fault in Waitron) comes after the numbered ones.
+    const inNumberOrder = [...bills].sort(
+      (a, b) => (a.billNumber ?? Infinity) - (b.billNumber ?? Infinity),
+    );
     for (const bill of inNumberOrder) {
       const draft = byBill.get(bill.workingOrderId);
       if (draft !== undefined) {
         unsent.get(partyId)!.push({
           billId: bill.workingOrderId,
-          billNumber: bill.billNumber!,
+          billNumber: bill.billNumber,
           ownerId: draft.ownerId,
           ownerName: draft.ownerName ?? "",
           savedAt: draft.savedAt,

@@ -8691,6 +8691,7 @@ export async function listTablesWithState(
   annotators: readonly FloorAnnotator[] = [],
   locationId?: string,
   now: Date = new Date(),
+  log?: Logger,
 ): Promise<TableState[]> {
   const loc = locationId ?? cfg.locationId;
   const result = await tx.execute<{
@@ -8787,7 +8788,7 @@ export async function listTablesWithState(
   `);
 
   const today = await readTodayTables(tx, loc);
-  const { seated, facts } = await readSeatedParties(tx, loc);
+  const { seated, facts } = await readSeatedParties(tx, loc, log);
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
@@ -8989,6 +8990,7 @@ interface Labelled {
 async function readSeatedParties(
   tx: Transaction,
   locationId: string,
+  log: Logger | undefined,
 ): Promise<{ seated: Map<string, TableParty>; facts: Map<string, SeatedPartyFacts> }> {
   const members = await tx
     .select({
@@ -9014,7 +9016,7 @@ async function readSeatedParties(
   }
   const partyIds = [...firstZones.keys()];
   const labels = await partyTableLabels(tx, partyIds);
-  const bills = await readBillsOfParties(tx, partyIds);
+  const bills = await readBillsOfParties(tx, partyIds, log);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds, bills);
   const reminders = await readReleaseReminders(tx, partyIds, firstZones);
   const notes = await VENUE_SERVICE.readKitchenNotes(

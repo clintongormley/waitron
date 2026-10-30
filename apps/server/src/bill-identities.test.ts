@@ -724,7 +724,7 @@ async function listOf(partyId: string): Promise<[string, number | null, string |
 }
 
 /** The floor's unsent orders of the party, as `[billId, billNumber]`, in the order it lists them. */
-async function unsentOf(partyId: string): Promise<[string, number][]> {
+async function unsentOf(partyId: string): Promise<[string, number | null][]> {
   const unsent = await inTx(v, async (tx) =>
     readUnsentDrafts(tx, [partyId], await readBillsOfParties(tx, [partyId])),
   );
@@ -833,51 +833,89 @@ describe("A803 bill list", () => {
     ]);
   });
 
-  it("a party bill that is not abandoned and has no row makes the read throw, naming the bill", async () => {
+  it("a bill at a table stored with no row is listed with no number and logged as a fault in Waitron, naming the bill", async () => {
     const seated = await tableWithBills("L7", 2);
     await inTx(v, (tx) =>
       tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.bills[1]!)),
     );
+    const logged: unknown[][] = [];
 
     try {
-      const error = await captureError(() => listOf(seated.partyId));
-      expect(error).toBeInstanceOf(Error);
-      expect(error).not.toBeInstanceOf(AppError);
-      expect((error as Error).message).toContain(seated.bills[1]);
-    } finally {
-      await inTx(v, (tx) => numberBill(tx, seated.bills[1]!, seated.partyId));
-    }
-  });
-
-  it("a party bill that is not abandoned and whose row has a null number makes the read throw, naming the bill", async () => {
-    const seated = await tableWithBills("L8", 2);
-    await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, seated.bills[1]!));
-
-    try {
-      const error = await captureError(() =>
-        inTx(v, (tx) => readBillsOfParties(tx, [seated.partyId])),
+      const bills = await inTx(v, (tx) =>
+        readPartyBills(tx, seated.partyId, (...line) => logged.push(line)),
       );
-      expect(error).toBeInstanceOf(Error);
-      expect(error).not.toBeInstanceOf(AppError);
-      expect((error as Error).message).toContain(seated.bills[1]);
+      expect(bills.map((bill) => [bill.workingOrderId, bill.billNumber])).toEqual([
+        [seated.bills[0], 1],
+        [seated.bills[1], null],
+      ]);
+      expect(logged).toEqual([
+        ["error", "bill.number_missing", { billId: seated.bills[1], partyId: seated.partyId }],
+      ]);
     } finally {
       await inTx(v, (tx) => numberBill(tx, seated.bills[1]!, seated.partyId));
     }
   });
-  it("a paid bill whose row has a null number makes the read throw, naming the bill", async () => {
+
+  it("a bill at a table whose row has a null number is listed with no number and logged, and the floor's unsent order on it comes last with no number", async () => {
+    const seated = await tableWithBills("L8", 3);
+    await saveUnsent(seated.partyId, seated.bills[0]!, "Flan");
+    await saveUnsent(seated.partyId, seated.bills[1]!, "Flan");
+    await saveUnsent(seated.partyId, seated.bills[2]!, "Flan");
+    await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, seated.bills[0]!));
+    const logged: unknown[][] = [];
+
+    try {
+      const unsent = await inTx(v, async (tx) =>
+        readUnsentDrafts(
+          tx,
+          [seated.partyId],
+          await readBillsOfParties(tx, [seated.partyId], (...line) => logged.push(line)),
+        ),
+      );
+      expect(unsent.get(seated.partyId)!.map((draft) => [draft.billId, draft.billNumber])).toEqual([
+        [seated.bills[1], 2],
+        [seated.bills[2], 3],
+        [seated.bills[0], null],
+      ]);
+      expect(logged).toEqual([
+        ["error", "bill.number_missing", { billId: seated.bills[0], partyId: seated.partyId }],
+      ]);
+    } finally {
+      await inTx(v, (tx) => numberBill(tx, seated.bills[0]!, seated.partyId));
+    }
+  });
+
+  it("a paid bill whose row has a null number is listed with no number and logged", async () => {
     const seated = await seat(v, await v.table("L9"));
     await order(v, seated.tabId, "Burger", "Agua");
     const paid = await split(v, seated.partyId, seated.tabId, [2]);
     await pay(v, paid, "2.00");
     expect(await statusOf(v, paid)).toBe("settled");
     await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, paid));
+    const logged: unknown[][] = [];
 
     try {
-      const error = await captureError(() => listOf(seated.partyId));
-      expect(error).not.toBeInstanceOf(AppError);
-      expect((error as Error).message).toContain(paid);
+      const bills = await inTx(v, (tx) =>
+        readPartyBills(tx, seated.partyId, (...line) => logged.push(line)),
+      );
+      expect(bills.find((bill) => bill.workingOrderId === paid)!.billNumber).toBeNull();
+      expect(logged).toEqual([
+        ["error", "bill.number_missing", { billId: paid, partyId: seated.partyId }],
+      ]);
     } finally {
       await inTx(v, (tx) => numberBill(tx, paid, seated.partyId));
     }
+  });
+
+  it("an abandoned bill with no number is not logged", async () => {
+    const seated = await tableWithBills("L10", 2);
+    const command = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
+    await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, seated.bills[1]!));
+    const logged: unknown[][] = [];
+
+    await inTx(v, (tx) => readPartyBills(tx, seated.partyId, (...line) => logged.push(line)));
+
+    expect(logged).toEqual([]);
   });
 });

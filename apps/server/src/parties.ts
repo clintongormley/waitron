@@ -25,6 +25,7 @@ import {
   rawCentsToDecimal,
 } from "@waitron/shared";
 import { VENUE_SERVICE } from "./modules.js";
+import type { Logger } from "./logger.js";
 import { floorDeletionFor } from "./floor-delete.js";
 import { floorPlanSetsFor } from "./floor-plan-sets.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -68,7 +69,10 @@ export interface PartyBill {
   /** The party the bill is recorded on; for a bill a merged party kept, not the one asked about. */
   partyId: string;
   label: string | null;
-  /** The number the bill holds at its table; null exactly when the bill is abandoned. */
+  /**
+   * The number the bill holds at its table; null when the bill is abandoned, or when a bill at a
+   * table was stored with none, which is a fault in Waitron.
+   */
   billNumber: number | null;
   /** The name staff gave the bill; null when it has none. */
   billName: string | null;
@@ -533,11 +537,15 @@ export async function requireOpenParty(tx: Transaction, partyId: string): Promis
 }
 
 /** Every bill of the party's family, in the order they were opened. */
-export async function readPartyBills(tx: Transaction, partyId: string): Promise<PartyBill[]> {
+export async function readPartyBills(
+  tx: Transaction,
+  partyId: string,
+  log?: Logger,
+): Promise<PartyBill[]> {
   if ((await readParty(tx, partyId)) === undefined) {
     throw new AppError("party.not_open", { partyId });
   }
-  const bills = (await readBillsOfParties(tx, [partyId])).get(partyId)!;
+  const bills = (await readBillsOfParties(tx, [partyId], log)).get(partyId)!;
   const choices =
     bills.length === 0
       ? []
@@ -650,12 +658,12 @@ export type FamilyBill = Omit<
 
 /**
  * {@link readPartyBills} for several parties at once, keyed by each party asked about, without
- * reading whether each bill's receipt can be printed again. Throws when a bill that is not abandoned
- * has no number: every path that puts a bill on a table numbers it.
+ * reading whether each bill's receipt can be printed again.
  */
 export async function readBillsOfParties(
   tx: Transaction,
   partyIds: readonly string[],
+  log?: Logger,
 ): Promise<Map<string, FamilyBill[]>> {
   if (partyIds.length === 0) return new Map();
   const families = await partyFamilies(tx, partyIds);
@@ -688,13 +696,18 @@ export async function readBillsOfParties(
     const identity = identities.get(row.workingOrderId);
     const abandoned = row.status === "abandoned";
     if (!abandoned && identity?.number == null) {
-      throw new Error(`Bill ${row.workingOrderId} is on a table with no bill number`);
+      // A fault in Waitron: every path that puts a bill on a table numbers it. The bill is shown
+      // unnumbered and the rest of the floor carries on (owner, 2026-10-30, A803 slice 2 Q5).
+      log?.("error", "bill.number_missing", {
+        billId: row.workingOrderId,
+        partyId: row.partyId!,
+      });
     }
     return {
       workingOrderId: row.workingOrderId,
       partyId: row.partyId!,
       label: row.label,
-      billNumber: abandoned ? null : identity!.number,
+      billNumber: abandoned ? null : (identity?.number ?? null),
       billName: identity?.name ?? null,
       status: row.status,
       total,
