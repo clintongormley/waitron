@@ -2,6 +2,7 @@ import { LitElement, css, html, nothing } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   startAuthentication,
+  WebAuthnAbortService,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
 import { baseStyles } from "@waitron/ui";
@@ -64,6 +65,7 @@ export class FreshSignIn extends LitElement {
   @state() private errors: Partial<Record<Field, string>> = {};
 
   #attempt = 0;
+  #prompting = false;
   #reads = 0;
 
   constructor() {
@@ -80,6 +82,18 @@ export class FreshSignIn extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     if (this.profile === null) void this.#readProfile();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.#closePrompt();
+  }
+
+  /** The library's cancel stops whichever ceremony the page has open, so only while it is ours. */
+  #closePrompt(): void {
+    this.#attempt++;
+    if (this.#prompting) WebAuthnAbortService.cancelCeremony();
+    this.#prompting = false;
   }
 
   async #readProfile(): Promise<void> {
@@ -115,21 +129,25 @@ export class FreshSignIn extends LitElement {
     const errors: Partial<Record<Field, string>> = {};
     if (way === "password" && this.password === "") errors.password = t("form.password_required");
     const code = this.code.trim();
+    const digits = code.replace(/\s+/g, "");
     if (this.profile!.hasTotp && code === "") errors.code = t("fresh_sign_in.code_required");
     this.errors = errors;
     if (Object.keys(errors).length > 0) return null;
     const codes = !this.profile!.hasTotp
       ? {}
-      : /^\d{6}$/.test(code)
-        ? { totp: code }
+      : /^\d{6}$/.test(digits)
+        ? { totp: digits }
         : { recoveryCode: code };
     if (way === "password") return { method: "password", password: this.password, ...codes };
     const attempt = ++this.#attempt;
     try {
       const { challengeHandle, options } = await this.api.recoveryPackPasskeyOptions();
       if (attempt !== this.#attempt) return null;
+      this.#prompting = true;
       const response = await startAuthentication({
         optionsJSON: options as unknown as PublicKeyCredentialRequestOptionsJSON,
+      }).finally(() => {
+        if (attempt === this.#attempt) this.#prompting = false;
       });
       if (attempt !== this.#attempt) return null;
       return { method: "passkey", challengeHandle, response, ...codes };
@@ -149,12 +167,15 @@ export class FreshSignIn extends LitElement {
     if (passkey === "cancelled") return "";
     if (passkey === "failed") return codeMessage("passkey.verification_failed");
     const code = codeOf(error, "server.internal");
-    if (code === "password.invalid" && this.ways?.password) {
+    if (code === "password.invalid") {
       this.errors = { password: codeMessage(code) };
       return "";
     }
-    if ((code === "totp.invalid" || code === "totp.required") && this.profile?.hasTotp) {
-      this.errors = { code: codeMessage(code) };
+    if (code === "totp.invalid" || code === "totp.required") {
+      // A profile read before an authenticator was added draws no code field to type into.
+      const stale = !this.profile?.hasTotp;
+      this.errors = { code: codeMessage(stale ? "totp.required" : code) };
+      if (stale) void this.#readProfile();
       return "";
     }
     if (code === "passkey.not_registered")
@@ -164,9 +185,9 @@ export class FreshSignIn extends LitElement {
     return codeMessage(code);
   }
 
-  /** Forgets everything typed, and drops the answer of a passkey prompt still open. */
+  /** Forgets everything typed, and closes a passkey prompt still open, dropping its answer. */
   clear(): void {
-    this.#attempt++;
+    this.#closePrompt();
     this.password = "";
     this.code = "";
     this.revealed = false;

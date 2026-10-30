@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebAuthnAbortService } from "@simplewebauthn/browser";
 import type { DashboardApi, OwnProfile } from "../api/client.js";
 import { codeMessage } from "../i18n/codes.js";
 import { setLocale, t } from "../i18n/t.js";
@@ -104,6 +105,17 @@ describe("the sign-in body", () => {
     const { el, root } = await mount(profile({ hasTotp: true }));
     type(root, "current-password", "hunter2-hunter2");
     type(root, "totp", " 123456 ");
+    expect(await el.signIn()).toEqual({
+      method: "password",
+      password: "hunter2-hunter2",
+      totp: "123456",
+    });
+  });
+
+  it("sends six digits typed with spaces as totp, without the spaces", async () => {
+    const { el, root } = await mount(profile({ hasTotp: true }));
+    type(root, "current-password", "hunter2-hunter2");
+    type(root, "totp", "123 456");
     expect(await el.signIn()).toEqual({
       method: "password",
       password: "hunter2-hunter2",
@@ -257,6 +269,66 @@ describe("a passkey run", () => {
     });
   });
 
+  /** A prompt that never answers on its own, and is refused as a browser refuses one when aborted. */
+  function promptHeldOpen(): { signal: () => AbortSignal | undefined } {
+    let seen: AbortSignal | undefined;
+    vi.mocked(navigator.credentials.get).mockImplementationOnce(
+      (options) =>
+        new Promise((_resolve, reject) => {
+          seen = options?.signal ?? undefined;
+          seen?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+    return { signal: () => seen };
+  }
+
+  it.each([
+    ["cleared", (el: FreshSignIn) => el.clear()],
+    ["removed", (el: FreshSignIn) => el.remove()],
+  ])("closes an open passkey prompt when %s, and its sign-in gives nothing", async (_l, close) => {
+    const { el } = await mount(profile({ passkeys: [PASSKEY] }));
+    const prompt = promptHeldOpen();
+    const pending = el.signIn("passkey");
+    await vi.waitFor(() => expect(prompt.signal()).toBeDefined());
+    close(el);
+    expect(prompt.signal()!.aborted).toBe(true);
+    expect(await pending).toBeNull();
+  });
+
+  it.each([
+    ["cleared", (el: FreshSignIn) => el.clear()],
+    ["removed", (el: FreshSignIn) => el.remove()],
+  ])("drops the answer of a prompt that answers after it was %s", async (_l, close) => {
+    const { el } = await mount(profile({ passkeys: [PASSKEY] }));
+    let answer: (credential: PublicKeyCredential) => void = () => undefined;
+    vi.mocked(navigator.credentials.get).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const pending = el.signIn("passkey");
+    await vi.waitFor(() => expect(navigator.credentials.get).toHaveBeenCalled());
+    close(el);
+    answer(passkeyCredential());
+    expect(await pending).toBeNull();
+  });
+
+  it("leaves the page's other passkey prompts alone when it has none open", async () => {
+    const cancel = vi.spyOn(WebAuthnAbortService, "cancelCeremony");
+    const { el } = await mount(profile({ passkeys: [PASSKEY] }));
+    await el.signIn("passkey");
+    const prompt = promptHeldOpen();
+    const pending = el.signIn("passkey");
+    await vi.waitFor(() => expect(prompt.signal()).toBeDefined());
+    el.clear();
+    await pending;
+    cancel.mockClear();
+    el.clear();
+    el.remove();
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
   it("stops quietly when the person cancels the passkey prompt", async () => {
     const { el } = await mount(profile({ passkeys: [PASSKEY] }));
     vi.mocked(navigator.credentials.get).mockRejectedValueOnce(
@@ -328,9 +400,32 @@ describe("refusals", () => {
     expect(words).toBe(`${t("fresh_sign_in.no_way_in")} ${t("profile.password_recovery")}`);
   });
 
-  it("hands a code refusal back for the bottom message when the code field is not shown", async () => {
-    const { el } = await mount(profile({ hasTotp: false }));
-    expect(el.refuse({ code: "totp.required", status: 401 })).toBe(codeMessage("totp.required"));
+  it.each(["totp.invalid", "totp.required"])(
+    "reads the profile again on %s when no code field is shown, and asks for the code under it",
+    async (code) => {
+      const api = stubApi(profile({ hasTotp: false }));
+      const { el, root } = await mount(profile({ hasTotp: false }), api);
+      api.getProfile.mockResolvedValue(profile({ hasTotp: true }));
+      expect(el.refuse({ code, status: 401 })).toBe("");
+      await vi.waitFor(() => expect(field(root, "totp")).not.toBeNull());
+      await el.updateComplete;
+      expect(api.getProfile).toHaveBeenCalledTimes(2);
+      expect(field(root, "totp")!.error).toBe(codeMessage("totp.required"));
+      type(root, "current-password", "hunter2-hunter2");
+      type(root, "totp", "123456");
+      expect(await el.signIn()).toEqual({
+        method: "password",
+        password: "hunter2-hunter2",
+        totp: "123456",
+      });
+    },
+  );
+
+  it("never sends the password way for a person with no password", async () => {
+    const { el, root, api } = await mount(profile({ hasPassword: false, passkeys: [PASSKEY] }));
+    expect(field(root, "current-password")).toBeNull();
+    expect(await el.signIn("password")).toBeNull();
+    expect(api.recoveryPackPasskeyOptions).not.toHaveBeenCalled();
   });
 
   it("clears a field's refusal when that field is edited", async () => {
