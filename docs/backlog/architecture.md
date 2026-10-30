@@ -475,14 +475,15 @@ until A977).
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
   products (café, agua), names no check in it reads. The station-alert and party suites still
   hold other Spanish samples, among them "Mesa 7" and "Terraza" in the party suites. The
-  device-api pass suite (`apps/server/src/device-api.pass.test.ts`) and the configuration-transfer
-  suite (`apps/server/src/configuration-transfer.test.ts`) give English names to what they create;
-  the transfer suite still reads the default kitchen station setup names "Cocina" for a Spanish
-  venue (`packages/provisioning/src/starter-content.ts`), and keeps Spanish values inside its
-  translation maps, its accented name-key case, and official holiday and place names. The
-  device, device-delete, join-request, join-api, join-api database and device-session suites keep
-  only the Spanish names the shared test helpers create, and the device and device-session suites'
-  operation description "Venta en establecimiento". Screen tests take translated expectations from
+  configuration-transfer suite (`apps/server/src/configuration-transfer.test.ts`) gives English
+  names to what it creates; it still reads the default kitchen station setup names "Cocina" for a
+  Spanish venue (`packages/provisioning/src/starter-content.ts`), and keeps Spanish values inside
+  its translation maps, its accented name-key case, official holiday and place names, its street
+  lines, and "Fiesta" (also an English word). The device-api pass suite
+  (`apps/server/src/device-api.pass.test.ts`) and the device, device-delete, join-request,
+  join-api, join-api database and device-session suites keep only the Spanish names the shared
+  test helpers create, and the device and device-session suites' operation description "Venta en
+  establecimiento". Screen tests take translated expectations from
   their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language

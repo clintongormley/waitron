@@ -462,7 +462,7 @@ describe("a pass monitor on a till", () => {
       return { ...till, signedIn: `${till.cookie}; ${SESSION_COOKIE}=${session.token}` };
     };
     const tables = await monitorOn("Tables till", f.v.tables.zoneId);
-    const counter = await monitorOn("Bar till", f.v.counter.zoneId);
+    const counter = await monitorOn("Counter till", f.v.counter.zoneId);
 
     const anonymous = await f.app.request("/api/device/pass-monitor", {
       headers: { cookie: tables.cookie },
