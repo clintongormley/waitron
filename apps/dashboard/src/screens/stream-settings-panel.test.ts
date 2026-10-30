@@ -520,6 +520,17 @@ describe("stream-settings-panel: the bucket form", () => {
 });
 
 describe("stream-settings-panel: once set up", () => {
+  it("keeps no secret after Save: Change opens with it blank and the other fields from the server's answer", async () => {
+    const api = stubApi();
+    const { el } = await mount(api);
+    fillRequired(el);
+    await press(el, "save");
+    expect(api.saveStreamSettings).toHaveBeenCalled();
+    await press(el, "change");
+    expect(field(el, "bucket-secret-access-key").value).toBe("");
+    expect(field(el, "bucket-region").value).toBe("eu-west-1");
+  });
+
   it("shows how current the copy is when it is on", async () => {
     const { el } = await mount(stubApi({}, ON));
     expect(text(el, "[data-test=stream-state]")).toBe(t("stream.state.streaming"));
@@ -929,6 +940,31 @@ describe("stream-settings-panel: once set up", () => {
     finish(OFF);
     await flush(el);
     expect(field(el, "bucket-region")).not.toBeNull();
+  });
+
+  it("keeps a new Turn off held when an earlier one sent before the panel was re-added answers", async () => {
+    const answers: ((value: StreamSettingsView) => void)[] = [];
+    const api = stubApi(
+      {
+        turnOffStream: vi.fn(
+          () => new Promise<StreamSettingsView>((resolve) => answers.push(resolve)),
+        ),
+      },
+      ON,
+    );
+    const { el, host } = await mount(api);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    el.remove();
+    host.append(el);
+    await flush(el);
+    await press(el, "turn-off");
+    await press(el, "turn-off");
+    expect(api.turnOffStream).toHaveBeenCalledTimes(2);
+    answers[0]!(OFF);
+    await flush(el);
+    const button = q(el, "[data-test=turn-off]") as HTMLElement & { disabled: boolean };
+    expect(button.disabled).toBe(true);
   });
 
   it("says why when the settings cannot be read", async () => {
