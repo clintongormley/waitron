@@ -499,6 +499,8 @@ until A977).
   samples, keeping official holiday names, dates, locale settings and behavior checks.
   Opening-hours route samples use English venue, station, zone, menu, period and custom-date
   names, keeping locale settings, dates, permissions and refusal checks.
+  Period-deletion HTTP route samples use English location, operation, station, menu and special-day
+  names, keeping dates, locale keys, permission refusals and replacement checks.
   Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
