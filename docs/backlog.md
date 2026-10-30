@@ -6542,6 +6542,10 @@ shipping-style wizard; `wa-wt reset demo|onboarding [worktree-name]` wipes and r
 
 ## Standing decisions
 
+- **Dashboard live reads follow the document lifecycle (A1229, 2026-10-30).**
+  [Decision and limits](backlog/dashboard.md#decisions-and-deliberate-limits).
+
+
 - **Joining tables suggests their combined seats, still editable (A747, owner, 2026-10-16).**
   Implemented for the till's joining and split/rejoin windows and the dashboard's Add joined table.
   [Decision and limits](backlog/till.md#joined-table-seat-suggestions-owner-2026-10-16-a747).
