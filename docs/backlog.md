@@ -6214,6 +6214,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   dates, permissions, refusal details, saved paint and name ordering stay.
   Named-day occurrence samples use English custom-day names; repetition, closure, public-holiday
   tone and area-selection checks stay.
+  Holiday-route custom fair samples use English names; official holiday names, geography,
+  permissions, sources and dates stay.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

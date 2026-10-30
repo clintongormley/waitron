@@ -204,7 +204,7 @@ async function create(fx: Fixture, date: string, name: string) {
 describe("reading holidays", () => {
   it("returns the range's holiday read to anyone who may view the venue", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-20", "Feria de otoño");
+    await create(fx, "2026-10-20", "Autumn fair");
     const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-01", "2026-10-31"));
     const response = await send(
       fx,
@@ -270,7 +270,7 @@ describe("reading holidays", () => {
 describe("the Calendar and holidays", () => {
   it("reads holidays once and returns their coverage and sources with the days", async () => {
     const fx = await fixture();
-    await create(fx, "2026-10-13", "Feria");
+    await create(fx, "2026-10-13", "Fair");
     const expected = await direct((tx) => readHolidays(tx, fx.cfg, "2026-10-11", "2026-10-13"));
     const readSpy = vi.spyOn(getCountryPack("ES")!.holidayCalendar!, "read");
     onTestFinished(() => readSpy.mockRestore());
@@ -304,7 +304,7 @@ describe("the Calendar and holidays", () => {
     expect(model.days.map(({ specialDay }) => specialDay?.name ?? null)).toEqual([
       null,
       null,
-      "Feria",
+      "Fair",
     ]);
   });
 });

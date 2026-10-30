@@ -546,6 +546,8 @@ until A977).
   operation description stay Spanish.
   Named-day occurrence samples use English custom-day names; repetition, closure, public-holiday
   tone and area-selection checks stay.
+  Holiday-route custom fair samples use English names; official holiday names, geography,
+  permissions, sources and dates stay.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
