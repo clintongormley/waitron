@@ -137,7 +137,7 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("the command recovery sheet uses the frozen venue zone", async () => {
+it("the command recovery pack uses the frozen venue zone", async () => {
   const f = configured();
   const saved = fixture();
   const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {

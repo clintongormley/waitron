@@ -482,7 +482,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
     for (const [question, answer] of [
       ["address line 2 (blank if none): ", ""],
       ["Confirm setup password: ", PASSWORD],
-      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+      ["Have you kept this recovery pack? [y/N]: ", "yes"],
     ]) {
       const count = output.split(question!).length - 1;
       for (let i = replies.get(question!) ?? 0; i < count; i++) child.stdin.write(`${answer}\n`);

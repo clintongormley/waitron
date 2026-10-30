@@ -137,8 +137,8 @@ export function createFirstSetupCommandDelivery(options: {
         };
       } else if (digest(await readSaved(output)) !== reference.documentDigest) refuse();
       await options.recoveryDelivery.registerRecoveryDocumentDelivery(owner, reference);
-      io.stdout(`Recovery PDF: ${output}`);
-      const kept = (await io.prompt("Have you kept this recovery PDF? [y/N]: "))
+      io.stdout(`Recovery pack: ${output}`);
+      const kept = (await io.prompt("Have you kept this recovery pack? [y/N]: "))
         .trim()
         .toLowerCase();
       await options.owner.authorize(owner);

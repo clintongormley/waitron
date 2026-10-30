@@ -77,7 +77,7 @@ const HARMLESS_LOG_FIELDS: ReadonlyMap<string, string> = new Map([
   ["recovery.venue_holder_stalled.holderKind", "an enum of which process holds the venue folder"],
   [
     "restore.recovery_key_selected.name",
-    "a recovery key's name: a date and a random code (apps/server/src/break-glass.ts)",
+    "a server key's name: a date and a random code (packages/provisioning/src/server-key-name.ts)",
   ],
   ["staff_notice.duplicate_key.owner", "the id of a notice's source, such as fiscal-outbox"],
   ["staff_notice.source_recovered.owner", "the id of a notice's source, such as fiscal-outbox"],
