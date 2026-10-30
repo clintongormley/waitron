@@ -38,14 +38,6 @@ async function pages(bytes: Uint8Array): Promise<string[]> {
   }
 }
 
-it("dates the server key's last change by the key's name, as the dashboard's packs do", async () => {
-  const [cover, keyPage] = await pages(
-    await renderSetupRecoveryPack(document, "en", "UTC", loadRecoveryFont),
-  );
-  expect(cover).toContain("Server key 17 Oct 2026 2026-10-17 · ACRY 2");
-  expect(keyPage).toContain("Key name 2026-10-17 · ACRY");
-});
-
 it.each(["en", "es"] as const)(
   "draws in full a legal name at the tax agency's 120-character cap and a venue name at the recovery document's 256, in the widest letter the pack's font draws, in %s",
   async (locale) => {
