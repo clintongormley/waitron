@@ -434,8 +434,8 @@ Fix: a `_one` wording for each, used for one item, as `service-delete-copy.ts` d
 
 A routing cell's line for Lunch does not apply to a Lunch dish confirmed
 after Lunch: it goes where the running period's line, or the cell's every-period target, sends it.
-A table's mojito on Almuerzo, with Cocktails routed Lunch → Downstairs bar and otherwise Upstairs
-bar, confirmed at 14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`,
+A table's mojito on the Midday menu, with Cocktails routed Lunch → Downstairs bar and otherwise
+Upstairs bar, confirmed at 14:05 is made Upstairs (`apps/server/src/till-api.service-periods.test.ts`,
 "makes a table's cocktail confirmed late at 14:05 at the Upstairs bar, not Lunch's Downstairs
 bar"). Routing it by the ended period is a module-contract change across the fire, hold and
 release paths: the router resolves one period per department per resolver (`routingAt`,

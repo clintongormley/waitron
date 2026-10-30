@@ -6260,6 +6260,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   (`apps/server/src/order-places.test.ts`) English table and group names; the alert suite keeps
   its es-ES locale and the printer name "Epson", and the order-places suite keeps the Spanish names
   its shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
+  The service-period suite (`apps/server/src/till-api.service-periods.test.ts`) gives English
+  names to what it creates and names no menu after a period, and the service-step suite
+  (`apps/server/src/service-step-signals.test.ts`) English table names; the service-period suite
+  keeps the Spanish names its shared signed-in till (`apps/server/src/testing/signed-in-till.ts`)
+  creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
+  ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
+  shared party venue creates.
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
