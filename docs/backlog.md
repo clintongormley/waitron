@@ -6278,8 +6278,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   tone and area-selection checks stay.
   Holiday-route custom fair samples use English names; official holiday names, geography,
   permissions, sources and dates stay.
-  The provisioning and floor-plan-route fixture slice in [#2295](https://github.com/clintongormley/waitron/pull/2295)
-  still needs rebasing onto A1239's export-check repair and fresh current-head qualification.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
@@ -6595,14 +6593,6 @@ _Formerly entries spread across the old sections._
 - **A980 — data protection, Waitron's side.** Design revision 2 (2026-10-24) records the owner's
   ten answers; its small slices are planned. S9 and S11 wait for the specialists.
   [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
-
-- **Qualify the personal-data export's forbidden-value check against session timestamps.**
-  [PR #2295's server shard 6](https://github.com/clintongormley/waitron/actions/runs/41103592952/job/124227073022)
-  failed at `apps/server/src/personal-data-export-api.workforce.test.ts:873` after finding
-  `19.99` in `sign-in.json`. The check searches for the colleague's pay as a substring;
-  a session timestamp collision is an unverified hypothesis because the log holds no export payload.
-  Capture the failing payload and reproduce before changing the check; retain the colleague-data
-  and secret-exclusion assertions.
 
 - **A privacy-notice page hosted by Waitron Cloud.** For a Cloud-connected venue, a page Cloud
   serves from the venue's own notice text, instead of a page on the venue's own website. The owner
