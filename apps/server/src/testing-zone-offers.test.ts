@@ -93,7 +93,7 @@ async function seedVenue(db: Database): Promise<Venue> {
     const water = await product("Agua", "1.20", null);
     const sugar = await product("Azúcar", "0.10", null);
     const counter = await createStation(tx, cfg, { name: "Barra" });
-    const pass = await createStation(tx, cfg, { name: "Pase" });
+    const pass = await createStation(tx, cfg, { name: "Pass" });
     await routeProductTo(tx, cfg, coffee.id, counter.id);
     await routeCategoryTo(tx, cfg, food.id, pass.id);
     const list = await createExtraList(
