@@ -263,11 +263,16 @@ describe("demo seed end-to-end", () => {
 
     const held = await getHeldOrder({ db: suite.db }, cfg, orderId);
     // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
-    expect(held.lines.map((l) => l.productId)).toEqual([casaProduct.id, diaProduct.id]);
+    expect(held.lines.map((l) => l.productId)).toEqual([
+      casaProduct.id,
+      diaProduct.id,
+      diaProduct.id,
+    ]);
     expect(held.lines.map((l) => ("menuItemId" in l ? l.menuItemId : null))).toEqual([
       casaOffer,
       diaOffer,
+      diaOffer,
     ]);
-    expect(held.lines[1]!.quantity).toBe("2.000");
+    expect(held.lines.map((l) => l.quantity)).toEqual(["1.000", "1.000", "1.000"]);
   });
 });
