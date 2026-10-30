@@ -596,7 +596,7 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(sorted(recorded.map((row) => row.lineId))).toEqual(sorted(expected));
   });
 
-  it("A1208 half off the whole of 3,277 burgers with cheese records what it took off each burger and each cheese", async () => {
+  it("A1208 half off the whole of 3,277 burgers with cheese records a discount line for each burger and each cheese", async () => {
     const { id } = await park(linesOfAtMost99(3277, burgersWithCheese));
     const reasonId = await inTx(
       venue,

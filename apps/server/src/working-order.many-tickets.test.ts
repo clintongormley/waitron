@@ -1,17 +1,12 @@
 import { and, eq, sql } from "drizzle-orm";
 import { beforeAll, expect, it } from "vitest";
-import {
-  kitchenPrintJobLines,
-  printJobs,
-  ticketItems,
-  withTransaction,
-  workingOrderLines,
-} from "@waitron/db";
+import { kitchenPrintJobLines, printJobs, ticketItems, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { offerProducts } from "./testing/zone-offers.js";
 import { createTableKitchenOrder } from "./testing/kitchen-table-order.js";
-import { fireableLineColumns, fireLines, insertTabRound, priceTabRound } from "./working-order.js";
+import { fireAll } from "./testing/serve-line.js";
+import { insertTabRound, priceTabRound } from "./working-order.js";
 import {
   fireNewOrder,
   setupSplitExtrasVenue,
@@ -97,12 +92,7 @@ it("A1208 a table bill firing 11,880 burgers at once records an allergy snapshot
       const priced = await priceTabRound(tx, venue.cfg, tabId, round, "checked");
       await insertTabRound(tx, venue.cfg, priced, priced.rows);
     }
-    const stored = await tx
-      .select(fireableLineColumns)
-      .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, tabId))
-      .orderBy(workingOrderLines.lineNo);
-    await fireLines(tx, venue.cfg, tabId, stored);
+    await fireAll(tx, venue.cfg, tabId);
     return tabId;
   });
 
