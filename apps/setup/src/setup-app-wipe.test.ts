@@ -44,12 +44,15 @@ const OWNER_HEADER = "X-Waitron-Setup-Owner";
 async function wipeFixture(
   options: {
     inspection?: Partial<FirstSetupInspection>;
+    /** Merged into each inspection read after `inspection`, counted from 0. */
+    inspectionAt?: (read: number) => Partial<FirstSetupInspection>;
     activity?: BackupRepairActivity | null | (() => BackupRepairActivity | null);
     summary?: () => Response | Promise<Response>;
     startAgain?: () => Response;
     backupPhase?: BackupRepairStatus["phase"];
   } = {},
 ) {
+  let inspections = 0;
   const fixture = wizardApi({
     claimed: true,
     intercept(path) {
@@ -82,6 +85,7 @@ async function wipeFixture(
           repairEligible: false,
           artifacts: [],
           ...options.inspection,
+          ...options.inspectionAt?.(inspections++),
         } satisfies FirstSetupInspection);
     },
   });
@@ -157,9 +161,12 @@ for (const c of cases)
       activity: c.activity,
       summary: () => Response.json(c.summary),
     });
+    const inputs = () => app.shadowRoot!.querySelectorAll("wt-input").length;
+    const inputsBefore = inputs();
     await click(app, "start-again");
     await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    expect(q(app, "damaged-record-password")).toBeNull();
+    expect(inputs()).toBe(inputsBefore);
+    expect(q(app, "start-again")).toBeNull();
     expect(summaryReads(requests).length).toBe(1);
     for (const read of summaryReads(requests)) expect(read.headers.has(OWNER_HEADER)).toBe(false);
     await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
@@ -414,3 +421,98 @@ for (const [locale, lang] of locales)
     expect(text(app)).toContain(strings.uncheckable);
     expect(q(app, "start-again-refused")!.textContent).toBe(strings.wipeUnavailable);
   });
+
+it("a summary that changed after the confirmation was drawn closes it, says the setup changed, and Start again then opens on the new summary", async () => {
+  let reads = 0;
+  const { app, requests } = await wipeFixture({
+    summary: () => Response.json(reads++ === 0 ? namedSummary : stoppedSummary),
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).toBeNull();
+  await settled(app);
+  expect(formErrors(app)).toContain(t.heldChanged);
+  expect(sends(requests)).toEqual([]);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  expect(q(app, "recovery-stopped")).not.toBeNull();
+});
+
+for (const [name, refusal, words] of [
+  [
+    "trading-settings",
+    () => refusedCause("trading-settings"),
+    `${t.tradingSaved} ${t.tradingSavedPassword}`,
+  ],
+  [
+    "setup.not_ready",
+    () => Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 409 }),
+    t.wipeUnavailable,
+  ],
+] as const)
+  it(`a send refused ${name} closes the confirmation, draws the box's words and offers no Start again`, async () => {
+    const { app } = await wipeFixture({ startAgain: refusal });
+    await click(app, "start-again");
+    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+    await click(app, "confirm-start-again");
+    await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+    await settled(app);
+    expect(q(app, "start-again-refused")!.textContent).toBe(words);
+    expect(q(app, "retire-confirmed")).toBeNull();
+    expect(q(app, "start-again")).toBeNull();
+    if (name === "trading-settings") expect(q(app, "resume")).not.toBeNull();
+  });
+
+it("Start again reads and sends with the setup as read on pressing, not as first drawn", async () => {
+  const { app, requests } = await wipeFixture({
+    inspectionAt: (read) => (read === 0 ? {} : { inspectionId: "b".repeat(64), revision: 2 }),
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => sends(requests).length).toBe(1);
+  for (const r of [...summaryReads(requests), ...sends(requests)])
+    expect(r.body).toMatchObject({ inspectionId: "b".repeat(64), revision: 2 });
+});
+
+it("where the setup as read on pressing can no longer be deleted, no summary is read and the page says so", async () => {
+  const { app, requests } = await wipeFixture({
+    inspectionAt: (read) => (read === 0 ? {} : { pair: "repairable" }),
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+  await settled(app);
+  expect(q(app, "start-again-refused")!.textContent).toBe(t.wipeUnavailable);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
+  expect(summaryReads(requests)).toEqual([]);
+});
+
+it("with the setup database missing and a recovery journal the summary does not name, pressing Start again opens no confirmation", async () => {
+  const { app } = await wipeFixture({
+    inspection: { database: "missing" },
+    backupPhase: "uncertain",
+  });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "missing-reached")).not.toBeNull();
+  await settled(app);
+  expect(q(app, "retire-confirmed")).toBeNull();
+});
+
+it("pressing Start again moves focus to the confirmation's tick box", async () => {
+  const { app } = await wipeFixture();
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "retire-confirmed"));
+});
+
+it("a refusal drawn on pressing Start again takes the focus in the button's place", async () => {
+  const { app } = await wipeFixture({ summary: () => refusedCause("kept-records") });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+  await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again-refused"));
+});

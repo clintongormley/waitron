@@ -1411,12 +1411,15 @@ export class SetupApp extends LitElement {
         this.firstWipeSummary = summary;
       }
       this.firstRestartConfirm = true;
+      void this.#focusAfterUpdate("retire-confirmed");
     } catch (error) {
       if (!current()) return;
       this.#closeWipe();
       const refusal = wipeRefusal(error);
-      if (refusal !== undefined) this.firstStartAgainRefused = refusal;
-      else if (this.firstActivity?.state === "stopped") {
+      if (refusal !== undefined) {
+        this.firstStartAgainRefused = refusal;
+        void this.#focusAfterUpdate("start-again-refused");
+      } else if (this.firstActivity?.state === "stopped") {
         const key = repairErrorKey(error);
         this.firstWipeUnread = true;
         this.firstWipeError = key
@@ -1426,6 +1429,11 @@ export class SetupApp extends LitElement {
     } finally {
       if (current()) this.firstOwnerBusy = false;
     }
+  }
+  /** Start again's button is not drawn beside its confirmation or a refusal, so focus moves there. */
+  async #focusAfterUpdate(name: string): Promise<void> {
+    await this.updateComplete;
+    this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${name}"]`)?.focus();
   }
   async #startAgainFirstSetup(): Promise<void> {
     const shown = this.firstWipeSummary;
@@ -1447,8 +1455,12 @@ export class SetupApp extends LitElement {
     } catch (error) {
       if (!current()) return;
       const refusal = wipeRefusal(error);
-      if (refusal === "kept-records") {
-        // The summary showed none, so the database changed after it was read.
+      // The summary showed no kept records, and an attempt conflict here means the summary or the
+      // inspection changed after the page read them.
+      if (
+        refusal === "kept-records" ||
+        (error as { code?: unknown })?.code === "setup.attempt_conflict"
+      ) {
         this.#closeWipe();
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
       } else if (refusal !== undefined) {
@@ -2453,7 +2465,7 @@ export class SetupApp extends LitElement {
         : nothing;
     const refusal =
       refused !== undefined || (inspection !== undefined && !offered)
-        ? html`<p data-test="start-again-refused">${refusalWords}</p>`
+        ? html`<p data-test="start-again-refused" tabindex="-1">${refusalWords}</p>`
         : nothing;
     return html`<section data-test="screen-first-owner">
       <h1>${inspection || offersNothing ? t.interrupted : t.heading}</h1>
