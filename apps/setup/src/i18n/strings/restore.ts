@@ -74,7 +74,7 @@ export const restoreEn = {
   "restore_bucket.intro":
     "Rebuild this server from the copy the old server kept in your storage bucket. Use this only when the old server is gone. You need the recovery pack or kit file, and nothing else.",
   "restore_bucket.sensitive":
-    "The recovery kit is as sensitive as the recovery key: anyone holding it can read every sale and every stored credential in the bucket copy. Enter it only here.",
+    "A recovery pack or kit file is as sensitive as the recovery key: the bucket copy code inside lets anyone read every sale and every stored credential in the bucket copy. Enter it only here.",
   "restore_bucket.kit_file": "Recovery pack or kit file",
   "restore_bucket.pack_no_code":
     "This recovery pack holds no bucket copy code: the box had no bucket copy when it was made. Choose a newer pack, or paste the code.",
@@ -259,7 +259,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.intro":
     "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit, y nada más.",
   "restore_bucket.sensitive":
-    "El kit de recuperación es tan delicado como la clave de recuperación: quien lo tenga puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
+    "Un paquete de recuperación o un archivo del kit es tan delicado como la clave de recuperación: con el código de la copia en el bucket que lleva dentro, cualquiera puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
   "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",
   "restore_bucket.pack_no_code":
     "Este paquete de recuperación no contiene el código de la copia en el bucket: el equipo no tenía copia en el bucket cuando se hizo. Elige un paquete más reciente o pega el código.",

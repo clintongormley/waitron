@@ -673,6 +673,40 @@ describe("making a pack", () => {
     },
   );
 
+  it.each(["before", "after"] as const)(
+    "keeps the new api's status when the old api's status read after a lost answer arrives %s the new api's own read",
+    async (order) => {
+      setLocale("en-GB");
+      const api = stubApi(STATES.none);
+      const el = await mount(api);
+      api.makeRecoveryPack.mockRejectedValue({ code: "connection.failed" });
+      const oldRead = deferred<RecoveryPackStatus>();
+      api.getRecoveryPackStatus.mockReturnValueOnce(oldRead.promise);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
+      const { make } = await openDialog(el);
+      make();
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
+      const next = stubApi(STATES["up to date"]);
+      const newRead = deferred<RecoveryPackStatus>();
+      next.getRecoveryPackStatus.mockReturnValueOnce(newRead.promise);
+      el.api = next as unknown as DashboardApi;
+      await settle(el);
+      await expect.poll(() => next.getRecoveryPackStatus.mock.calls.length).toBe(1);
+      if (order === "before") oldRead.resolve(STATES.unreceived);
+      else newRead.resolve(STATES["up to date"]);
+      await settle(el);
+      if (order === "before") newRead.resolve(STATES["up to date"]);
+      else oldRead.resolve(STATES.unreceived);
+      await settle(el);
+      expect(line(el)).toBe(
+        `${fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" })} ${fill(
+          "recovery_pack.keep_server_key",
+          { number: "1", date: "2 September" },
+        )}`,
+      );
+    },
+  );
+
   it("tells the screen when Make is pressed", async () => {
     const el = await mount(stubApi(STATES.none));
     const pressed = vi.fn();

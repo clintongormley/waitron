@@ -100,11 +100,7 @@ function answeredByBox(error: unknown): boolean {
 type Step = "form" | "lost" | "key-failed";
 type Draft = { typed: boolean; ticked: boolean };
 
-/**
- * Makes a recovery pack after a fresh sign-in. Sends `recovery-pack-made` once the PDF has arrived
- * whole, `recovery-pack-status` with the status it read again after a lost answer or an unreplaced
- * key, and `recovery-pack-closed` when it closes, since a make it dropped may still have happened.
- */
+/** Makes a recovery pack after a fresh sign-in. */
 @customElement("dashboard-recovery-pack-dialog")
 export class RecoveryPackDialog extends LitElement {
   static override styles = [
@@ -361,6 +357,7 @@ export class RecoveryPackDialog extends LitElement {
     } catch {
       return null;
     }
+    if (api !== this.api) return null;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackStatus>("recovery-pack-status", {
         detail: status,

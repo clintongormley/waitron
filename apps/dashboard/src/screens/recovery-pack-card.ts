@@ -229,7 +229,6 @@ export class RecoveryPackCard extends LitElement {
       number: made.number,
       arrivedAt: new Date().toISOString(),
     };
-    // An open dialog closes after handing the pack over, and its close reads the status.
     if (!this.dialog?.isOpen) this.reload();
   }
 
