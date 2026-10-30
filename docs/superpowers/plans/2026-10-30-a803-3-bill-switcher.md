@@ -856,7 +856,7 @@ this task does not break the ~60 test files that pass `bills` (review-1 I1); `is
 file in `rg -l "moveBill\(|/move\b" apps/server/src -g '*.test.ts'` whose red run changes (each
 listed in the receipt). No test's `bills` property is removed in this task.
 
-- [ ] **Write and run the new cases red BEFORE touching `move-bill.ts`** (review-1 minor 8): they
+- [x] **Write and run the new cases red BEFORE touching `move-bill.ts`** (review-1 minor 8): they
       rely on the `move()` helper's default `bills: "merge"` (`party-move-bill.test.ts:122-133`),
       which stays until Task 4b. New cases `A803 no main bill (move):` in `party-move-bill.test.ts`:
       "a bill moved to a seated table with an untouched bill of the same service mode arrives as
@@ -865,7 +865,7 @@ listed in the receipt). No test's `bills` property is removed in this task.
       holds other unpaid bills"; "a counter order moved to a seated table stays its own bill"; and
       in `till-api.move-bill.test.ts` "a request still carrying `bills: \"merge\"` is served the same
       way" (D13).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.move-bill.test.ts -t 'A803 no main bill'`.
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.move-bill.test.ts -t 'A803 no main bill'`.
       Expect the first case to fail on the receiving bill's lines (the merge moved them) and the
       second on `party.main_bill_stays`.
 - [ ] Implement. Then run every file the trace lists: `rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"' apps/server/src -g '*.test.ts' | sed 's#apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run`.

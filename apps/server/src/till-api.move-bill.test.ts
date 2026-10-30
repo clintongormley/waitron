@@ -1152,29 +1152,40 @@ describe("the move route", () => {
     expect(partyOfBill(billId)).toBe(ana.partyId);
   });
 
-  it("merges by default, and answers the new codes with 409", async () => {
+  it("keeps the bill separate by default, moves a party's first bill while it holds another, and answers the new codes with 409", async () => {
     const { ana, luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
     const own = await moveTo(billId, ana.tableId);
-    const mainStays = await post(`/api/bills/${ana.tabId}/move`, {
+    const first = await post(`/api/bills/${ana.tabId}/move`, {
       to: { counter: { zoneId: null } },
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
-    const merged = await moveTo(billId, luis.tableId);
+    const moved = await moveTo(billId, luis.tableId);
 
     expect(own.status).toBe(409);
     expect(own.json).toMatchObject({
       code: "table.already_in_party",
       params: { tableId: ana.tableId },
     });
-    expect(mainStays.status).toBe(409);
-    expect(mainStays.json).toMatchObject({
-      code: "party.main_bill_stays",
-      params: { partyId: ana.partyId },
-    });
-    expect(merged.status).toBe(200);
-    expect(merged.json).toEqual({ partyId: luis.partyId, billId: luis.tabId, merged: true });
-    expect(await statusOf(venue, billId)).toBe("abandoned");
+    expect(first.status).toBe(200);
+    expect(first.json).toEqual({ partyId: null, billId: ana.tabId, merged: false });
+    expect(partyOfBill(ana.tabId)).toBeNull();
+    expect(moved.status).toBe(200);
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(await statusOf(venue, billId)).toBe("open");
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+  });
+
+  it('A803 no main bill (move): a request still carrying `bills: "merge"` is served the same way', async () => {
+    const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+
+    const answer = await moveTo(billId, luis.tableId, { bills: "merge" });
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(await statusOf(venue, billId)).toBe("open");
+    expect(partyOfBill(billId)).toBe(luis.partyId);
+    expect(await statusOf(venue, luis.tabId)).toBe("open");
   });
 
   it("moves a bill to the counter in the zone sent, answering no party", async () => {

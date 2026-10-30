@@ -4860,11 +4860,13 @@ describe("source-backed draft foundations", () => {
     },
   );
 
-  it("moving a bill into a merged bill absorbs its draft once and retains its original party history", async () => {
+  it("moving a bill to a seated party keeps the arriving bill and its draft separate from the party's own", async () => {
     const v = await setupVenue();
     const moving = await movingFamily(v, "held");
     const target = await seated(v, "Receiving table");
     const own = await billDraft(v, target.partyId, target.tabId);
+    const freshBefore = await storedLines(moving.draft.id);
+    const ownBefore = await draftRow(own.id);
     const result = await inTx(async (tx) =>
       moveBill(
         tx,
@@ -4881,30 +4883,30 @@ describe("source-backed draft foundations", () => {
         },
       ),
     );
-    expect(result).toEqual({ partyId: target.partyId, billId: target.tabId, merged: true });
+    expect(result).toEqual({ partyId: target.partyId, billId: moving.billId, merged: false });
     expect(await draftRow(moving.draft.id)).toMatchObject({
-      state: "discarded",
-      revision: 1,
-      partyId: moving.from.partyId,
-      billId: target.tabId,
-    });
-    expect(await draftRow(own.id)).toMatchObject({
       state: "open",
       revision: 1,
       partyId: target.partyId,
+      billId: moving.billId,
+    });
+    expect(await draftRow(own.id)).toEqual(ownBefore);
+    expect(ownBefore).toMatchObject({
+      state: "open",
+      partyId: target.partyId,
       billId: target.tabId,
     });
+    expect(await storedLines(moving.draft.id)).toEqual(freshBefore);
     const reads = await draftsOf(v, target.partyId);
-    expect(reads).toHaveLength(1);
-    expect(reads[0]!.lines.map((line) => line.id)).toEqual([
-      ...lineIds(own),
+    expect(reads).toHaveLength(2);
+    expect(reads.find((row) => row.id === own.id)!.lines).toEqual(own.lines);
+    expect(reads.find((row) => row.id === moving.draft.id)!.lines.map((line) => line.id)).toEqual([
       ...lineIds(moving.draft),
       moving.id,
     ]);
-    expect(reads[0]!.lines[4]).toMatchObject({
+    expect(reads.find((row) => row.id === moving.draft.id)!.lines[2]).toMatchObject({
       sourceLineId: moving.parentId,
       source: { netAmount: "12.50" },
-      slot: 3,
       afterGroupId: moving.groupId,
     });
     expect(await draftsOf(v, moving.from.partyId)).toEqual([]);

@@ -311,7 +311,7 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved with Merge the bills takes no number there, so the next new bill there is Bill 2, and its old table still never gives its old number again", async () => {
+  it("a bill moved with Merge the bills asked for still arrives as its own bill with the next number, so the next new bill there is Bill 3, and its old table still never gives its old number again", async () => {
     const from = await tableWithBills("M3", 2);
     const to = await seat(v, await v.table("M3 to"));
     await order(v, to.tabId, "Agua");
@@ -319,12 +319,16 @@ describe("A803 bill numbers: move bill", () => {
 
     const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
 
-    expect(moved).toMatchObject({ merged: true, billId: to.tabId });
-    expect(await allocationsOf(v, to.partyId)).toEqual([[1, to.tabId]]);
+    expect(moved).toMatchObject({ merged: false, billId: from.bills[1] });
+    expect(await allocationsOf(v, to.partyId)).toEqual([
+      [1, to.tabId],
+      [2, from.bills[1]],
+    ]);
     const next = await split(v, to.partyId, to.tabId, [1]);
     expect(await numbersOf(v, to.partyId)).toEqual([
       [to.tabId, 1, null],
-      [next, 2, null],
+      [from.bills[1], 2, null],
+      [next, 3, null],
     ]);
     const third = await split(v, from.partyId, from.tabId, [2]);
     expect((await numbersOf(v, from.partyId)).at(-1)).toEqual([third, 3, null]);
@@ -818,21 +822,21 @@ describe("A803 bill list", () => {
     expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4]);
   });
 
-  it("an abandoned bill is listed with billNumber null, including a counter order merged into a table's main bill on arrival, which has no row", async () => {
+  it("an abandoned bill is listed with billNumber null, and a counter order arriving with Merge the bills asked for is listed with the next number", async () => {
     const seated = await tableWithBills("L6", 2);
     const command = await commandFor(v, seated.partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
     const counter = await counterOrder(v, "Burger");
     const table = (await activeTablesOf(v, seated.partyId))[0]!;
     await moveTo(counter, { tableId: table }, { bills: "merge" });
-    expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).not.toContain(
+    expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).toContain(
       counter,
     );
 
     expect(await listOf(seated.partyId)).toEqual([
       [seated.bills[0], 1, null, "open"],
       [seated.bills[1], null, null, "abandoned"],
-      [counter, null, null, "abandoned"],
+      [counter, 3, null, "open"],
     ]);
   });
 

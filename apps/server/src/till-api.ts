@@ -903,15 +903,15 @@ function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
 }
 
 /**
- * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, the
- * bill choice, and the party read at the target table.
+ * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, and
+ * the party read at the target table. A well-formed `bills` key is ignored.
  */
 function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
   const { partyId, ...rest } = body;
-  const bills = requireBillChoice(body.bills);
+  // Still refused when malformed, though never used, until A803 slice 3 Task 4b retires the key.
+  requireBillChoice(body.bills);
   const command: MoveBillOptions = {
     ...billCommand(personId, partyId === null ? rest : body),
-    bills,
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
   };
   if (partyId === null) command.partyId = null;

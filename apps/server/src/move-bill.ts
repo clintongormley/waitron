@@ -1,5 +1,5 @@
 import { joinedOutOfService, needsMoving, tableInService } from "@waitron/db";
-import { and, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import {
   diningTables,
   orderGroups,
@@ -13,13 +13,12 @@ import {
 import type { Transaction } from "@waitron/db";
 import type { AllergyMoveRead, AllergyPatch } from "@waitron/module";
 import { AppError, isUuid, partyDisplayName } from "@waitron/shared";
-import { guardPathParty, mergeCheckedBills } from "./bill-actions.js";
+import { guardPathParty } from "./bill-actions.js";
 import { holdsPayment } from "./bill-payments.js";
 import { enqueueMovedSlips, firedQuantity, readSentWork, type SentWork } from "./kitchen-print.js";
 import { moveBillDraftsToParty } from "./order-drafts.js";
 import {
   readPartyBillIds,
-  requireBillEditors,
   requireRelocatableBillEditors,
   relocateBillEditor,
 } from "./bill-editing.js";
@@ -49,7 +48,6 @@ import {
   clearGroups,
   fireLines,
   refuseHeldLeavingParty,
-  serviceModesMatch,
   unsentDishLines,
 } from "./working-order.js";
 import type { OrderAttendance } from "./working-order.js";
@@ -70,7 +68,8 @@ export interface MoveBillOptions extends OtherPartyRead {
   submissionId?: string;
   allergy?: AllergyPatch;
   expectedEdits: BillEditExpected[];
-  bills: "merge" | "separate";
+  /** Ignored: a bill always arrives as a bill of its own. Removed in A803 slice 3 Task 4b. */
+  bills?: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
   /** The party the till read the bill under; null when it read the bill with no party. */
@@ -80,8 +79,8 @@ export interface MoveBillOptions extends OtherPartyRead {
 
 export interface MoveBillResult {
   partyId: string | null;
-  /** The moved bill, or the main bill it merged into. */
   billId: string;
+  /** Always false: a move never merges. Removed in A803 slice 3 Task 4b. */
   merged: boolean;
 }
 
@@ -191,19 +190,6 @@ async function moveBillOnce(
   const main = destination.kind === "party" ? await readMainBill(tx, destination.partyId) : null;
   const zoneId =
     destination.kind === "party" ? await partyZone(tx, cfg, destination.partyId) : null;
-  const merging =
-    options.bills === "merge" &&
-    main !== null &&
-    (await isUntouched(tx, billId)) &&
-    (await isUntouched(tx, main)) &&
-    (zoneId === null
-      ? await serviceModesMatch(tx, cfg, billId, main)
-      : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode ===
-        (await VENUE_SERVICE.findOrderContext(tx, cfg, main))?.serviceMode);
-  const mergingEdits = options.expectedEdits.filter(
-    (e) => e.billId === billId || e.billId === main,
-  );
-  if (merging) await requireBillEditors(tx, [billId, main!], options.operatorId, mergingEdits);
   const expectedEdit = options.expectedEdits.find((e) => e.billId === billId)!;
   const open = path.status === "open";
   const activity =
@@ -214,14 +200,10 @@ async function moveBillOnce(
           at: attendance.clock.now().instant.toISOString(),
         };
 
-  // Read before the bill's party changes, which clears the party's main bill when it is this bill.
   const source = path.partyId === null ? null : await readSourceParty(tx, path.partyId);
   const noteScope = path.partyId === null ? { workingOrderId: billId } : { partyId: path.partyId };
   let firers: ReadonlyMap<string, Firer> = new Map();
-  if (source !== null) {
-    await refuseMainBillLeaving(tx, source, billId);
-    firers = await leaveParty(tx, billId);
-  }
+  if (source !== null) firers = await leaveParty(tx, billId);
   const before = await readSentWork(tx, billId);
 
   let result: MoveBillResult;
@@ -291,8 +273,6 @@ async function moveBillOnce(
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, zoneId, () => recordAllergy(partyId));
-    // Before any merge: a merge keeps line ids, so the dishes take these groups onto the main bill,
-    // whose own lines keep theirs.
     ({ held } = await groupArrivingDishes(
       tx,
       cfg,
@@ -302,28 +282,14 @@ async function moveBillOnce(
       firers,
       activity,
     ));
-    if (merging && main !== null) {
-      // `before` was read while the bill was still at its old tables, so the kitchen is told below.
-      await mergeCheckedBills(tx, cfg, partyId, main, billId, {
-        operatorId: options.operatorId,
-        expectedEdits: mergingEdits,
-        ...(activity === undefined ? {} : { attendance: activity }),
-        mainBillId: main,
-        kitchenTold: true,
-      });
-      result = { partyId, billId: main, merged: true };
-    } else {
-      // Only a bill that stays a bill of its own takes a number here: one merged away takes none.
-      await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
-      await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
-      if (main === null && open) await setMainBill(tx, partyId, billId);
-      result = { partyId, billId, merged: false };
-    }
+    await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
+    await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
+    if (main === null && open) await setMainBill(tx, partyId, billId);
+    result = { partyId, billId, merged: false };
   }
 
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
 
-  // After any merge, so the tickets name the bill the dishes are now on.
   await printHoldTickets(tx, cfg, held);
   await enqueueMovedSlips(tx, cfg, before, result.billId);
   return result;
@@ -495,13 +461,12 @@ export async function refuseUnseatable(
 
 interface SourceParty {
   id: string;
-  mainBillId: string | null;
   name: string | null;
 }
 
 async function readSourceParty(tx: Transaction, partyId: string): Promise<SourceParty> {
   const [party] = await tx
-    .select({ id: parties.id, mainBillId: parties.mainBillId, name: parties.name })
+    .select({ id: parties.id, name: parties.name })
     .from(parties)
     .where(eq(parties.id, partyId));
   return party!;
@@ -510,28 +475,6 @@ async function readSourceParty(tx: Transaction, partyId: string): Promise<Source
 /** What a bill taken from the party to the counter is labelled: the party's display name. */
 async function counterLabel(tx: Transaction, party: SourceParty): Promise<string> {
   return partyDisplayName(party.name, (await partyTableLabels(tx, [party.id])).get(party.id)!);
-}
-
-/** The party's main bill leaves only as its last unpaid bill. */
-async function refuseMainBillLeaving(
-  tx: Transaction,
-  party: SourceParty,
-  billId: string,
-): Promise<void> {
-  if (party.mainBillId !== billId) return;
-  const partyId = party.id;
-  const [other] = await tx
-    .select({ id: workingOrders.id })
-    .from(workingOrders)
-    .where(
-      and(
-        eq(workingOrders.partyId, partyId),
-        ne(workingOrders.id, billId),
-        inArray(workingOrders.status, ["open", "placed"]),
-      ),
-    )
-    .limit(1);
-  if (other !== undefined) throw new AppError("party.main_bill_stays", { partyId });
 }
 
 /** A bill's status and when a payment in full at a reader began, as {@link takeIntoParty} answers. */
