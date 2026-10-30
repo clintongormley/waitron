@@ -120,9 +120,9 @@ async function seedDiningTables(db: Database): Promise<void> {
   const [held, left, inactive] = await db
     .insert(diningTables)
     .values([
-      { locationId, zoneId: zone!.id, label: "Mesa 1" },
-      { locationId, zoneId: zone!.id, label: "Mesa 2" },
-      { locationId, zoneId: zone!.id, label: "Mesa 3 (baja)" },
+      { locationId, zoneId: zone!.id, label: "Table 1" },
+      { locationId, zoneId: zone!.id, label: "Table 2" },
+      { locationId, zoneId: zone!.id, label: "Table 3 (retired)" },
     ])
     .returning({ id: diningTables.id });
   await db.insert(floorTodayTables).values([{ tableId: held!.id }, { tableId: left!.id }]);
@@ -150,7 +150,7 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Sala principal",
+        name: "Main dining room",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -159,7 +159,7 @@ const suite = useVenueDb({
     ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 1" })
+      .values({ locationId, name: "Node 1" })
       .returning({ id: nodes.id });
     nodeId = node!.id;
     // A SECOND node at the SAME location — no sales of its own. The venue-wide vs node-scoped test
@@ -167,7 +167,7 @@ const suite = useVenueDb({
     // sale (venue-wide) while the daily close scoped to this node stays empty.
     const [node2] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 2" })
+      .values({ locationId, name: "Node 2" })
       .returning({ id: nodes.id });
     secondNodeId = node2!.id;
     const [series] = await db

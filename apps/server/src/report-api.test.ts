@@ -145,7 +145,7 @@ const suite = useVenueDb({
     const [loc] = await db
       .insert(locations)
       .values({
-        name: "Sala principal",
+        name: "Main dining room",
         invoiceLocales: ["es-ES"],
         operationDescription: "Venta en establecimiento",
       })
@@ -154,7 +154,7 @@ const suite = useVenueDb({
     ({ deviceId } = await seedDevice(db, { locationId }));
     const [node] = await db
       .insert(nodes)
-      .values({ locationId, name: "Nodo 1" })
+      .values({ locationId, name: "Node 1" })
       .returning({ id: nodes.id });
     nodeId = node!.id;
     const [series] = await db
