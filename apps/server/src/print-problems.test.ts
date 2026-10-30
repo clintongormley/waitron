@@ -104,11 +104,12 @@ async function setupVenue(): Promise<Venue> {
   await seedLegacySellingUnits(db);
   const [location] = await db
     .insert(locations)
-    .values({ name: "Sala", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
+    .values({ name: "Dining room", invoiceLocales: [LOCALE], operationDescription: "Restaurante" })
     .returning({ id: locations.id });
   const locationId = location!.id;
   const kitchenStationId = await seedKitchenStation(db, {
     locationId: brandLocationId(locationId),
+    name: "Kitchen",
   });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg = await deviceRequestCfg(db, {
@@ -120,9 +121,9 @@ async function setupVenue(): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   } satisfies TradingContext);
   return inTx(async (tx) => {
-    const { id: barStationId } = await createStation(tx, cfg, { name: "Barra" });
-    const catalogue = await createCatalogue(tx, { name: "Carta" });
-    const category = await createCategory(tx, { name: "Platos" });
+    const { id: barStationId } = await createStation(tx, cfg, { name: "Bar" });
+    const catalogue = await createCatalogue(tx, { name: "Menu" });
+    const category = await createCategory(tx, { name: "Dishes" });
     const productId = {} as Record<Dish, string>;
     for (const [dish, names] of Object.entries(DISHES) as [Dish, (typeof DISHES)[Dish]][]) {
       const product = await createProduct(tx, {
@@ -148,9 +149,9 @@ async function setupVenue(): Promise<Venue> {
           { name, transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
         )
       ).id;
-    const kitchenPrinterId = await printer("Cocina");
-    const barPrinterId = await printer("Barra");
-    const receiptPrinter = await printer("Recibos");
+    const kitchenPrinterId = await printer("Kitchen printer");
+    const barPrinterId = await printer("Bar printer");
+    const receiptPrinter = await printer("Receipt printer");
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
       stationId: kitchenStationId,
@@ -323,7 +324,7 @@ async function orderAsRead(v: Venue, s: Seated) {
 describe("the link from a kitchen ticket to its bill and station", () => {
   it("links each bill's own ticket when a fired group's dishes sit on two bills of the party", async () => {
     const v = await setupVenue();
-    const s = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    const s = await firedTable(v, "Table 4", ["burger", "fish"]);
     const lineNo = await lineNoOf(s.tabId, "fish");
     const { billId: checkId } = await inTx(async (tx) =>
       splitBill(tx, v.cfg, s.tabId, [{ lineNo, quantity: "1" }], {
@@ -348,7 +349,7 @@ describe("the link from a kitchen ticket to its bill and station", () => {
 
   it("records a Reprint's fired and held lines on the one job that prints both", async () => {
     const v = await holdingVenue();
-    const s = await seated(v, "Mesa 4");
+    const s = await seated(v, "Table 4");
     await submit(v, s.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
@@ -363,7 +364,7 @@ describe("the link from a kitchen ticket to its bill and station", () => {
 
   it("marks a reprint's links as a reprint", async () => {
     const v = await setupVenue();
-    const s = await firedTable(v, "Mesa 4");
+    const s = await firedTable(v, "Table 4");
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, s.tabId));
 
     expect((await links()).map((row) => [row.stationId, row.reprint])).toEqual([
@@ -374,9 +375,9 @@ describe("the link from a kitchen ticket to its bill and station", () => {
 });
 
 describe("a printing problem on the table and the station (Review Focus 6)", () => {
-  it("shows a ticket that failed every delivery attempt on Mesa 4 and on its station's card", async () => {
+  it("shows a ticket that failed every delivery attempt on Table 4 and on its station's card", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
 
@@ -384,7 +385,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       {
         workingOrderId: table4.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(job),
       },
     ]);
@@ -395,7 +396,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("does not show a ticket that failed but still has attempts left, while it is young", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), {
       status: "failed",
       attempts: MAX_DELIVERY_ATTEMPTS - 1,
@@ -407,7 +408,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("shows a ticket still queued after JOBS_WAITING_MS, and not one queued a moment less", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     const created = Date.parse(await createdAtOf(job));
 
@@ -424,9 +425,9 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect((await stationCard(v.kitchenStationId, table4.tabId)).printProblem).toBe(true);
   });
 
-  it("still accepts a new round on Mesa 4 while the problem stands, and reads the order as before", async () => {
+  it("still accepts a new round on Table 4 while the problem stands, and reads the order as before", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const before = await orderAsRead(v, table4);
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
@@ -446,7 +447,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("clears once a reprint of the bill has printed, and not while the reprint waits", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
@@ -460,7 +461,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("clears once a resend of the failed ticket has printed, and not while the resend waits", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
 
@@ -474,7 +475,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("stays clear when a resend of the printed copy then runs out of attempts, while the printer's alert counts that copy", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
     const printed = await inTx(async (tx) => (await resendPrintJob(tx, job)).jobId);
@@ -492,7 +493,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("is not cleared by a later round's ticket printing, which does not carry the lost dishes", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const later = (await links()).at(-1)!.printJobId;
@@ -503,7 +504,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("clears once a reprint on the same printer has printed, though it was queued in the same millisecond", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
@@ -515,7 +516,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("decides which ticket came later by the order they were queued, not by their clock stamps", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
@@ -542,8 +543,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("follows the dishes when the bill whose ticket failed is merged into another table's bill", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
-    const table5 = await firedTable(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4");
+    const table5 = await firedTable(v, "Table 5");
     const job = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(job, exhausted);
 
@@ -553,13 +554,13 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       {
         workingOrderId: table5.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(job),
       },
     ]);
     expect((await stationCard(v.kitchenStationId, table5.tabId)).printProblem).toBe(true);
 
-    // Mesa 5's bill now carries Mesa 4's dishes, so its reprint printing clears the problem.
+    // Table 5's bill now carries Table 4's dishes, so its reprint printing clears the problem.
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table5.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
     expect(await problemsOf(table5.partyId)).toEqual([]);
@@ -567,8 +568,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("keeps a failure merged in from another bill when the receiving bill was reprinted before the merge", async () => {
     const v = await setupVenue();
-    const source = await firedTable(v, "Mesa 4");
-    const destination = await firedTable(v, "Mesa 5");
+    const source = await firedTable(v, "Table 4");
+    const destination = await firedTable(v, "Table 5");
     const failed = await jobFor(source.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, destination.tabId));
@@ -581,7 +582,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       {
         workingOrderId: destination.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -590,8 +591,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("keeps the receiving bill's own failure when the merged bill's reprint printed before the merge", async () => {
     const v = await setupVenue();
-    const source = await firedTable(v, "Mesa 4");
-    const destination = await firedTable(v, "Mesa 5");
+    const source = await firedTable(v, "Table 4");
+    const destination = await firedTable(v, "Table 5");
     const failed = await jobFor(destination.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
@@ -603,7 +604,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       {
         workingOrderId: destination.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -612,8 +613,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("keeps the receiving bill's own failure when the merged bill's reprint, waiting at the merge, prints after it", async () => {
     const v = await setupVenue();
-    const source = await firedTable(v, "Mesa 4");
-    const destination = await firedTable(v, "Mesa 5");
+    const source = await firedTable(v, "Table 4");
+    const destination = await firedTable(v, "Table 5");
     const failed = await jobFor(destination.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
@@ -626,7 +627,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
       {
         workingOrderId: destination.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -635,8 +636,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("does not bring back a merged bill's failure that its own reprint had already cleared", async () => {
     const v = await setupVenue();
-    const source = await firedTable(v, "Mesa 4");
-    const destination = await firedTable(v, "Mesa 5");
+    const source = await firedTable(v, "Table 4");
+    const destination = await firedTable(v, "Table 5");
     await setJob(await jobFor(source.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
@@ -652,8 +653,8 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("does not bring back a merged bill's failure that a printed resend of its failed Reprint had cleared", async () => {
     const v = await setupVenue();
-    const source = await firedTable(v, "Mesa 4");
-    const destination = await firedTable(v, "Mesa 5");
+    const source = await firedTable(v, "Table 4");
+    const destination = await firedTable(v, "Table 5");
     await setJob(await jobFor(source.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, source.tabId));
     const reprint = (await links()).at(-1)!.printJobId;
@@ -670,7 +671,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 
   it("raises no table problem for a failed job no kitchen ticket links, such as a receipt", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const { jobId } = await inTx((tx) =>
       enqueuePrintJob(tx, { locationId: v.cfg.locationId }, v.receiptPrinter, Uint8Array.from([1])),
     );
@@ -680,10 +681,10 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
     expect("printProblem" in (await stationCard(v.kitchenStationId, table4.tabId))).toBe(false);
   });
 
-  it("keeps another table's problem off Mesa 4", async () => {
+  it("keeps another table's problem off Table 4", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
-    const table5 = await firedTable(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4");
+    const table5 = await firedTable(v, "Table 5");
     await setJob(await jobFor(table5.tabId, v.kitchenPrinterId), exhausted);
 
     expect(await problemsOf(table4.partyId)).toEqual([]);
@@ -705,7 +706,7 @@ describe("a printing problem on the table and the station (Review Focus 6)", () 
 describe("the printer's alert after the till's Reprint (A167)", () => {
   it("counts a failed ticket while the till's Reprint waits, and drops it once the Reprint has printed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     const reprint = (await links()).find((row) => row.reprint)!.printJobId;
@@ -718,7 +719,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("counts both when the till's Reprint also runs out of attempts", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     await setJob((await links()).find((row) => row.reprint)!.printJobId, exhausted);
@@ -728,7 +729,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("drops a failed ticket once a Printers-screen resend of its failed Reprint has printed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     const reprint = (await links()).at(-1)!.printJobId;
@@ -743,7 +744,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("clears a two-bill ticket's problem on the bill whose failed Reprint's resend printed, and only there", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish"]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     const lineNo = await lineNoOf(table4.tabId, "fish");
     const { billId: checkId } = await inTx(async (tx) =>
@@ -759,14 +760,14 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
     const resend = await inTx((tx) => resendPrintJob(tx, reprint.printJobId));
     await setJob(resend.jobId, { status: "done" });
 
-    // Mesa 4's own link to the original ticket has no Reprint yet.
+    // Table 4's own link to the original ticket has no Reprint yet.
     expect(await waitingAt(v.kitchenPrinterId)).toBe(1);
     expect(await problemsOf(table4.partyId)).toMatchObject([{ workingOrderId: table4.tabId }]);
   });
 
   it("keeps counting a failed ticket when the resend of its failed Reprint also runs out of attempts", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     const original = await jobFor(table4.tabId, v.kitchenPrinterId);
     const earlier = new Date(Date.now() - 1000).toISOString();
     await setJob(original, { ...exhausted, createdAt: earlier });
@@ -785,7 +786,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("keeps counting a failed ticket when a later round's ticket prints, which is no Reprint", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const later = (await links()).at(-1)!;
@@ -797,7 +798,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("drops a failed Reprint once a later Reprint has printed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     await setJob((await links()).at(-1)!.printJobId, exhausted);
@@ -810,7 +811,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("keeps counting a Reprint that runs out of attempts after an earlier Reprint printed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     await setJob((await links()).at(-1)!.printJobId, { status: "done" });
@@ -826,7 +827,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("keeps counting a ticket linked to two bills until each bill's Reprint has printed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish"]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     const lineNo = await lineNoOf(table4.tabId, "fish");
     const { billId: checkId } = await inTx(async (tx) =>
@@ -845,7 +846,7 @@ describe("the printer's alert after the till's Reprint (A167)", () => {
 
   it("keeps counting a failed job no kitchen ticket links, such as a receipt", async () => {
     const v = await setupVenue();
-    await firedTable(v, "Mesa 4");
+    await firedTable(v, "Table 4");
     const { jobId } = await inTx((tx) =>
       enqueuePrintJob(
         tx,
@@ -864,9 +865,9 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   const TIME = expect.stringMatching(/^\d\d:\d\d$/);
   const REPRINTED = expect.stringMatching(/^\*\*\* REPRINT \d\d:\d\d \*\*\*$/);
 
-  it("shows on Mesa 4 and on its station's card, as a failed fire ticket does", async () => {
+  it("shows on Table 4 and on its station's card, as a failed fire ticket does", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     const [hold] = await jobsAt(v.kitchenPrinterId);
     expect(hold!.lines[0]).toBe("*** HOLD ***");
@@ -876,7 +877,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       {
         workingOrderId: table4.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(hold!.id),
       },
     ]);
@@ -885,7 +886,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("is reprinted under REPRINT and HOLD on a party with nothing fired, and clears once that prints", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
     const [hold] = await jobsAt(v.kitchenPrinterId);
     await setJob(hold!.id, exhausted);
@@ -912,7 +913,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   // earlier failure for that bill and station on that printer, including tickets it does not carry.
   it("reprints fired and held work as one job per printer, the held work alone under HOLD", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish"), line(v, "beer")] },
@@ -926,24 +927,24 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
 
-    const head = (station: string) => [station, "Mesa 4", fire!.lines[2], TIME];
+    const head = (station: string) => [station, "Table 4", fire!.lines[2], TIME];
     const kitchenStationId = (await jobsAt(v.kitchenPrinterId)).slice(2);
     expect(kitchenStationId.map((job) => job.lines)).toEqual([
       [
         REPRINTED,
-        ...head("Cocina"),
+        ...head("Kitchen"),
         "GROUP 1",
         `1.000 x ${DISHES.burger.kitchen}`,
         REPRINTED,
         "*** HOLD ***",
-        ...head("Cocina"),
+        ...head("Kitchen"),
         "GROUP 2",
         `1.000 x ${DISHES.fish.kitchen}`,
       ],
     ]);
     const barStationId = (await jobsAt(v.barPrinterId)).slice(1);
     expect(barStationId.map((job) => job.lines)).toEqual([
-      [REPRINTED, "*** HOLD ***", ...head("Barra"), "GROUP 2", `1.000 x ${DISHES.beer.kitchen}`],
+      [REPRINTED, "*** HOLD ***", ...head("Bar"), "GROUP 2", `1.000 x ${DISHES.beer.kitchen}`],
     ]);
     expect(
       (await links()).slice(before).map((row) => [row.printJobId, row.stationId, row.reprint]),
@@ -961,7 +962,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   // fired part's heading, and the spy moves the clock on there, so its heading would say 15:21.
   it("A808 a reprint reads its time once, for every part", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
@@ -998,7 +999,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
   // rather than the earliest, or the HOLD part takes the fired part's time.
   it("A808 prints the reprint time in the heading and each part's original send time below the order", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     const { groups } = await submit(v, table4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
@@ -1040,16 +1041,16 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     expect(heldAt).toBeGreaterThan(0);
     expect(lines.slice(0, 5)).toEqual([
       "*** REPRINT 15:20 ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       lines[3],
       "14:05",
     ]);
     expect(lines.slice(heldAt)).toEqual([
       "*** REPRINT 15:20 ***",
       "*** HOLD ***",
-      "Cocina",
-      "Mesa 4",
+      "Kitchen",
+      "Table 4",
       lines[3],
       "14:10",
       "GROUP 2",
@@ -1059,7 +1060,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("does not reprint a held group whose HOLD ticket was never queued", async () => {
     const v = await setupVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
       { release: "fire", lines: [line(v, "burger")] },
       { release: "hold", lines: [line(v, "fish")] },
@@ -1080,7 +1081,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("reprints a fired group as fired work, not under HOLD, and that clears its failed HOLD ticket", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     const { groups } = await submit(v, table4.partyId, [
       { release: "hold", lines: [line(v, "burger")] },
     ]);
@@ -1106,7 +1107,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("does not reprint under HOLD a line recalled from a fired group whose HOLD ticket was queued", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     const { groups } = await submit(v, table4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
     ]);
@@ -1123,8 +1124,8 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     expect(reprints).toEqual([
       [
         REPRINTED,
-        "Cocina",
-        "Mesa 4",
+        "Kitchen",
+        "Table 4",
         expect.any(String),
         TIME,
         "GROUP 1",
@@ -1135,11 +1136,11 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("follows the held dishes when their bill is merged into another table's, and clears by that bill's reprint", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     const [hold] = await jobsAt(v.kitchenPrinterId);
     await setJob(hold!.id, exhausted);
-    const table5 = await firedTable(v, "Mesa 5", ["fish"]);
+    const table5 = await firedTable(v, "Table 5", ["fish"]);
 
     await mergeBills(v, table4, table5);
 
@@ -1147,7 +1148,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
       {
         workingOrderId: table5.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(hold!.id),
       },
     ]);
@@ -1157,22 +1158,22 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
     const reprint = (await jobsAt(v.kitchenPrinterId)).at(-1)!;
     // Both tables now seat the merged bill and the header names them together (spec decision 9);
     // their order is not this test's subject.
-    const table = expect.stringMatching(/^Mesa (4, 5|5, 4)$/);
+    const table = expect.stringMatching(/^Table (4, 5|5, 4)$/);
     expect(reprint.lines).toEqual([
       REPRINTED,
-      "Cocina",
+      "Kitchen",
       table,
       expect.any(String),
       TIME,
-      expect.stringMatching(/^GROUP 1 · Mesa (4, 5|5, 4)$/),
+      expect.stringMatching(/^GROUP 1 · Table (4, 5|5, 4)$/),
       `1.000 x ${DISHES.fish.kitchen}`,
       REPRINTED,
       "*** HOLD ***",
-      "Cocina",
+      "Kitchen",
       table,
       expect.any(String),
       TIME,
-      "GROUP 1 · Mesa 4",
+      "GROUP 1 · Table 4",
       `1.000 x ${DISHES.burger.kitchen}`,
     ]);
     await setJob(reprint.id, { status: "done" });
@@ -1181,7 +1182,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 
   it("raises no problem for a failed HOLD correction slip, as for every correction slip", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
       { release: "hold", lines: [line(v, "burger"), line(v, "fish")] },
     ]);
@@ -1201,7 +1202,7 @@ describe("a failed HOLD ticket (service plan Task 6)", () => {
 describe("a printing problem a Reprint would print nothing for", () => {
   it("clears a failed fire ticket once every dish it carried for that station is voided", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     expect(await problemsOf(table4.partyId)).toMatchObject([{ stationId: v.kitchenStationId }]);
     expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(true);
@@ -1210,7 +1211,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
     expect(await problemsOf(table4.partyId)).toEqual([]);
     expect(await stationSees(v.kitchenStationId, table4.tabId)).toBe(false);
-    // What the rule stands on: a Reprint of the bill prints nothing on the Cocina printer now.
+    // What the rule stands on: a Reprint of the bill prints nothing on the Kitchen printer now.
     const before = (await links()).length;
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     expect((await links()).slice(before).map((row) => [row.printerId, row.stationId])).toEqual([
@@ -1220,7 +1221,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
   it("clears a failed HOLD ticket once every held dish it carried for that station is voided", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "hold", lines: [line(v, "burger")] }]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     expect(await problemsOf(table4.partyId)).toMatchObject([{ stationId: v.kitchenStationId }]);
@@ -1238,7 +1239,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
   it("keeps a failed ticket whose station still has a dish to reprint after other dishes are voided, until the Reprint prints", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "fish", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish", "beer"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
@@ -1249,7 +1250,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
       {
         workingOrderId: table4.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -1261,7 +1262,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
   it("keeps showing a failed ticket while its printer is switched off, and clears it once the printer is back on and a Reprint prints", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
     const printerCfg = { locationId: v.cfg.locationId };
@@ -1271,7 +1272,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
     const problem = {
       workingOrderId: table4.tabId,
       stationId: v.kitchenStationId,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       since: await createdAtOf(failed),
     };
     expect(await problemsOf(table4.partyId)).toEqual([problem]);
@@ -1295,7 +1296,7 @@ describe("a printing problem a Reprint would print nothing for", () => {
 
   it("drops a failed ticket once its printer is detached from the station", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     expect(await problemsOf(table4.partyId)).toMatchObject([{ stationId: v.kitchenStationId }]);
 
@@ -1346,7 +1347,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("shows a failed ticket on the check its dish was split off to, and clears it by the check's Reprint", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
@@ -1362,7 +1363,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: checkId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -1376,11 +1377,11 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("shows a failed ticket on the table its dish was transferred to, and clears it by that bill's Reprint", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
-    const table5 = await firedTable(v, "Mesa 5", ["fish"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
+    const table5 = await firedTable(v, "Table 5", ["fish"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
-    // Mesa 5's own ticket printed, and so did a Reprint of it before the move, which never
+    // Table 5's own ticket printed, and so did a Reprint of it before the move, which never
     // carried the burger.
     await setJob(await jobFor(table5.tabId, v.kitchenPrinterId), { status: "done" });
     await reprintPrinted(v, table5.tabId);
@@ -1391,7 +1392,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: table5.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -1405,9 +1406,9 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("keeps the failure on both bills when part of the dish moves, and each bill's Reprint clears only its own", async () => {
     const v = await setupVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
-    const table5 = await seated(v, "Mesa 5");
+    const table5 = await seated(v, "Table 5");
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
@@ -1415,7 +1416,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     const problem = {
       stationId: v.kitchenStationId,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       since: await createdAtOf(failed),
     };
     expect(await problemsOf(table4.partyId)).toEqual([
@@ -1435,8 +1436,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("does not show the source bill's failure at a station none of the moved dishes go to", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
-    const table5 = await firedTable(v, "Mesa 5", ["beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
+    const table5 = await firedTable(v, "Table 5", ["beer"]);
     await setJob(await jobFor(table4.tabId, v.barPrinterId), exhausted);
     await setJob(await jobFor(table5.tabId, v.barPrinterId), { status: "done" });
 
@@ -1450,8 +1451,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("does not carry a failure whose ticket carried only dishes that stayed behind", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger"]);
-    const table5 = await seated(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4", ["burger"]);
+    const table5 = await seated(v, "Table 5");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), { status: "done" });
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const fishTicket = (await links()).at(-1)!;
@@ -1469,7 +1470,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: table4.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(fishTicket.printJobId),
       },
     ]);
@@ -1477,8 +1478,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("carries a failure to the bill the dish its ticket carried moves to", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger"]);
-    const table5 = await seated(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4", ["burger"]);
+    const table5 = await seated(v, "Table 5");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), { status: "done" });
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "fish")] }]);
     const fishTicket = (await links()).at(-1)!;
@@ -1490,7 +1491,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: table5.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(fishTicket.printJobId),
       },
     ]);
@@ -1498,8 +1499,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("shows a failure on both bills when its ticket carried a dish that moved and one that stayed", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
-    const table5 = await seated(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish"]);
+    const table5 = await seated(v, "Table 5");
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
@@ -1507,7 +1508,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
     const problem = {
       stationId: v.kitchenStationId,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       since: await createdAtOf(failed),
     };
     expect(await problemsOf(table4.partyId)).toEqual([
@@ -1520,10 +1521,10 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("carries a failure on with the part of a dish split off to another bill when that part moves again", async () => {
     const v = await setupVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "fire", lines: [line(v, "burger", "2")] }]);
-    const table5 = await seated(v, "Mesa 5");
-    const table6 = await seated(v, "Mesa 6");
+    const table5 = await seated(v, "Table 5");
+    const table6 = await seated(v, "Table 6");
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
 
@@ -1534,7 +1535,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: table6.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(failed),
       },
     ]);
@@ -1542,8 +1543,8 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("carries a failed Reprint to the bill a dish it carried moves to", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger"]);
-    const table5 = await seated(v, "Mesa 5");
+    const table4 = await firedTable(v, "Table 4", ["burger"]);
+    const table5 = await seated(v, "Table 5");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), { status: "done" });
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
     const reprint = (await links()).at(-1)!;
@@ -1556,7 +1557,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       {
         workingOrderId: table5.tabId,
         stationId: v.kitchenStationId,
-        stationName: "Cocina",
+        stationName: "Kitchen",
         since: await createdAtOf(reprint.printJobId),
       },
     ]);
@@ -1564,7 +1565,7 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("clears by a Reprint queued before some of the held dishes moved to a new group of the same bill", async () => {
     const v = await holdingVenue();
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [{ release: "hold", lines: [line(v, "burger", "2")] }]);
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await inTx((tx) => reprintOrderTickets(tx, v.cfg, table4.tabId));
@@ -1599,13 +1600,13 @@ describe("a printing problem whose dishes move to another bill", () => {
 
   it("merges a bill onto one already carrying its failure, and moves a dish back onto the bill it left", async () => {
     const v = await setupVenue();
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "fish"]);
-    const table5 = await firedTable(v, "Mesa 5", ["beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "fish"]);
+    const table5 = await firedTable(v, "Table 5", ["beer"]);
     const failed = await jobFor(table4.tabId, v.kitchenPrinterId);
     await setJob(failed, exhausted);
     const problem = {
       stationId: v.kitchenStationId,
-      stationName: "Cocina",
+      stationName: "Kitchen",
       since: await createdAtOf(failed),
     };
 
@@ -1627,13 +1628,13 @@ describe("a printing problem whose dishes move to another bill", () => {
 });
 
 describe("a printing problem on a printer two stations share (A366)", () => {
-  /** A station printer Cocina and Barra both list, beside each one's own. */
+  /** A station printer Kitchen and Bar both list, beside each one's own. */
   async function sharedPrinter(v: Venue): Promise<string> {
     return inTx(async (tx) => {
       const { id } = await createPrinter(
         tx,
         { locationId: v.cfg.locationId },
-        { name: "Compartida", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+        { name: "Shared printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
       );
       await attachPrinterToStation(tx, {
         locationId: v.cfg.locationId,
@@ -1649,12 +1650,12 @@ describe("a printing problem on a printer two stations share (A366)", () => {
     });
   }
 
-  // Fired work on the shared printer covers Barra and Cocina, held work only Cocina: the Reprint
+  // Fired work on the shared printer covers Bar and Kitchen, held work only Kitchen: the Reprint
   // still goes there as one job.
   it("shows a failed combined ticket on both stations' cards, and one Reprint there clears both", async () => {
     const v = await holdingVenue();
     const shared = await sharedPrinter(v);
-    const table4 = await seated(v, "Mesa 4");
+    const table4 = await seated(v, "Table 4");
     await submit(v, table4.partyId, [
       { release: "fire", lines: [line(v, "burger"), line(v, "beer")] },
       { release: "hold", lines: [line(v, "fish")] },
@@ -1700,7 +1701,7 @@ describe("a printing problem on a printer two stations share (A366)", () => {
   it("drops one station's problem there once a Reprint would carry nothing for it, and keeps the other's", async () => {
     const v = await setupVenue();
     const shared = await sharedPrinter(v);
-    const table4 = await firedTable(v, "Mesa 4", ["burger", "beer"]);
+    const table4 = await firedTable(v, "Table 4", ["burger", "beer"]);
     const [combined] = await jobsAt(shared);
     await setJob(combined!.id, exhausted);
     expect(await stationSees(v.barStationId, table4.tabId)).toBe(true);
@@ -1715,7 +1716,7 @@ describe("a printing problem on a printer two stations share (A366)", () => {
   it("a pass printer's printed reprint does not clear a station printer's failed ticket", async () => {
     const v = await setupVenue();
     const pass = await sharedPrinter(v);
-    const table4 = await firedTable(v, "Mesa 4");
+    const table4 = await firedTable(v, "Table 4");
     await setJob(await jobFor(table4.tabId, v.kitchenPrinterId), exhausted);
     await setJob(await jobFor(table4.tabId, pass), { status: "done" });
 
