@@ -289,8 +289,9 @@ export function createFirstSetupResolutionActions(
     return marker;
   };
   /**
-   * Every check Start again makes before it writes, in its order, so the summary refuses exactly
-   * what Start again would. No password: the repair page's wipe is offered to whoever can open it.
+   * Start again's checks, in its order, except those on what the page sends back and the deletion
+   * marker's size (Start again builds the marker, which hashes every file it lists). No password:
+   * the repair page's wipe is offered to whoever can open it.
    */
   const assessStartAgain = async (
     request: StartAgainFirstSetupRequest,
@@ -346,7 +347,6 @@ export function createFirstSetupResolutionActions(
       if (holdings.rows === 0) unavailable();
       assertNoKeptRecords(holdings);
     }
-    const marker = await markerFor(box, state, { ...discarding, ...heldOption });
     const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
     // With the database present and not held, Start again compares the assignment's own reading.
     const recoveryRecordDamaged =
@@ -362,7 +362,6 @@ export function createFirstSetupResolutionActions(
       discardsStopped,
       heldOption,
       box,
-      marker,
       recoveryRecordDamaged,
     };
   };
@@ -392,8 +391,9 @@ export function createFirstSetupResolutionActions(
             "recoveryRecordDamagedShown",
           ]);
           const assessed = await assessStartAgain(request, "start-again");
-          const { state, found, recovery, missing, discardsStopped, heldOption, box } = assessed;
-          let { marker } = assessed;
+          const { state, found, recovery, discarding, missing, discardsStopped, heldOption, box } =
+            assessed;
+          let marker = await markerFor(box, state, { ...discarding, ...heldOption });
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           const damagedShown = request.recoveryRecordDamagedShown === true;
           if (!missing && assessed.recoveryRecordDamaged !== damagedShown) conflict();
