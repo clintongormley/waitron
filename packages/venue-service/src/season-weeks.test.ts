@@ -58,16 +58,16 @@ async function venue() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `Venue ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     })
     .returning({ id: locations.id });
   const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Sala", displayOrder: 0 })
+    .values({ locationId: cfg.locationId, name: "Dining room", displayOrder: 0 })
     .returning({ id: floorZones.id });
   return scoped(async (tx) => {
     const departmentId = (
