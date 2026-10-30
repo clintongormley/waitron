@@ -503,6 +503,8 @@ until A977).
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
+  The server's split-extras test venue and its suites use English customer and kitchen names;
+  staff names, language keys, the venue's locale and operation description stay.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
