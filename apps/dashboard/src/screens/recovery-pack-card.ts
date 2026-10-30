@@ -286,12 +286,15 @@ export class RecoveryPackCard extends LitElement {
       const pack = { number: String(latest.number), date: date(latest.madeAt) };
       const reasons = reasonSentences(status.reasons, date);
       if (status.incomplete) {
-        lines.push([fill("recovery_pack.incomplete", pack), ...reasons].join(" "));
+        lines.push(
+          html`<strong>${fill("recovery_pack.incomplete", pack)}</strong> ${reasons.join(" ")}`,
+        );
       } else if (!status.upToDate || reasons.length > 0) {
         lines.push(
-          [fill("recovery_pack.out_of_date", pack), ...reasons, t("recovery_pack.make_new")].join(
-            " ",
-          ),
+          html`<strong>${fill("recovery_pack.out_of_date", pack)}</strong> ${[
+              ...reasons,
+              t("recovery_pack.make_new"),
+            ].join(" ")}`,
         );
       } else if (holder === null) {
         warn = false;
