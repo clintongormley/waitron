@@ -921,7 +921,7 @@ describe("a returning disabled device", () => {
       offerOnProfile(tx, venue.cfg, kds, stationScreen(venue.defaultStationId)),
     );
     const deviceId = await disabledDevice(venue, till);
-    const accepted = await comeBack(venue, deviceId, { label: "Pase", profileId: kds }).catch(
+    const accepted = await comeBack(venue, deviceId, { label: "Pass", profileId: kds }).catch(
       (e: unknown) => e,
     );
     expect(accepted).toMatchObject({ code: "kitchen_screen.required" });
@@ -930,11 +930,11 @@ describe("a returning disabled device", () => {
     await withTransaction(suite.db, async (tx) => {
       await createJoinRequest(tx, venue.cfg, {
         kind: "device",
-        label: "Pase",
+        label: "Pass",
         returning: { deviceId, tokenHash },
       });
       await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
-        label: "Pase",
+        label: "Pass",
         profileId: kds,
         kitchenScreens: [stationScreen(venue.defaultStationId)],
       });
@@ -943,7 +943,7 @@ describe("a returning disabled device", () => {
       .select({ active: devices.active, label: devices.label })
       .from(devices)
       .where(eq(devices.id, deviceId));
-    expect(row).toEqual({ active: true, label: "Pase" });
+    expect(row).toEqual({ active: true, label: "Pass" });
     expect(await shownOn(venue, deviceId)).toMatchObject([
       { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
     ]);
@@ -1125,9 +1125,9 @@ describe("a returning disabled device", () => {
       }),
     );
     const deviceId = await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" });
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pass" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        label: "Pase",
+        label: "Pass",
         profileId,
         kitchenScreens: [{ kind: "pass", stationIds: [venue.defaultStationId], zoneIds: null }],
       });
@@ -1155,7 +1155,7 @@ describe("a returning disabled device", () => {
 
     await withTransaction(suite.db, (tx) =>
       acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
-        label: "Pase",
+        label: "Pass",
         profileId,
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
       }),
@@ -1197,8 +1197,8 @@ describe("a returning disabled device", () => {
       );
       return deviceId;
     };
-    const kitchenDevice = await returningWith("Pase cocina", [venue.defaultStationId]);
-    const grillDevice = await returningWith("Pase plancha", [grill.id]);
+    const kitchenDevice = await returningWith("Kitchen pass", [venue.defaultStationId]);
+    const grillDevice = await returningWith("Grill pass", [grill.id]);
     const batch = vi.spyOn(VENUE_SERVICE, "readDevicesKitchenScreens");
     const single = vi.spyOn(VENUE_SERVICE, "readDeviceKitchenScreens");
     try {

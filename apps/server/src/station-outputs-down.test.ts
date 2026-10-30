@@ -593,9 +593,9 @@ describe("passScreensDark", () => {
   it("lists a pass screen unseen for four minutes with a dish waiting in its zone", async () => {
     const f = await passFixture();
     await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-    const pass = await passDevice(f, "pass", { label: "Pase" });
+    const pass = await passDevice(f, "pass", { label: "Pass" });
     expect(await read(f)).toEqual([
-      { deviceId: pass, deviceName: "Pase", kind: "pass", lastSeenAt: dark },
+      { deviceId: pass, deviceName: "Pass", kind: "pass", lastSeenAt: dark },
     ]);
   });
 
@@ -796,12 +796,12 @@ describe("passScreensDark", () => {
     it("raises one warning for a dark pass screen with a dish waiting", async () => {
       const f = await passFixture();
       await waitingItem(f.venue, f.grill, "2026-10-02T17:50:00.000Z");
-      const pass = await passDevice(f, "pass", { label: "Pase" });
+      const pass = await passDevice(f, "pass", { label: "Pass" });
       expect(await alerts(f)).toEqual([
         {
           key: `kitchen_screen.pass_dark:${pass}`,
           code: "kitchen_screen.pass_dark",
-          params: { device: "Pase" },
+          params: { device: "Pass" },
           severity: "warning",
           since: dark,
           screen: "devices",

@@ -673,7 +673,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     await withTransaction(suite.db, (tx) =>
       offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
     );
-    const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+    const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
       app,
@@ -682,7 +682,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       {
         cookie: venue.managerCookie,
         body: {
-          name: "Pantalla Cocina",
+          name: "Kitchen screen",
           profileId,
           kitchenScreens: [stationScreen(venue)],
         },
@@ -691,7 +691,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       deviceId: made.joinId,
-      name: "Pantalla Cocina",
+      name: "Kitchen screen",
       formFactor: "kds",
     });
     expect(await pendingCount()).toBe(0);
@@ -701,7 +701,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       .from(devices)
       .where(eq(devices.id, made.joinId));
     expect(rows[0]).toMatchObject({
-      label: "Pantalla Cocina",
+      label: "Kitchen screen",
       active: true,
     });
     expect(
@@ -718,7 +718,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const { app, holdId } = openApp(venue.cfg);
     const made = await knock(venue, {
       kind: "device",
-      label: "Pantalla Cocina",
+      label: "Kitchen screen",
       numbers: () => 42,
     });
     const path = `/management-api/device-join-requests/${made.joinId}/check`;
@@ -777,7 +777,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     await withTransaction(suite.db, (tx) =>
       offerOnProfile(tx, venue.cfg, profileId, stationScreen(venue)),
     );
-    const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+    const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
       app,
@@ -786,7 +786,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       {
         cookie: venue.staffCookie,
         body: {
-          name: "Pantalla Cocina",
+          name: "Kitchen screen",
           profileId,
           kitchenScreens: [stationScreen(venue)],
         },
@@ -822,7 +822,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+    const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
       app,
@@ -830,7 +830,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       `/management-api/device-join-requests/${made.joinId}/accept`,
       {
         cookie: venue.managerCookie,
-        body: { name: "Pantalla Cocina", profileId },
+        body: { name: "Kitchen screen", profileId },
       },
     );
     expect(res.status).toBe(400);
@@ -853,7 +853,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
         zoneIds: null,
       }),
     );
-    const made = await knock(venue, { kind: "device", label: "Pantalla Cocina" });
+    const made = await knock(venue, { kind: "device", label: "Kitchen screen" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
       app,
@@ -861,7 +861,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       `/management-api/device-join-requests/${made.joinId}/accept`,
       {
         cookie: venue.managerCookie,
-        body: { name: "Pantalla Cocina", profileId, kitchenScreens: [stationScreen(venue)] },
+        body: { name: "Kitchen screen", profileId, kitchenScreens: [stationScreen(venue)] },
       },
     );
     expect(res.status).toBe(400);

@@ -150,7 +150,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
     const profileId = await seedProfile("kds", "Perfil KDS");
 
     const dev = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Pantalla Cocina",
+      name: "Kitchen screen",
       profileId,
       stationId,
     });
@@ -176,12 +176,12 @@ describe("device join-and-accept binds the device by its profile's form factor",
     const window = createPairingMode();
     window.open();
     const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "Pantalla" }),
+      createJoinRequest(tx, cfg, { kind: "device", label: "Screen" }),
     );
     const accept = (kitchenScreens: readonly DeviceKitchenScreen[]) =>
       withTransaction(suite.db, (tx) =>
         acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-          label: "Pantalla",
+          label: "Screen",
           profileId,
           kitchenScreens,
         }),
@@ -200,7 +200,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
     const { cfg } = await setupVenue();
     const profileId = await seedProfile("kds", "Perfil KDS");
     await expect(
-      enrolDeviceForTest(suite.db, cfg, { name: "Pantalla", profileId }),
+      enrolDeviceForTest(suite.db, cfg, { name: "Screen", profileId }),
     ).rejects.toMatchObject({ code: "kitchen_screen.required" });
   });
 });
@@ -223,11 +223,11 @@ describe("accepting a device writes its kitchen screens", () => {
     kitchenScreens: readonly DeviceKitchenScreen[],
   ) {
     const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "Pantalla" }),
+      createJoinRequest(tx, cfg, { kind: "device", label: "Screen" }),
     );
     return withTransaction(suite.db, (tx) =>
       acceptDeviceJoinRequest(tx, cfg, made.joinId, {
-        label: "Pantalla",
+        label: "Screen",
         profileId,
         kitchenScreens,
       }),

@@ -354,7 +354,7 @@ function enrolKds(
   app: Hono,
   venue: Venue,
   stationId: string,
-  name = "Pantalla Cocina",
+  name = "Kitchen screen",
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   return enrolStationScreen(app, venue, [stationId], "kds", name);
 }
@@ -366,7 +366,7 @@ async function enrolStationScreen(
   venue: Venue,
   stationIds: string[] | null,
   formFactor: "kds" | "till" = "kds",
-  name = "Pantalla Cocina",
+  name = "Kitchen screen",
 ): Promise<{ deviceId: string; jar: string; profileId: string }> {
   const profileId = await seedProfile(formFactor);
   const screen: DeviceKitchenScreen = { kind: "station", stationIds, zoneIds: null };
@@ -1596,7 +1596,7 @@ describe("Device API — the device-guarded routes", () => {
     expect(await refused.json()).toMatchObject({
       error: { code: "device.forbidden_station", params: { stationId: postre!.id } },
     });
-    const every = await enrolStationScreen(app, venue, null, "kds", "Pantalla Todo");
+    const every = await enrolStationScreen(app, venue, null, "kds", "All stations screen");
     const advanced = await send(app, "POST", `/api/device/ticket-items/${items[1]}/advance`, {
       cookie: every.jar,
       body: { to: "preparing" },
@@ -1754,7 +1754,7 @@ describe("Device management routes (device.manage)", () => {
       kind: "kds_station",
       kitchenScreens: [{ kind: "station", stations: [{ id: venue.defaultStationId }] }],
       deviceProfileId: profileId,
-      label: "Pantalla Cocina",
+      label: "Kitchen screen",
       active: true,
     });
   });
@@ -1782,8 +1782,8 @@ describe("Device management routes (device.manage)", () => {
       await createStation(tx, venue.cfg, { name: "Plancha" }),
       await createStation(tx, venue.cfg, { name: "Horno" }),
     ]);
-    const live = await enrolKds(app, venue, liveStation!.id, "Pantalla plancha");
-    const off = await enrolKds(app, venue, offStation!.id, "Pantalla horno");
+    const live = await enrolKds(app, venue, liveStation!.id, "Grill screen");
+    const off = await enrolKds(app, venue, offStation!.id, "Oven screen");
     await switchStationOff(offStation!.id);
     const till = await enrolTill(app, venue, "Caja");
 
@@ -2282,7 +2282,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
     });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: { code: "kitchen_screen.required" } });
-    expect(await storedBody(deviceId)).toMatchObject({ name: "Pantalla Cocina" });
+    expect(await storedBody(deviceId)).toMatchObject({ name: "Kitchen screen" });
     expect(await shownOn(venue, deviceId)).toMatchObject([
       { kind: "station", stations: [{ id: venue.defaultStationId, available: true }] },
     ]);
@@ -2305,7 +2305,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         );
       await offer([venue.defaultStationId, off!.id, grill!.id]);
       const { deviceId, jar } = await knockAndAccept(app, venue, {
-        name: "Pantalla Cocina",
+        name: "Kitchen screen",
         profileId,
         kitchenScreens: [
           {
@@ -2386,7 +2386,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, kds, { pass: every }),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
-        name: "Pantalla Pase",
+        name: "Pass screen",
         profileId: kds,
         kitchenScreens: [{ kind: "pass", ...every }],
       });
@@ -2534,7 +2534,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         }),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
-        name: "Pantalla Pase",
+        name: "Pass screen",
         profileId,
         kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: [offered!.id] }],
       });
@@ -2603,7 +2603,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         VENUE_SERVICE.addProfileKitchenScreen(tx, venue.cfg, profileId, monitor),
       );
       const { deviceId } = await knockAndAccept(app, venue, {
-        name: "Monitor Pase",
+        name: "Pass monitor",
         profileId,
         kitchenScreens: [monitor],
       });
@@ -2797,7 +2797,7 @@ describe("PATCH /management-api/devices/:id (device.manage)", () => {
         params: { field: "stationIds", reason: "not_found" },
       },
     });
-    expect(await storedBody(deviceId)).toMatchObject({ name: "Pantalla Cocina" });
+    expect(await storedBody(deviceId)).toMatchObject({ name: "Kitchen screen" });
     const [shown] = await shownOn(venue, deviceId);
     expect(shown!.stations.map((station) => station.id)).not.toContain(off.id);
     expect(shown!.stations.map((station) => station.id)).toContain(venue.defaultStationId);
@@ -3554,7 +3554,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     expect(device).toMatchObject({
       id: deviceId,
       kind: "kds_station",
-      label: "Pantalla Cocina",
+      label: "Kitchen screen",
       active: true,
     });
     expect(device).not.toHaveProperty("stationId");
@@ -3571,7 +3571,7 @@ describe("GET /api/dev/devices (dev-only chooser list)", () => {
     // Enrol through a non-dev mount: a devMode knock auto-accepts as a till.
     const enrolApp = mountApp(venue.cfg);
     const live = await enrolKds(enrolApp, venue, venue.defaultStationId);
-    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId, "Pantalla Pase");
+    const doomed = await enrolKds(enrolApp, venue, venue.defaultStationId, "Pass screen");
     expect(
       (
         await send(app, "POST", `/management-api/devices/${doomed.deviceId}/revoke`, {

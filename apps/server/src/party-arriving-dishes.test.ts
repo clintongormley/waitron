@@ -312,7 +312,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
   });
 
   it("lets the pass mark a moved bill's dishes ready through their new group", async () => {
-    const [m4, m7] = [await v.table("Pase 4"), await v.table("Pase 7")];
+    const [m4, m7] = [await v.table("Pass 4"), await v.table("Pass 7")];
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
@@ -641,7 +641,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [vino] = await lineRows(b2);
     const display = await seedSessionDevice(v.db, v.cfg);
     await inTx(v, async (tx) => {
-      await tx.update(devices).set({ label: "Pantalla cocina" }).where(eq(devices.id, display));
+      await tx.update(devices).set({ label: "Kitchen screen" }).where(eq(devices.id, display));
       await tx
         .update(orderGroups)
         .set({ firedBy: null, firedByDeviceId: display })
@@ -662,7 +662,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     );
     expect(made).toEqual({ firedBy: null, firedByDeviceId: display, submittedBy: MOVER });
     const current = await inTx(v, (tx) => readCurrentOrders(tx, result.partyId!));
-    expect(current.groups.map((g) => g.sentBy)).toEqual(["Pantalla cocina"]);
+    expect(current.groups.map((g) => g.sentBy)).toEqual(["Kitchen screen"]);
   });
 
   it("names the kitchen display that fired a dish's group when Split a table takes its bill", async () => {

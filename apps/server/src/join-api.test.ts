@@ -188,7 +188,7 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
     }),
   );
   const made = await withTransaction(suite.db, (tx) =>
-    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pase" }),
+    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Pass" }),
   );
   const send = (verb: "check" | "accept", body: unknown) =>
     app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
@@ -202,7 +202,7 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
   ).toBe(204);
 
   const refused = await send("accept", {
-    name: "Pase",
+    name: "Pass",
     profileId: profile!.id,
     kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: [other!.id] }],
   });
