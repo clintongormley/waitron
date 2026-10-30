@@ -419,6 +419,12 @@ given, and refuses a new one for that venue until then (Waitron Cloud at 4eed93d
 
 ## Other full-disk words still send the person elsewhere or end with the short reinstall sentence
 
+- **Other full-disk words still send the person elsewhere or end with the short reinstall
+  sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
+  Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the
+  owner. Left open by A1127.
+  [Detail](setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence)
+
 The owner's 2026-10-28 answers covered the till strip («Tell a manager», a stated exception, Q4) and
 "both pages" (the repair page and the full-disk page, the longer reinstall sentence). Three more
 full-disk texts are outside them, for the owner:
@@ -487,6 +493,12 @@ in a copy at another path and on `main`.
 
 ## A discarded recovery whose files cannot be deleted brings the repair page back after each Start again
 
+- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
+  again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
+  person keep or move aside files the box did not create after a cut-off Start again; a file the
+  box created that cannot be deleted stays a manual loop. Left open by A1042.
+  [Detail](setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
+
 Left open by A1042. When a file in a discarded recovery cannot be deleted, each Start again answers
 "Start again has not finished. Reload this page to see what is left to do. If the box is
 restarting, wait until it answers." and restarts the box. The next start logs
@@ -502,6 +514,12 @@ move the found files aside into `first-setup-set-aside/` and finish Start again
 as this restored database, is not a found file, so it stays a manual loop.
 
 ## A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation
+
+- **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
+  explanation.** A link, device or lock file, a finisher's `setup.start_again_incomplete` for any
+  other reason, or more than 20,000 found entries: no Keep
+  or Move (owner question Q2, built with A). Left open by A1098.
+  [Detail](setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
 
 Left open by A1098 (owner question Q2, built with option A, the most cautious). When the found
 files include, at any depth, a symbolic link or special file, a lock file (`venue.lock`,
@@ -590,6 +608,12 @@ run; pressing Retry again would ask for the restart again. Wanted: the Retry use
 once-only restart, with a test that closes the connection before the answer is written.
 
 ## A1131: Start again beside a recovery record that cannot be read, with the setup database missing
+
+- **A1131: Start again beside a recovery record that cannot be read, with the setup database
+  missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore
+  writes straight into the usual folders and never makes a recovery folder, and its slice 4 deletes the
+  old recovery-folder code (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`).
+  [Detail](setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
 
 Left open by A1042 (#2101), point 3 of its owner questions; the other point (a stopped recovery
 beside a setup database that holds records) was built by A1131 part 1. The box refuses both a new
@@ -687,6 +711,49 @@ repeated about every 15 seconds). The box records such a wait only after an earl
 this may be intended; decide it with the rest of this entry. The setup page has the same shape
 after a reload during the box's wait (read, not run: `#select(true)` in `first-hour.ts` skips
 `#canSelect`).
+
+## A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).
+
+- **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
+  invites the owner to sign up for Cloud and try level 2 (remote access, translation, the
+  rota solver, backups) free for 30 days, with no payment details. Sign-up and payment
+  happen on Cloud's pages. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §4–§5.
+  [Plan](../superpowers/plans/2026-10-29-a1186-cloud-trial-offer.md) and
+  [proposed EN/ES mockups](mockups/a1186-cloud-trial-offer/README.md) propose a small
+  completion invitation without building A250. **Build remains open**; Cloud's qualified
+  trial journey is prerequisite G1 in the plan.
+
+## The Start again summary's `setup.not_ready` carries no cause.
+
+- **The Start again summary's `setup.not_ready` carries no cause.** With the venue database present
+  and a stopped backup recovery, the summary refuses `setup.not_ready` wherever Start again would
+  (`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
+  a stopped recovery, the summary refuses setup.not_ready when %s, as Start again would"). The setup
+  page has no words for that code there, so it shows "This box could not read the details of the
+  recovery from backup. Check again." (`#presentReadsFailed`, `apps/setup/src/setup-app.ts`), and
+  Check again gets the same refusal while nothing changes on the box. Wanted: a cause of its own
+  from the server and words for it. Left open by A1206.
+
+## A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts
+
+- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item
+  counts** (owner, 2026-10-28). Both buttons on the repair page run one wipe, with no password: the
+  setup's files are deleted (2026-10-29, A1206: the never-reuse note step is retired), and Recover from
+  backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
+  record, saved trading settings and a finished setup stay. Designed with A1131 below
+  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
+  owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
+  failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
+  taken from when it last saved anything. Being built in the spec's four slices. Slice 1 (Start
+  again's words without counts, plan
+  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) landed as #2230: the
+  confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
+  still lists them, and the counts still travel between the page and the box and are stored in the
+  confirmation record, until slice 2 removes them. Slice 2 also corrects the three lines that say the
+  confirmation record holds, or the confirmation is of, what the page showed
+  (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md` ("what the repair page showed
+  them") and `apps/server/README.md`).
+  Slices 2 to 4 are still to come.
 
 ## Decisions and deliberate limits
 

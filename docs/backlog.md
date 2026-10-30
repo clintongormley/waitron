@@ -470,14 +470,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 
 ### The setup wizard, onboarding and the demo venue
 
-- **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).** Setup
-  invites the owner to sign up for Cloud and try level 2 (remote access, translation, the
-  rota solver, backups) free for 30 days, with no payment details. Sign-up and payment
-  happen on Cloud's pages. [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/4064f3044f4826235e399070e564a94e4dd7bdd0/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §4–§5.
-  [Plan](superpowers/plans/2026-10-29-a1186-cloud-trial-offer.md) and
-  [proposed EN/ES mockups](backlog/mockups/a1186-cloud-trial-offer/README.md) propose a small
-  completion invitation without building A250. **Build remains open**; Cloud's qualified
-  trial journey is prerequisite G1 in the plan.
+- **A1186. The setup tour offers Waitron Cloud's level-2 trial (owner, 2026-10-29).**
+  **Build remains open**; Cloud's qualified trial journey is prerequisite G1 in the plan.
+  [Detail](backlog/setup.md#a1186-the-setup-tour-offers-waitron-clouds-level-2-trial-owner-2026-10-29).
 
 - **A1215. Correcting invoices issued under a wrong clock** (from A1207): a box can hold invoices
   dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
@@ -521,14 +516,9 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   open by A1099; needs an owner decision.
   [Audit](backlog/self-service-refusals.md#a1161-with-the-database-present-a-public-record-or-documents-file-still-dead-ends-start-again).
 
-- **The Start again summary's `setup.not_ready` carries no cause.** With the venue database present
-  and a stopped backup recovery, the summary refuses `setup.not_ready` wherever Start again would
-  (`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
-  a stopped recovery, the summary refuses setup.not_ready when %s, as Start again would"). The setup
-  page has no words for that code there, so it shows "This box could not read the details of the
-  recovery from backup. Check again." (`#presentReadsFailed`, `apps/setup/src/setup-app.ts`), and
-  Check again gets the same refusal while nothing changes on the box. Wanted: a cause of its own
-  from the server and words for it. Left open by A1206.
+- **The Start again summary's `setup.not_ready` carries no cause.**
+  Wanted: a cause of its own from the server and words for it. Left open by A1206.
+  [Detail](backlog/setup.md#the-start-again-summarys-setupnot_ready-carries-no-cause).
 
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
@@ -552,11 +542,9 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   A1042.
   [Detail](backlog/setup.md#close-a-discarded-recoverys-cloud-approval-from-the-box)
 
-- **Other full-disk words still send the person elsewhere or end with the short reinstall
-  sentence** — the till's other full-disk refusals («Tell a manager»), the recovery page's
-  Start-again form, and the managers' full-disk email («ask whoever installed the box»). For the
-  owner. Left open by A1127.
-  [Detail](backlog/setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence)
+- **Other full-disk words still send the person elsewhere or end with the short reinstall sentence**
+  For the owner. Left open by A1127.
+  [Detail](backlog/setup.md#other-full-disk-words-still-send-the-person-elsewhere-or-end-with-the-short-reinstall-sentence).
 
 - **A start from a selected backup recovery cleans the recovery's own logs, not the box's**, so on a
   full disk it frees no log space in the box's log folder, and the repair page makes no promise
@@ -583,17 +571,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 - **A boot test's disk assertion reads the checkout's path**, so it fails in a worktree whose path
   holds "disk". [Detail](backlog/setup.md#a-boot-tests-disk-assertion-reads-the-checkouts-path)
 
-- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start
-  again.** Each press answers "Start again has not finished" and restarts the box. A1098 lets the
-  person keep or move aside files the box did not create after a cut-off Start again; a file the
-  box created that cannot be deleted stays a manual loop. Left open by A1042.
-  [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again)
+- **A discarded recovery whose files cannot be deleted brings the repair page back after each Start again.**
+  Each press answers "Start again has not finished" and restarts the box. Left open by A1042.
+  [Detail](backlog/setup.md#a-discarded-recovery-whose-files-cannot-be-deleted-brings-the-repair-page-back-after-each-start-again).
 
-- **A1142: a cut-off Start again beside found files the Move cannot handle gets only the
-  explanation.** A link, device or lock file, a finisher's `setup.start_again_incomplete` for any
-  other reason, or more than 20,000 found entries: no Keep
-  or Move (owner question Q2, built with A). Left open by A1098.
-  [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation)
+- **A1142: a cut-off Start again beside found files the Move cannot handle gets only the explanation.**
+  Left open by A1098.
+  [Detail](backlog/setup.md#a1142-a-cut-off-start-again-beside-found-files-the-move-cannot-handle-gets-only-the-explanation).
 
 - **A1143: files a Move set aside have no way back in the app.** Recover from backup takes only a
   backup file, a bucket copy or a Waitron Cloud copy. Left open by A1098.
@@ -640,30 +624,13 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   measured on a box. Left open by A1042.
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
-- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item
-  counts** (owner, 2026-10-28). Both buttons on the repair page run one wipe, with no password: the
-  setup's files are deleted (2026-10-29, A1206: the never-reuse note step is retired), and Recover from
-  backup then uses the restore a new box already has. The refusals for an invoice or a never-deleted
-  record, saved trading settings and a finished setup stay. Designed with A1131 below
-  (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`). Approved by the
-  owner on 2026-10-29, both questions answered A: anyone who can open the repair page may delete a
-  failed setup, and a setup whose database cannot be read may be deleted, with the safety margin
-  taken from when it last saved anything. Being built in the spec's four slices. Slice 1 (Start
-  again's words without counts, plan
-  `docs/superpowers/plans/2026-10-29-a1131bc-slice1-start-again-words.md`) landed as #2230: the
-  confirmation no longer shows the counts; the refusal for an invoice or a never-deleted record
-  still lists them, and the counts still travel between the page and the box and are stored in the
-  confirmation record, until slice 2 removes them. Slice 2 also corrects the three lines that say the
-  confirmation record holds, or the confirmation is of, what the page showed
-  (`docs/operations/first-live-fiscal-setup.md`, `deploy/README.md` ("what the repair page showed
-  them") and `apps/server/README.md`).
+- **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
   Slices 2 to 4 are still to come.
+  [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
 
-- **A1131: Start again beside a recovery record that cannot be read, with the setup database
-  missing.** Only Reconnect is enabled today. The revised A1131bc design removes the case: a restore
-  writes straight into the usual folders and never makes a recovery folder, and its slice 4 deletes the
-  old recovery-folder code (`docs/superpowers/specs/2026-10-28-a1131bc-restore-replaces-setup-design.md`).
-  [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing)
+- **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**
+  Only Reconnect is enabled today.
+  [Detail](backlog/setup.md#a1131-start-again-beside-a-recovery-record-that-cannot-be-read-with-the-setup-database-missing).
 
 - **On a full disk, the repair page's password step needs room for a whole copy of the setup
   database.** The box's 8 MiB spare covered a 3.6 MB one; a larger one is believed to be refused.
