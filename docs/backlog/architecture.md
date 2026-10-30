@@ -585,6 +585,8 @@ until A977).
   UI combobox and row-menu suites use English sample staff names; deliberate bilingual
   trigger labels and accented-search examples remain.
   Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
+  Routing-grid equal-name and ordinary hierarchy samples use English labels; explicit accent,
+  natural-order and search fixtures and the Spanish locale check remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
@@ -809,6 +811,8 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   UI combobox and row-menu suites use English sample staff names; deliberate bilingual
   trigger labels and accented-search examples remain.
   Venue-service API-client zone samples use English names; request bodies and refusal checks remain.
+  Routing-grid equal-name and ordinary hierarchy samples use English labels; explicit accent,
+  natural-order and search fixtures and the Spanish locale check remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain

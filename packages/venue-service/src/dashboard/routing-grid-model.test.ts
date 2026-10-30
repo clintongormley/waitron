@@ -619,10 +619,10 @@ describe("visibleRoutingRows name order", () => {
     const venue = model(
       [folder("bar", null, "Bar")],
       [
-        item("p2", "bar", "Caña"),
-        item("p1", "bar", "Caña"),
-        item("u2", null, "Agua"),
-        item("u1", null, "Agua"),
+        item("p2", "bar", "Beer"),
+        item("p1", "bar", "Beer"),
+        item("u2", null, "Water"),
+        item("u1", null, "Water"),
       ],
     );
     const productIds = visibleRoutingRows(venue, new Set(["bar"])).flatMap((entry) =>
@@ -634,24 +634,24 @@ describe("visibleRoutingRows name order", () => {
   it("keeps a child category under its parent, after it and before the parent's products", () => {
     const venue = model(
       [
-        folder("zumos", null, "Zumos"),
-        folder("agua", null, "Agua"),
-        folder("mesa", "zumos", "Mesa"),
+        folder("zumos", null, "Juices"),
+        folder("agua", null, "Ice water"),
+        folder("mesa", "zumos", "Table"),
       ],
       [
-        item("p-b", "zumos", "Batido"),
+        item("p-b", "zumos", "Shake"),
         item("p-a", "zumos", "Arándano"),
-        item("p-m", "mesa", "Menta"),
+        item("p-m", "mesa", "Mint"),
       ],
     );
     expect(outline(visibleRoutingRows(venue, expandAll(venue)))).toEqual([
       "[All]",
-      "  C:Agua",
-      "  C:Zumos",
-      "    C:Mesa <Zumos>",
-      "      P:Menta <Zumos/Mesa>",
-      "    P:Arándano <Zumos>",
-      "    P:Batido <Zumos>",
+      "  C:Ice water",
+      "  C:Juices",
+      "    C:Table <Juices>",
+      "      P:Mint <Juices/Table>",
+      "    P:Arándano <Juices>",
+      "    P:Shake <Juices>",
     ]);
   });
 });
