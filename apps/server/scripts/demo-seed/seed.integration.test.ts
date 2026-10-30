@@ -262,7 +262,7 @@ describe("demo seed end-to-end", () => {
     expect(orderNumber).toBeGreaterThan(0);
 
     const held = await getHeldOrder({ db: suite.db }, cfg, orderId);
-    // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
+    // Lines from both menus survived the round-trip, in order — none was dropped as unknown.
     expect(held.lines.map((l) => l.productId)).toEqual([
       casaProduct.id,
       diaProduct.id,

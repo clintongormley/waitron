@@ -122,6 +122,8 @@ land** (queue item), even with green CI.
   many lines … the basket has") fail with 48 statements for five lines against 40 for one; that test
   is a performance pin, so the fix is in product code (Task 1), and the test stays unedited. The same
   saving reaches table rounds.
+  (2026-10-30, finishing: each of the two inserts now goes through `insertInChunks`, so a round
+  of more portions than one statement can bind is written in more than two.)
 - **D7 — the counter basket groups on the till, by the listing.** `#loadIntoBasket`
   (`till-app.ts:8716-8798`) builds one `OrderLine` per stored dish from `getHeldOrder`
   (`working-order.ts:5135`, one entry per dish line) and keeps the stored listing as `counterLines`
