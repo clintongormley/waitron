@@ -4769,9 +4769,19 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   pack format and every reader, landed as #2250; PR B, the fresh sign-in at the button, landed as
   #2257 (nothing calls it yet). Its review also made every passkey challenge record the ceremony
   that created it (`webauthn_challenges.purpose`, identity migrations 0008-0010), closing a way to
-  finish adding a passkey with a challenge from a sign-in or the new check. The next is PR C (plan
-  Tasks 10-14): its make route must pass the origin and the key ring to `confirmFreshSignIn` and
-  build its own `createPasswordThrottle()`, never another route's.
+  finish adding a passkey with a challenge from a sign-in or the new check. PR C, the server's make,
+  received and status routes and the `recovery_packs` record (core migration 0200), landed as
+  #2263; the dashboard does not call them yet. Its keep-until date works from the key's change
+  time, not the archive names' times (plan decision 9, a stated departure from design §4). The next
+  is PR D (plan Tasks 15-17, 18a-18c, 19).
+  Left open by #2263's review: a change of credentials alone in environment-managed archive
+  settings does not make a pack out of date (its record holds a digest of the non-secret settings
+  only); `promote-api.ts` still answers a plain-HTTP or cross-site request with
+  `authorization.not_permitted`, the answer this plan calls untruthful; the same-origin TLS check
+  is copied across several routes, and the archive code, the backup-key check, the bucket recovery
+  kit, the server key's name and the created date are each built twice, once in an older route
+  (`backup-api.ts`, `stream-api.ts`, `recovery-document-api.ts`, `recovery-pdf-content.ts`) and
+  once for the pack.
   Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
   where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
   field's help says "paste the kit"; the look images were taken before the review changed the
