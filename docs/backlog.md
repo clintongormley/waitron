@@ -6125,7 +6125,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Since then the device, device-delete, join-request, join-api, join-api database and
   device-session suites give English names to the devices, device profiles, stations, zones,
   locations, print agents and order labels they create; names the shared test helpers create
-  stay Spanish.
+  and the operation description stay Spanish.
   Venue-service period-deletion and zone-closure suites use English venue, station,
   zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
   Season and day-resolver suites use English venue, zone and custom-season samples;

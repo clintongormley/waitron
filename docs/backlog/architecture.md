@@ -474,7 +474,8 @@ until A977).
   configuration-transfer suites still hold other Spanish samples, among them station, till, table,
   zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The device,
   device-delete, join, join-request and device-session suites keep only the Spanish names the
-  shared test helpers create. Screen tests take translated
+  shared test helpers create, and the device and device-session suites' operation description
+  "Venta en establecimiento" (the operation-description slice). Screen tests take translated
   expectations from their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language
