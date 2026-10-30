@@ -1126,6 +1126,8 @@ export const en = {
   "fresh_sign_in.code": "Authenticator or recovery code",
   "fresh_sign_in.code_hint": "6-digit code from your app, or one of your recovery codes",
   "fresh_sign_in.code_required": "Enter a code from your authenticator app or a recovery code",
+  "fresh_sign_in.code_no_longer_needed":
+    "Your account no longer uses an authenticator app, so no code is needed. Make the pack again.",
   "fresh_sign_in.use_passkey": "Use your passkey",
   "fresh_sign_in.use_passkey_instead": "Use a passkey instead of the password",
   "fresh_sign_in.no_way_in":
@@ -4797,6 +4799,8 @@ export const es: Record<StringKey, string> = {
   "fresh_sign_in.code_hint": "Código de 6 cifras de tu app, o uno de tus códigos de recuperación",
   "fresh_sign_in.code_required":
     "Introduce un código de tu app de autenticación o un código de recuperación",
+  "fresh_sign_in.code_no_longer_needed":
+    "Tu cuenta ya no usa una app de autenticación, así que no hace falta ningún código. Vuelve a hacer el paquete.",
   "fresh_sign_in.use_passkey": "Usar tu passkey",
   "fresh_sign_in.use_passkey_instead": "Usar una passkey en lugar de la contraseña",
   "fresh_sign_in.no_way_in":

@@ -37,6 +37,7 @@ const STATES: Record<string, { own: Partial<OwnProfile> | "failed"; refusal?: st
   "no way in": { own: { hasPassword: false, passkeys: [] } },
   "refused password": { own: { hasTotp: true }, refusal: "password.invalid" },
   "refused code": { own: { hasTotp: true }, refusal: "totp.invalid" },
+  "code no longer needed": { own: {}, refusal: "totp.invalid" },
   "profile unreadable": { own: "failed" },
 };
 
@@ -66,6 +67,8 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
       )
       .toBeTruthy();
     if (refusal !== undefined) el.refuse({ code: refusal, status: 401 });
+    if (state === "code no longer needed")
+      await expect.poll(() => root.querySelector("[data-error]")).toBeTruthy();
     await el.updateComplete;
     for (const input of root.querySelectorAll("wt-input")) await input.updateComplete;
     await expectNoA11yViolations(host);

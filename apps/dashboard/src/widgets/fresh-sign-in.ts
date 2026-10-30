@@ -5,7 +5,7 @@ import {
   WebAuthnAbortService,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { baseStyles } from "@waitron/ui";
+import { baseStyles, formMessage, formMessageStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DashboardApi, FreshSignInBody, OwnProfile } from "../api/client.js";
@@ -32,6 +32,7 @@ type Field = "password" | "code";
 export class FreshSignIn extends LitElement {
   static override styles = [
     baseStyles,
+    formMessageStyles,
     css`
       :host {
         display: flex;
@@ -63,6 +64,7 @@ export class FreshSignIn extends LitElement {
   @state() private code = "";
   @state() private revealed = false;
   @state() private errors: Partial<Record<Field, string>> = {};
+  @state() private message = "";
 
   #attempt = 0;
   #prompting = false;
@@ -103,6 +105,10 @@ export class FreshSignIn extends LitElement {
       const own = await this.api.getProfile();
       if (read !== this.#reads) return;
       this.profile = own;
+      if (this.errors.code !== undefined && !own.hasTotp) {
+        this.errors = {};
+        this.message = t("fresh_sign_in.code_no_longer_needed");
+      }
       this.dispatchEvent(
         new CustomEvent<SignInWays>("sign-in-ways", {
           detail: this.ways!,
@@ -126,6 +132,7 @@ export class FreshSignIn extends LitElement {
     const way = method ?? (ways.password ? "password" : "passkey");
     if (way === "password" && !ways.password) return null;
     if (!ways.password && !ways.passkey) return null;
+    this.message = "";
     const errors: Partial<Record<Field, string>> = {};
     if (way === "password" && this.password === "") errors.password = t("form.password_required");
     const code = this.code.trim();
@@ -163,6 +170,7 @@ export class FreshSignIn extends LitElement {
    * the sentence for the screen's bottom message.
    */
   refuse(error: unknown): string {
+    this.message = "";
     const passkey = classifyPasskeySignInError(error);
     if (passkey === "cancelled") return "";
     if (passkey === "failed") return codeMessage("passkey.verification_failed");
@@ -192,11 +200,13 @@ export class FreshSignIn extends LitElement {
     this.code = "";
     this.revealed = false;
     this.errors = {};
+    this.message = "";
   }
 
   #edit(field: Field, value: string): void {
     if (field === "password") this.password = value;
     else this.code = value;
+    this.message = "";
     if (field in this.errors)
       this.errors = Object.fromEntries(
         Object.entries(this.errors).filter(([key]) => key !== field),
@@ -234,6 +244,7 @@ export class FreshSignIn extends LitElement {
           >${t(ways.password ? "fresh_sign_in.use_passkey_instead" : "fresh_sign_in.use_passkey")}</wt-button
         >
       </div>
+      ${formMessage(this.message)}
     `;
   }
 
