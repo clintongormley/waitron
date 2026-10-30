@@ -154,7 +154,12 @@ export class RecoveryPackCard extends LitElement {
   @state() private status: Status | null = null;
   @state() private failed = false;
   /** `arrivedAt` is the browser's time, used only until a status names the pack's own time. */
-  @state() private made: { url: string; number: number; arrivedAt: string } | null = null;
+  @state() private made: {
+    url: string;
+    number: number;
+    key: RecoveryPackMade["key"];
+    arrivedAt: string;
+  } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
 
   #generation = 0;
@@ -219,20 +224,22 @@ export class RecoveryPackCard extends LitElement {
   }
 
   /**
-   * The PDF may hold the server's secret key, so no link to it outlives the card or its permission;
-   * and a pack older than the one on offer, whose receipt was confirmed late, never replaces it,
-   * though its receipt still changes the status.
+   * The PDF may hold the server's secret key, so no link to it outlives the card or its permission.
+   * A pack older than the one on offer, whose receipt was confirmed late, replaces it only when it
+   * alone holds a new server key; its receipt changes the status either way.
    */
   #madeOne(made: RecoveryPackMade): void {
     if (!this.isConnected || !this.canManage) return;
-    if (this.made !== null && made.number < this.made.number) {
-      if (!this.dialog?.isOpen) this.reload();
+    const older = this.made !== null && made.number < this.made.number;
+    if (older && !(made.key === "replaced" && this.made?.key !== "replaced")) {
+      this.reload();
       return;
     }
     this.#dropMade();
     this.made = {
       url: URL.createObjectURL(made.pdf),
       number: made.number,
+      key: made.key,
       arrivedAt: new Date().toISOString(),
     };
     if (!this.dialog?.isOpen) this.reload();

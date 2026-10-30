@@ -874,6 +874,49 @@ describe("making a pack", () => {
       expect(download()).toBe("waitron-recovery-pack-2.pdf");
       expect(words(el.shadowRoot!.querySelector("[data-test=pack-ready]"))).toContain("2");
     });
+
+    /** Pack 1 is made, its receipt held; the dialog is dismissed; pack 2 is made and received. */
+    const twoMakes = async (
+      firstKey: "replaced" | "unchanged",
+      secondKey: "replaced" | "unchanged",
+    ) => {
+      const api = stubApi(STATES.none);
+      api.makeRecoveryPack
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: firstKey })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: secondKey });
+      const first = deferred<void>();
+      api.markRecoveryPackReceived
+        .mockReturnValueOnce(first.promise)
+        .mockResolvedValueOnce(undefined);
+      const el = await mount(api);
+      (await openDialog(el)).make();
+      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+      dialogOf(el).dismiss();
+      await settle(el);
+      (await openDialog(el)).make();
+      const download = () =>
+        el
+          .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")
+          ?.getAttribute("download") ?? null;
+      await expect.poll(download).toBe("waitron-recovery-pack-2.pdf");
+      await settle(el);
+      return { api, el, first, download };
+    };
+
+    it("offers an older pack's link when only that pack holds the new server key", async () => {
+      const { first, download } = await twoMakes("replaced", "unchanged");
+      first.resolve();
+      await expect.poll(download).toBe("waitron-recovery-pack-1.pdf");
+    });
+
+    it("re-reads the status an older pack's late receipt changed, even with an unused dialog open", async () => {
+      const { api, el, first, download } = await twoMakes("unchanged", "unchanged");
+      await openDialog(el);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
+      first.resolve();
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
+      expect(download()).toBe("waitron-recovery-pack-2.pdf");
+    });
   });
 
   it("tells the screen when Make is pressed", async () => {
