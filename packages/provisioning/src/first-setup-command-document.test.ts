@@ -123,7 +123,7 @@ it("saves the real module PDF privately and grants activation only for its exact
   expect(Object.keys(manifest.statement.nodeKey).sort()).toEqual(["name", "nodeId"]);
   expect(f.prompts).toEqual([
     "Confirm setup password: ",
-    "Have you kept this recovery PDF? [y/N]: ",
+    "Have you kept this recovery pack? [y/N]: ",
     "Confirm setup password: ",
   ]);
   expect(f.output.join("\n")).not.toContain(PASSWORD);

@@ -99,7 +99,7 @@ When the name must wait, it prints why and the time it continues at, and stops; 
 within a minute after that time (same file, "the terminal asks nothing, prints why it waits and
 until when, and keeps the wait"). The name is five symbols for the UTC minute. Pass an absolute
 `--recovery-pdf` destination outside both host state and the venue. Confirm the password and that
-you kept the resulting PDF. `--yes` does not answer the retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
+you kept the resulting recovery pack. `--yes` does not answer the retention question. The [setup procedure](../../docs/operations/first-live-fiscal-setup.md)
 explains the sequence and limits.
 
 For an accepted production readiness test, set `WAITRON_SETUP_SETTINGS_FILE` to

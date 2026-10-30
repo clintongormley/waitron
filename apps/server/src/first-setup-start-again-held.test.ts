@@ -58,7 +58,7 @@ type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
 
 // The rows a real activation stopped at `committed` leaves with the helper's module set.
-const ACTIVATION_ROWS = 105;
+const ACTIVATION_ROWS = 106;
 
 async function tree(dir: string, prefix = ""): Promise<Record<string, string>> {
   const result: Record<string, string> = {};

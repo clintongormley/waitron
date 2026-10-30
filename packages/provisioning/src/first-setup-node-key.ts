@@ -1,12 +1,20 @@
 import "./errors.js";
-import { createHash, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { eq } from "drizzle-orm";
 import { join } from "node:path";
 import { AppError } from "@waitron/shared";
 import { hashSecret } from "@waitron/identity";
-import { nodeRoles, setBreakGlassVerifierTx, withTransaction, type Database } from "@waitron/db";
+import {
+  insertRecoveryPack,
+  markRecoveryPackReceived,
+  nodeRoles,
+  setBreakGlassVerifierTx,
+  withTransaction,
+  type Database,
+} from "@waitron/db";
 import { generatePassword } from "./identifiers.js";
+import { newBreakGlassKeyName } from "./server-key-name.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import type {
   FirstSetupCoordinator,
@@ -83,11 +91,10 @@ export function createFirstSetupNodeKeys(options: Options) {
   };
   const generate = async (state: FirstSetupState, prior?: StagedNodeKey) => {
     const secret = generatePassword();
-    const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
-    let name: string;
-    do
-      name = `${new Date().toISOString().slice(0, 10)} · ${Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("")}`;
-    while (name === prior?.name);
+    const name = newBreakGlassKeyName(
+      new Date().toISOString().slice(0, 10),
+      new Set(prior === undefined ? [] : [prior.name]),
+    );
     const stage: StagedNodeKey = {
       version: 1,
       stageId: randomUUID(),
@@ -176,9 +183,23 @@ export function createFirstSetupNodeKeys(options: Options) {
             .where(eq(nodeRoles.nodeId, stage.nodeId));
           const verifier = stored?.verifier ?? null,
             name = stored?.name ?? null;
-          if (verifier === null && name === null)
+          if (verifier === null && name === null) {
             await setBreakGlassVerifierTx(tx, stage.nodeId, stage.verifier, stage.name);
-          else if (verifier !== stage.verifier || name !== stage.name) uncertain();
+            const at = new Date();
+            await insertRecoveryPack(tx, {
+              nodeId: stage.nodeId,
+              number: 1,
+              madeAt: at,
+              madeBy: null,
+              parts: [
+                { part: "bucket", state: "not-set-up" },
+                { part: "archives", state: "not-set-up" },
+                { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
+              ],
+            });
+            // The first-hour step's "I kept it" confirmed this pack reached the person.
+            await markRecoveryPackReceived(tx, stage.nodeId, 1, at);
+          } else if (verifier !== stage.verifier || name !== stage.name) uncertain();
         });
       });
     },

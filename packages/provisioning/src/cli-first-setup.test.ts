@@ -366,7 +366,7 @@ it("the actual venue command saves its selected recovery PDF and asks for kept d
   await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
   const pdf = await readFile(path);
   expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
-  expect(f.prompts).toContain("Have you kept this recovery PDF? [y/N]: ");
+  expect(f.prompts).toContain("Have you kept this recovery pack? [y/N]: ");
   const state = (await f.runtime.store.read())!;
   expect(state.status).toBe("consumption-intent");
   expect(f.output).toContain("setup.not_ready {}");
@@ -379,7 +379,7 @@ it("declining kept in the actual venue command preserves the saved PDF and leave
   const path = join(f.root, "declined-recovery.pdf");
   expect(await runCliPastWait([...f.args, "--recovery-pdf", path], f.deps)).toBe(1);
   await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
-  expect(f.prompts).toContain("Have you kept this recovery PDF? [y/N]: ");
+  expect(f.prompts).toContain("Have you kept this recovery pack? [y/N]: ");
   expect(f.output).not.toContain("setup.not_ready {}");
   expect(await readTenantIdentities(venue.db)).toEqual([]);
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");

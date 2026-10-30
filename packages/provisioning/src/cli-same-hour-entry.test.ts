@@ -126,7 +126,7 @@ Object.defineProperty(performance, "now", { value: () => 0 });
       errors = "";
     const answers = [
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+      ["Have you kept this recovery pack? [y/N]: ", "yes"],
     ];
     const answered = new Map<string, number>();
     child.stdout.on("data", (chunk: Buffer) => {

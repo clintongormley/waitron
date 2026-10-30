@@ -4789,65 +4789,54 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 ### The box: backups, upgrades and recovery
 
-- **A1187. One recovery pack (owner, 2026-10-29).** "It should be a single recovery pack. So
-  there's one document that covers everything that they need to know." Merge today's recovery
-  kit, the recovery sheet with the disk key and the archive recovery pack into one document,
-  and add the venue's emergency address and emergency code from Waitron Cloud (A1188).
-  [Cloud billing design](https://github.com/waitron-io/waitron-cloud/blob/main/docs/superpowers/specs/2026-10-29-cloud-billing-design.md) §7.
-  **Design approved by the owner** (2026-10-29), with the authenticator code asked for only when
-  the person has one set up: [design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md),
-  mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is planned
-  ([plan](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md)); its first pull request, the
-  pack format and every reader, landed as #2250; PR B, the fresh sign-in at the button, landed as
-  #2257. Its review also made every passkey challenge record the ceremony
-  that created it (`webauthn_challenges.purpose`, identity migrations 0008-0010), closing a way to
-  finish adding a passkey with a challenge from a sign-in or the new check. PR C, the server's make,
-  received and status routes and the `recovery_packs` record (core migration 0200), landed as
-  #2263. Its keep-until date works from the key's change
-  time, not the archive names' times (plan decision 9, a stated departure from design §4). PR D, the
-  Backups screen's Recovery pack card and its Make recovery pack dialog, retired the recovery kit,
-  the archive recovery pack and the recovery PDF panel. The next is PR E (setup's first pack).
-  Left open by #2263's review: a change of credentials alone in environment-managed archive
-  settings does not make a pack out of date (its record holds a digest of the non-secret settings
-  only); `promote-api.ts` still answers a plain-HTTP or cross-site request with
-  `authorization.not_permitted`, the answer this plan calls untruthful; the same-origin TLS check
-  is copied across several routes, and the archive code, the backup-key check, the bucket recovery
-  kit, the server key's name and the created date are each built twice, once in an older route
-  and once for the pack. PR D removed the older routes in `backup-api.ts`, `stream-api.ts` and
-  `recovery-document-api.ts`; setup's recovery sheet still draws the key's name and created date in
-  `packages/fiscal-verifactu/src/recovery-pdf-content.ts`.
-  Left open by #2250's review: `waitron-restore`'s usage line still says `<pack-file>` for
-  `--from-archive`, which a test pins, and the restore command's refusals for a file holding no kit
-  or no archive pack still name the kit file and the archive recovery pack file, which tests pin
-  word for word, where both forms now take the pack PDF; setup's pack refusals say "paste the
-  code" where the field's help says "paste the kit"; the look images were taken before the review
-  changed the "not a pack" refusal and added the space mark, and nobody has looked at those two
-  again. Part 2 waits for A1188 part 1, part 3 for B3's retained disk key.
-  Left open by PR D:
-  - The pack PDF uses one regular-weight font: no bold, codes not in a fixed-width face, so l and I
-    look alike. For PR E.
-  - Setup's first server key is named by its own copy of the four-character draw
-    (`packages/provisioning/src/first-setup-node-key.ts`); the box's mint and the pack share
-    `newBreakGlassKeyName` in `apps/server/src/break-glass.ts` since #2276. A freshly set-up node has
-    no packs, so the copy cannot clash today. For PR E, whose Task 21 changes that file. Nobody has
-    looked at the PDF or the card since #2276 lengthened their unreceived sentences.
-  - The pack's cover says "The dashboard's Backups screen shows the same checks" beside a check
-    value (`key of <day> · rev <8 characters>`) that no part of the Backups screen shows.
-  - There is no Backups guide page, so the Backups screen and the card link to none.
-  - One key has three names: "recovery key" (the key-change dialog), "backup key" (the card and
-    the PDF), and in Spanish "clave de las copias" beside "Clave de copia".
-  - The card's "ready" line dates a just-made pack from the browser's clock until the next status
-    read names it; it is wrong only when the browser's clock and the box's fall on different days
-    in the venue's zone.
-  - The card and the fresh sign-in widget read the pack status and the person's profile with
-    their own read counters, and the Backups screen pokes the card after each write, where the
-    dashboard's live queries (`DashboardQueries`, `apps/dashboard/src/api/live-queries.ts`) could
-    keep both current. The fresh sign-in widget asks only the recovery pack's passkey route, so the
-    next action that needs a fresh sign-in has to widen it.
-  - A pack whose receipt the box confirmed after the card left the page, or after the person lost
-    system.manage, is counted received though no link to it was offered. So is an older pack whose
-    receipt lands while a newer pack's link is on offer, unless it holds the newest server key
-    the card was handed.
+- **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).** Waits for A1188
+  part 1, whose card facts the page prints, for people holding `node.promote`. Part 1 landed in
+  pull requests from #2250 to setup's first pack (PR E): one PDF holding the bucket copy, the
+  archives and the server key, made from the Backups card or by setup.
+  [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
+
+- **A1187 part 3: the recovery pack's disk key page.** Waits for B3's retained disk key. A pack
+  that cannot carry the disk key is then refused rather than drawn without it.
+  [Design](superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
+
+- **A1187 part 1's defaults, which the owner has not confirmed.** The plan settled each question
+  the design left open with a conservative default, among them the keep-until date counting from
+  the key's change time (a stated departure from design §4) and Make offered wherever the old
+  Recovery PDF card was. [The list](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#questions-the-design-leaves-open).
+
+- **A1187: wording part 1's reviews left on the restore command and setup.** `waitron-restore`'s
+  usage line still says `<pack-file>` for `--from-archive`, and its refusals for a file holding no
+  kit or no archive pack still name the kit file and the archive recovery pack file, though both
+  forms take the pack PDF; tests pin both word for word. Setup's pack refusals say "paste the code"
+  where the field's help says "paste the kit".
+  [Detail](backlog/box.md#a1187-part-1-what-its-reviews-left-open)
+
+- **A1187: code part 1 built twice.** The same-origin TLS check is copied across several routes,
+  and `promote-api.ts` still answers a plain-HTTP or cross-site request with
+  `authorization.not_permitted`. The archive code, the backup-key check, the bucket recovery kit,
+  the server key's name and its created date are each built in more than one place.
+  [Detail](backlog/box.md#a1187-part-1-what-its-reviews-left-open)
+
+- **A1187: a credentials-only change to environment-managed archive settings does not make a pack
+  out of date.** The pack record holds a digest of the non-secret settings only.
+
+- **A1187: the pack PDF's presentation.** It uses one regular-weight font: no bold, and codes not
+  in a fixed-width face, so l and I look alike. The cover says "The dashboard's Backups screen shows
+  the same checks" beside a check value (`key of <day> · rev <8 characters>`) that no part of the
+  Backups screen shows.
+
+- **A1187: one key has three names.** "Recovery key" (the key-change dialog), "backup key" (the
+  card and the PDF), and in Spanish "clave de las copias" beside "Clave de copia".
+
+- **A1187: the Backups card's reads and receipts.** [Detail](backlog/box.md#a1187-part-1-what-its-reviews-left-open)
+
+- **There is no Backups guide page**, so the Backups screen and its Recovery pack card link to none.
+
+- **A1187: looks nobody has taken.** The Backups card after a real setup (pack 1 recorded, then a
+  bucket copy set up) has not been looked at on a running box: Docker Desktop was unresponsive for
+  PR D and PR E. Nobody has looked at the card since #2276 lengthened its unreceived sentences. The
+  look images for #2250 were taken before its review changed the "not a pack" refusal and added the
+  space mark.
 
 - **At 390 px wide, the configuration export's password label overlaps its Show password button.**
   Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is

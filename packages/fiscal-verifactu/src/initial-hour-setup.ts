@@ -130,8 +130,14 @@ export function createHourInitialSetup(
         createdAt: new Date().toISOString(),
         nodeKey: document.key,
       };
-      const { renderRecoveryPdf } = await import("./recovery-pdf-node.js");
-      const bytes = await renderRecoveryPdf(recovery, document.locale, document.identity.timeZone);
+      const { loadRecoveryFont } = await import("./recovery-pdf-node.js");
+      const { renderSetupRecoveryPack } = await import("./setup-recovery-pack.js");
+      const bytes = await renderSetupRecoveryPack(
+        recovery,
+        document.locale,
+        document.identity.timeZone,
+        loadRecoveryFont,
+      );
       return { bytes, statement: recoveryDocumentPublic(recovery) };
     },
     async commandResume(context, actions) {

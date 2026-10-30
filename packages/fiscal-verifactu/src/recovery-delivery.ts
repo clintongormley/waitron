@@ -1,4 +1,5 @@
-import { renderRecoveryPdf } from "./recovery-pdf.js";
+import { loadRecoveryFont } from "./recovery-pdf.js";
+import { renderSetupRecoveryPack } from "./setup-recovery-pack.js";
 import {
   parseRecoveryDocument,
   recoveryDocumentPublic,
@@ -44,7 +45,7 @@ export function createRecoveryDelivery<T>(
     const parsed = await parseRecoveryDocument(input);
     input = undefined;
     active();
-    const bytes = await renderRecoveryPdf(parsed, locale, timeZone);
+    const bytes = await renderSetupRecoveryPack(parsed, locale, timeZone, loadRecoveryFont);
     active();
     const statement = recoveryDocumentPublic(parsed);
     const binding = {

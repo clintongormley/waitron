@@ -1,5 +1,4 @@
-import { randomInt } from "node:crypto";
-import { generatePassword } from "@waitron/provisioning";
+import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
 import { hashSecret, verifySecretAsync } from "@waitron/identity";
 import {
   readBreakGlassVerifier,
@@ -17,17 +16,6 @@ import {
  */
 export async function mintBreakGlassSecret(ownerDb: Database, nodeId: string): Promise<string> {
   return (await mintBreakGlassKey(ownerDb, nodeId)).secret;
-}
-
-/** A key name for the UTC `day`: the day and four characters, drawn again while the name is `taken`. */
-export function newBreakGlassKeyName(day: string, taken: ReadonlySet<string>): string {
-  const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
-  let next: string;
-  do {
-    const code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
-    next = `${day} · ${code}`;
-  } while (taken.has(next));
-  return next;
 }
 
 /** Every server key name this node's packs recorded, and the key in force. */

@@ -88,14 +88,14 @@ const strings = {
       "Try from another phone or till. If they still differ, the box's time may be wrong: ask for help.",
     chosen: "Series name",
     failed: "Could not complete this step. Check again.",
-    next: "Keep your recovery PDF.",
-    pdf: "Prepare recovery PDF",
+    next: "Keep your recovery pack.",
+    pdf: "Make recovery pack",
     download: "Download PDF",
     print: "Open to print",
-    kept: "I kept the recovery PDF.",
+    kept: "I kept the recovery pack.",
     confirmKept: "Continue",
-    complete: "Recovery PDF confirmed.",
-    replace: "Replace recovery key",
+    complete: "Recovery pack confirmed.",
+    replace: "Make the pack again with a new server key",
   },
   es: {
     ...clockWaitStrings.es,
@@ -126,14 +126,14 @@ const strings = {
       "Prueba desde otro móvil o caja. Si siguen sin coincidir, puede que la hora del equipo esté mal: pide ayuda.",
     chosen: "Nombre de las series",
     failed: "No se pudo completar este paso. Comprueba de nuevo.",
-    next: "Guarda el PDF de recuperación.",
-    pdf: "Preparar PDF de recuperación",
+    next: "Guarda el paquete de recuperación.",
+    pdf: "Hacer paquete de recuperación",
     download: "Descargar PDF",
     print: "Abrir para imprimir",
-    kept: "He guardado el PDF de recuperación.",
+    kept: "He guardado el paquete de recuperación.",
     confirmKept: "Continuar",
-    complete: "PDF de recuperación confirmado.",
-    replace: "Sustituir clave de recuperación",
+    complete: "Paquete de recuperación confirmado.",
+    replace: "Hacer el paquete otra vez con una nueva clave del servidor",
   },
 };
 @customElement("vf-first-setup-hour")
@@ -532,7 +532,7 @@ export class FirstSetupHour extends LitElement {
                         <a
                           data-test="download-pdf"
                           href=${this.pdfUrl}
-                          download="waitron-recovery.pdf"
+                          download="waitron-recovery-pack-1.pdf"
                           >${t.download}</a
                         >
                       </p>

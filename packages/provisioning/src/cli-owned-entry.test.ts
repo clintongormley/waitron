@@ -262,7 +262,7 @@ it.each([false, true])(
       let errors = "";
       const questions = [
         ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-        ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+        ["Have you kept this recovery pack? [y/N]: ", "yes"],
       ] as const;
       const answered = new Map<string, number>();
       child.stdout.on("data", (chunk: Buffer) => {
@@ -326,7 +326,7 @@ it.each([false, true])(
       childError: undefined,
     });
     expect(output).not.toContain("SYNTHETIC-owner-password");
-    expect(answered.get("Have you kept this recovery PDF? [y/N]: ")).toBe(interrupted ? 0 : 1);
+    expect(answered.get("Have you kept this recovery pack? [y/N]: ")).toBe(interrupted ? 0 : 1);
     if (interrupted) expect([...answered.values()].reduce((a, b) => a + b, 0)).toBe(0);
     const state = JSON.parse(await readFile(join(stateDir, "first-setup.json"), "utf8"));
     expect(state.status).toBe("complete");
@@ -493,7 +493,7 @@ it("the built production command checks readiness and seals settings without sen
     );
     const answers = [
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+      ["Have you kept this recovery pack? [y/N]: ", "yes"],
     ] as const;
     const answered = new Map<string, number>();
     let output = "",
@@ -669,7 +669,7 @@ it("the built production command runs a confirmed isolated test and refuses acti
     );
     const answers = [
       ["Confirm setup password: ", "SYNTHETIC-owner-password"],
-      ["Have you kept this recovery PDF? [y/N]: ", "yes"],
+      ["Have you kept this recovery pack? [y/N]: ", "yes"],
       ["Send a preproduction fiscal test? [y/N]: ", "yes"],
     ] as const;
     const answered = new Map<string, number>();

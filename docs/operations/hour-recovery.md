@@ -35,7 +35,7 @@ keeps the old attempt and database files separately. You do not need the old set
 prove access to an independently authenticated backup.
 
 Choose an archive, bucket copy or supported Cloud copy. Supply its named node recovery key,
-and its archive key or source credentials where applicable. Choose the saved recovery PDF or a recovery pack that holds the server key, or enter the grouped key from your recovery sheet. Cloud approval is separate from this key;
+and its archive key or source credentials where applicable. Choose a recovery pack that holds the server key, such as the pack setup made, or an older recovery sheet, or enter the grouped key printed on either. Cloud approval is separate from this key;
 production Cloud recovery remains unavailable through the current client.
 
 After **Open backup**, check the authenticated details and use the module's recovery controls.
@@ -148,10 +148,10 @@ spent-name record to retry. An uncertain outcome needs inspection rather than a 
 ## Keep the resulting evidence
 
 Ordinary reboot and exact completion keep the current activation.
-They do not take another name. Keep the recovery sheet needed by each retained backup and check
-the restored server's outcome before using the till. The sheet carries the node recovery key and
-no installation code (`packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`, "refuses a sheet
-that still carries an installation code").
+They do not take another name. Keep the recovery pack, or older recovery sheet, that holds the
+key each retained backup needs, and check the restored server's outcome before using the till. The
+pack setup makes holds only the server key (`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`,
+"the command path writes recovery pack 1 holding only the staged key, in %s").
 
 Signed paper allocations, Cloud allocation receipts and random emergency identities are historical
 formats. Their old environment-file collectors do not provide authority through the current

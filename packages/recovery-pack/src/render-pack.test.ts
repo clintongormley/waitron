@@ -197,6 +197,277 @@ describe("the recovery pack's cover", () => {
   });
 });
 
+describe("what the cover says holding the pack opens", () => {
+  const keyOnly = (locale: "en" | "es") =>
+    input({
+      locale,
+      parts: [
+        { kind: "bucket", state: "not-set-up" },
+        { kind: "archives", state: "not-set-up" },
+        { ...serverKey, serverKeyLocation: { kind: "this-pack" } },
+      ],
+      file: {
+        ...file,
+        bucketCode: null,
+        archiveCode: null,
+        backupKey: null,
+        serverKey: { kind: "a-key-file" },
+        serverKeyHeldBy: null,
+      },
+    });
+
+  const others = (words: (typeof PACK_WORDS)["en"], said: keyof typeof PACK_WORDS.en) =>
+    (
+      [
+        "anyoneHoldingServerKey",
+        "anyoneHoldingBackups",
+        "anyoneHoldingBackupsAndServerKey",
+      ] as const
+    )
+      .filter((key) => key !== said)
+      .map((key) => words[key]);
+
+  it.each(["en", "es"] as const)(
+    "a pack holding the server key and no backup key says it recovers the server with its matching backup, in %s",
+    async (locale) => {
+      const [cover] = await rendered(await renderRecoveryPack(keyOnly(locale)));
+      const words = PACK_WORDS[locale];
+      expect(cover!.text).toContain(`${words.anyoneHoldingServerKey} ${words.whichToKeep}`);
+      for (const other of others(words, "anyoneHoldingServerKey"))
+        expect(cover!.text).not.toContain(other);
+    },
+  );
+
+  const held = [
+    ["the bucket code", { bucketCode }],
+    ["the archive code", { archiveCode }],
+    ["the backup key", { backupKey: "a backup passphrase" }],
+  ] as const;
+
+  it.each(
+    held.flatMap(([what, secrets]) =>
+      (["en", "es"] as const).map((locale) => [what, locale, secrets] as const),
+    ),
+  )(
+    "a pack holding %s and the server key says it opens the backups those unlock and, with a matching backup, recovers the server, in %s",
+    async (_, locale, secrets) => {
+      const pack = keyOnly(locale);
+      const [cover] = await rendered(
+        await renderRecoveryPack({ ...pack, file: { ...pack.file, ...secrets } }),
+      );
+      const words = PACK_WORDS[locale];
+      expect(cover!.text).toContain(
+        `${words.anyoneHoldingBackupsAndServerKey} ${words.whichToKeep}`,
+      );
+      for (const other of others(words, "anyoneHoldingBackupsAndServerKey"))
+        expect(cover!.text).not.toContain(other);
+    },
+  );
+
+  it.each(
+    held.flatMap(([what, secrets]) =>
+      (["en", "es"] as const).map((locale) => [what, locale, secrets] as const),
+    ),
+  )(
+    "a pack holding %s but not the server key says only that it opens the backups those unlock, in %s",
+    async (_, locale, secrets) => {
+      const [cover] = await rendered(
+        await renderRecoveryPack(
+          input({
+            locale,
+            file: { ...file, bucketCode: null, archiveCode: null, ...secrets },
+          }),
+        ),
+      );
+      const words = PACK_WORDS[locale];
+      expect(cover!.text).toContain(
+        `${words.anyoneHoldingBackups} ${words.whichToKeep} ${words.serverKeyPage(4)}`,
+      );
+      for (const other of others(words, "anyoneHoldingBackups"))
+        expect(cover!.text).not.toContain(other);
+    },
+  );
+
+  it("a pack holding no secret claims nothing about what it opens", async () => {
+    const [cover] = await rendered(
+      await renderRecoveryPack(
+        input({
+          parts: [
+            { kind: "bucket", state: "absent" },
+            { kind: "archives", state: "absent" },
+            { kind: "server-key", state: "absent" },
+          ],
+          file: {
+            ...file,
+            bucketCode: null,
+            archiveCode: null,
+            serverKeyName: null,
+            serverKeyHeldBy: null,
+          },
+        }),
+      ),
+    );
+    expect(cover!.text).toContain(PACK_WORDS.en.whichToKeep);
+    for (const other of others(PACK_WORDS.en, "lockedAway"))
+      expect(cover!.text).not.toContain(other);
+  });
+});
+
+describe("long names", () => {
+  const wide = (length: number) => "Ԫ".repeat(length);
+  const keyText = "0123 4567 89AB CDEF GHJK MNPQ RSTV WXYZ 0123 4567 8";
+  const serverKeyPage = (legalName: string, venueName: string): PackPart["page"] => ({
+    title: "Server key",
+    intro:
+      "With this key and its matching backup, the venue's server can be recovered with its own identity.",
+    rows: [
+      { label: "Legal name", value: legalName },
+      { label: "NIF", value: "B12345674" },
+      { label: "Venue", value: venueName },
+      { label: "Environment", value: "Preproduction" },
+      { label: "Software ID", value: "WT" },
+      { label: "Server ID", value: "4f9c2a1b" },
+      { label: "Key name", value: "2026-10-17 · ACRY" },
+      { label: "Created", value: "18 October 2026, 01:30 CEST" },
+    ],
+    secret: { label: "Key", text: keyText, qr: true },
+    notes: [
+      "Keep this pack in a safe place. Anyone with this key and its matching backup can recover the server.",
+      "A backup in Waitron Cloud needs your Cloud login. This pack is not a backup of your sales.",
+      "Keep older packs for older backups. A new key does not unlock backups made with an older key.",
+    ],
+  });
+  const setupPack = (locale: "en" | "es", legalName: string, venueName: string) =>
+    input({
+      locale,
+      cover: { ...input().cover, legalName, venueName, madeBy: null, number: 1 },
+      parts: [
+        { kind: "bucket", state: "not-set-up" },
+        { kind: "archives", state: "not-set-up" },
+        {
+          kind: "server-key",
+          state: "included",
+          lastChanged: "2026-10-17",
+          check: "2026-10-17 · ACRY",
+          page: serverKeyPage(legalName, venueName),
+          serverKeyLocation: { kind: "this-pack" },
+        },
+      ],
+      file: {
+        ...file,
+        number: 1,
+        bucketCode: null,
+        archiveCode: null,
+        serverKey: { kind: "a-key-file" },
+        serverKeyHeldBy: null,
+      },
+    });
+  const dashboardPack = (locale: "en" | "es", legalName: string, venueName: string) =>
+    input({
+      locale,
+      cover: { ...input().cover, legalName, venueName },
+      parts: [
+        bucket,
+        archives,
+        {
+          ...serverKey,
+          page: { ...serverKeyPage(legalName, venueName)!, secret: undefined },
+          serverKeyLocation: { kind: "pack", number: 1, madeOn: "2026-09-02", received: false },
+        },
+      ],
+    });
+  const fontSizeOf = async (bytes: Uint8Array, page: number, text: string) => {
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    try {
+      const items = (await (await (await loading.promise).getPage(page)).getTextContent()).items;
+      const item = items.find((i) => "str" in i && i.str.startsWith(text));
+      return (item as { transform: number[] }).transform[3];
+    } finally {
+      await loading.destroy();
+    }
+  };
+
+  it.each([
+    ["setup", "en", setupPack],
+    ["setup", "es", setupPack],
+    ["the dashboard", "en", dashboardPack],
+    ["the dashboard", "es", dashboardPack],
+  ] as const)(
+    "draws in full a legal name of 120 and a venue name of 256 of the widest letter, in %s's pack in %s",
+    async (_, locale, pack) => {
+      const legalName = wide(120);
+      const venueName = wide(256);
+      const bytes = await renderRecoveryPack(pack(locale, legalName, venueName));
+      const pages = await rendered(bytes);
+      const keyPage = pages.at(-1)!.text;
+      expect(squash(keyPage)).toContain(squash(legalName));
+      expect(squash(keyPage)).toContain(squash(venueName));
+      expect(squash(pages[0]!.text)).toContain(
+        squash(`${legalName} · NIF B12345678 · ${venueName}`),
+      );
+      if (pack === setupPack) expect(await fontSizeOf(bytes, 2, keyText)).toBeCloseTo(10);
+    },
+  );
+
+  it("cuts a name no page can hold with a mark, instead of refusing the pack", async () => {
+    const legalName = "⸻".repeat(256);
+    const venueName = "一".repeat(256);
+    const bytes = await renderRecoveryPack(setupPack("es", legalName, venueName));
+    const pages = await rendered(bytes);
+    expect(pages).toHaveLength(2);
+    expect(squash(pages[1]!.text)).toMatch(/Legalname⸻+…NIFB12345674Venue/);
+    expect(squash(pages[1]!.text)).toMatch(/Venue(\[U\+4E00\])+…Environment/);
+    expect(squash(pages[1]!.text)).toContain(squash(keyText));
+    expect(await fontSizeOf(bytes, 2, keyText)).toBeCloseTo(10);
+  });
+
+  it("cuts a cover name longer than the cover can hold with a mark", async () => {
+    const pages = await rendered(
+      await renderRecoveryPack(
+        input({
+          cover: {
+            ...input().cover,
+            legalName: "W".repeat(1000),
+            venueName: "W".repeat(1000),
+            madeBy: "M".repeat(1000),
+          },
+          parts: [
+            { kind: "bucket", state: "absent" },
+            { kind: "archives", state: "absent" },
+            { kind: "server-key", state: "absent" },
+          ],
+          file: { ...file, archiveCode: null, serverKeyName: null, serverKeyHeldBy: null },
+        }),
+      ),
+    );
+    expect(pages).toHaveLength(1);
+    expect(squash(pages[0]!.text)).toMatch(/W+…·NIFB12345678·W+…Which/);
+    expect(squash(pages[0]!.text)).toMatch(/byM+…\./);
+  });
+
+  it("keeps the running header's venue name clear of the page number", async () => {
+    const bytes = await renderRecoveryPack(
+      input({ cover: { ...input().cover, venueName: wide(256) } }),
+    );
+    const loading = getDocument({ data: Uint8Array.from(bytes), useSystemFonts: false });
+    try {
+      const items = (await (await (await loading.promise).getPage(2)).getTextContent()).items as {
+        str: string;
+        transform: number[];
+        width: number;
+      }[];
+      const header = items.find((i) => i.str.includes("Recovery pack 3"))!;
+      const number = items.find(
+        (i) => i.str === "Page 2 of 4" && i.transform[5] === header.transform[5],
+      )!;
+      expect(header.str).toMatch(/^Ԫ+… · Recovery pack 3 · 12 Oct 2026$/);
+      expect(header.transform[4] + header.width).toBeLessThan(number.transform[4]);
+    } finally {
+      await loading.destroy();
+    }
+  });
+});
+
 describe("the Spanish pack's other wording", () => {
   it("covers setup, a failed page and each place the key can be", async () => {
     const es = (parts: PackPart[], madeBy: string | null = "Marta Puig") =>
@@ -238,6 +509,29 @@ describe("parts the renderer refuses", () => {
     await expect(
       renderRecoveryPack(input({ parts: [{ ...bucket, page: { ...bucket.page!, notes } }] })),
     ).rejects.toThrow("Recovery pack refused: overflow");
+  });
+
+  it("refuses a pack whose final document has more pages than it planned", async () => {
+    vi.resetModules();
+    vi.doMock("pdfkit", async (load) => {
+      const { default: Real } = await load<{ default: new (options: object) => object }>();
+      class Doubling extends Real {
+        constructor(options: { info?: object }) {
+          super(options);
+          if (!options.info) return;
+          const addPage = (this as unknown as { addPage: () => unknown }).addPage.bind(this);
+          (this as unknown as { addPage: () => unknown }).addPage = () => (addPage(), addPage());
+        }
+      }
+      return { default: Doubling };
+    });
+    try {
+      const { renderRecoveryPack: render } = await import("./render-pack.js");
+      await expect(render(input())).rejects.toThrow("Recovery pack refused: overflow");
+    } finally {
+      vi.doUnmock("pdfkit");
+      vi.resetModules();
+    }
   });
 
   it("leaves no output-size refusal unhandled after a drawing refusal", async () => {

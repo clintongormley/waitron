@@ -17,7 +17,13 @@ type Words = {
   sameChecks: string;
   couldNotBeDrawn: string;
   lockedAway: string;
-  anyoneHolding: string;
+  /** For a pack holding a restore code or the backup key, and not the server key. */
+  anyoneHoldingBackups: string;
+  /** For a pack holding a restore code or the backup key, and the server key. */
+  anyoneHoldingBackupsAndServerKey: string;
+  /** For a pack holding the server key and no restore code or backup key. */
+  anyoneHoldingServerKey: string;
+  whichToKeep: string;
   serverKeyPage: (page: number) => string;
   part: Record<PartKind, string>;
   situation: Record<PartKind, string>;
@@ -50,8 +56,13 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       "The dashboard's Backups screen shows the same checks. If one differs, this pack is out of date: make a new one.",
     couldNotBeDrawn: "Could not be drawn",
     lockedAway: "Keep this pack locked away, and off the box.",
-    anyoneHolding:
-      "Anyone holding it can open every backup of this venue and start the venue somewhere else. When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
+    anyoneHoldingBackups:
+      "Anyone holding it can open the backups its restore codes or backup key unlock.",
+    anyoneHoldingBackupsAndServerKey:
+      "Anyone holding it can open the backups its restore codes or backup key unlock, and, with its server key and a matching backup, recover the server.",
+    anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the server.",
+    whichToKeep:
+      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
     serverKeyPage: (page) =>
       `Always keep the pack that holds the server key (page ${page} says which).`,
     part: { bucket: "Bucket copy", archives: "Archives", "server-key": "Server key" },
@@ -98,8 +109,14 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
       "La pantalla Copias de seguridad del panel muestra las mismas comprobaciones. Si alguna no coincide, este paquete está desfasado: haz uno nuevo.",
     couldNotBeDrawn: "No se pudo generar",
     lockedAway: "Guarda este paquete bajo llave, y fuera de la caja.",
-    anyoneHolding:
-      "Quien lo tenga puede abrir todas las copias de seguridad de este local y poner el local en marcha en otro sitio. Cuando hagas un paquete nuevo, la pantalla Copias de seguridad del panel te dice qué paquetes anteriores guardar y hasta cuándo.",
+    anyoneHoldingBackups:
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de copia.",
+    anyoneHoldingBackupsAndServerKey:
+      "Quien lo tenga puede abrir las copias de seguridad que desbloquean sus códigos de restauración o su clave de copia y, con su clave del servidor y la copia correspondiente, recuperar el servidor.",
+    anyoneHoldingServerKey:
+      "Quien lo tenga, junto con su copia correspondiente, puede recuperar el servidor.",
+    whichToKeep:
+      "Cuando hagas un paquete nuevo, la pantalla Copias de seguridad del panel te dice qué paquetes anteriores guardar y hasta cuándo.",
     serverKeyPage: (page) =>
       `Guarda siempre el paquete que tiene la clave del servidor (la página ${page} dice cuál).`,
     part: {

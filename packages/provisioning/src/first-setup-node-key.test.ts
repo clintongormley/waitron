@@ -3,7 +3,13 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import { CORE_MIGRATIONS, nodeRoles, stampDeployment, withTransaction } from "@waitron/db";
+import {
+  CORE_MIGRATIONS,
+  nodeRoles,
+  readRecoveryPacks,
+  stampDeployment,
+  withTransaction,
+} from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { verifySecretAsync } from "@waitron/identity";
 import { request, PASSWORD } from "../test/first-setup-request.js";
@@ -261,6 +267,64 @@ it("installs the delivered verifier once and preserves it on exact publication r
   );
   expect(await database.db.select().from(nodeRoles)).toEqual(before);
 });
+
+it("records recovery pack 1 as received beside the installed key, once across a publication retry", async () => {
+  const f = await fixture();
+  const state = await f.committed();
+  await stampDeployment(database.db, "preproduction");
+  const before = Date.now();
+  await f.keys.installStagedNodeKey(database.db, state, f.staged!.stage);
+  const after = Date.now();
+  const packs = await readRecoveryPacks(database.db, state.frozen.nodeId);
+  expect(packs).toEqual([
+    {
+      nodeId: state.frozen.nodeId,
+      number: 1,
+      madeAt: expect.any(Date),
+      madeBy: null,
+      receivedAt: expect.any(Date),
+      parts: [
+        { part: "bucket", state: "not-set-up" },
+        { part: "archives", state: "not-set-up" },
+        {
+          part: "server-key",
+          state: "included",
+          keyName: f.staged!.stage.name,
+          carriedKey: true,
+        },
+      ],
+    },
+  ]);
+  const receivedAt = packs[0]!.receivedAt!.getTime();
+  expect(receivedAt).toBeGreaterThanOrEqual(before);
+  expect(receivedAt).toBeLessThanOrEqual(after);
+  expect(packs[0]!.madeAt.getTime()).toBe(receivedAt);
+  await f.coordinator.run((hold) =>
+    f.keys.installStagedNodeKey(database.db, state, f.staged!.stage, hold),
+  );
+  expect(await readRecoveryPacks(database.db, state.frozen.nodeId)).toEqual(packs);
+});
+
+it.each(["verifier", "name"])(
+  "records no recovery pack when publication finds a different %s",
+  async (part) => {
+    const f = await fixture();
+    const state = await f.committed();
+    const stage = f.staged!.stage;
+    await stampDeployment(database.db, "preproduction");
+    await withTransaction(database.db, async (tx) => {
+      await tx.insert(nodeRoles).values({
+        nodeId: stage.nodeId,
+        breakGlassVerifier: part === "name" ? stage.verifier : "another-verifier",
+        breakGlassKeyName: part === "verifier" ? stage.name : "another-name",
+      });
+    });
+    await expect(f.keys.installStagedNodeKey(database.db, state, stage)).rejects.toMatchObject({
+      code: "setup.attempt_uncertain",
+    });
+    expect(await readRecoveryPacks(database.db, stage.nodeId)).toEqual([]);
+  },
+);
 
 it("reissues a lost unfinished key only after a separate password confirmation, keeping the attempt intact", async () => {
   const f = await fixture();
