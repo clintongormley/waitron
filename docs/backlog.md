@@ -6144,8 +6144,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A976. Finish the server's English test-venue defaults.**
-  Venue-service API-client zone and ordinary routing-grid hierarchy samples use English names;
-  remaining fixtures are listed in the detail.
+  Venue-service API-client zone, ordinary routing-grid hierarchy and menu-period rule samples
+  use English names; remaining fixtures are listed in the detail.
   Other helpers and screen expectations remain. Low priority.
   [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
