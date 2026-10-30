@@ -511,7 +511,7 @@ export class FirstSetupHour extends LitElement {
       }
       ${renderClockProblem(this.#wait.problem, t, clock)}
       ${
-        result?.status === "waiting"
+        this.#wait.counting
           ? this.#wait.renderWait(t)
           : result?.status === "selected"
             ? html`<section data-test="selected-hour">

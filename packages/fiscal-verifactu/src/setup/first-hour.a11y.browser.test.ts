@@ -85,6 +85,7 @@ for (const theme of ["light", "dark"] as const)
                     params: {
                       reason: mode === "later" ? "minute_not_later" : "minute_in_use",
                       allowedFromMs: instant + 240000,
+                      ...(mode === "in-use" ? { remainingMs: 240000, recheckInMs: 90000 } : {}),
                     },
                   };
                 return mode === "waiting"
@@ -147,7 +148,7 @@ for (const theme of ["light", "dark"] as const)
             "second-clock": "clock-wait",
             waiting: "remaining",
             later: "minute-not-later",
-            "in-use": "minute-in-use",
+            "in-use": "minute-taken",
             pdf: "prepare-pdf",
           } as const;
           await vi.waitFor(() =>
