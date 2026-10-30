@@ -310,7 +310,7 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved with Merge the bills asked for still arrives as its own bill with the next number, so the next new bill there is Bill 3, and its old table still never gives its old number again", async () => {
+  it("a bill moved to another party's table still arrives as its own bill with the next number, so the next new bill there is Bill 3, and its old table still never gives its old number again", async () => {
     const from = await tableWithBills("M3", 2);
     const to = await seat(v, await v.table("M3 to"));
     await order(v, to.tabId, "Agua");
@@ -334,7 +334,7 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
-  it("a bill moved with Merge the bills to a table whose main bill is presented stays separate and takes that table's next number", async () => {
+  it("a bill moved to a table whose main bill is presented stays separate and takes that table's next number", async () => {
     const from = await tableWithBills("M3b", 2);
     const to = await seat(v, await v.table("M3b to"));
     await order(v, to.tabId, "Agua");
@@ -589,7 +589,7 @@ describe("A803 bill numbers: tables", () => {
     await everyPartyBillNumbered();
   });
 
-  it("joining with Merge the bills asked for: no bill merges, and every incoming bill takes the next numbers with no gap", async () => {
+  it("joining another party: no bill merges, and every incoming bill takes the next numbers with no gap", async () => {
     const ours = await seat(v, await v.table("S6 ours"));
     await order(v, ours.tabId, "Agua");
     const theirs = await tableWithBills("S6 theirs", 2);
@@ -817,7 +817,7 @@ describe("A803 bill list", () => {
     expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("an abandoned bill is listed with billNumber null, and a counter order arriving with Merge the bills asked for is listed with the next number", async () => {
+  it("an abandoned bill is listed with billNumber null, and a counter order moved to the table is listed with the next number", async () => {
     const seated = await tableWithBills("L6", 2);
     const command = await commandFor(v, seated.partyId);
     await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));

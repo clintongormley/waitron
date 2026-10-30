@@ -1168,7 +1168,7 @@ describe("the move route", () => {
     expect(partyOfBill(billId)).toBe(luis.partyId);
   });
 
-  it('A803 no main bill (move): a request still carrying `bills: "merge"` is served the same way', async () => {
+  it("A803 no main bill (move): a bill moved onto a table held by another party stays its own open bill, beside the open bill already there", async () => {
     const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
     const answer = await moveTo(billId, luis.tableId);

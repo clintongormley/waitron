@@ -220,7 +220,7 @@ describe("table composition compares every affected bill before moving anything"
     },
   );
   it.each(actions)(
-    "%s asked to merge keeps both bills with their common foreign editor, and Merge bills afterwards still refuses without that editor's authority",
+    "%s keeps both bills with their common foreign editor, and Merge bills afterwards still refuses without that editor's authority",
     async (action) => {
       const from = await party(),
         into = await party();
@@ -244,7 +244,7 @@ describe("table composition compares every affected bill before moving anything"
   );
 
   it.each(actions)(
-    "%s asked to merge keeps both bills; Merge bills afterwards compares authority using the service mode after relocation",
+    "%s keeps both bills; Merge bills afterwards compares authority using the service mode after relocation",
     async (action) => {
       const from = await party(),
         into = await party();
@@ -266,7 +266,7 @@ describe("table composition compares every affected bill before moving anything"
     },
   );
   it.each(actions)(
-    "%s asked to merge keeps both bills; an authorised Merge bills afterwards succeeds after the source changed service mode",
+    "%s keeps both bills; an authorised Merge bills afterwards succeeds after the source changed service mode",
     async (action) => {
       const from = await party(),
         into = await party();

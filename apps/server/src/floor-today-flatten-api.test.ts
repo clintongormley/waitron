@@ -368,7 +368,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     expect(await placeOf(table.c5!)).toEqual({ x: 46, y: 0 });
   });
 
-  it("guests at both, Bar pushed onto Long table, bills kept separate: a moved notice for Long table's bill only, as Bar's keeps Bar and its name", async () => {
+  it("guests at both, Bar pushed onto Long table: a moved notice for Long table's bill only, as Bar's keeps Bar and its name", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -460,7 +460,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     ]);
   });
 
-  it("guests with food at both, Bar pushed onto Long table, Merge the bills asked for: no bill merges, and only Long table's dish gets a moved notice, on its own bill", async () => {
+  it("guests with food at both, Bar pushed onto Long table: no bill merges, and only Long table's dish gets a moved notice, on its own bill", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -488,7 +488,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
     expect((await billRow(v, atBar.tabId)).status).toBe("open");
   });
 
-  it("guests at both, food at Long table only, Bar pushed onto Long table, Merge the bills asked for: one moved notice, on Long table's own bill", async () => {
+  it("guests at both, food at Long table only, Bar pushed onto Long table: one moved notice, on Long table's own bill", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);
@@ -540,7 +540,7 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
 });
 
 describe("a till join without a merge", () => {
-  it("guests at Long table joining Bar, whose party has food, Merge the bills asked for: no bill merges, so no moved notice", async () => {
+  it("guests at Long table joining Bar, whose party has food: no bill merges, so no moved notice", async () => {
     const { table } = await LONG_TABLE();
     const atLong = await seat(v, table.long!);
     const atBar = await seat(v, table.bar!);

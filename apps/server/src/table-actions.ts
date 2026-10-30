@@ -111,7 +111,8 @@ export async function moveGuests(
     await leaveMergeOf(tx, toTableId, held);
     for (const expected of options.expectedEdits)
       await relocateBillEditor(tx, expected.billId, expected);
-    return { partyId, billIds: await partyBillIds(tx, cfg, partyId) };
+    await ensureShownBill(tx, cfg, partyId);
+    return { partyId, billIds: await partyBillIds(tx, partyId) };
   });
 }
 
@@ -164,7 +165,8 @@ export async function joinTables(
     options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
     await addTable(tx, partyId, tableId);
-    return { partyId, billIds: await partyBillIds(tx, cfg, partyId) };
+    await ensureShownBill(tx, cfg, partyId);
+    return { partyId, billIds: await partyBillIds(tx, partyId) };
   });
 }
 
@@ -189,7 +191,8 @@ async function combineAt(
       expectedEdits: options.expectedEdits,
       intoZoneId,
     });
-    return { partyId: into, billIds: await partyBillIds(tx, cfg, into) };
+    await ensureShownBill(tx, cfg, into);
+    return { partyId: into, billIds: await partyBillIds(tx, into) };
   });
 }
 
@@ -362,7 +365,7 @@ export async function splitTable(
       await printHoldTickets(tx, cfg, held);
       if (status === "open") await setMainBill(tx, newParty, billId);
       // The staying party is given an empty bill when this was its last (D1).
-      await partyBillIds(tx, cfg, partyId);
+      await ensureShownBill(tx, cfg, partyId);
     }
     await leaveMergesRestoring(tx, [tableId]);
     return { partyId: newParty, billId: taken };
@@ -389,19 +392,24 @@ async function refuseUnsplittableBill(
 }
 
 /**
- * The party's bills that are not abandoned, in number order (unnumbered last, then by id). A party
- * with none is given one new empty bill first (A803 D1); its revision is the caller's to move.
+ * A party with no bill that is not abandoned is given one new empty bill (A803 D1); its revision is
+ * the caller's to move.
  */
-async function partyBillIds(
-  tx: Transaction,
-  cfg: OriginConfig,
-  partyId: string,
-): Promise<string[]> {
+async function ensureShownBill(tx: Transaction, cfg: OriginConfig, partyId: string): Promise<void> {
+  const [row] = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")))
+    .limit(1);
+  if (row === undefined) await insertMainBill(tx, cfg, partyId);
+}
+
+/** The party's bills that are not abandoned, in number order (unnumbered last, then by id). */
+async function partyBillIds(tx: Transaction, partyId: string): Promise<string[]> {
   const rows = await tx
     .select({ id: workingOrders.id })
     .from(workingOrders)
     .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")));
-  if (rows.length === 0) return [await insertMainBill(tx, cfg, partyId)];
   const numbers = await VENUE_SERVICE.readBillIdentities(
     tx,
     rows.map((row) => row.id),

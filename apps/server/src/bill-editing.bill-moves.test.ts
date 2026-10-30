@@ -235,7 +235,7 @@ describe("moving one bill compares only that bill and the complete destination",
     });
     expect((await billEdits(into.tabId))[0]).toEqual(expected.find((e) => e.billId === into.tabId));
   });
-  it("keeps two bills with a common foreign editor apart when the move asks to merge, and Merge bills still refuses them", async () => {
+  it("keeps two bills with a common foreign editor apart when one moves to the other's party, and Merge bills still refuses them", async () => {
     const from = await party(),
       into = await party();
     const moving = await save(from.partyId, from.tabId, venue.adminId);

@@ -198,7 +198,7 @@ describe("a join that merges", () => {
     expect((await mergeOf(v, b!))?.seats).toBe(6);
   });
 
-  it("two seated tables combine, keeping the bills apart when asked, and merge", async () => {
+  it("two seated tables combine, keeping both bills open, and the tables merge", async () => {
     const { a, b } = await tables({ key: "a", x: 0 }, { key: "b", x: 20 });
     const p = await seat(a!);
     const q = await seat(b!);

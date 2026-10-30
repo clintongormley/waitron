@@ -348,7 +348,7 @@ describe("move guests", () => {
     expect(await activeTablesOf(v, ana.partyId)).toEqual([]);
   });
 
-  it("keeps both main bills when asked, and the receiving one stays main", async () => {
+  it("keeps both main bills, and the receiving one stays main", async () => {
     const [m4, m7] = await tables("Dos", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1019,7 +1019,7 @@ describe("join tables", () => {
     }
   });
 
-  it("keeps the bills separate when asked", async () => {
+  it("keeps the bills separate", async () => {
     const [m4, m7] = await tables("Aparte", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1594,7 +1594,7 @@ describe("combineParties", () => {
 
 describe("guest counts when parties combine", () => {
   it.each(["merge", "separate"] as const)(
-    "a join adds the joined party's guests to the receiving party's (bills %s)",
+    "a join adds the joined party's guests to the receiving party's (%s row: both rows send the same request now that no bill choice exists)",
     async (bills) => {
       const [m4, m7] = await tables(`Comensales juntar ${bills}`, 4, 7);
       const ana = await seat(v, m4, 3);
@@ -1609,7 +1609,7 @@ describe("guest counts when parties combine", () => {
   );
 
   it.each(["merge", "separate"] as const)(
-    "moving guests onto a seated table adds them to its party's (bills %s)",
+    "moving guests onto a seated table adds them to its party's (%s row: both rows send the same request now that no bill choice exists)",
     async (bills) => {
       const [m4, m7] = await tables(`Comensales mover ${bills}`, 4, 7);
       const ana = await seat(v, m4, 2);

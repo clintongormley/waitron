@@ -109,7 +109,7 @@ describe("the table action routes", () => {
     expect(tablesOf(ana.partyId)).toEqual([to]);
   });
 
-  it("move guests to another party's table keeps every bill, with no bills key or with one", async () => {
+  it("move guests to another party's table keeps every bill, for each of two moves sending the same request", async () => {
     const ana = await seatedWith(venue, "Tarta");
     const luis = await seatedWith(venue, "Caña");
     const bea = await seatedWith(venue, "Pulpo");
@@ -571,7 +571,18 @@ describe("A803 action results:", () => {
   }
 
   it("Move guests to a free table answers the party's bills in number order", async () => {
-    const { ana, billId } = await anaAtTwo();
+    // Bill ids are random, so seat again until Bill 1's id sorts after Bill 2's: only then does
+    // number order differ from id order.
+    let arranged = await anaAtTwo();
+    for (let tries = 1; tries < 20 && arranged.ana.tabId < arranged.billId; tries++) {
+      arranged = await anaAtTwo();
+    }
+    const { ana, billId } = arranged;
+    expect(ana.tabId > billId).toBe(true);
+    expect((await numbersOf(venue, ana.partyId)).map(([id, n]) => [id, n])).toEqual([
+      [ana.tabId, 1],
+      [billId, 2],
+    ]);
     const to = await freeTable();
 
     const answer = await post(`/api/parties/${ana.partyId}/move`, {
@@ -930,6 +941,7 @@ describe("Split a table's guest counts", () => {
     const answers = [
       [await splitOf(alone.partyId, alone.tableId, null), "table.not_shared"],
       [await splitOf(ana.partyId, luis.tableId, null), "table.not_joined"],
+      [await splitOf(ana.partyId, second, luis.tabId), "bill.other_party"],
     ] as const;
 
     for (const [answer, code] of answers) {

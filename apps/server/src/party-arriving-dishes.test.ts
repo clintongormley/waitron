@@ -971,7 +971,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     ]);
   });
 
-  it("names on the HOLD ticket the moved bill itself, kept apart from the destination's bill, when the move asks to merge", async () => {
+  it("names on the HOLD ticket the moved bill itself, kept apart from the destination's bill", async () => {
     await printHeldWork(true);
     const ana = await coursedBill("Aviso 7");
     const mesa = await v.table("Aviso 8");

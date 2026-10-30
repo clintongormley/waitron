@@ -339,7 +339,7 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect((await partyRow(v, luis.partyId)).mainBillId).toBe(luis.tabId);
   });
 
-  it("keeps it separate when asked, even when both are untouched", async () => {
+  it("keeps it separate, even when both are untouched", async () => {
     const ana = await seat(v, await v.table("Mesa 6"));
     const luis = await seat(v, await v.table("Mesa 9"));
     await order(v, ana.tabId, "Burger", "Vino");
@@ -905,7 +905,7 @@ describe("move a counter order into a party", () => {
     expect((await partyRow(v, ana.partyId)).mainBillId).toBe(ana.tabId);
   });
 
-  it("keeps it a separate bill of the party when asked, no longer delivered to a table", async () => {
+  it("keeps it a separate bill of the party, no longer delivered to a table", async () => {
     const mesa = await v.table("Mesa D2");
     const barra = await v.table("Barra D2", v.counter.zoneId);
     const ana = await seat(v, mesa);

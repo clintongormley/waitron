@@ -189,7 +189,7 @@ describe("kitchen notes when bills and parties move", () => {
   );
 
   it.each(["merge", "separate"] as const)(
-    "combines a counter bill, kept as its own bill, with the destination note when the move asks for bills: %s",
+    "combines a counter bill, kept as its own bill, with the destination note (%s row: both rows send the same request now that no bill choice exists)",
     async () => {
       const targetTable = await freshTable("Existing destination");
       const target = await seat(v, targetTable);
