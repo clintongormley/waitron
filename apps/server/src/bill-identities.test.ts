@@ -864,4 +864,20 @@ describe("A803 bill list", () => {
       await inTx(v, (tx) => numberBill(tx, seated.bills[1]!, seated.partyId));
     }
   });
+  it("a paid bill whose row has a null number makes the read throw, naming the bill", async () => {
+    const seated = await seat(v, await v.table("L9"));
+    await order(v, seated.tabId, "Burger", "Agua");
+    const paid = await split(v, seated.partyId, seated.tabId, [2]);
+    await pay(v, paid, "2.00");
+    expect(await statusOf(v, paid)).toBe("settled");
+    await inTx(v, (tx) => VENUE_SERVICE.releaseBillNumber(tx, paid));
+
+    try {
+      const error = await captureError(() => listOf(seated.partyId));
+      expect(error).not.toBeInstanceOf(AppError);
+      expect((error as Error).message).toContain(paid);
+    } finally {
+      await inTx(v, (tx) => numberBill(tx, paid, seated.partyId));
+    }
+  });
 });
