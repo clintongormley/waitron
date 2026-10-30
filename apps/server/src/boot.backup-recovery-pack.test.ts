@@ -318,14 +318,14 @@ it("with the box ticked, the real fiscal module draws a new server key that the 
     expect(await verifySecretAsync(carried, verifier)).toBe(true);
     expect(await verifySecretAsync(oldKey, verifier)).toBe(false);
     expect(
-      (await suite.db.select().from(invoiceSeries)).map((s) => ({
+      (await suite.db.select().from(invoiceSeries).orderBy(invoiceSeries.code)).map((s) => ({
         code: s.code,
         nextNumber: s.nextNumber,
       })),
     ).toEqual([
       { code: "A-0CNNW", nextNumber: 123 },
-      { code: "R-0CNNW", nextNumber: 123 },
       { code: "FF-0CNNW", nextNumber: 123 },
+      { code: "R-0CNNW", nextNumber: 123 },
     ]);
     expect(await readFile(historyPath)).toEqual(originalHistory);
     const log = await readFile(join(scratch, "logs", "waitron.log"), "utf8");

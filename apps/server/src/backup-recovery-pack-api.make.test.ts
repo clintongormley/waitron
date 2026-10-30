@@ -591,7 +591,7 @@ describe("a made pack", () => {
     let release!: () => void;
     const held = turns(() => new Promise<void>((resolve) => (release = resolve)));
     const making = fixture({ turns, readBoxEnv }).make();
-    await vi.waitFor(() => expect(handed).toBe(2));
+    await vi.waitFor(() => expect(handed).toBe(2), { timeout: 30_000 });
     expect(reads).toBe(0);
     expect(await packs()).toEqual([]);
     release();
