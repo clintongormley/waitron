@@ -27,7 +27,7 @@ or stop and change nothing.
 
 During an unfinished first setup, resume the same attempt with its setup password and use that
 flow's recovery-document step. Follow [first Live setup](first-live-fiscal-setup.md); do not start a
-fresh identity just to obtain another sheet.
+fresh identity just to obtain another pack.
 
 ## Implementation references
 

@@ -412,8 +412,9 @@ configuración para poner en marcha otro local.
   recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
-  menos 12 caracteres, así que es tan segura como esa frase. El paquete de recuperación abre la copia
-  del bucket y las copias programadas, así que guárdalo bajo llave, fuera del equipo.
+  menos 12 caracteres, así que es tan segura como esa frase. Un paquete de recuperación hecho en
+  **Copias de seguridad** después de configurar la copia del bucket o las copias programadas las
+  abre, así que guarda cada paquete de recuperación bajo llave, fuera del equipo.
 
 ## Si se pierden o se exponen datos personales {#breach}
 
@@ -535,8 +536,11 @@ dos pasos. Waitron no permite **Restablecer acceso** para el único administrado
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
-**Un paquete de recuperación perdido.** El paquete contiene la clave de acceso y el secreto de tu
-bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
+**Un paquete de recuperación perdido.** El paquete hecho durante la primera configuración solo
+contiene la clave del servidor, que una recuperación necesita junto con el acceso a una copia; para
+sustituirla, mira el final de esta sección. Un paquete hecho en **Copias de seguridad** después de
+configurar la copia del bucket contiene la clave de acceso y el
+secreto de tu bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
 persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo,

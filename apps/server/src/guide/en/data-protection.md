@@ -381,8 +381,8 @@ own, can also make scheduled backups, and can export your setup to start another
   the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
-  as that passphrase. The recovery pack opens the bucket copy and the scheduled backups, so keep
-  it locked away, off the box.
+  as that passphrase. A recovery pack made on **Backups** after you set up the bucket copy or
+  scheduled backups opens them, so keep every recovery pack locked away, off the box.
 
 ## If personal data is lost or exposed {#breach}
 
@@ -491,8 +491,10 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery pack.** The pack holds your bucket's access key and secret and the recovery key
-(the pack calls it the backup key), so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
+**A lost recovery pack.** The pack made during first setup holds only the server key, which a
+recovery needs alongside access to a copy; to replace it, see the end of this section. A pack made
+on **Backups** after you set up the bucket copy holds your bucket's access
+key and secret and the recovery key (the pack calls it the backup key), so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
 each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only
 active admin, who instead opens **Account settings**, chooses **Disable** beside **Authenticator

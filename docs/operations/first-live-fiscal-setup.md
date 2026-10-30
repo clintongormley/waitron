@@ -76,22 +76,22 @@ Correct clocks
 and surviving history reduce accidental reuse; they cannot discover another box whose activity
 you did not report.
 
-## Keep the recovery PDF
+## Keep recovery pack 1
 
-Download, print, or both from the recovery-document step. Both actions use the same document
-within that delivery session. Check the business, node and key name, then confirm that you kept
-the sheet before continuing. There is no separate signing key, custodian computer, register or
-downloadable tool.
+Choose **Make recovery pack**, then download `waitron-recovery-pack-1.pdf`, print it, or both. Both
+actions use the same document within that delivery session. Check the business, venue, server ID
+and key name on its server-key page, then tick **I kept the recovery pack.** before continuing.
+There is no separate signing key, custodian computer, register or downloadable tool.
 
-Keep the PDF or paper outside the box and its backups. It contains the recovery secret.
-Your Cloud login, or the downloaded archive's password, stays separate. Keep the older named
-sheet while you retain backups that need its key. The box stores a verifier for the key;
-it cannot recover the old secret from that verifier.
+Keep the PDF or paper outside the box and its backups. It contains the server key. Pack 1 holds
+only that key: its cover lists the bucket copy and archives as not set up
+(`packages/fiscal-verifactu/src/initial-hour-setup.test.ts`, "the command path writes recovery pack
+1 holding only the staged key, in %s"). Your Cloud login, or the downloaded archive's password,
+stays separate. Keep an older pack or recovery sheet while you retain backups that need its key.
+The box stores a verifier for the key; it cannot recover the old secret from that verifier.
 
-The sheet shows one grouped recovery key and no installation code
-(`packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`, "refuses a sheet that still carries an
-installation code"). You can select the saved PDF during recovery or type its key. The typing
-check catches mistakes; opening the selected backup still authenticates the complete secret.
+You can select the saved pack, or an older sheet, during recovery or type its grouped key. The
+typing check catches mistakes; opening the selected backup still authenticates the complete secret.
 See [recovering a box](hour-recovery.md).
 
 ## Resume an interruption
@@ -161,7 +161,7 @@ A732's proposed fresh-workspace action and recovery desk were withdrawn by the o
 
 ## When both credentials are lost
 
-If you have lost both the administrator password and recovery sheet, reinstall the box and set
+If you have lost both the administrator password and every recovery pack or sheet holding the server key, reinstall the box and set
 it up again (owner, 2026-10-21). Reinstallation loses the box's local data. The new setup starts a
 fresh fiscal identity and chain; it does not reopen the old account or continue its history.
 Keep any separately held archive, bucket or managed Cloud copy: recovering one still requires
