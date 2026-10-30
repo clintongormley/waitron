@@ -6161,12 +6161,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain.
   The server's split-extras test venue and its suites use English customer, kitchen and location
-  names; staff names, language keys and the venue's locale stay, and its operation description and
-  pass-printer name remain.
+  names; staff names, language keys and the venue's locale stay, and its operation description
+  remains.
   The server's device-api, device-api pass, station-alert, party and configuration-transfer
-  suites still hold Spanish kitchen-screen, station, till, table, zone and location names, as do
-  the kitchen-print, zone-offer and fiscal sale-path suites' "Pase" pass names and the fiscal
-  sale-path suite's "Pantalla" screen names. The device, device-delete, join-request, join-api,
+  suites still hold Spanish kitchen-screen, station, till, table, zone and location names. The
+  device, device-delete, join-request, join-api,
   join-api database and device-session suites give English names to what they create; the names
   the shared test helpers create and the operation description stay Spanish.
   Venue-service period-deletion and zone-closure suites use English venue, station,
