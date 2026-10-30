@@ -4838,6 +4838,25 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   look images for #2250 were taken before its review changed the "not a pack" refusal and added the
   space mark.
 
+- **A1187: setup's command-line pack is not run under the source loader or from the bundle.**
+  `apps/server/src/recovery-pdf-source.test.ts` and `packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`
+  still draw the old recovery sheet through `recovery-pdf-node.ts`; the command path's real renderer,
+  `renderSetupRecoveryPack`, is tested only inside Vitest.
+
+- **A1187: "sheet" wording left after the pack replaced the sheet.** Setup's key picker says "Enter
+  the key from the sheet below." (`packages/fiscal-verifactu/src/setup/recovery-key.ts`), and
+  `docs/operations/hour-recovery.md` is titled "Recover a box with its recovery sheet". Older sheets
+  are still read, so each needs the pack named beside the sheet, not in its place.
+
+- **A1187: the data-protection guide says a pack made on Backups "opens" the backups.** It does not
+  when the pack's bucket or archive page failed, nor for backups made under an older key (the guide
+  covers older keys further down). Narrow the sentence in English and Spanish.
+
+- **A1187: pack 1's record is dated from activation, not from the PDF.** Provisioning keeps setup's
+  delivery statement opaque, so `installStagedNodeKey` records the activation time as pack 1's made
+  time; the Backups card can name a later time than the pack's cover. Deliberate in #2285; change it
+  only if the owner wants the card and the cover to agree.
+
 - **At 390 px wide, the configuration export's password label overlaps its Show password button.**
   Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is
   believed to predate that branch; nobody photographed it before.
