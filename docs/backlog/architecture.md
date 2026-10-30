@@ -474,10 +474,14 @@ until A977).
   "Pimientos" and "Cana", its legal name and its operation description remain; it keeps its
   street address, its es-ES locale, its reasons' Spanish translations, setup's default station
   "Cocina" and the Spanish ticket and receipt words its es-ES venue prints. Some of its suites
-  keep their own Spanish samples, among them the extra-cancel suite's "Hamburguesa completa",
-  "Sándwich tostado", "Patatas fritas" and "Pepinillos", the apply suite's "Barra" counter zones,
+  keep their own Spanish samples, among them the apply suite's "Barra" counter zones,
   the collect-at-counter suite's "Fríos" printer and the receipt and portions suites' customer
   "Cliente SL".
+  The kitchen-ticket renderer suite (`apps/server/src/kitchen-ticket.test.ts`) uses English
+  station, table, dish, note and place names; it keeps the Spanish ticket words its es-ES cases
+  print, the accented samples its wrapping and character checks read ("Cumpleaños de la abuela"
+  with and without "García", "Jalapeños en vinagre con eneldo" and "Café"), and one French sample,
+  "Cornichons".
   The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
   printer, course, dish, extra, note and table names to what it creates; it keeps the default
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name

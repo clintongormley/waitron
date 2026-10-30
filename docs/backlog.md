@@ -6247,6 +6247,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
   dish names, legal name and operation description remain.
+  The server's kitchen-ticket renderer suite uses English station, table, dish, note and place
+  names; it keeps the Spanish ticket words its es-ES cases print, its accented wrapping and
+  character samples and one French sample.
   The server's station-alert and party suites still hold Spanish sample names. The
   configuration-transfer suite gives English names to what it creates; it still reads setup's
   Spanish default station "Cocina", and keeps Spanish translation-map values, its accented
