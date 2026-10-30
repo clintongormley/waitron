@@ -544,6 +544,8 @@ until A977).
   The device, device-delete, join-request, join-api, join-api database and device-session suites
   give English names to what they create; the names the shared test helpers create and the
   operation description stay Spanish.
+  Named-day occurrence samples use English custom-day names; repetition, closure, public-holiday
+  tone and area-selection checks stay.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
