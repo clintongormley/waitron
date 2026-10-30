@@ -530,7 +530,7 @@ describe("SetupRestoreBucketScreen", () => {
       venueConfirmed: null,
     };
     const REFUSAL =
-      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.";
+      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.";
 
     it("shows it under that field and focuses it, leaving Restore working", async () => {
       const { el } = await mountWidget<SetupRestoreBucketScreen>("setup-restore-bucket-screen", {

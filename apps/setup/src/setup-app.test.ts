@@ -3434,22 +3434,22 @@ describe("restore from my bucket", () => {
     [
       "backup.stream_kit_invalid",
       undefined,
-      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
     ],
     [
       "backup.stream_kit_invalid",
       { reason: "not_found" },
-      "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+      "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
     ],
     [
       "backup.stream_kit_invalid",
       { reason: "encoding" },
-      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.",
+      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
     ],
     [
       "backup.stream_kit_invalid",
       { reason: "shape" },
-      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.",
+      "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
     ],
     [
       "restore.stream_pointer_missing",
@@ -3489,17 +3489,17 @@ describe("restore from my bucket", () => {
     [
       "recovery.passphrase_invalid",
       undefined,
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
     ],
     [
       "backup.artifact_invalid",
       { reason: "magic" },
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
     ],
     [
       "backup.archive_invalid",
       { reason: "magic" },
-      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+      "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
     ],
     [
       "backup.stream_restore_failed",
