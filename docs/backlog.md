@@ -4817,6 +4817,11 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   Left open by PR D:
   - The pack PDF uses one regular-weight font: no bold, codes not in a fixed-width face, so l and I
     look alike. For PR E.
+  - Setup's first server key is named by its own copy of the four-character draw
+    (`packages/provisioning/src/first-setup-node-key.ts`); the box's mint and the pack share
+    `newBreakGlassKeyName` in `apps/server/src/break-glass.ts` since #2276. A freshly set-up node has
+    no packs, so the copy cannot clash today. For PR E, whose Task 21 changes that file. Nobody has
+    looked at the PDF or the card since #2276 lengthened their unreceived sentences.
   - The pack's cover says "The dashboard's Backups screen shows the same checks" beside a check
     value (`key of <day> · rev <8 characters>`) that no part of the Backups screen shows.
   - There is no Backups guide page, so the Backups screen and the card link to none.
