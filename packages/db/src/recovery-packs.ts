@@ -7,6 +7,8 @@ export type RecoveryPackPartRecord = {
   part: "bucket" | "archives" | "server-key";
   state: "included" | "absent" | "failed" | "not-set-up";
   keyChangedAt?: string;
+  /** `keyChangedAt` is the pack's own time: nothing had changed the backup key yet. */
+  keyNeverChanged?: boolean;
   settingsRevision?: string;
   destination?: "bucket" | "folder";
   keyName?: string;
@@ -41,7 +43,7 @@ function checkedPart(entry: unknown): RecoveryPackPartRecord {
       if (!STATES.has(value as string)) refuse();
     } else if (key === "destination") {
       if (value !== "bucket" && value !== "folder") refuse();
-    } else if (key === "carriedKey") {
+    } else if (key === "carriedKey" || key === "keyNeverChanged") {
       if (typeof value !== "boolean") refuse();
     } else if (!TEXT_FIELDS.has(key) || typeof value !== "string") refuse();
   }
@@ -82,6 +84,18 @@ export async function markRecoveryPackReceived(
         isNull(recoveryPacks.receivedAt),
       ),
     );
+}
+
+export async function readRecoveryPack(
+  db: Database | Transaction,
+  nodeId: string,
+  number: number,
+): Promise<RecoveryPackRecord | null> {
+  const [row] = await db
+    .select()
+    .from(recoveryPacks)
+    .where(and(eq(recoveryPacks.nodeId, nodeId), eq(recoveryPacks.number, number)));
+  return row ?? null;
 }
 
 /** This node's packs, newest first. */

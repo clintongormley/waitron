@@ -7,9 +7,11 @@ export function partFailure(
   params: Readonly<Record<string, unknown>>,
 ): PartFailure {
   const words = PART_WORDS[locale];
-  if (code === "sif.allocation_invalid") {
-    if (params.reason !== "history_invalid") return words.general;
-    return { what: words.historyInvalid, todo: words.failures[code]!.todo };
+  if (code === "sif.allocation_invalid" && params.reason === "history_invalid") {
+    return words.historyInvalid;
+  }
+  if (code === "recovery.pack_invalid" && params.reason === "module_unsupported") {
+    return words.moduleFault;
   }
   return Object.hasOwn(words.failures, code) ? words.failures[code]! : words.general;
 }

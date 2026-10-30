@@ -312,21 +312,15 @@ export async function readHeldArchiveSettings(
   db: Database,
   ring: KeyRing,
 ): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
-  return heldArchiveSettings(() => readArchiveSettings(db, ring));
+  return withTransaction(db, (tx) => readHeldArchiveSettingsIn(tx, ring));
 }
 
 export async function readHeldArchiveSettingsIn(
   tx: Transaction,
   ring: KeyRing,
 ): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
-  return heldArchiveSettings(() => readArchiveSettingsIn(tx, ring));
-}
-
-async function heldArchiveSettings(
-  read: () => Promise<ArchiveSettings | null>,
-): Promise<{ settings: ArchiveSettings | null } | { unreadable: string }> {
   try {
-    return { settings: await read() };
+    return { settings: await readArchiveSettingsIn(tx, ring) };
   } catch (error) {
     if (isAppError(error) && UNREADABLE_SETTINGS.has(error.code)) {
       return { unreadable: error.code };

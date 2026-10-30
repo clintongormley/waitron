@@ -1,4 +1,4 @@
-import type { RecoveryPackPage } from "@waitron/recovery-pack/src/page.js";
+import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import { shortNodeId } from "@waitron/shared";
 import { encodeRecoveryKey } from "./recovery-key-code.js";
 import {

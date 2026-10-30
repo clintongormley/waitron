@@ -236,7 +236,14 @@ export * from "./schema/deployment.js";
 export * from "./schema/node-roles.js";
 export * from "./schema/node-sealed-state.js";
 export * from "./schema/recovery-packs.js";
-export * from "./recovery-packs.js";
+export {
+  insertRecoveryPack,
+  markRecoveryPackReceived,
+  nextRecoveryPackNumber,
+  readRecoveryPack,
+  readRecoveryPacks,
+} from "./recovery-packs.js";
+export type { RecoveryPackPartRecord, RecoveryPackRecord } from "./recovery-packs.js";
 export { membershipRemovals } from "./schema/membership-removals.js";
 export { membershipClearances } from "./schema/membership-clearances.js";
 export { readMirrorConfig, writeMirrorConfig } from "./mirror-config.js";
@@ -251,7 +258,7 @@ export {
 } from "./node-membership.js";
 export {
   readMembershipTrustSet,
-  readMembershipTrustSetIn,
+  readNodePublicKeyTx,
   setNodePublicKey,
   setNodePublicKeyTx,
 } from "./node-identity.js";

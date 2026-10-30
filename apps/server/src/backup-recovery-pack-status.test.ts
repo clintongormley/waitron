@@ -143,6 +143,18 @@ describe("the latest pack", () => {
     expect(answer.upToDate).toBe(false);
   });
 
+  it("counts unreadable archive settings as changed, even against a record with no revision", () => {
+    const noRevision = { ...included.archives, settingsRevision: undefined };
+    for (const archives of [included.archives, noRevision]) {
+      const parts = [included.bucket, archives, included.serverKey(KEY_1, false)];
+      const answer = status([pack(1, "2026-10-12T10:00:00.000Z", { parts })], {
+        current: { ...current, archives: "unreadable" },
+      });
+      expect(answer.reasons).toEqual([{ part: "archives", kind: "settings_changed" }]);
+      expect(answer.upToDate).toBe(false);
+    }
+  });
+
   it.each<[RecoveryPackPartRecord["part"], Partial<CurrentChecks>]>([
     ["bucket", {}],
     ["archives", {}],
@@ -286,6 +298,30 @@ describe("the packs to keep", () => {
     );
     // min(7 daily archives, 30 days) after the change, plus one interval: 7 + 1 days, over the
     // bucket copy's 7.
+    expect(answer.keep).toEqual([
+      {
+        number: 2,
+        madeAt: "2026-10-12T10:00:00.000Z",
+        until: new Date(Date.parse(change) + 8 * DAY).toISOString(),
+        why: "backup_key",
+      },
+    ]);
+  });
+
+  it("keeps one pack, the newest, for the key that had never been changed when they were made", () => {
+    const standIn = (madeAt: string): RecoveryPackPartRecord[] => [
+      { ...included.bucket, keyChangedAt: madeAt, keyNeverChanged: true },
+      { ...included.archives, keyChangedAt: madeAt, keyNeverChanged: true },
+      included.serverKey(KEY_1, false),
+    ];
+    const change = "2026-10-25T07:00:00.000Z";
+    const answer = status(
+      [
+        pack(2, "2026-10-12T10:00:00.000Z", { parts: standIn("2026-10-12T10:00:00.000Z") }),
+        pack(1, "2026-10-01T10:00:00.000Z", { parts: standIn("2026-10-01T10:00:00.000Z") }),
+      ],
+      { current: { ...current, keyChangedAt: change } },
+    );
     expect(answer.keep).toEqual([
       {
         number: 2,

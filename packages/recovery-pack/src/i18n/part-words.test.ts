@@ -9,7 +9,7 @@ const CODES = [
   ["backup.stream_signer_missing", {}],
   ["sif.allocation_invalid", { reason: "history_invalid" }],
   ["sif.allocation_invalid", { reason: "something_else" }],
-  ["server_key.missing", {}],
+  ["recovery.pack_invalid", { reason: "module_unsupported" }],
   ["anything.else", {}],
 ] as const;
 
@@ -40,6 +40,28 @@ describe("part failure words", () => {
     );
   });
 
+  it("words a box with no server key yet in both languages", () => {
+    expect(PART_WORDS.en.noServerKey).toEqual({
+      what: "This box has no server key yet.",
+      todo: "There is nothing to keep for this part until the box has one.",
+    });
+    const es = PART_WORDS.es.noServerKey;
+    expect(es.what).not.toBe("");
+    expect(es.todo).not.toBe("");
+    expect(es.what).not.toBe(PART_WORDS.en.noServerKey.what);
+    expect(es.todo).not.toBe(PART_WORDS.en.noServerKey.todo);
+  });
+
+  it("calls a module composition the page cannot use a fault in Waitron, not a reason to make a new pack", () => {
+    expect(partFailure("en", "recovery.pack_invalid", { reason: "module_unsupported" })).toEqual({
+      what: "This page could not be made. That is a fault in Waitron.",
+      todo: "A new pack will fail here the same way. The other pages of this pack are still good.",
+    });
+    expect(partFailure("es", "recovery.pack_invalid", { reason: "module_unsupported" })).toBe(
+      PART_WORDS.es.moduleFault,
+    );
+  });
+
   it("answers the general wording for any other code, and for another reason of a known one", () => {
     const general = partFailure("en", "anything.else", {});
     expect(general).toEqual({
@@ -47,6 +69,7 @@ describe("part failure words", () => {
       todo: "Check Backups and make a new pack.",
     });
     expect(partFailure("en", "sif.allocation_invalid", { reason: "other" })).toEqual(general);
+    expect(partFailure("en", "recovery.pack_invalid", { reason: "shape" })).toEqual(general);
   });
 
   it("never prints a parameter's value", () => {

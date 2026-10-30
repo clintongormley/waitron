@@ -1,4 +1,7 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TLSSocket } from "node:tls";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -22,15 +25,16 @@ import { openManagementSession } from "@waitron/identity/test/fixtures.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
 import { fakeModule } from "@waitron/module/src/testing/fake-module.js";
-import { readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
+import { PART_WORDS, readRecoveryPackPdf, type RecoveryPackPage } from "@waitron/recovery-pack";
 import { AppError, locationId } from "@waitron/shared";
 import { parseRecoveryKit } from "@waitron/stream";
 import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
+import { ARCHIVE_PURPOSE, writeArchiveSettings, type ArchiveSettings } from "./archive-settings.js";
 import { mountBackupRecoveryPackMakeApi } from "./backup-recovery-pack-api.js";
 import { createTurns, type Turns } from "./backup-turns.js";
 import { mintBreakGlassKey } from "./break-glass.js";
 import { invoiceFontBytes } from "./invoice-font.js";
+import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 import { TOTP_KEY_RING } from "./testing/authenticator.js";
 
@@ -64,6 +68,7 @@ let keyInForce: { secret: string; name: string };
 let admin: { personId: string; token: string };
 let boxEnv: Record<string, string>;
 let loadedKey: string | undefined;
+let managed: boolean;
 const sockets: TLSSocket[] = [];
 const logs: unknown[][] = [];
 
@@ -73,6 +78,7 @@ afterEach(() => {
 
 beforeEach(async () => {
   logs.length = 0;
+  managed = false;
   boxEnv = {
     WAITRON_BACKUP_RECOVERY_KEY: KEY,
     WAITRON_BACKUP_KEY_ROTATED_AT: "2026-09-20T08:00:00.000Z",
@@ -106,11 +112,24 @@ const drawingSeat: Seat = async (_tx, _node, context) =>
     ? { page: PAGE }
     : { page: PAGE, keyFile: { kind: "test-key-file", nodeKey: context.newKey } };
 
-function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date } = {}) {
+function fixture(
+  options: {
+    seat?: Seat | null;
+    seats?: number;
+    turns?: Turns;
+    now?: () => Date;
+    evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
+  } = {},
+) {
   const app = new Hono();
   const seat = options.seat === undefined ? drawingSeat : options.seat;
   const modules: WaitronModule[] =
-    seat === null ? [] : [{ ...fakeModule("test-regime"), backup: { recoveryPackPage: seat } }];
+    seat === null
+      ? []
+      : Array.from({ length: options.seats ?? 1 }, (_, n) => ({
+          ...fakeModule(`test-regime-${n}`),
+          backup: { recoveryPackPage: seat },
+        }));
   mountBackupRecoveryPackMakeApi(
     app,
     {
@@ -124,13 +143,13 @@ function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date 
       modules,
       turns: options.turns ?? createTurns(),
       readBoxEnv: async () => ({ ...boxEnv }),
-      loadedBackups: () => ({
+      backups: () => ({
+        managedByEnvironment: managed,
         schedule: ARCHIVES.schedule,
         retention: ARCHIVES.retention,
         recoveryKey: loadedKey,
       }),
-      managedByEnvironment: () => false,
-      documentEvidence: async () => ({}),
+      documentEvidence: options.evidence ?? (async () => ({})),
       loadFont: async () => invoiceFontBytes,
       now: options.now ?? (() => new Date("2026-10-30T09:00:00.000Z")),
     },
@@ -144,11 +163,13 @@ function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date 
       headers = {},
       tls = true,
       raw,
+      stream,
     }: {
       token?: string | null;
       headers?: Record<string, string>;
       tls?: boolean;
       raw?: string;
+      stream?: ReadableStream<Uint8Array>;
     } = {},
   ) {
     const socket = tls ? new TLSSocket(new Socket()) : undefined;
@@ -162,8 +183,9 @@ function fixture(options: { seat?: Seat | null; turns?: Turns; now?: () => Date 
           ...(token === null ? {} : { cookie: `waitron_management_session=${token}` }),
           ...headers,
         },
-        body: raw ?? JSON.stringify(body),
-      },
+        body: stream ?? raw ?? JSON.stringify(body),
+        ...(stream === undefined ? {} : { duplex: "half" }),
+      } as RequestInit,
       socket ? { incoming: { socket } } : undefined,
     );
   }
@@ -374,6 +396,78 @@ describe("a made pack", () => {
     },
   );
 
+  it("a damaged fiscal evidence file fails the server-key page alone, keeping the key", async () => {
+    const scratch = await mkdtemp(join(tmpdir(), "pack-evidence-"));
+    try {
+      await writeFile(join(scratch, "module-preparation-state.json"), "{not valid JSON");
+      const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
+      const response = await fixture({
+        evidence: (module) =>
+          readRecoveryDocumentEvidence({ stateDir: scratch, venueDir: scratch }, module),
+      }).make(true);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+      const text = await pdfText(await response.arrayBuffer());
+      expect(text).toContain("The server key was not replaced.");
+      expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBe(verifier);
+      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+      expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
+        ["bucket", "included"],
+        ["archives", "included"],
+        ["server-key", "failed"],
+      ]);
+    } finally {
+      await rm(scratch, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    [
+      "a refusal, in its own code's words",
+      new AppError("sif.allocation_invalid", { reason: "history_invalid" }),
+      PART_WORDS.en.historyInvalid.what,
+    ],
+    ["any other failure, in the general words", new Error("disk read failed"), "could not be read"],
+  ])(
+    "an evidence read that fails with %s fails only the server-key page",
+    async (_n, error, words) => {
+      const response = await fixture({
+        evidence: async () => {
+          throw error;
+        },
+      }).make();
+      expect(response.status).toBe(200);
+      expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+      expect(await pdfText(await response.arrayBuffer())).toContain(words);
+      expect((await packs())[0]!.parts.map((p) => p.state)).toEqual([
+        "included",
+        "included",
+        "failed",
+      ]);
+    },
+  );
+
+  it("with two modules offering the server-key page, fails that page without asking either, keeping the key", async () => {
+    let asked = 0;
+    const response = await fixture({
+      seats: 2,
+      seat: async (...args) => {
+        asked++;
+        return drawingSeat(...args);
+      },
+    }).make(true);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("x-waitron-recovery-pack-key")).toBe("failed");
+    expect(asked).toBe(0);
+    expect(await pdfText(await response.arrayBuffer())).toContain(
+      "That is a fault in Waitron. A new pack will fail here the same way.",
+    );
+    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    const [record] = await packs();
+    expect(record!.parts.map((p) => p.state)).toEqual(["included", "included", "failed"]);
+    expect(record!.parts[2]).toMatchObject({ keyName: keyInForce.name, carriedKey: false });
+  });
+
   it("with no key in force and the box ticked, fails the page and writes no key", async () => {
     await suite.db.execute(
       sql`update node_roles set break_glass_verifier = null, break_glass_key_name = null`,
@@ -421,7 +515,7 @@ describe("a made pack", () => {
     expect(await packs()).toHaveLength(1);
   });
 
-  it("logs the made pack's parts and person, and no code, key or secret in the log or headers", async () => {
+  it("logs the made pack's parts, why a part failed, and the person, and no code, key, secret or error message in the log or headers", async () => {
     const response = await fixture().make(true);
     const file = await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()));
     const secret = (file.serverKey as { nodeKey: { secret: string } }).nodeKey.secret;
@@ -438,8 +532,37 @@ describe("a made pack", () => {
         ],
       },
     ]);
-    const seen = JSON.stringify([logs, [...response.headers]]);
-    for (const value of [KEY, BUCKET.secretAccessKey, secret, file.bucketCode!, file.archiveCode!])
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+    );
+    const failing = await fixture({
+      evidence: async () => {
+        throw new Error("could not read /home/jane-doe/evidence.json");
+      },
+    }).make();
+    expect(failing.status).toBe(200);
+    expect(logs).toContainEqual([
+      "info",
+      "recovery.pack_made",
+      {
+        personId: admin.personId,
+        number: 2,
+        parts: [
+          { part: "bucket", state: "included" },
+          { part: "archives", state: "failed", failedWith: "backup.archive_settings_unreadable" },
+          { part: "server-key", state: "failed", failedWith: "unexpected" },
+        ],
+      },
+    ]);
+    const seen = JSON.stringify([logs, [...response.headers], [...failing.headers]]);
+    for (const value of [
+      KEY,
+      BUCKET.secretAccessKey,
+      secret,
+      file.bucketCode!,
+      file.archiveCode!,
+      "jane-doe",
+    ])
       expect(seen).not.toContain(value);
   });
 });
@@ -510,9 +633,80 @@ describe("the received route", () => {
         params: { reason: "unknown_pack" },
       });
     }
+    for (const number of ["abc", "1.5"]) {
+      const response = await f.post(`/api/backup/recovery-pack/${number}/received`, {});
+      expect(await codeOf(response)).toEqual({
+        code: "recovery.pack_invalid",
+        params: { reason: "unknown_pack" },
+      });
+    }
     expect(await receivedAt()).toBeNull();
     const [theirs] = await readRecoveryPacks(suite.db, elsewhere.nodeId);
     expect(theirs!.receivedAt).toBeNull();
+  });
+
+  it("reads the body before it takes the venue's write turn, so a slow client holds up no sale", async () => {
+    const f = await made();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        await gate;
+        controller.enqueue(new TextEncoder().encode("{}"));
+        controller.close();
+      },
+    });
+    const answer = f.post("/api/backup/recovery-pack/1/received", undefined, { stream });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const other = withTransaction(suite.db, async () => "written");
+    const first = await Promise.race([
+      other,
+      new Promise((resolve) => setTimeout(() => resolve("waiting"), 1000)),
+    ]);
+    release();
+    expect(first).toBe("written");
+    expect((await answer).status).toBe(204);
+    expect(await receivedAt()).not.toBeNull();
+  });
+
+  it("refuses a person without system.manage before judging the body", async () => {
+    const f = await made();
+    const supervisor = await openManagementSession(suite.db, "supervisor");
+    const response = await f.post(
+      "/api/backup/recovery-pack/1/received",
+      { at: "now" },
+      { token: supervisor.token },
+    );
+    expect(response.status).toBe(403);
+    expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+  });
+
+  it("never reads the body of a request from an unknown session or a person without system.manage", async () => {
+    const f = await made();
+    const supervisor = await openManagementSession(suite.db, "supervisor");
+    for (const [token, status] of [
+      ["0123456789abcdef0123456789abcdef", 401],
+      [supervisor.token, 403],
+    ] as const) {
+      let pulled = 0;
+      const stream = new ReadableStream<Uint8Array>(
+        {
+          pull(controller) {
+            pulled++;
+            controller.enqueue(new TextEncoder().encode("{}"));
+            controller.close();
+          },
+        },
+        { highWaterMark: 0 },
+      );
+      const response = await f.post("/api/backup/recovery-pack/1/received", undefined, {
+        token,
+        stream,
+      });
+      expect(response.status).toBe(status);
+      expect(pulled).toBe(0);
+    }
+    expect(await receivedAt()).toBeNull();
   });
 
   it("refuses a body that is not empty", async () => {
@@ -611,6 +805,69 @@ describe("the status route", () => {
     expect(JSON.stringify(answer)).not.toContain(KEY);
     loadedKey = undefined;
     expect((await read(f)).backupsUseOlderKey).toBe(false);
+  });
+
+  it("answers when the backup key is too short; a pack made under it is incomplete", async () => {
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_RECOVERY_KEY: "short" };
+    const f = fixture();
+    expect((await f.make()).status).toBe(200);
+    expect((await f.received(1)).status).toBe(204);
+    const response = await f.status();
+    expect(response.status).toBe(200);
+    const answer = (await response.json()) as Answer & { incomplete: boolean };
+    expect(answer).toMatchObject({ incomplete: true, upToDate: false, backupsUseOlderKey: false });
+    for (const key of [KEY, "short"]) expect(JSON.stringify(answer)).not.toContain(key);
+  });
+
+  it("counts archives as changed when their record cannot be read, even after the environment managed them", async () => {
+    managed = true;
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_DIR: "/srv/archives" };
+    const f = fixture();
+    await (await f.make()).arrayBuffer();
+    await f.received(1);
+    expect((await read(f)).upToDate).toBe(true);
+    managed = false;
+    await withTransaction(suite.db, (tx) =>
+      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+    );
+    const answer = await read(f);
+    expect(answer.upToDate).toBe(false);
+    expect(answer.reasons).toContainEqual({ part: "archives", kind: "settings_changed" });
+  });
+
+  it("says a pack is out of date when the environment's archive bucket changes, recording none of its credentials", async () => {
+    const destinations = (bucket: string) =>
+      JSON.stringify([{ kind: "s3", id: "archive", ...BUCKET, bucket }]);
+    managed = true;
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_DESTINATIONS: destinations("old-bucket") };
+    const f = fixture();
+    const file = await readRecoveryPackPdf(new Uint8Array(await (await f.make()).arrayBuffer()));
+    expect(decodeArchiveRecoveryPack(file.archiveCode!).bucket.bucket).toBe("old-bucket");
+    await f.received(1);
+    expect((await read(f)).upToDate).toBe(true);
+    const stored = JSON.stringify(await packs());
+    for (const value of [BUCKET.accessKeyId, BUCKET.secretAccessKey, KEY])
+      expect(stored).not.toContain(value);
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_DESTINATIONS: destinations("new-bucket") };
+    const answer = await read(f);
+    expect(answer.upToDate).toBe(false);
+    expect(answer.reasons).toEqual([{ part: "archives", kind: "settings_changed" }]);
+  });
+
+  it("keeps one pack for a backup key that was never changed before its first change", async () => {
+    delete boxEnv.WAITRON_BACKUP_KEY_ROTATED_AT;
+    let instant = "2026-10-01T09:00:00.000Z";
+    const f = fixture({ now: () => new Date(instant) });
+    await (await f.make()).arrayBuffer();
+    await f.received(1);
+    instant = "2026-10-02T09:00:00.000Z";
+    await (await f.make()).arrayBuffer();
+    await f.received(2);
+    boxEnv = { ...boxEnv, WAITRON_BACKUP_KEY_ROTATED_AT: "2026-10-03T09:00:00.000Z" };
+    instant = "2026-10-04T09:00:00.000Z";
+    expect((await read(f)).keep).toEqual([
+      expect.objectContaining({ number: 2, why: "backup_key" }),
+    ]);
   });
 
   it("answers for this node only", async () => {

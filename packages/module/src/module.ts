@@ -25,6 +25,7 @@ import type {
 import type { ChangeSource } from "@waitron/shared";
 import type { AllergenMap, Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
+import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -1572,10 +1573,13 @@ export interface ModuleBackupContribution {
       readonly locale: "en" | "es";
       readonly evidence: Readonly<Record<string, unknown>>;
     },
-  ) => Promise<{
-    readonly page: import("@waitron/recovery-pack/src/page.js").RecoveryPackPage;
-    readonly keyFile?: Readonly<Record<string, unknown>>;
-  }>;
+  ) => Promise<RecoveryPackPageResult>;
+}
+
+/** What `recoveryPackPage` answers: the page, and the key file when it was asked for a new key. */
+export interface RecoveryPackPageResult {
+  readonly page: RecoveryPackPage;
+  readonly keyFile?: Readonly<Record<string, unknown>>;
 }
 
 /** One table whose rows may cross from preparation into a fresh production database. */

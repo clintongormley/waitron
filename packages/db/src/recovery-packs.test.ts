@@ -4,6 +4,7 @@ import {
   insertRecoveryPack,
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
+  readRecoveryPack,
   readRecoveryPacks,
   type RecoveryPackPartRecord,
 } from "./recovery-packs.js";
@@ -17,6 +18,7 @@ const parts: RecoveryPackPartRecord[] = [
     part: "bucket",
     state: "included",
     keyChangedAt: "2026-10-01T10:00:00.000Z",
+    keyNeverChanged: true,
     settingsRevision: "7",
   },
   { part: "archives", state: "absent" },
@@ -62,6 +64,22 @@ describe("recovery pack records", () => {
     ]);
   });
 
+  it("reads one pack by node and number, and none of another node's", async () => {
+    await make("node-a");
+    await make("node-b", "person-2");
+    await make("node-b", "person-3");
+    expect(await readRecoveryPack(suite.db, "node-b", 2)).toEqual({
+      nodeId: "node-b",
+      number: 2,
+      madeAt,
+      madeBy: "person-3",
+      receivedAt: null,
+      parts,
+    });
+    expect(await readRecoveryPack(suite.db, "node-a", 2)).toBeNull();
+    expect(await readRecoveryPack(suite.db, "node-c", 1)).toBeNull();
+  });
+
   it("marks a pack received once, keeping the first time, and touches no other node's pack", async () => {
     await make("node-a");
     await make("node-b");
@@ -81,6 +99,10 @@ describe("recovery pack records", () => {
     [
       "a carried key that is not true or false",
       { part: "server-key", state: "included", carriedKey: "yes" },
+    ],
+    [
+      "a never-changed mark that is not true or false",
+      { part: "bucket", state: "included", keyNeverChanged: "yes" },
     ],
     ["a key name that is not text", { part: "server-key", state: "included", keyName: 7 }],
     ["a destination outside the two", { part: "archives", state: "included", destination: "usb" }],

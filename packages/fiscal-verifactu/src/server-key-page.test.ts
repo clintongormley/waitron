@@ -70,7 +70,7 @@ describe("serverKeyPage", () => {
     });
   });
 
-  it("no longer tells the reader to keep a backup file's password apart, because the pack holds it", () => {
+  it("does not tell the reader to keep a backup file's password apart, because the pack holds it", () => {
     for (const locale of ["en", "es"] as const) {
       const text = serverKeyPage(document, { locale, ...zone }).notes.join(" ");
       expect(text).not.toMatch(/password|contraseña/i);

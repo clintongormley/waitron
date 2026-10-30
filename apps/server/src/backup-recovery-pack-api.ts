@@ -9,12 +9,12 @@ import {
   markRecoveryPackReceived,
   nextRecoveryPackNumber,
   readBreakGlassKeyName,
+  readRecoveryPack,
   readRecoveryPacks,
   readTenant,
   setBreakGlassVerifierTx,
   withTransaction,
   type Database,
-  type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -39,18 +39,23 @@ import {
   archiveDestinations,
   loadKeyRotatedAt,
   loadRecoveryKey,
-  type BackupSchedule,
+  readHeldKey,
 } from "./backup-config.js";
 import {
+  archivesRevision,
   buildArchivesPart,
   buildBucketPart,
   buildServerKeyPart,
   dayIn,
+  serverKeySeat,
   withServerKeyPageNumber,
-  type KeyHolder,
+  type BuiltPart,
+  type KeyInForce,
   type PartsContext,
+  type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
-import { packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
+import { carriesServerKey, packStatus, type CurrentChecks } from "./backup-recovery-pack-status.js";
+import type { BackupRuntimeStatus } from "./backup-supervisor.js";
 import type { Turns } from "./backup-turns.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import type { Logger } from "./logger.js";
@@ -105,13 +110,11 @@ export interface BackupRecoveryPackMakeDeps extends BackupRecoveryPackApiDeps {
   /** The backup API's own turns, so a Save or a key change waits for a pack being made. */
   turns: Turns;
   readBoxEnv: () => Promise<Readonly<Record<string, string | undefined>>>;
-  managedByEnvironment: () => boolean;
-  /** What the backup supervisor loaded last; the key never leaves the server. */
-  loadedBackups: () => {
-    schedule: BackupSchedule | undefined;
-    retention: { count: number; days: number } | undefined;
-    recoveryKey: string | undefined;
-  };
+  /** What the backup supervisor holds now; the key never leaves the server. */
+  backups: () => Pick<
+    BackupRuntimeStatus,
+    "managedByEnvironment" | "schedule" | "retention" | "recoveryKey"
+  >;
   documentEvidence: RecoveryDocumentEvidence;
   loadFont: () => Promise<Uint8Array>;
   now: () => Date;
@@ -178,55 +181,165 @@ function makeRequest(body: unknown): MakeRequest {
 }
 
 /**
- * Where the key in force is printed: the pack that made it, else the sheet it was first printed on.
- * One pack at most: every key a pack makes gets a fresh name.
+ * The key in force and where it is printed: the pack that made it, else the sheet it was first
+ * printed on. One pack at most: every key a pack makes gets a fresh name.
  */
-function keyHolder(records: RecoveryPackRecord[], name: string, timeZone: string): KeyHolder {
-  const pack = records.find((record) =>
-    record.parts.some(
-      (p) => p.part === "server-key" && p.carriedKey === true && p.keyName === name,
-    ),
+async function readKeyInForce(
+  tx: Transaction,
+  nodeId: string,
+  timeZone: string,
+): Promise<KeyInForce | null> {
+  const name = await readBreakGlassKeyName(tx, nodeId);
+  if (name === null) return null;
+  const pack = (await readRecoveryPacks(tx, nodeId)).find((record) =>
+    carriesServerKey(record, name),
   );
-  if (pack === undefined) return { kind: "sheet", keyName: name, madeOn: name.slice(0, 10) };
+  if (pack === undefined) {
+    return { name, holder: { kind: "sheet", keyName: name, madeOn: name.slice(0, 10) } };
+  }
   return {
-    kind: "pack",
-    number: pack.number,
-    madeOn: dayIn(timeZone, pack.madeAt.toISOString()),
-    received: pack.receivedAt !== null,
+    name,
+    holder: {
+      kind: "pack",
+      number: pack.number,
+      madeOn: dayIn(timeZone, pack.madeAt.toISOString()),
+      received: pack.receivedAt !== null,
+    },
   };
+}
+
+async function currentArchives(
+  tx: Transaction,
+  deps: BackupRecoveryPackMakeDeps,
+  env: Readonly<Record<string, string | undefined>>,
+): Promise<CurrentChecks["archives"]> {
+  const { managedByEnvironment } = deps.backups();
+  let sealed: ArchiveSettings | null = null;
+  if (!managedByEnvironment) {
+    const read = await readHeldArchiveSettingsIn(tx, deps.ring);
+    if ("unreadable" in read) return "unreadable";
+    sealed = read.settings;
+  }
+  const destinations = archiveDestinations({
+    managedByEnvironment,
+    env,
+    sealed,
+    venueId: deps.venueId,
+  });
+  return destinations.length === 0 ? null : { revision: archivesRevision(sealed, destinations) };
 }
 
 async function currentChecks(
   tx: Transaction,
   deps: BackupRecoveryPackMakeDeps,
   env: Readonly<Record<string, string | undefined>>,
+  filesInvoices: boolean,
 ): Promise<CurrentChecks> {
   const streamRevision = await credentialRevision(tx, { purpose: STREAM_PURPOSE });
-  const managedByEnvironment = deps.managedByEnvironment();
-  let sealed: ArchiveSettings | null = null;
-  let unreadable = false;
-  if (!managedByEnvironment) {
-    const read = await readHeldArchiveSettingsIn(tx, deps.ring);
-    if ("unreadable" in read) unreadable = true;
-    else sealed = read.settings;
-  }
-  const archives = archiveDestinations({
-    managedByEnvironment,
-    env,
-    sealed,
-    venueId: deps.venueId,
-  });
-  const owner = deps.modules.some((m) => m.backup?.recoveryPackPage !== undefined);
   return {
     keyChangedAt: loadKeyRotatedAt(env),
     bucket: streamRevision === null ? null : { revision: streamRevision },
-    // An unreadable record has no revision to compare, so a pack's archive page counts as changed.
-    archives:
-      unreadable || archives.length > 0
-        ? { revision: unreadable ? undefined : sealed?.revision }
-        : null,
-    serverKeyName: owner ? await readBreakGlassKeyName(tx, deps.node.nodeId) : undefined,
+    archives: await currentArchives(tx, deps, env),
+    serverKeyName: filesInvoices ? await readBreakGlassKeyName(tx, deps.node.nodeId) : undefined,
   };
+}
+
+type MakeInput = {
+  token: string;
+  personId: string;
+  request: MakeRequest;
+  env: Readonly<Record<string, string | undefined>>;
+  seat: ServerKeySeat;
+  madeAt: string;
+  newKey: { name: string; secret: string } | undefined;
+  verifier: string | undefined;
+};
+
+/** Builds, renders and records one pack inside the caller's transaction. */
+async function makePack(
+  tx: Transaction,
+  deps: BackupRecoveryPackMakeDeps,
+  input: MakeInput,
+): Promise<{
+  number: number;
+  pdf: Uint8Array<ArrayBuffer>;
+  key: "failed" | "replaced" | "unchanged";
+  parts: BuiltPart[];
+}> {
+  const { request, madeAt, newKey } = input;
+  const nodeId = deps.node.nodeId;
+  await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
+  const tenant = await readTenant(tx);
+  const [venue] = await tx
+    .select({ name: locations.name, timeZone: locations.timeZone })
+    .from(locations)
+    .where(eq(locations.id, deps.node.locationId));
+  if (tenant === null || venue === undefined) {
+    throw new Error("the box has no taxpayer or venue to name on a recovery pack");
+  }
+  const [person] = await tx
+    .select({ name: persons.displayName })
+    .from(persons)
+    .where(eq(persons.id, input.personId));
+  const number = await nextRecoveryPackNumber(tx, nodeId);
+  const keyInForce = await readKeyInForce(tx, nodeId, venue.timeZone);
+  const context: PartsContext = {
+    locale: request.locale,
+    timeZone: venue.timeZone,
+    madeAt,
+    nodeId,
+    venueId: deps.venueId,
+    ring: deps.ring,
+    env: input.env,
+    managedByEnvironment: deps.backups().managedByEnvironment,
+  };
+  const bucket = await buildBucketPart(tx, context);
+  const archives = await buildArchivesPart(tx, context);
+  const serverKey = await buildServerKeyPart(tx, context, {
+    seat: input.seat,
+    node: deps.node,
+    keyInForce,
+    ...(newKey === undefined ? {} : { newKey }),
+  });
+  const parts = withServerKeyPageNumber([bucket, archives, serverKey], request.locale);
+  const carried = serverKey.record.carriedKey === true;
+  const pdf = await renderRecoveryPack({
+    locale: request.locale,
+    timeZone: venue.timeZone,
+    loadFont: deps.loadFont,
+    cover: {
+      legalName: tenant.legalName,
+      taxId: tenant.taxId,
+      venueName: venue.name,
+      madeAt,
+      madeBy: person?.name ?? null,
+      number,
+    },
+    parts: parts.map((p) => p.part),
+    file: {
+      kind: "waitron-recovery-pack",
+      version: 1,
+      number,
+      madeAt,
+      bucketCode: null,
+      archiveCode: null,
+      backupKey: null,
+      serverKey: null,
+      serverKeyName: null,
+      serverKeyHeldBy: null,
+      ...Object.assign({}, ...parts.map((p) => p.file)),
+    },
+  });
+  if (carried) await setBreakGlassVerifierTx(tx, nodeId, input.verifier!, newKey!.name);
+  await insertRecoveryPack(tx, {
+    nodeId,
+    number,
+    madeAt: new Date(madeAt),
+    madeBy: input.personId,
+    parts: parts.map((p) => p.record),
+  });
+  const key = serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
+  return { number, pdf, key, parts };
 }
 
 export function mountBackupRecoveryPackMakeApi(
@@ -236,6 +349,7 @@ export function mountBackupRecoveryPackMakeApi(
 ): void {
   const throttle = createPasswordThrottle();
   const nodeId = deps.node.nodeId;
+  const filesInvoices = deps.modules.some((m) => m.backup?.recoveryPackPage !== undefined);
 
   app.post("/api/backup/recovery-pack", (c) => {
     c.header("Cache-Control", "no-store");
@@ -256,109 +370,25 @@ export function mountBackupRecoveryPackMakeApi(
       const made = await deps.turns(() =>
         inTurn(deps.db, `recovery-document:${nodeId}`, async () => {
           const env = await deps.readBoxEnv();
-          const owner = deps.modules.find((m) => m.backup?.recoveryPackPage !== undefined);
-          const evidence = owner === undefined ? {} : await deps.documentEvidence(owner);
+          const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
           const newKey = request.newServerKey
             ? { name: `${madeAt.slice(0, 10)} · ${randomUUID()}`, secret: generatePassword() }
             : undefined;
-          return withTransaction(deps.db, async (tx) => {
-            await authorizeManager(tx, { managementSessionId: token, permission: "system.manage" });
-            const tenant = await readTenant(tx);
-            const [venue] = await tx
-              .select({ name: locations.name, timeZone: locations.timeZone })
-              .from(locations)
-              .where(eq(locations.id, deps.node.locationId));
-            if (tenant === null || venue === undefined) {
-              throw new Error("the box has no taxpayer or venue to name on a recovery pack");
-            }
-            const [person] = await tx
-              .select({ name: persons.displayName })
-              .from(persons)
-              .where(eq(persons.id, personId));
-            const number = await nextRecoveryPackNumber(tx, nodeId);
-            const keyName = await readBreakGlassKeyName(tx, nodeId);
-            const holder =
-              keyName === null
-                ? null
-                : keyHolder(await readRecoveryPacks(tx, nodeId), keyName, venue.timeZone);
-            const context: PartsContext = {
-              locale: request.locale,
-              timeZone: venue.timeZone,
-              madeAt,
-              nodeId,
-              venueId: deps.venueId,
-              ring: deps.ring,
-              env,
-              managedByEnvironment: deps.managedByEnvironment(),
-            };
-            const parts = withServerKeyPageNumber(
-              [
-                await buildBucketPart(tx, context),
-                await buildArchivesPart(tx, context),
-                await buildServerKeyPart(tx, context, {
-                  modules: deps.modules,
-                  node: deps.node,
-                  evidence,
-                  keyInForce: keyName === null ? null : { name: keyName, holder: holder! },
-                  ...(newKey === undefined ? {} : { newKey }),
-                }),
-              ],
-              request.locale,
-            );
-            const serverKey = parts[2]!;
-            const carried = serverKey.record.carriedKey === true;
-            const file = Object.assign({}, ...parts.map((p) => p.file));
-            const pdf = await renderRecoveryPack({
-              locale: request.locale,
-              timeZone: venue.timeZone,
-              loadFont: deps.loadFont,
-              cover: {
-                legalName: tenant.legalName,
-                taxId: tenant.taxId,
-                venueName: venue.name,
-                madeAt,
-                madeBy: person?.name ?? null,
-                number,
-              },
-              parts: parts.map((p) => p.part),
-              file: {
-                kind: "waitron-recovery-pack",
-                version: 1,
-                number,
-                madeAt,
-                bucketCode: null,
-                archiveCode: null,
-                backupKey: null,
-                serverKey: null,
-                serverKeyName: null,
-                ...file,
-                serverKeyHeldBy:
-                  serverKey.part.state !== "absent" && !carried && holder?.kind === "pack"
-                    ? { number: holder.number, madeOn: holder.madeOn, received: holder.received }
-                    : null,
-              },
-            });
-            if (carried) {
-              await setBreakGlassVerifierTx(tx, nodeId, hashSecret(newKey!.secret), newKey!.name);
-            }
-            await insertRecoveryPack(tx, {
-              nodeId,
-              number,
-              madeAt: new Date(madeAt),
-              madeBy: personId,
-              parts: parts.map((p) => p.record),
-            });
-            const key =
-              serverKey.part.state === "failed" ? "failed" : carried ? "replaced" : "unchanged";
-            return { number, pdf, key, records: parts.map((p) => p.record) };
-          });
+          const verifier = newKey === undefined ? undefined : hashSecret(newKey.secret);
+          return withTransaction(deps.db, (tx) =>
+            makePack(tx, deps, { token, personId, request, env, seat, madeAt, newKey, verifier }),
+          );
         }),
       );
       log("info", "recovery.pack_made", {
         personId,
         number: made.number,
-        parts: made.records.map(({ part, state }) => ({ part, state })),
+        parts: made.parts.map(({ record: { part, state }, failedWith }) => ({
+          part,
+          state,
+          ...(failedWith === undefined ? {} : { failedWith }),
+        })),
       });
       return c.body(made.pdf, 200, {
         "Content-Type": "application/pdf",
@@ -374,6 +404,7 @@ export function mountBackupRecoveryPackMakeApi(
     return makeRun(c, log, async () => {
       const token = requireManagementSession(c);
       const env = await deps.readBoxEnv();
+      const { key: fileKey } = await readHeldKey(async () => loadRecoveryKey(env));
       const status = await withTransaction(deps.db, async (tx) => {
         await authorizeManager(tx, { managementSessionId: token, permission: "system.manage" });
         const records = await readRecoveryPacks(tx, nodeId);
@@ -388,14 +419,13 @@ export function mountBackupRecoveryPackMakeApi(
                   .where(inArray(persons.id, makers))
               ).map((p) => [p.id, p.name] as const),
         );
-        const loaded = deps.loadedBackups();
-        const fileKey = loadRecoveryKey(env);
+        const loaded = deps.backups();
         return packStatus({
           records: records.map((r) => ({
             ...r,
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
           })),
-          current: await currentChecks(tx, deps, env),
+          current: await currentChecks(tx, deps, env, filesInvoices),
           retention: loaded.retention,
           schedule: loaded.schedule,
           backupsUseOlderKey:
@@ -414,20 +444,28 @@ export function mountBackupRecoveryPackMakeApi(
     return makeRun(c, log, async () => {
       requireSecurePackRequest(c);
       const token = requireManagementSession(c);
+      await authorizeManager(deps.db, {
+        managementSessionId: token,
+        permission: "system.manage",
+        touch: false,
+      });
+      // Read outside the write lock, which a slow client would otherwise hold against every sale.
+      const body = await readRawJsonBody<unknown>(c);
       await withTransaction(deps.db, async (tx) => {
         const { authorizedBy } = await authorizeManager(tx, {
           managementSessionId: token,
           permission: "system.manage",
         });
-        const body = await readRawJsonBody<unknown>(c);
         if (body === null || typeof body !== "object" || Object.keys(body).length > 0) {
           invalid("shape");
         }
         const number = Number(c.req.param("number"));
-        const pack = (await readRecoveryPacks(tx, nodeId)).find((p) => p.number === number);
-        // Another person's pack answers as an unknown one: only the browser that asked for a
+        const pack = Number.isSafeInteger(number)
+          ? await readRecoveryPack(tx, nodeId, number)
+          : null;
+        // Another person's pack answers as an unknown one: only the person who asked for a
         // pack can have received it, and the answer does not say whether the number exists.
-        if (pack === undefined || pack.madeBy !== authorizedBy) invalid("unknown_pack");
+        if (pack === null || pack.madeBy !== authorizedBy) invalid("unknown_pack");
         await markRecoveryPackReceived(tx, nodeId, number, deps.now());
       });
       return c.body(null, 204);

@@ -13,8 +13,8 @@ export type CurrentChecks = {
   keyChangedAt: string | undefined;
   /** `null` when the box has no bucket copy. */
   bucket: { revision: string } | null;
-  /** `null` when the box makes no archives; the revision is `undefined` for the environment's. */
-  archives: { revision: string | undefined } | null;
+  /** `null` when the box makes no archives. */
+  archives: { revision: string } | "unreadable" | null;
   /** `undefined` on a venue that files no invoices; `null` when the box has no server key. */
   serverKeyName: string | null | undefined;
 };
@@ -62,7 +62,8 @@ export type PackStatus = {
 const partOf = (record: RecoveryPackRecord, part: RecoveryPackPartRecord["part"]) =>
   record.parts.find((p) => p.part === part);
 
-const carries = (record: RecoveryPackRecord, keyName: string | null | undefined) =>
+/** The pack made the server key named `keyName`. */
+export const carriesServerKey = (record: RecoveryPackRecord, keyName: string | null | undefined) =>
   keyName !== null &&
   keyName !== undefined &&
   record.parts.some(
@@ -85,7 +86,7 @@ function reasonsFor(record: RecoveryPackRecord, current: CurrentChecks): Reason[
       reasons.push({ part, kind: "removed" });
       continue;
     }
-    if (recorded.settingsRevision !== now.revision)
+    if (now === "unreadable" || recorded.settingsRevision !== now.revision)
       reasons.push({ part, kind: "settings_changed" });
     if (
       current.keyChangedAt !== undefined &&
@@ -165,16 +166,20 @@ function keepList(input: PackStatusInput): Keep[] {
   const received = records.filter((r) => r.receivedAt !== null);
   const seenKeys = new Set<string>();
   for (const record of received) {
-    const recorded = [partOf(record, "bucket"), partOf(record, "archives")].find(
+    const facts = [partOf(record, "bucket"), partOf(record, "archives")].find(
       (p) => p?.state === "included" && p.keyChangedAt !== undefined,
-    )?.keyChangedAt;
+    );
+    const recorded = facts?.keyChangedAt;
+    // Nothing records a change before the first rotation, so packs made before it count as one key.
+    const key = facts?.keyNeverChanged === true ? "never-changed" : recorded;
     if (
       recorded !== undefined &&
+      key !== undefined &&
       current.keyChangedAt !== undefined &&
       later(current.keyChangedAt, recorded) &&
-      !seenKeys.has(recorded)
+      !seenKeys.has(key)
     ) {
-      seenKeys.add(recorded);
+      seenKeys.add(key);
       add(record, "backup_key", keepUntil(Date.parse(current.keyChangedAt), input));
     }
     const serverKey = partOf(record, "server-key");
@@ -184,7 +189,7 @@ function keepList(input: PackStatusInput): Keep[] {
       continue;
     }
     const replacement = records
-      .filter((r) => r.number > record.number && carries(r, partOf(r, "server-key")?.keyName))
+      .filter((r) => r.number > record.number && partOf(r, "server-key")?.carriedKey === true)
       .at(-1);
     const replacedAt =
       replacement !== undefined
@@ -204,14 +209,13 @@ function unreceivedOf(input: PackStatusInput): PackStatus["unreceived"] {
     holdsCurrentServerKey,
   });
   const holder = input.records.find(
-    (r) => r.receivedAt === null && carries(r, input.current.serverKeyName),
+    (r) => r.receivedAt === null && carriesServerKey(r, input.current.serverKeyName),
   );
   if (holder !== undefined) return view(holder, true);
   const newest = input.records[0];
   return newest !== undefined && newest.receivedAt === null ? view(newest, false) : null;
 }
 
-/** What the Backups card says about this node's packs. */
 export function packStatus(input: PackStatusInput): PackStatus {
   const latest = input.records[0];
   const reasons = latest === undefined ? [] : reasonsFor(latest, input.current);

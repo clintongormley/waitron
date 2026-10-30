@@ -1,24 +1,28 @@
+import { createHash } from "node:crypto";
 import type { KeyRing } from "@waitron/credentials";
 import { credentialRevision } from "@waitron/credentials";
-import {
-  readMembershipTrustSetIn,
-  type RecoveryPackPartRecord,
-  type Transaction,
-} from "@waitron/db";
-import type { ProvisionedNode, WaitronModule } from "@waitron/module";
+import { readNodePublicKeyTx, type RecoveryPackPartRecord, type Transaction } from "@waitron/db";
+import type { ProvisionedNode, RecoveryPackPageResult, WaitronModule } from "@waitron/module";
 import {
   PART_WORDS,
   packDates,
+  packPageNumbers,
   partFailure,
   type PackLocale,
   type PackPart,
+  type PartFailure,
   type RecoveryPackFile,
+  type ServerKeyHolder,
   type ServerKeyLocation,
 } from "@waitron/recovery-pack";
 import { AppError, isAppError } from "@waitron/shared";
 import { encodeRecoveryKit } from "@waitron/stream";
 import { encodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
-import { archiveNamespace, readHeldArchiveSettingsIn } from "./archive-settings.js";
+import {
+  archiveNamespace,
+  readHeldArchiveSettingsIn,
+  type ArchiveSettings,
+} from "./archive-settings.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,
@@ -26,6 +30,7 @@ import {
   readHeldKey,
 } from "./backup-config.js";
 import { MIN_PASSPHRASE_LENGTH } from "./recovery-bundle.js";
+import type { BackupDestination } from "./storage-backend.js";
 import { readStreamSettingsIn, STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
 
@@ -43,13 +48,18 @@ export type PartsContext = {
 };
 
 type FileFields = Partial<
-  Pick<RecoveryPackFile, "bucketCode" | "archiveCode" | "backupKey" | "serverKey" | "serverKeyName">
+  Pick<
+    RecoveryPackFile,
+    "bucketCode" | "archiveCode" | "backupKey" | "serverKey" | "serverKeyName" | "serverKeyHeldBy"
+  >
 >;
 
 export type BuiltPart = {
   readonly part: PackPart;
   readonly record: RecoveryPackPartRecord;
   readonly file: FileFields;
+  /** For the log only: a refusal's code, `unexpected` for any other error, never a message. */
+  readonly failedWith?: string;
 };
 
 type Kind = PackPart["kind"];
@@ -78,6 +88,7 @@ async function orFailed(
       part: { kind, state: "failed", failure: partFailure(context.locale, code, params) },
       record: { part: kind, state: "failed" },
       file: {},
+      failedWith: code === "" ? "unexpected" : code,
     };
   }
 }
@@ -105,7 +116,7 @@ function keyFacts(context: PartsContext, revision: string | undefined) {
   const when = packDates(context.locale, context.timeZone);
   const lastChanged = dayIn(context.timeZone, keyChangedAt);
   return {
-    keyChangedAt,
+    record: rotatedAt === undefined ? { keyChangedAt, keyNeverChanged: true } : { keyChangedAt },
     lastChanged,
     check: words.check(when.shortDay(lastChanged), revision),
     rows:
@@ -124,8 +135,8 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
     const settings = await readStreamSettingsIn(tx, context.ring);
     if (settings === null) return absent("bucket");
     const recoveryKey = await backupKey(context.env);
-    const pointerSignerPublicKey = (await readMembershipTrustSetIn(tx))[context.nodeId];
-    if (pointerSignerPublicKey === undefined) {
+    const pointerSignerPublicKey = await readNodePublicKeyTx(tx, context.nodeId);
+    if (pointerSignerPublicKey === null) {
       throw new AppError("backup.stream_signer_missing", {});
     }
     const bucketCode = encodeRecoveryKit({
@@ -155,12 +166,39 @@ export function buildBucketPart(tx: Transaction, context: PartsContext): Promise
       record: {
         part: "bucket",
         state: "included",
-        keyChangedAt: facts.keyChangedAt,
+        ...facts.record,
         settingsRevision: revision,
       },
       file: { bucketCode },
     };
   });
+}
+
+/**
+ * What a pack's archive check compares: the stored record's revision, or, for archives the
+ * environment manages, a digest of where they go. Weaker than it looks for the environment's: the
+ * record travels into every backup, so credentials stay out of the digest and a change of access key
+ * alone is not seen.
+ */
+export function archivesRevision(
+  sealed: ArchiveSettings | null,
+  destinations: readonly BackupDestination[],
+): string {
+  if (sealed !== null) return sealed.revision;
+  const where = destinations.map((d) =>
+    d.kind === "local-fs"
+      ? { kind: d.kind, dir: d.dir }
+      : {
+          kind: d.kind,
+          venueId: d.venueId,
+          endpoint: d.bucket.endpoint ?? null,
+          region: d.bucket.region,
+          bucket: d.bucket.bucket,
+          prefix: d.bucket.prefix,
+        },
+  );
+  // The prefix keeps it apart from a stored record's revision, which is a UUID.
+  return `env:${createHash("sha256").update(JSON.stringify(where)).digest("hex").slice(0, 16)}`;
 }
 
 export function buildArchivesPart(tx: Transaction, context: PartsContext): Promise<BuiltPart> {
@@ -183,13 +221,14 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
     const folder = destinations.find((d) => d.kind === "local-fs");
     if (bucket === undefined && folder === undefined) return absent("archives");
     const recoveryKey = await backupKey(context.env);
+    const revision = archivesRevision(sealed, destinations);
     const facts = keyFacts(context, sealed?.revision);
     const words = PART_WORDS[context.locale].archives;
     const record: RecoveryPackPartRecord = {
       part: "archives",
       state: "included",
-      keyChangedAt: facts.keyChangedAt,
-      ...(sealed === null ? {} : { settingsRevision: sealed.revision }),
+      ...facts.record,
+      settingsRevision: revision,
       destination: bucket === undefined ? "folder" : "bucket",
     };
     const part = {
@@ -245,12 +284,45 @@ export function buildArchivesPart(tx: Transaction, context: PartsContext): Promi
 
 export type KeyHolder = Exclude<ServerKeyLocation, { kind: "this-pack" }>;
 
+/** The key in force and where it is printed. */
+export type KeyInForce = { readonly name: string; readonly holder: KeyHolder };
+
+function heldBy(holder: KeyHolder): ServerKeyHolder | null {
+  return holder.kind === "pack"
+    ? { number: holder.number, madeOn: holder.madeOn, received: holder.received }
+    : null;
+}
+
+/**
+ * The module that draws the server-key page and its evidence, read before the transaction; `null`
+ * when no module draws it; a refusal fails that page alone.
+ */
+export type ServerKeySeat =
+  | null
+  | { readonly module: WaitronModule; readonly evidence: Readonly<Record<string, unknown>> }
+  | { readonly refused: unknown };
+
+export async function serverKeySeat(
+  modules: readonly WaitronModule[],
+  readEvidence: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>,
+): Promise<ServerKeySeat> {
+  const owners = modules.filter((m) => m.backup?.recoveryPackPage !== undefined);
+  if (owners.length === 0) return null;
+  try {
+    if (owners.length > 1) {
+      throw new AppError("recovery.pack_invalid", { reason: "module_unsupported" });
+    }
+    return { module: owners[0]!, evidence: await readEvidence(owners[0]!) };
+  } catch (error) {
+    return { refused: error };
+  }
+}
+
 export type ServerKeyInput = {
-  readonly modules: readonly WaitronModule[];
+  readonly seat: ServerKeySeat;
   readonly node: ProvisionedNode;
-  readonly evidence: Readonly<Record<string, unknown>>;
-  /** The key the box holds now and where it is printed; `null` when the box has none. */
-  readonly keyInForce: { readonly name: string; readonly holder: KeyHolder } | null;
+  /** `null` when the box has no server key. */
+  readonly keyInForce: KeyInForce | null;
   readonly newKey?: { readonly name: string; readonly secret: string };
 };
 
@@ -259,12 +331,11 @@ export async function buildServerKeyPart(
   context: PartsContext,
   input: ServerKeyInput,
 ): Promise<BuiltPart> {
-  const owner = input.modules.find((m) => m.backup?.recoveryPackPage !== undefined);
-  if (owner === undefined) return absent("server-key");
+  const { seat } = input;
+  if (seat === null) return absent("server-key");
   const words = PART_WORDS[context.locale];
   const { keyInForce, newKey } = input;
-  const failed = (code: string, params: Readonly<Record<string, unknown>>): BuiltPart => {
-    const cause = partFailure(context.locale, code, params);
+  const failed = (cause: PartFailure, failedWith: string): BuiltPart => {
     const lines = [cause.todo];
     if (newKey !== undefined) lines.push(words.keyNotReplaced);
     if (keyInForce !== null) {
@@ -291,24 +362,34 @@ export async function buildServerKeyPart(
         ...(keyInForce === null ? {} : { keyName: keyInForce.name }),
         carriedKey: false,
       },
-      file: keyInForce === null ? {} : { serverKey: null, serverKeyName: keyInForce.name },
+      file:
+        keyInForce === null
+          ? {}
+          : {
+              serverKey: null,
+              serverKeyName: keyInForce.name,
+              serverKeyHeldBy: heldBy(keyInForce.holder),
+            },
+      failedWith,
     };
   };
-  if (keyInForce === null) return failed("server_key.missing", {});
-  let drawn: Awaited<
-    ReturnType<NonNullable<NonNullable<WaitronModule["backup"]>["recoveryPackPage"]>>
-  >;
+  const refused = (error: unknown): BuiltPart => {
+    const { code, params } = refusal(error);
+    return failed(partFailure(context.locale, code, params), code === "" ? "unexpected" : code);
+  };
+  if (keyInForce === null) return failed(words.noServerKey, "no_server_key");
+  if ("refused" in seat) return refused(seat.refused);
+  let drawn: RecoveryPackPageResult;
   try {
-    drawn = await owner.backup!.recoveryPackPage!(tx, input.node, {
+    drawn = await seat.module.backup!.recoveryPackPage!(tx, input.node, {
       keyInForce: { nodeId: context.nodeId, name: keyInForce.name },
       ...(newKey === undefined ? {} : { newKey }),
       createdAt: context.madeAt,
       locale: context.locale,
-      evidence: input.evidence,
+      evidence: seat.evidence,
     });
   } catch (error) {
-    const { code, params } = refusal(error);
-    return failed(code, params);
+    return refused(error);
   }
   if (newKey !== undefined && drawn.keyFile === undefined) {
     throw new Error("the server key seat returned no key file");
@@ -332,16 +413,18 @@ export async function buildServerKeyPart(
     file: {
       serverKey: (drawn.keyFile as Record<string, unknown> | undefined) ?? null,
       serverKeyName: name,
+      serverKeyHeldBy: newKey === undefined ? heldBy(keyInForce.holder) : null,
     },
   };
 }
 
 /** Tells the bucket and archive pages which page holds the server key, once every part is built. */
 export function withServerKeyPageNumber(parts: BuiltPart[], locale: PackLocale): BuiltPart[] {
-  const paged = parts.filter((p) => p.part.state === "included" || p.part.state === "failed");
-  const serverKey = paged.findIndex((p) => p.part.kind === "server-key");
-  if (serverKey === -1) return parts;
-  const sentence = PART_WORDS[locale].alsoServerKey(serverKey + 2);
+  const serverKeyPage = [...packPageNumbers(parts.map((p) => p.part))].find(
+    ([part]) => part.kind === "server-key",
+  )?.[1];
+  if (serverKeyPage === undefined) return parts;
+  const sentence = PART_WORDS[locale].alsoServerKey(serverKeyPage);
   return parts.map((built) => {
     const page = built.part.page;
     if (built.part.kind === "server-key" || page === undefined) return built;

@@ -15,9 +15,11 @@ import {
   buildArchivesPart,
   buildBucketPart,
   buildServerKeyPart,
+  serverKeySeat,
   withServerKeyPageNumber,
   type PartsContext,
   type ServerKeyInput,
+  type ServerKeySeat,
 } from "./backup-recovery-pack-parts.js";
 import { STREAM_PURPOSE, streamSettingsPayload } from "./stream-host.js";
 
@@ -126,6 +128,7 @@ describe("the bucket part", () => {
       buildBucketPart(tx, { ...context, env: { WAITRON_BACKUP_RECOVERY_KEY: KEY } }),
     );
     expect(built.record.keyChangedAt).toBe(context.madeAt);
+    expect(built.record.keyNeverChanged).toBe(true);
     expect(built.part.page!.rows).toHaveLength(1);
   });
 
@@ -165,6 +168,7 @@ describe("the bucket part", () => {
       part: { kind: "bucket", state: "failed", failure: partFailure("en", code, {}) },
       record: { part: "bucket", state: "failed" },
       file: {},
+      failedWith: code,
     });
   });
 
@@ -243,6 +247,7 @@ describe("the archives part", () => {
     const built = await inTx((tx) => buildArchivesPart(tx, context));
     expect(built.part.failure).toEqual(partFailure("en", "backup.archive_settings_unreadable", {}));
     expect(built.record).toEqual({ part: "archives", state: "failed" });
+    expect(built.failedWith).toBe("backup.archive_settings_unreadable");
   });
 
   it("fails both bucket and archives with the Backups wording when the key is too short", async () => {
@@ -263,7 +268,47 @@ describe("the archives part", () => {
       }),
     );
     expect(built.record).toMatchObject({ state: "included", destination: "folder" });
-    expect(built.record).not.toHaveProperty("settingsRevision");
+    expect(built.record.settingsRevision).toMatch(/^env:[0-9a-f]{16}$/);
+    expect(built.part.check).toBe("key of 20 Sept 2026");
+  });
+
+  it("prints the stored record's revision in the check of archives the box keeps", async () => {
+    await storeArchives();
+    const built = await inTx((tx) => buildArchivesPart(tx, context));
+    expect(built.part.check).toBe(
+      `key of 20 Sept 2026 · rev ${built.record.settingsRevision!.slice(0, 8)}`,
+    );
+  });
+
+  it("gives the environment's archives a revision that follows the destination, not the credentials or the key", async () => {
+    const revisionFor = async (destination: Record<string, unknown>, key = KEY) =>
+      (
+        await inTx((tx) =>
+          buildArchivesPart(tx, {
+            ...context,
+            managedByEnvironment: true,
+            env: {
+              ...context.env,
+              WAITRON_BACKUP_RECOVERY_KEY: key,
+              WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+                { kind: "s3", id: "archive", ...BUCKET, ...destination },
+              ]),
+            },
+          }),
+        )
+      ).record.settingsRevision;
+    const first = await revisionFor({});
+    expect(first).toMatch(/^env:[0-9a-f]{16}$/);
+    expect(await revisionFor({})).toBe(first);
+    expect(await revisionFor({}, "another-recovery-key-entirely")).toBe(first);
+    for (const change of [
+      { bucket: "other-bucket" },
+      { prefix: "elsewhere/" },
+      { region: "eu-south-2" },
+      { endpoint: "https://s3.example.net" },
+    ]) {
+      expect(await revisionFor(change)).not.toBe(first);
+    }
   });
 });
 
@@ -272,23 +317,26 @@ describe("the server key part", () => {
   const holder = { kind: "pack" as const, number: 2, madeOn: "2026-09-02", received: true };
   const keyInForce = { name: "2026-09-02 · OLD", holder };
   const newKey = { name: "2026-10-30 · NEW", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" };
-  function fiscal(seat: NonNullable<NonNullable<WaitronModule["backup"]>["recoveryPackPage"]>) {
+  function module(seat: NonNullable<NonNullable<WaitronModule["backup"]>["recoveryPackPage"]>) {
     return { backup: { recoveryPackPage: seat } } as unknown as WaitronModule;
   }
+  const fiscal = (...args: Parameters<typeof module>): ServerKeySeat => ({
+    module: module(...args),
+    evidence: {},
+  });
   const node = () => ({ nodeId, locationId: locationId(VENUE) });
   const server = (
-    modules: WaitronModule[],
+    seat: ServerKeySeat,
     options: { newKey?: typeof newKey; keyInForce?: ServerKeyInput["keyInForce"] } = {},
   ) => ({
-    modules,
+    seat,
     node: node(),
-    evidence: {},
     keyInForce: options.keyInForce === undefined ? keyInForce : options.keyInForce,
     ...(options.newKey ? { newKey: options.newKey } : {}),
   });
 
   it("is absent when no module files invoices", async () => {
-    expect((await inTx((tx) => buildServerKeyPart(tx, context, server([])))).part).toEqual({
+    expect((await inTx((tx) => buildServerKeyPart(tx, context, server(null)))).part).toEqual({
       kind: "server-key",
       state: "absent",
     });
@@ -300,12 +348,12 @@ describe("the server key part", () => {
       buildServerKeyPart(
         tx,
         context,
-        server([
+        server(
           fiscal(async (_tx, _node, ctx) => {
             calls.push(ctx);
             return { page };
           }),
-        ]),
+        ),
       ),
     );
     expect(calls).toEqual([
@@ -331,7 +379,11 @@ describe("the server key part", () => {
         keyName: keyInForce.name,
         carriedKey: false,
       },
-      file: { serverKey: null, serverKeyName: keyInForce.name },
+      file: {
+        serverKey: null,
+        serverKeyName: keyInForce.name,
+        serverKeyHeldBy: { number: 2, madeOn: "2026-09-02", received: true },
+      },
     });
   });
 
@@ -341,7 +393,10 @@ describe("the server key part", () => {
       buildServerKeyPart(
         tx,
         context,
-        server([fiscal(async () => ({ page, keyFile }))], { newKey }),
+        server(
+          fiscal(async () => ({ page, keyFile })),
+          { newKey },
+        ),
       ),
     );
     expect(built.part).toMatchObject({
@@ -356,13 +411,24 @@ describe("the server key part", () => {
       keyName: newKey.name,
       carriedKey: true,
     });
-    expect(built.file).toEqual({ serverKey: keyFile, serverKeyName: newKey.name });
+    expect(built.file).toEqual({
+      serverKey: keyFile,
+      serverKeyName: newKey.name,
+      serverKeyHeldBy: null,
+    });
   });
 
   it("refuses a seat that draws a new key but hands back no key file", async () => {
     await expect(
       inTx((tx) =>
-        buildServerKeyPart(tx, context, server([fiscal(async () => ({ page }))], { newKey })),
+        buildServerKeyPart(
+          tx,
+          context,
+          server(
+            fiscal(async () => ({ page })),
+            { newKey },
+          ),
+        ),
       ),
     ).rejects.toThrow("the server key seat returned no key file");
   });
@@ -374,18 +440,16 @@ describe("the server key part", () => {
         tx,
         context,
         server(
-          [
-            fiscal(async () => {
-              asked = true;
-              return { page };
-            }),
-          ],
+          fiscal(async () => {
+            asked = true;
+            return { page };
+          }),
           { keyInForce: null, newKey },
         ),
       ),
     );
     expect(asked).toBe(false);
-    const missing = partFailure("en", "server_key.missing", {});
+    const missing = PART_WORDS.en.noServerKey;
     expect(built.part).toEqual({
       kind: "server-key",
       state: "failed",
@@ -393,6 +457,7 @@ describe("the server key part", () => {
     });
     expect(built.part.failure!.todo).not.toContain("still works");
     expect(built.record).toEqual({ part: "server-key", state: "failed", carriedKey: false });
+    expect(built.failedWith).toBe("no_server_key");
   });
 
   const refusing = fiscal(async () => {
@@ -401,9 +466,7 @@ describe("the server key part", () => {
   const cause = partFailure("en", "sif.allocation_invalid", { reason: "history_invalid" });
 
   it("a refusing seat with a new key ticked fails with its own cause, not replaced, and where the key still is", async () => {
-    const built = await inTx((tx) =>
-      buildServerKeyPart(tx, context, server([refusing], { newKey })),
-    );
+    const built = await inTx((tx) => buildServerKeyPart(tx, context, server(refusing, { newKey })));
     expect(built.part).toEqual({
       kind: "server-key",
       state: "failed",
@@ -418,11 +481,15 @@ describe("the server key part", () => {
       keyName: keyInForce.name,
       carriedKey: false,
     });
-    expect(built.file).toEqual({ serverKey: null, serverKeyName: keyInForce.name });
+    expect(built.file).toEqual({
+      serverKey: null,
+      serverKeyName: keyInForce.name,
+      serverKeyHeldBy: { number: 2, madeOn: "2026-09-02", received: true },
+    });
   });
 
   it("a refusing seat without a new key leaves out the not-replaced line", async () => {
-    const built = await inTx((tx) => buildServerKeyPart(tx, context, server([refusing])));
+    const built = await inTx((tx) => buildServerKeyPart(tx, context, server(refusing)));
     expect(built.part.failure!.todo).toBe(
       `${cause.todo} The current key, on recovery pack 2 made on 2 September 2026, still works.`,
     );
@@ -442,7 +509,7 @@ describe("the server key part", () => {
       buildServerKeyPart(
         tx,
         context,
-        server([refusing], { keyInForce: { name: keyInForce.name, holder: where } }),
+        server(refusing, { keyInForce: { name: keyInForce.name, holder: where } }),
       ),
     );
     expect(built.part.failure!.todo).toBe(`${cause.todo} ${line}`);
@@ -453,14 +520,101 @@ describe("the server key part", () => {
       buildServerKeyPart(
         tx,
         context,
-        server([
+        server(
           fiscal(async () => {
             throw new Error("boom");
           }),
-        ]),
+        ),
       ),
     );
     expect(built.part.failure!.what).toBe(PART_WORDS.en.general.what);
+    expect(built.failedWith).toBe("unexpected");
+  });
+
+  it("a seat that could not be read before the pack fails with its refusal's words, without asking the module", async () => {
+    const built = await inTx((tx) =>
+      buildServerKeyPart(
+        tx,
+        context,
+        server(
+          { refused: new AppError("sif.allocation_invalid", { reason: "history_invalid" }) },
+          { newKey },
+        ),
+      ),
+    );
+    expect(built.part.failure).toEqual({
+      what: cause.what,
+      todo: `${cause.todo} The server key was not replaced. The current key, on recovery pack 2 made on 2 September 2026, still works.`,
+    });
+    expect(built.record).toEqual({
+      part: "server-key",
+      state: "failed",
+      keyName: keyInForce.name,
+      carriedKey: false,
+    });
+  });
+});
+
+describe("the server key's seat", () => {
+  const owner = (name: string) =>
+    ({
+      name,
+      backup: { recoveryPackPage: async () => ({ page: {} }) },
+    }) as unknown as WaitronModule;
+  const other = { name: "orders" } as unknown as WaitronModule;
+
+  it("is none when no module draws the page, reading no evidence", async () => {
+    let read = 0;
+    expect(
+      await serverKeySeat([other], async () => {
+        read++;
+        return {};
+      }),
+    ).toBeNull();
+    expect(read).toBe(0);
+  });
+
+  it("is the one module that draws the page, with its evidence", async () => {
+    const fiscalModule = owner("fiscal");
+    expect(await serverKeySeat([other, fiscalModule], async (m) => ({ for: m.name }))).toEqual({
+      module: fiscalModule,
+      evidence: { for: "fiscal" },
+    });
+  });
+
+  it("refuses more than one module, as the recovery sheet does, reading no evidence, and its page says it is a fault in Waitron", async () => {
+    let read = 0;
+    const seat = await serverKeySeat([owner("a"), owner("b")], async () => {
+      read++;
+      return {};
+    });
+    expect(read).toBe(0);
+    expect(seat).toEqual({ refused: expect.any(AppError) });
+    const { refused } = seat as { refused: { code: string; params: unknown } };
+    expect(refused.code).toBe("recovery.pack_invalid");
+    expect(refused.params).toEqual({ reason: "module_unsupported" });
+    const keyed = await inTx((tx) =>
+      buildServerKeyPart(tx, context, {
+        seat,
+        node: { nodeId, locationId: locationId(VENUE) },
+        keyInForce: {
+          name: "2026-09-02 · OLD",
+          holder: { kind: "pack", number: 2, madeOn: "2026-09-02", received: true },
+        },
+      }),
+    );
+    expect(keyed.part.failure!.what).toBe(PART_WORDS.en.moduleFault.what);
+    expect(keyed.part.failure!.todo.startsWith(PART_WORDS.en.moduleFault.todo)).toBe(true);
+    expect(keyed.failedWith).toBe("recovery.pack_invalid");
+  });
+
+  it("carries an evidence read's failure as it was thrown", async () => {
+    const error = new AppError("setup.attempt_invalid", {});
+    expect(
+      await serverKeySeat([owner("fiscal")], async () => {
+        throw error;
+      }),
+    ).toEqual({ refused: error });
   });
 });
 

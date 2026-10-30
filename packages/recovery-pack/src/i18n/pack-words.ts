@@ -158,7 +158,7 @@ type PartWords = {
     stepsFolder: string[];
   };
   keyRow: string;
-  /** The cover's check for a part guarded by the backup key: the Backups card prints the same. */
+  /** The cover's check for a part guarded by the backup key. */
   check: (keyDay: string, revision: string | undefined) => string;
   keyChangedOn: (day: string) => string;
   alsoServerKey: (page: number) => string;
@@ -166,8 +166,14 @@ type PartWords = {
   currentKeyOnPack: (number: number, day: string) => string;
   currentKeyOnUnreceivedPack: (number: number, day: string) => string;
   currentKeyOnSheet: (keyName: string, day: string) => string;
+  /** Keyed by the refusal's real code. */
   failures: Record<string, PartFailure>;
-  historyInvalid: string;
+  /** `sif.allocation_invalid` with reason `history_invalid`; its other reasons take `general`. */
+  historyInvalid: PartFailure;
+  /** The server-key page of a box that has no server key yet; no refusal stands behind it. */
+  noServerKey: PartFailure;
+  /** `recovery.pack_invalid` with reason `module_unsupported`: only a wrong module composition gives it. */
+  moduleFault: PartFailure;
   general: PartFailure;
 };
 
@@ -236,16 +242,19 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         what: "The box could not find the key that signs its bucket copy.",
         todo: "Check Backups and make a new pack.",
       },
-      "sif.allocation_invalid": {
-        what: "",
-        todo: "Keep the pack or sheet that holds the current server key; the next pack tries this page again.",
-      },
-      "server_key.missing": {
-        what: "This box has no server key yet.",
-        todo: "There is nothing to keep for this part until the box has one.",
-      },
     },
-    historyInvalid: "The box's record of its invoice series disagrees with what setup recorded.",
+    historyInvalid: {
+      what: "The box's record of its invoice series disagrees with what setup recorded.",
+      todo: "Keep the pack or sheet that holds the current server key; the next pack tries this page again.",
+    },
+    noServerKey: {
+      what: "This box has no server key yet.",
+      todo: "There is nothing to keep for this part until the box has one.",
+    },
+    moduleFault: {
+      what: "This page could not be made. That is a fault in Waitron.",
+      todo: "A new pack will fail here the same way. The other pages of this pack are still good.",
+    },
     general: {
       what: "This part could not be read when this pack was made.",
       todo: "Check Backups and make a new pack.",
@@ -316,17 +325,19 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
         what: "La caja no encontró la clave que firma su copia en el bucket.",
         todo: "Revisa Copias de seguridad y haz un paquete nuevo.",
       },
-      "sif.allocation_invalid": {
-        what: "",
-        todo: "Guarda el paquete o la hoja que tiene la clave del servidor actual; el próximo paquete volverá a intentar esta página.",
-      },
-      "server_key.missing": {
-        what: "Esta caja aún no tiene clave del servidor.",
-        todo: "No hay nada que guardar de esta parte hasta que la caja tenga una.",
-      },
     },
-    historyInvalid:
-      "El registro de la caja de sus series de facturas no coincide con lo que registró la instalación.",
+    historyInvalid: {
+      what: "El registro de la caja de sus series de facturas no coincide con lo que registró la instalación.",
+      todo: "Guarda el paquete o la hoja que tiene la clave del servidor actual; el próximo paquete volverá a intentar esta página.",
+    },
+    noServerKey: {
+      what: "Esta caja aún no tiene clave del servidor.",
+      todo: "No hay nada que guardar de esta parte hasta que la caja tenga una.",
+    },
+    moduleFault: {
+      what: "Esta página no se pudo hacer. Es un fallo de Waitron.",
+      todo: "Un paquete nuevo fallará aquí de la misma forma. Las demás páginas de este paquete siguen sirviendo.",
+    },
     general: {
       what: "Esta parte no se pudo leer cuando se hizo este paquete.",
       todo: "Revisa Copias de seguridad y haz un paquete nuevo.",

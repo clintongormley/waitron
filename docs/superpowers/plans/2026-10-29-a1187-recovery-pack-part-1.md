@@ -671,6 +671,20 @@ so failures here and at profile changes are counted separately, per person each.
 
 ## PR C — the server makes the pack and remembers it
 
+_2026-10-30:_ PR C put the make, received and status route cases in
+`apps/server/src/backup-recovery-pack-api.make.test.ts` (the existing `backup-recovery-pack-api.test.ts`
+fixture migrates core and identity only), and the real-start case in
+`apps/server/src/boot.backup-recovery-pack.test.ts` (`boot.recovery-pack.test.ts` already tests the
+node recovery pack). The check commands below name the planned files. The bucket page reads this
+node's public key alone through `readNodePublicKeyTx`; no `readMembershipTrustSetIn` was added and
+`readMembershipTrustSet` is unchanged. The received route checks the person who made the pack, not
+the browser. From the finish-branch review: environment-managed archives record a digest of their
+non-secret destination settings as their revision (the cover's check still prints none for them),
+a failed evidence read or a second module offering the page fails the server-key page alone (for a
+second module the page says it is a fault in Waitron), the `recovery.pack_made` log line adds each
+failed part's error code as `failedWith` (`unexpected` for an error with no code, `no_server_key` for a box with none), and the received
+route checks the session and permission before it reads the body.
+
 ### Task 10 — the seat gains the page variant (contract between packages)
 
 **Files:** `packages/module/package.json` (type dependency on `@waitron/recovery-pack`),
