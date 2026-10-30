@@ -6283,6 +6283,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   permissions, sources and dates stay.
   Native season route and season week suites use English venue, operation, zone and custom-season
   samples; Spanish starter-season names, locale keys, clock revisions and refusal checks stay.
+  Native kitchen-notice samples use English menu, dish, table, note and removed-extra text;
+  unit translations, unit identities, quantities and all six day-boundary readings stay.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

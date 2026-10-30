@@ -581,11 +581,11 @@ describe("recordKitchenNotices", () => {
     const [seededEach, kg, gram, lookalike] = stored;
     await inTx((tx) => updateUnit(tx, seededEach!.id, { abbreviation: { en: "pc" } }, "en"));
     const offer = await inTx(async (tx) => {
-      const menu = await createCatalogue(tx, { name: "Tapas" });
+      const menu = await createCatalogue(tx, { name: "Snacks" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
-        name: "Tapa",
+        name: "Small plate",
         pricingUnit: "each",
         unitPrice: "1.00",
         vatClass: "reduced",
@@ -594,14 +594,14 @@ describe("recordKitchenNotices", () => {
     });
     const soldIn = [
       {
-        name: "Croqueta",
+        name: "Croquette",
         unit: { id: EACH_UNIT_ID, abbreviation: EACH_UNIT.abbreviation, precision: 0 },
         soldInEach: true,
       },
-      { name: "Gilda", unit: { ...seededEach!, abbreviation: { en: "pc" } }, soldInEach: true },
-      { name: "Pulpo", unit: kg!, soldInEach: false },
-      { name: "Almendras", unit: gram!, soldInEach: false },
-      { name: "Pan", unit: lookalike!, soldInEach: false },
+      { name: "Skewer", unit: { ...seededEach!, abbreviation: { en: "pc" } }, soldInEach: true },
+      { name: "Octopus", unit: kg!, soldInEach: false },
+      { name: "Almonds", unit: gram!, soldInEach: false },
+      { name: "Bread", unit: lookalike!, soldInEach: false },
     ];
     const lineIds: string[] = [];
     for (const [index, sold] of soldIn.entries()) {
@@ -624,7 +624,7 @@ describe("recordKitchenNotices", () => {
         workingOrderLineId: line!.id,
         menuItemId: offer.id,
         menuId: offer.menuId,
-        menuName: "Tapas",
+        menuName: "Snacks",
         departmentId: "00000000-0000-4000-8000-0000000000d1",
         departmentName: "Restaurant",
         categoryName: "Uncategorised",
@@ -661,11 +661,11 @@ describe("recordKitchenNotices", () => {
         notice.soldInEach,
       ]),
     ).toEqual([
-      ["Croqueta", true],
-      ["Gilda", true],
-      ["Pulpo", false],
-      ["Almendras", false],
-      ["Pan", false],
+      ["Croquette", true],
+      ["Skewer", true],
+      ["Octopus", false],
+      ["Almonds", false],
+      ["Bread", false],
       ["BRGR", false],
     ]);
   });
@@ -949,7 +949,7 @@ describe("recordKitchenNotices", () => {
       });
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "changed");
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "void");
-      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", { movedTo: "Mesa 2" });
+      await recordKitchenNotices(tx, v.cfg, order.orderId, burger, "moved", { movedTo: "Table 2" });
     });
     expect(
       (await db.execute(sql`select kind, direction from kitchen_notices order by rowid`)).rows,
@@ -1051,7 +1051,7 @@ describe("recordKitchenNotices", () => {
           },
         ],
         "moved",
-        { movedTo: "Mesa 7" },
+        { movedTo: "Table 7" },
       ),
     );
     expect(await inTx((tx) => listStationNotices(tx, v.cfg, v.grill))).toEqual([
@@ -1067,7 +1067,7 @@ describe("recordKitchenNotices", () => {
         quantity: ONE,
         note: "no onions",
         wasStarted: false,
-        movedTo: "Mesa 7",
+        movedTo: "Table 7",
         direction: null,
         cancelledExtra: null,
         reroutedTo: null,
@@ -1085,11 +1085,11 @@ describe("recordKitchenNotices", () => {
     ];
     await inTx(async (tx) => {
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
-        movedTo: "Mesa 7",
+        movedTo: "Table 7",
         fromNumber: 28,
       });
       await recordKitchenNotices(tx, v.cfg, order.orderId, burger(order), "moved", {
-        movedTo: "Mesa 7",
+        movedTo: "Table 7",
         fromNumber: 27,
       });
       await recordKitchenNotices(tx, v.cfg, labelled.orderId, burger(labelled), "moved", {
@@ -1102,8 +1102,8 @@ describe("recordKitchenNotices", () => {
         notice.movedTo,
       ]),
     ).toEqual([
-      ["#28 → #27", "Mesa 7"],
-      ["#27", "Mesa 7"],
+      ["#28 → #27", "Table 7"],
+      ["#27", "Table 7"],
       ["#28 → #30 · Table 4", null],
     ]);
   });
@@ -1344,9 +1344,9 @@ describe.each([
         unitName: { en: "glass", es: "copa" },
         soldInEach: true,
         quantity: 1500,
-        note: "sin hielo",
+        note: "no ice",
         wasStarted: true,
-        cancelledExtra: "Hielo",
+        cancelledExtra: "Ice",
         createdAt: minutesAgo(1),
       })
       .returning();
@@ -1364,11 +1364,11 @@ describe.each([
         unitName: { en: "glass", es: "copa" },
         soldInEach: true,
         quantity: thousandthsToDecimal(1500),
-        note: "sin hielo",
+        note: "no ice",
         wasStarted: true,
         movedTo: null,
         direction: "removed",
-        cancelledExtra: "Hielo",
+        cancelledExtra: "Ice",
         reroutedTo: null,
         createdAt: row!.createdAt,
       },
