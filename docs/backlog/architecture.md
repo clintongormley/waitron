@@ -442,11 +442,10 @@ until A977).
   A972 cut 1 moves its original bytes and keeps the existing encoder behavior.
 - **A974 — remaining Bucket E and F sites.** Still open: identifiers and file names from the audit.
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
-  Keep the service-period suite's menu keys with its fixture names under A976. Other private
-  naming sites remain in the till's boot and counter-payment suites
+  Other private naming sites remain in the till's boot and counter-payment suites
   and the server's till-API fixtures.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
-  under A976, as do the service-period menu keys.
+  under A976.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
   also stay with A976, along with counter-screen display text, station-screen display names,
   kitchen-ticket grouping, payment/queue widget display text, variant media fixtures and
@@ -510,6 +509,13 @@ until A977).
   (`apps/server/src/order-places.test.ts`) English table and group names; the alert suite keeps
   its es-ES locale and the printer name "Epson", and the order-places suite keeps the Spanish names
   its shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
+  The service-period suite (`apps/server/src/till-api.service-periods.test.ts`) gives English
+  names to what it creates and names no menu after a period, and the service-step suite
+  (`apps/server/src/service-step-signals.test.ts`) English table names; the service-period suite
+  keeps the Spanish names its shared signed-in till (`apps/server/src/testing/signed-in-till.ts`)
+  creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
+  ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
+  shared party venue creates.
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
   products (café, agua), names no check in it reads. The station-alert and party suites still

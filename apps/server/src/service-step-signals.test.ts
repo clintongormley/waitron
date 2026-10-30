@@ -185,7 +185,7 @@ describe("readTableSteps", () => {
     const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     const ids = await setSteps(v, department, [seated("Set up"), seated("Water?", 5)]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
 
@@ -227,7 +227,7 @@ describe("readTableSteps", () => {
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     const { tabId } = await orderForParty(v, partyId, ["Burger", "Paella", "Agua"]);
     await setCourse(v, mains.id, [
@@ -252,7 +252,7 @@ describe("readTableSteps", () => {
     const [dessert] = await setSteps(v, await tablesDepartment(v), [
       { name: "Dessert?", start: "course_served", courseId: mains.id, minutes: 10 },
     ]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     const { tabId } = await orderForParty(v, partyId, ["Burger", "Paella", "Flan"]);
     await setCourse(v, mains.id, [
@@ -288,7 +288,7 @@ describe("readTableSteps", () => {
     const [anything] = await setSteps(v, await tablesDepartment(v), [
       { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
     ]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     const { tabId } = await orderForParty(v, partyId, ["Burger", "Agua"]);
     const held = await holdGroup(v, partyId, "Flan");
@@ -315,7 +315,7 @@ describe("readTableSteps", () => {
   it("the first order sent through placeGroups clears a step triggered before it", async () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
     expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([setUp]);
@@ -330,7 +330,7 @@ describe("readTableSteps", () => {
     const [drinks] = await setSteps(v, await tablesDepartment(v), [
       { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
     ]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     expect(await liveAt(v, partyId, tableId)).toEqual([]);
 
@@ -357,7 +357,7 @@ describe("readTableSteps", () => {
       seated("Set up"),
       { name: "Take order", start: "after_previous", courseId: null, minutes: 2 },
     ]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
     expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([setUp]);
@@ -380,7 +380,7 @@ describe("readTableSteps", () => {
   it("before the first order no step shows while the party has an open draft", async () => {
     const v = await setupPartyVenue(suite.db);
     const [setUp] = await setSteps(v, await tablesDepartment(v), [seated("Set up")]);
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId, tabId } = await seat(v, tableId);
     expect((await liveAt(v, partyId, tableId))!.map((step) => step.stepId)).toEqual([setUp]);
 
@@ -401,7 +401,7 @@ describe("readTableSteps", () => {
       return { departmentId: department.id, zoneId: zone.id };
     });
     const [water] = await setSteps(v, terrace.departmentId, [seated("Water?", 5)]);
-    const inside = await v.table("Mesa 1");
+    const inside = await v.table("Table 1");
     const outside = await v.table("T1", terrace.zoneId);
     const { partyId } = await seat(v, inside);
     // `joinTables` refuses a table of another zone (`service_zone.join_mismatch`).
@@ -438,7 +438,7 @@ describe("readTableSteps", () => {
         .returning({ id: diningTables.id });
       return table!.id;
     });
-    const inside = await v.table("Mesa 1");
+    const inside = await v.table("Table 1");
     const { partyId } = await seat(v, inside);
     await inTx(v, (tx) => tx.insert(partyTables).values({ partyId, tableId: outside }));
 
@@ -460,7 +460,7 @@ describe("readTableSteps", () => {
         .orderBy(asc(serviceSteps.position))
         .limit(1),
     );
-    const tableId = await v.table("Mesa 1");
+    const tableId = await v.table("Table 1");
     const { partyId } = await seat(v, tableId);
     await setOpenedAt(v, partyId, OPENED);
 
@@ -478,8 +478,8 @@ describe("readTableSteps", () => {
     const v = await setupPartyVenue(suite.db);
     const department = await tablesDepartment(v);
     const [setUp] = await setSteps(v, department, [seated("Set up")]);
-    const firstTable = await v.table("Mesa 1");
-    const secondTable = await v.table("Mesa 2");
+    const firstTable = await v.table("Table 1");
+    const secondTable = await v.table("Table 2");
     const { partyId } = await seat(v, firstTable);
     await join(v, partyId, secondTable);
     await setOpenedAt(v, partyId, OPENED);
@@ -508,8 +508,8 @@ describe("readTableSteps", () => {
       { name: "Drinks?", start: "since_last_order", courseId: null, minutes: 20 },
       { name: "Anything else?", start: "all_served", courseId: null, minutes: 10 },
     ]);
-    const firstTable = await v.table("Mesa 1");
-    const secondTable = await v.table("Mesa 2");
+    const firstTable = await v.table("Table 1");
+    const secondTable = await v.table("Table 2");
     const a = await seat(v, firstTable);
     await setOpenedAt(v, a.partyId, OPENED);
     const b = await seat(v, secondTable);
@@ -582,9 +582,9 @@ describe("readTableSteps", () => {
         }
       });
     };
-    const first = await busyParty("Mesa 1");
+    const first = await busyParty("Table 1");
     const one = await statements([first]);
-    const three = await statements([first, await busyParty("Mesa 2"), await busyParty("Mesa 3")]);
+    const three = await statements([first, await busyParty("Table 2"), await busyParty("Table 3")]);
     const none = await statements([]);
 
     expect(three.steps.size).toBe(3);
