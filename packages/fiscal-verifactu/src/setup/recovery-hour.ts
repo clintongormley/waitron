@@ -414,7 +414,7 @@ export class RecoveryHourEntry extends LitElement {
       }
       ${renderClockProblem(this.#wait.problem, words, clock)}
       ${
-        result?.status === "waiting"
+        this.#wait.counting
           ? this.#wait.renderWait(words)
           : result?.status === "selected"
             ? html`<p role="status" data-test="selected-hour">

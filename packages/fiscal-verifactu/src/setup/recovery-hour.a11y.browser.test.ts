@@ -105,6 +105,7 @@ for (const theme of ["light", "dark"] as const)
                     params: {
                       reason: state === "later" ? "minute_not_later" : "minute_in_use",
                       allowedFromMs: Date.parse("2026-10-18T20:04:00Z"),
+                      ...(state === "in-use" ? { remainingMs: 240000, recheckInMs: 90000 } : {}),
                     },
                   };
                 return state === "waiting"
@@ -167,7 +168,7 @@ for (const theme of ["light", "dark"] as const)
                   "second-clock": "[data-test=clock-wait]",
                   waiting: "[data-test=remaining]",
                   later: "[data-test=minute-not-later]",
-                  "in-use": "[data-test=minute-in-use]",
+                  "in-use": "[data-test=minute-taken]",
                   selected: "[data-test=selected-hour]",
                 }[state]!;
                 await vi.waitFor(() => expect(el.shadowRoot!.querySelector(shown)).not.toBeNull());

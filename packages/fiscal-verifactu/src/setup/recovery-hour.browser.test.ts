@@ -853,12 +853,18 @@ it("a later minute in use is explained and does not count down", async () => {
     vi.useRealTimers();
   }
 });
-it("a minute in use names its time and does not count down", async () => {
+it("a minute in use shows one countdown, checks again quietly and keeps saying why", async () => {
   const { prepare } = scripted([
     {
       code: "sif.allocation_invalid",
-      params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
     },
+    { status: "waiting", targetMs: instant + 180_000, remainingMs: 150_000 },
   ]);
   const { el } = await mount(prepare);
   await ready(el);
@@ -866,22 +872,27 @@ it("a minute in use names its time and does not count down", async () => {
   fakeClock();
   try {
     await userEvent.click(button(el, "select"));
+    const taken = () =>
+      el
+        .shadowRoot!.querySelector("[data-test=minute-taken]")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim();
     await vi.waitFor(() =>
-      expect(
-        el
-          .shadowRoot!.querySelector("[data-test=minute-in-use]")
-          ?.textContent?.replace(/\s+/g, " ")
-          .trim(),
-      ).toBe(
-        "The series cannot be made yet: this box's records already hold a series for the minute this box would use. You can carry on from 22:04.",
+      expect(taken()).toBe(
+        "The minute this box would use already has a series here, so it will use the next free minute.",
       ),
     );
-    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
-    vi.advanceTimersByTime(60_000);
+    expect(remaining(el)).toBe("3:00");
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
     await el.updateComplete;
-    expect(selects(prepare)).toHaveLength(1);
+    expect(taken()).toBe(
+      "The minute this box would use already has a series here, so it will use the next free minute.",
+    );
+    expect(remaining(el)).toBe("2:30");
+    expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
     expect(el.readCredentials()).toBeNull();
-    expect(button(el, "compare").disabled).toBe(false);
   } finally {
     vi.useRealTimers();
   }
@@ -1067,11 +1078,16 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   expect(text(el)).toContain("No hace falta hacer nada; deja esta página abierta.");
   expect(text(el)).toContain("Sigue en");
 });
-it("says in Spanish that a minute in use cannot be used yet", async () => {
+it("says in Spanish that the minute already has a series, with the countdown", async () => {
   const { prepare } = scripted([
     {
       code: "sif.allocation_invalid",
-      params: { reason: "minute_in_use", allowedFromMs: Date.parse("2026-10-18T20:04:00Z") },
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
     },
   ]);
   const { el } = await mount(prepare);
@@ -1082,9 +1098,10 @@ it("says in Spanish that a minute in use cannot be used yet", async () => {
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo. Podrás seguir a partir de las 22:04.",
+      "El minuto que usaría este equipo ya tiene una serie aquí, así que usará el siguiente minuto libre.",
     ),
   );
+  expect(text(el)).toContain("Sigue en");
 });
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([
