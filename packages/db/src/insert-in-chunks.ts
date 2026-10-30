@@ -1,14 +1,7 @@
 import { getTableColumns } from "drizzle-orm";
 import type { SQLiteInsertValue, SQLiteTable } from "drizzle-orm/sqlite-core";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
 import type { Transaction } from "./client.js";
-
-/**
- * The most values one statement may bind: SQLite's default `SQLITE_MAX_VARIABLE_NUMBER`, which
- * Node's own build keeps (`limits.variableNumber` read 32766 on the official Node v26.13.0 for
- * macOS). A Node linked to Homebrew's SQLite read 250000, so a statement over this limit can pass
- * on a developer's machine and be refused in CI and on the box.
- */
-export const SQL_VARIABLE_LIMIT = 32766;
 
 /** How many rows of `columns` columns one statement binding at most `limit` values can take. */
 export function rowsPerStatement(columns: number, limit: number): number {

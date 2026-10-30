@@ -11,6 +11,7 @@ import {
   DATABASE_FILES,
   openVenueStore,
   SIDE_FILE_SUFFIXES,
+  SQL_VARIABLE_LIMIT,
   VENUE_HOLDER_FILE,
   VENUE_LOCK_FILE,
 } from "./index.js";
@@ -631,6 +632,54 @@ const untilLocked = (child: ChildProcess) =>
  * and least predictable on a loaded machine), the hold, and one retry interval past it.
  */
 const CONTENTION_TIMEOUT_MS = 20_000;
+
+describe("openVenueStore's bound-value limit", () => {
+  /** A statement binding `count` values, on whichever connection `db` routes it to. */
+  const binding = (count: number) =>
+    sql`select count(*) as n from (select 1) where 1 in (${sql.join(
+      Array.from({ length: count }, () => sql`${1}`),
+      sql`, `,
+    )})`;
+
+  it("is the official Node build's 32,766", () => {
+    expect(SQL_VARIABLE_LIMIT).toBe(32766);
+  });
+
+  it("refuses a statement binding one value more on the reader and the writer of both files, whatever this Node's SQLite allows", async () => {
+    const { store } = await open();
+    const outcome = (db: { all: (query: ReturnType<typeof sql>) => unknown }, count: number) => {
+      try {
+        return db.all(binding(count));
+      } catch (error) {
+        return (error as Error).message;
+      }
+    };
+    for (const db of [store.venue, store.node]) {
+      // On the writer: no write body is running, and then from inside one.
+      expect(outcome(db, SQL_VARIABLE_LIMIT)).toEqual([{ n: 1 }]);
+      expect(outcome(db, SQL_VARIABLE_LIMIT + 1)).toBe("too many SQL variables");
+
+      // On the reader: a read from outside a running body, as in "shows a read taken outside the
+      // write lock the committed rows only" above.
+      let bodyRunning!: () => void;
+      const running = new Promise<void>((resolve) => {
+        bodyRunning = resolve;
+      });
+      const fromOutside = running.then(() => [
+        outcome(db, SQL_VARIABLE_LIMIT),
+        outcome(db, SQL_VARIABLE_LIMIT + 1),
+      ]);
+      let fromInside: unknown;
+      await db.withWriteLock(async () => {
+        fromInside = [outcome(db, SQL_VARIABLE_LIMIT), outcome(db, SQL_VARIABLE_LIMIT + 1)];
+        bodyRunning();
+        await fromOutside;
+      });
+      expect(fromInside).toEqual([[{ n: 1 }], "too many SQL variables"]);
+      expect(await fromOutside).toEqual([[{ n: 1 }], "too many SQL variables"]);
+    }
+  });
+});
 
 describe("openVenueStore under contention", () => {
   it(

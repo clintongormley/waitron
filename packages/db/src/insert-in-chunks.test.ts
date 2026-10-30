@@ -2,12 +2,8 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import {
-  insertInChunks,
-  rowsPerStatement,
-  SQL_VARIABLE_LIMIT,
-  statementChunks,
-} from "./insert-in-chunks.js";
+import { SQL_VARIABLE_LIMIT } from "@waitron/store";
+import { insertInChunks, rowsPerStatement, statementChunks } from "./insert-in-chunks.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { orderPortions } from "./schema/order-portions.js";
 import { withTransaction } from "./tenancy.js";

@@ -129,6 +129,16 @@ export interface VenueStore<
 /** How long a statement blocked on another connection waits, and how long the switch below retries. */
 const BUSY_TIMEOUT_MS = 5000;
 
+/**
+ * The most values one statement may bind on a connection this store opens. It is the limit the
+ * official Node v26.13.0 for macOS reported (`limits.variableNumber`), where Homebrew's Node
+ * v26.11.1 reported 250000; setting it on every connection makes a run on either refuse the same
+ * statements. Inserts whose rows grow with an order go through `insertInChunks` in `@waitron/db`.
+ */
+export const SQL_VARIABLE_LIMIT = 32766;
+
+const CONNECTION_LIMITS = { limits: { variableNumber: SQL_VARIABLE_LIMIT } };
+
 const WAL_RETRY_INTERVAL_MS = 25;
 
 /**
@@ -165,7 +175,7 @@ async function enterWriteAheadMode(connection: DatabaseSync): Promise<void> {
  * write-ahead file grow without limit.
  */
 async function openConnection(path: string): Promise<DatabaseSync> {
-  const connection = new DatabaseSync(path);
+  const connection = new DatabaseSync(path, CONNECTION_LIMITS);
   try {
     connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
     await enterWriteAheadMode(connection);
@@ -197,7 +207,7 @@ async function openConnection(path: string): Promise<DatabaseSync> {
  * database file, which this connection cannot make.
  */
 function openReadConnection(path: string): DatabaseSync {
-  const connection = new DatabaseSync(path, { readOnly: true });
+  const connection = new DatabaseSync(path, { ...CONNECTION_LIMITS, readOnly: true });
   connection.exec(`pragma busy_timeout = ${BUSY_TIMEOUT_MS}`);
   registerSearchFunction(connection);
   return connection;
