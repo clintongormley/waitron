@@ -5,6 +5,7 @@ import {
   clockProblem,
   clockWaitStrings,
   dateTimeFormat,
+  remainingInWords,
   renderClockProblem,
   validWait,
   type ClockWords,
@@ -124,7 +125,7 @@ describe("a taken minute shows one countdown", () => {
   });
   const WAITING = { status: "waiting", targetMs: 1, remainingMs: 150_000 } as const;
   const TAKEN =
-    "The minute this box would use already has a series here, so it will use the next free minute.";
+    "The auto-generated invoice series code (which is time-based) already exists in the database.";
 
   const setup = () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
@@ -152,13 +153,17 @@ describe("a taken minute shows one countdown", () => {
     expect(wait.counting).toBe(true);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
     expect(drawn().querySelector("[data-test=minute-taken]")?.getAttribute("role")).toBe("status");
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("3:00");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("3 minutes");
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Generating a new code in: 3 minutes",
+    );
+    expect(text(drawn())).toContain("Nothing to do; keep this page open.");
     vi.advanceTimersByTime(30_000);
     expect(recheck).toHaveBeenCalledTimes(1);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2:30");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes 30 seconds");
     wait.show(undefined, WAITING);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2:30");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes 30 seconds");
     expect(fail).not.toHaveBeenCalled();
   });
 
@@ -168,7 +173,7 @@ describe("a taken minute shows one countdown", () => {
     vi.advanceTimersByTime(30_000);
     wait.show(undefined, { ...WAITING, remainingMs: 90_001 });
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("1:31");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("1 minute 31 seconds");
   });
 
   it("a re-check refused again starts the same display again", () => {
@@ -177,7 +182,7 @@ describe("a taken minute shows one countdown", () => {
     vi.advanceTimersByTime(30_000);
     wait.settle(NEXT_MINUTE(120_000, 60_000), true, fail);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2:00");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes");
     expect(fail).not.toHaveBeenCalled();
   });
 
@@ -190,6 +195,9 @@ describe("a taken minute shows one countdown", () => {
     expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
     expect(text(drawn().querySelector("[role=status]"))).toBe(
       "Waiting to confirm the time, so no invoice series is ever repeated.",
+    );
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Continues in 2:30",
     );
   });
 
@@ -213,6 +221,48 @@ describe("a taken minute shows one countdown", () => {
     wait.show(undefined, WAITING);
     expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
   });
+});
+
+it.each([
+  [0, "0 seconds", "0 segundos"],
+  [1_000, "1 second", "1 segundo"],
+  [51_001, "52 seconds", "52 segundos"],
+  [60_000, "1 minute", "1 minuto"],
+  [61_000, "1 minute 1 second", "1 minuto 1 segundo"],
+  [150_000, "2 minutes 30 seconds", "2 minutos 30 segundos"],
+  [180_000, "3 minutes", "3 minutos"],
+])("a taken minute's %i ms left reads %s / %s", (ms, en, es) => {
+  expect(remainingInWords(ms, clockWaitStrings.en)).toBe(en);
+  expect(remainingInWords(ms, clockWaitStrings.es)).toBe(es);
+});
+
+it("says in Spanish that the code exists and when a new one is made", () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => undefined,
+    updateComplete: Promise.resolve(true),
+  };
+  const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+  wait.show({ kind: "next-minute", remainingMs: 52_000, recheckInMs: 1_000 });
+  const target = document.createElement("div");
+  render(
+    wait.renderWait({
+      ...clockWaitStrings.es,
+      secondClockDo: "",
+      secondClockEnds: "",
+      differDo: "",
+    }),
+    target,
+  );
+  expect(text(target.querySelector("[data-test=minute-taken]"))).toBe(
+    "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+  );
+  expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
+    "Generando un código nuevo en: 52 segundos",
+  );
+  vi.useRealTimers();
 });
 
 it("builds each language, zone and style's formatter once", () => {

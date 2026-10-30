@@ -23,6 +23,11 @@ export interface ClockWords {
   later: string;
   inUse: string;
   nextMinute: string;
+  newCodeIn: string;
+  second: string;
+  seconds: string;
+  minute: string;
+  minutes: string;
 }
 
 export interface ClockComparison {
@@ -51,7 +56,12 @@ export const clockWaitStrings = {
     inUse:
       "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
     nextMinute:
-      "The minute this box would use already has a series here, so it will use the next free minute.",
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    newCodeIn: "Generating a new code in:",
+    second: "second",
+    seconds: "seconds",
+    minute: "minute",
+    minutes: "minutes",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -67,7 +77,12 @@ export const clockWaitStrings = {
     inUse:
       "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
     nextMinute:
-      "El minuto que usaría este equipo ya tiene una serie aquí, así que usará el siguiente minuto libre.",
+      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+    newCodeIn: "Generando un código nuevo en:",
+    second: "segundo",
+    seconds: "segundos",
+    minute: "minuto",
+    minutes: "minutos",
   },
 } satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
 
@@ -86,6 +101,21 @@ export function dateTimeFormat(
     formats.set(key, format);
   }
   return format;
+}
+
+/** "2 minutes 30 seconds": the taken-minute wait's figure, in whole seconds as `formatRemaining`. */
+export function remainingInWords(
+  ms: number,
+  words: Pick<ClockWords, "second" | "seconds" | "minute" | "minutes">,
+): string {
+  const total = Math.ceil(Math.max(0, ms) / 1000);
+  const minutes = Math.floor(total / 60);
+  const seconds = total % 60;
+  const parts: string[] = [];
+  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? words.minute : words.minutes}`);
+  if (seconds > 0 || minutes === 0)
+    parts.push(`${seconds} ${seconds === 1 ? words.second : words.seconds}`);
+  return parts.join(" ");
 }
 
 export const SECOND_CLOCK_POLL_MS = 15_000;
@@ -302,9 +332,13 @@ function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: bo
       countdown.remainingMs === undefined
         ? nothing
         : html`<p>
-            ${words.continuesIn}
+            ${minuteTaken ? words.newCodeIn : words.continuesIn}
             <span role="timer" data-test="remaining"
-              >${formatRemaining(countdown.remainingMs)}</span
+              >${
+                minuteTaken
+                  ? remainingInWords(countdown.remainingMs, words)
+                  : formatRemaining(countdown.remainingMs)
+              }</span
             >
           </p>`
     }

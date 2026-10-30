@@ -913,18 +913,19 @@ it("a minute in use shows one countdown, checks again quietly and keeps saying w
         .trim();
     await vi.waitFor(() =>
       expect(taken()).toBe(
-        "The minute this box would use already has a series here, so it will use the next free minute.",
+        "The auto-generated invoice series code (which is time-based) already exists in the database.",
       ),
     );
-    expect(remaining(el)).toBe("3:00");
+    expect(remaining(el)).toBe("3 minutes");
+    expect(text(el)).toContain("Generating a new code in: 3 minutes");
     expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
     vi.advanceTimersByTime(30_000);
     await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
     await el.updateComplete;
     expect(taken()).toBe(
-      "The minute this box would use already has a series here, so it will use the next free minute.",
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
     );
-    expect(remaining(el)).toBe("2:30");
+    expect(remaining(el)).toBe("2 minutes 30 seconds");
     expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
     expect(el.readCredentials()).toBeNull();
     expect(button(el, "compare").disabled).toBe(false);
@@ -1113,7 +1114,7 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   expect(text(el)).toContain("No hace falta hacer nada; deja esta página abierta.");
   expect(text(el)).toContain("Sigue en");
 });
-it("says in Spanish that the minute already has a series, with the countdown", async () => {
+it("says in Spanish that the series code already exists, with the countdown", async () => {
   const { prepare } = scripted([
     {
       code: "sif.allocation_invalid",
@@ -1133,10 +1134,10 @@ it("says in Spanish that the minute already has a series, with the countdown", a
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "El minuto que usaría este equipo ya tiene una serie aquí, así que usará el siguiente minuto libre.",
+      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     ),
   );
-  expect(text(el)).toContain("Sigue en");
+  expect(text(el)).toContain("Generando un código nuevo en: 3 minutos");
 });
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([

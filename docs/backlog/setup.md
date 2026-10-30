@@ -695,10 +695,11 @@ backup's record of names), exact names only (Q2); a minute in use is skipped as 
 before (Q3). The owner on Q4 (2026-10-30): "If the existing minute is taken then we should just wait
 for another minute before checking again. Explain that to the user and show a countdown." So the
 box's refusal (reason `minute_in_use`) says how long until the next free minute and when to check
-again, and the setup and restore pages say "The minute this box would use already has a series
-here, so it will use the next free minute.", count down to it and check again by themselves; a
-promotion waits up to 150 seconds and is otherwise refused with those values. Those words wait for
-the owner's approval. After a restore of a backup whose invoices are more than a minute later than the box's time,
+again, and the setup and restore pages say the owner's own words (2026-10-30): "The auto-generated
+invoice series code (which is time-based) already exists in the database." and "Generating a new
+code in: 52 seconds", count down to it and check again by themselves; a promotion waits up to 150
+seconds and is otherwise refused with those values. The Spanish and the figure past a minute ("2
+minutes 30 seconds") wait for the owner's approval. After a restore of a backup whose invoices are more than a minute later than the box's time,
 payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
 more than a minute behind the last sale (Q5); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind

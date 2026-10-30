@@ -44,9 +44,10 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **The minute this box would use already has a series here**: the page says "The minute this box
-  would use already has a series here, so it will use the next free minute." and counts down to that
-  minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
+- **The minute this box would use already has a series here**: the page says "The auto-generated
+  invoice series code (which is time-based) already exists in the database." and "Generating a new
+  code in: 3 minutes", counting down in minutes and seconds to the next free minute with no button
+  to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
   "a minute in use shows one countdown, checks again quietly and keeps saying why"). A reload before
   the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
   time are correct." and press **Make the series** again (read, not run: the page's check on load
