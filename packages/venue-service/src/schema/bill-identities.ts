@@ -50,7 +50,9 @@ export const billNumberAllocations = table(
   {
     id: id("id").primaryKey().$defaultFn(newId),
     // Plain ids with no key: a row nothing may delete would make every party and bill it names
-    // undeletable for good.
+    // undeletable for good. Nothing here refuses an id that names no party or bill;
+    // `allocateBillNumber` writes the matching `bill_identities` row in the same transaction, and
+    // that row's keys refuse one.
     partyId: id("party_id").notNull(),
     number: count("number").notNull(),
     workingOrderId: id("working_order_id").notNull(),

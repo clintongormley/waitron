@@ -1984,7 +1984,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-  landed; it leaves open A1232. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
+  landed; it leaves open A1232–A1234. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
   courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
   footer has totals and Pay, no Hold. This bill's unsent dishes make Pay quiet but tappable,

@@ -3082,7 +3082,7 @@ export class TillApp extends LitElement {
   /** A name the server refused for the party, and why, which the table screen shows beside its field. */
   @state() private nameRefusal: { name: string; message: string } | null = null;
   @state() private billNameRefusal: { billId: string; name: string; message: string } | null = null;
-  @state() private otherDraftsRevealed = 0;
+  @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
@@ -15481,7 +15481,7 @@ export class TillApp extends LitElement {
         return;
       }
       await this.#refreshBillDraft();
-      if (live() && refused?.code === "draft.taken_over") this.otherDraftsRevealed += 1;
+      if (live() && refused?.code === "draft.taken_over") this.revealOtherDrafts += 1;
       return;
     }
     if (live()) await this.#loadPartyBills();
@@ -18727,7 +18727,7 @@ export class TillApp extends LitElement {
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
-      .revealOtherDrafts=${this.otherDraftsRevealed}
+      .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
       .busy=${this.submitting || this.invoiceRecipientReading}
@@ -18863,7 +18863,7 @@ export class TillApp extends LitElement {
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}
-          .revealOtherDrafts=${this.otherDraftsRevealed}
+          .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
           .busy=${this.submitting || this.invoiceRecipientReading}

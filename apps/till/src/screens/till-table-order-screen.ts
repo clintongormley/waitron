@@ -1409,8 +1409,8 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
-  /** Moved on by the app when a refusal is lifted by taking over another person's order: on a
-   * narrow screen Review opens, and the Take over button is scrolled into view. */
+  /** Moved on by the app each time it refuses something that only taking over another person's
+   * order allows: on a narrow screen Review opens, and the Take over button is scrolled into view. */
   @property({ attribute: false }) revealOtherDrafts = 0;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
@@ -3232,7 +3232,6 @@ export class TillTableOrderScreen extends LitElement {
       }`;
   }
 
-  /** Focus follows the view: the control pressed is hidden by what it opens. */
   async #revealTakeOver(): Promise<void> {
     if (!this.wide && !this.reviewing) await this.#openReview();
     await this.updateComplete;
@@ -3241,6 +3240,7 @@ export class TillTableOrderScreen extends LitElement {
       ?.scrollIntoView({ block: "nearest" });
   }
 
+  /** Focus follows the view: the control pressed is hidden by what it opens. */
   async #openReview(): Promise<void> {
     const scroller = this.#scroller();
     this.#browsingScroll = { scroller, top: scroller.scrollTop };

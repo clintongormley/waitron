@@ -8594,7 +8594,10 @@ export interface TableParty {
   billCount: number;
   /** Every table the party sits at, in the order they joined it. */
   tableIds: string[];
-  /** Each open draft on the party holding a line, oldest first. */
+  /**
+   * Each open draft on the party holding a line, in its bill's number order; a bill with no number
+   * comes last.
+   */
   unsentDrafts: UnsentDraft[];
   /**
    * The held group waiting to be released and when it is due; null with no held group, with

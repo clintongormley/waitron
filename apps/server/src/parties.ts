@@ -697,7 +697,8 @@ export async function readBillsOfParties(
     const abandoned = row.status === "abandoned";
     if (!abandoned && identity?.number == null) {
       // A fault in Waitron: the paths that put a bill on a table number it. The bill is shown
-      // unnumbered and the rest of the floor carries on (owner, 2026-10-30, A803 slice 2 Q5).
+      // unnumbered and the rest of the floor carries on (owner, 2026-10-30; decision in
+      // docs/backlog/till.md).
       log?.("error", "bill.number_missing", {
         billId: row.workingOrderId,
         partyId: row.partyId!,

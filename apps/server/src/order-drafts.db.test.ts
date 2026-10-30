@@ -530,7 +530,7 @@ describe("floor bill/editor pairs", () => {
     expect((await pairsAt(v, tableId)).map((entry) => entry.ownerId)).toEqual([SAM]);
   });
 
-  it("numbers the bills in their shown order even when their drafts were saved in reverse", async () => {
+  it("gives each unsent order its bill's stored number, in number order, even when the drafts were saved in reverse", async () => {
     const v = await setupVenue();
     const { partyId, tableId } = await seated(v);
     const second = await saveOnSeparateBill(v, partyId, SAM, null, 0, [item(v, "fish")]);
