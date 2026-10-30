@@ -523,6 +523,39 @@ describe("making a pack", () => {
     expect(revoke).toHaveBeenCalledWith(created[1]);
   });
 
+  it.each([
+    [
+      "system.manage is taken away",
+      (el: RecoveryPackCard): void => {
+        el.canManage = false;
+      },
+    ],
+    [
+      "the screen hands it another api",
+      (el: RecoveryPackCard): void => {
+        el.api = stubApi() as unknown as DashboardApi;
+      },
+    ],
+  ] as const)("drops the made pack's links and revokes them when %s", async (_what, change) => {
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const el = await mount(stubApi());
+    dialogOf(el).dispatchEvent(
+      new CustomEvent("recovery-pack-made", {
+        detail: { pdf: pdf(), number: 4, key: "unchanged", received: true },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    await settle(el);
+    const href = el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")!.href;
+    change(el);
+    await settle(el);
+    expect(revoke).toHaveBeenCalledWith(href);
+    el.canManage = true;
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("[data-test=download-pack]")).toBeNull();
+  });
+
   it("re-reads the status when the dialog closes after Cancel, though the make's answer is dropped", async () => {
     const api = stubApi(STATES.none);
     const el = await mount(api);

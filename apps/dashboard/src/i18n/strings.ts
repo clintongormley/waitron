@@ -1785,20 +1785,6 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
-  "recovery_document.title": "Recovery PDF",
-  "recovery_document.intro": "Create a new recovery key and its PDF.",
-  "recovery_document.create": "Create recovery PDF",
-  "recovery_document.keep":
-    "Keep this PDF outside the server. Keep older sheets for older backups.",
-  "recovery_document.download": "Download PDF",
-  "recovery_document.print": "Open to print",
-  "recovery_document.clear": "Clear PDF",
-  "recovery_document.confirm_title": "Replace the recovery key?",
-  "recovery_document.warning":
-    "New backups will use the new key. Older backups still need their matching old key.",
-  "recovery_document.failed": "The recovery PDF could not be created. Try again.",
-  "recovery_document.cancel": "Cancel",
-  "recovery_document.replace": "Replace key",
   "node_pack.create": "Create pack",
   "node_pack.key_error": "The node recovery key is not valid.",
   "node_pack.title": "Node recovery pack",
@@ -2005,30 +1991,6 @@ export const en = {
   "backup.turn_off.explain":
     "Scheduled backups stop. The saved destination and recovery key are kept, and nothing already stored is deleted.",
   "backup.turn_off.cancel": "Cancel",
-  "backup.pack.title": "Archive recovery pack",
-  "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
-  "backup.pack.show": "Show archive recovery pack",
-  "backup.pack.warning":
-    "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
-  "backup.pack.copy": "Copy",
-  "backup.pack.download": "Download pack file",
-  "backup.pack.file_heading": "Waitron archive recovery pack",
-  "backup.pack.file_secret":
-    "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-  "backup.pack.file_keep_previous":
-    "Keep the previous pack while you still want to restore archives made before it was replaced.",
-  "backup.pack.file_store":
-    "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
-  "backup.pack.file_restore":
-    'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
-  "backup.pack.key_missing":
-    "This box holds no recovery key, so there is no archive recovery pack.",
-  "backup.pack.key_too_short":
-    "The recovery key this box holds is too short to make a recovery pack. Use “Change the recovery key” on this page: the new key replaces the short one.",
-  "backup.pack.key_too_short_off":
-    "The recovery key this box holds is too short to make a recovery pack. Use “Turn on backups” on this page: the new key it saves replaces the short one.",
-  "backup.pack.key_too_short_managed":
-    "The recovery key this box holds is too short to make a recovery pack. This box's backup settings come from its environment, so a longer key has to be set there.",
   "backup.rotate.title": "Change the recovery key",
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
@@ -5542,20 +5504,6 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
-  "recovery_document.title": "PDF de recuperación",
-  "recovery_document.intro": "Crea una nueva clave de recuperación y su PDF.",
-  "recovery_document.create": "Crear PDF de recuperación",
-  "recovery_document.keep":
-    "Guarda este PDF fuera del servidor. Conserva las hojas anteriores para las copias antiguas.",
-  "recovery_document.download": "Descargar PDF",
-  "recovery_document.print": "Abrir para imprimir",
-  "recovery_document.clear": "Borrar PDF",
-  "recovery_document.confirm_title": "¿Cambiar la clave de recuperación?",
-  "recovery_document.warning":
-    "Las nuevas copias usarán la nueva clave. Las copias antiguas siguen necesitando su clave anterior.",
-  "recovery_document.failed": "No se ha podido crear el PDF de recuperación. Inténtalo de nuevo.",
-  "recovery_document.cancel": "Cancelar",
-  "recovery_document.replace": "Cambiar clave",
   "node_pack.create": "Crear kit",
   "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",
@@ -5771,31 +5719,6 @@ export const es: Record<StringKey, string> = {
   "backup.turn_off.explain":
     "Las copias programadas se detienen. Se conservan el destino guardado y la clave de recuperación, y no se borra nada de lo ya guardado.",
   "backup.turn_off.cancel": "Cancelar",
-  "backup.pack.title": "Paquete de recuperación de las copias",
-  "backup.pack.explanation":
-    "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
-  "backup.pack.show": "Mostrar el paquete de recuperación de las copias",
-  "backup.pack.warning":
-    "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
-  "backup.pack.copy": "Copiar",
-  "backup.pack.download": "Descargar el archivo del paquete",
-  "backup.pack.file_heading": "Paquete de recuperación de las copias de Waitron",
-  "backup.pack.file_secret":
-    "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
-  "backup.pack.file_keep_previous":
-    "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
-  "backup.pack.file_store":
-    "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
-  "backup.pack.file_restore":
-    "Para restaurar en una caja nueva una copia archivada, sigue «A restore takes one of three sources» en deploy/README.md.",
-  "backup.pack.key_missing":
-    "Esta caja no tiene clave de recuperación, así que no hay paquete de recuperación de las copias.",
-  "backup.pack.key_too_short":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Cambiar la clave de recuperación» en esta página: la clave nueva sustituye a la corta.",
-  "backup.pack.key_too_short_off":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Activar las copias» en esta página: la clave nueva que guarda sustituye a la corta.",
-  "backup.pack.key_too_short_managed":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Los ajustes de copia de esta caja vienen de su entorno, así que hay que poner allí una clave más larga.",
   "backup.rotate.title": "Cambiar la clave de recuperación",
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",

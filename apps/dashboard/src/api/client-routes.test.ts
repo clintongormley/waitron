@@ -714,7 +714,7 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/api/backup/disable", "POST", undefined]]);
   });
 
-  it("drives the bucket copy's settings, test and switch-off routes, and the archive pack route", async () => {
+  it("drives the bucket copy's settings, test and switch-off routes", async () => {
     const view = { isPrimary: true, configured: false, bucket: null, status: { state: "off" } };
     const bucket = {
       endpoint: "",
@@ -724,36 +724,25 @@ describe("DashboardApi routes", () => {
       accessKeyId: "AKIAEXAMPLE",
       secretAccessKey: "not-a-real-secret",
     };
-    const pack = {
-      pack: "WAITRON-ARCHIVE-PACK-1:abc",
-      keyFingerprint: "ab12cd34",
-      keyRotatedAt: "2026-10-01T10:00:00.000Z",
-      revision: "rev-1",
-    };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(view))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse(view))
-      .mockResolvedValueOnce(jsonResponse(view))
-      .mockResolvedValueOnce(jsonResponse(pack));
+      .mockResolvedValueOnce(jsonResponse(view));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getStreamSettings()).resolves.toEqual(view);
     await expect(api.testStreamBucket(bucket)).resolves.toEqual({ ok: true });
     await expect(api.saveStreamSettings(bucket)).resolves.toEqual(view);
     await expect(api.turnOffStream()).resolves.toEqual(view);
-    await expect(api.getArchiveRecoveryPack()).resolves.toEqual(pack);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/stream", "GET", undefined],
       ["/api/backup/stream/test", "POST", bucket],
       ["/api/backup/stream", "PUT", bucket],
       ["/api/backup/stream", "DELETE", undefined],
-      ["/api/backup/archive-recovery-pack", "GET", undefined],
     ]);
-    const [, packInit] = fetchImpl.mock.calls.at(-1) as [string, RequestInit];
-    expect(new Headers(packInit.headers).get("x-waitron-live")).toBeNull();
   });
 
   it("lists card providers and readers, disconnects a provider, and reads and sets a device's reader", async () => {

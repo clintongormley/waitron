@@ -323,6 +323,23 @@ describe("a made pack", () => {
     await expect.poll(() => dialog.open).toBe(false);
   });
 
+  it("sends one make at a time: a second press while it is out sends nothing", async () => {
+    const api = stubApi();
+    const answer = deferred<MadeRecoveryPack>();
+    api.makeRecoveryPack.mockReturnValue(answer.promise);
+    const { el, signIn } = await open({ api });
+    const seen = made(el);
+    type(signIn, "current-password", "hunter2-hunter2");
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
+    button(el, "make-pack")!.click();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
+    answer.resolve({ pdf: pdf(), number: 4, key: "unchanged" });
+    await expect.poll(() => seen.length).toBe(1);
+    expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
+  });
+
   it("asks for the pack in Spanish when the screen is in Spanish", async () => {
     setLocale("es-ES");
     const { el, api, signIn } = await open();
@@ -645,6 +662,24 @@ describe("a refusal", () => {
     expect(el.shadowRoot!.querySelector("[data-test=lost]")).toBeNull();
     expect(api.getRecoveryPackStatus).not.toHaveBeenCalled();
     expect(button(el, "make-pack")!.disabled).toBe(false);
+  });
+
+  it("forgets a refusal on Cancel, so a reopened dialog shows none and sends nothing", async () => {
+    const api = stubApi();
+    api.makeRecoveryPack.mockRejectedValue({ code: "password.throttled", status: 429 });
+    const { el, dialog, signIn } = await open({ api });
+    type(signIn, "current-password", "hunter2-hunter2");
+    button(el, "make-pack")!.click();
+    await expect.poll(() => bottom(el)).toBe(codeMessage("password.throttled"));
+    const closed = dialogClosed(dialog);
+    button(el, "cancel-pack")!.click();
+    await closed;
+    el.show(status());
+    await expect.poll(() => dialog.open).toBe(true);
+    await signInOf(el);
+    await el.updateComplete;
+    expect(bottom(el)).toBe("");
+    expect(api.makeRecoveryPack).toHaveBeenCalledOnce();
   });
 
   it("puts a wrong password under its field, and keeps Make pack working", async () => {

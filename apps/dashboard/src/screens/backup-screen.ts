@@ -26,7 +26,6 @@ import "./stream-settings-panel.js";
 import "./recovery-pack-card.js";
 import "../widgets/backup-settings-evidence.js";
 import type {
-  ArchiveRecoveryPackAnswer,
   BackupApplyBody,
   BackupDestinationStatus,
   BackupDestinationView,
@@ -266,12 +265,6 @@ export class BackupScreen extends LitElement {
         border-radius: var(--wt-radius-md);
         color: var(--wt-color-text);
       }
-      .pack {
-        margin: 0;
-        white-space: pre-wrap;
-        word-break: normal;
-        overflow-wrap: break-word;
-      }
       .key-actions {
         display: flex;
         gap: var(--wt-space-2);
@@ -378,14 +371,7 @@ export class BackupScreen extends LitElement {
   @state() private exportingConfiguration = false;
 
   @state() private oldKey: string | null = null;
-  /** Held in this element alone, never in storage. */
-  @state() private pack: ArchiveRecoveryPackAnswer | null = null;
-  @state() private packUrl: string | null = null;
-  @state() private packFailure: string | null = null;
-  @state() private packLoading = false;
   @state() private turnOffArmed = false;
-  /** Every pack fetch takes the next number; only the latest, unchanged since, may show its answer. */
-  #packRequest = 0;
 
   @state() private editSettings = false;
   /** A Turn off takes the next number, so an editor opening begun before it never opens. */
@@ -561,7 +547,6 @@ export class BackupScreen extends LitElement {
     this.#configureUsesHeldKey = false;
     this.mintedKey = null;
     this.oldKey = null;
-    this.#dropPack();
     this.#watcherAsked = false;
     this.#minting = null;
     for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
@@ -591,7 +576,6 @@ export class BackupScreen extends LitElement {
             this.#configureUsesHeldKey = this.#reusesHeldKey;
             this.configureAfterApply = true;
           }
-          this.#dropStalePack(value);
           this.status = value;
           if (!value.enabled) this.turnOffArmed = false;
           await Promise.all([this.#openStoredOff(false), this.#mintIfNone()]);
@@ -871,7 +855,6 @@ export class BackupScreen extends LitElement {
       this.errorKey = "backup.rotation_metadata_failed";
       const params = (error as { params?: { reloadErrorCode?: unknown } }).params;
       reloadErrorCode = typeof params?.reloadErrorCode === "string" ? params.reloadErrorCode : null;
-      this.#dropPack();
       this.#packSettingsChanged();
     }
     try {
@@ -968,7 +951,6 @@ export class BackupScreen extends LitElement {
   #takeWriteAnswer(status: BackupStatusView): void {
     this.#writeAnswers++;
     this.#packSettingsChanged();
-    this.#dropStalePack(status);
     this.status = status;
   }
 
@@ -977,83 +959,9 @@ export class BackupScreen extends LitElement {
     this.renderRoot.querySelector("dashboard-recovery-pack-card")?.reload();
   }
 
-  /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
-   * listed: a read naming another key or record, or no bucket, takes it away. */
-  #dropStalePack(value: BackupStatusView): void {
-    const pack = this.pack;
-    const shown = this.status;
-    if (pack === null && !this.packLoading && this.packFailure === null) return;
-    const changed =
-      !value.destinations.some((d) => d.kind === "s3") ||
-      (pack === null
-        ? shown !== undefined && !this.#sameKeyAndRecord(shown, value)
-        : value.keyFingerprint !== pack.keyFingerprint ||
-          value.keyRotatedAt !== pack.keyRotatedAt ||
-          (pack.revision ?? null) !== value.revision);
-    if (!changed) return;
-    this.#dropPack();
-  }
-
-  #sameKeyAndRecord(a: BackupStatusView, b: BackupStatusView): boolean {
-    return (
-      a.keyFingerprint === b.keyFingerprint &&
-      a.keyRotatedAt === b.keyRotatedAt &&
-      a.revision === b.revision
-    );
-  }
-
-  /** Also discards the answer of any pack fetch still running, and a shown refusal. */
-  #dropPack(): void {
-    this.#packRequest++;
-    this.packLoading = false;
-    this.pack = null;
-    this.packFailure = null;
-    if (this.packUrl !== null) URL.revokeObjectURL(this.packUrl);
-    this.packUrl = null;
-  }
-
   /** Takes back an armed turn-off, except while the turn-off's own request is out. */
   #disarmTurnOff(): void {
     if (!this.submitting) this.turnOffArmed = false;
-  }
-
-  async #showPack(): Promise<void> {
-    if (this.packLoading) return;
-    this.#disarmTurnOff();
-    this.#dropPack();
-    this.packLoading = true;
-    const request = this.#packRequest;
-    try {
-      const answer = await this.api.getArchiveRecoveryPack();
-      if (request !== this.#packRequest) return;
-      this.pack = answer;
-      const file = [
-        t("backup.pack.file_heading"),
-        t("backup.pack.file_secret"),
-        t("backup.pack.file_keep_previous"),
-        t("backup.pack.file_store"),
-        t("backup.pack.file_restore"),
-        "",
-        answer.pack,
-        "",
-      ].join("\n");
-      this.packUrl = URL.createObjectURL(new Blob([file], { type: "text/plain" }));
-    } catch (error) {
-      if (request === this.#packRequest) this.packFailure = codeOf(error);
-    } finally {
-      if (request === this.#packRequest) this.packLoading = false;
-    }
-  }
-
-  #packFailureText(code: string): string {
-    const s = this.status;
-    if (code === "backup.recovery_key_missing") return t("backup.pack.key_missing");
-    if (code === "backup.recovery_key_too_short" && s !== undefined) {
-      if (s.managedByEnvironment) return t("backup.pack.key_too_short_managed");
-      if (s.isPrimary)
-        return t(s.enabled ? "backup.pack.key_too_short" : "backup.pack.key_too_short_off");
-    }
-    return codeMessage(code);
   }
 
   async #showOldKey(): Promise<void> {
@@ -1434,7 +1342,6 @@ export class BackupScreen extends LitElement {
                 ${this.#renderTurnOff()}`
             : nothing
         }
-        ${s.destinations.some((d) => d.kind === "s3") ? this.#renderPack() : nothing}
         ${
           writable && s.enabled && !this.editSettings && !this.configureAfterApply
             ? this.#renderRotate()
@@ -2006,53 +1913,6 @@ export class BackupScreen extends LitElement {
           this.retentionRefused = false;
         }}
       ></wt-number-stepper>
-    `;
-  }
-
-  #renderPack(): TemplateResult {
-    const pack = this.pack;
-    return html`
-      <h2>${t("backup.pack.title")}</h2>
-      <p class="hint">${t("backup.pack.explanation")}</p>
-      <div class="key-actions">
-        <wt-button
-          variant="secondary"
-          data-test="show-pack"
-          ?disabled=${this.packLoading}
-          @click=${() => void this.#showPack()}
-          >${t("backup.pack.show")}</wt-button
-        >
-      </div>
-      ${
-        this.packFailure === null
-          ? nothing
-          : html`<p class="error" role="alert" data-test="pack-failure">
-              ${this.#packFailureText(this.packFailure)}
-            </p>`
-      }
-      ${
-        pack === null || this.packUrl === null
-          ? nothing
-          : html`<p class="warning" role="note" data-test="pack-warning">
-                ${t("backup.pack.warning")}
-              </p>
-              <pre class="key pack" data-test="pack">${pack.pack}</pre>
-              <div class="key-actions">
-                <wt-button
-                  variant="secondary"
-                  data-test="copy-pack"
-                  @click=${() => this.#copy(pack.pack)}
-                  >${t("backup.pack.copy")}</wt-button
-                >
-                <a
-                  class="download"
-                  data-test="download-pack"
-                  download=${`waitron-archive-recovery-pack-${pack.keyFingerprint}.txt`}
-                  href=${this.packUrl}
-                  >${t("backup.pack.download")}</a
-                >
-              </div>`
-      }
     `;
   }
 

@@ -2039,14 +2039,6 @@ export interface BackupSettingsEvidence {
   recoveryKey: { held: boolean; tooShort: boolean; fingerprint?: string };
 }
 
-/** `GET /api/backup/archive-recovery-pack`. `pack` is the pack's code line alone, and secret. */
-export interface ArchiveRecoveryPackAnswer {
-  pack: string;
-  keyFingerprint: string;
-  keyRotatedAt?: string;
-  revision?: string;
-}
-
 /** The `signIn` field of `POST /api/backup/recovery-pack` — LOCAL copy of what
  * `apps/server/src/fresh-sign-in.ts` reads. */
 export type FreshSignInBody = (
@@ -4623,18 +4615,6 @@ export class DashboardApi {
     });
   }
 
-  async reissueRecoveryDocument(locale: "en" | "es"): Promise<Blob> {
-    const pdf = await this.#request<Blob>(
-      "/api/box/recovery-document/reissue",
-      "POST",
-      { locale },
-      { as: "blob" },
-    );
-    if (pdf.type !== "application/pdf" || pdf.size === 0 || pdf.size > 8 * 1024 * 1024)
-      throw { code: "recovery.pack_invalid" };
-    return pdf;
-  }
-
   /** Refuses, as `recovery.pack_invalid`, an answer that is not a whole PDF with its pack headers. */
   async makeRecoveryPack(body: {
     locale: "en" | "es";
@@ -4711,10 +4691,6 @@ export class DashboardApi {
   /** What is already in the bucket stays there. */
   turnOffStream(): Promise<StreamSettingsView> {
     return this.#request<StreamSettingsView>("/api/backup/stream", "DELETE");
-  }
-
-  getArchiveRecoveryPack(): Promise<ArchiveRecoveryPackAnswer> {
-    return this.#request<ArchiveRecoveryPackAnswer>("/api/backup/archive-recovery-pack", "GET");
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────
