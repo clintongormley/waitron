@@ -91,7 +91,13 @@ const at = (instant: Date) => {
 let nifCounter = 0;
 const nextNif = () => nifWithControlLetter(71_000_000 + ++nifCounter);
 
-const MENUS = ["Desayunos", "Almuerzo", "Bebidas", "Café", "Deli para llevar"] as const;
+const MENUS = [
+  "Breakfast menu",
+  "Midday menu",
+  "Drinks menu",
+  "Coffee menu",
+  "Deli takeaway",
+] as const;
 type MenuName = (typeof MENUS)[number];
 
 interface Venue {
@@ -107,7 +113,7 @@ interface Venue {
   deliCounterZone: string;
   menus: Record<MenuName, string>;
   versions: Record<MenuName, string>;
-  toast: { desayunos: string; almuerzo: string };
+  toast: { breakfast: string; midday: string };
   sandwich: string;
 }
 
@@ -130,10 +136,10 @@ async function setupVenue(options: {
       const deli = await createBareDepartment(tx, cfg, "Deli", MONDAY_10_00);
       const zone = async (name: string, departmentId: string) =>
         (await createServiceZone(tx, cfg, { name, departmentId })).id;
-      const barZone = await zone("Barra", restaurant);
-      const diningZone = await zone("Sala", restaurant);
-      const terraceZone = await zone("Terraza", restaurant);
-      const deliCounterZone = await zone("Mostrador deli", deli);
+      const barZone = await zone("Bar", restaurant);
+      const diningZone = await zone("Dining room", restaurant);
+      const terraceZone = await zone("Terrace", restaurant);
+      const deliCounterZone = await zone("Deli counter", deli);
       const menus = {} as Record<MenuName, string>;
       for (const name of MENUS) menus[name] = (await createCatalogue(tx, { name })).id;
       const product = (catalogueId: string, name: string, unitPrice: string) =>
@@ -145,22 +151,22 @@ async function setupVenue(options: {
           unitPrice,
           vatClass: "general",
         });
-      const toast = await product(menus.Desayunos, "Tostada", "3.00");
+      const toast = await product(menus["Breakfast menu"], "Toast", "3.00");
       const offer = async (menu: MenuName, productId: string, grossPrice?: string) =>
         (await addProductToMenu(tx, { menuId: menus[menu], productId, grossPrice })).id;
       const toastOffers = {
-        desayunos: await offer("Desayunos", toast.id, "2.50"),
-        almuerzo: await offer("Almuerzo", toast.id, "4.00"),
+        breakfast: await offer("Breakfast menu", toast.id, "2.50"),
+        midday: await offer("Midday menu", toast.id, "4.00"),
       };
-      await offer("Café", (await product(menus["Café"], "Cortado", "1.60")).id);
-      await offer("Bebidas", (await product(menus.Bebidas, "Agua", "2.00")).id);
+      await offer("Coffee menu", (await product(menus["Coffee menu"], "Flat white", "1.60")).id);
+      await offer("Drinks menu", (await product(menus["Drinks menu"], "Water", "2.00")).id);
       const sandwich = await offer(
-        "Deli para llevar",
-        (await product(menus["Deli para llevar"], "Bocadillo", "6.50")).id,
+        "Deli takeaway",
+        (await product(menus["Deli takeaway"], "Sandwich", "6.50")).id,
       );
       const versions = {} as Record<MenuName, string>;
       for (const name of MENUS) versions[name] = await publishWorkingMenu(tx, menus[name]);
-      await offerMenuThroughZone(tx, cfg, deliCounterZone, menus["Deli para llevar"], {
+      await offerMenuThroughZone(tx, cfg, deliCounterZone, menus["Deli takeaway"], {
         makeDefault: true,
       });
       if (options.timetable) {
@@ -169,11 +175,11 @@ async function setupVenue(options: {
             await saveMenuPeriod(tx, cfg, restaurant, {
               name,
               menuId: menus[menu],
-              staffMenuIds: [menus.Bebidas, menus["Café"]],
+              staffMenuIds: [menus["Drinks menu"], menus["Coffee menu"]],
             })
           ).id;
-        const morningPeriodId = await period("Mañanas", "Desayunos");
-        const middayPeriodId = await period("Mediodía", "Almuerzo");
+        const morningPeriodId = await period("Mornings", "Breakfast menu");
+        const middayPeriodId = await period("Middays", "Midday menu");
         await replaceMenuWeek(
           tx,
           cfg,
@@ -189,8 +195,8 @@ async function setupVenue(options: {
           0,
         );
       } else {
-        await offerMenuThroughZone(tx, cfg, barZone, menus.Bebidas, { makeDefault: true });
-        for (const menu of [menus.Desayunos, menus.Almuerzo, menus["Café"]])
+        await offerMenuThroughZone(tx, cfg, barZone, menus["Drinks menu"], { makeDefault: true });
+        for (const menu of [menus["Breakfast menu"], menus["Midday menu"], menus["Coffee menu"]])
           await offerMenuThroughZone(tx, cfg, barZone, menu);
       }
       return {
@@ -256,17 +262,17 @@ async function replacePeriodMembership(
 }
 
 describe("ordering uses period membership while browsing follows the timetable", () => {
-  it("keeps a stored Desayunos line at its published price after its period has ended", async () => {
+  it("keeps a stored Breakfast menu line at its published price after its period has ended", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);
-    const parked = await park(v, v.diningZone, v.toast.desayunos, v.versions.Desayunos);
+    const parked = await park(v, v.diningZone, v.toast.breakfast, v.versions["Breakfast menu"]);
     expect(parked.status).toBe(200);
     at(MONDAY_13_00);
     const offers = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
-    expect(offers.body).toMatchObject({ defaultMenuId: v.menus.Almuerzo });
+    expect(offers.body).toMatchObject({ defaultMenuId: v.menus["Midday menu"] });
     expect((await editMealLine(v, parked.id, { note: "No salt" })).status).toBe(200);
     const lines = await withTransaction(suite.db, (tx) => linesOf(tx, parked.id));
-    expect(lines).toMatchObject([{ unitPriceGross: 250, menuName: "Desayunos" }]);
+    expect(lines).toMatchObject([{ unitPriceGross: 250, menuName: "Breakfast menu" }]);
   });
 
   it("sells another department's menu in its own zones once it is in the department's periods, and only then", async () => {
@@ -274,11 +280,11 @@ describe("ordering uses period membership while browsing follows the timetable",
     at(MONDAY_13_00);
     await withTransaction(suite.db, (tx) =>
       replacePeriodMembership(tx, v.cfg, v.restaurant, [
-        v.menus.Desayunos,
-        v.menus.Almuerzo,
-        v.menus.Bebidas,
-        v.menus["Café"],
-        v.menus["Deli para llevar"],
+        v.menus["Breakfast menu"],
+        v.menus["Midday menu"],
+        v.menus["Drinks menu"],
+        v.menus["Coffee menu"],
+        v.menus["Deli takeaway"],
       ]),
     );
     const parked = await park(v, v.barZone, v.sandwich);
@@ -292,7 +298,7 @@ describe("ordering uses period membership while browsing follows the timetable",
     }));
     expect(recorded.order).toEqual([{ departmentId: v.restaurant }]);
     expect(recorded.lines).toMatchObject([
-      { departmentId: v.restaurant, menuName: "Deli para llevar" },
+      { departmentId: v.restaurant, menuName: "Deli takeaway" },
     ]);
 
     expect(await sendAsTill(v, "GET", `/api/service-zones/${v.deliCounterZone}/offers`)).toEqual({
@@ -302,10 +308,10 @@ describe("ordering uses period membership while browsing follows the timetable",
 
     await withTransaction(suite.db, (tx) =>
       replacePeriodMembership(tx, v.cfg, v.restaurant, [
-        v.menus.Desayunos,
-        v.menus.Almuerzo,
-        v.menus.Bebidas,
-        v.menus["Café"],
+        v.menus["Breakfast menu"],
+        v.menus["Midday menu"],
+        v.menus["Drinks menu"],
+        v.menus["Coffee menu"],
       ]),
     );
     const refused = await park(v, v.barZone, v.sandwich);
@@ -325,19 +331,19 @@ describe("ordering uses period membership while browsing follows the timetable",
       .body as {
       menus: { id: string; versionId: string }[];
     };
-    const desayunos = offers.menus.find((menu) => menu.id === v.menus.Desayunos)!.versionId;
-    const held = await park(v, v.diningZone, v.toast.desayunos, desayunos);
+    const breakfast = offers.menus.find((menu) => menu.id === v.menus["Breakfast menu"])!.versionId;
+    const held = await park(v, v.diningZone, v.toast.breakfast, breakfast);
     expect(held.status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     expect(before).toMatchObject([
-      { unitPriceGross: 250, menuName: "Desayunos", menuVersionId: desayunos },
+      { unitPriceGross: 250, menuName: "Breakfast menu", menuVersionId: breakfast },
     ]);
 
     await withTransaction(suite.db, (tx) =>
       replacePeriodMembership(tx, v.cfg, v.restaurant, [
-        v.menus.Almuerzo,
-        v.menus.Bebidas,
-        v.menus["Café"],
+        v.menus["Midday menu"],
+        v.menus["Drinks menu"],
+        v.menus["Coffee menu"],
       ]),
     );
     const order = (await sendAsTill(v, "GET", `/api/working-orders/${held.id}`)).body as {
@@ -352,7 +358,7 @@ describe("ordering uses period membership while browsing follows the timetable",
           menuItemId,
           quantity,
         })),
-        { menuItemId: v.toast.desayunos, quantity: "1", menuVersionId: desayunos },
+        { menuItemId: v.toast.breakfast, quantity: "1", menuVersionId: breakfast },
       ],
     });
     expect(added).toEqual({
@@ -360,7 +366,7 @@ describe("ordering uses period membership while browsing follows the timetable",
       body: {
         error: {
           code: "menu.version_changed",
-          params: { menus: [{ menuId: v.menus.Desayunos, liveVersionId: null }] },
+          params: { menus: [{ menuId: v.menus["Breakfast menu"], liveVersionId: null }] },
         },
       },
     });
@@ -388,8 +394,8 @@ async function mealVenue(weekdays: readonly number[] = [1], simulatorCard = fals
       .select()
       .from(menuPeriods)
       .where(eq(menuPeriods.departmentId, v.restaurant));
-    const lunch = periods.find((period) => period.menuId === v.menus.Almuerzo)!;
-    const dinner = periods.find((period) => period.menuId === v.menus.Desayunos)!;
+    const lunch = periods.find((period) => period.menuId === v.menus["Midday menu"])!;
+    const dinner = periods.find((period) => period.menuId === v.menus["Breakfast menu"])!;
     await updateMenuPeriod(tx, v.cfg, lunch.id, { name: "Lunch" });
     await updateMenuPeriod(tx, v.cfg, dinner.id, { name: "Dinner" });
     await replaceMenuWeek(
@@ -496,7 +502,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("after Lunch ends, a fresh Lunch line and a stored increase are both refused and nothing changes", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
     at(mondayAt("14:05"));
@@ -505,17 +511,19 @@ describe("service periods gate only added dishes and added stored quantities", (
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+          params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
         },
       },
     };
-    expect(await park(v, v.diningZone, v.toast.almuerzo)).toMatchObject(
-      periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+    expect(await park(v, v.diningZone, v.toast.midday)).toMatchObject(
+      periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
     );
-    const otherRoot = await park(v, v.diningZone, v.toast.desayunos);
+    const otherRoot = await park(v, v.diningZone, v.toast.breakfast);
     expect(otherRoot).toMatchObject({
       status: 400,
-      body: { error: { code: "menu_period.not_running", params: { menuId: v.menus.Desayunos } } },
+      body: {
+        error: { code: "menu_period.not_running", params: { menuId: v.menus["Breakfast menu"] } },
+      },
     });
     expect(await editMealLine(v, held.id, { quantity: "2" })).toEqual(lunchEnded);
     expect(await sendAsTill(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
@@ -541,9 +549,9 @@ describe("service periods gate only added dishes and added stored quantities", (
       lines: [
         {
           clientLineId: randomUUID(),
-          menuItemId: v.toast.almuerzo,
+          menuItemId: v.toast.midday,
           quantity: "1",
-          menuVersionId: v.versions.Almuerzo,
+          menuVersionId: v.versions["Midday menu"],
         },
       ],
     });
@@ -575,7 +583,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     const { tabId, submitUrl, submit } = await savedTableDraft(v);
     at(mondayAt("14:05"));
     const submitted = await sendAsTill(v, "POST", submitUrl, submit(randomUUID()));
-    expect(submitted).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+    expect(submitted).toMatchObject(periodEnded(v, "Midday menu", "Lunch", v.toast.midday));
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, tabId))).toEqual([]);
   });
 
@@ -586,7 +594,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     at(mondayAt("14:05"));
     const submitted = await sendAsTill(v, "POST", submitUrl, {
       ...submit(randomUUID()),
-      lateSend: { menuIds: [v.menus.Almuerzo] },
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
     });
     expect(submitted.status).toBe(200);
     expect((submitted.body as { groups: { state: string }[] }).groups).toMatchObject([
@@ -605,7 +613,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     const body = submit(randomUUID());
     const submitted = await sendAsTill(v, "POST", submitUrl, {
       ...body,
-      lateSend: { menuIds: [v.menus.Almuerzo] },
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
     });
     expect(submitted.status).toBe(200);
     expect(await sendAsTill(v, "POST", submitUrl, body)).toEqual(submitted);
@@ -626,8 +634,8 @@ describe("service periods gate only added dishes and added stored quantities", (
       submissionId: randomUUID(),
       expectedPartyRevision: party!.revision,
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      groups: [{ lines: [{ menuItemId: v.toast.almuerzo, quantity: "1" }], release: "hold" }],
-      lateSend: { menuIds: [v.menus.Almuerzo] },
+      groups: [{ lines: [{ menuItemId: v.toast.midday, quantity: "1" }], release: "hold" }],
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
     });
     expect(submitted.status).toBe(200);
     expect((submitted.body as { groups: { state: string }[] }).groups).toMatchObject([
@@ -652,12 +660,12 @@ describe("service periods gate only added dishes and added stored quantities", (
       submissionId: randomUUID(),
       expectedPartyRevision: party!.revision,
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
-      groups: [{ lines: [{ menuItemId: v.toast.almuerzo, quantity: "1" }], release: "hold" }],
+      groups: [{ lines: [{ menuItemId: v.toast.midday, quantity: "1" }], release: "hold" }],
     };
     const url = `/api/parties/${partyId}/groups`;
     const submitted = await sendAsTill(v, "POST", url, {
       ...body,
-      lateSend: { menuIds: [v.menus.Almuerzo] },
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
     });
     expect(submitted.status).toBe(200);
     expect(await sendAsTill(v, "POST", url, body)).toEqual(submitted);
@@ -697,8 +705,8 @@ describe("service periods gate only added dishes and added stored quantities", (
         service: { open, periodName: open ? "Lunch" : null },
         menus: expect.arrayContaining([
           expect.objectContaining({
-            menuId: v.menus.Almuerzo,
-            versionId: v.versions.Almuerzo,
+            menuId: v.menus["Midday menu"],
+            versionId: v.versions["Midday menu"],
             orderable,
             endedPeriodName,
           }),
@@ -708,7 +716,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       expect(offers.status).toBe(200);
       expect(offers.body).toMatchObject({
         menus: expect.arrayContaining([
-          expect.objectContaining({ id: v.menus.Almuerzo, orderable, endedPeriodName }),
+          expect.objectContaining({ id: v.menus["Midday menu"], orderable, endedPeriodName }),
         ]),
       });
     },
@@ -719,15 +727,15 @@ describe("service periods gate only added dishes and added stored quantities", (
     async (time) => {
       at(mondayAt(time));
       const v = await mealVenue();
-      const held = await park(v, v.diningZone, v.toast.almuerzo, v.versions.Almuerzo);
+      const held = await park(v, v.diningZone, v.toast.midday, v.versions["Midday menu"]);
       if (time === "17:00") {
-        expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+        expect(held).toMatchObject(periodEnded(v, "Midday menu", "Lunch", v.toast.midday));
         expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
         return;
       }
       expect(held.status).toBe(200);
       expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
-        { unitPriceGross: 400, menuName: "Almuerzo", menuVersionId: v.versions.Almuerzo },
+        { unitPriceGross: 400, menuName: "Midday menu", menuVersionId: v.versions["Midday menu"] },
       ]);
     },
   );
@@ -735,13 +743,13 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("refuses a Dinner line before Dinner starts and writes no order", async () => {
     at(mondayAt("13:00"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.desayunos, v.versions.Desayunos);
+    const held = await park(v, v.diningZone, v.toast.breakfast, v.versions["Breakfast menu"]);
     expect(held).toMatchObject({
       status: 400,
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+          params: { departmentId: v.restaurant, menuId: v.menus["Breakfast menu"] },
         },
       },
     });
@@ -755,10 +763,10 @@ describe("service periods gate only added dishes and added stored quantities", (
   });
 
   it.each([
-    ["2026-10-05T13:00:00+02:00", "Desayunos", "desayunos", [0, 1, 2, 3, 4, 5, 6], false],
-    ["2026-10-04T13:00:00+02:00", "Almuerzo", "almuerzo", [1, 2, 3, 4, 5, 6], false],
-    ["2026-10-05T14:00:00+02:00", "Almuerzo", "almuerzo", [1], true],
-    ["2026-10-05T17:00:00+02:00", "Almuerzo", "almuerzo", [1], true],
+    ["2026-10-05T13:00:00+02:00", "Breakfast menu", "breakfast", [0, 1, 2, 3, 4, 5, 6], false],
+    ["2026-10-04T13:00:00+02:00", "Midday menu", "midday", [1, 2, 3, 4, 5, 6], false],
+    ["2026-10-05T14:00:00+02:00", "Midday menu", "midday", [1], true],
+    ["2026-10-05T17:00:00+02:00", "Midday menu", "midday", [1], true],
   ] as const)(
     "at %s refuses %s outside its own period",
     async (instant, menu, item, weekdays, endedToday) => {
@@ -791,7 +799,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("accepts a stored Lunch quantity increase while Lunch runs, keeping its id and price", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     at(mondayAt("13:55"));
@@ -819,7 +827,7 @@ describe("service periods gate only added dishes and added stored quantities", (
     async (time) => {
       at(mondayAt("13:50"));
       const v = await mealVenue();
-      const held = await park(v, v.diningZone, v.toast.almuerzo);
+      const held = await park(v, v.diningZone, v.toast.midday);
       expect(held.status).toBe(200);
       const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
       at(mondayAt(time));
@@ -828,7 +836,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         body: {
           error: {
             code: "menu_period.not_running",
-            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+            params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
           },
         },
       });
@@ -839,7 +847,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("edits a stored Lunch note after Lunch ends, without repricing the dish", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     at(mondayAt("15:00"));
@@ -855,12 +863,12 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("refuses a new line on a business day when no period has run", async () => {
     at(new Date("2026-10-04T13:00:00+02:00"));
     const v = await mealVenue();
-    expect(await park(v, v.diningZone, v.toast.almuerzo)).toMatchObject({
+    expect(await park(v, v.diningZone, v.toast.midday)).toMatchObject({
       status: 400,
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+          params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
         },
       },
     });
@@ -877,7 +885,7 @@ describe("service periods gate only added dishes and added stored quantities", (
           await sendAsTill(v, "POST", "/api/working-orders", {
             id,
             zoneId: v.diningZone,
-            lines: [1, 2, 3].map(() => ({ menuItemId: v.toast.almuerzo, quantity: "1" })),
+            lines: [1, 2, 3].map(() => ({ menuItemId: v.toast.midday, quantity: "1" })),
           })
         ).status,
       ).toBe(200);
@@ -896,7 +904,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("refuses a future-period fresh line appended to a stored order without changing it", async () => {
     at(mondayAt("13:00"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
     const order = before.body as {
@@ -912,7 +920,7 @@ describe("service periods gate only added dishes and added stored quantities", (
             menuItemId,
             quantity,
           })),
-          { menuItemId: v.toast.desayunos, quantity: "1" },
+          { menuItemId: v.toast.breakfast, quantity: "1" },
         ],
       }),
     ).toEqual({
@@ -920,7 +928,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+          params: { departmentId: v.restaurant, menuId: v.menus["Breakfast menu"] },
         },
       },
     });
@@ -935,7 +943,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       await sendAsTill(v, "POST", "/api/sales", {
         id,
         zoneId: v.diningZone,
-        lines: [{ menuItemId: v.toast.desayunos, quantity: "1" }],
+        lines: [{ menuItemId: v.toast.breakfast, quantity: "1" }],
         tender: { method: "cash", amount: "5.00" },
       }),
     ).toEqual({
@@ -943,7 +951,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+          params: { departmentId: v.restaurant, menuId: v.menus["Breakfast menu"] },
         },
       },
     });
@@ -958,7 +966,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("keeps Lunch quantity decreases and notes editable when its timetable is cleared", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     expect((await editMealLine(v, held.id, { quantity: "2" })).status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
@@ -988,16 +996,16 @@ describe("service periods gate only added dishes and added stored quantities", (
     const v = await mealVenue();
     const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
     const offers = read.body.offers as { id: string; menuId: string }[];
-    const water = offers.find((offer) => offer.menuId === v.menus.Bebidas)!;
+    const water = offers.find((offer) => offer.menuId === v.menus["Drinks menu"])!;
     const held = await park(v, v.diningZone, water.id);
     if (time === "17:00") {
-      expect(held).toMatchObject(periodEnded(v, "Bebidas", "Lunch", water.id));
+      expect(held).toMatchObject(periodEnded(v, "Drinks menu", "Lunch", water.id));
       expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toEqual([]);
       return;
     }
     expect(held.status).toBe(200);
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
-      { menuName: "Bebidas", unitPriceGross: 200 },
+      { menuName: "Drinks menu", unitPriceGross: 200 },
     ]);
   });
 
@@ -1008,10 +1016,10 @@ describe("service periods gate only added dishes and added stored quantities", (
       .update(locations)
       .set({ timeZone: "Unreadable/Zone" })
       .where(eq(locations.id, v.cfg.locationId));
-    const held = await park(v, v.diningZone, v.toast.desayunos);
+    const held = await park(v, v.diningZone, v.toast.breakfast);
     expect(held.status).toBe(200);
     expect(await withTransaction(suite.db, (tx) => linesOf(tx, held.id))).toMatchObject([
-      { menuName: "Desayunos", unitPriceGross: 250 },
+      { menuName: "Breakfast menu", unitPriceGross: 250 },
     ]);
   });
 
@@ -1044,7 +1052,7 @@ describe("service periods gate only added dishes and added stored quantities", (
           personId: v.personId,
           draftId: null,
           revision: 0,
-          lines: [{ menuItemId: v.toast.almuerzo, quantity: "1" }],
+          lines: [{ menuItemId: v.toast.midday, quantity: "1" }],
         });
         expect(saved.status).toBe(200);
         const { draft } = saved.body as {
@@ -1072,7 +1080,7 @@ describe("service periods gate only added dishes and added stored quantities", (
             .where(eq(workingOrderLines.workingOrderId, id)),
         ).toEqual([{ sentAt: mondayAt("13:50").toISOString() }]);
       } else {
-        const held = await park(v, v.diningZone, v.toast.almuerzo);
+        const held = await park(v, v.diningZone, v.toast.midday);
         expect(held.status).toBe(200);
         id = held.id;
         await suite.db
@@ -1094,7 +1102,7 @@ describe("service periods gate only added dishes and added stored quantities", (
         body: {
           error: {
             code: "menu_period.not_running",
-            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+            params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
           },
         },
       });
@@ -1117,7 +1125,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       const seated = await sendAsTill(v, "POST", `/api/tables/${tableId}/seat`, { guestCount: 2 });
       expect(seated.status).toBe(200);
       const { partyId, tabId } = seated.body as { partyId: string; tabId: string };
-      const menuItemId = meal === "lunch" ? v.toast.almuerzo : v.toast.desayunos;
+      const menuItemId = meal === "lunch" ? v.toast.midday : v.toast.breakfast;
       const saved = await sendAsTill(v, "PUT", `/api/parties/${partyId}/drafts`, {
         billId: tabId,
         personId: v.personId,
@@ -1154,13 +1162,13 @@ describe("service periods gate only added dishes and added stored quantities", (
       );
       expect(submitted).toEqual(
         meal === "lunch"
-          ? periodEnded(v, "Almuerzo", "Lunch", menuItemId)
+          ? periodEnded(v, "Midday menu", "Lunch", menuItemId)
           : {
               status: 400,
               body: {
                 error: {
                   code: "menu_period.not_running",
-                  params: { departmentId: v.restaurant, menuId: v.menus.Desayunos },
+                  params: { departmentId: v.restaurant, menuId: v.menus["Breakfast menu"] },
                 },
               },
             },
@@ -1175,11 +1183,11 @@ describe("service periods gate only added dishes and added stored quantities", (
     const v = await mealVenue();
     const read = await sendAsTill(v, "GET", `/api/service-zones/${v.diningZone}/offers`);
     const dish = (read.body.offers as { id: string; productId: string }[]).find(
-      (offer) => offer.id === v.toast.almuerzo,
+      (offer) => offer.id === v.toast.midday,
     )!;
     const { extraId, listId } = await withTransaction(suite.db, async (tx) => {
       const extra = await createProduct(tx, {
-        catalogueId: v.menus.Almuerzo,
+        catalogueId: v.menus["Midday menu"],
         categoryId: null,
         name: "Butter",
         pricingUnit: "each",
@@ -1200,10 +1208,10 @@ describe("service periods gate only added dishes and added stored quantities", (
         SIGNED_IN_TILL_LOCALE,
       );
       await writeProductModifiers(tx, dish.productId, [{ kind: "extras", id: list.id }]);
-      await publishWorkingMenu(tx, v.menus.Almuerzo);
+      await publishWorkingMenu(tx, v.menus["Midday menu"]);
       return { extraId: extra.id, listId: list.id };
     });
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const before = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     await withTransaction(suite.db, (tx) =>
@@ -1251,7 +1259,7 @@ describe("service periods gate only added dishes and added stored quantities", (
   it("previews routing of an unchanged stored line when its periods have been cleared", async () => {
     at(mondayAt("13:50"));
     const v = await mealVenue();
-    const held = await park(v, v.diningZone, v.toast.almuerzo);
+    const held = await park(v, v.diningZone, v.toast.midday);
     expect(held.status).toBe(200);
     const [line] = await withTransaction(suite.db, (tx) => linesOf(tx, held.id));
     await withTransaction(suite.db, (tx) =>
@@ -1270,7 +1278,7 @@ describe("service periods gate only added dishes and added stored quantities", (
       await sendAsTill(v, "POST", "/api/dead-ends/sale", {
         workingOrderId: held.id,
         step: "edit",
-        lines: [{ workingOrderLineId: line!.id, menuItemId: v.toast.almuerzo, quantity: "1" }],
+        lines: [{ workingOrderLineId: line!.id, menuItemId: v.toast.midday, quantity: "1" }],
       }),
     ).toMatchObject({ status: 200, body: { sends: true, deadEnds: [] } });
     expect(await sendAsTill(v, "GET", `/api/working-orders/${held.id}`)).toEqual(before);
@@ -1310,39 +1318,45 @@ describe("a dish whose period ended earlier today", () => {
   it("is refused unconfirmed at 14:05 and writes no order", async () => {
     at(mondayAt("14:05"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, {});
-    expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+    const held = await parkWith(v, v.toast.midday, {});
+    expect(held).toMatchObject(periodEnded(v, "Midday menu", "Lunch", v.toast.midday));
     expect(await orderRows(held.id)).toEqual([]);
   });
 
   it("is parked at 14:05 when the till confirms its menu, priced as published and marked by the signed-in person", async () => {
     at(mondayAt("14:05"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+    const held = await parkWith(v, v.toast.midday, {
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
+    });
     expect(held.status).toBe(200);
     expect(await marksOf(held.id)).toEqual([
       { unitPriceGross: 400, latePeriodName: "Lunch", lateConfirmedBy: v.personId },
     ]);
   });
 
-  it("is refused when the confirmation names another menu, naming Almuerzo, and writes no order", async () => {
+  it("is refused when the confirmation names another menu, naming the Midday menu, and writes no order", async () => {
     at(mondayAt("14:05"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Bebidas] } });
-    expect(held).toMatchObject(periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo));
+    const held = await parkWith(v, v.toast.midday, {
+      lateSend: { menuIds: [v.menus["Drinks menu"]] },
+    });
+    expect(held).toMatchObject(periodEnded(v, "Midday menu", "Lunch", v.toast.midday));
     expect(await orderRows(held.id)).toEqual([]);
   });
 
   it("is refused not_running the next morning, even confirmed, and writes no order", async () => {
     at(new Date("2026-10-06T10:00:00+02:00"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+    const held = await parkWith(v, v.toast.midday, {
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
+    });
     expect(held).toMatchObject({
       status: 400,
       body: {
         error: {
           code: "menu_period.not_running",
-          params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+          params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
         },
       },
     });
@@ -1350,11 +1364,11 @@ describe("a dish whose period ended earlier today", () => {
   });
 
   it.each(["19:00", "19:30"])(
-    "is parked at %s at its own 4.00, unmarked and unconfirmed, while Dinner sells the Tostada",
+    "is parked at %s at its own 4.00, unmarked and unconfirmed, while Dinner sells the Toast",
     async (time) => {
       at(mondayAt(time));
       const v = await mealVenue();
-      const held = await parkWith(v, v.toast.almuerzo, {});
+      const held = await parkWith(v, v.toast.midday, {});
       expect(held.status).toBe(200);
       expect(await marksOf(held.id)).toEqual([
         { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
@@ -1370,7 +1384,7 @@ describe("a dish whose period ended earlier today", () => {
   ] as const)("refuses a lateSend that is %s and writes no order", async (_shape, lateSend) => {
     at(mondayAt("14:05"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, { lateSend });
+    const held = await parkWith(v, v.toast.midday, { lateSend });
     expect(held).toMatchObject({
       status: 400,
       body: { error: { code: "management.request_invalid", params: { field: "lateSend" } } },
@@ -1381,10 +1395,10 @@ describe("a dish whose period ended earlier today", () => {
   it("replays a retried confirmed park with the same body", async () => {
     at(mondayAt("14:05"));
     const v = await mealVenue();
-    const body = { lateSend: { menuIds: [v.menus.Almuerzo] } };
-    const first = await parkWith(v, v.toast.almuerzo, body);
+    const body = { lateSend: { menuIds: [v.menus["Midday menu"]] } };
+    const first = await parkWith(v, v.toast.midday, body);
     expect(first.status).toBe(200);
-    const retried = await parkWith(v, v.toast.almuerzo, body, first.id);
+    const retried = await parkWith(v, v.toast.midday, body, first.id);
     expect(retried).toMatchObject({ status: 200, body: first.body });
     expect(retried.body).toEqual({ id: first.id, orderNumber: expect.any(Number) });
     expect(await marksOf(first.id)).toHaveLength(1);
@@ -1393,7 +1407,9 @@ describe("a dish whose period ended earlier today", () => {
   it("accepts a confirmation at 19:00 when nothing is late, unmarked", async () => {
     at(mondayAt("19:00"));
     const v = await mealVenue();
-    const held = await parkWith(v, v.toast.almuerzo, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+    const held = await parkWith(v, v.toast.midday, {
+      lateSend: { menuIds: [v.menus["Midday menu"]] },
+    });
     expect(held.status).toBe(200);
     expect(await marksOf(held.id)).toEqual([
       { unitPriceGross: 400, latePeriodName: null, lateConfirmedBy: null },
@@ -1405,7 +1421,7 @@ describe("a dish whose period ended earlier today", () => {
       at(mondayAt("14:05"));
       return mealVenue([1], true);
     };
-    const toast = (v: Venue) => [{ menuItemId: v.toast.almuerzo, quantity: "1" }];
+    const toast = (v: Venue) => [{ menuItemId: v.toast.midday, quantity: "1" }];
     const cashSale = (v: Venue, id: string, extra: Record<string, unknown>) =>
       sendAsTill(v, "POST", "/api/sales", {
         workingOrderId: id,
@@ -1429,7 +1445,7 @@ describe("a dish whose period ended earlier today", () => {
       const id = randomUUID();
       const filed = await filingRows();
       expect(await cashSale(v, id, {})).toMatchObject(
-        periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+        periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
       );
       expect(await orderRows(id)).toEqual([]);
       expect(await filingRows()).toBe(filed);
@@ -1438,7 +1454,7 @@ describe("a dish whose period ended earlier today", () => {
     it("takes a confirmed cash sale at 14:05 at its published 4.00, marked by the signed-in person", async () => {
       const v = await counterVenue();
       const id = randomUUID();
-      const paid = await cashSale(v, id, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+      const paid = await cashSale(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
       expect(paid.status).toBe(200);
       expect(paid.body).toMatchObject({
         total: "4.00",
@@ -1454,7 +1470,7 @@ describe("a dish whose period ended earlier today", () => {
       const id = randomUUID();
       const filed = await filingRows();
       expect(await cardSale(v, id, {})).toMatchObject(
-        periodEnded(v, "Almuerzo", "Lunch", v.toast.almuerzo),
+        periodEnded(v, "Midday menu", "Lunch", v.toast.midday),
       );
       expect(await orderRows(id)).toEqual([]);
       expect(await filingRows()).toBe(filed);
@@ -1463,7 +1479,7 @@ describe("a dish whose period ended earlier today", () => {
     it("takes a confirmed simulator card pay at 14:05 at its published 4.00, marked by the signed-in person", async () => {
       const v = await counterVenue();
       const id = randomUUID();
-      const paid = await cardSale(v, id, { lateSend: { menuIds: [v.menus.Almuerzo] } });
+      const paid = await cardSale(v, id, { lateSend: { menuIds: [v.menus["Midday menu"]] } });
       expect(paid.status).toBe(200);
       expect(paid.body).toMatchObject({ outcome: "captured", ticket: { total: "4.00" } });
       expect(await marksOf(id)).toEqual([
@@ -1518,7 +1534,10 @@ describe("a dish whose period ended earlier today", () => {
         const before = await footprint();
         expect(
           await sent(v, randomUUID(), {
-            lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "9999" } },
+            lateSend: {
+              menuIds: [v.menus["Midday menu"]],
+              override: { personId: manager, pin: "9999" },
+            },
           }),
         ).toMatchObject({ status: 401, body: { error: { code: "pin.invalid" } } });
         expect(await footprint()).toEqual(before);
@@ -1532,14 +1551,17 @@ describe("a dish whose period ended earlier today", () => {
         const before = await footprint();
         expect(
           await sent(v, randomUUID(), {
-            lateSend: { menuIds: [v.menus.Bebidas], override: { personId: manager, pin: "1234" } },
+            lateSend: {
+              menuIds: [v.menus["Drinks menu"]],
+              override: { personId: manager, pin: "1234" },
+            },
           }),
         ).toMatchObject({
           status: 409,
           body: {
             error: {
               code: "menu_period.ended",
-              params: { menus: [{ menuId: v.menus.Almuerzo, periodName: "Lunch" }] },
+              params: { menus: [{ menuId: v.menus["Midday menu"], periodName: "Lunch" }] },
             },
           },
         });
@@ -1554,7 +1576,10 @@ describe("a dish whose period ended earlier today", () => {
         const id = randomUUID();
         const before = await footprint();
         const first = await sent(v, id, {
-          lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
+          lateSend: {
+            menuIds: [v.menus["Midday menu"]],
+            override: { personId: manager, pin: "1234" },
+          },
         });
         expect(first.status).toBe(200);
         const taken = await footprint();
@@ -1591,7 +1616,7 @@ describe("a dish whose period ended earlier today", () => {
 
     it("names needsManager in the refusal of an unconfirmed dish", async () => {
       const { v } = await managerVenue("14:05");
-      const held = await parkWith(v, v.toast.almuerzo, {});
+      const held = await parkWith(v, v.toast.midday, {});
       expect(held).toMatchObject({
         status: 409,
         body: { error: { code: "menu_period.ended", params: { needsManager: true } } },
@@ -1601,8 +1626,8 @@ describe("a dish whose period ended earlier today", () => {
 
     it("refuses a staff confirmation with no manager override and writes no order", async () => {
       const { v } = await managerVenue("14:05");
-      const held = await parkWith(v, v.toast.almuerzo, {
-        lateSend: { menuIds: [v.menus.Almuerzo] },
+      const held = await parkWith(v, v.toast.midday, {
+        lateSend: { menuIds: [v.menus["Midday menu"]] },
       });
       expect(held).toMatchObject({
         status: 403,
@@ -1614,15 +1639,21 @@ describe("a dish whose period ended earlier today", () => {
     it("throttles wrong manager PINs for a late send on the same device", async () => {
       const { v, manager } = await managerVenue("14:05");
       for (let i = 0; i < 4; i++) {
-        const held = await parkWith(v, v.toast.almuerzo, {
-          lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "9999" } },
+        const held = await parkWith(v, v.toast.midday, {
+          lateSend: {
+            menuIds: [v.menus["Midday menu"]],
+            override: { personId: manager, pin: "9999" },
+          },
         });
         expect(held.status).toBe(401);
         expect(held.body).toMatchObject({ error: { code: "pin.invalid" } });
         expect(await orderRows(held.id)).toEqual([]);
       }
-      const held = await parkWith(v, v.toast.almuerzo, {
-        lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
+      const held = await parkWith(v, v.toast.midday, {
+        lateSend: {
+          menuIds: [v.menus["Midday menu"]],
+          override: { personId: manager, pin: "1234" },
+        },
       });
       expect(held.status).toBe(429);
       expect(held.body).toMatchObject({ error: { code: "pin.throttled" } });
@@ -1631,8 +1662,11 @@ describe("a dish whose period ended earlier today", () => {
 
     it("parks with the manager's PIN, marked as confirmed by the manager", async () => {
       const { v, manager } = await managerVenue("14:05");
-      const held = await parkWith(v, v.toast.almuerzo, {
-        lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
+      const held = await parkWith(v, v.toast.midday, {
+        lateSend: {
+          menuIds: [v.menus["Midday menu"]],
+          override: { personId: manager, pin: "1234" },
+        },
       });
       expect(held.status).toBe(200);
       expect(await marksOf(held.id)).toEqual([
@@ -1643,8 +1677,8 @@ describe("a dish whose period ended earlier today", () => {
     it("parks for a signed-in manager with no override, marked as confirmed by the manager", async () => {
       const { v, manager } = await managerVenue("14:05");
       const asManager = await signedInAs(v, manager, "1234");
-      const held = await parkWith(asManager, v.toast.almuerzo, {
-        lateSend: { menuIds: [v.menus.Almuerzo] },
+      const held = await parkWith(asManager, v.toast.midday, {
+        lateSend: { menuIds: [v.menus["Midday menu"]] },
       });
       expect(held.status).toBe(200);
       expect(await marksOf(held.id)).toEqual([
@@ -1655,8 +1689,11 @@ describe("a dish whose period ended earlier today", () => {
     it("counts a wrong manager PIN sent when nothing is late, while still parking the order", async () => {
       const { v, manager } = await managerVenue("19:00");
       for (let i = 0; i < 4; i++) {
-        const held = await parkWith(v, v.toast.almuerzo, {
-          lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "9999" } },
+        const held = await parkWith(v, v.toast.midday, {
+          lateSend: {
+            menuIds: [v.menus["Midday menu"]],
+            override: { personId: manager, pin: "9999" },
+          },
         });
         expect(held.status).toBe(200);
         expect(await marksOf(held.id)).toEqual([
@@ -1664,8 +1701,11 @@ describe("a dish whose period ended earlier today", () => {
         ]);
       }
       at(mondayAt("14:05"));
-      const late = await parkWith(v, v.toast.almuerzo, {
-        lateSend: { menuIds: [v.menus.Almuerzo], override: { personId: manager, pin: "1234" } },
+      const late = await parkWith(v, v.toast.midday, {
+        lateSend: {
+          menuIds: [v.menus["Midday menu"]],
+          override: { personId: manager, pin: "1234" },
+        },
       });
       expect(late.status).toBe(429);
       expect(late.body).toMatchObject({ error: { code: "pin.throttled" } });
@@ -1674,7 +1714,7 @@ describe("a dish whose period ended earlier today", () => {
   });
 
   describe("a held order's save", () => {
-    /** A Lunch Tostada parked at 13:50, then at 14:05 the save of `lines` beside the stored one. */
+    /** A Lunch Toast parked at 13:50, then at 14:05 the save of `lines` beside the stored one. */
     const saveAfterLunch = async (
       storedQuantity: string,
       confirmed: boolean,
@@ -1693,7 +1733,7 @@ describe("a dish whose period ended earlier today", () => {
           .where(eq(persons.displayName, "Administradora"));
         override = { personId: manager!.id, pin: managerPin };
       }
-      const held = await park(v, v.diningZone, v.toast.almuerzo);
+      const held = await park(v, v.diningZone, v.toast.midday);
       expect(held.status).toBe(200);
       const before = await sendAsTill(v, "GET", `/api/working-orders/${held.id}`);
       const order = before.body as {
@@ -1709,9 +1749,9 @@ describe("a dish whose period ended earlier today", () => {
             menuItemId: order.lines[0]!.menuItemId,
             quantity: storedQuantity,
           },
-          { menuItemId: v.toast.almuerzo, quantity: "1" },
+          { menuItemId: v.toast.midday, quantity: "1" },
         ],
-        ...(confirmed ? { lateSend: { menuIds: [v.menus.Almuerzo], override } } : {}),
+        ...(confirmed ? { lateSend: { menuIds: [v.menus["Midday menu"]], override } } : {}),
       });
       return {
         v,
@@ -1779,7 +1819,7 @@ describe("a dish whose period ended earlier today", () => {
         body: {
           error: {
             code: "menu_period.not_running",
-            params: { departmentId: v.restaurant, menuId: v.menus.Almuerzo },
+            params: { departmentId: v.restaurant, menuId: v.menus["Midday menu"] },
           },
         },
       });
@@ -1799,16 +1839,16 @@ describe("GET /api/menu-state", () => {
   it("names the zone's default menu at the moment it is read", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);
-    expect(await defaultMenu(v, `?zoneId=${v.barZone}`)).toBe(v.menus.Desayunos);
-    expect(await defaultMenu(v, `?zoneId=${v.diningZone}`)).toBe(v.menus.Desayunos);
+    expect(await defaultMenu(v, `?zoneId=${v.barZone}`)).toBe(v.menus["Breakfast menu"]);
+    expect(await defaultMenu(v, `?zoneId=${v.diningZone}`)).toBe(v.menus["Breakfast menu"]);
     vi.setSystemTime(MONDAY_12_30);
-    expect(await defaultMenu(v, `?zoneId=${v.barZone}`)).toBe(v.menus.Almuerzo);
+    expect(await defaultMenu(v, `?zoneId=${v.barZone}`)).toBe(v.menus["Midday menu"]);
   });
 
   it("names the starting zone's default when no zone is asked for", async () => {
     const v = await setupVenue({ timetable: true });
     at(MONDAY_10_00);
-    expect(await defaultMenu(v, "")).toBe(v.menus.Desayunos);
+    expect(await defaultMenu(v, "")).toBe(v.menus["Breakfast menu"]);
   });
 });
 
@@ -1818,17 +1858,17 @@ describe("menu-state follows department service periods", () => {
     await withTransaction(suite.db, async (tx) => {
       const lunch = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
         name: "Lunch",
-        menuId: v.menus.Almuerzo,
-        staffMenuIds: [v.menus.Bebidas],
+        menuId: v.menus["Midday menu"],
+        staffMenuIds: [v.menus["Drinks menu"]],
       });
       const afternoon = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
         name: "Afternoon",
-        menuId: v.menus["Café"],
+        menuId: v.menus["Coffee menu"],
         staffMenuIds: [],
       });
       const night = await saveMenuPeriod(tx, v.cfg, v.restaurant, {
         name: "Night",
-        menuId: v.menus.Desayunos,
+        menuId: v.menus["Breakfast menu"],
         staffMenuIds: [],
       });
       await replaceMenuWeek(
@@ -1851,9 +1891,9 @@ describe("menu-state follows department service periods", () => {
   };
 
   it.each([
-    ["2026-10-09T11:59:00Z", "Lunch", "Almuerzo"],
-    ["2026-10-09T12:00:00Z", "Afternoon", "Café"],
-    ["2026-10-10T00:30:00Z", "Night", "Desayunos"],
+    ["2026-10-09T11:59:00Z", "Lunch", "Midday menu"],
+    ["2026-10-09T12:00:00Z", "Afternoon", "Coffee menu"],
+    ["2026-10-10T00:30:00Z", "Night", "Breakfast menu"],
   ] as const)("reports the running department period at %s", async (instant, periodName, menu) => {
     const v = await setupPeriods();
     at(new Date(instant));
@@ -1887,34 +1927,34 @@ describe("menu-state follows department service periods", () => {
     });
     expect(answer.body.menus).toEqual([
       {
-        menuId: v.menus["Café"],
-        versionId: v.versions["Café"],
+        menuId: v.menus["Coffee menu"],
+        versionId: v.versions["Coffee menu"],
         orderable: false,
         endedPeriodName: "Afternoon",
       },
       {
-        menuId: v.menus.Almuerzo,
-        versionId: v.versions.Almuerzo,
+        menuId: v.menus["Midday menu"],
+        versionId: v.versions["Midday menu"],
         orderable: false,
         endedPeriodName: "Lunch",
       },
       {
-        menuId: v.menus.Desayunos,
-        versionId: v.versions.Desayunos,
+        menuId: v.menus["Breakfast menu"],
+        versionId: v.versions["Breakfast menu"],
         orderable: false,
         endedPeriodName: null,
       },
       {
-        menuId: v.menus.Bebidas,
-        versionId: v.versions.Bebidas,
+        menuId: v.menus["Drinks menu"],
+        versionId: v.versions["Drinks menu"],
         orderable: false,
         endedPeriodName: "Lunch",
       },
     ]);
   });
   it.each([
-    ["2026-10-09T11:59:00Z", "Almuerzo", "Bebidas", "Lunch"],
-    ["2026-10-09T12:00:00Z", "Café", null, "Afternoon"],
+    ["2026-10-09T11:59:00Z", "Midday menu", "Drinks menu", "Lunch"],
+    ["2026-10-09T12:00:00Z", "Coffee menu", null, "Afternoon"],
   ] as const)(
     "never falls back to another period after %s loses its customer menu",
     async (instant, inactive, fallback, periodName) => {
@@ -1965,7 +2005,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       const afternoon = (
         await saveMenuPeriod(tx, v.cfg, v.restaurant, {
           name: "Afternoon",
-          menuId: v.menus.Bebidas,
+          menuId: v.menus["Drinks menu"],
           staffMenuIds: [],
         })
       ).id;
@@ -1989,16 +2029,17 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       );
       const cocktails = (await createCategory(tx, { name: "Cocktails" })).id;
       const mojito = await createProduct(tx, {
-        catalogueId: v.menus.Almuerzo,
+        catalogueId: v.menus["Midday menu"],
         categoryId: cocktails,
         name: "Mojito",
         pricingUnit: "each",
         unitPrice: "8.00",
         vatClass: "general",
       });
-      const offer = (await addProductToMenu(tx, { menuId: v.menus.Almuerzo, productId: mojito.id }))
-        .id;
-      await publishWorkingMenu(tx, v.menus.Almuerzo);
+      const offer = (
+        await addProductToMenu(tx, { menuId: v.menus["Midday menu"], productId: mojito.id })
+      ).id;
+      await publishWorkingMenu(tx, v.menus["Midday menu"]);
       const stationWithPrinter = async (name: string) => {
         const stationId = (await createStation(tx, v.cfg, { name })).id;
         const printerId = (
@@ -2135,7 +2176,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       expectedPartyRevision: await partyRevision(c.partyId),
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release: "fire" }],
-      lateSend: { menuIds: [c.v.menus.Almuerzo] },
+      lateSend: { menuIds: [c.v.menus["Midday menu"]] },
     });
     expect(answer.status).toBe(200);
     const fired = (answer.body as { groups: { lineIds: string[] }[] }).groups[0]!;
@@ -2162,7 +2203,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
       expectedPartyRevision: await partyRevision(c.partyId),
       allergy: { party: { answer: "none", guests: [] }, ticks: [] },
       groups: [{ lines: [{ menuItemId: c.offer, quantity: "1" }], release }],
-      lateSend: { menuIds: [c.v.menus.Almuerzo] },
+      lateSend: { menuIds: [c.v.menus["Midday menu"]] },
     });
     expect(answer.status).toBe(200);
     return (answer.body as { groups: { id: string }[] }).groups[0]!;
@@ -2195,7 +2236,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         { kind: "station", stationId: c.downstairs.stationId },
       );
       const mint = await createProduct(tx, {
-        catalogueId: c.v.menus.Almuerzo,
+        catalogueId: c.v.menus["Midday menu"],
         categoryId: garnish,
         name: "Mint",
         pricingUnit: "each",
@@ -2216,7 +2257,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
         SIGNED_IN_TILL_LOCALE,
       );
       await writeProductModifiers(tx, mojito.productId, [{ kind: "extras", id: list.id }]);
-      await publishWorkingMenu(tx, c.v.menus.Almuerzo);
+      await publishWorkingMenu(tx, c.v.menus["Midday menu"]);
       return { listId: list.id, mintId: mint.id };
     });
   };
@@ -2242,7 +2283,7 @@ describe("kitchen routing follows the period running when a dish goes on the ord
           release: "fire",
         },
       ],
-      lateSend: { menuIds: [c.v.menus.Almuerzo] },
+      lateSend: { menuIds: [c.v.menus["Midday menu"]] },
     });
 
   it("prints the mark on the own station's ticket of an extra on a dish confirmed late", async () => {
