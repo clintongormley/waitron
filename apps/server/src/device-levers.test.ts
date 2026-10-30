@@ -70,7 +70,7 @@ async function fixture() {
     return { id: joined.deviceId, cookie: `${DEVICE_COOKIE}=${joined.deviceId}.${joined.token}` };
   };
   const runner = await profile("kds", RUNS_THE_PASS);
-  const pass = await device("Pantalla Pase", runner, { kitchenScreen: EVERY_PASS });
+  const pass = await device("Pass screen", runner, { kitchenScreen: EVERY_PASS });
   const app = new Hono();
   mountTillApi(
     app,

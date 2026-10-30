@@ -116,9 +116,9 @@ async function enrolDeviceFixture(): Promise<{
   deviceProfileId: string;
 }> {
   const { cfg, stationId } = await setupStation();
-  const deviceProfileId = await seedDeviceProfile("Pantalla profile", "kds", []);
+  const deviceProfileId = await seedDeviceProfile("Screen profile", "kds", []);
   const dev = await enrolDeviceForTest(suite.db, cfg, {
-    name: "Pantalla",
+    name: "Screen",
     profileId: deviceProfileId,
     stationId,
   });
@@ -405,7 +405,7 @@ describe("requireDevice (venue database)", () => {
       binding: {
         deviceId,
         formFactor: "kds",
-        label: "Pantalla",
+        label: "Screen",
         locationId: cfg.locationId,
         deviceProfileId,
         ...NO_BINDINGS,
@@ -526,7 +526,7 @@ describe("tryReadDevice (venue database)", () => {
     expect(await probeTry(`${deviceId}.${token}`)).toEqual({
       deviceId,
       formFactor: "kds",
-      label: "Pantalla",
+      label: "Screen",
       locationId: cfg.locationId,
       deviceProfileId,
       ...NO_BINDINGS,
@@ -823,14 +823,14 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     const locationId = loc!.id;
     const [prof] = await admin
       .insert(deviceProfiles)
-      .values({ name: "Pantalla", formFactor: "kds" })
+      .values({ name: "Screen", formFactor: "kds" })
       .returning({ id: deviceProfiles.id });
     const [dev] = await admin
       .insert(devices)
       .values({
         locationId,
         deviceProfileId: prof!.id,
-        label: "Pantalla Cocina",
+        label: "Kitchen screen",
         tokenHash: "scrypt$00$00",
         active: true,
       })
@@ -974,7 +974,7 @@ describe("reading the device beside the write lock", () => {
 
   it("returns the profile the device was moved to while it waits for the lock to record a sighting", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const movedTo = await seedDeviceProfile("Pantalla nueva", "kds", []);
+    const movedTo = await seedDeviceProfile("New screen", "kds", []);
     const stale = new Date(Date.now() - 90_000);
     await setLastSeen(deviceId, stale);
     const lock = holdWriteLock(() =>
@@ -1092,7 +1092,7 @@ describe("a change committed while the token is being verified", () => {
 
   it("returns the profile the device was moved to meanwhile", async () => {
     const { deviceId, token } = await enrolDeviceFixture();
-    const movedTo = await seedDeviceProfile("Pantalla nueva", "kds", []);
+    const movedTo = await seedDeviceProfile("New screen", "kds", []);
     const hook = commitDuringVerification(() =>
       suite.db.execute(
         sql`update devices set device_profile_id = ${movedTo} where id = ${deviceId}`,
@@ -1144,7 +1144,7 @@ describe("a token already verified for its device", () => {
         Array.from({ length: VERIFIED_TOKENS_LIMIT }, (_, i) => ({
           locationId: cfg.locationId,
           deviceProfileId,
-          label: `Pantalla ${i}`,
+          label: `Screen ${i}`,
           tokenHash: first!.tokenHash,
         })),
       )

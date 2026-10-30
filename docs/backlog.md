@@ -6117,6 +6117,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description and
   pass-printer name remain.
+  The server's device, device-session, join, station-alert, party and configuration-transfer
+  suites no longer use "Pase" or "Pantalla" in sample names; their other Spanish samples remain,
+  among them kitchen-screen, station, till, table, zone, location and device-profile names, as do
+  the kitchen-print, zone-offer and fiscal sale-path suites' "Pase" pass names and the fiscal
+  sale-path suite's "Pantalla" screen names.
   Venue-service period-deletion and zone-closure suites use English venue, station,
   zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
   Season and day-resolver suites use English venue, zone and custom-season samples;

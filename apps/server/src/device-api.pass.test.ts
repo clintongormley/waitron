@@ -425,7 +425,7 @@ describe("the pass monitor's device route", () => {
   it("lists the pass queue with no marks, and offers no Done", async () => {
     const f = await fixture();
     const itemId = await burgerOrder(f.v);
-    const monitor = await f.device("Monitor Pase", f.kds, {
+    const monitor = await f.device("Pass monitor", f.kds, {
       kitchenScreen: { kind: "pass_monitor", stationIds: null, zoneIds: null },
     });
     const board = await read(f.app, monitor.cookie, "/api/device/pass-monitor");

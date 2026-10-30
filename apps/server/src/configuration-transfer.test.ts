@@ -2234,7 +2234,7 @@ it("transfers a station's rest of the order switch", async () => {
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
       locationId: source.locationId,
-      name: "Pase",
+      name: "Pass",
       showsRestOfOrder: true,
     }),
   );
@@ -2247,7 +2247,7 @@ it("transfers a station's rest of the order switch", async () => {
     versions,
   );
   expect(transferred.tables.kitchen_stations).toContainEqual(
-    expect.objectContaining({ name: "Pase", shows_rest_of_order: 1 }),
+    expect.objectContaining({ name: "Pass", shows_rest_of_order: 1 }),
   );
   await applyVenue(planVenue(venue("B97531865"), ALL_MODULES), {
     db: targetSuite.db,
@@ -2258,7 +2258,7 @@ it("transfers a station's rest of the order switch", async () => {
   const imported = await targetSuite.db
     .select({ showsRestOfOrder: kitchenStations.showsRestOfOrder })
     .from(kitchenStations)
-    .where(eq(kitchenStations.name, "Pase"));
+    .where(eq(kitchenStations.name, "Pass"));
   expect(imported).toEqual([{ showsRestOfOrder: true }]);
 });
 
@@ -6043,10 +6043,10 @@ describe("special days in a configuration transfer", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, (tx) =>
-      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pase" }),
+      tx.insert(kitchenStations).values({ locationId: source.locationId, name: "Pass" }),
     );
     const { cfg, stations } = await named(suite.db, source);
-    const pase = { kind: "station" as const, id: stations.get("Pase")! };
+    const pass = { kind: "station" as const, id: stations.get("Pass")! };
     await withTransaction(suite.db, async (tx) => {
       await insertSpecialDay(tx, cfg, { date: "2026-12-31", name: "New Year's Eve" });
       await setDefaultStation(
@@ -6059,7 +6059,7 @@ describe("special days in a configuration transfer", () => {
           tipsEnabled: false,
           simplifiedInvoiceLimit: null,
         },
-        pase.id,
+        pass.id,
       );
     });
     const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
@@ -6074,7 +6074,7 @@ describe("special days in a configuration transfer", () => {
         importConfigurationTables(tx, transferred, result, ALL_MODULES, versions),
     });
     const imported = await named(targetSuite.db, target);
-    const importedPase = { kind: "station" as const, id: imported.stations.get("Pase")! };
+    const importedPass = { kind: "station" as const, id: imported.stations.get("Pass")! };
     const read = await withTransaction(targetSuite.db, async (tx) => ({
       eve: await namedOn(tx, imported.cfg, "2026-12-31"),
       tuesday: await namedOn(tx, imported.cfg, "2026-10-06"),
@@ -6090,7 +6090,7 @@ describe("special days in a configuration transfer", () => {
     });
     expect(read.tuesday).toBeNull();
     for (const states of read.states)
-      expect(states.get(importedPase.id)).toMatchObject({ isDefault: true, open: true });
+      expect(states.get(importedPass.id)).toMatchObject({ isDefault: true, open: true });
   });
 
   it.each([
