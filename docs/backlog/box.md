@@ -298,12 +298,11 @@ unpack`'s destination refusals (a symbolic link, another user's folder, not a fo
 
 **Task 2a** (#557, a recovery key that does not need an archive destination; A538-6d). Open:
 
-- The bucket copy panel's refusal for a too-short key, and the recovery pack's, name a button
-  ("Turn on backups" with archives off, "Change the recovery key" with them on) but do not link or
-  scroll to it (`#failureText` in `apps/dashboard/src/screens/stream-settings-panel.ts`,
-  `#packFailureText` in `apps/dashboard/src/screens/backup-screen.ts`).
-- With archives on and a key hand-edited too short in `backup.env`, the panel and the recovery
-  pack's refusal name "Change the recovery key", but that form waits for "Show the current key"
+- The bucket copy panel's refusal for a too-short key names a button ("Turn on backups" with
+  archives off, "Change the recovery key" with them on) but does not link or scroll to it
+  (`#failureText` in `apps/dashboard/src/screens/stream-settings-panel.ts`).
+- With archives on and a key hand-edited too short in `backup.env`, the panel's refusal names
+  "Change the recovery key", but that form waits for "Show the current key"
   (`#rotateWaiting`, `apps/dashboard/src/screens/backup-screen.ts`), and
   `GET /api/backup/recovery-key` refuses a too-short key with `backup.recovery_key_too_short`
   (`apps/server/src/backup-api.ts`; the case "reports a too-short key in backup.env as set…" in
@@ -985,8 +984,8 @@ refused under field `destination`, a name the request no longer has; the dashboa
 
 `parseRecoveryKit`
 (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
-the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key hands out a kit whose
-restore calls it damaged; the archive recovery pack accepts such keys. Predates A538-5 (kit.ts
+the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key prints a bucket copy code
+in its recovery pack whose restore calls it damaged; the pack's archive code accepts such keys. Predates A538-5 (kit.ts
 last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
 space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
 
