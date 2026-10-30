@@ -439,3 +439,56 @@ describe("A1208 counter orders are written as portions", () => {
     expect(lines[1]!.cohortId).toBe(lines[0]!.cohortId);
   });
 });
+
+/** `count` of a dish as request lines of at most 99, the most one line may hold. */
+function linesOfAtMost99(count: number, of: (quantity: string) => TabRoundLine[]): TabRoundLine[] {
+  const lines: TabRoundLine[] = [];
+  for (let left = count; left > 0; left -= 99) lines.push(...of(String(Math.min(left, 99))));
+  return lines;
+}
+
+// Node's own SQLite binds at most 32,766 values per statement. Written in one statement each, the
+// walk-up's 1,630 lines and their sale contexts, and the saved order's 2,002 lines, were refused
+// "too many SQL variables" on Node v26.13.0.
+describe("A1208 a counter order of more portions than one statement can bind", () => {
+  it("A1208 a walk-up of 815 burgers with cheese stores 1,630 lines and files every portion", async () => {
+    const id = await walkUp(linesOfAtMost99(815, burgersWithCheese), "2999.20");
+
+    const lines = linesOf(id);
+    expect(lines).toHaveLength(1630);
+    const burgers = lines.filter((line) => line.name === "Burger");
+    expect(new Set(burgers.map((line) => line.portionId)).size).toBe(815);
+    expect(burgers.every((line) => line.portionId !== null)).toBe(true);
+    const filed = await filedRows(id);
+    expect(filed).toHaveLength(18);
+    expect(filed.filter((row) => row.name === "Burger").flatMap((row) => row.portions)).toEqual(
+      expect.arrayContaining(burgers.map((line) => line.portionId)),
+    );
+    expect(filed.reduce((sum, row) => sum + row.portions.length, 0)).toBe(1630);
+    expect(saleOf(id)[0]!.total).toBe(299920);
+  });
+
+  it("A1208 a parked order saved with 2,001 more croquetas stores each as its own portion", async () => {
+    const { id } = await park(croquetas("1"));
+    const [croqueta] = linesOf(id);
+    const [revision, expectedEdit] = await inTx(venue, async (tx) => [
+      await readOrderRevision(tx, id),
+      await readBillEditState(tx, id),
+    ]);
+
+    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+      operatorId: venue.operatorId,
+      expectedEdit,
+      revision,
+      lines: [
+        { workingOrderLineId: croqueta!.id, ...croquetas("1")[0]! },
+        ...linesOfAtMost99(2001, croquetas),
+      ],
+    });
+
+    const lines = linesOf(id);
+    expect(lines).toHaveLength(2002);
+    expect(new Set(lines.map((line) => line.portionId)).size).toBe(2002);
+    expect(lines.every((line) => line.portionId !== null && line.quantity === 1000)).toBe(true);
+  });
+});

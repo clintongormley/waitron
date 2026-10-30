@@ -188,6 +188,7 @@ import {
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
+  insertInChunks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -1741,10 +1742,7 @@ export async function createOpenOrder(
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
   }
 
-  // An empty tab has no lines, and `tx.insert(...).values([])` throws.
-  if (lineRows.length > 0) {
-    await tx.insert(workingOrderLines).values(lineRows);
-  }
+  await insertInChunks(tx, workingOrderLines, lineRows);
   if (placement.copyServiceContextFrom !== undefined) {
     await VENUE_SERVICE.copyOrderContext(tx, cfg, placement.copyServiceContextFrom, id);
   } else {
@@ -6442,7 +6440,7 @@ async function applyLineEdits(
     }
   });
   if (inserted.length > 0) {
-    await tx.insert(workingOrderLines).values(inserted);
+    await insertInChunks(tx, workingOrderLines, inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
     await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
     await registerPortions(tx, newPortions);

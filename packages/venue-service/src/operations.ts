@@ -20,6 +20,7 @@ import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizz
 import {
   catalogues,
   floorZones,
+  insertInChunks,
   refusalOn,
   UNIQUE_VIOLATION,
   kitchenStations,
@@ -1438,7 +1439,9 @@ export async function recordWorkingLineContexts(
       throw new Error(`the offers name no live version of menu ${menuId}`);
     return versionId;
   };
-  await tx.insert(workingLineContexts).values(
+  await insertInChunks(
+    tx,
+    workingLineContexts,
     lines.map((line) => {
       const offer = byMenuItem.get(line.menuItemId);
       if (offer === undefined) {

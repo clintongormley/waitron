@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { adjustmentLines } from "@waitron/adjustments";
 import {
+  insertInChunks,
   orderPortionEvents,
   orderPortions,
   saleLinePortions,
@@ -179,7 +180,9 @@ export async function registerPortions(
     return true;
   });
   if (fresh.length === 0) return;
-  await tx.insert(orderPortions).values(
+  await insertInChunks(
+    tx,
+    orderPortions,
     fresh.map((portion) => ({
       id: portion.portionId,
       cohortId: portion.pricingCohortId,
@@ -187,7 +190,9 @@ export async function registerPortions(
       measured: portion.measured,
     })),
   );
-  await tx.insert(workingLinePortions).values(
+  await insertInChunks(
+    tx,
+    workingLinePortions,
     fresh.map((portion) => ({
       workingOrderLineId: portion.lineId,
       portionId: portion.portionId,
@@ -395,5 +400,5 @@ export async function linkSalePortions(
       throw new Error(`linkSalePortions: sale ${saleId} filed no line ${i + 1}`);
     return (identity.portionIds ?? []).map((portionId) => ({ saleLineId, portionId }));
   });
-  await tx.insert(saleLinePortions).values(links);
+  await insertInChunks(tx, saleLinePortions, links);
 }
