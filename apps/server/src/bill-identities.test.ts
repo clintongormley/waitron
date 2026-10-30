@@ -26,6 +26,7 @@ import {
   activeTablesOf,
   billRow,
   commandFor,
+  join,
   counterOrder,
   inTx,
   order,
@@ -37,12 +38,18 @@ import {
   seatWithNoAllergies as seat,
   setupPartyVenue,
   split,
+  statusOf,
   type PartyVenue,
 } from "./testing/party-venue.js";
 import { splitDraft } from "./order-drafts.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { partyBillEditsForTest } from "./testing/table-action-fixture.js";
+import {
+  joinTables,
+  moveGuests,
+  partyBillEditsForTest,
+  splitTable,
+} from "./testing/table-action-fixture.js";
 import "./errors.js";
 
 // A803 slice 2: each bill at a table keeps the number its seated party gave it.
@@ -437,6 +444,168 @@ describe("A803 bill numbers: move bill", () => {
     ).rejects.toMatchObject({ code: "party.out_of_date" });
 
     expect(await billNumberTables(v)).toEqual(before);
+    await everyPartyBillNumbered();
+  });
+});
+
+async function tableOptions(
+  partyId: string,
+  other?: string,
+  bills: "merge" | "separate" = "separate",
+) {
+  return {
+    bills,
+    expectedPartyRevision: await revisionOf(v, partyId),
+    ...(other === undefined
+      ? {}
+      : { otherPartyId: other, expectedOtherPartyRevision: await revisionOf(v, other) }),
+    operatorId: OPERATOR,
+  };
+}
+
+describe("A803 bill numbers: tables", () => {
+  it("splitting off the table first seated keeps every staying bill's number and party, and the leaving bill is Bill 1 at its own table", async () => {
+    const t1 = await v.table("S1 a");
+    const t2 = await v.table("S1 b");
+    const { partyId, tabId } = await seat(v, t1);
+    await join(v, partyId, t2);
+    await order(v, tabId, "Agua", "Flan", "Caña");
+    const second = await split(v, partyId, tabId, [1]);
+    const third = await split(v, partyId, tabId, [2]);
+    const command = await commandFor(v, partyId);
+
+    const leaving = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t1, third, command));
+
+    expect(await numbersOf(v, partyId)).toEqual([
+      [tabId, 1, null],
+      [second, 2, null],
+    ]);
+    expect(await numbersOf(v, leaving.partyId)).toEqual([[third, 1, null]]);
+    expect((await billRow(v, second)).partyId).toBe(partyId);
+    await everyPartyBillNumbered();
+  });
+
+  it("splitting a table without a bill gives the leaving table Bill 1 and leaves the staying bills as they were", async () => {
+    const t1 = await v.table("S2 a");
+    const t2 = await v.table("S2 b");
+    const { partyId, tabId } = await seat(v, t1);
+    await join(v, partyId, t2);
+    await order(v, tabId, "Agua", "Flan");
+    const second = await split(v, partyId, tabId, [1]);
+    const before = await numbersOf(v, partyId);
+    const command = await commandFor(v, partyId);
+
+    const leaving = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t2, null, command));
+
+    expect(await numbersOf(v, partyId)).toEqual(before);
+    expect(before).toEqual([
+      [tabId, 1, null],
+      [second, 2, null],
+    ]);
+    expect(await numbersOf(v, leaving.partyId)).toEqual([[leaving.mainBillId, 1, null]]);
+    await everyPartyBillNumbered();
+  });
+
+  it("joining a seated table gives its bills our next numbers in their own number order, names kept", async () => {
+    const ours = await tableWithBills("S3 ours", 4);
+    const theirs = await tableWithBills("S3 theirs", 2);
+    const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
+    await nameBill(theirs.bills[0]!, "Clint");
+    const options = await tableOptions(ours.partyId, theirs.partyId);
+
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
+
+    expect((await numbersOf(v, ours.partyId)).slice(4)).toEqual([
+      [theirs.bills[0], 5, "Clint"],
+      [theirs.bills[1], 6, null],
+    ]);
+    expect(await numbersOf(v, theirs.partyId)).toEqual([]);
+    await everyPartyBillNumbered();
+  });
+
+  it("moving guests onto a seated table gives our bills that table's next numbers, including a paid bill that stays on our closed party", async () => {
+    const ana = await seat(v, await v.table("S4 ana"));
+    const luisTable = await v.table("S4 luis");
+    const luis = await seat(v, luisTable);
+    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, luis.tabId, "Agua");
+    const second = await split(v, ana.partyId, ana.tabId, [2]);
+    await pay(v, ana.tabId, "12.00");
+    const options = await tableOptions(ana.partyId, luis.partyId);
+
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, ana.partyId, luisTable, options));
+
+    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "settled", partyId: ana.partyId });
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [ana.tabId, 2, null],
+      [second, 3, null],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("an abandoned bill of the party that closes keeps its row and takes no number", async () => {
+    const ours = await tableWithBills("S5 ours", 1);
+    const theirs = await tableWithBills("S5 theirs", 3);
+    const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
+    const merge = await commandFor(v, theirs.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, theirs.bills[0]!, theirs.bills[1]!, merge));
+    const options = await tableOptions(ours.partyId, theirs.partyId);
+
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
+
+    expect(await statusOf(v, theirs.bills[1]!)).toBe("abandoned");
+    expect(await numbersOf(v, theirs.partyId)).toEqual([[theirs.bills[1], 2, null]]);
+    expect(await numbersOf(v, ours.partyId)).toEqual([
+      [ours.tabId, 1, null],
+      [theirs.bills[0], 2, null],
+      [theirs.bills[2], 3, null],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("joining with Merge the bills: the incoming main bill merges and takes no number, and the other incoming bills take the next numbers with no gap", async () => {
+    const ours = await seat(v, await v.table("S6 ours"));
+    await order(v, ours.tabId, "Agua");
+    const theirs = await tableWithBills("S6 theirs", 2);
+    const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
+    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+
+    const result = await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
+
+    expect(result.merged).toBe(true);
+    expect(await statusOf(v, theirs.tabId)).toBe("abandoned");
+    expect(await numbersOf(v, ours.partyId)).toEqual([
+      [ours.tabId, 1, null],
+      [theirs.bills[1], 2, null],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("joining or moving guests with a free table changes no number", async () => {
+    const ours = await tableWithBills("S7", 2);
+    const joined = await v.table("S7 joined");
+    const moveTo = await v.table("S7 moved");
+    const before = await billNumberTables(v);
+
+    await join(v, ours.partyId, joined);
+    const options = await tableOptions(ours.partyId);
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, ours.partyId, moveTo, options));
+
+    expect(await billNumberTables(v)).toEqual(before);
+    await everyPartyBillNumbered();
+  });
+
+  it("after a join the surviving party's bills that are not abandoned hold no number twice", async () => {
+    const ours = await tableWithBills("S8 ours", 2);
+    const theirs = await tableWithBills("S8 theirs", 2);
+    const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
+    const options = await tableOptions(ours.partyId, theirs.partyId);
+
+    await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
+
+    const numbers = (await numbersOf(v, ours.partyId)).map(([, number]) => number);
+    expect(numbers).toEqual([1, 2, 3, 4]);
     await everyPartyBillNumbered();
   });
 });
