@@ -958,7 +958,8 @@ empty and is retired in 3b; the answer keeps today's shape with `merged: false` 
       `:1019` passes `bills: "merge"`; if it goes red, stop: that file was meant to stay unchanged).
 - [x] GREEN: that list; F; H2; Filing; `git diff a90f4f87b -- apps/server/src/move-merge.filing.test.ts | /usr/bin/grep '^[-+].*expect'`
       prints nothing; server typecheck. (That grep also matches the two added
-      `expectedPartyRevision:` setup lines; `/usr/bin/grep '^[-+].*expect('` prints nothing.)
+      `expectedPartyRevision:` setup lines; at Task 3a's commit `/usr/bin/grep '^[-+].*expect('` printed nothing. Since the
+      Task 3a review fix 8184f7597 it prints only `+` lines: the four checks added to the `:339` case, Q5 item 1. No `-` line.)
 - [x] Commit: "Joining or moving guests keeps every bill separate".
 
 ## Task 3b: retire the merge helpers and the kitchen-slip merge map (≈30 calls)
