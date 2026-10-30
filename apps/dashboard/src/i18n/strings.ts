@@ -2098,20 +2098,9 @@ export const en = {
     "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
   "stream.error.recovery_key_too_short_unknown":
     "The recovery key this box holds is too short, so the bucket copy cannot use it.",
-  "stream.show_kit": "Show recovery kit",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
   "stream.turn_off_confirm": "Turn off this copy?",
-  "stream.kit.title": "Recovery kit",
-  "stream.kit.warning":
-    "Anyone holding this kit can read every sale and every stored credential in the bucket copy. Keep it as safe as the recovery key: offline, and never in the bucket itself. It is the only thing a rebuild asks for.",
-  "stream.kit.reissued":
-    "The recovery key changed, so this is a new recovery kit. Download it now. Keep the old kit for seven days: copies made before the change still need it.",
-  "stream.kit.copy": "Copy",
-  "stream.kit.download": "Download kit file",
-  "stream.kit.file_heading": "Waitron recovery kit",
-  "stream.kit.file_note":
-    "Keep this safe. It opens the bucket copy of this restaurant. A new server rebuilt from the bucket asks for this file and nothing else.",
   "stream.probe.access_denied": "The bucket refused this access key.",
   "stream.probe.conditional_write_unsupported":
     "This storage does not support the safe-write check Waitron needs.",
@@ -5876,20 +5865,9 @@ export const es: Record<StringKey, string> = {
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
   "stream.error.recovery_key_too_short_unknown":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
-  "stream.show_kit": "Mostrar el kit de recuperación",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.turn_off_confirm": "¿Desactivar esta copia?",
-  "stream.kit.title": "Kit de recuperación",
-  "stream.kit.warning":
-    "Quien tenga este kit puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket. Es lo único que pide una reconstrucción.",
-  "stream.kit.reissued":
-    "La clave de recuperación ha cambiado, así que este es un kit de recuperación nuevo. Descárgalo ahora. Conserva el kit anterior siete días: las copias anteriores al cambio todavía lo necesitan.",
-  "stream.kit.copy": "Copiar",
-  "stream.kit.download": "Descargar el archivo del kit",
-  "stream.kit.file_heading": "Kit de recuperación de Waitron",
-  "stream.kit.file_note":
-    "Guárdalo en un lugar seguro. Abre la copia de este restaurante en el bucket. Un servidor nuevo reconstruido desde el bucket pide este archivo y nada más.",
   "stream.probe.access_denied": "El bucket ha rechazado esta clave de acceso.",
   "stream.probe.conditional_write_unsupported":
     "Este almacenamiento no admite la comprobación de escritura segura que Waitron necesita.",

@@ -69,7 +69,6 @@ async function mount(
     liveData,
     getStreamSettings: async () => stored,
     testStreamBucket: async () => ({ ok: true }),
-    getRecoveryKit: async () => ({ kit: "synthetic-kit", keyFingerprint: "abcd1234" }),
     ...overrides,
     saveStreamSettings: async (body: StreamBucketBody) => {
       stored = await (overrides.saveStreamSettings?.(body) ?? Promise.resolve(on));
@@ -278,15 +277,13 @@ it("a refused settings write retains the values and warning", async () => {
   expect(await pending).toBe("kept");
 });
 
-it("an accepted settings write is clean before a failed recovery-kit read", async () => {
-  const kit = deferred<{ kit: string; keyFingerprint: string }>();
+it("an accepted settings write is clean", async () => {
   const bodies: StreamBucketBody[] = [];
   const { app, panel } = await mount(off, {
     saveStreamSettings: async (body) => {
       bodies.push(body);
       return on;
     },
-    getRecoveryKit: () => kit.promise,
   });
   await fill(panel);
   click(panel, "save");
@@ -303,10 +300,6 @@ it("an accepted settings write is clean before a failed recovery-kit read", asyn
   ]);
   expect(unload()).toBe(false);
   expect(await leave(app)).toBe("proceeded");
-  kit.reject({ code: "connection.failed" });
-  await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=kit-failure]")).toBeTruthy();
-  expect(unload()).toBe(false);
-  expect(await leave(app)).toBe("proceeded");
 });
 
 it("input made during Save survives and compares against the submitted snapshot", async () => {
@@ -316,7 +309,9 @@ it("input made during Save survives and compares against the submitted snapshot"
   click(panel, "save");
   await type(panel, "prefix", "later");
   write.resolve(on);
-  await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=kit]")).toBeTruthy();
+  await expect
+    .poll(() => panel.shadowRoot!.querySelector("[data-test=stream-status]"))
+    .toBeTruthy();
   expect(input(panel, "prefix")?.value).toBe("later");
   expect(unload()).toBe(true);
   const pending = leave(app);
@@ -360,13 +355,8 @@ it.each(["success", "refusal"] as const)(
   "an old settings write %s cannot change a reconnected editor",
   async (outcome) => {
     const write = deferred<StreamSettingsView>();
-    let kitReads = 0;
     const { app, panel } = await mount(off, {
       saveStreamSettings: () => write.promise,
-      getRecoveryKit: async () => {
-        kitReads++;
-        return { kit: "synthetic-kit", keyFingerprint: "abcd1234" };
-      },
     });
     await fill(panel);
     click(panel, "save");
@@ -379,7 +369,6 @@ it.each(["success", "refusal"] as const)(
     await new Promise((resolve) => setTimeout(resolve, 50));
     await panel.updateComplete;
     expect(input(panel, "name")?.value).toBe("new editor");
-    expect(kitReads).toBe(0);
     expect(panel.shadowRoot!.querySelector("[data-test=refusal]")).toBeNull();
     expect(unload()).toBe(true);
   },
@@ -403,27 +392,6 @@ it.each(["success", "refusal"] as const)(
     expect(panel.shadowRoot!.querySelector("[data-test=test-passed]")).toBeNull();
     expect(panel.shadowRoot!.querySelector("[data-test=refusal]")).toBeNull();
     expect(unload()).toBe(true);
-  },
-);
-
-it.each(["success", "refusal"] as const)(
-  "an old recovery-kit %s cannot affect a reconnected panel",
-  async (outcome) => {
-    const kit = deferred<{ kit: string; keyFingerprint: string }>();
-    const { app, panel } = await mount(off, { getRecoveryKit: () => kit.promise });
-    await fill(panel);
-    click(panel, "save");
-    await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=change]")).toBeTruthy();
-    panel.remove();
-    app.shadowRoot!.prepend(panel);
-    await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=change]")).toBeTruthy();
-    if (outcome === "success") kit.resolve({ kit: "old-kit", keyFingerprint: "abcd1234" });
-    else kit.reject({ code: "connection.failed" });
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await panel.updateComplete;
-    expect(panel.shadowRoot!.querySelector("[data-test=kit]")).toBeNull();
-    expect(panel.shadowRoot!.querySelector("[data-test=kit-failure]")).toBeNull();
-    expect(unload()).toBe(false);
   },
 );
 
@@ -487,36 +455,6 @@ it.each(["success", "refusal"] as const)(
     expect(unload()).toBe(true);
   },
 );
-
-it("an old kit action cannot unlock a newer kit request after reconnect", async () => {
-  const first = deferred<{ kit: string; keyFingerprint: string }>();
-  const second = deferred<{ kit: string; keyFingerprint: string }>();
-  let reads = 0;
-  const { app, panel } = await mount(on, {
-    getRecoveryKit: () => (++reads === 1 ? first.promise : second.promise),
-  });
-  click(panel, "cancel");
-  await panel.updateComplete;
-  click(panel, "show-kit");
-  panel.remove();
-  app.shadowRoot!.prepend(panel);
-  await expect.poll(() => panel.shadowRoot!.querySelector("[data-test=show-kit]")).toBeTruthy();
-  click(panel, "show-kit");
-  await panel.updateComplete;
-  expect(reads).toBe(2);
-  first.resolve({ kit: "old-kit", keyFingerprint: "abcd1234" });
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  await panel.updateComplete;
-  expect(panel.shadowRoot!.querySelector("[data-test=show-kit]")!.hasAttribute("disabled")).toBe(
-    true,
-  );
-  expect(panel.shadowRoot!.querySelector("[data-test=kit]")).toBeNull();
-  second.resolve({ kit: "new-kit", keyFingerprint: "abcd1234" });
-  await expect
-    .poll(() => panel.shadowRoot!.querySelector("[data-test=kit]")?.textContent?.trim())
-    .toBe("new-kit");
-  expect(unload()).toBe(false);
-});
 
 it("an old failed settings read cannot replace a reconnected panel's read status", async () => {
   const first = deferred<StreamSettingsView>();

@@ -714,7 +714,7 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/api/backup/disable", "POST", undefined]]);
   });
 
-  it("drives the bucket copy's settings, test, switch-off and recovery kit routes", async () => {
+  it("drives the bucket copy's settings, test and switch-off routes, and the archive pack route", async () => {
     const view = { isPrimary: true, configured: false, bucket: null, status: { state: "off" } };
     const bucket = {
       endpoint: "",
@@ -724,7 +724,6 @@ describe("DashboardApi routes", () => {
       accessKeyId: "AKIAEXAMPLE",
       secretAccessKey: "not-a-real-secret",
     };
-    const kit = { kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ab12cd34" };
     const pack = {
       pack: "WAITRON-ARCHIVE-PACK-1:abc",
       keyFingerprint: "ab12cd34",
@@ -737,7 +736,6 @@ describe("DashboardApi routes", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse(view))
       .mockResolvedValueOnce(jsonResponse(view))
-      .mockResolvedValueOnce(jsonResponse(kit))
       .mockResolvedValueOnce(jsonResponse(pack));
     const api = new DashboardApi("", fetchImpl);
 
@@ -745,7 +743,6 @@ describe("DashboardApi routes", () => {
     await expect(api.testStreamBucket(bucket)).resolves.toEqual({ ok: true });
     await expect(api.saveStreamSettings(bucket)).resolves.toEqual(view);
     await expect(api.turnOffStream()).resolves.toEqual(view);
-    await expect(api.getRecoveryKit()).resolves.toEqual(kit);
     await expect(api.getArchiveRecoveryPack()).resolves.toEqual(pack);
 
     expect(callsOf(fetchImpl)).toEqual([
@@ -753,7 +750,6 @@ describe("DashboardApi routes", () => {
       ["/api/backup/stream/test", "POST", bucket],
       ["/api/backup/stream", "PUT", bucket],
       ["/api/backup/stream", "DELETE", undefined],
-      ["/api/backup/stream/kit", "GET", undefined],
       ["/api/backup/archive-recovery-pack", "GET", undefined],
     ]);
     const [, packInit] = fetchImpl.mock.calls.at(-1) as [string, RequestInit];

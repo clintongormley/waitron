@@ -65,9 +65,6 @@ function stubApi(settings: StreamSettingsView, testPasses = false): DashboardApi
       code: "backup.stream_config_unsafe",
       params: { field: "bucket" },
     }),
-    getRecoveryKit: vi
-      .fn()
-      .mockResolvedValue({ kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ab12cd34" }),
     liveData: new LiveData(),
   } as unknown as DashboardApi;
 }
@@ -149,15 +146,9 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     await expectNoA11yViolations(host);
   });
 
-  it("configured and paused with a failing bucket check, the kit and the re-issue banner", async () => {
+  it("configured and paused with a failing bucket check", async () => {
     const { el, host } = await mount(PAUSED);
-    vi.mocked(el.api.getStreamSettings).mockResolvedValue({
-      ...PAUSED,
-      keyFingerprint: "ffee0011",
-    });
-    el.api.liveData.invalidate([{ type: "backup_status" }]);
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=kit-reissued]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=bucket-problem]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 
@@ -171,15 +162,6 @@ describe.each(["light", "dark"] as const)("stream-settings-panel a11y (%s theme)
     await flush(el);
     expect(el.shadowRoot!.querySelector("[data-test=refusal]")).not.toBeNull();
     expect(el.shadowRoot!.querySelector("[data-test=read-failure]")).not.toBeNull();
-    await expectNoA11yViolations(host);
-  });
-
-  it("a failed kit fetch with its alert", async () => {
-    const { el, host } = await mount(STREAMING);
-    vi.mocked(el.api.getRecoveryKit).mockRejectedValue({ code: "connection.failed" });
-    el.shadowRoot!.querySelector<HTMLElement>("[data-test=show-kit]")!.click();
-    await flush(el);
-    expect(el.shadowRoot!.querySelector("[data-test=kit-failure]")).not.toBeNull();
     await expectNoA11yViolations(host);
   });
 

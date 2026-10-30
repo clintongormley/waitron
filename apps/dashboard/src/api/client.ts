@@ -4713,10 +4713,6 @@ export class DashboardApi {
     return this.#request<StreamSettingsView>("/api/backup/stream", "DELETE");
   }
 
-  getRecoveryKit(): Promise<{ kit: string; keyFingerprint: string }> {
-    return this.#request<{ kit: string; keyFingerprint: string }>("/api/backup/stream/kit", "GET");
-  }
-
   getArchiveRecoveryPack(): Promise<ArchiveRecoveryPackAnswer> {
     return this.#request<ArchiveRecoveryPackAnswer>("/api/backup/archive-recovery-pack", "GET");
   }

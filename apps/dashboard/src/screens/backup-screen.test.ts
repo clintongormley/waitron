@@ -126,9 +126,6 @@ function stubApi(
       recoveryKeySet: false,
       keyFingerprint: null,
     }),
-    getRecoveryKit: vi
-      .fn()
-      .mockResolvedValue({ kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ffee0011" }),
     getRecoveryPackStatus: vi.fn().mockResolvedValue(NO_PACK),
     liveData: new LiveData(),
     ...overrides,
@@ -373,50 +370,6 @@ describe("backup-screen", () => {
       timeout: 2_000,
     });
     expect(q(el, "[data-test=minted-key]")).toBeNull();
-  });
-
-  it("lets the bucket copy re-issue its kit when the key changes while archives are off", async () => {
-    const api = stubApi(
-      { getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON) },
-      { ...OFF, recoveryKeySet: true },
-    );
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    vi.mocked(api.getStreamSettings).mockResolvedValue({
-      ...STREAM_ON,
-      keyFingerprint: "ffee0011",
-    });
-    api.liveData.invalidate([{ type: "backup_status" }]);
-    await vi.waitFor(() =>
-      expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
-    );
-    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
-  });
-
-  it("has the bucket copy re-issue its kit as soon as a rotate here changes the key", async () => {
-    const api = stubApi(
-      {
-        getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
-        rotateBackupKey: vi.fn().mockResolvedValue({ ...ENABLED, keyFingerprint: "ffee0011" }),
-      },
-      ENABLED,
-    );
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    q(el, "[data-test=show-old-key]")!.click();
-    await flush(el);
-    tickCheckbox(el, "[data-test=saved-it]");
-    await el.updateComplete;
-    vi.mocked(api.getStreamSettings).mockResolvedValue({
-      ...STREAM_ON,
-      keyFingerprint: "ffee0011",
-    });
-    q(el, "[data-test=rotate-confirm]")!.click();
-    await vi.waitFor(
-      () => expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
-      { timeout: 2_000 },
-    );
-    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
   });
 
   it("treats a key change whose settings record failed as done: the old key goes, the next read shows the new key, and a fresh key is made", async () => {
