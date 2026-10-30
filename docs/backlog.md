@@ -6273,6 +6273,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   tone and area-selection checks stay.
   Holiday-route custom fair samples use English names; official holiday names, geography,
   permissions, sources and dates stay.
+  The provisioning and floor-plan-route fixture slice in [#2295](https://github.com/clintongormley/waitron/pull/2295)
+  still needs rebasing onto A1239's export-check repair and fresh current-head qualification.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
