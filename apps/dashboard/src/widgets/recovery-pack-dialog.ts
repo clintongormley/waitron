@@ -52,7 +52,10 @@ function answeredByBox(error: unknown): boolean {
 type Step = "form" | "lost" | "key-failed";
 type Draft = { typed: boolean; ticked: boolean };
 
-/** Makes a recovery pack after a fresh sign-in. */
+/**
+ * Makes a recovery pack after a fresh sign-in. Fires `recovery-pack-closed` on closing only when it
+ * sent a make, which may have changed the status.
+ */
 @customElement("dashboard-recovery-pack-dialog")
 export class RecoveryPackDialog extends LitElement {
   static override styles = [
@@ -112,6 +115,7 @@ export class RecoveryPackDialog extends LitElement {
   @state() private lostTicked = false;
 
   #generation = 0;
+  #sent = false;
   #method: "password" | "passkey" | undefined;
   #scope?: DraftScope<Draft>;
   #leave?: LeaveCoordinator;
@@ -126,6 +130,7 @@ export class RecoveryPackDialog extends LitElement {
     if (this.opened) return;
     this.#generation++;
     this.opened = true;
+    this.#sent = false;
     this.status = status;
     this.ticked = false;
     this.busy = false;
@@ -192,7 +197,7 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
     this.reread = null;
     this.ways = null;
-    if (announce && wasOpen && this.isConnected)
+    if (announce && wasOpen && this.#sent && this.isConnected)
       this.dispatchEvent(
         new CustomEvent("recovery-pack-closed", { bubbles: true, composed: true }),
       );
@@ -244,6 +249,7 @@ export class RecoveryPackDialog extends LitElement {
       return;
     }
     let made;
+    this.#sent = true;
     try {
       made = await api.makeRecoveryPack({
         locale: currentLocale().startsWith("es") ? "es" : "en",

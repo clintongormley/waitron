@@ -626,6 +626,40 @@ describe("making a pack", () => {
     );
   });
 
+  it("reads nothing when the dialog closes on Cancel before any make was sent", async () => {
+    const api = stubApi(STATES.none);
+    const el = await mount(api);
+    const { wt, cancel } = await openDialog(el);
+    const reads = api.getRecoveryPackStatus.mock.calls.length;
+    const closed = dialogClosed(wt);
+    cancel();
+    await closed;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await settle(el);
+    expect(api.getRecoveryPackStatus.mock.calls.length).toBe(reads);
+  });
+
+  it("re-reads on closing a dialog that sent a make, even one the box refused", async () => {
+    const api = stubApi(STATES.none);
+    api.makeRecoveryPack.mockRejectedValue({ code: "password.throttled", status: 429 });
+    const el = await mount(api);
+    const { dialog, wt, make, cancel } = await openDialog(el);
+    make();
+    await expect
+      .poll(
+        () =>
+          dialog.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-form-actions"]>(
+            "wt-form-actions",
+          )!.error,
+      )
+      .not.toBe("");
+    const reads = api.getRecoveryPackStatus.mock.calls.length;
+    const closed = dialogClosed(wt);
+    cancel();
+    await closed;
+    await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
+  });
+
   it("reads the status once after a make that succeeds", async () => {
     const api = stubApi(STATES.none);
     const el = await mount(api);
