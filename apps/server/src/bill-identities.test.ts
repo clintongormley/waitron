@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { captureError } from "@waitron/db";
+import { billEditStates, captureError, parties, workingOrders } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { billIdentities } from "@waitron/venue-service";
 import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
@@ -49,6 +49,7 @@ import { readUnsentDrafts, splitDraft } from "./order-drafts.js";
 import { readBillsOfParties, readPartyBills } from "./parties.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
+import { renameBill } from "./bill-identities.js";
 import {
   joinTables,
   moveGuests,
@@ -367,7 +368,7 @@ describe("A803 bill numbers: move bill", () => {
 
     expect(await numbersOf(v, from.partyId)).toEqual([[from.tabId, 1, null]]);
     expect(await inTx(v, (tx) => VENUE_SERVICE.readBillIdentities(tx, [leaving]))).toEqual(
-      new Map([[leaving, { number: null, name: "Clint" }]]),
+      new Map([[leaving, { partyId: null, number: null, name: "Clint" }]]),
     );
     expect(await allocationsOf(v, from.partyId)).toEqual([
       [1, from.tabId],
@@ -414,7 +415,7 @@ describe("A803 bill numbers: move bill", () => {
 
     expect((await billRow(v, tabId)).partyId).toBeNull();
     expect(await inTx(v, (tx) => VENUE_SERVICE.readBillIdentities(tx, [tabId]))).toEqual(
-      new Map([[tabId, { number: null, name: "Clint" }]]),
+      new Map([[tabId, { partyId: null, number: null, name: "Clint" }]]),
     );
     expect(await allocationsOf(v, partyId)).toEqual([[1, tabId]]);
     await everyPartyBillNumbered();
@@ -917,5 +918,217 @@ describe("A803 bill list", () => {
     await inTx(v, (tx) => readPartyBills(tx, seated.partyId, (...line) => logged.push(line)));
 
     expect(logged).toEqual([]);
+  });
+});
+
+describe("A803 rename", () => {
+  /** Every row a rename could touch, for a before-and-after comparison. */
+  async function renameRows() {
+    const numbers = await billNumberTables(v);
+    return inTx(v, async (tx) => ({
+      numbers,
+      bills: await tx.select().from(workingOrders).orderBy(asc(workingOrders.id)),
+      parties: await tx.select().from(parties).orderBy(asc(parties.id)),
+      edits: await tx.select().from(billEditStates).orderBy(asc(billEditStates.billId)),
+    }));
+  }
+
+  async function rename(
+    billId: string,
+    name: unknown,
+    partyId: string,
+    sent: { expectedPartyRevision?: number } = {},
+  ) {
+    const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));
+    const expectedPartyRevision = sent.expectedPartyRevision ?? (await revisionOf(v, partyId));
+    return inTx(v, (tx) =>
+      renameBill(tx, billId, name, {
+        partyId,
+        expectedPartyRevision,
+        operatorId: OPERATOR,
+        expectedEdit,
+      }),
+    );
+  }
+
+  async function refusedRename(run: () => Promise<unknown>, code: string, params?: object) {
+    const before = await renameRows();
+    const refusal = await captureError(run);
+    expect(refusal).toMatchObject({ code, ...(params === undefined ? {} : { params }) });
+    expect(await renameRows()).toEqual(before);
+  }
+
+  it("names a bill, trimmed, and the bill list shows it", async () => {
+    const seated = await tableWithBills("R1", 2);
+    const revision = await revisionOf(v, seated.partyId);
+
+    const answer = await rename(seated.bills[1]!, "  Ana  ", seated.partyId);
+
+    expect(answer).toEqual({ revision: revision + 1, billNumber: 2, billName: "Ana" });
+    const bills = await inTx(v, (tx) => readPartyBills(tx, seated.partyId));
+    expect(bills.map((bill) => [bill.billNumber, bill.billName])).toEqual([
+      [1, null],
+      [2, "Ana"],
+    ]);
+  });
+
+  it.each([[""], ["   "], [null]])("the name %j clears it", async (cleared) => {
+    const seated = await tableWithBills(`R2 ${randomUUID()}`, 1);
+    await rename(seated.tabId, "Ana", seated.partyId);
+
+    const answer = await rename(seated.tabId, cleared, seated.partyId);
+
+    expect(answer.billName).toBeNull();
+    expect(await numbersOf(v, seated.partyId)).toEqual([[seated.tabId, 1, null]]);
+  });
+
+  it("40 characters are kept and 41 are refused naming the field, with nothing changed", async () => {
+    const seated = await tableWithBills("R3", 1);
+
+    expect((await rename(seated.tabId, "a".repeat(40), seated.partyId)).billName).toBe(
+      "a".repeat(40),
+    );
+    await refusedRename(
+      () => rename(seated.tabId, "b".repeat(41), seated.partyId),
+      "management.request_invalid",
+      { field: "name" },
+    );
+  });
+
+  it.each([[7], [{ name: "Ana" }]])("a name of %j is refused naming the field", async (name) => {
+    const seated = await tableWithBills(`R4 ${randomUUID()}`, 1);
+
+    await refusedRename(
+      () => rename(seated.tabId, name, seated.partyId),
+      "management.request_invalid",
+      { field: "name" },
+    );
+  });
+
+  it("a name like <b>Ana</b> is stored as typed", async () => {
+    const seated = await tableWithBills("R5", 1);
+
+    await rename(seated.tabId, "<b>Ana</b>", seated.partyId);
+
+    expect(await numbersOf(v, seated.partyId)).toEqual([[seated.tabId, 1, "<b>Ana</b>"]]);
+  });
+
+  it("a stale party revision is party.out_of_date with nothing changed", async () => {
+    const seated = await tableWithBills("R6", 1);
+    const stale = (await revisionOf(v, seated.partyId)) - 1;
+
+    await refusedRename(
+      () => rename(seated.tabId, "Ana", seated.partyId, { expectedPartyRevision: stale }),
+      "party.out_of_date",
+      { partyId: seated.partyId },
+    );
+  });
+
+  it("an abandoned bill is tab.not_open", async () => {
+    const seated = await tableWithBills("R7", 2);
+    const command = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
+
+    await refusedRename(() => rename(seated.bills[1]!, "Ana", seated.partyId), "tab.not_open", {
+      tabId: seated.bills[1],
+    });
+  });
+
+  it("a counter order is refused naming billId", async () => {
+    const orderId = await counterOrder(v, "Burger");
+
+    await refusedRename(
+      () =>
+        inTx(v, async (tx) =>
+          renameBill(tx, orderId, "Ana", {
+            operatorId: OPERATOR,
+            expectedEdit: await readBillEditState(tx, orderId),
+          }),
+        ),
+      "management.request_invalid",
+      { field: "billId" },
+    );
+  });
+
+  it("a paid bill may be renamed", async () => {
+    const seated = await tableWithBills("R9", 2);
+    await pay(v, seated.bills[1]!, "2.00");
+    expect(await statusOf(v, seated.bills[1]!)).toBe("settled");
+
+    const answer = await rename(seated.bills[1]!, "Ana", seated.partyId);
+
+    expect(answer).toMatchObject({ billNumber: 2, billName: "Ana" });
+  });
+
+  it("a paid bill left on a party merged into this one is renamed with the surviving party's id and revision", async () => {
+    const ana = await seat(v, await v.table("R10 ana"));
+    const luisTable = await v.table("R10 luis");
+    const luis = await seat(v, luisTable);
+    await order(v, ana.tabId, "Burger", "Vino");
+    await order(v, luis.tabId, "Agua");
+    await split(v, ana.partyId, ana.tabId, [2]);
+    await pay(v, ana.tabId, "12.00");
+    const options = await tableOptions(ana.partyId, luis.partyId);
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, ana.partyId, luisTable, options));
+    expect(await billRow(v, ana.tabId)).toMatchObject({ partyId: ana.partyId });
+    const revision = await revisionOf(v, luis.partyId);
+
+    const answer = await rename(ana.tabId, "Ana", luis.partyId);
+
+    expect(answer).toEqual({ revision: revision + 1, billNumber: 2, billName: "Ana" });
+    await refusedRename(() => rename(ana.tabId, "Otra", ana.partyId), "party.out_of_date", {
+      partyId: ana.partyId,
+    });
+  });
+
+  it("a bill of a finished table is party.not_open", async () => {
+    const first = await seat(v, await v.table("R11"));
+    await order(v, first.tabId, "Agua");
+    await pay(v, first.tabId, "2.00");
+    const command = await commandFor(v, first.partyId);
+    await inTx(v, (tx) => finishTable(tx, { partyId: first.partyId, ...command }));
+    expect(await partyRow(v, first.partyId)).toMatchObject({ state: "closed" });
+    expect(await numbersOf(v, first.partyId)).toEqual([[first.tabId, 1, null]]);
+
+    await refusedRename(() => rename(first.tabId, "Ana", first.partyId), "party.not_open", {
+      partyId: first.partyId,
+    });
+  });
+
+  it("renaming changes no bill, allocation or editor row, and moves only the party's revision", async () => {
+    const seated = await tableWithBills("R12", 2);
+    const before = await renameRows();
+
+    await rename(seated.bills[1]!, "Ana", seated.partyId);
+
+    const after = await renameRows();
+    expect(after.bills).toEqual(before.bills);
+    expect(after.edits).toEqual(before.edits);
+    expect(after.numbers.allocations).toEqual(before.numbers.allocations);
+    expect(after.parties).toEqual(
+      before.parties.map((party) =>
+        party.id === seated.partyId ? { ...party, revision: party.revision + 1 } : party,
+      ),
+    );
+  });
+
+  it("a table bill with no number row fails as a fault in Waitron, with nothing changed", async () => {
+    const seated = await tableWithBills("R13", 1);
+    const [row] = await inTx(v, (tx) =>
+      tx.select().from(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId)),
+    );
+    await inTx(v, (tx) =>
+      tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId)),
+    );
+
+    try {
+      const before = await renameRows();
+      const failure = await captureError(() => rename(seated.tabId, "Ana", seated.partyId));
+      expect(failure).not.toBeInstanceOf(AppError);
+      expect((failure as Error).message).toContain(seated.tabId);
+      expect(await renameRows()).toEqual(before);
+    } finally {
+      await inTx(v, (tx) => tx.insert(billIdentities).values(row!));
+    }
   });
 });

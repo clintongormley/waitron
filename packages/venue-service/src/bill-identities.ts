@@ -72,10 +72,11 @@ export async function readBillIdentities(
   const rows = await tx
     .select({
       billId: billIdentities.workingOrderId,
+      partyId: billIdentities.partyId,
       number: billIdentities.number,
       name: billIdentities.name,
     })
     .from(billIdentities)
     .where(inArray(billIdentities.workingOrderId, [...billIds]));
-  return new Map(rows.map(({ billId, number, name }) => [billId, { number, name }]));
+  return new Map(rows.map(({ billId, ...identity }) => [billId, identity]));
 }

@@ -186,6 +186,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/split                               | order                  | refuses POST /api/bills/:id/split                    |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
+ * | PUT  /api/bills/:id/name                                | order                  | refuses PUT /api/bills/:id/name                      |
  * | POST /api/bills/:id/transfer                            | order; body order      | refuses POST /api/bills/:id/transfer (from), (to)    |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
@@ -929,6 +930,17 @@ const ROUTES: readonly Row[] = [
     "PUT",
     (x) => `/api/parties/${x.deliParty}/name`,
     () => ({ name: "Renamed", expectedPartyRevision: 0 }),
+    deliTableZone,
+  ],
+  [
+    "PUT /api/bills/:id/name",
+    "PUT",
+    (x) => `/api/bills/${x.deliTab}/name`,
+    (x) => ({
+      name: "Ana",
+      expectedPartyRevision: 0,
+      expectedEdit: { billId: x.deliTab, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
     deliTableZone,
   ],
   [

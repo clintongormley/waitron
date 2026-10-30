@@ -18,6 +18,9 @@ import {
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { openTillSession } from "./testing/session-device.js";
+import { readBillEditState } from "./bill-editing.js";
+import { VENUE_SERVICE } from "./modules.js";
+import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 
 import "./errors.js";
 import { billActionBody, splitBill } from "./testing/bill-action-fixture.js";
@@ -422,5 +425,139 @@ describe("the bill action routes", () => {
     expect(registroCount(venue, tabId)).toBe(1);
     expect(await statusOf(venue, tabId)).toBe("settled");
     expect(registroCount(venue, answer.json.billId as string)).toBe(0);
+  });
+});
+
+describe("A803 rename: PUT /api/bills/:id/name", () => {
+  async function editOf(billId: string) {
+    return inTx(venue, (tx) => readBillEditState(tx, billId));
+  }
+
+  async function put(billId: string, body: Record<string, unknown>, cookie = venue.cookie) {
+    return send(venue.app, cookie, "PUT", `/api/bills/${billId}/name`, body);
+  }
+
+  async function wellFormed(partyId: string, billId: string, name: unknown = "Ana") {
+    return {
+      name,
+      partyId,
+      expectedPartyRevision: await revisionOf(partyId),
+      expectedEdit: await editOf(billId),
+    };
+  }
+
+  /** An unsent Paella on the bill, saved by the admin unless another person is named. */
+  async function adminUnsentDish(partyId: string, billId: string, personId = venue.adminId) {
+    return inTx(venue, (tx) =>
+      saveDraftForTest(tx, venue.cfg, partyId, personId, {
+        billId,
+        draftId: null,
+        revision: 0,
+        lines: [
+          {
+            menuItemId: venue.offerFor("Paella"),
+            variantId: null,
+            menuVersionId: null,
+            quantity: "1",
+            options: [],
+            extras: [],
+            note: null,
+            courseId: null,
+            noMerge: false,
+            slot: 1,
+            joinGroupId: null,
+            afterGroupId: null,
+          },
+        ],
+      }),
+    );
+  }
+
+  async function nameOf(billId: string) {
+    return (await inTx(venue, (tx) => VENUE_SERVICE.readBillIdentities(tx, [billId]))).get(billId)
+      ?.name;
+  }
+
+  it("401 without a session", async () => {
+    const { partyId, second } = await twoBills();
+
+    const answer = await put(second, await wellFormed(partyId, second), "");
+
+    expect(answer.status).toBe(401);
+    expect(await nameOf(second)).toBeNull();
+  });
+
+  it("names the bill and answers the party's new revision, the bill's number and its name", async () => {
+    const { partyId, second } = await twoBills();
+    const revision = await revisionOf(partyId);
+
+    const answer = await put(second, await wellFormed(partyId, second, " Ana "));
+
+    expect(answer.status).toBe(200);
+    expect(answer.json).toEqual({ revision: revision + 1, billNumber: 2, billName: "Ana" });
+    expect(await nameOf(second)).toBe("Ana");
+  });
+
+  it.each(["name", "expectedEdit"] as const)(
+    "a body with no %s is 400 naming the field, changing nothing",
+    async (field) => {
+      const { partyId, second } = await twoBills();
+      const body: Record<string, unknown> = await wellFormed(partyId, second);
+      delete body[field];
+      const revision = await revisionOf(partyId);
+
+      const answer = await put(second, body);
+
+      expect(answer.status).toBe(400);
+      expect(answer.json).toMatchObject({
+        code: "management.request_invalid",
+        params: { field },
+      });
+      expect(await revisionOf(partyId)).toBe(revision);
+      expect(await nameOf(second)).toBeNull();
+    },
+  );
+
+  it("another person's unsent dishes on the bill are 409 draft.taken_over naming them, changing nothing; after the take-over the rename goes through", async () => {
+    const { partyId, second } = await twoBills();
+    const draft = await adminUnsentDish(partyId, second);
+    const revision = await revisionOf(partyId);
+
+    const refused = await put(second, await wellFormed(partyId, second));
+
+    expect(refused.status).toBe(409);
+    expect(refused.json).toMatchObject({
+      code: "draft.taken_over",
+      params: { billId: second, draftId: draft.id, ownerId: venue.adminId },
+    });
+    expect(await revisionOf(partyId)).toBe(revision);
+    expect(await nameOf(second)).toBeNull();
+
+    const taken = await send(
+      venue.app,
+      venue.cookie,
+      "POST",
+      `/api/parties/${partyId}/drafts/${draft.id}/take-over`,
+      { revision: draft.revision, expectedEdit: await editOf(second), submissionId: randomUUID() },
+    );
+    expect(taken.status).toBe(200);
+
+    const renamed = await put(second, await wellFormed(partyId, second));
+
+    expect(renamed.status).toBe(200);
+    expect(await nameOf(second)).toBe("Ana");
+  });
+
+  it("an editor expectation read before our own unsent dishes were saved is 409 draft.out_of_date, changing nothing", async () => {
+    const { partyId, second } = await twoBills();
+    const before = await editOf(second);
+    await adminUnsentDish(partyId, second, venue.operatorId);
+    const body = { ...(await wellFormed(partyId, second)), expectedEdit: before };
+
+    const answer = await put(second, body);
+
+    expect(answer.status).toBe(409);
+    expect(answer.json).toMatchObject({ code: "draft.out_of_date", params: { billId: second } });
+    expect(await nameOf(second)).toBeNull();
   });
 });

@@ -131,7 +131,7 @@ describe("A803 bill numbers (seat)", () => {
     ]);
     expect(await identitiesOf(from)).toEqual([{ bill: gone, number: 3 }]);
     const names = await tx((t) => readBillIdentities(t, [two]));
-    expect(names.get(two)).toEqual({ number: 3, name: "Clint" });
+    expect(names.get(two)).toEqual({ partyId: into, number: 3, name: "Clint" });
   });
 
   it("A803 bill numbers (seat): dropping a bill's number keeps its name, and returning it to a party gives it that party's next number with its name", async () => {
@@ -145,6 +145,7 @@ describe("A803 bill numbers (seat)", () => {
 
     await tx((t) => releaseBillNumber(t, bill));
     expect((await tx((t) => readBillIdentities(t, [bill]))).get(bill)).toEqual({
+      partyId: null,
       number: null,
       name: "Ana",
     });
@@ -154,6 +155,7 @@ describe("A803 bill numbers (seat)", () => {
     await allocate(first, other);
     expect(await allocate(bill, other)).toBe(2);
     expect((await tx((t) => readBillIdentities(t, [bill]))).get(bill)).toEqual({
+      partyId: other,
       number: 2,
       name: "Ana",
     });
@@ -185,7 +187,7 @@ describe("A803 bill numbers (seat)", () => {
     await allocate(bill, party);
     const unknown = randomUUID();
     const read = await tx((t) => readBillIdentities(t, [bill, unknown]));
-    expect([...read.entries()]).toEqual([[bill, { number: 1, name: null }]]);
+    expect([...read.entries()]).toEqual([[bill, { partyId: party, number: 1, name: null }]]);
     expect((await tx((t) => readBillIdentities(t, []))).size).toBe(0);
   });
 
