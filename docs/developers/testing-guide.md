@@ -552,13 +552,14 @@ Homebrew's Node when their inserts were put back to one statement; with the sett
 well, they passed there.
 
 An insert whose rows grow with an order must go through `insertInChunks`, or `statementChunks`
-where the inserted rows are needed back (`packages/db/src/insert-in-chunks.ts`); both count one
-bound value per column per row. No sweep has read every insert. After the first, PR #2265's run-it
-review found an item payment's lines unchunked, and a test of each further insert it named found
-three more: a discount's lines, a kitchen ticket's line links and a party bill's kitchen allergy
-snapshots. Each test failed "too many SQL variables" under Homebrew's Node before its fix, and
-again when its fix was taken out. The table round's line insert, `insertTabRound`, is still one
-statement; `docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one
+where the statement needs more than a plain insert: its rows back (`.returning()`) or a conflict
+clause (`.onConflictDoNothing()`) (`packages/db/src/insert-in-chunks.ts`); both count one bound
+value per column per row. No sweep has read every insert. After A1208's own sweep, PR #2265's
+run-it review found an item payment's lines unchunked, and a test of each further insert it named
+found three more: a discount's lines, a kitchen ticket's line links and a party bill's kitchen
+allergy snapshots. Each test failed "too many SQL variables" before its fix, and again when its fix
+was taken out. The table round's line insert, `insertTabRound`, is still one statement;
+`docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one
 value more on the reader and the writer of both files" in `packages/store/src/index.test.ts`,
 failed with the setting deleted from the writer alone and from the reader alone. It is weaker
 than the rule: it proves the store's connections refuse, not that every growing insert is

@@ -6075,6 +6075,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
+- **No sweep has read every insert whose rows grow with an order.** A1208's sweep missed four,
+  which PR #2265's review and the tests after it found; others may remain.
+  [Detail](backlog/architecture.md#no-sweep-has-read-every-insert-whose-rows-grow-with-an-order)
+
 - **A table round of more than about 1,100 dishes is refused "too many SQL variables"**
   `insertTabRound` writes a round's lines in one statement; 1,089 waters passed and 1,188 were
   refused. [Detail](backlog/architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
