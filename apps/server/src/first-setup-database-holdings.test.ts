@@ -26,7 +26,7 @@ import * as provisioning from "@waitron/provisioning";
 import { appendOnlyTriggers } from "@waitron/store";
 import { damagePages, checkpointed } from "../test/damaged-database.js";
 import { MODULE } from "../test/first-fiscal.js";
-import { foreignHotJournal } from "../test/foreign-journal.js";
+import { foreignHotJournal, foreignWal } from "../test/foreign-journal.js";
 import { readSetupDatabase } from "./first-setup-database-holdings.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
@@ -98,6 +98,7 @@ async function mainFile(db: Pick<Database, "execute">) {
   const rows = (await db.execute<{ name: string; file: string }>("pragma database_list")).rows;
   return rows.find((row) => row.name === "main")!.file;
 }
+const PRIVATE_COPY = /waitron-setup-holdings-/;
 
 it("reads a legitimate held setup in place: every activation row, nothing kept, no invoice", async () => {
   const held = await heldSetup();
@@ -145,7 +146,9 @@ it("answers setup.not_ready when the private copy cannot be removed", async () =
   const held = await heldSetup({ pendingWal: true });
   let copy: string | undefined;
   const modules = withHoldings(held, async (db) => {
-    copy = await mainFile(db);
+    // The seat also reads the main file alone, which is not the copy.
+    const file = await mainFile(db);
+    if (PRIVATE_COPY.test(file)) copy = file;
     return { records: 0, accepted: 0 };
   });
   vi.mocked(fileSystem.rm).mockRejectedValueOnce(
@@ -187,20 +190,25 @@ it("passes on a module seat's error code, never its reason", async () => {
   });
 });
 
-it("refuses a write through the private copy", async () => {
+it("refuses a write through the private copy and through the main file read alone", async () => {
   const held = await heldSetup({ pendingWal: true });
-  let refusal: unknown;
+  const refusals: [string, unknown][] = [];
   const modules = withHoldings(held, async (db) => {
-    expect(await mainFile(db)).toMatch(/waitron-setup-holdings-/);
+    const file = await mainFile(db);
     try {
       await db.execute("create table seat_write (a)");
+      refusals.push([file, undefined]);
     } catch (error) {
-      refusal = error;
+      refusals.push([file, error]);
     }
     return { records: 0, accepted: 0 };
   });
   await read(held, modules);
-  expect(String(refusal)).toMatch(/readonly/);
+  expect(refusals.map(([file]) => file)).toEqual([
+    expect.stringMatching(PRIVATE_COPY),
+    expect.not.stringMatching(PRIVATE_COPY),
+  ]);
+  for (const [, refusal] of refusals) expect(String(refusal)).toMatch(/readonly/);
 });
 
 it.each([
@@ -215,7 +223,8 @@ it.each([
   const held = await heldSetup({ pendingWal: true });
   let copy: string | undefined;
   const modules = withHoldings(held, async (db) => {
-    copy = await mainFile(db);
+    const file = await mainFile(db);
+    if (PRIVATE_COPY.test(file)) copy = file;
     return answer();
   });
   const reading = read(held, modules);
@@ -414,6 +423,55 @@ it("is not ready, never damaged, for an intact database holding an invoice with 
   });
   expect(await readFile(venueDb(held))).toEqual(before);
 });
+
+it.each([
+  ["whose page 1 names only its own table", "page-1", "no such table"],
+  ["overwriting other pages", "other-pages", "errcode 11"],
+] as const)(
+  "an intact database holding an invoice, with another database's -wal beside it %s, is damaged and still counts the invoice its main file holds",
+  async (_label, shape, code) => {
+    const held = await heldSetup({ invoices: 1, recovery: false });
+    checkpointed(venueDb(held));
+    foreignWal(`${venueDb(held)}-wal`, shape);
+    const before = await files(held.roots.venueDir);
+    const answer = await readDatabase(held);
+    expect(answer).toMatchObject({ kind: "damaged", code, seen: { records: 1 } });
+    const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;
+    expect(seen.kept).toBeGreaterThanOrEqual(1);
+    expect(seen.rows).toBeGreaterThan(ACTIVATION_ROWS);
+    expect(await files(held.roots.venueDir)).toEqual(before);
+  },
+);
+
+it("a damaged database with no invoice and its own pending -wal still reads as damaged with nothing kept", async () => {
+  const held = await heldSetup({ pendingWal: true, recovery: false });
+  const wal = await readFile(`${venueDb(held)}-wal`);
+  damagePages(venueDb(held), "department_days");
+  await writeFile(`${venueDb(held)}-wal`, wal);
+  expect(await readDatabase(held)).toMatchObject({
+    kind: "damaged",
+    code: "errcode 11",
+    seen: { kept: 0, records: 0, accepted: 0 },
+  });
+});
+
+it.each([
+  [Object.assign(new Error("seat failed"), { code: "ESEAT" }), "ESEAT"],
+  [new AppError("setup.attempt_invalid", {}, { reason: "a value" }), "setup.attempt_invalid"],
+])(
+  "is not ready when a module seat fails on the main file read alone (%s)",
+  async (failure, code) => {
+    const held = await heldSetup({ pendingWal: true, recovery: false });
+    const modules = withHoldings(held, async (db) => {
+      if (!PRIVATE_COPY.test(await mainFile(db))) throw failure;
+      return { records: 0, accepted: 0 };
+    });
+    await expect(readDatabase(held, modules)).rejects.toMatchObject({
+      code: "setup.not_ready",
+      reason: `main file read failed: ${code}`,
+    });
+  },
+);
 
 it("sums records and accepted filings over every module with a holdings seat", async () => {
   const held = await heldSetup({ recovery: false });

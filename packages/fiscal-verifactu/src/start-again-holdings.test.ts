@@ -87,6 +87,40 @@ describe("startAgainHoldings on a database missing the fiscal tables", () => {
   });
 });
 
+describe("startAgainHoldings with an invoice record and the envios table missing", () => {
+  const suite = useVenueDb({ migrations: TEST_MIGRATIONS, resetPerTest: false });
+
+  it("still counts the invoice record, and no acceptance", async () => {
+    const { nodeId, seriesId: series } = await seedTenantWithSif(suite.db);
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "production",
+      clock: steadyClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+    });
+    await withTransaction(suite.db, (tx) =>
+      recordSale(tx, backend, saleInput({ nodeId, seriesId: series })),
+    );
+    await suite.db.execute(sql`drop table envios`);
+    for (const [, seat] of contributions)
+      expect(await seat.startAgainHoldings!(suite.db)).toEqual({ records: 1, accepted: 0 });
+  });
+});
+
+describe("startAgainHoldings with no invoice record and the envios table missing", () => {
+  const suite = useVenueDb({
+    migrations: TEST_MIGRATIONS,
+    resetPerTest: false,
+    setup: async (db) => {
+      await db.execute(sql`drop table envios`);
+    },
+  });
+
+  it.each(contributions)("refuses rather than counting nothing in %s", async (_, seat) => {
+    await expect(seat.startAgainHoldings!(suite.db)).rejects.toThrow(/no such table: envios/);
+  });
+});
+
 it("lists exactly the append-only table the fiscal activation writes as deletable", () => {
   expect(FISCAL_START_AGAIN_DELETABLE).toEqual(["fiscal_allocations"]);
 });

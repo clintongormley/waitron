@@ -12,13 +12,19 @@ async function count(db: Target, query: ReturnType<typeof sql>): Promise<number>
   return Number(rows[0]!.n);
 }
 
-// A missing table throws "no such table" here, so a damaged database is never read as holding nothing.
 export const startAgainHoldings: NonNullable<
   InitialSetupContribution["startAgainHoldings"]
-> = async (db) => ({
-  records: await count(db, sql`select count(*) as n from registros_facturacion`),
-  accepted: await count(
-    db,
-    sql`select count(*) as n from envios where estado in ('aceptado', 'aceptado_con_errores')`,
-  ),
-});
+> = async (db) => {
+  const records = await count(db, sql`select count(*) as n from registros_facturacion`);
+  try {
+    const accepted = await count(
+      db,
+      sql`select count(*) as n from envios where estado in ('aceptado', 'aceptado_con_errores')`,
+    );
+    return { records, accepted };
+  } catch (error) {
+    // Any record refuses Start again whatever `accepted` says, so a failed count must not lose it.
+    if (records === 0) throw error;
+    return { records, accepted: 0 };
+  }
+};

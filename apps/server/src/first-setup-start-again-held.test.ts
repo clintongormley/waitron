@@ -29,7 +29,7 @@ import {
 } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
-import { foreignHotJournal } from "../test/foreign-journal.js";
+import { foreignHotJournal, foreignWal } from "../test/foreign-journal.js";
 import { checkpointed, damageIndexes, damagePages } from "../test/damaged-database.js";
 import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
@@ -1176,6 +1176,43 @@ it("a held database missing a table beside a readable sale refuses kept-records,
   const f = await heldSetup({ invoices: 1, recovery: false });
   dropTables(f, ["department_days"]);
   await expectHeldRefused(f, keptRecords);
+});
+
+it.each([
+  ["page-1", "partial"],
+  ["other-pages", "corrupt"],
+] as const)(
+  "an intact held database with an invoice and another database's -wal beside it (%s, labelled %s) refuses kept-records, and deletes nothing",
+  async (shape, label) => {
+    const f = await heldSetup({ invoices: 1, recovery: false });
+    checkpointed(venueDb(f));
+    foreignWal(`${venueDb(f)}-wal`, shape);
+    expect(await labelOf(f)).toBe(label);
+    await expectHeldRefused(f, keptRecords);
+  },
+);
+
+it("a damaged held database with no invoice and its own pending -wal: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ pendingWal: true, recovery: false });
+  const wal = await readFile(`${venueDb(f)}-wal`);
+  damagePages(venueDb(f), "department_days");
+  await writeFile(`${venueDb(f)}-wal`, wal);
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("an invoice record with the envios table missing refuses kept-records even when every append-only table is listed as deletable, and nothing changes", async () => {
+  extraDeletable.set(
+    "fiscal-verifactu",
+    manifestSets().flatMap((set) => set.appendOnlyTables),
+  );
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  dropTables(f, ["envios"]);
+  await expectHeldRefused(f, {
+    ...keptRecords,
+    reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
+  });
 });
 
 it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {

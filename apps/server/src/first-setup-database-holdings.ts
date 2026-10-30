@@ -6,6 +6,7 @@ import { manifestSets } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import {
   executeTarget,
+  openImmutable,
   openImmutableWhenWalEmpty,
   quoteIdent,
   type FirstSetupRoots,
@@ -102,7 +103,11 @@ export async function readSetupDatabase(
       connection = new DatabaseSync(join(scratch, "venue.db"));
       connection.exec("pragma query_only = 1");
     }
-    const { holdings, damage } = await readHoldings(connection!, modules);
+    const { holdings: read, damage } = await readHoldings(connection!, modules);
+    // What the copy shows can come from another database's -wal or journal, so the main file is
+    // read alone too.
+    const holdings =
+      opened.kind === "wal" ? larger(read, await readMainFile(database, modules)) : read;
     if (damage === undefined) return { kind: "read", holdings };
     // Another database's journal rolled into the copy fails an intact database in the same way.
     if (journal) notReady(`journal beside a damaged read: ${damage}`);
@@ -122,6 +127,31 @@ export async function readSetupDatabase(
           failed ? undefined : notReady(`copy not removed: ${codeOf(error)}`),
         );
     }
+  }
+}
+
+const larger = (a: SetupDatabaseHoldings, b: SetupDatabaseHoldings): SetupDatabaseHoldings => ({
+  rows: Math.max(a.rows, b.rows),
+  kept: Math.max(a.kept, b.kept),
+  records: Math.max(a.records, b.records),
+  accepted: Math.max(a.accepted, b.accepted),
+});
+
+/** What the main file holds, its `-wal` ignored; damage counts as nothing, as in `readHoldings`. */
+async function readMainFile(
+  database: string,
+  modules: readonly WaitronModule[],
+): Promise<SetupDatabaseHoldings> {
+  let connection: DatabaseSync | undefined;
+  try {
+    connection = openImmutable(database);
+    return (await readHoldings(connection, modules)).holdings;
+  } catch (error) {
+    return notReady(
+      `main file read failed: ${error instanceof AppError ? error.code : codeOf(error)}`,
+    );
+  } finally {
+    connection?.close();
   }
 }
 

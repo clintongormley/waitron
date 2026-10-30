@@ -22,14 +22,22 @@ export async function openImmutableWhenWalEmpty(path: string): Promise<Immutable
     if ((error as NodeJS.ErrnoException).code !== "ENOENT")
       return { kind: "failed", stage: "wal", error };
   }
-  const url = pathToFileURL(path);
-  url.searchParams.set("mode", "ro");
-  url.searchParams.set("immutable", "1");
   try {
-    return { kind: "open", connection: new DatabaseSync(url, { readOnly: true }) };
+    return { kind: "open", connection: openImmutable(path) };
   } catch (error) {
     return { kind: "failed", stage: "open", error };
   }
+}
+
+/**
+ * Opens the database at `path` read-only and immutable: it ignores a `-wal` and writes nothing
+ * beside it.
+ */
+export function openImmutable(path: string): DatabaseSync {
+  const url = pathToFileURL(path);
+  url.searchParams.set("mode", "ro");
+  url.searchParams.set("immutable", "1");
+  return new DatabaseSync(url, { readOnly: true });
 }
 
 /** A plain `execute` target over `connection`, for module seats that read with plain statements. */

@@ -74,10 +74,7 @@ export interface InitialSetupContribution {
     readonly keys: readonly string[];
     readonly positions: readonly { namespace: string; position: number }[];
   };
-  /**
-   * Invoice records in a setup database Start again is about to delete. Throws when its own tables
-   * are missing from a database whose migration set is applied, never counts them as 0.
-   */
+  /** Invoice records in a setup database Start again is about to delete. */
   startAgainHoldings?(
     db: Pick<Database, "execute">,
   ): Promise<{ readonly records: number; readonly accepted: number }>;
