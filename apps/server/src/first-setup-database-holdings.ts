@@ -55,7 +55,7 @@ export async function readSetupDatabaseHoldings(
           ? false
           : notReady(`journal check failed: ${codeOf(error)}`),
     );
-    // Opening the original in place avoids the copy: Start again is the way out of a nearly full disk.
+    // Opening the original in place avoids a copy, which a nearly full disk may have no room for.
     const opened = journal ? ({ kind: "wal" } as const) : await openImmutableWhenWalEmpty(database);
     if (opened.kind === "failed")
       notReady(`database unreadable: ${opened.stage} ${codeOf(opened.error)}`);

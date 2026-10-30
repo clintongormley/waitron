@@ -1,9 +1,8 @@
 import { heldSetup } from "../test/held-setup-database.js";
-import { createHash } from "node:crypto";
 import { Socket } from "node:net";
 import { TLSSocket } from "node:tls";
 import { Hono } from "hono";
-import { access, lstat, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { access, readFile, readdir, rm, rmdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { getTableName, sql } from "drizzle-orm";
@@ -13,7 +12,13 @@ import { applyMigrationSet } from "@waitron/db/testing/venue-db.js";
 import { manifestSets } from "@waitron/migrations";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
+  assertStartAgainAllowedOnDisk,
+  finishStartAgainDeletion,
+  firstSetupFrozenDigest,
+  startAgainMarkerFor,
+  writeStartAgainMarker,
   readStartAgainMarker,
+  resolveFirstSetupBackupWorkspace,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { registrosFacturacion } from "@waitron/fiscal-verifactu/src/schema/registros.js";
@@ -23,6 +28,11 @@ import {
   type StartAgainFirstSetupRequest,
 } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
+import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
+import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
+import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
+import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
+import { runStagedRestore, stageRestoreRequest } from "./restore-request.js";
 
 // Tables a test adds to a module's `startAgainDeletable`, as the holdings reader sees it.
 const extraDeletable = vi.hoisted(() => new Map<string, readonly string[]>());
@@ -57,26 +67,7 @@ vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
 
-async function tree(dir: string, prefix = ""): Promise<Record<string, string>> {
-  const result: Record<string, string> = {};
-  for (const name of (await readdir(join(dir, prefix))).sort()) {
-    const relative = prefix === "" ? name : `${prefix}/${name}`;
-    // Every exclusive turn rewrites the anchor's own lock pair.
-    if (prefix === "" && /^venue\.(lock|holder)/.test(name)) continue;
-    if ((await lstat(join(dir, relative))).isDirectory()) {
-      result[`${relative}/`] = "";
-      Object.assign(result, await tree(dir, relative));
-    } else
-      result[relative] = createHash("sha256")
-        .update(await readFile(join(dir, relative)))
-        .digest("hex");
-  }
-  return result;
-}
-const snapshot = async (f: Pick<Held, "roots">) => ({
-  venue: await tree(f.roots.venueDir),
-  state: await tree(f.roots.stateDir),
-});
+const snapshot = (f: Pick<Held, "roots">) => diskSnapshot(f.roots);
 
 /**
  * Signs the setup owner in, then answers a call that asks for the summary. A setup whose
@@ -199,10 +190,6 @@ it("a complete attempt with no saved trading settings refuses setup.start_again_
   );
 });
 
-it("a held setup database with no recovery started is still refused setup.not_ready, and nothing changes", async () => {
-  await expectRefused(await heldSetup({ recovery: false }), { code: "setup.not_ready" });
-});
-
 it("a held summary the disk check refuses is refused before what the setup database holds is read, and nothing changes", async () => {
   const f = await heldSetup();
   const node = new DatabaseSync(join(f.roots.venueDir, "node.db"));
@@ -214,12 +201,16 @@ it("a held summary the disk check refuses is refused before what the setup datab
 });
 
 it.each([
-  ["saved trading settings", { recovery: false, tradingSettings: true }, true],
-  ["a complete attempt", { recovery: false, status: "complete" }, false],
+  ["saved trading settings", "trading-settings", { recovery: false, tradingSettings: true }, true],
+  ["a complete attempt", "setup-finished", { recovery: false, status: "complete" }, false],
+  ["an invoice record", "kept-records", { recovery: false, invoices: 1 }, true],
 ] as const)(
-  "%s with no recovery started is refused setup.not_ready, not start_again_refused, and nothing changes",
-  async (_label, options, signIn) => {
-    await expectRefused(await heldSetup(options), { code: "setup.not_ready" }, { signIn });
+  "%s with no recovery started refuses the summary and Start again setup.start_again_refused %s, and nothing changes",
+  async (_label, cause, options, signIn) => {
+    const f = await heldSetup(options);
+    const refusal = { code: "setup.start_again_refused", params: { cause } };
+    await expectRefused(f, refusal, { signIn });
+    await expectStartAgainRefused(f, await handMade(f, signIn, false), refusal);
   },
 );
 
@@ -294,7 +285,7 @@ const LEFT_VENUE = /^(venue|recovery|migrations)\.lock(-journal)?$|^venue\.holde
 const LEFT_STATE =
   /^(first-setup-start-again-confirmations\/(\w|[-.])*|first-setup-resolutions\/|first-setup-resolutions\/backup-recovery\/(current\.json)?|first-setup-resolutions\/backup-recovery\/[^/]+\/(\d{6}\.json|target\/|target\/(venue|state)\/|target\/(venue|state)\/((venue|migrations|recovery)\.lock(-journal)?|venue\.holder\.json))?)$/;
 
-it("in the held state, Start again confirming the summary deletes the setup, and keeps who chose it", async () => {
+it("in the held state, Start again confirming the summary deletes the setup, and keeps whose setup it was", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
   await expect(startAgain.run()).resolves.toBeUndefined();
@@ -303,7 +294,12 @@ it("in the held state, Start again confirming the summary deletes the setup, and
   expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
-  expect(records[0]).toMatchObject({ database: "present", shown: startAgain.shown });
+  expect(records[0]).toMatchObject({
+    database: "present",
+    shown: startAgain.shown,
+    setupAdministrator: { displayName: expect.any(String), email: expect.any(String) },
+    signedIn: false,
+  });
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
 });
 
@@ -471,12 +467,6 @@ it("in the held state, a request answering no-current-master is refused setup.no
   );
 });
 
-it("a held setup database with no recovery started still refuses Start again setup.not_ready, and nothing changes", async () => {
-  const f = await heldSetup({ recovery: false });
-  // With no recovery, a confirmRecoveryDiscard is refused setup.attempt_conflict before this check.
-  await expectStartAgainRefused(f, await handMade(f, true, false), { code: "setup.not_ready" });
-});
-
 it("in the held state, the Start again route passes the shown summary on, so confirming it over HTTPS starts again", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
@@ -556,4 +546,173 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
     socket.destroy();
   }
   expect(await snapshot(f)).toEqual(before);
+});
+
+/** The ids a page holds after reading the inspection, with nobody signed in. */
+async function withoutSignIn(f: Held, host: Held["host"] = f.host) {
+  const current = await host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const actions = createFirstSetupResolutionActions({ ...f.roots, host });
+  return { ids, actions };
+}
+
+const noConfirmations = (f: Held) =>
+  expect(access(join(f.roots.stateDir, START_AGAIN_CONFIRMATIONS_DIR))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+
+it("a held setup database with no recovery: the summary answers and Start again deletes it with no password", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "fiscal-finished" });
+  await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  await noConfirmations(f);
+});
+
+it("a held setup database with no recovery, when the box knows no modules, refuses the summary and Start again setup.not_ready before reading what it holds, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const host = { ...f.host, modules: undefined } as unknown as Held["host"];
+  const { ids, actions } = await withoutSignIn(f, host);
+  holdingsRead.calls = 0;
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), {
+    code: "setup.not_ready",
+  });
+  await expectStartAgainRefused(f, () => actions.startAgainFirstSetup(ids), {
+    code: "setup.not_ready",
+  });
+  expect(holdingsRead.calls).toBe(0);
+});
+
+it("a held setup database with no recovery, its venue.db missing and trading settings saved, refuses the summary and Start again setup.not_ready for state/trading.env, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false, tradingSettings: true });
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  const { ids, actions } = await withoutSignIn(f);
+  const refusal = { code: "setup.not_ready", reason: "refused artifact: state/trading.env" };
+  await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), refusal);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "fiscal-finished" } },
+      }),
+    refusal,
+  );
+});
+
+async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) {
+  const app = restoreApp({
+    stageRestore: (request) => stageRestoreRequest(f.roots.stateDir, request),
+  });
+  const response = await app.request("https://box.test/setup-api/restore", {
+    method: "POST",
+    body: archiveForm(archive, {
+      selectedSourceId: archive.options.selected.sourceId,
+      oldBoxGone: true,
+      soleRecovery: true,
+    }),
+  });
+  expect(response.status).toBe(202);
+  agreeInternet();
+}
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
+it("a held setup database, wiped, then the fresh-box restore writes into the usual folders", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  await actions.startAgainFirstSetup(ids);
+  // The backup's hour is chosen after the wipe, as on a box: the wipe deletes an earlier choice.
+  const outcome = (await recoverySelectPastWaits(
+    clock,
+    createSelectedRecoveryPreparation(f.archive.options),
+    { onBox: false },
+  )) as { input: unknown };
+  await stageFreshRestore(f, { ...f.archive, outcome });
+  await expect(runStagedRestore(f.archive.restore)).resolves.toBe(true);
+  expect(await exists(join(f.roots.venueDir, "venue.db"))).toBe(true);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(true);
+  for (const dir of [f.roots.venueDir, f.roots.stateDir])
+    expect(await exists(join(dir, "first-setup-resolutions"))).toBe(false);
+  expect((await resolveFirstSetupBackupWorkspace(f.roots)).kind).toBe("absent");
+}, 180_000);
+
+it("control: the same fresh-box restore beside a held setup database that was not wiped is refused, and places nothing", async () => {
+  const f = await heldSetup({ recovery: false });
+  await stageFreshRestore(f);
+  const venue = (await diskSnapshot(f.roots)).venue;
+  await expect(runStagedRestore(f.archive.restore)).rejects.toMatchObject({
+    code: expect.stringMatching(/^setup\.attempt_(conflict|uncertain)$/),
+  });
+  expect((await diskSnapshot(f.roots)).venue).toEqual(venue);
+  expect(await exists(join(f.roots.stateDir, "trading.env"))).toBe(false);
+}, 180_000);
+
+it("a power cut during a held wipe with no recovery: the next start finishes the deletion", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids } = await withoutSignIn(f);
+  let removed = 0;
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    remove: async (path, kind) => {
+      if (removed++ === 1) throw new Error("power cut");
+      await (kind === "file" ? unlink(path) : rmdir(path));
+    },
+  });
+  await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+    code: "setup.start_again_incomplete",
+  });
+  expect(removed).toBe(2);
+  expect(await readStartAgainMarker(f.roots.venueDir)).not.toBeNull();
+  await finishStartAgainDeletion(f.roots);
+  await expectStartAgainDeleted(f.roots);
+});
+
+it("a deletion already marked: Start again answers setup.start_again_incomplete and the route asks for a restart", async () => {
+  const f = await heldSetup({ recovery: false });
+  const state = (await f.host.store.read())!;
+  await writeStartAgainMarker(
+    f.roots,
+    await startAgainMarkerFor(
+      await assertStartAgainAllowedOnDisk(f.roots, { held: true }),
+      { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
+      { held: true },
+    ),
+  );
+  const { ids, actions } = await withoutSignIn(f);
+  const requestRestart = vi.fn();
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: actions.startAgainFirstSetup,
+    requestRestart,
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: { code: "setup.start_again_incomplete" },
+    });
+  } finally {
+    socket.destroy();
+  }
+  await vi.waitFor(() => expect(requestRestart).toHaveBeenCalledOnce());
 });

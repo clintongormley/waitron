@@ -18,6 +18,7 @@ import {
 } from "@waitron/provisioning";
 import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
 import { heldSetup } from "../test/held-setup-database.js";
+import { diskSnapshot } from "../test/start-again-deleted.js";
 import "./testing/hour-test-clock.js";
 import { PASSWORD } from "../test/first-fiscal.js";
 import "./first-setup-backup-source.js";
@@ -282,4 +283,47 @@ it("in the held state, with the box's spare file, the summary answers and Start 
     target: { recoveryId },
   });
   expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
+});
+
+it("in the held state with no recovery, on a full disk with the box's spare file, the spare is not released, and the summary and Start again answer 507 storage.disk_full, deleting nothing", async (ctx) => {
+  const small = needDisk(ctx);
+  const f = await heldSetup({ recovery: false });
+  expect(realpathSync(f.roots.venueDir).startsWith(`${process.env.TMPDIR}/`)).toBe(true);
+  vi.mocked(backupEntry.firstSetupBackupRecoveryFor).mockReset();
+  const spare = join(f.roots.stateDir, SPARE_SPACE_FILE);
+  await writeFile(spare, Buffer.alloc(SPARE_SPACE_BYTES, 1));
+  const entry = await resolveFirstSetupEntry(
+    f.roots,
+    { WAITRON_ENV: "preproduction" },
+    undefined,
+    () => {},
+    spareOption(f.roots),
+  );
+  if (entry.kind !== "resolution") throw new Error("repair app missing");
+  small.fill();
+  expect(small.free()).toBeLessThan(65_536);
+  const inspected = (await (await entry.app.request(ROUTE, {}, tls())).json()) as Inspection;
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision,
+    ownerGeneration: inspected.ownerGeneration,
+  };
+  const before = await diskSnapshot(f.roots);
+  const send = (path: string) =>
+    entry.app.request(
+      `${ROUTE}${path}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(ids),
+      },
+      tls(),
+    );
+  for (const path of ["/start-again/summary", "/start-again"]) {
+    const answer = await send(path);
+    expect(answer.status, path).toBe(507);
+    expect(await answer.json()).toMatchObject({ error: { code: "storage.disk_full" } });
+  }
+  expect(await diskSnapshot(f.roots)).toEqual(before);
+  expect((await stat(spare)).size).toBe(SPARE_SPACE_BYTES);
 });

@@ -22,7 +22,11 @@ import {
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
-import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
+import {
+  diskSnapshot,
+  expectStartAgainDeleted,
+  startAgainUnchanged,
+} from "../test/start-again-deleted.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -121,6 +125,48 @@ it("with an empty unused setup, the summary answers, and Start again deletes it 
   await f.actions.startAgainFirstSetup({ ...ids, register });
   await expectStartAgainDeleted(f);
 });
+it.each<[string, (f: Awaited<ReturnType<typeof actionsFixture>>) => Promise<void>, string]>([
+  [
+    "an empty database past claimed",
+    async (f) => {
+      await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
+      await f.store.update(f.claim.state.attemptId, 2, { kind: "activation-started" });
+    },
+    "setup.not_ready",
+  ],
+  [
+    "a restore request in the state folder",
+    (f) => writeFile(join(f.stateDir, "restore-request.json"), "{}"),
+    "setup.not_ready",
+  ],
+  [
+    "an unexpected folder among the first-setup recovery records",
+    async (f) => {
+      await mkdir(join(f.stateDir, "first-setup-resolutions", "unexpected"), { recursive: true });
+    },
+    "setup.not_ready",
+  ],
+  [
+    "a first-setup-workspaces folder in the state folder",
+    (f) => mkdir(join(f.stateDir, "first-setup-workspaces")),
+    "setup.workspace_unsupported",
+  ],
+])(
+  "%s: the summary and Start again are refused, and nothing changes",
+  async (_label, arrange, code) => {
+    const f = await actionsFixture();
+    await arrange(f);
+    const { register, ...ids } = await f.startRequest();
+    const before = await diskSnapshot(f);
+    await expect(f.actions.startAgainSummary(ids)).rejects.toMatchObject({ code });
+    await expect(f.actions.startAgainFirstSetup({ ...ids, register })).rejects.toMatchObject({
+      code,
+    });
+    await expect(f.actions.startAgainFirstSetup(ids)).rejects.toMatchObject({ code });
+    expect(await diskSnapshot(f)).toEqual(before);
+    expect(before.state["first-setup-start-again-confirmations/"]).toBeUndefined();
+  },
+);
 it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {

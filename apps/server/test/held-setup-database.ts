@@ -56,6 +56,8 @@ interface HeldSetup {
     ids: { inspectionId: string; revision: number; ownerGeneration: number };
   }>;
   installationName: string;
+  /** `archiveHost()`'s backup. A wipe deletes its hour choice, so a restore after one chooses again. */
+  archive: Awaited<ReturnType<typeof archiveHost>>;
 }
 
 const services: { dispose(): Promise<void> }[] = [];
@@ -310,7 +312,7 @@ export async function heldSetup(options: HeldSetupOptions = {}): Promise<HeldSet
         },
       };
     };
-    return { roots: f.roots, host, workspace, service, signIn, installationName };
+    return { roots: f.roots, host, workspace, service, signIn, installationName, archive: f };
   } finally {
     if (open) await held.close();
   }

@@ -72,16 +72,15 @@ function assertNoKeptRecords({ rows, kept, records, accepted }: SetupDatabaseHol
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
-/** The held state's refusals, in this order. */
+/** The held state's refusals made before what its database holds is read, in this order. */
 function assertHeldStartAgainOffered(
   inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
-  found: FoundRecovery | undefined,
   status: FirstSetupState["status"],
 ): void {
   const holdsRecords =
     inspection.database === "occupied" ||
     (inspection.database === "no-venue-rows" && !inspection.emptyDatabase);
-  if (found?.kind !== "stopped" || !holdsRecords) unavailable();
+  if (!holdsRecords) unavailable();
   if (
     inspection.artifacts.find((artifact) => artifact.name === "trading.env")?.status !== "missing"
   )
@@ -315,7 +314,7 @@ export function createFirstSetupResolutionActions(
       !missing &&
       (inspection.database !== "no-venue-rows" ||
         !PRESENT_START_AGAIN_STATUSES.includes(state.status));
-    if (held) assertHeldStartAgainOffered(inspection, found, state.status);
+    if (held) assertHeldStartAgainOffered(inspection, state.status);
     else if (missing) {
       if (state.status === "complete") refused("setup-finished");
       if (kind === "start-again" && request.confirmMissingDatabase === undefined) unavailable();
@@ -341,8 +340,8 @@ export function createFirstSetupResolutionActions(
     // Before the read, which may copy the whole database: a refusal here costs nothing.
     const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
     if (held) {
-      // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
-      const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+      if (host.modules === undefined) unavailable();
+      const holdings = await readSetupDatabaseHoldings(roots, host.modules);
       // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
       if (holdings.rows === 0) unavailable();
       assertNoKeptRecords(holdings);

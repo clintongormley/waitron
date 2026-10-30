@@ -1287,8 +1287,8 @@ it.each<[string, (f: { stateDir: string; venueDir: string }) => Promise<unknown>
   },
 );
 
-it("on a missing database, Start again with outside evidence configured is refused, and nothing is written", async () => {
-  const { f, actions, request } = await missingDatabase();
+it("on a missing database, the summary and Start again with outside evidence configured are refused, and nothing is written", async () => {
+  const { f, actions, request, ids } = await missingDatabase();
   const inspect = f.host.resolution.inspectFirstSetupResolution.bind(f.host.resolution);
   vi.spyOn(f.host.resolution, "inspectFirstSetupResolution").mockImplementation(async () => {
     const inspection = await inspect();
@@ -1298,6 +1298,7 @@ it("on a missing database, Start again with outside evidence configured is refus
     };
   });
   const before = await folderTrees(f);
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
   await expect(
     actions.startAgainFirstSetup({
       ...request,
