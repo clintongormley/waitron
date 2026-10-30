@@ -3,6 +3,7 @@ import type {
   PartyAllergySnapshot,
   TicketAllergyCopy,
 } from "./party-allergy.js";
+import type { BillIdentity } from "./bill-identity.js";
 import type { ModuleTimeRecordExport } from "./record-export.js";
 import type { ModulePersonalData } from "./personal-data.js";
 import semver from "semver";
@@ -1490,6 +1491,17 @@ export interface VenueServiceContribution {
     billId: string | null,
     operatorId: string,
   ): Promise<void>;
+  /** Give a bill the party's next number; a number once given is never given again. */
+  allocateBillNumber(tx: Transaction, billId: string, partyId: string): Promise<number>;
+  /** Renumber, after any merge, every bill numbered in `fromPartyId` that is not abandoned. */
+  rescopeBillNumbers(tx: Transaction, fromPartyId: string, intoPartyId: string): Promise<void>;
+  /** Drop a bill's number as it leaves for the counter, keeping its name. */
+  releaseBillNumber(tx: Transaction, billId: string): Promise<void>;
+  setBillName(tx: Transaction, billId: string, name: string | null): Promise<void>;
+  readBillIdentities(
+    tx: Transaction,
+    billIds: readonly string[],
+  ): Promise<ReadonlyMap<string, BillIdentity>>;
   kitchenNoteKey(scope: KitchenNoteScope): string;
   readKitchenNotes(
     tx: Transaction,
