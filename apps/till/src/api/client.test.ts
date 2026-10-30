@@ -3230,6 +3230,33 @@ describe("TillApi", () => {
     );
   });
 
+  it("A803 bill names: renameBill PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
+    const fetchStub = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ revision: 4, billNumber: 2, billName: "Clint" }));
+    const result = await new TillApi("", fetchStub).renameBill("wo-7", "Clint", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+    });
+
+    expect(fetchStub).toHaveBeenCalledWith(
+      "/api/bills/wo-7/name",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: "Clint",
+          expectedPartyRevision: 3,
+          partyId: "v1",
+          expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },
+        }),
+      }),
+    );
+    expect(result).toEqual({ revision: 4, billNumber: 2, billName: "Clint" });
+  });
+
   it("splitBill POSTs the chosen lines to the bill's /split route and answers the new bill's id", async () => {
     const fetchStub = vi.fn().mockResolvedValue(jsonResponse({ billId: "wo-new" }));
 

@@ -16331,10 +16331,10 @@ export class TillApp extends LitElement {
    * amount due: its total plus its credit notes. */
   #departingBills(): DepartingBill[] {
     const party = this.orderParty?.displayName ?? "";
-    return shownBills(this.partyBills).flatMap((bill, index) => {
+    return shownBills(this.partyBills).flatMap((bill) => {
       const due = bill.amountDue ?? bill.outstanding;
       return owing(bill) && compareDecimal(decimal(due), decimal("0")) > 0
-        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, index), outstanding: due }]
+        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, bill), outstanding: due }]
         : [];
     });
   }
@@ -16794,8 +16794,8 @@ export class TillApp extends LitElement {
   }
 
   #paymentBillLabel(billId: string): string | undefined {
-    const index = shownBills(this.partyBills).findIndex((bill) => bill.workingOrderId === billId);
-    return index < 0 ? undefined : billName(this.orderParty?.displayName ?? "", index);
+    const bill = shownBills(this.partyBills).find((row) => row.workingOrderId === billId);
+    return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
   async #onTakePayment(event: Event): Promise<void> {

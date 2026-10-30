@@ -16,7 +16,10 @@ import { stepChip, stepChipStyles } from "./step-chip.js";
 import { trackDialog } from "./track-dialog.js";
 
 export function unsentText({ billNumber, ownerName, lineCount }: UnsentDraft): string {
-  const bill = t("floor.unsent_bill").replace("{n}", String(billNumber));
+  const bill =
+    billNumber === null
+      ? t("floor.unsent_bill_unnumbered")
+      : t("floor.unsent_bill").replace("{n}", String(billNumber));
   return `${bill} · ${named(
     ownerName,
     countText(lineCount, "floor.unsent_owner", "floor.unsent_owner_one"),

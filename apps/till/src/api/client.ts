@@ -4697,6 +4697,20 @@ export class TillApi {
   }
 
   /**
+   * Name a bill, or clear its name with null or "" → `PUT /api/bills/:id/name`, answering the
+   * party's revision and the bill's number and name. A name over 40 characters is
+   * `management.request_invalid` naming the field `name`; another till's unsent dishes on the bill
+   * are `draft.taken_over` until this till takes the bill over.
+   */
+  renameBill(
+    billId: string,
+    name: string | null,
+    revisions: BillRevisions & { expectedEdit: BillEditExpected },
+  ): Promise<{ revision: number; billNumber: number | null; billName: string | null }> {
+    return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
+  }
+
+  /**
    * Put the chosen items of a bill on a new bill of the same party → `POST /api/bills/:billId/split`,
    * answering the new bill's id. Rejects, among others, `bill.paid`, `bill.presented`,
    * `bill.line_paid`, `tab.split_held_line`, `tab.transfer_modifier_line`, `party.not_open` and

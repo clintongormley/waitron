@@ -2199,8 +2199,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Discount on the bill on screen, named as the bills list names it. */
   #billAdjust(): TemplateResult | typeof nothing {
     if (!this.#adjustable() || this.lines.length === 0) return nothing;
-    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    const name = index === -1 ? t("adjust.whole_bill") : this.#billName(index);
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
     return html`<div class="bill-adjust">
       <wt-button
         variant="secondary"
@@ -2484,7 +2484,7 @@ export class TillTableOrderScreen extends LitElement {
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
-        .billLabels=${new Map(bills.map((bill, index) => [bill.workingOrderId, billName(this.party?.displayName ?? "", index)]))}
+        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billName(this.party?.displayName ?? "", bill)]))}
         .busy=${this.busy || this.groupCommandBusy}
         .now=${this.now}
         @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
@@ -4198,8 +4198,8 @@ export class TillTableOrderScreen extends LitElement {
     return shownBills(this.bills);
   }
 
-  #billName(index: number): string {
-    return billName(this.party?.displayName ?? "", index);
+  #billName(bill: PartyBill): string {
+    return billName(this.party?.displayName ?? "", bill);
   }
 
   #money(amount: string): string {
@@ -4215,7 +4215,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="bills" data-bills>
       <h2>${t("table.bills_title")}</h2>
       <ul>
-        ${bills.map((bill, index) => this.#billRow(bill, index))}
+        ${bills.map((bill) => this.#billRow(bill))}
       </ul>
       <div class="total-row">
         <span class="label">${t("table.still_to_pay")}</span>
@@ -4292,7 +4292,7 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #billRow(bill: PartyBill, index: number): TemplateResult {
+  #billRow(bill: PartyBill): TemplateResult {
     const shown = bill.workingOrderId === this.orderId;
     const paid = bill.status === "settled";
     return html`<li
@@ -4301,7 +4301,7 @@ export class TillTableOrderScreen extends LitElement {
       aria-current=${shown ? "true" : nothing}
     >
       <span
-        ><span class="bill-name">${this.#billName(index)}</span> ${
+        ><span class="bill-name">${this.#billName(bill)}</span> ${
           bill.invoiceType === "F1" && bill.recipient !== null
             ? html`<span class="bill-invoice" data-invoice-choice
                 >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
@@ -4714,8 +4714,8 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The bill on screen by {@link #billName}, or undefined when the party's bills do not list it. */
   #shownBillName(): string | undefined {
-    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    return index < 0 ? undefined : this.#billName(index);
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    return shown === undefined ? undefined : this.#billName(shown);
   }
 
   #tableTargets(): TableState[] {
@@ -4759,12 +4759,12 @@ export class TillTableOrderScreen extends LitElement {
   #otherBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
-    return this.#shownBills().flatMap((bill, index) =>
+    return this.#shownBills().flatMap((bill) =>
       bill.workingOrderId !== this.orderId &&
       bill.partyId === party.id &&
       bill.status === "open" &&
       !bill.hasPayments
-        ? [{ bill, name: this.#billName(index) }]
+        ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
   }
@@ -4957,9 +4957,9 @@ export class TillTableOrderScreen extends LitElement {
   #splitTableBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
-    return this.#shownBills().flatMap((bill, index) =>
+    return this.#shownBills().flatMap((bill) =>
       bill.partyId === party.id && bill.workingOrderId !== party.mainBillId && owing(bill)
-        ? [{ bill, name: this.#billName(index) }]
+        ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
   }
@@ -5507,9 +5507,9 @@ export class TillTableOrderScreen extends LitElement {
     const shown = this.#shownBills();
     let heading = t(key);
     for (const [slot, id] of Object.entries(bills)) {
-      const index = shown.findIndex((bill) => bill.workingOrderId === id);
-      if (index < 0) return t("table.actions_title");
-      heading = heading.replace(`{${slot}}`, () => this.#billName(index));
+      const bill = shown.find((row) => row.workingOrderId === id);
+      if (bill === undefined) return t("table.actions_title");
+      heading = heading.replace(`{${slot}}`, () => this.#billName(bill));
     }
     return heading;
   }
