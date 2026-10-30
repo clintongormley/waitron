@@ -5211,3 +5211,65 @@ hyphenated, its inflections and unhyphenated spelling are not checked, and an un
 the retired command's separator. Text extensions are case-sensitive. The fiscal parser checks
 ordinary and private identifiers; quoted property keys remain string literals and are not
 identifier checks. These limits also apply to source comments and prose that use different words.
+
+
+## Root receipts moved on 2026-10-31
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`a8ce834d69f298f7e062aaf1cd8b587e62be0171`. They are not new measurements.
+
+### Personal log field names
+
+- **A detail or log field holding a person's name, email or tax number uses a name on
+  `PERSONAL_LOG_KEYS` or a path on `PERSONAL_LOG_PATHS` (`apps/server/src/log-personal-data.ts`),
+  which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
+  it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
+  the venue's own): the list is flat across every code.** Cost: staff names and emails reached the
+  sign-in-free recovery page. Guard:
+  `scripts/personal-log-params.test.ts`, weaker than its name: reads text, judges keys by a word
+  list and a named type only by its name, sees no spread at a throw site or in a log call, no free
+  text and not the watchdog's own line. Limits: [conventions-ui.md](conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
+
+### Configuration preview field guard
+
+- **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
+  setup app copies `venue.location` by `LocationDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
+  production box could be set up from an export. Guard: the preview row in
+  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
+  weaker than the rule: the e2e row cuts the location by its own keys, so only the setup-app case
+  catches a copied `fireControl`. [Detail](conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
+
+### Spare file release and recovery
+
+- **Within the server, only the start (on a nearly full disk, before first-setup resolution), its
+  emptying of a discarded recovery and the repair page's Start-again flow delete
+  `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
+  `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
+  until a start with room, the free-space watch or Box status's Free button has written the spare
+  back whole. It is never venue data, and a recovery's originals walk leaves both out.** Cost if
+  not: on a full disk the venue locks cannot be taken, so a recovery's copy could never be freed, and
+  a full disk with nothing else to free would serve only the full-disk page (A1127). Guard:
+  `scripts/spare-space.test.ts`, weaker than its name: reads text.
+  [Detail](conventions-data.md#the-boxs-spare-file).
+
+### Backup room note deletion
+
+- **Every server path that replaces or removes the live `venue.db` deletes
+  `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.** Cost if not: a full-disk start could trust an old installation start and delete backups
+  from before a restore or Start again, which can hold sales the live database lacks. Guard:
+  `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
+  [Detail](conventions-data.md#the-backup-room-note).
+
+### Start again records retention
+
+- **Start again's confirmation and choice records and the set-aside folder are removed only by
+  `waitron.sh reset --all`** (A1042, A1098). Cost if not: the box forgets what a person confirmed,
+  or deletes files a Move set aside. Guard: `scripts/start-again-records-writers.test.ts`, weaker
+  than its name: reads text, never what a listed file does.
+  [Detail](conventions-data.md#start-agains-records-and-the-set-aside-folder).
+
+### Fiscal ownership guard limits
+
+- **The node owns the fiscal identity, chain and invoice series; a till is a cash register.**
+  Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text; misses the same idea
+  under another word (terminal, device, caja) and in prose. Limits: [conventions-data.md](conventions-data.md#the-node-owns-fiscal-identity).

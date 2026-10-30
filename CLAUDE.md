@@ -228,10 +228,8 @@ called weaker than its name, the topic file lists what it does not see.
   the files it allows by name only to a line count.
 - **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
   (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
-  provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: it reads text
-  under `apps/*/src` only, finds forms by the literals `"addressLine1"`/`"streetAddress"`, and checks
-  that the tag is present, not where or with a provider. Limits:
-  [design-system.md](docs/developers/design-system.md).
+  provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: reads text, not
+  placement or provider. [Limits](docs/developers/conventions-ui.md#root-receipts-moved-on-2026-10-31).
 - **A `wt-help-tooltip` outside the setup wizard carries `mode="help-mode"`**, so it shows only while
   help is on (owner, 2026-10-18, A582 design §7). Guard: `scripts/help-tooltip-mode.test.ts`, weaker than its name — it reads
   literals as text; what it misses is in [conventions-ui.md](docs/developers/conventions-ui.md).
@@ -370,10 +368,8 @@ called weaker than its name, the topic file lists what it does not see.
   which the server's logger masks in every line it writes; the answer keeps it. Name it for whose
   it is (`guestName`, `customerTaxId`), never a bare `name` or `taxId` (the listed bare `taxId` is
   the venue's own): the list is flat across every code.** Cost: staff names and emails reached the
-  sign-in-free recovery page. Guard:
-  `scripts/personal-log-params.test.ts`, weaker than its name: reads text, judges keys by a word
-  list and a named type only by its name, sees no spread at a throw site or in a log call, no free
-  text and not the watchdog's own line. Limits: [conventions-ui.md](docs/developers/conventions-ui.md#the-unauthenticated-recovery-page-curated-title-and-action-the-failed-starts-report-and-the-logs-last-lines).
+  sign-in-free recovery page. Guard: `scripts/personal-log-params.test.ts`, weaker than its name:
+  reads text. [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A recorded incident code needs an area claim and English and Spanish alert wording.** Guard:
   `scripts/alert-codes.test.ts`, weaker than its name — it reads literals in hand-listed files.
 - **General code is English only** (owner, 2026-09-07 and 2026-10-19), including literals, comments,
@@ -395,10 +391,9 @@ called weaker than its name, the topic file lists what it does not see.
   `@waitron/dashboard-modules` is the browser-side twin.
 - **A configuration bundle value that is not a setup field stays out of `venue`'s own keys; the
   setup app copies `venue.location` by `LocationDraft`'s fields.** Cost: from #1752 to A980 S1a2 no
-  production box could be set up from an export. Guard: the preview row in
-  `apps/server/src/first-fiscal-setup.e2e.test.ts` and `apps/setup/src/setup-app-first-fiscal.test.ts`,
-  weaker than the rule: the e2e row cuts the location by its own keys, so only the setup-app case
-  catches a copied `fireControl`. [Detail](docs/developers/conventions-data.md#a-configuration-bundle-value-that-is-not-a-setup-field-stays-out-of-the-venues-own-keys).
+  production box could be set up from an export. Guards: `apps/server/src/first-fiscal-setup.e2e.test.ts`
+  and `apps/setup/src/setup-app-first-fiscal.test.ts`, weaker than the rule: one export shape.
+  [Limits](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **A test-only dependency closes a workspace dependency loop as surely as a runtime one.** A suite
   needing packages from both ends of a loop goes in a package nothing depends on. Guard:
   `scripts/workspace-cycles.test.ts` — it reads each `package.json`, not pnpm's own graph.
@@ -464,21 +459,17 @@ called weaker than its name, the topic file lists what it does not see.
   `<state>/spare-space` (`waitron.sh reset` deletes it too); a release writes
   `spare-space.released` (exceptions in the topic file), which holds the till stop, across restarts,
   until a start with room, the free-space watch or Box status's Free button has written the spare
-  back whole. It is never venue data, and a recovery's originals walk leaves both out.** Cost if
-  not: on a full disk the venue locks cannot be taken, so a recovery's copy could never be freed, and
-  a full disk with nothing else to free would serve only the full-disk page (A1127). Guard:
-  `scripts/spare-space.test.ts`, weaker than its name: reads text.
-  [Detail](docs/developers/conventions-data.md#the-boxs-spare-file).
+  back whole. It is never venue data, and a recovery's originals walk leaves both out.**
+  Guard: `scripts/spare-space.test.ts`, weaker than its name: reads text.
+  [Cost and detail](docs/developers/conventions-data.md#the-boxs-spare-file).
 - **Every server path that replaces or removes the live `venue.db` deletes
-  `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.** Cost if not: a full-disk start could trust an old installation start and delete backups
-  from before a restore or Start again, which can hold sales the live database lacks. Guard:
-  `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
-  [Detail](docs/developers/conventions-data.md#the-backup-room-note).
+  `<state>/backup-room-note.json` first; `waitron.sh reset` removes both together.**
+  Guard: `scripts/backup-room-note.test.ts`, weaker than its name: reads text, two hand-kept lists.
+  [Cost and detail](docs/developers/conventions-data.md#the-backup-room-note).
 - **Start again's confirmation and choice records and the set-aside folder are removed only by
-  `waitron.sh reset --all`** (A1042, A1098). Cost if not: the box forgets what a person confirmed,
-  or deletes files a Move set aside. Guard: `scripts/start-again-records-writers.test.ts`, weaker
-  than its name: reads text, never what a listed file does.
-  [Detail](docs/developers/conventions-data.md#start-agains-records-and-the-set-aside-folder).
+  `waitron.sh reset --all`** (A1042, A1098). Guard: `scripts/start-again-records-writers.test.ts`,
+  weaker than its name: reads text, never what a listed file does.
+  [Cost and detail](docs/developers/conventions-data.md#root-receipts-moved-on-2026-10-31).
 - **One process owns a venue folder at a time.** Tools documented to run beside the server use
   `exclusive: false`; file-changing commands take `lockVenueDatabase` before changing anything.
   Never unlink `venue.lock`/`recovery.lock`; change `recovery.json` only through `updateRecoveryState`.
@@ -601,14 +592,11 @@ browser test** — most of these rules exist because a test passed while proving
 - **Don't own a database in a suite — let `useVenueDb` own it.** Raw `beforeAll`/`afterAll` only
   when the suite legitimately builds its own resource, and then guarded. Guard:
   `scripts/guarded-teardowns.test.ts`.
-- **Official Node's SQLite binds at most 32,766 values in one statement; Homebrew's binds 250,000.**
-  `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses. An
-  insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`; the table round's
-  `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a
-  2,001-dish order passed locally and failed CI. Guard: the bound-value case in
+- **An insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`**;
+  the table round's `insertTabRound` does not yet, and no sweep has read every insert (see the backlog).
+  Cost: a 2,001-dish order passed locally and failed CI. Guard: the bound-value case in
   `packages/store/src/index.test.ts`, weaker than the rule: it proves the store's connections, not
-  that growing inserts are chunked. Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md#the-store-caps-the-values-one-statement-binds-at-official-nodes-limit).
+  that growing inserts are chunked. [Runtime limits and receipt](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **Synchronous `node:sqlite` tests need a real timer turn for the venue watchdog; `useVenueDb`
   yields after each test.** Guards: `packages/db/src/testing/venue-db.test.ts` and
   `packages/store/src/venue-liveness.test.ts`, weaker than the rule: only the helper/default options
@@ -622,12 +610,9 @@ browser test** — most of these rules exist because a test passed while proving
   interrupt suites need versitygw alone. Missing binaries skip locally and fail CI. Guard:
   `scripts/ci-workflow.test.mjs`, weaker than its name: text reads accept commented or disabled setup.
 - **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
-  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
-  `WAITRON_FULL_DISK_DIR_FROM_SPARE` and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` for the second to fourth
-  files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
-  run them at once), otherwise skips locally and fails CI. Interrupted
-  macOS images can remain attached; `pnpm reap` does not detach them. Guard:
-  `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
+  needs `WAITRON_FULL_DISK_DIR`, otherwise skips locally and fails CI. Interrupted macOS images
+  can remain attached; `pnpm reap` does not detach them. Guard: `scripts/ci-workflow.test.mjs`,
+  weaker than its name: reads workflow text. [Separate filesystems and variables](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **On Vitest 4.1.12 a browser configured inside a project reads `connectTimeout` only from the
   OUTER config's `test.browser` block**; the command-line flag and that project's own `browser`
   block are ignored without a word. Nothing guards it. Receipt:
@@ -645,10 +630,8 @@ browser test** — most of these rules exist because a test passed while proving
   `beforeServerStarts`, weaker than the rule — it covers the file's two write helpers only. Receipt:
   [testing-guide.md](docs/developers/testing-guide.md#a-test-that-runs-the-server-in-its-own-process-writes-to-the-database-only-while-the-server-is-down).
 - **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
-  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the children of
-  `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`
-  and `apps/server/src/hour-promotion.test.ts`, weaker than the rule: those children only. Receipt:
-  [testing-guide.md](docs/developers/testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).
+  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the hour test children,
+  weaker than the rule: those children only. [Receipt and paths](docs/developers/testing-guide.md#root-receipts-moved-on-2026-10-31).
 - **Draw every port a test needs in one `freePorts(n)` call, before binding any of them**
   (`apps/server/src/testing/free-ports.ts`), never two single draws before either is bound. Nothing
   guards it.
@@ -771,8 +754,8 @@ browser test** — most of these rules exist because a test passed while proving
 ## 5. Fiscal invariants — the unrecoverable ones
 
 - **The node owns the fiscal identity, chain and invoice series; a till is a cash register.**
-  Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text; misses the same idea
-  under another word (terminal, device, caja) and in prose. Limits: [conventions-data.md](docs/developers/conventions-data.md#the-node-owns-fiscal-identity).
+  Guard: `scripts/no-till-as-issuer.test.ts`, weaker than its name: reads text.
+  [Limits](docs/developers/conventions-data.md#the-node-owns-fiscal-identity).
 
 Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#root-detail-moved-on-2026-10-26),
 [printing](docs/developers/conventions-ui.md#root-detail-moved-on-2026-10-26) and

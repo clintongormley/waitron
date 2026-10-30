@@ -2179,3 +2179,18 @@ name or the wrong one. Which surface reads which: [products.md](products.md).
 the whole tab's stream, so a misspelled name breaks other screens too. Guard:
 `scripts/live-subscriptions.test.ts` — it catches unknown names, NOT missing SQL dependencies or
 disabled-module combinations.
+
+
+## Root receipts moved on 2026-10-31
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`a8ce834d69f298f7e062aaf1cd8b587e62be0171`. They are not new measurements.
+
+### Postal address field guard
+
+- **A form that asks for a postal address puts `wt-address-lookup` above its address fields**
+  (the owner's ask, 2026-10-28, A1171); it stays hidden until the form is handed an address
+  provider. Guard: `scripts/address-lookup-forms.test.ts`, weaker than its name: it reads text
+  under `apps/*/src` only, finds forms by the literals `"addressLine1"`/`"streetAddress"`, and checks
+  that the tag is present, not where or with a provider. Limits:
+  [design-system.md](design-system.md).
