@@ -1159,7 +1159,7 @@ describe("Device API — the device-guarded routes", () => {
     const queued = (entry: Entry) =>
       entry.queue?.flatMap((group) => group.items.map((item) => item.id));
 
-    /** A dish at Grill (the default station) and one, with a void notice, at Fría. */
+    /** A dish at Grill (the default station) and one, with a void notice, at Cold. */
     async function seed() {
       const venue = await setupVenue(suite.db);
       const app = mountApp(venue.cfg);
