@@ -304,6 +304,7 @@ import type {
 } from "./screens/till-table-order-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
 import { billName, owing, paidInPart, shownBills } from "./state/bill-state.js";
+import { foldRetrievedPortions, portionWireLines } from "./state/counter-portion-rows.js";
 import { billRequestOf } from "./state/table-signals.js";
 import {
   barTables,
@@ -6396,7 +6397,7 @@ export class TillApp extends LitElement {
       // The server pays a retrieved order from its stored lines and ignores `lines`, so an edit made
       // after retrieving must be saved first or it is silently dropped from the charge and the record.
       if (
-        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
+        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -6557,7 +6558,7 @@ export class TillApp extends LitElement {
     let paid = false;
     try {
       if (
-        !(await this.#syncIfDirty(id, lines, label, lateSend)) ||
+        !(await this.#syncIfDirty(id, lines, basketLines, label, lateSend)) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;
@@ -7323,36 +7324,91 @@ export class TillApp extends LitElement {
     return true;
   }
 
+  /** Saves the basket's edits to its stored order. `lines` are `rows` as `#currentSaleLines` sent
+   * them, one per row; a row of several portions is saved as its members (plan D8). */
   async #syncIfDirty(
     id: string,
     lines: SaleLine[],
+    rows: readonly OrderLine[],
     label: string | undefined,
     lateSend?: LateSend,
   ): Promise<boolean> {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
+    const visit = this.#store.loadGeneration;
+    const movedOn = () => session !== this.#operatorSession || visit !== this.#store.loadGeneration;
     const payload = this.#basketPayload();
+    const sent = lines.flatMap((wire, index) => portionWireLines(rows[index]!, wire));
     try {
       const saved = await this.api.updateWorkingOrder(id, {
         expectedEdit: this.#counterExpectedEdit(id),
-        lines,
+        lines: sent,
         label,
         revision: this.#store.revision,
         ...(lateSend === undefined ? {} : { lateSend }),
       });
-      if (session !== this.#operatorSession) return false;
+      if (movedOn()) return false;
       this.#store.markSaved(saved.revision);
       this.#commitBasket(payload);
     } catch (error) {
-      if (session !== this.#operatorSession) return false;
+      if (movedOn()) return false;
       const code = (error as { code?: string }).code;
       if (code === "working_order.out_of_date") {
         await this.#reloadChangedOrder(id);
         return false;
       }
       if (code !== "working_order.not_open") throw error;
+      return true;
     }
+    // A new dish, a portion sent above one (it rises by copies), a repriced line's added units (they
+    // go on a line of their own) or a row of portions can leave stored dishes the basket's rows do
+    // not name (plan D12).
+    const listed = this.counterLines?.orderId === id ? this.counterLines.lines : [];
+    const risesInPlace = (lineId: string) =>
+      listed.some(
+        (line) =>
+          line.id === lineId && line.portion !== true && line.listUnitPriceGross === undefined,
+      );
+    const movesIds =
+      rows.some((row) => row.portionLineIds !== undefined) ||
+      sent.some(
+        (wire) =>
+          wire.workingOrderLineId === undefined ||
+          (Number(wire.quantity) !== 1 && !risesInPlace(wire.workingOrderLineId)),
+      );
+    return !movesIds || (await this.#readBackSaved(id, session, visit));
+  }
+
+  /** The basket takes the order `id` as stored after its own save, so a later save names every
+   * stored dish; unfolded, as a load takes it, when its lines cannot be read. Edits are locked while
+   * it reads. When the order cannot be read the lock stays until the basket is cleared or loaded
+   * again, and nothing more is saved from it: the answer is false and the basket is no longer
+   * unsaved. */
+  async #readBackSaved(id: string, session: number, visit: number): Promise<boolean> {
+    const unlock = this.#store.lockEdits();
+    const [order, listed] = await Promise.all([
+      this.api.retrieveWorkingOrder(id).catch(() => undefined),
+      this.#readStoredLines(id),
+    ]);
+    if (session !== this.#operatorSession || visit !== this.#store.loadGeneration) {
+      unlock();
+      return false;
+    }
+    if (order === undefined) {
+      this.#store.markPersisted();
+      this.errorKey = "held.reread_failed";
+      return false;
+    }
+    const { lines, banner } = this.#basketLinesOf(order);
+    if (banner !== undefined) this.errorKey = banner;
+    this.#store.adoptSaved(
+      foldRetrievedPortions(lines, listed, this.#holdsMoney(id)),
+      order.revision,
+    );
+    this.counterLines = listed;
+    this.#commitBasket(this.#basketPayload());
+    unlock();
     return true;
   }
 
@@ -7425,10 +7481,11 @@ export class TillApp extends LitElement {
         if (!(await this.#askCounterDeadEnds("place", !refusalRetry, clearInactiveChoices))) return;
         if (!current()) return;
         const lines = this.#currentSaleLines();
+        const rows = [...this.#store.lines];
         const label = this.#store.label;
         const payload = this.#basketPayload();
         if (this.#store.persisted) {
-          if (!(await this.#syncIfDirty(id, lines, label, lateSend)) || !current()) return;
+          if (!(await this.#syncIfDirty(id, lines, rows, label, lateSend)) || !current()) return;
           // A refused save can precede a replay, but unsaved edits are a different placement.
           if (this.#basketPayload() !== this.#basketBaseline) {
             this.errorKey = "place.error";
@@ -8578,7 +8635,13 @@ export class TillApp extends LitElement {
           if (session !== this.#operatorSession) return;
           this.#store.markSaved(saved.revision);
         } else if (
-          !(await this.#syncIfDirty(id, lines, label ?? this.#store.label, lateSend)) ||
+          !(await this.#syncIfDirty(
+            id,
+            lines,
+            basketLines,
+            label ?? this.#store.label,
+            lateSend,
+          )) ||
           basketVisit !== this.#store.loadGeneration
         )
           return;
@@ -8723,6 +8786,39 @@ export class TillApp extends LitElement {
       this.#dismissStationChoices();
       this.#counterMoveSubmitting = null;
     }
+    const { lines, banner } = this.#basketLinesOf(order);
+    if (banner !== undefined) this.errorKey = banner;
+    this.#store.loadFrom(
+      order.id,
+      foldRetrievedPortions(lines, listed, this.#holdsMoney(order.id)),
+      order.label ?? undefined,
+      order.revision,
+      {
+        ...order.kitchenNote,
+        scopeKey:
+          "partyId" in order.kitchenNote.scope
+            ? `party:${order.kitchenNote.scope.partyId}`
+            : `order:${order.kitchenNote.scope.workingOrderId}`,
+      },
+    );
+    this.#counterBillEdit = {
+      id: order.id,
+      visit: this.#store.loadGeneration,
+      expectedEdit: structuredClone(order.expectedEdit),
+    };
+    this.#rememberReceiptLanguage(
+      order.id,
+      offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
+      true,
+    );
+    this.#clearUnlistedCounterStations();
+    this.counterLines = listed;
+    this.collectFlow = undefined;
+  }
+
+  /** `order`'s lines rebuilt against today's live offer, and the one banner that says what the
+   * rebuild changed. */
+  #basketLinesOf(order: HeldOrder): { lines: OrderLine[]; banner?: StringKey } {
     const lines: OrderLine[] = [];
     let droppedAProduct = false;
     let extraNotOffered = false;
@@ -8772,29 +8868,18 @@ export class TillApp extends LitElement {
     }
     // One banner, so a DROPPED product is reported first: it has already changed what the basket
     // will bill, where the other two change nothing until the operator edits the order.
-    if (droppedAProduct) this.errorKey = "held.product_gone";
-    else if (extraNotOffered) this.errorKey = "held.extra_not_offered";
-    else if (mustChooseAgain) this.errorKey = "held.options_changed";
-    this.#store.loadFrom(order.id, lines, order.label ?? undefined, order.revision, {
-      ...order.kitchenNote,
-      scopeKey:
-        "partyId" in order.kitchenNote.scope
-          ? `party:${order.kitchenNote.scope.partyId}`
-          : `order:${order.kitchenNote.scope.workingOrderId}`,
-    });
-    this.#counterBillEdit = {
-      id: order.id,
-      visit: this.#store.loadGeneration,
-      expectedEdit: structuredClone(order.expectedEdit),
-    };
-    this.#rememberReceiptLanguage(
-      order.id,
-      offeredReceiptLanguage(order.receiptLanguage, this.receiptLanguages),
-      true,
-    );
-    this.#clearUnlistedCounterStations();
-    this.counterLines = listed;
-    this.collectFlow = undefined;
+    const banner: StringKey | undefined = droppedAProduct
+      ? "held.product_gone"
+      : extraNotOffered
+        ? "held.extra_not_offered"
+        : mustChooseAgain
+          ? "held.options_changed"
+          : undefined;
+    return banner === undefined ? { lines } : { lines, banner };
+  }
+
+  #holdsMoney(orderId: string): boolean {
+    return this.heldOrders.some((held) => held.id === orderId && paidInPart(held));
   }
 
   async #readStoredLines(orderId: string, signal?: AbortSignal): Promise<StoredLines | null> {
@@ -17344,7 +17429,13 @@ export class TillApp extends LitElement {
     this.submitting = true;
     try {
       if (
-        !(await this.#syncIfDirty(id, this.#currentSaleLines(), this.#store.label, lateSend)) ||
+        !(await this.#syncIfDirty(
+          id,
+          this.#currentSaleLines(),
+          [...this.#store.lines],
+          this.#store.label,
+          lateSend,
+        )) ||
         basketVisit !== this.#store.loadGeneration
       )
         return;

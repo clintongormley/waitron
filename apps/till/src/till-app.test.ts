@@ -1235,12 +1235,14 @@ describe("till-app", () => {
           revision: 3,
           lines: [
             {
+              workingOrderLineId: "wl-1",
               menuItemId: "menu-item-cafe-0",
               productId: "cafe",
               quantity: "1.000",
               makeAt: "retired",
             },
             {
+              workingOrderLineId: "wl-2",
               menuItemId: "menu-item-cafe-0",
               productId: "cafe",
               quantity: "1.000",
@@ -6301,7 +6303,25 @@ describe("till-app", () => {
       .mockResolvedValueOnce({ revision: 4 })
       .mockResolvedValue({ revision: 5 });
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
-    const { el } = await mountApp({ updateWorkingOrder, pay });
+    const stored = (revision: number, quantities: string[]) => ({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Mesa 4",
+      revision,
+      lines: quantities.map((quantity, index) => ({
+        workingOrderLineId: `wl-${index + 1}`,
+        menuItemId: "menu-item-cafe-0",
+        productId: "cafe",
+        quantity,
+      })),
+    });
+    // The added café is a new dish, so the first save reads the order back as it now stands.
+    const retrieveWorkingOrder = vi
+      .fn()
+      .mockResolvedValueOnce(stored(3, ["2.000"]))
+      .mockResolvedValue(stored(4, ["2.000", "1.000"]));
+    const { el } = await mountApp({ updateWorkingOrder, pay, retrieveWorkingOrder });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -6310,6 +6330,8 @@ describe("till-app", () => {
 
     emit(c, "collect-card", {});
     await flush(el);
+    expect(c.store.revision).toBe(4);
+    c.store.setLineExtras(1, { note: "Decaf" });
     emit(c, "collect-card", {});
     await flush(el);
 
@@ -6321,7 +6343,48 @@ describe("till-app", () => {
     // revision the order is at.
     const updateWorkingOrder = vi.fn().mockResolvedValue({ revision: 3 });
     const pay = vi.fn().mockResolvedValue({ outcome: "declined" });
-    const { el } = await mountApp({ updateWorkingOrder, pay });
+    // A stored café line the listing shows as one line of two, which a save raises in place.
+    const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Mesa 4",
+      revision: 3,
+      lines: [
+        {
+          workingOrderLineId: "wl-1",
+          menuItemId: "menu-item-cafe-0",
+          productId: "cafe",
+          quantity: "2.000",
+        },
+      ],
+    });
+    const getTabLines = vi.fn().mockResolvedValue({
+      revision: 3,
+      lines: [
+        {
+          changesAfterSending: "held-or-waiting",
+          stationId: null,
+          movable: false,
+          id: "wl-1",
+          groupId: null,
+          lineNo: 1,
+          productId: "cafe",
+          quantity: "2.000",
+          unitPriceGross: "1.50",
+          servedAt: null,
+          courseId: null,
+          sentAt: null,
+          firedAt: null,
+          state: null,
+          note: null,
+          listId: null,
+          menuItemId: "menu-item-cafe-0",
+          parentProductId: null,
+        },
+      ],
+    });
+    const { el } = await mountApp({ updateWorkingOrder, pay, retrieveWorkingOrder, getTabLines });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });
     await flush(el);
@@ -6336,6 +6399,86 @@ describe("till-app", () => {
 
     expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 3]);
     expect(c.store.revision).toBe(3);
+  });
+
+  describe("a stored line of two cafés the listing shows is not a portion (A1208)", () => {
+    const listedCafe = (over: Partial<TabLine> = {}): TabLine => ({
+      changesAfterSending: "held-or-waiting",
+      stationId: null,
+      movable: false,
+      id: "wl-1",
+      groupId: null,
+      lineNo: 1,
+      productId: "cafe",
+      quantity: "2.000",
+      unitPriceGross: "1.50",
+      servedAt: null,
+      courseId: null,
+      sentAt: null,
+      firedAt: null,
+      state: null,
+      note: null,
+      listId: null,
+      menuItemId: "menu-item-cafe-0",
+      parentProductId: null,
+      ...over,
+    });
+    async function raisedAndDeclined(listed: TabLine) {
+      const updateWorkingOrder = vi
+        .fn()
+        .mockResolvedValueOnce({ revision: 4 })
+        .mockResolvedValue({ revision: 5 });
+      const retrieveWorkingOrder = vi.fn().mockResolvedValue({
+        kitchenNote: {
+          scope: { workingOrderId: "wo-1" },
+          note: null,
+          revision: 0,
+          ownerRevision: 3,
+        },
+        id: "wo-1",
+        orderNumber: 5,
+        label: "Mesa 4",
+        revision: 3,
+        lines: [
+          {
+            workingOrderLineId: "wl-1",
+            menuItemId: "menu-item-cafe-0",
+            productId: "cafe",
+            quantity: "2.000",
+          },
+        ],
+      });
+      const { el } = await mountApp({
+        updateWorkingOrder,
+        retrieveWorkingOrder,
+        getTabLines: vi.fn().mockResolvedValue({ revision: 3, lines: [listed] }),
+        pay: vi.fn().mockResolvedValue({ outcome: "declined" }),
+      });
+      const c = await toCounter(el);
+      emit(c, "retrieve-order", { id: "wo-1" });
+      await flush(el);
+      c.store.setLineQuantity(0, "3");
+      emit(c, "collect-card", {});
+      await flush(el);
+      return { el, c, updateWorkingOrder, retrieveWorkingOrder };
+    }
+
+    it("raises it in place and reads nothing back; the next save goes from the revision the save answered", async () => {
+      const { el, c, updateWorkingOrder, retrieveWorkingOrder } =
+        await raisedAndDeclined(listedCafe());
+      expect(retrieveWorkingOrder).toHaveBeenCalledOnce();
+      c.store.setLineExtras(0, { note: "Decaf" });
+      emit(c, "collect-card", {});
+      await flush(el);
+      expect(updateWorkingOrder.mock.calls.map(([, req]) => req.revision)).toEqual([3, 4]);
+    });
+
+    it("reads the order back after raising it once a comp has repriced it, as the added cafés go on a line of their own", async () => {
+      const { retrieveWorkingOrder } = await raisedAndDeclined(
+        listedCafe({ unitPriceGross: "0.00", listUnitPriceGross: "1.50" }),
+      );
+      expect(retrieveWorkingOrder).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("a held order parked from this till is saved from revision 0", async () => {
@@ -22217,8 +22360,28 @@ describe("basket protection lifetimes", () => {
     expect(unloadCancelled()).toBe(false);
   });
   it("an accepted line save stays clean when the subsequent payment is refused", async () => {
+    const stored = (note?: string) => ({
+      kitchenNote: { scope: { workingOrderId: "wo-1" }, note: null, revision: 0, ownerRevision: 3 },
+      id: "wo-1",
+      orderNumber: 5,
+      label: "Mesa 4",
+      revision: note === undefined ? 3 : 4,
+      lines: [
+        {
+          menuItemId: "menu-item-cafe-0",
+          productId: "cafe",
+          quantity: "2.000",
+          ...(note === undefined ? {} : { note }),
+        },
+      ],
+    });
+    // The stored line carries no id, so the save reads the order back: it answers the saved note.
     const { el } = await mountApp({
       recordSale: vi.fn().mockRejectedValue({ code: "sale.refused" }),
+      retrieveWorkingOrder: vi
+        .fn()
+        .mockResolvedValueOnce(stored())
+        .mockResolvedValue(stored("No sugar")),
     });
     const c = await toCounter(el);
     emit(c, "retrieve-order", { id: "wo-1" });

@@ -197,7 +197,7 @@ describe("recalled sources cannot bypass their draft through legacy writes", () 
       (key) => key !== "basket omission" && key !== "named send",
     ) as (keyof typeof edits)[],
   )("still serves %s on a bill without a recalled source", async (operation) => {
-    // A move of both Tartas: grouped, as a counter order moved to a table keeps it (plan D1).
+    // A move of both Tartas: grouped, as an order stored before portions.
     const p = await setup(false, "hold", operation === "group move" ? "grouped" : undefined);
     const answer = await edits[operation](p);
     expect(answer.status, JSON.stringify(answer.json)).toBe(200);

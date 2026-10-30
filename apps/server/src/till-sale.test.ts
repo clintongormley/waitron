@@ -103,6 +103,17 @@ const suite = useVenueDb({
 let backend: FiscalBackend;
 let clock: TrustedClock;
 
+/** Each stored dish line was fired once, at one unit; returns how many dishes there are. */
+async function expectOneTicketItemPerDish(): Promise<number> {
+  const dishes = await suite.db.execute<{ line: string }>(sql`
+    select id as line from working_order_lines where parent_line_id is null order by id`);
+  const fired = await suite.db.execute<{ line: string; quantity: number }>(sql`
+    select working_order_line_id as line, cast(quantity as integer) as quantity
+    from ticket_items order by working_order_line_id`);
+  expect(fired.rows).toEqual(dishes.rows.map(({ line }) => ({ line, quantity: 1000 })));
+  return dishes.rows.length;
+}
+
 /** The system wall clock, reported confident/anchored. */
 function systemClock(): TrustedClock {
   return {
@@ -380,6 +391,7 @@ describe("recordTillSale", () => {
     };
     expect(snapshots.rows.map(decodeNames)).toEqual([
       { ...names, unit_price_gross: 410 },
+      { ...names, unit_price_gross: 410 },
       { ...names, unit_price_gross: null },
     ]);
     // The open order's line names the variant as its product, and neither table has a
@@ -387,7 +399,10 @@ describe("recordTillSale", () => {
     const orderLines = await suite.db.execute<{ product_id: string }>(
       sql`select product_id from working_order_lines`,
     );
-    expect(orderLines.rows).toEqual([{ product_id: variantIds!.double }]);
+    expect(orderLines.rows).toEqual([
+      { product_id: variantIds!.double },
+      { product_id: variantIds!.double },
+    ]);
     for (const table of ["sale_lines", "working_order_lines"]) {
       const columns = await suite.db.execute<{ name: string }>(
         sql`select name from pragma_table_info(${table})`,
@@ -570,18 +585,14 @@ describe("recordTillSale", () => {
       join working_order_lines w on w.working_order_id = o.working_order_id
       join working_line_contexts l on l.working_order_line_id = w.id
       where o.location_id = ${cfg.locationId}`);
-    expect(snapshots.rows).toEqual([
-      {
-        zone_id: zoneId,
-        menu_item_id: waterOfferId,
-        menu_name: "Delicatessen",
-        department_name: "Sala principal",
-      },
-    ]);
-    const prep = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as integer) as count from ticket_items
-      `);
-    expect(prep.rows).toEqual([{ count: 1 }]);
+    const attribution = {
+      zone_id: zoneId,
+      menu_item_id: waterOfferId,
+      menu_name: "Delicatessen",
+      department_name: "Sala principal",
+    };
+    expect(snapshots.rows).toEqual([attribution, attribution]);
+    expect(await expectOneTicketItemPerDish()).toBe(2);
   });
 
   // A menu that sets no price sells the product at its own (1.50), never at the old menu price
@@ -618,10 +629,7 @@ describe("recordTillSale", () => {
     expect(result.vatBreakdown).toEqual([{ rate: "21.00", base: "2.48", tax: "0.52" }]);
     expect(result.issuedAt).toMatch(/^\d{4}-\d\d-\d\dT/); // ISO-8601 instant
     expect(typeof result.qr).toBe("string"); // regime verification URL (may be empty)
-    const prep = await suite.db.execute<{ count: number }>(sql`
-      select cast(count(*) as integer) as count from ticket_items
-      `);
-    expect(prep.rows).toEqual([{ count: 1 }]);
+    expect(await expectOneTicketItemPerDish()).toBe(2);
 
     const rows = await withTransaction(suite.db, async (tx) => {
       return tx.select().from(registrosFacturacion);
@@ -938,7 +946,10 @@ describe("priceOrderLines re-keys bare catalogue content to the venue invoice_lo
       .select({ creditedTo: workingOrderLines.creditedTo, groupId: workingOrderLines.groupId })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, workingOrderId));
-    expect(lines).toEqual([{ creditedTo: operatorId, groupId: null }]);
+    expect(lines).toEqual([
+      { creditedTo: operatorId, groupId: null },
+      { creditedTo: operatorId, groupId: null },
+    ]);
   });
 });
 
@@ -1411,12 +1422,15 @@ describe("ordering extras and options — parent + child lines", () => {
       return { wol, sl };
     });
 
-    // Child Bacon at the COMBINED 6, 0.50 × 6 = 3.00 gross: cents and thousandths as stored.
-    expect(wol).toHaveLength(2);
-    expect(wol[0]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: 2000 });
-    expect(wol[1]!.productId).toBe(v.baconId);
-    expect(wol[1]!.quantity).toBe(6000);
-    expect(wol[1]!.lineTotal).toBe(300);
+    // Each dish is its own stored line with its 3 Bacon, 0.50 × 3 = 1.50 gross: cents and
+    // thousandths as stored. The filed child below is the COMBINED 6.
+    expect(wol).toHaveLength(4);
+    for (const at of [0, 2]) {
+      expect(wol[at]).toMatchObject({ productId: v.burgerId, parentLineId: null, quantity: 1000 });
+      expect(wol[at + 1]!.productId).toBe(v.baconId);
+      expect(wol[at + 1]!.quantity).toBe(3000);
+      expect(wol[at + 1]!.lineTotal).toBe(150);
+    }
 
     expect(sl).toHaveLength(2);
     const child = sl.find((l) => l.parentLineId !== null)!;
@@ -1834,7 +1848,7 @@ describe("ordering extras and options — parent + child lines", () => {
       .select({ productId: workingOrderLines.productId })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, edited));
-    expect(stored).toEqual([{ productId: v.burgerId }]);
+    expect(stored).toEqual([{ productId: v.burgerId }, { productId: v.burgerId }]);
     // Two Hamburguesas at 9.00, and no Bacon.
     expect((await pay(edited)).total).toBe("18.00");
   });

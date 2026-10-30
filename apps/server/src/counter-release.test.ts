@@ -67,13 +67,18 @@ describe("A773 counter release", () => {
     expect(after.order.partyId).toBeNull();
     expect(after.order.status).toBe("placed");
     expect(after.groups).toEqual([]);
-    expect(after.lines.map(({ courseId }) => courseId)).toEqual([
-      courses.last.id,
-      courses.first.id,
-      null,
+    expect(
+      after.lines.map(({ lineNo, quantity, courseId }) => [lineNo, quantity, courseId]),
+    ).toEqual([
+      [1, 1000, courses.last.id],
+      [2, 1000, courses.first.id],
+      [3, 1000, null],
+      [4, 1000, null],
+      [5, 1000, null],
+      [6, 1000, null],
     ]);
     expect(after.lines).toEqual(lines.map((line) => ({ ...line, sentAt: expect.any(String) })));
-    expect(after.items).toHaveLength(3);
+    expect(after.items).toHaveLength(6);
     for (const line of lines) {
       const item = after.items.find((row) => row.workingOrderLineId === line.id)!;
       expect(item).toMatchObject({

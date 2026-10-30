@@ -20,6 +20,7 @@ import { and, asc, desc, eq, inArray, isNotNull, ne, sql, type SQL } from "drizz
 import {
   catalogues,
   floorZones,
+  insertInChunks,
   refusalOn,
   UNIQUE_VIOLATION,
   kitchenStations,
@@ -1438,7 +1439,9 @@ export async function recordWorkingLineContexts(
       throw new Error(`the offers name no live version of menu ${menuId}`);
     return versionId;
   };
-  await tx.insert(workingLineContexts).values(
+  await insertInChunks(
+    tx,
+    workingLineContexts,
     lines.map((line) => {
       const offer = byMenuItem.get(line.menuItemId);
       if (offer === undefined) {
@@ -1514,7 +1517,7 @@ export async function copyWorkingLineContext(
   });
 }
 
-/** {@link copyWorkingLineContext} for many lines, in one read and one write. */
+/** {@link copyWorkingLineContext} for many lines, in one read. */
 export async function copyWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,
@@ -1533,7 +1536,7 @@ export async function copyWorkingLineContexts(
     const context = byLine.get(from);
     return context === undefined ? [] : [{ ...context, workingOrderLineId: to }];
   });
-  if (copies.length > 0) await tx.insert(workingLineContexts).values(copies);
+  await insertInChunks(tx, workingLineContexts, copies);
 }
 
 type ZoneKeepOpenState = NonNullable<ZoneMenuState["service"]["zoneKeepOpen"]>;

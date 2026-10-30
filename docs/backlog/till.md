@@ -754,8 +754,7 @@ Left open:
   in the way.
 - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
   transferring items and moving part of a dish to another group still refuse a partial move
-  of a line with extras (`tab.transfer_modifier_line`): a counter order's line of several
-  dishes, or part of a weighed dish.
+  of a line with extras (`tab.transfer_modifier_line`): part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
@@ -2698,18 +2697,12 @@ Out of A582's scope; the slice 4 plan's Parked orders help text (slice 4b) says 
 table's bill for this reason. Done when the till either sends the bill's expectation or does not
 offer Discard on a table's bill, with a test through the till.
 
-## A1190. Counter orders keep one line for several of a dish
+## A1217. Two separate adds of the same dish with extras stay two counter rows
 
-A803 slice 1 splits a dish into portions only in the table-service writers (its plan's finding 1
-and D1, [plan](../superpowers/plans/2026-10-27-a803-1-portions.md)). `createOpenOrder` still
-writes one line for "2 ×" on walk-up sales and parked counter orders, because fiscal control tests
-that must stay byte-unedited pin that shape: `till-api.fiscal-sale-paths.test.ts` (a walk-up
-sale's stored lines, and a parked order's kitchen items after payment), `split-bill.fiscal.test.ts`
-and `bill-payments.test.ts` (both act on part of a line of several). So a counter order moved to a
-table still brings a line of several, and the grouped code paths stay (A1196). In slice 1's LOOK
-the counter also kept two separate adds of the same dish with extras as two lines of one, where a
-table's draft merges them. Expanding counter orders is the owner's decision, and would change
-those control tests.
+Seen in A803 slice 1's LOOK (2026-10-29): adding the same dish with the same extras twice at the
+counter kept two lines of one, where a table's draft merges them into one line of two. Counter
+orders store each dish as its own portion since A1208, so a retrieved order shows the two as one
+row; whether the basket merges them before it is saved was not re-checked.
 
 ## A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped row
 

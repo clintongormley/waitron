@@ -246,7 +246,7 @@ describe("adjusting an owned recalled family", () => {
   });
 
   it("places a split source next to its original without colliding with fresh or recalled draft rows", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", "grouped");
     const saved = await call("PUT", `/api/parties/${p.partyId}/drafts`, {
       billId: p.billId,
@@ -364,7 +364,7 @@ describe("adjusting an owned recalled family", () => {
   });
 
   it("keeps both parts of a partially comped recalled family unsent with their allergy assignment", async () => {
-    // Grouped, as a counter order moved to a table keeps it (plan D1).
+    // Grouped, as an order stored before portions.
     const p = await setup("hold", "grouped");
     const allergy = await inTx(venue, async (tx) => {
       const [party] = await tx.select().from(parties).where(eq(parties.id, p.partyId));

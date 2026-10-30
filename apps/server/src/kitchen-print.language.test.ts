@@ -24,6 +24,7 @@ import {
   setupSplitExtrasVenue,
   useSplitExtrasDb,
   fireNewOrder,
+  fireGroupedOrder,
   createOfferedOrder,
 } from "./testing/split-extras-venue.js";
 import { updateStation } from "./kitchen.js";
@@ -331,50 +332,62 @@ it.each(["en", "es"] as const)(
   },
 );
 
-it("A964 venue language leaves no-printer reads and counter notices independent of the frame fallback", async () => {
-  const v = await setupSplitExtrasVenue();
-  const cfg = { ...v.cfg, locale: "de-DE" };
-  const id = await withTransaction(suite.db, (tx) =>
-    fireNewOrder(tx, cfg, [{ productId: v.products.burger, quantity: "1" }]),
-  );
-  const [fired] = await suite.db
-    .select()
-    .from(ticketItems)
-    .where(eq(ticketItems.workingOrderId, id));
-  const target = {
-    workingOrderLineId: fired!.workingOrderLineId,
-    stationId: fired!.stationId!,
-    quantity: 1000,
-    wasStarted: false,
-  };
-  const beforeJobs = await jobs();
-  await withTransaction(suite.db, (tx) => tx.update(printers).set({ active: false }));
-  const reader = vi.spyOn(kitchenLanguage, "readKitchenLanguage");
-  for (const language of ["en", "es"] as const) {
-    await withTransaction(suite.db, async (tx) => {
-      await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
-      await enqueueKitchenTickets(tx, cfg, id, [target]);
-      await enqueueCorrectionSlips(tx, cfg, id, [target], "VOID");
-      const sent = (await readSentWork(tx, id))!;
-      await enqueueMovedSlips(
-        tx,
-        cfg,
-        { ...sent, places: { ...sent.places, orderNumber: sent.places.orderNumber + 1 } },
-        id,
-      );
-    });
-    expect(reader).not.toHaveBeenCalled();
-    const notices = await suite.db
-      .select({ kind: kitchenNotices.kind, movedTo: kitchenNotices.movedTo })
-      .from(kitchenNotices)
-      .where(eq(kitchenNotices.workingOrderId, id));
-    expect(notices.slice(-2)).toEqual([
-      { kind: "void", movedTo: null },
-      { kind: "moved", movedTo: null },
-    ]);
-    expect(await jobs()).toEqual(beforeJobs);
-  }
-});
+// `grouped`: a counter line written before portions, which no no-printer path reads the language
+// for. `portions`: folding identical dishes (`foldPortionNotices`) reads it once, as on a table's
+// portions, and gets the venue's language, never the frame's.
+it.each(["grouped", "portions"] as const)(
+  "A964 venue language leaves no-printer reads and counter notices independent of the frame fallback (%s)",
+  async (shape) => {
+    const v = await setupSplitExtrasVenue();
+    const cfg = { ...v.cfg, locale: "de-DE" };
+    const fire = shape === "grouped" ? fireGroupedOrder : fireNewOrder;
+    const id = await withTransaction(suite.db, (tx) =>
+      fire(tx, cfg, [{ productId: v.products.burger, quantity: "1" }]),
+    );
+    const [fired] = await suite.db
+      .select()
+      .from(ticketItems)
+      .where(eq(ticketItems.workingOrderId, id));
+    const target = {
+      workingOrderLineId: fired!.workingOrderLineId,
+      stationId: fired!.stationId!,
+      quantity: 1000,
+      wasStarted: false,
+    };
+    const beforeJobs = await jobs();
+    await withTransaction(suite.db, (tx) => tx.update(printers).set({ active: false }));
+    const reader = vi.spyOn(kitchenLanguage, "readKitchenLanguage");
+    for (const language of ["en", "es"] as const) {
+      reader.mockClear();
+      await withTransaction(suite.db, async (tx) => {
+        await writeContentLanguages(tx, { defaultLanguage: language, languages: ["en", "es"] });
+        await enqueueKitchenTickets(tx, cfg, id, [target]);
+        await enqueueCorrectionSlips(tx, cfg, id, [target], "VOID");
+        const sent = (await readSentWork(tx, id))!;
+        await enqueueMovedSlips(
+          tx,
+          cfg,
+          { ...sent, places: { ...sent.places, orderNumber: sent.places.orderNumber + 1 } },
+          id,
+        );
+      });
+      if (shape === "grouped") expect(reader).not.toHaveBeenCalled();
+      else {
+        expect(reader).toHaveBeenCalledTimes(1);
+        expect(await reader.mock.results[0]!.value).toBe(language);
+      }
+      const notices = await suite.db
+        .select({ kind: kitchenNotices.kind, movedTo: kitchenNotices.movedTo })
+        .from(kitchenNotices)
+        .where(eq(kitchenNotices.workingOrderId, id));
+      expect(notices.slice(-2)).toEqual([
+        { kind: "void", movedTo: null },
+        { kind: "moved", movedTo: null },
+      ]);
+      expect(await jobs()).toEqual(beforeJobs);
+    }
+  },
+);
 
 it.each(["en", "es"] as const)(
   "A964 portion corrections keep cached cross-references in content %s and fold identical dishes",

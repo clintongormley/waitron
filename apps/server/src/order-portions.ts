@@ -3,6 +3,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import { adjustmentLines } from "@waitron/adjustments";
 import {
+  insertInChunks,
   orderPortionEvents,
   orderPortions,
   saleLinePortions,
@@ -100,6 +101,53 @@ export function expandPortionRows<C extends { workingOrderLineId: string }>(
   };
 }
 
+/**
+ * Each priced row's identity with the expanded lines and portions it stands for, as
+ * `projectPortionSale` reads them back: a dish row lists its portions' dish lines, an extra row that
+ * extra's copy under each portion, and both list the dish's portions. `identities` and `requestRows`
+ * are aligned, as `priceOrderLines` returns them; `expanded` is `expandPortionRows` of `requestRows`.
+ */
+export function portionIdentities(
+  identities: readonly OrderLineIdentity[],
+  requestRows: readonly Row[],
+  expanded: Pick<ReturnType<typeof expandPortionRows>, "rows" | "portions" | "requestOfRow">,
+): OrderLineIdentity[] {
+  const indexOf = new Map(requestRows.map((row, i) => [row.id!, i]));
+  const dishes: number[] = [];
+  const extrasOf = new Map<number, number[]>();
+  requestRows.forEach((row, i) => {
+    if (row.parentLineId == null) {
+      dishes.push(i);
+      return;
+    }
+    const parent = indexOf.get(row.parentLineId)!;
+    const extras = extrasOf.get(parent) ?? [];
+    extras.push(i);
+    extrasOf.set(parent, extras);
+  });
+  const portionOf = new Map(
+    expanded.portions.map((portion) => [portion.lineId, portion.portionId]),
+  );
+  const lineIds = requestRows.map((): string[] => []);
+  const portionIds = requestRows.map((): string[] => []);
+  let extrasLeft: number[] = [];
+  expanded.rows.forEach((row, k) => {
+    const dish = dishes[expanded.requestOfRow[k]!]!;
+    if (row.parentLineId == null) {
+      lineIds[dish]!.push(row.id!);
+      portionIds[dish]!.push(portionOf.get(row.id!)!);
+      extrasLeft = [...(extrasOf.get(dish) ?? [])];
+    } else {
+      lineIds[extrasLeft.shift()!]!.push(row.id!);
+    }
+  });
+  return identities.map((identity, i) => {
+    const parent = requestRows[i]!.parentLineId;
+    const dish = parent == null ? i : indexOf.get(parent)!;
+    return { ...identity, lineIds: lineIds[i]!, portionIds: portionIds[dish]! };
+  });
+}
+
 /** One dish's share of a row priced for `count` dishes, exact in cents and thousandths. */
 function share(row: Row, count: number): Row {
   if (count === 1) return { ...row };
@@ -122,23 +170,34 @@ export async function registerPortions(
     tx,
     portions.map((portion) => portion.lineId),
   );
-  for (const portion of portions) {
+  const fresh = portions.filter((portion) => {
     const held = bound.get(portion.lineId);
-    if (held?.portionId === portion.portionId) continue;
+    if (held?.portionId === portion.portionId) return false;
     if (held !== undefined)
       throw new Error(
         `registerPortions: line ${portion.lineId} already holds portion ${held.portionId}, not ${portion.portionId}`,
       );
-    await tx.insert(orderPortions).values({
+    return true;
+  });
+  if (fresh.length === 0) return;
+  await insertInChunks(
+    tx,
+    orderPortions,
+    fresh.map((portion) => ({
       id: portion.portionId,
       cohortId: portion.pricingCohortId,
       ordinal: portion.ordinal,
       measured: portion.measured,
-    });
-    await tx
-      .insert(workingLinePortions)
-      .values({ workingOrderLineId: portion.lineId, portionId: portion.portionId });
-  }
+    })),
+  );
+  await insertInChunks(
+    tx,
+    workingLinePortions,
+    fresh.map((portion) => ({
+      workingOrderLineId: portion.lineId,
+      portionId: portion.portionId,
+    })),
+  );
 }
 
 /** For each `{ from, to }`, a copy or a part split off `from`, give `to` every row of what a comp or
@@ -167,7 +226,7 @@ export async function carryLineReductions(
   const rows = pairs.flatMap(({ from, to }) =>
     (byLine.get(from) ?? []).map((row) => ({ ...row, lineId: to })),
   );
-  if (rows.length > 0) await tx.insert(adjustmentLines).values(rows);
+  await insertInChunks(tx, adjustmentLines, rows);
 }
 
 /** The portion each of `lineIds` holds; a line holding none is absent. */
@@ -303,7 +362,7 @@ export async function recordPortionEvents(
           },
         ];
   });
-  if (rows.length > 0) await tx.insert(orderPortionEvents).values(rows);
+  await insertInChunks(tx, orderPortionEvents, rows);
 }
 
 /**
@@ -341,5 +400,5 @@ export async function linkSalePortions(
       throw new Error(`linkSalePortions: sale ${saleId} filed no line ${i + 1}`);
     return (identity.portionIds ?? []).map((portionId) => ({ saleLineId, portionId }));
   });
-  await tx.insert(saleLinePortions).values(links);
+  await insertInChunks(tx, saleLinePortions, links);
 }

@@ -1,10 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { workingOrderLines, type Transaction } from "@waitron/db";
+import type { Transaction } from "@waitron/db";
 import type { OriginConfig } from "../trading-context.js";
-import { fireableLineColumns, fireLines, insertTabRound, priceTabRound } from "../working-order.js";
+import { insertTabRound, priceTabRound } from "../working-order.js";
 import { createTable } from "./live-table.js";
-import { openPartyTab } from "./serve-line.js";
+import { fireAll, openPartyTab } from "./serve-line.js";
 import { offerProducts } from "./zone-offers.js";
 import type { ProductLine } from "./split-extras-venue.js";
 
@@ -32,11 +31,6 @@ export async function fireTableKitchenOrder(
   lines: ProductLine[],
 ): Promise<string> {
   const id = await createTableKitchenOrder(tx, cfg, lines);
-  const stored = await tx
-    .select(fireableLineColumns)
-    .from(workingOrderLines)
-    .where(eq(workingOrderLines.workingOrderId, id))
-    .orderBy(workingOrderLines.lineNo);
-  await fireLines(tx, cfg, id, stored);
+  await fireAll(tx, cfg, id);
   return id;
 }

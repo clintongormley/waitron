@@ -88,6 +88,7 @@ import "./errors.js";
 import {
   setupVenue,
   fireNewOrder,
+  fireGroupedOrder,
   createOfferedOrder,
   addExtras,
   useSplitExtrasDb,
@@ -97,6 +98,7 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { readLinesSoldInEach } from "@waitron/venue-service";
 import { cancelLine } from "./testing/cancel-line.js";
 import { addPortionRound } from "./testing/portion-bill.js";
+import { createTable } from "./testing/live-table.js";
 import type { KitchenAllergyBlock } from "@waitron/module";
 
 const OPERATOR = "0000ffff-2222-4000-8000-0000000000aa";
@@ -1230,6 +1232,7 @@ describe("a dish sold by the piece prints no unit", () => {
 
   // Fails if merging and splitting go by the unit's spelling while the unit's printing goes by its
   // identity: Pan's unit is spelled like Each but is the venue's own, and Bomba's is Each renamed.
+  // `["2"]` is one stored line of two, as a counter order written before portions holds it.
   const at = (thousandths: number, rest: string) => `${thousandthsToDecimal(thousandths)} ${rest}`;
   it.each([
     {
@@ -1271,7 +1274,7 @@ describe("a dish sold by the piece prints no unit", () => {
           .from(kitchenStations)
           .where(eq(kitchenStations.name, "Cocina"));
         await setStationPrinting(tx, { ticketGrouping: grouping }, [kitchenStation!.id]);
-        await fireNewOrder(
+        await fireGroupedOrder(
           tx,
           cfg,
           sold.map((quantity) => ({ productId: dishes[dish], quantity })),
@@ -1283,6 +1286,50 @@ describe("a dish sold by the piece prints no unit", () => {
       expect(printedLines(jobs[0]!.payload).filter((text) => text.endsWith(` x ${name}`))).toEqual(
         printed,
       );
+    },
+  );
+
+  it.each(["separate", "combined"] as const)(
+    "A1208: two of a dish whose unit prints, sold at the counter, print as a table's portions do (%s)",
+    async (grouping) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const { counter, table } = await asApp(cfg, async (tx) => {
+        const dishes = await sellInEveryUnit(tx, cfg, catalogueId);
+        const [kitchenStation] = await tx
+          .select({ id: kitchenStations.id })
+          .from(kitchenStations)
+          .where(eq(kitchenStations.name, "Cocina"));
+        await setStationPrinting(tx, { ticketGrouping: grouping }, [kitchenStation!.id]);
+        const newJobs = async (fn: () => Promise<unknown>) => {
+          const before = new Set((await printJobsFor(tx)).map((job) => job.id));
+          await fn();
+          return (await printJobsFor(tx)).filter((job) => !before.has(job.id));
+        };
+        const offers = await offerProducts(tx, cfg, { zone: "tables" });
+        const { id: tableId } = await createTable(tx, cfg, { label: "T", zoneId: offers.zoneId });
+        const { tabId } = await openPartyTab(tx, cfg, { tableId });
+        return {
+          counter: await newJobs(() =>
+            fireNewOrder(tx, cfg, [{ productId: dishes.pan, quantity: "2" }]),
+          ),
+          table: await newJobs(() =>
+            addPortionRound(
+              tx,
+              cfg,
+              tabId,
+              [{ menuItemId: offers.offerFor(dishes.pan), quantity: "2" }],
+              { fire: true },
+            ),
+          ),
+        };
+      });
+
+      const pans = (jobs: { payload: Uint8Array }[]) => {
+        expect(jobs).toHaveLength(1);
+        return printedLines(jobs[0]!.payload).filter((text) => text.endsWith(" x Pan"));
+      };
+      expect(pans(counter)).toEqual([at(1000, "ud x Pan"), at(1000, "ud x Pan")]);
+      expect(pans(table)).toEqual(pans(counter));
     },
   );
 
@@ -1474,78 +1521,89 @@ describe("dish extras on kitchen tickets", () => {
     ]);
   });
 
-  it("gives the station queue each dish's extra count and amount on a counter line of two dishes, not the line's totals", async () => {
-    const { cfg, catalogueId } = await setupVenue();
-    const { stored, items } = await asApp(cfg, async (tx) => {
-      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
-      const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-        { name: "Queso", customerName: "Queso cliente", kitchenName: "QUESO", maxQuantity: 2 },
-        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
-      ]);
-      const [cheese, ham] = productIds as [string, string];
-      const [gram] = await tx
-        .insert(units)
-        .values({
-          staffName: "Staff unit",
-          staffAbbreviation: "su",
-          name: { es: "gramo" },
-          abbreviation: { es: "g" },
-          precision: 0,
-          hardwareUnit: "g",
-        })
-        .returning({ id: units.id });
-      await assignProductUnit(tx, ham, gram!.id);
-      await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
+  it.each(["grouped", "portions"] as const)(
+    "gives the station queue each dish's extra count and amount on a counter order of two dishes, not the line's totals (%s)",
+    async (shape) => {
+      const { cfg, catalogueId } = await setupVenue();
+      const { stored, items } = await asApp(cfg, async (tx) => {
+        const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+        const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+        const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
+          { name: "Queso", customerName: "Queso cliente", kitchenName: "QUESO", maxQuantity: 2 },
+          { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+        ]);
+        const [cheese, ham] = productIds as [string, string];
+        const [gram] = await tx
+          .insert(units)
+          .values({
+            staffName: "Staff unit",
+            staffAbbreviation: "su",
+            name: { es: "gramo" },
+            abbreviation: { es: "g" },
+            precision: 0,
+            hardwareUnit: "g",
+          })
+          .returning({ id: units.id });
+        await assignProductUnit(tx, ham, gram!.id);
+        await tx.execute(sql`update extra_list_items set portion = 50000, max_quantity = 3
         where list_id = ${listId} and product_id = ${ham}`);
-      const orderId = await fireNewOrder(tx, cfg, [
-        {
-          productId: dish,
-          quantity: "2",
-          extras: [
-            {
-              listId,
-              picks: [
-                { productId: cheese, quantity: 2 },
-                { productId: ham, quantity: 3 },
-              ],
-            },
-          ],
-        },
-      ]);
-      const stored = await tx
-        .select({
-          productId: workingOrderLines.productId,
-          parentLineId: workingOrderLines.parentLineId,
-          quantity: workingOrderLines.quantity,
-        })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, orderId))
-        .orderBy(workingOrderLines.lineNo);
-      return {
-        stored: stored.map(({ productId, parentLineId, quantity }) => ({
-          product: productId === dish ? "dish" : productId === cheese ? "cheese" : "ham",
-          child: parentLineId !== null,
-          quantity,
-        })),
-        items: (await listStationQueue(tx, station.id)).flatMap((group) => group.items),
-      };
-    });
+        const fire = shape === "grouped" ? fireGroupedOrder : fireNewOrder;
+        const orderId = await fire(tx, cfg, [
+          {
+            productId: dish,
+            quantity: "2",
+            extras: [
+              {
+                listId,
+                picks: [
+                  { productId: cheese, quantity: 2 },
+                  { productId: ham, quantity: 3 },
+                ],
+              },
+            ],
+          },
+        ]);
+        const stored = await tx
+          .select({
+            productId: workingOrderLines.productId,
+            parentLineId: workingOrderLines.parentLineId,
+            quantity: workingOrderLines.quantity,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId))
+          .orderBy(workingOrderLines.lineNo);
+        return {
+          stored: stored.map(({ productId, parentLineId, quantity }) => ({
+            product: productId === dish ? "dish" : productId === cheese ? "cheese" : "ham",
+            child: parentLineId !== null,
+            quantity,
+          })),
+          items: (await listStationQueue(tx, station.id)).flatMap((group) => group.items),
+        };
+      });
 
-    expect(stored).toEqual([
-      { product: "dish", child: false, quantity: 2000 },
-      { product: "cheese", child: true, quantity: 4000 },
-      { product: "ham", child: true, quantity: 300000 },
-    ]);
-    expect(
-      items.map((item) => item.modifiers.map(({ perDish, amount }) => ({ perDish, amount }))),
-    ).toEqual([
-      [
+      const dish = (quantity: number, cheese: number, ham: number) => [
+        { product: "dish", child: false, quantity },
+        { product: "cheese", child: true, quantity: cheese },
+        { product: "ham", child: true, quantity: ham },
+      ];
+      const perDish = [
         { perDish: 2, amount: undefined },
         { perDish: undefined, amount: "150.000" },
-      ],
-    ]);
-  });
+      ];
+      if (shape === "grouped") {
+        expect(stored).toEqual(dish(2000, 4000, 300000));
+        expect(
+          items.map((item) => item.modifiers.map(({ perDish, amount }) => ({ perDish, amount }))),
+        ).toEqual([perDish]);
+      } else {
+        expect(stored).toEqual([...dish(1000, 2000, 150000), ...dish(1000, 2000, 150000)]);
+        expect(
+          items.map((item) => item.modifiers.map(({ perDish, amount }) => ({ perDish, amount }))),
+        ).toEqual([perDish, perDish]);
+      }
+    },
+  );
 
   it("prints split chips once on Fryer paper and cross-references both station and pass paper", async () => {
     const venue = await setupSplitExtrasVenue();

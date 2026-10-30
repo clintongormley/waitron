@@ -156,7 +156,15 @@ describe("accepted order attendance", () => {
     expect(
       await run((tx) => updateOrderLine(tx, v.cfg, id, 1, { quantity: "2" }, 0, worker, capture())),
     ).toBe(1);
-    expect([(await line(id)).quantity, (await line(id)).creditedTo]).toEqual([2000, OPERATOR]);
+    const rows = await suite.db
+      .select()
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    // One row of 2, or two portions of 1: either way still credited to the operator who parked it.
+    expect([
+      rows.reduce((sum, row) => sum + row.quantity, 0),
+      [...new Set(rows.map((row) => row.creditedTo))],
+    ]).toEqual([2000, [OPERATOR]]);
     await expectActivity(id, 1, "line");
   });
   it("a changed option captures the editor after the real option snapshot changes", async () => {

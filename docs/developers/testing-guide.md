@@ -531,6 +531,44 @@ The same case faking only Date, setTimeout and clearTimeout passed, with the mon
 continuing above its starting value. The two timer setups in
 `apps/server/src/tender-refunds.test.ts` now keep the real clock; their earlier assertions remain.
 
+## The store caps the values one statement binds at official Node's limit
+
+The SQLite inside the official Node v26.13.0 for macOS reported `limits.variableNumber` 32,766;
+Homebrew's Node v26.11.1, linked to Homebrew's SQLite, reported 250,000 (both read on
+2026-10-30 with `new DatabaseSync(":memory:").limits.variableNumber`). So an insert binding more
+than 32,766 values passed on this Mac and failed in CI: per PR #2265, four cases in
+`apps/server/src/till-sale-integrated.db.test.ts` (the walk-up invoice and unfiled-F1 cases with
+2,001 coffees) failed in CI with "too many SQL variables" once a counter order stored each dish as
+its own line, and failed the same way here under the official Node. The box image's `node:26`
+limit was not read: Docker was not running when this was written.
+
+`openVenueStore` (`packages/store/src/index.ts`) opens each file's writer and reader with
+`limits: { variableNumber: SQL_VARIABLE_LIMIT }` (32,766), so a local run on either Node refuses
+those statements too. With the setting in place, four big-order cases (in
+`apps/server/src/order-portions.counter.test.ts` the 17 croquetas raised to 99, the 4,700
+croquetas saved down to one and `carryLineReductions`' 6,554 copies; in
+`apps/server/src/working-order.many-tickets.test.ts` the send of 2,400 burgers) failed under
+Homebrew's Node when their inserts were put back to one statement; with the setting deleted as
+well, they passed there.
+
+An insert whose rows grow with an order must go through `insertInChunks`, or `statementChunks`
+where the statement needs more than a plain insert: its rows back (`.returning()`) or a conflict
+clause (`.onConflictDoNothing()`) (`packages/db/src/insert-in-chunks.ts`); both count one bound
+value per column per row. No sweep has read every insert. After A1208's own sweep, PR #2265's
+run-it review found an item payment's lines unchunked, and a test of each further insert it named
+found three more: a discount's lines, a kitchen ticket's line links and a party bill's kitchen
+allergy snapshots. Each test failed "too many SQL variables" before its fix, and again when its fix
+was taken out. The table round's line insert, `insertTabRound`, is still one statement;
+`docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one
+value more on the reader and the writer of both files" in `packages/store/src/index.test.ts`,
+failed with the setting deleted from the writer alone and from the reader alone. It is weaker
+than the rule: it proves the store's connections refuse, not that every growing insert is
+chunked, and other openers (the read-only
+copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
+`apps/server/src/backup-verification.ts` and `apps/server/src/first-setup-database-holdings.ts`, the
+lock files, the inline Node script in `deploy/waitron.sh`, and script and bench fixtures such as
+`apps/server/scripts/cloud-backup-fixture.ts`) keep their runtime's own limit.
+
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
 Read in vitest 4.1.11: `resolveMaxWorkers(project)` returns `project.config.maxWorkers` when that is

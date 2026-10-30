@@ -1242,11 +1242,12 @@ describe("cross-till end-to-end", () => {
       }),
     ).resolves.toBe(1);
 
-    // The edit landed on the shared row: node A sees node B's rewritten basket (quantity 1 → 2).
+    // The edit landed on the shared row: node A sees node B's rewritten basket (1 café → 2).
     const afterEdit = await getHeldOrder({ db: suite.db }, nodeA, orderId);
-    expect(afterEdit.lines).toHaveLength(1);
-    expect(afterEdit.lines[0]!.productId).toBe(cafe.id);
-    expect(Number(afterEdit.lines[0]!.quantity)).toBe(2);
+    expect(afterEdit.lines.map(({ productId, quantity }) => [productId, quantity])).toEqual([
+      [cafe.id, "1.000"],
+      [cafe.id, "1.000"],
+    ]);
 
     // Node B abandons it; the order flips terminal for the whole venue.
     await expect(abandonHeldOrder({ db: suite.db }, nodeB, orderId)).resolves.toBeUndefined();

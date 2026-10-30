@@ -49,6 +49,7 @@ import { readReceiptOrder } from "./receipt-order.js";
 import { seedLegacySellingUnits } from "./testing/seed-units.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, serveLine, splitPartyBill } from "./testing/serve-line.js";
+import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import "./errors.js";
 import { splitBill, mergeBills, transferItems } from "./testing/bill-action-fixture.js";
 import { moveBill } from "./testing/move-bill-fixture.js";
@@ -133,16 +134,19 @@ async function setupVenue(): Promise<Seeded> {
 /** Each venue's offers in its tables zone, keyed by the venue's config so call sites pass only `cfg`. */
 const offersByCfg = new WeakMap<OriginConfig, ZoneOffers>();
 
-/** `openTab`, selling each line through the venue's offer for its product. */
-function openTabWith(
+/**
+ * `openTab`, selling each line through the venue's offer for its product. Its lines are stored
+ * grouped, as lines written before portions: this file splits part of a line.
+ */
+async function openTabWith(
   tx: Transaction,
   cfg: OriginConfig,
   req: { tableId: string; lines?: { productId: string; quantity: string }[] },
 ) {
-  return openPartyTab(tx, cfg, {
-    tableId: req.tableId,
-    lines: offersByCfg.get(cfg)!.toOfferLines(req.lines ?? []),
-  });
+  const opened = await openPartyTab(tx, cfg, { tableId: req.tableId });
+  const lines = offersByCfg.get(cfg)!.toOfferLines(req.lines ?? []);
+  if (lines.length > 0) await writeGroupedLines(tx, cfg, opened.tabId, lines);
+  return opened;
 }
 
 function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T>): Promise<T> {

@@ -817,7 +817,7 @@ describe("growing a bill with a saved full-invoice choice", () => {
 
     expect(updated.json.code).toBeUndefined();
     expect(updated.status).toBe(200);
-    expect(storedLines(id)).toEqual(["2:2000"]);
+    expect(storedLines(id)).toEqual(["2:1000", "3:1000"]);
     expect(orderRow(id)!.revision).toBe(revision + 1);
     expect(savedChoice(id)).toEqual(choice);
     expect(written()).toEqual(before);
@@ -977,7 +977,7 @@ describe("an edit that does not raise an order already over the limit", () => {
       revision: orderRow(id)!.revision,
     });
     expect(shrunk.status).toBe(200);
-    expect(storedLines(id).map((entry) => entry.split(":")[1])).toEqual(["2000"]);
+    expect(storedLines(id).map((entry) => entry.split(":")[1])).toEqual(["1000", "1000"]);
 
     const atLimit = await send(limited, venue.cookie, "PUT", `/api/working-orders/${id}`, {
       lines: linesOf(counter, { Lote: 1 }),
@@ -997,7 +997,7 @@ describe("an edit that does not raise an order already over the limit", () => {
       status: 409,
       json: { ...REFUSED, params: { total: "3200.01", limit: "3000.00" } },
     });
-    expect(storedLines(id)).toEqual(["1:2000"]);
+    expect(storedLines(id)).toEqual(["1:1000", "2:1000"]);
     expect(orderRow(id)!.revision).toBe(revision);
   });
 

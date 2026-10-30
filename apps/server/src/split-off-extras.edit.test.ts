@@ -315,7 +315,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       await placeGrouped(
         tx,
         venue.cfg,
@@ -339,7 +339,7 @@ describe("editing split-off extras", () => {
     const venue = await setupSplitExtrasVenue();
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       const placed = [
         {
           ...line(venue, "burger"),
@@ -573,7 +573,7 @@ describe("editing split-off extras", () => {
     const id = venue.party.tabId;
     await withTransaction(db, async (tx) => {
       await setStationPrinting(tx, { printHeldWork: true });
-      // Grouped, as a counter order moved to a table keeps it (plan D1).
+      // Grouped, as an order stored before portions.
       await placeGrouped(
         tx,
         venue.cfg,

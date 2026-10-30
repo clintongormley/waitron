@@ -104,9 +104,11 @@ import {
 } from "@waitron/venue-service";
 import { VENUE_SERVICE } from "./modules.js";
 import { openPartyTab, serveLine } from "./testing/serve-line.js";
+import { openGroupedCounterOrder } from "./testing/grouped-counter-order.js";
 import { inTx, join, orderForParty, seat, setupPartyVenue, split } from "./testing/party-venue.js";
 import "./errors.js";
 import { cancelLine } from "./testing/cancel-line.js";
+import { heldRow } from "./testing/held-row.js";
 import { setStationPrinting } from "./testing/station-printing.js";
 
 import { placeGroupedRound } from "./testing/group-submit-fixture.js";
@@ -817,24 +819,30 @@ describe("parkOrder", () => {
     const lines = await db
       .select()
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id));
-    expect(lines).toHaveLength(1);
-    // The line carries its product FK + quantity AND the full display snapshot priceBasket produced:
-    // 1.50 gross each × 2 = 3.00 gross. `line_total` on this DRAFT is the GROSS 3.00 (the
-    // customer-facing total the held list shows), NOT the net base 2.48 the FILED sale line carries;
-    // `vat_class` is the product's class, general. Each number is read straight off the row, so each
-    // is the whole number its own scale stores: 300 is that gross 3.00 in cents, 150 the gross unit
-    // 1.50, and 2000 is two units in thousandths.
-    expect(lines[0]).toMatchObject({
-      productId: cafeId,
-      lineNo: 1,
-      quantity: 2000,
-      descriptions: { [LOCALE]: "Café" },
-      unitPriceGross: 150,
-      vatClass: "general",
-      lineTotal: 300,
-      category: "ES drinks",
-    });
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(lines).toHaveLength(2);
+    // Each of the two coffees is its own line, carrying its product FK + quantity AND the full
+    // display snapshot priceBasket produced: 1.50 gross each. `line_total` on this DRAFT is the
+    // GROSS 1.50 (the customer-facing total the held list shows), NOT the net base the FILED sale
+    // line carries; `vat_class` is the product's class, general. Each number is read straight off
+    // the row, so each is the whole number its own scale stores: 150 is that gross 1.50 in cents,
+    // and 1000 is one unit in thousandths.
+    for (const [at, lineNo] of [
+      [0, 1],
+      [1, 2],
+    ] as const) {
+      expect(lines[at]).toMatchObject({
+        productId: cafeId,
+        lineNo,
+        quantity: 1000,
+        descriptions: { [LOCALE]: "Café" },
+        unitPriceGross: 150,
+        vatClass: "general",
+        lineTotal: 150,
+        category: "ES drinks",
+      });
+    }
   });
 
   it("stores a quantity as whole thousandths", async () => {
@@ -888,12 +896,19 @@ describe("parkOrder", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(4);
     expect(lines[0]).toMatchObject({ lineNo: 1, productId: cafeId, category: "ES drinks" });
-    // `quantity` is read straight off the column, so 3000 is three units as a count of thousandths.
-    expect(lines[1]).toMatchObject({ lineNo: 2, productId: aguaId, quantity: 3000 });
-    // The category-less product's line snapshots NULL, the other branch of `?? null`.
-    expect(lines[1]!.category).toBeNull();
+    // `quantity` is read straight off the column, so 1000 is one unit as a count of thousandths:
+    // the three waters are three lines. The category-less product's lines snapshot NULL, the
+    // other branch of `?? null`.
+    for (const [at, lineNo] of [
+      [1, 2],
+      [2, 3],
+      [3, 4],
+    ] as const) {
+      expect(lines[at]).toMatchObject({ lineNo, productId: aguaId, quantity: 1000 });
+      expect(lines[at]!.category).toBeNull();
+    }
   });
 
   it("refuses an empty basket (sale.empty_basket) and an offer the zone does not hold (service_zone.offer_not_allowed)", async () => {
@@ -952,14 +967,19 @@ describe("parkOrder", () => {
     const replay = await parkProducts(cfg, { id, lines, label: "John" });
     expect(replay).toEqual({ id, orderNumber: 1 });
 
-    // Exactly ONE order and ONE line survive: the replay re-inserted neither the order nor its lines.
+    // Exactly ONE order and its two coffee lines survive: the replay re-inserted neither the order
+    // nor its lines.
     const orders = await db.select().from(workingOrders).where(eq(workingOrders.id, id));
     expect(orders).toHaveLength(1);
     const woLines = await db
       .select()
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id));
-    expect(woLines).toHaveLength(1);
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(woLines.map(({ lineNo, quantity }) => [lineNo, quantity])).toEqual([
+      [1, 1000],
+      [2, 1000],
+    ]);
   });
 
   it("replays the ORIGINAL order when a re-sent park carries a DIFFERENT basket (id is the idempotency key)", async () => {
@@ -1368,12 +1388,20 @@ describe("listHeldOrders", () => {
     const b = await readOrder(idB);
 
     const held = await listHeldOrders({ db }, cfg);
+    // One item per stored dish, each of quantity 1.
+    const item = (name: string) => ({
+      lineId: expect.any(String),
+      name,
+      quantity: "1.000",
+      note: null,
+      extras: [],
+    });
+    const coffee = item("Coffee");
+    const water = item("Water");
     expect(held).toEqual([
       {
         id: idA,
-        items: [
-          { lineId: expect.any(String), name: "Coffee", quantity: "2.000", note: null, extras: [] },
-        ],
+        items: [coffee, coffee],
         orderNumber: 1,
         label: "Mesa 4",
         counts: { ordered: 2, unsent: 2, held: 0, waiting: 0, ready: 0 },
@@ -1386,10 +1414,7 @@ describe("listHeldOrders", () => {
       },
       {
         id: idB,
-        items: [
-          { lineId: expect.any(String), name: "Coffee", quantity: "1.000", note: null, extras: [] },
-          { lineId: expect.any(String), name: "Water", quantity: "3.000", note: null, extras: [] },
-        ],
+        items: [coffee, water, water, water],
         orderNumber: 2,
         label: null,
         counts: { ordered: 4, unsent: 4, held: 0, waiting: 0, ready: 0 },
@@ -1520,10 +1545,11 @@ describe("getHeldOrder", () => {
       const read = status === "open" ? getHeldOrder : getPlacedCounterOrder;
       expect((await read({ db }, cfg, id)).lines.map((l) => l.quantity)).toEqual([
         "1.000",
-        "2.000",
+        "1.000",
+        "1.000",
       ]);
       await db.execute(sql`delete from working_line_contexts where working_order_line_id in
-      (select id from working_order_lines where working_order_id = ${id} and quantity = 2000)`);
+      (select id from working_order_lines where working_order_id = ${id} and line_no = 3)`);
       await expect(read({ db }, cfg, id)).rejects.toMatchObject({
         code: "order.service_context_missing",
         params: { workingOrderId: id },
@@ -1660,17 +1686,19 @@ describe("getHeldOrder", () => {
       line_total: number;
     }>(sql`
       select quantity, price_quantity, unit_name, unit_precision, unit_price_gross, line_total
-      from working_order_lines where working_order_id = ${id} and parent_line_id is not null`);
-    expect(rows.rows).toEqual([
-      {
-        quantity: 300,
-        price_quantity: 50,
-        unit_name: JSON.stringify({ [CONTENT_LANGUAGE]: "su" }),
-        unit_precision: 3,
-        unit_price_gross: 1,
-        line_total: 6,
-      },
-    ]);
+      from working_order_lines where working_order_id = ${id} and parent_line_id is not null
+      order by line_no`);
+    // Each dish's own three picks: 150 g, 3 cents; the two together the 300 g and 6 cents of
+    // the order's picks.
+    const picks = {
+      quantity: 150,
+      price_quantity: 50,
+      unit_name: JSON.stringify({ [CONTENT_LANGUAGE]: "su" }),
+      unit_precision: 3,
+      unit_price_gross: 1,
+      line_total: 3,
+    };
+    expect(rows.rows).toEqual([picks, picks]);
 
     const revision = await revisionOf(id);
     await withTransaction(db, (tx) =>
@@ -1682,8 +1710,11 @@ describe("getHeldOrder", () => {
       line_total: number;
     }>(sql`
       select quantity, price_quantity, line_total from working_order_lines
-      where working_order_id = ${id} and parent_line_id is not null`);
-    expect(after.rows).toEqual([{ quantity: 300, price_quantity: 50, line_total: 6 }]);
+      where working_order_id = ${id} and parent_line_id is not null order by line_no`);
+    expect(after.rows).toEqual([
+      { quantity: 150, price_quantity: 50, line_total: 3 },
+      { quantity: 150, price_quantity: 50, line_total: 3 },
+    ]);
   });
 
   it("keeps a fractional item's unit snapshot after the live unit is renamed", async () => {
@@ -1794,26 +1825,27 @@ describe("getHeldOrder", () => {
 
     const order = await getHeldOrder({ db }, cfg, id);
 
-    expect(order.lines).toEqual([
-      expect.objectContaining({
-        workingOrderLineId: expect.any(String),
-        menuItemId: premiumCafeOfferId,
-        productId: cafeId,
-        quantity: "2.000",
-        note: "Sin espuma",
-        extras: [
-          {
-            productId: extra.productId,
-            name: "Leche staff",
-            descriptions: { [LOCALE]: "Leche customer" },
-            kitchenName: "Leche kitchen",
-            price: "0.75",
-            quantity: 2,
-            listId: extra.listId,
-          },
-        ],
-      }),
-    ]);
+    // Each of the two coffees is its own line, with its own two picks.
+    const coffee = expect.objectContaining({
+      workingOrderLineId: expect.any(String),
+      menuItemId: premiumCafeOfferId,
+      productId: cafeId,
+      quantity: "1.000",
+      note: "Sin espuma",
+      extras: [
+        {
+          productId: extra.productId,
+          name: "Leche staff",
+          descriptions: { [LOCALE]: "Leche customer" },
+          kitchenName: "Leche kitchen",
+          price: "0.75",
+          quantity: 2,
+          listId: extra.listId,
+        },
+      ],
+    });
+    expect(order.lines).toEqual([coffee, coffee]);
+    expect(new Set(order.lines.map((line) => line.workingOrderLineId)).size).toBe(2);
   });
 
   it("returns the parked offer's identity and snapshots after its live product changes", async () => {
@@ -1948,12 +1980,12 @@ describe("getHeldOrder", () => {
           quantity: "1.000",
           optionSnapshots: [],
         },
-        {
+        ...Array.from({ length: 3 }, () => ({
           productId: aguaId,
           menuItemId: offers.offerFor(aguaId),
-          quantity: "3.000",
+          quantity: "1.000",
           optionSnapshots: [],
-        },
+        })),
       ],
     });
   });
@@ -2055,23 +2087,33 @@ describe("updateHeldOrder", () => {
              cast(unit_price_gross as int) as unit_price_gross, cast(line_total as int) as line_total
       from working_order_lines
       where working_order_id = ${id} order by line_no`);
-    // The quantities are counts of whole thousandths: three dishes and their six picks.
+    // The quantities are counts of whole thousandths: three dishes, each its own line with its two
+    // picks, all at the locked prices (3 × 3.25 + 6 × 0.75, as one line of three was). The first
+    // dish keeps its line and its picks' row; the raise adds two more.
+    const dish = (id: unknown) => ({
+      id,
+      parent_line_id: null,
+      quantity: "1000",
+      unit_price_gross: 325,
+      line_total: 325,
+    });
+    const milk = (id: unknown, parent: string) => ({
+      id,
+      parent_line_id: parent,
+      quantity: "2000",
+      unit_price_gross: 75,
+      line_total: 150,
+    });
+    const added = [after.rows[2]!.id, after.rows[4]!.id];
     expect(after.rows).toEqual([
-      {
-        id: before.rows[0]!.id,
-        parent_line_id: null,
-        quantity: "3000",
-        unit_price_gross: 325,
-        line_total: 975,
-      },
-      {
-        id: before.rows[1]!.id,
-        parent_line_id: before.rows[0]!.id,
-        quantity: "6000",
-        unit_price_gross: 75,
-        line_total: 450,
-      },
+      dish(before.rows[0]!.id),
+      milk(before.rows[1]!.id, before.rows[0]!.id),
+      dish(added[0]),
+      milk(expect.any(String), added[0]!),
+      dish(added[1]),
+      milk(expect.any(String), added[1]!),
     ]);
+    expect(new Set(after.rows.map((row) => row.id)).size).toBe(6);
   });
 
   // A held-order edit in which every line is quantity-only, and which keeps a line at its stored
@@ -2125,12 +2167,11 @@ describe("updateHeldOrder", () => {
     await withTransaction(db, (tx) =>
       catalogue.updateProduct(tx, extra.productId, { available: false }),
     );
+    const dishes = before.filter((line) => line.parent_line_id === null).map((line) => line.id);
     const edit = async (quantity: string) =>
       updateHeldOrder({ db }, cfg, id, {
         revision: await revisionOf(id),
-        lines: [
-          { workingOrderLineId: before[0]!.id, menuItemId: premiumCafeOfferId, quantity, extras },
-        ],
+        lines: heldRow(dishes, quantity, { menuItemId: premiumCafeOfferId, extras }),
       });
 
     await edit("2");
@@ -2565,12 +2606,16 @@ describe("updateHeldOrder", () => {
       ],
     });
 
-    // Same ids at the locked price: the plain line is two dishes at 3.25, not re-priced at 9.00.
-    expect(await readLines(id)).toEqual([
+    // Same ids at the locked price: the plain dish keeps its line, and the raise adds a second
+    // dish at 3.25, not re-priced at 9.00.
+    const after = await readLines(id);
+    expect(after).toEqual([
       before[0],
       before[1],
-      { ...before[2]!, quantity: "2000", line_total: 650 },
+      before[2],
+      { ...before[2]!, id: expect.any(String) },
     ]);
+    expect(after[3]!.id).not.toBe(before[2]!.id);
   });
 
   // A JSON body can carry a `productId` the line types no longer declare. Beside a valid offer it is
@@ -2649,16 +2694,15 @@ describe("updateHeldOrder", () => {
       select id, cast(quantity as text) as quantity, cast(unit_price_gross as int) as unit_price_gross,
              cast(line_total as int) as line_total
       from working_order_lines
-      where working_order_id = ${id}`);
-    // Two units, as a count of whole thousandths.
+      where working_order_id = ${id} order by line_no`);
+    // Two dishes, each one unit as a count of whole thousandths, both at the locked price: the
+    // first keeps its line, the raise adds the second.
+    const coffee = { quantity: "1000", unit_price_gross: 325, line_total: 325 };
     expect(after.rows).toEqual([
-      {
-        id: lineId,
-        quantity: "2000",
-        unit_price_gross: 325,
-        line_total: 650,
-      },
+      { id: lineId, ...coffee },
+      { id: expect.any(String), ...coffee },
     ]);
+    expect(after.rows[1]!.id).not.toBe(lineId);
   });
 
   it("replaces an offer line using the order's stored zone and refreshes its attribution", async () => {
@@ -2684,11 +2728,10 @@ describe("updateHeldOrder", () => {
              c.menu_item_id
       from working_order_lines l
       join working_line_contexts c on c.working_order_line_id = l.id
-      where l.working_order_id = ${id}`);
-    // Two units, as a count of whole thousandths.
-    expect(line.rows).toEqual([
-      { quantity: "2000", unit_price_gross: 325, menu_item_id: premiumCafeOfferId },
-    ]);
+      where l.working_order_id = ${id} order by l.line_no`);
+    // Two dishes, each one unit as a count of whole thousandths.
+    const coffee = { quantity: "1000", unit_price_gross: 325, menu_item_id: premiumCafeOfferId };
+    expect(line.rows).toEqual([coffee, coffee]);
   });
 
   it("replaces the lines, re-prices the total and updates the label, leaving the order row otherwise unchanged", async () => {
@@ -2724,15 +2767,15 @@ describe("updateHeldOrder", () => {
       settledAt: null,
     });
 
-    // The old café line is gone; the two new lines carry the new products, numbered after it.
+    // The two old café lines are gone; the two new lines carry the new products, numbered after them.
     const lines = await db
       .select()
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
     expect(lines).toHaveLength(2);
-    expect(lines[0]).toMatchObject({ lineNo: 2, productId: aguaId });
-    expect(lines[1]).toMatchObject({ lineNo: 3, productId: cafeId });
+    expect(lines[0]).toMatchObject({ lineNo: 3, productId: aguaId });
+    expect(lines[1]).toMatchObject({ lineNo: 4, productId: cafeId });
 
     // Re-priced: the new total differs from the parked one AND equals the GROSS basket total for the
     // replaced lines (`priceBasket(newLines, "2026-09-27").total`, computed independently of the persisted column) —
@@ -2791,16 +2834,21 @@ describe("updateHeldOrder", () => {
       params: { zoneId, menuItemId: UUID_NOT_IN_CAT },
     });
 
-    // Both refusals happen before any line is deleted, so the parked order still holds its one
-    // original café line unchanged.
+    // Both refusals happen before any line is deleted, so the parked order still holds its two
+    // original café lines unchanged.
     const after = await readOrder(id);
     expect(after.lineTotals).toEqual(before.lineTotals);
     const lines = await db
       .select()
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id));
-    expect(lines).toHaveLength(1);
-    expect(lines[0]).toMatchObject({ productId: cafeId, lineNo: 1 });
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    expect(
+      lines.map(({ productId, lineNo, quantity }) => ({ productId, lineNo, quantity })),
+    ).toEqual([
+      { productId: cafeId, lineNo: 1, quantity: 1000 },
+      { productId: cafeId, lineNo: 2, quantity: 1000 },
+    ]);
   });
 
   it("throws working_order.not_open on a settled order — a closed order can no longer be edited", async () => {
@@ -3043,8 +3091,14 @@ async function createOfferedOrder(
   cfg: DeviceRequestConfig,
   id: string,
   lines: ProductLine[],
-): ReturnType<typeof createOpenOrder> {
+  shape: "portions" | "grouped" = "portions",
+): Promise<{ orderNumber: number }> {
   const offers = await offerProducts(tx, cfg);
+  if (shape === "grouped") {
+    return openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
+      zoneId: offers.zoneId,
+    });
+  }
   return createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
     zoneId: offers.zoneId,
   });
@@ -3059,9 +3113,10 @@ async function placeOrderWith(
   // `note` is the per-line KDS customisation (spec §2/§3, NON-FISCAL) — `createOpenOrder` validates
   // and persists it on the parent dish line, and `fireLines` snapshots it onto the ticket.
   lines: ProductLine[],
+  shape: "portions" | "grouped" = "portions",
 ): Promise<{ id: string }> {
   const id = randomUUID();
-  await createOfferedOrder(tx, cfg, id, lines);
+  await createOfferedOrder(tx, cfg, id, lines, shape);
   const fired = await tx
     .select({
       id: workingOrderLines.id,
@@ -4217,9 +4272,13 @@ describe("a sale on a Spanish public holiday", () => {
 
     const ordinary = await saleOn(ORDINARY);
     const holiday = await saleOn(HOLIDAY);
-    expect(await priced(holiday.parked)).toEqual([
-      expect.objectContaining({ productId: cafeId, unitPriceGross: 150, lineTotal: 300 }),
-    ]);
+    // Each of the two coffees is its own line.
+    const coffee = expect.objectContaining({
+      productId: cafeId,
+      unitPriceGross: 150,
+      lineTotal: 150,
+    });
+    expect(await priced(holiday.parked)).toEqual([coffee, coffee]);
     expect(await priced(holiday.parked)).toEqual(await priced(ordinary.parked));
     expect(await tickets(holiday.fired)).toEqual([
       { productId: product, stationId: upstairs.id, state: "queued" },
@@ -4666,11 +4725,17 @@ describe("advanceTicketItem / advanceTicket / listStationQueue (bump + queue)", 
     const { cfg, cafeId, aguaId } = await setupVenue();
     await withTransaction(db, async (tx) => {
       const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station.
-      const { id: orderId } = await placeOrderWith(tx, cfg, [
-        { productId: cafeId, quantity: "2" },
-        { productId: aguaId, quantity: "3" },
-      ]);
+      // Line 1 → 2× Café, line 2 → 3× Agua, both routed to the default station. Grouped, as a
+      // counter order written before portions, so each item carries a quantity other than one.
+      const { id: orderId } = await placeOrderWith(
+        tx,
+        cfg,
+        [
+          { productId: cafeId, quantity: "2" },
+          { productId: aguaId, quantity: "3" },
+        ],
+        "grouped",
+      );
 
       const [group] = await listStationQueue(tx, cocina.id);
       expect(group!.orderId).toBe(orderId);
@@ -6811,8 +6876,8 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     return { listId: list.id, productId: offered.id };
   }
 
-  /** An OPEN bill with extras lines for a party seated at a fresh table: `openTab` does not thread
-   *  `extras`, so the bill is built directly. Skips firing, so no station is required. */
+  /** An OPEN bill with extras lines for a party seated at a fresh table. Skips firing, so no station
+   *  is required. */
   async function openExtrasTab(
     tx: Transaction,
     cfg: DeviceRequestConfig,
@@ -6822,7 +6887,8 @@ describe("a cancel's extras cascade (FIX 2)", () => {
     const id = randomUUID();
     const offers = await tableOffers(tx, cfg);
     const { partyId } = await openPartyTab(tx, cfg, { tableId });
-    await createOpenOrder(tx, cfg, id, offers.toOfferLines(lines), null, {
+    // Grouped, as a counter order written before portions: two cases here split or cancel part of a line.
+    await openGroupedCounterOrder(tx, cfg, id, offers.toOfferLines(lines), {
       zoneId: offers.zoneId,
       partyId,
     });
@@ -7019,26 +7085,31 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxPicks: 5,
         maxQuantity: 5,
       });
-      const id = randomUUID();
-      await createOfferedOrder(tx, cfg, id, [
+      const request = [
         {
           productId: cafeId,
           quantity: "3",
           extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 2 }] }],
         },
-      ]);
-      const lines = await tx
-        .select({
-          id: workingOrderLines.id,
-          productId: workingOrderLines.productId,
-          parentLineId: workingOrderLines.parentLineId,
-          quantity: workingOrderLines.quantity,
-          unitPriceGross: workingOrderLines.unitPriceGross,
-          lineTotal: workingOrderLines.lineTotal,
-        })
-        .from(workingOrderLines)
-        .where(eq(workingOrderLines.workingOrderId, id))
-        .orderBy(workingOrderLines.lineNo);
+      ];
+      const linesOf = (orderId: string) =>
+        tx
+          .select({
+            id: workingOrderLines.id,
+            productId: workingOrderLines.productId,
+            parentLineId: workingOrderLines.parentLineId,
+            quantity: workingOrderLines.quantity,
+            unitPriceGross: workingOrderLines.unitPriceGross,
+            lineTotal: workingOrderLines.lineTotal,
+          })
+          .from(workingOrderLines)
+          .where(eq(workingOrderLines.workingOrderId, orderId))
+          .orderBy(workingOrderLines.lineNo);
+      // Grouped, as a counter order written before portions: only a line of several dishes shows
+      // the pick multiplied by the dish count.
+      const id = randomUUID();
+      await createOfferedOrder(tx, cfg, id, request, "grouped");
+      const lines = await linesOf(id);
       expect(lines).toHaveLength(2);
       // Parent dish row is UNCHANGED: its own product, no parent link, quantity still 3.
       expect(lines[0]).toMatchObject({
@@ -7055,6 +7126,29 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
       expect(lines[1]!.quantity).toBe(6000);
       expect(lines[1]!.unitPriceGross).toBe(50);
       expect(lines[1]!.lineTotal).toBe(300);
+
+      // As portions, each of the three dishes carries its own child of 2: 0.50 × 2 = 1.00, and
+      // the three together the same 3.00.
+      const portionsId = randomUUID();
+      await createOfferedOrder(tx, cfg, portionsId, request);
+      const portions = await linesOf(portionsId);
+      const dishes = portions.filter((line) => line.parentLineId === null);
+      expect(dishes.map((dish) => [dish.productId, dish.quantity])).toEqual([
+        [cafeId, 1000],
+        [cafeId, 1000],
+        [cafeId, 1000],
+      ]);
+      expect(
+        portions
+          .filter((line) => line.parentLineId !== null)
+          .map(({ parentLineId, productId, quantity, unitPriceGross, lineTotal }) => [
+            parentLineId,
+            productId,
+            quantity,
+            unitPriceGross,
+            lineTotal,
+          ]),
+      ).toEqual(dishes.map((dish) => [dish.id, shot.productId, 2000, 50, 100]));
     });
   });
 
@@ -7218,14 +7312,22 @@ describe("priceOrderLines extras quantities (resolve loop)", () => {
         maxPicks: 1,
         maxQuantity: 1,
       });
+      // Grouped, as a counter order written before portions: only a line of several dishes shows
+      // the pick multiplied by the dish count.
       const id = randomUUID();
-      await createOfferedOrder(tx, cfg, id, [
-        {
-          productId: cafeId,
-          quantity: "2",
-          extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 1 }] }],
-        },
-      ]);
+      await createOfferedOrder(
+        tx,
+        cfg,
+        id,
+        [
+          {
+            productId: cafeId,
+            quantity: "2",
+            extras: [{ listId: shot.listId, picks: [{ productId: shot.productId, quantity: 1 }] }],
+          },
+        ],
+        "grouped",
+      );
       const lines = await tx
         .select({
           parentLineId: workingOrderLines.parentLineId,
@@ -7425,17 +7527,26 @@ describe("frozen answers through a fractional quantity edit", () => {
       await attachModifierList(tx, cafeId, { kind: "extras", id: list.id });
       return { extraId: extra.id, listId: list.id };
     });
+    // Grouped, as a counter order written before portions: the raise scales a line of several
+    // dishes, which a portion never is.
     const id = randomUUID();
-    await parkProducts(cfg, {
-      id,
-      lines: [
-        {
-          productId: cafeId,
-          quantity: "2",
-          extras: [{ listId: seeded.listId, picks: [{ productId: seeded.extraId, quantity: 3 }] }],
-        },
-      ],
-    });
+    await withTransaction(db, (tx) =>
+      createOfferedOrder(
+        tx,
+        cfg,
+        id,
+        [
+          {
+            productId: cafeId,
+            quantity: "2",
+            extras: [
+              { listId: seeded.listId, picks: [{ productId: seeded.extraId, quantity: 3 }] },
+            ],
+          },
+        ],
+        "grouped",
+      ),
+    );
     const before = await db
       .select()
       .from(workingOrderLines)
@@ -7808,37 +7919,37 @@ describe("order path — extras and options", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(lines).toHaveLength(2);
-    const [dish, child] = lines;
-    expect(dish!.vatClass).toBe("reduced");
-    expect(child!.parentLineId).toBe(
-      (
-        await db
-          .select({ id: workingOrderLines.id })
-          .from(workingOrderLines)
-          .where(
-            and(
-              eq(workingOrderLines.workingOrderId, id),
-              eq(workingOrderLines.lineNo, dish!.lineNo),
-            ),
-          )
-      )[0]!.id,
-    );
-    // The child IS the wine, by id.
-    expect(child!.productId).toBe(seeded.wineId);
-    // The wine's three names, frozen: staff on `name`, customer re-keyed onto the venue's invoice
-    // locale, kitchen on `kitchen_name`.
-    expect(child!.name).toBe("Vino staff");
-    expect(child!.descriptions).toEqual({ [LOCALE]: "Vino customer" });
-    expect(child!.kitchenName).toBe("Vino kitchen");
-    // The extra PRODUCT's own VAT, never the 10% dish's.
-    expect(child!.vatClass).toBe("general");
-    // The list ITEM's price, not the wine's own 3.00; dish ×2 × pick ×1 = 2. All three columns are
-    // read straight off the row, each at its own scale: 450 is that 4.50 and 900 the 9.00 total in
-    // whole cents, and 2000 is the two picks in thousandths.
-    expect(child!.unitPriceGross).toBe(450);
-    expect(child!.quantity).toBe(2000);
-    expect(child!.lineTotal).toBe(900);
+    // Each of the two dishes is its own line, followed by its own wine child.
+    expect(lines).toHaveLength(4);
+    const ids = await db
+      .select({ lineNo: workingOrderLines.lineNo, id: workingOrderLines.id })
+      .from(workingOrderLines)
+      .where(eq(workingOrderLines.workingOrderId, id));
+    const idOf = (lineNo: number) => ids.find((row) => row.lineNo === lineNo)!.id;
+    for (const [dish, child] of [
+      [lines[0]!, lines[1]!],
+      [lines[2]!, lines[3]!],
+    ]) {
+      expect(dish.parentLineId).toBeNull();
+      expect(dish.productId).toBe(seeded.dishId);
+      expect(dish.vatClass).toBe("reduced");
+      expect(child.parentLineId).toBe(idOf(dish.lineNo));
+      // The child IS the wine, by id.
+      expect(child.productId).toBe(seeded.wineId);
+      // The wine's three names, frozen: staff on `name`, customer re-keyed onto the venue's
+      // invoice locale, kitchen on `kitchen_name`.
+      expect(child.name).toBe("Vino staff");
+      expect(child.descriptions).toEqual({ [LOCALE]: "Vino customer" });
+      expect(child.kitchenName).toBe("Vino kitchen");
+      // The extra PRODUCT's own VAT, never the 10% dish's.
+      expect(child.vatClass).toBe("general");
+      // The list ITEM's price, not the wine's own 3.00; dish ×1 × pick ×1 = 1. All three columns
+      // are read straight off the row, each at its own scale: 450 is that 4.50 in whole cents, and
+      // 1000 is the one pick in thousandths; the two children together are the 9.00 one wine line of two was.
+      expect(child.unitPriceGross).toBe(450);
+      expect(child.quantity).toBe(1000);
+      expect(child.lineTotal).toBe(450);
+    }
   });
 
   it("keeps an extra child without a make-at station when a chosen dish gains units", async () => {
@@ -8081,17 +8192,17 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(after).toHaveLength(1);
-    expect(after[0]).toMatchObject({
-      id: before[0]!.id,
-      // Two units, as a count of thousandths off the column.
-      quantity: 2000,
-      // The offer's 3.25 at park time, not the 99.00 it now costs, and twice it for the total —
-      // both read straight off the row, so 325 and 650 are those amounts in whole cents.
-      unitPriceGross: 325,
-      lineTotal: 650,
-    });
-    expect(after[0]!.optionSnapshots).toEqual(before[0]!.optionSnapshots);
+    // The dish keeps its line, and the raise adds a second dish beside it. One unit each, as a
+    // count of thousandths off the column, at the offer's 3.25 at park time, not the 99.00 it now
+    // costs — read straight off the row, so 325 is that amount in whole cents; the two together
+    // are the 6.50 one line of two was.
+    expect(after).toHaveLength(2);
+    expect(after[0]!.id).toBe(before[0]!.id);
+    expect(after[1]!.id).not.toBe(before[0]!.id);
+    for (const line of after) {
+      expect(line).toMatchObject({ quantity: 1000, unitPriceGross: 325, lineTotal: 325 });
+      expect(line.optionSnapshots).toEqual(before[0]!.optionSnapshots);
+    }
   });
 
   it("keeps each extras child on its own row when two extras lists change places", async () => {
@@ -8140,17 +8251,40 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // Every row keeps its id and the price it was sold at; only the quantities move, each child
-    // following its own dish at dish × picks — so the three-pick child doubles to six.
+    // Every stored row keeps its id, its quantity and the price it was sold at; the raise adds a
+    // second dish with its own two picks at those prices, each child keeping its OWN pick's count —
+    // so a child that took the other list's count would show 3 bacon or 1 milk. Every column is
+    // read straight off the row, each at its own scale: the money in whole cents, the quantities
+    // in whole thousandths.
+    const row = (line: (typeof after)[number]) => [
+      line.parentLineId,
+      line.productId,
+      line.quantity,
+      line.unitPriceGross,
+      line.lineTotal,
+    ];
+    expect(after.slice(0, 3).map((line) => line.id)).toEqual(before.map((line) => line.id));
+    expect(after.slice(0, 3).map(row)).toEqual(before.map(row));
+    expect(after).toHaveLength(6);
+    const copy = after[3]!;
+    expect(new Set(after.map((line) => line.id)).size).toBe(6);
+    // The dish at its own 1.50; bacon at 1.00 for one pick; milk at 0.30 for three picks.
+    expect(row(copy)).toEqual([null, cafeId, 1000, 150, 150]);
     expect(
-      after.map((line) => [line.id, line.quantity, line.unitPriceGross, line.lineTotal]),
-    ).toEqual([
-      // The dish at its own 1.50, twice; bacon at 1.00 for two dishes of one pick; milk at 0.30 for
-      // two dishes of three picks. Every column is read straight off the row, each at its own
-      // scale: the money in whole cents, the quantities in whole thousandths.
-      [before[0]!.id, 2000, 150, 300],
-      [before[1]!.id, 2000, 100, 200],
-      [before[2]!.id, 6000, 30, 180],
+      after
+        .slice(4)
+        .map(row)
+        .sort((a, b) => String(a[1]).localeCompare(String(b[1]))),
+    ).toEqual(
+      [
+        [copy.id, seeded.bacon.productId, 1000, 100, 100],
+        [copy.id, seeded.leche.productId, 3000, 30, 90],
+      ].sort((a, b) => String(a[1]).localeCompare(String(b[1]))),
+    );
+    expect(before.map(row)).toEqual([
+      [null, cafeId, 1000, 150, 150],
+      [before[0]!.id, seeded.bacon.productId, 1000, 100, 100],
+      [before[0]!.id, seeded.leche.productId, 3000, 30, 90],
     ]);
   });
 
@@ -8344,13 +8478,23 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    // Both rows keep their ids, the cheese its list and the 1.50 it was sold at, for two dishes.
+    // Both rows keep their ids, the cheese its list and the 1.50 it was sold at; the raise adds a
+    // second dish whose cheese takes the same list and the same 1.50, not the 1.80 it now costs.
     expect(
-      after.map((line) => [line.id, line.extraListId, line.unitPriceGross, line.lineTotal]),
+      after.map((line) => [
+        line.id,
+        line.parentLineId,
+        line.extraListId,
+        line.unitPriceGross,
+        line.lineTotal,
+      ]),
     ).toEqual([
-      [before[0]!.id, null, 150, 300],
-      [before[1]!.id, seeded.premiumListId, 150, 300],
+      [before[0]!.id, null, null, 150, 150],
+      [before[1]!.id, before[0]!.id, seeded.premiumListId, 150, 150],
+      [after[2]!.id, null, null, 150, 150],
+      [after[3]!.id, after[2]!.id, seeded.premiumListId, 150, 150],
     ]);
+    expect(new Set(after.map((line) => line.id)).size).toBe(4);
   });
 
   it("keeps the line and its price when the answer itself changed: an answer carries no price", async () => {
@@ -8504,13 +8648,17 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(after).toHaveLength(1);
+    // The dish keeps its line, and the raise adds a second dish beside it; both at the 3.25 it
+    // was sold at, not today's 99.00, in whole cents off the column, and both freeze the new name.
+    expect(after).toHaveLength(2);
     expect(after[0]!.id).toEqual(before[0]!.id);
-    // The 3.25 it was sold at, not today's 99.00, in whole cents off the column.
-    expect(after[0]!.unitPriceGross).toEqual(325);
-    expect(after[0]!.optionSnapshots[0]).toMatchObject({
-      listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
-    });
+    expect(after[1]!.id).not.toEqual(before[0]!.id);
+    for (const line of after) {
+      expect(line.unitPriceGross).toEqual(325);
+      expect(line.optionSnapshots[0]).toMatchObject({
+        listName: { [CONTENT_LANGUAGE]: "Renamed staff" },
+      });
+    }
   });
 
   /**
@@ -8588,9 +8736,11 @@ describe("what a held-order edit preserves and what it replaces", () => {
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id))
       .orderBy(workingOrderLines.lineNo);
-    expect(after).toHaveLength(1);
-    // Two units, as a count of thousandths off the column.
-    expect(after[0]).toMatchObject({ id: before[0]!.id, quantity: 2000 });
+    // The dish keeps its line, and the raise adds a second dish beside it: one unit each, as a
+    // count of thousandths off the column.
+    expect(after.map((line) => line.quantity)).toEqual([1000, 1000]);
+    expect(after[0]!.id).toBe(before[0]!.id);
+    expect(after[1]!.id).not.toBe(before[0]!.id);
   });
 });
 
@@ -8734,14 +8884,18 @@ describe("editing a saved order prices only what the edit adds", () => {
     const { cfg, water } = await menuVenue();
     const id = randomUUID();
     await parkProducts(cfg, { id, lines: [{ productId: water, quantity: "2" }] });
-    const [before] = await storedRows(id);
+    const before = await storedRows(id);
     await db.execute(sql`update products set unit_price = 900 where id = ${water}`);
 
     await updateProducts(cfg, id, {
-      lines: [{ workingOrderLineId: before!.id, productId: water, quantity: "2", note: "Warm" }],
+      lines: heldRow(
+        before.map((row) => row.id),
+        "2",
+        { productId: water, note: "Warm" },
+      ),
     });
 
-    expect(await storedRows(id)).toEqual([{ ...before!, note: "Warm" }]);
+    expect(await storedRows(id)).toEqual(before.map((row) => ({ ...row, note: "Warm" })));
   });
 
   it("numbers a line that replaces another after the order's highest line number", async () => {
@@ -8765,9 +8919,11 @@ describe("editing a saved order prices only what the edit adds", () => {
     });
 
     const after = await storedRows(id);
+    // The two lemonades are two lines, both numbered past the order's highest.
     expect(after.map((row) => [row.id === before[1]!.id, row.lineNo, row.productId])).toEqual([
       [true, 2, water],
       [false, 3, lemonade],
+      [false, 4, lemonade],
     ]);
   });
 
@@ -9145,14 +9301,14 @@ describe("a variant is sold as the product it is", () => {
       })
       .from(workingOrderLines)
       .where(eq(workingOrderLines.workingOrderId, id));
-    expect(stored).toEqual([
-      // A line freezes the unit's abbreviation, in the default content language, as its unit name.
-      {
-        productId: wine.wine175,
-        unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
-        unitPrecision: EACH_UNIT.precision,
-      },
-    ]);
+    // A line freezes the unit's abbreviation, in the default content language, as its unit name;
+    // each of the two glasses is its own line.
+    const glass = {
+      productId: wine.wine175,
+      unitName: { [CONTENT_LANGUAGE]: EACH_UNIT.abbreviation.es },
+      unitPrecision: EACH_UNIT.precision,
+    };
+    expect(stored).toEqual([glass, glass]);
   });
 
   it("refuses a parent with Active variants rung up alone, and sells one whose variants are all Inactive as itself", async () => {
@@ -9712,10 +9868,15 @@ describe("a variant is sold as the product it is", () => {
         lineTotal: workingOrderLines.lineTotal,
       })
       .from(workingOrderLines)
-      .where(eq(workingOrderLines.workingOrderId, id));
+      .where(eq(workingOrderLines.workingOrderId, id))
+      .orderBy(workingOrderLines.lineNo);
+    // The glass keeps its line, and the raise adds a second glass beside it, both at the locked
+    // 4.50 rather than today's 9.00: together the 9.00 one line of two was.
     expect(after).toEqual([
-      { id: before!.id, productId: wine.wine125, unitPriceGross: 450, lineTotal: 900 },
+      { id: before!.id, productId: wine.wine125, unitPriceGross: 450, lineTotal: 450 },
+      { id: expect.any(String), productId: wine.wine125, unitPriceGross: 450, lineTotal: 450 },
     ]);
+    expect(after[1]!.id).not.toBe(before!.id);
   });
 
   it("returns a retrieved variant line's variant id, and none for a line without one", async () => {

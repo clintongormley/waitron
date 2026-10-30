@@ -1344,7 +1344,7 @@ export interface VenueServiceContribution {
     fromWorkingOrderLineId: string,
     toWorkingOrderLineId: string,
   ): Promise<void>;
-  /** `copyLineContext` for each pair, in one read and one write. */
+  /** `copyLineContext` for each pair, in one read. */
   copyLineContexts(
     tx: Transaction,
     cfg: { locationId: LocationId },

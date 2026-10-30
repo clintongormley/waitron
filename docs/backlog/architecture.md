@@ -650,21 +650,42 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   (`apps/server/src/receipt-print.ts:622`, `:645-653`). Correct the comment to name every reason
   that sets it.
 
-## A query with tens of thousands of bound values crashes before it reaches the database
+## No sweep has read every insert whose rows grow with an order
 
-Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
-  (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
-  value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
-  call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
-  size). Any query that binds one value per row can still meet it.
+A1208 routed the inserts it found growing with a counter order's dishes (the lines, their sale
+contexts and copies, portions and their bindings, cancellations, carried discounts, kitchen items
+and split extras, and the links from filed rows) through `insertInChunks` or `statementChunks`
+(`packages/db/src/insert-in-chunks.ts`). That sweep missed four. PR #2265's run-it review saw one
+refused when it ran it, and named three more it had not run; a test of each was refused "too many
+SQL variables" before its fix: an item payment's lines (6,554 rows), a whole-bill discount's lines
+(6,554), a kitchen ticket's line links (10,924 on one printer) and, on a bill with a party, its
+kitchen allergy snapshots (11,880 items fired in one call). These now go through the same helpers.
+Nobody has read every insert since, so others may remain. Read each insert whose row count follows
+an order's dishes and route any that can bind more than `SQL_VARIABLE_LIMIT` values
+(`packages/store/src/index.ts`) through one of those helpers.
 
-Since A803 slice 1 a table send writes one line per portion. Run on that branch (2026-10-29, a
-throwaway case in `order-drafts.db.test.ts`): 999 burgers with a sauce (1,998 lines) were written;
-1,500 with a sauce (3,000 lines), and 3,000, 5,000 or 10,000 plain, failed with "Maximum call stack
-size exceeded" in the adapter's insert. The slice refuses more than 99 of one dish in one write
-(`tab.portions_too_many`), but per dish, so a send of about 31 different dishes at 99 each (about
-15 with an extra each) could still reach the limit — the build review's estimate, not measured.
-The review's suggested fix: insert in chunks in `node-sqlite-adapter.ts`.
+## A table round of more than about 1,100 dishes is refused "too many SQL variables"
+
+A connection the store opens binds at most 32,766 values in one statement
+(`SQL_VARIABLE_LIMIT`, `packages/store/src/index.ts`), the limit the official Node v26.13.0 for
+macOS reported; Homebrew's Node reported 250,000, and the store sets the lower one so a local run
+refuses what CI refused. A803 slice 1 writes one line per dish. A1208 chunked the other inserts
+it found growing with an order; see
+[No sweep has read every insert whose rows grow with an order](#no-sweep-has-read-every-insert-whose-rows-grow-with-an-order).
+The table round's line insert, `insertTabRound` (`apps/server/src/working-order.ts`), is still one
+statement: placing one round of waters through `placeGroups` passed at 11 lines of 99 (1,089
+dishes) and was refused "too many SQL variables" in `insertTabRound` at 12 lines of 99 (1,188
+dishes), 20 and 30, under the official Node v26.13.0 and Homebrew's v26.11.1 alike (2026-10-30). It uses `.returning`, so splitting it means gathering the
+returned rows from every part, as `fireLines` now does. `copyRecalledPortion`
+(`apps/server/src/draft-recall.ts`) also writes its lines in one statement; it copies one recalled
+dish, so its size is bounded by that dish's quantity (read, not run). The 99 limit
+(`tab.portions_too_many`) is per dish, so it does not bound a round.
+
+Separately, drizzle's session and the store's adapter (`packages/store/src/node-sqlite-adapter.ts`)
+pass every bound value as a separate argument, and an `inArray` over 60,000 ids answered
+`RangeError: Maximum call stack size exceeded` on Homebrew's Node, where 57,500 passed. Through the
+store's connections, which now set the limit, a 60,000-value statement is refused "too many SQL
+variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 ## Decisions and deliberate limits
 

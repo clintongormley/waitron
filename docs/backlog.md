@@ -1644,6 +1644,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
+  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
+  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
+
 - **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
@@ -1969,7 +1973,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
-  ticket/receipt grouping, has landed. What it leaves open is A1190–A1202 and the store limit under
+  ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Remaining slices: named, stable-numbered bills;
   always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
@@ -1986,15 +1990,28 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   [plan](superpowers/plans/2026-10-19-a803-bills-and-tables.md);
   [mockups](backlog/mockups/a803-bills-and-tables/).
 
-- **A1190. Counter orders keep one line for several of a dish (owner decision; left open by A803
-  slice 1, D1).** Walk-up sales and parked counter orders are not split into portions, because
-  fiscal control tests that must stay unedited pin their grouped lines.
-  [Detail](backlog/till.md#a1190-counter-orders-keep-one-line-for-several-of-a-dish)
-
 - **A1191. Pay items lists one row per portion (left open by A803 slice 1, D15).** "12 ×
   Croquetas" is twelve rows to tick, because A739's payment window holds those files
-  (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Once A739 releases them,
+  (`apps/till/src/state/bill-payment.ts`, `widgets/bill-pay-dialog.ts`). Since A1208 the counter's
+  Pay items on a part-paid counter order lists one row per portion too. Once A739 releases them,
   group the rows with a count that sends the members' line numbers.
+
+- **A1217. Two separate adds of the same dish with extras stay two counter rows (left open by
+  A803 slice 1).** Seen in slice 1's LOOK (2026-10-29): the counter basket kept them as two lines of
+  one, where a table's draft merges them. Not re-checked after A1208.
+  [Detail](backlog/till.md#a1217-two-separate-adds-of-the-same-dish-with-extras-stay-two-counter-rows)
+
+- **A1218. A counter device showing two counter zones cannot get back to its menu after a
+  retrieve.** Seen in A1208's LOOK (2026-10-30, demo Counter device with Downstairs bar and Upstairs
+  bar): after Retrieve the Parked orders list stays, and choosing the zone again, or Floor and back,
+  is refused "Clear the basket before changing service area" (`#onCounterZoneSelected`,
+  `apps/till/src/till-app.ts`), so no dish can be added to the retrieved order. With one counter zone
+  the plain Counter tab brings the menu back. I believe this predates A1208 (the refusal is from
+  c90856059; A1208 changes how a retrieved order's lines load into the basket, `#loadIntoBasket`,
+  but not `#onCounterZoneSelected` or the Parked orders list); not run on main.
+
+- **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
+  one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
@@ -2013,8 +2030,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1196. Retire the partial-quantity server paths (left open by A803 slice 1, D12).** Partial
   transfer and split (`carveLines`), `splitUnitsWithinOrder`, and partial serve, cancel,
-  adjustment and item payment stay for measured lines and grouped counter lines, and their tests
-  build grouped bills. Retire them once A1190 and A1195 are settled.
+  adjustment and item payment stay for measured lines and lines stored before portions, and their
+  tests build grouped bills. Retire them once A1195 is settled.
 
 - **A1197. `addTabRound` still writes grouped table lines (left open by A803 slice 1, D26).** Only
   test helpers call it (`apps/server/src/testing/party-venue.ts`,
@@ -6058,9 +6075,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **A query with tens of thousands of bound values crashes before it reaches the database**
-  A803 slice 1's limit of 99 portions is per dish, so one table send of many dishes can still
-  reach it (not measured). [Detail](backlog/architecture.md#a-query-with-tens-of-thousands-of-bound-values-crashes-before-it-reaches-the-database)
+- **No sweep has read every insert whose rows grow with an order.** A1208's sweep missed four,
+  which PR #2265's review and the tests after it found; others may remain.
+  [Detail](backlog/architecture.md#no-sweep-has-read-every-insert-whose-rows-grow-with-an-order)
+
+- **A table round of more than about 1,100 dishes is refused "too many SQL variables"**
+  `insertTabRound` writes a round's lines in one statement; 1,089 waters passed and 1,188 were
+  refused. [Detail](backlog/architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
 
 - **A760. Squash every migration set before go-live.**
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)

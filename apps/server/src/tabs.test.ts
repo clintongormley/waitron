@@ -738,7 +738,7 @@ describe("readTabLines", () => {
     await asApp(cfg, (tx) => serveLine(tx, cfg, tabId, 1));
 
     const lines = await asApp(cfg, (tx) => readTabLines(tx, cfg, tabId));
-    expect(lines).toHaveLength(2);
+    expect(lines).toHaveLength(3);
     expect(lines[0]).toMatchObject({
       lineNo: 1,
       productId: cafeId,
@@ -746,13 +746,18 @@ describe("readTabLines", () => {
       unitPriceGross: "1.50",
     });
     expect(lines[0]!.servedAt).not.toBeNull();
-    expect(lines[1]).toMatchObject({
-      lineNo: 2,
-      productId: aguaId,
-      quantity: "2.000",
-      unitPriceGross: "2.00",
-      servedAt: null,
-    });
+    for (const [index, lineNo] of [
+      [1, 2],
+      [2, 3],
+    ] as const) {
+      expect(lines[index]).toMatchObject({
+        lineNo,
+        productId: aguaId,
+        quantity: "1.000",
+        unitPriceGross: "2.00",
+        servedAt: null,
+      });
+    }
   });
 
   it("carries each line's course + fired/held state (KDS-2 §5b) for the tab's waiter-fire", async () => {

@@ -11,6 +11,7 @@ import {
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
+  insertInChunks,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -850,14 +851,22 @@ async function itemsDue(
     .from(workingOrderLines)
     .where(eq(workingOrderLines.workingOrderId, workingOrderId));
   const paid = paidQuantitiesOf(held, await readPaymentLines(tx, held));
+  const byLineNo = new Map(lines.map((line) => [line.lineNo, line]));
+  const childrenOf = new Map<string, (typeof lines)[number][]>();
+  for (const line of lines) {
+    if (line.parentLineId === null) continue;
+    const siblings = childrenOf.get(line.parentLineId);
+    if (siblings === undefined) childrenOf.set(line.parentLineId, [line]);
+    else siblings.push(line);
+  }
   const rows: ItemsDue["rows"] = [];
   for (const asked of requested) {
-    const line = lines.find((candidate) => candidate.lineNo === asked.lineNo);
+    const line = byLineNo.get(asked.lineNo);
     if (line === undefined) {
       throw new AppError("tab.line_not_found", { tabId: workingOrderId, lineNo: asked.lineNo });
     }
     if (line.parentLineId !== null) throw invalid("lines");
-    const children = lines.filter((child) => child.parentLineId === line.id);
+    const children = childrenOf.get(line.id) ?? [];
     let quantity = line.quantity;
     if (asked.quantity !== undefined) {
       try {
@@ -1121,9 +1130,11 @@ async function beginBillPayment(
     })
     .returning();
   if (items !== null) {
-    await tx
-      .insert(billPaymentLines)
-      .values(items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })));
+    await insertInChunks(
+      tx,
+      billPaymentLines,
+      items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })),
+    );
   }
   await captureBillPaymentAttendance(
     tx,

@@ -299,6 +299,7 @@ describe("offerProducts", () => {
     expect(await soldLines(suite.db, id)).toEqual([
       { productId: venue.coffee, unitPriceGross: 150 },
       { productId: venue.water, unitPriceGross: 120 },
+      { productId: venue.water, unitPriceGross: 120 },
     ]);
   });
 

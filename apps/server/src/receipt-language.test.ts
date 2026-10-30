@@ -75,6 +75,7 @@ import {
   send as rawPaymentSend,
   statusOf,
   tabWith,
+  groupedTabWith,
   type BillVenue,
 } from "./testing/bill-venue.js";
 import { REASONS } from "./testing/adjustment-venue.js";
@@ -957,7 +958,10 @@ describe("a sale prints its goods in the default content language its lines stor
         expect(startsWith(receipt!, label), label).toBe(true);
       }
       expectGoods(receipt!, "es");
-      expect(storedGoods(sale.id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+      expect(storedGoods(sale.id)).toEqual({
+        order: [SPANISH_LINE, SPANISH_LINE],
+        sale: [SPANISH_LINE],
+      });
     }
   });
 
@@ -1101,7 +1105,10 @@ describe("a sale prints its goods in the default content language its lines stor
         optionSnapshots,
       })),
     ).toEqual([SPANISH_LINE]);
-    expect(storedGoods(id)).toEqual({ order: [SPANISH_LINE], sale: [SPANISH_LINE] });
+    expect(storedGoods(id)).toEqual({
+      order: [SPANISH_LINE, SPANISH_LINE],
+      sale: [SPANISH_LINE],
+    });
     const [filed] = suite.db.all<{ id: string }>(
       sql`select id from sales where working_order_id = ${id}`,
     );
@@ -1543,6 +1550,13 @@ describe("a sale files in the receipt language saved on its order", () => {
       return billId;
     }
 
+    /** {@link billWith}'s bill with its lines stored grouped: the line route cuts part of a line in place. */
+    async function groupedBillWith(venue: BillVenue, ...names: string[]): Promise<string> {
+      const billId = await groupedTabWith(venue, ...names);
+      if (stored !== null) await choose(venue, billId, stored);
+      return billId;
+    }
+
     it("files a bill paid in two parts", async () => {
       const venue = await barcelonaVenue();
       const billId = await billWith(venue, "Tarta", "Caña");
@@ -1588,7 +1602,7 @@ describe("a sale files in the receipt language saved on its order", () => {
 
     it("files a bill a line edit leaves paid", async () => {
       const venue = await barcelonaVenue();
-      const billId = await billWith(venue, "Tarta", "Caña");
+      const billId = await groupedBillWith(venue, "Tarta", "Caña");
       const line = (quantity: string) =>
         revisionOfOrder(venue, billId).then(async (revision) =>
           send(venue.app, venue.cookie, "PUT", `/api/working-orders/${billId}/lines/2`, {

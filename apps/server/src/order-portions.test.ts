@@ -18,10 +18,11 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   deletePortionBindings,
   expandPortionRows,
+  portionIdentities,
   readPortionBindings,
   registerPortions,
   type PortionRef,
@@ -31,7 +32,14 @@ import { openPartyTab } from "./testing/serve-line.js";
 import { setupVenue, useSplitExtrasDb } from "./testing/split-extras-venue.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import type { DeviceRequestConfig } from "./trading-context.js";
-import { insertTabRound, priceTabRound, type PricedTabRound } from "./working-order.js";
+import {
+  insertTabRound,
+  priceOrderLines,
+  priceTabRound,
+  readStoredOrder,
+  type OrderLineIdentity,
+  type PricedTabRound,
+} from "./working-order.js";
 
 type Row = PricedTabRound["rows"][number];
 
@@ -241,6 +249,49 @@ describe("A803 portions: splitting a priced round", () => {
   });
 });
 
+describe("A1208 portionIdentities: the portions each priced row stands for", () => {
+  const identity = (row: Row): OrderLineIdentity => ({
+    id: row.id!,
+    productId: row.productId ?? null,
+    classification: null,
+    listUnitGross: null,
+  });
+
+  it("A1208 portionIdentities: a dish of two with two extras lists both portions under every row; a dish of one lists itself", () => {
+    const burgers = dish("burgers", { name: "Burger", quantity: 2000, lineTotal: 1000 });
+    const cheese = extra("cheese", "burgers", { quantity: 2000, lineTotal: 200 });
+    const bacon = extra("bacon", "burgers", { name: "Bacon", quantity: 2000, lineTotal: 300 });
+    const fries = dish("fries", { name: "Fries", quantity: 1000, lineTotal: 300 });
+    const rows = [burgers, cheese, bacon, fries];
+    const out = expandPortionRows(
+      rows,
+      rows.map((row) => context(row)),
+      [true, false, false, true],
+      1,
+    );
+
+    const identities = portionIdentities(rows.map(identity), rows, out);
+
+    const [first, second, third] = out.portions;
+    const burgerPortions = [first!.portionId, second!.portionId];
+    expect(identities).toEqual([
+      { ...identity(burgers), lineIds: ["burgers", out.rows[3]!.id], portionIds: burgerPortions },
+      { ...identity(cheese), lineIds: ["cheese", out.rows[4]!.id], portionIds: burgerPortions },
+      { ...identity(bacon), lineIds: ["bacon", out.rows[5]!.id], portionIds: burgerPortions },
+      { ...identity(fries), lineIds: ["fries"], portionIds: [third!.portionId] },
+    ]);
+  });
+
+  it("A1208 portionIdentities: a measured dish lists its one measured portion", () => {
+    const wine = dish("wine", { quantity: 200000, unitName: { en: "ml" }, lineTotal: 600 });
+    const out = expandPortionRows([wine], [context(wine)], [false], 1);
+
+    expect(portionIdentities([identity(wine)], [wine], out)).toEqual([
+      { ...identity(wine), lineIds: ["wine"], portionIds: [out.portions[0]!.portionId] },
+    ]);
+  });
+});
+
 describe("A803 portions: recording portions", () => {
   const suite = useVenueDb({
     migrations: migrationOptionsFor(manifestSets(), null),
@@ -250,6 +301,7 @@ describe("A803 portions: recording portions", () => {
   let cfg: DeviceRequestConfig;
   let offers: ZoneOffers;
   let ids: { burger: string; cheese: string; toppings: string; wine: string };
+  let catalogueId: string;
 
   beforeAll(() => {
     db = suite.db;
@@ -259,6 +311,7 @@ describe("A803 portions: recording portions", () => {
   beforeEach(async () => {
     const venue = await setupVenue();
     cfg = venue.cfg;
+    catalogueId = venue.catalogueId;
     ids = await withTransaction(db, async (tx) => {
       const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
       const product = async (name: string, price: string) =>
@@ -319,8 +372,9 @@ describe("A803 portions: recording portions", () => {
     return (await openPartyTab(tx, cfg, { tableId: table.id })).tabId;
   }
 
-  /** A round of two burgers with a cheese each and 200 ml of wine, split and written. */
-  async function writeRound(tx: Transaction, billId: string) {
+  /** A round of `burgers` burgers (two unless named) with a cheese each and 200 ml of wine, split and
+   * written. */
+  async function writeRound(tx: Transaction, billId: string, burgers = 2) {
     const round = await priceTabRound(
       tx,
       cfg,
@@ -328,7 +382,7 @@ describe("A803 portions: recording portions", () => {
       offers.toOfferLines([
         {
           productId: ids.burger,
-          quantity: "2",
+          quantity: String(burgers),
           extras: [{ listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] }],
         },
         { productId: ids.wine, quantity: "200" },
@@ -411,6 +465,102 @@ describe("A803 portions: recording portions", () => {
           }))
           .sort((a, b) => a.lineId.localeCompare(b.lineId)),
       );
+    });
+  });
+
+  it("A1208 registerPortions: six portions cost the statements two do", async () => {
+    const statementsFor = (burgers: number) =>
+      withTransaction(db, async (tx) => {
+        const { out } = await writeRound(tx, await bill(tx), burgers);
+        const session = (
+          tx as unknown as { session: { prepareQuery: (query: { sql: string }) => unknown } }
+        ).session;
+        const prepared = vi.spyOn(session, "prepareQuery");
+        await registerPortions(tx, out.portions);
+        const count = prepared.mock.calls.length;
+        prepared.mockRestore();
+        expect(await registryRows(tx, out.portions)).toHaveLength(out.portions.length);
+        expect(
+          await tx
+            .select()
+            .from(workingLinePortions)
+            .where(
+              inArray(
+                workingLinePortions.portionId,
+                out.portions.map((portion) => portion.portionId),
+              ),
+            ),
+        ).toHaveLength(out.portions.length);
+        return { portions: out.portions.length, count };
+      });
+
+    const few = await statementsFor(1);
+    const many = await statementsFor(5);
+    expect([few.portions, many.portions]).toEqual([2, 6]);
+    expect(many.count).toBe(few.count);
+  });
+
+  it("A1208 portionIdentities: matches the stored readers, two extras on a dish and the same dish on two request lines kept apart", async () => {
+    await withTransaction(db, async (tx) => {
+      const billId = await bill(tx);
+      const { defaultLanguage } = await readContentLanguages(tx, cfg.locale);
+      const bacon = (
+        await createProduct(tx, {
+          catalogueId,
+          categoryId: null,
+          name: "Bacon",
+          customerName: { [defaultLanguage]: "Bacon (customer)" },
+          kitchenName: "BACON",
+          pricingUnit: "each",
+          unitPrice: "0.75",
+          vatClass: "reduced",
+        })
+      ).id;
+      const sides = (
+        await createExtraList(
+          tx,
+          {
+            name: "Sides",
+            customerName: null,
+            kitchenName: null,
+            minPicks: 0,
+            maxPicks: null,
+            active: true,
+            items: [{ productId: bacon, maxQuantity: 2, preselected: false, price: null }],
+          },
+          cfg.locale,
+        )
+      ).id;
+      await writeProductModifiers(tx, ids.burger, [
+        { kind: "extras", id: ids.toppings },
+        { kind: "extras", id: sides },
+      ]);
+      const published = await offerProducts(tx, cfg, { zone: "tables" });
+      const priced = await priceOrderLines(
+        tx,
+        cfg,
+        billId,
+        published.toOfferLines([
+          {
+            productId: ids.burger,
+            quantity: "2",
+            extras: [
+              { listId: sides, picks: [{ productId: bacon, quantity: 2 }] },
+              { listId: ids.toppings, picks: [{ productId: ids.cheese, quantity: 1 }] },
+            ],
+          },
+          { productId: ids.burger, quantity: "1" },
+          { productId: ids.wine, quantity: "200" },
+        ]),
+        published.zoneId,
+      );
+      const out = expandPortionRows(priced.lineRows, priced.lineContexts, priced.portionable, 1);
+      await tx.insert(workingOrderLines).values(out.rows);
+      await registerPortions(tx, out.portions);
+
+      const stored = (await readStoredOrder(tx, billId)).identities;
+      expect(stored).toHaveLength(5);
+      expect(portionIdentities(priced.identities, priced.lineRows, out)).toEqual(stored);
     });
   });
 

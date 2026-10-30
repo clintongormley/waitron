@@ -283,6 +283,7 @@ export {
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
+export { insertInChunks, statementChunks } from "./insert-in-chunks.js";
 export {
   billParties,
   billPartyTableLabels,

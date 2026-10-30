@@ -73,6 +73,9 @@ export interface OrderLine {
   place?: Place;
   draftLineId?: string;
   workingOrderLineId?: string;
+  /** A retrieved row of identical portions: every member's stored dish line, by line number,
+   * `workingOrderLineId` first. ABSENT on a line of one. Never sent. */
+  portionLineIds?: string[];
   product: TillProduct;
   /** A decimal string accepted by the product unit's precision. */
   quantity: string;
@@ -416,6 +419,17 @@ export class WorkingOrderStore {
   /** After a save of this copy landed, at the revision the server answered. */
   markSaved(revision: number): void {
     this.#revision = revision;
+  }
+
+  /** The order as read back after a save of this copy, at `revision`: the same visit of the same
+   * saved order, so {@link loadGeneration} does not move. */
+  adoptSaved(lines: OrderLine[], revision: number): void {
+    this.#revision = revision;
+    this.#lines.length = 0;
+    this.#lines.push(...lines);
+    this.#invalidatePricing();
+    this.#dirty = false;
+    this.emit("changed");
   }
 
   get #pricedOrder(): Priced {

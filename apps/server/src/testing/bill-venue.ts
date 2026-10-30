@@ -48,6 +48,7 @@ import type { DeviceRequestConfig } from "../trading-context.js";
 import { mountTillApi } from "../till-api.js";
 import { systemClock } from "../till-backend.js";
 import { SESSION_COOKIE } from "../till-session.js";
+import { writeGroupedLines } from "./grouped-counter-order.js";
 import { openPartyTab } from "./serve-line.js";
 import { enrolDeviceForTest } from "./enrol.js";
 import { offerProducts } from "./zone-offers.js";
@@ -340,6 +341,27 @@ export function tabWith(venue: BillVenue, ...names: string[]): Promise<string> {
       tableId: table.id,
       lines: names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
     });
+    return tabId;
+  });
+}
+
+/**
+ * {@link tabWith}'s bill with its lines stored grouped, as lines written before portions: for the
+ * cases that edit part of a line in place.
+ */
+export function groupedTabWith(venue: BillVenue, ...names: string[]): Promise<string> {
+  return withTransaction(venue.db, async (tx) => {
+    const table = await createTable(tx, venue.cfg, {
+      label: `M-${randomUUID().slice(0, 8)}`,
+      zoneId: venue.zoneId,
+    });
+    const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: table.id });
+    await writeGroupedLines(
+      tx,
+      venue.cfg,
+      tabId,
+      names.map((name) => ({ menuItemId: venue.offerFor(name), quantity: "1" })),
+    );
     return tabId;
   });
 }

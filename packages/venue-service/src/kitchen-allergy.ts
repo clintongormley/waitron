@@ -1,5 +1,5 @@
 import { eq, inArray } from "drizzle-orm";
-import type { Transaction } from "@waitron/db";
+import { statementChunks, type Transaction } from "@waitron/db";
 import type { KitchenAllergyBlock, TicketAllergyCopy } from "@waitron/module";
 import { ticketItemAllergies } from "./schema/kitchen-allergy.js";
 
@@ -7,11 +7,8 @@ export async function recordTicketAllergies(
   tx: Transaction,
   rows: readonly ({ ticketItemId: string } & TicketAllergyCopy)[],
 ): Promise<void> {
-  if (rows.length === 0) return;
-  await tx
-    .insert(ticketItemAllergies)
-    .values([...rows])
-    .onConflictDoNothing({
+  for (const chunk of statementChunks(ticketItemAllergies, rows))
+    await tx.insert(ticketItemAllergies).values(chunk).onConflictDoNothing({
       target: ticketItemAllergies.ticketItemId,
     });
 }

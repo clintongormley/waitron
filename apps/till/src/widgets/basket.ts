@@ -44,6 +44,7 @@ import {
   adjustableListing,
   billGross,
   lineAdjustTarget,
+  rowAdjustTarget,
   storedListing,
 } from "../state/adjust-target.js";
 import type { AdjustKind, AdjustTarget } from "./adjustment-dialog.js";
@@ -55,6 +56,20 @@ const QTY_BADGE = "×";
 function pickQuantityBadge(quantity: number): string {
   return quantity > 1 ? ` ${QTY_BADGE}${quantity}` : "";
 }
+
+/** The stored dishes a basket line stands for: every member of a retrieved row of identical
+ * portions, or its one dish. Null when the listing lacks one of them. */
+function listedDishes(
+  line: OrderLine,
+  byId: (id: string | undefined) => TabLine | undefined,
+): TabLine[] | null {
+  const ids = line.portionLineIds ?? [line.workingOrderLineId];
+  const dishes = ids.map(byId);
+  return dishes.every((dish) => dish !== undefined) ? dishes : null;
+}
+
+const lineIdsOf = (dishes: readonly TabLine[]) =>
+  dishes.length > 1 ? { lineIds: dishes.map((dish) => dish.id) } : {};
 
 function notOfferedMarker() {
   return html` <span class="not-offered">${t("basket.not_offered")}</span>`;
@@ -503,17 +518,24 @@ export class TillBasket extends LitElement {
   #lineStationMove(line: OrderLine) {
     if (!this.lineDetails || !this.store.lines.includes(line)) return null;
     const listing = adjustableListing(this.store, this.stationMoveLines, this.orderInFlight);
-    const listed = listing?.lines.find((row) => row.id === line.workingOrderLineId);
+    const dishes =
+      listing === null
+        ? null
+        : listedDishes(line, (id) => listing.lines.find((row) => row.id === id));
     return listing !== null &&
-      listed !== undefined &&
-      (listed.parentLineNo ?? null) === null &&
-      listed.movable &&
-      (listed.sentAt !== null || listed.firedAt !== null)
+      dishes !== null &&
+      dishes.every(
+        (listed) =>
+          (listed.parentLineNo ?? null) === null &&
+          listed.movable &&
+          (listed.sentAt !== null || listed.firedAt !== null),
+      )
       ? {
           workingOrderId: listing.orderId,
-          lineId: listed.id,
+          lineId: dishes[0]!.id,
+          ...lineIdsOf(dishes),
           name: this.#lineName(line),
-          stationId: listed.stationId,
+          stationId: dishes[0]!.stationId,
           counter: true as const,
         }
       : null;
@@ -1257,19 +1279,40 @@ export class TillBasket extends LitElement {
     listing: StoredLines,
   ) {
     const name = this.#lineName(line);
+    const dishes = listedDishes(line, (id) =>
+      id === undefined ? undefined : this.#listedById.get(id),
+    );
+    if (dishes === null) return nothing;
     return this.#adjustActions(
       "line",
       String(index),
       name,
-      () => lineAdjustTarget(listed, listing.lines, name),
+      () => this.#dishesTarget(dishes, listing, name),
       sent,
-      !this.lineDetails && sent && listed.movable
-        ? { workingOrderId: listing.orderId, lineId: listed.id, name, stationId: listed.stationId }
+      !this.lineDetails && sent && dishes.every((dish) => dish.movable)
+        ? {
+            workingOrderId: listing.orderId,
+            lineId: listed.id,
+            ...lineIdsOf(dishes),
+            name,
+            stationId: listed.stationId,
+          }
         : null,
     );
   }
 
-  /** The same, on an extra alone, whole: Cancel while its dish is with the kitchen. */
+  /** A row of several portions is adjusted as one target over all of them; its extras have their
+   * own Comp, as a line of one's do. */
+  #dishesTarget(dishes: readonly TabLine[], listing: StoredLines, name: string): AdjustTarget {
+    if (dishes.length === 1) return lineAdjustTarget(dishes[0]!, listing.lines, name);
+    const row = rowAdjustTarget(dishes, listing.lines, name);
+    delete row.extras;
+    return row;
+  }
+
+  /** The same, on an extra, whole: on a row of several portions, that extra under every one.
+   * Cancel only on a line of one while its dish is with the kitchen: the server cancels an extra
+   * on its own only from its own line (`standInRow`, `apps/server/src/adjustments-apply.ts`). */
   #extraActions(
     line: OrderLine,
     extra: SelectedExtra,
@@ -1281,13 +1324,18 @@ export class TillBasket extends LitElement {
     const name = t("table.extra_of")
       .replace("{extra}", () => extra.name)
       .replace("{dish}", () => this.#lineName(line));
-    return this.#adjustActions(
-      "extra",
-      place,
-      name,
-      () => lineAdjustTarget(listedExtra, listing.lines, name),
-      sent,
+    const dishes = listedDishes(line, (id) =>
+      id === undefined ? undefined : this.#listedById.get(id),
     );
+    if (dishes === null) return nothing;
+    const target = (): AdjustTarget => {
+      if (dishes.length === 1) return lineAdjustTarget(listedExtra, listing.lines, name);
+      const across = rowAdjustTarget(dishes, listing.lines, name).extras!.find((one) =>
+        one.lineIds!.includes(listedExtra.id),
+      )!;
+      return { ...across, name };
+    };
+    return this.#adjustActions("extra", place, name, target, sent && dishes.length === 1);
   }
 
   #adjustActions(
@@ -1299,6 +1347,7 @@ export class TillBasket extends LitElement {
     move: {
       workingOrderId: string;
       lineId: string;
+      lineIds?: string[];
       name: string;
       stationId: string | null;
     } | null = null,

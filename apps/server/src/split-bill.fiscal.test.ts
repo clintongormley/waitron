@@ -2,7 +2,13 @@
 // across the checks, and a repeated pay replays rather than files twice.
 import { beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { saleLines, sales, withTransaction, workingOrderLines } from "@waitron/db";
+import {
+  saleLinePortions,
+  saleLines,
+  sales,
+  withTransaction,
+  workingOrderLines,
+} from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -32,6 +38,7 @@ import { payWorkingOrder } from "./testing/whole-payment-fixture.js";
 import type { TillSaleResult } from "./till-sale.js";
 import { offerProducts, type ZoneOffers } from "./testing/zone-offers.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
 
@@ -169,7 +176,7 @@ function asApp<T>(cfg: DeviceRequestConfig, fn: (tx: Transaction) => Promise<T>)
 }
 
 interface ThreeChecks {
-  /** The emptied ORIGIN tab (line 1 wholly moved by check C, line 2 by check A). */
+  /** The emptied ORIGIN tab. */
   tabId: string;
   /** Check A = 1 agua + the whole jamón (MIXED VAT); B = 1 agua; C = 1 agua. */
   a: string;
@@ -183,30 +190,40 @@ interface ThreeChecks {
 
 /**
  * Open the mixed-VAT origin tab (3× agua @21%, 0.300 kg jamón @10%), carve it into three checks
- * (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties line 1 with a whole move), and pay
- * all three.
+ * (A = 1 agua + whole jamón; B = 1 agua; C = 1 agua, which empties the tab), and pay all three.
+ * `portions` holds each agua as its own line; the jamón is ordered first so that check A holds it
+ * first, as the grouped carve does, and its VAT breakdown lists the rates in the same order.
+ * `grouped` holds the three agua as one line, as a tab written before portions does, and carves it
+ * by quantity.
  */
 async function splitIntoThreeChecks(
   seeded: Seeded,
   deps: Parameters<typeof payWorkingOrder>[0],
+  shape: "portions" | "grouped" = "portions",
 ): Promise<ThreeChecks> {
   const { cfg, aguaId, jamonId, tableId, offers } = seeded;
-  const { tabId } = await asApp(cfg, (tx) =>
-    openPartyTab(tx, cfg, {
-      tableId,
-      lines: offers.toOfferLines([
-        { productId: aguaId, quantity: "3" },
-        { productId: jamonId, quantity: "0.300" },
-      ]),
-    }),
-  );
-  const { billId: a } = await asApp(cfg, (tx) =>
-    splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }]),
-  );
-  const { billId: b } = await asApp(cfg, (tx) =>
-    splitPartyBill(tx, cfg, tabId, [{ lineNo: 1, quantity: "1" }]),
-  );
-  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, [{ lineNo: 1 }]));
+  const agua = { productId: aguaId, quantity: "3" };
+  const jamon = { productId: jamonId, quantity: "0.300" };
+  const { tabId } = await asApp(cfg, async (tx) => {
+    if (shape === "portions") {
+      return openPartyTab(tx, cfg, { tableId, lines: offers.toOfferLines([jamon, agua]) });
+    }
+    const lines = offers.toOfferLines([agua, jamon]);
+    const opened = await openPartyTab(tx, cfg, { tableId });
+    await writeGroupedLines(tx, cfg, opened.tabId, lines);
+    return opened;
+  });
+  const [toA, toB, toC] =
+    shape === "portions"
+      ? [[{ lineNo: 1 }, { lineNo: 2 }], [{ lineNo: 3 }], [{ lineNo: 4 }]]
+      : [
+          [{ lineNo: 1, quantity: "1" }, { lineNo: 2 }],
+          [{ lineNo: 1, quantity: "1" }],
+          [{ lineNo: 1 }],
+        ];
+  const { billId: a } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toA!));
+  const { billId: b } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toB!));
+  const { billId: c } = await asApp(cfg, (tx) => splitPartyBill(tx, cfg, tabId, toC!));
 
   // A check is a retrieved order, so req.lines is ignored — it files from its stored locked lines.
   const rA = await payWorkingOrder(deps, cfg, {
@@ -285,7 +302,7 @@ describe("split-bill: pay each check files its own registro", () => {
     //   A jamón 7.47 / 1.10 → 6.79 base, 0.68 tax
     //   B / C agua 1.50 → 1.24 base, 0.26 tax
     expect(rA.vatBreakdown).toEqual([
-      { rate: "10.00", base: "6.79", tax: "0.68" }, // 0.300 kg jamón (whole line moved first)
+      { rate: "10.00", base: "6.79", tax: "0.68" }, // 0.300 kg jamón, check A's first line
       { rate: "21.00", base: "1.24", tax: "0.26" }, // 1 agua
     ]);
     expect(rB.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
@@ -296,6 +313,65 @@ describe("split-bill: pay each check files its own registro", () => {
       tx.select({ workingOrderId: sales.workingOrderId }).from(sales),
     );
     expect(new Set(filedFor.map((s) => s.workingOrderId))).toEqual(new Set([a, b, c]));
+
+    // (6) Each check's agua row stands for exactly one portion, and the three are different ones.
+    const aguaLinks = await asApp(cfg, (tx) =>
+      tx
+        .select({ workingOrderId: sales.workingOrderId, portionId: saleLinePortions.portionId })
+        .from(saleLinePortions)
+        .innerJoin(saleLines, eq(saleLines.id, saleLinePortions.saleLineId))
+        .innerJoin(sales, eq(sales.id, saleLines.saleId))
+        .where(eq(saleLines.vatRate, 2100)),
+    );
+    expect(aguaLinks.map((link) => link.workingOrderId).sort()).toEqual([a, b, c].sort());
+    expect(new Set(aguaLinks.map((link) => link.portionId)).size).toBe(3);
+  });
+
+  it("on a tab written before portions, a part of the agua line still files on its own check", async () => {
+    const seeded = await setupVenue();
+    const { cfg } = seeded;
+    const deps = { db: suite.db, backend, clock };
+
+    const { tabId, a, b, c, rA, rB, rC } = await splitIntoThreeChecks(seeded, deps, "grouped");
+
+    const { registros, originLines, filed } = await asApp(cfg, async (tx) => ({
+      registros: await tx.select({ id: registrosFacturacion.id }).from(registrosFacturacion),
+      originLines: await tx
+        .select({ id: workingOrderLines.id })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, tabId)),
+      filed: await tx
+        .select({
+          workingOrderId: sales.workingOrderId,
+          vatRate: saleLines.vatRate,
+          quantity: saleLines.quantity,
+        })
+        .from(saleLines)
+        .innerJoin(sales, eq(sales.id, saleLines.saleId)),
+    }));
+    expect(registros.length).toBe(3);
+    const seqs = [seqOf(rA), seqOf(rB), seqOf(rC)].sort((x, y) => x - y);
+    expect(seqs).toEqual([seqs[0], seqs[0]! + 1, seqs[0]! + 2]);
+    expect([rA.total, rB.total, rC.total]).toEqual(["8.97", "1.50", "1.50"]);
+    expect(rA.vatBreakdown).toEqual([
+      { rate: "10.00", base: "6.79", tax: "0.68" },
+      { rate: "21.00", base: "1.24", tax: "0.26" },
+    ]);
+    expect(rB.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    expect(rC.vatBreakdown).toEqual([{ rate: "21.00", base: "1.24", tax: "0.26" }]);
+    expect(originLines).toEqual([]);
+    expect(
+      filed
+        .map((row) => [row.workingOrderId, row.vatRate, row.quantity])
+        .sort((x, y) => String(x).localeCompare(String(y))),
+    ).toEqual(
+      [
+        [a, 2100, 1000],
+        [a, 1000, 300],
+        [b, 2100, 1000],
+        [c, 2100, 1000],
+      ].sort((x, y) => String(x).localeCompare(String(y))),
+    );
   });
 
   it("partitions the items — every unit filed on exactly ONE check, quantity conserved, origin emptied", async () => {
@@ -355,7 +431,7 @@ describe("split-bill: pay each check files its own registro", () => {
   it("paying a check twice files exactly ONE registro (sale-idempotency replay)", async () => {
     const { cfg, aguaId, tableId, offers } = await setupVenue();
     const deps = { db: suite.db, backend, clock };
-    // Open a 2× agua tab and carve ONE agua onto a detached check — the working order under proof.
+    // Open a 2× agua tab and split ONE agua onto a detached check — the working order under proof.
     const { tabId } = await asApp(cfg, (tx) =>
       openPartyTab(tx, cfg, {
         tableId,

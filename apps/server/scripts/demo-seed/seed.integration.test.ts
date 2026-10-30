@@ -211,8 +211,14 @@ describe("demo seed end-to-end", () => {
       !p.offeredModifiers.some(
         (entry) => entry.kind === "options" || (entry.kind === "extras" && entry.minPicks > 0),
       );
+    // Products seeded under the frozen clock share one creation time, so the list's order among
+    // them follows their random ids: pick the second menu's dish by what it is, sold in whole
+    // portions, which a counter order stores one line per dish.
+    const wholePortions = ({ unit }: (typeof read.products)[number]): boolean =>
+      unit.hardwareUnit === null && unit.precision === 0 && unit.measure !== true;
     const casaProduct = casaProducts.find(optionFree) ?? casaProducts[0]!;
-    const diaProduct = diaProducts.find(optionFree) ?? diaProducts[0]!;
+    const diaProduct = diaProducts.find((p) => optionFree(p) && wholePortions(p))!;
+    expect(diaProduct).toBeDefined();
 
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
@@ -262,12 +268,17 @@ describe("demo seed end-to-end", () => {
     expect(orderNumber).toBeGreaterThan(0);
 
     const held = await getHeldOrder({ db: suite.db }, cfg, orderId);
-    // Both mixed lines survived the round-trip, in order — neither was dropped as unknown.
-    expect(held.lines.map((l) => l.productId)).toEqual([casaProduct.id, diaProduct.id]);
+    // Lines from both menus survived the round-trip, in order — none was dropped as unknown.
+    expect(held.lines.map((l) => l.productId)).toEqual([
+      casaProduct.id,
+      diaProduct.id,
+      diaProduct.id,
+    ]);
     expect(held.lines.map((l) => ("menuItemId" in l ? l.menuItemId : null))).toEqual([
       casaOffer,
       diaOffer,
+      diaOffer,
     ]);
-    expect(held.lines[1]!.quantity).toBe("2.000");
+    expect(held.lines.map((l) => l.quantity)).toEqual(["1.000", "1.000", "1.000"]);
   });
 });

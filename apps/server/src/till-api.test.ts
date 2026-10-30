@@ -2857,7 +2857,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
     const priced = await suite.db.execute<{ unit_price_gross: number }>(sql`
       select cast(unit_price_gross as int) as unit_price_gross
       from working_order_lines where working_order_id = ${allowedId}`);
-    expect(priced.rows).toEqual([{ unit_price_gross: 175 }]);
+    expect(priced.rows).toEqual([{ unit_price_gross: 175 }, { unit_price_gross: 175 }]);
 
     const rejected = await app.request("/api/working-orders", {
       method: "POST",
@@ -2969,27 +2969,26 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       }),
     );
 
-    // GET /:id rebuilds the basket from the frozen menu offer and returns its product details.
-    // `quantity` reads back at the three places `thousandthsToDecimal` always renders ("2.000",
-    // not the sent "2").
+    // GET /:id rebuilds the basket from the frozen menu offer and returns its product details,
+    // one line per stored dish. `quantity` reads back at the three places `thousandthsToDecimal`
+    // always renders ("1.000", not "1").
+    const aguaLine = {
+      menuItemId: aguaOfferId,
+      productId: aguaProduct.id,
+      quantity: "1.000",
+      product: {
+        menuItemId: aguaOfferId,
+        productId: aguaProduct.id,
+        unitPrice: "1.75",
+      },
+    };
     const got = await app.request(`/api/working-orders/${id}`, { headers: { cookie } });
     expect(got.status).toBe(200);
     expect(await got.json()).toMatchObject({
       id,
       orderNumber,
       label: "Mesa 7",
-      lines: [
-        {
-          menuItemId: aguaOfferId,
-          productId: aguaProduct.id,
-          quantity: "2.000",
-          product: {
-            menuItemId: aguaOfferId,
-            productId: aguaProduct.id,
-            unitPrice: "1.75",
-          },
-        },
-      ],
+      lines: [aguaLine, aguaLine],
     });
 
     // PUT replaces the whole basket + label — a 200 with the revision it moved to — and a re-retrieve
@@ -3012,18 +3011,7 @@ describe("/api/working-orders (session-guarded park & retrieve)", () => {
       id,
       orderNumber,
       label: "Mesa 7 bis",
-      lines: [
-        {
-          menuItemId: aguaOfferId,
-          productId: aguaProduct.id,
-          quantity: "5.000",
-          product: {
-            menuItemId: aguaOfferId,
-            productId: aguaProduct.id,
-            unitPrice: "1.75",
-          },
-        },
-      ],
+      lines: Array.from({ length: 5 }, () => aguaLine),
     });
 
     // DELETE abandons it — a 200 with no body — after which retrieve is 404 and it leaves the list.

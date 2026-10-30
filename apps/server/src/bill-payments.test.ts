@@ -101,6 +101,7 @@ import { creditWholeInvoice, readOrderInvoice } from "./cancel-credit.js";
 import { moveOrderLines } from "./working-order.js";
 import "./errors.js";
 import { openPartyTab, splitPartyBill } from "./testing/serve-line.js";
+import { writeGroupedLines } from "./testing/grouped-counter-order.js";
 import { cancelLine } from "./testing/cancel-line.js";
 import { deviceRequestCfg, openTillSession } from "./testing/session-device.js";
 
@@ -602,12 +603,68 @@ describe("the writers with no route of their own", () => {
     expect(saved).toBe(order!.revision + 1);
   });
 
-  it("refuses splitting off more of a line than is unpaid", async () => {
+  it("refuses splitting off a paid portion, and lets the unpaid one go", async () => {
     const billId = await inTx(async (tx) => {
       const { tabId } = await openPartyTab(tx, venue.cfg, {
         tableId: await freshTableIn(tx),
         lines: [{ menuItemId: offer("Caña"), quantity: "3" }],
       });
+      return tabId;
+    });
+    await take(
+      billId,
+      cash("6.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }, { lineNo: 2 }] }),
+    );
+    const transfer = (lineNo: number) =>
+      inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo }]));
+
+    expect(await codeOf(transfer(1))).toBe("bill.line_paid");
+    await transfer(3);
+    const lines = await inTx((tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+    expect(lines).toEqual([
+      { lineNo: 1, quantity: 1000 },
+      { lineNo: 2, quantity: 1000 },
+    ]);
+  });
+
+  it("refuses a split naming one paid and one unpaid portion, and moves nothing", async () => {
+    const billId = await inTx(async (tx) => {
+      const { tabId } = await openPartyTab(tx, venue.cfg, {
+        tableId: await freshTableIn(tx),
+        lines: [{ menuItemId: offer("Caña"), quantity: "2" }],
+      });
+      return tabId;
+    });
+    await take(billId, cash("3.00", { kind: "items", amount: undefined, lines: [{ lineNo: 1 }] }));
+
+    const code = await codeOf(
+      inTx((tx) => splitPartyBill(tx, venue.cfg, billId, [{ lineNo: 1 }, { lineNo: 2 }])),
+    );
+    const lines = await inTx((tx) =>
+      tx
+        .select({ lineNo: workingOrderLines.lineNo, quantity: workingOrderLines.quantity })
+        .from(workingOrderLines)
+        .where(eq(workingOrderLines.workingOrderId, billId))
+        .orderBy(workingOrderLines.lineNo),
+    );
+
+    expect(code).toBe("bill.line_paid");
+    expect(lines).toEqual([
+      { lineNo: 1, quantity: 1000 },
+      { lineNo: 2, quantity: 1000 },
+    ]);
+  });
+
+  it("on a bill written before portions, refuses splitting off more of a line than is unpaid", async () => {
+    const billId = await inTx(async (tx) => {
+      const { tabId } = await openPartyTab(tx, venue.cfg, { tableId: await freshTableIn(tx) });
+      await writeGroupedLines(tx, venue.cfg, tabId, [{ menuItemId: offer("Caña"), quantity: "3" }]);
       return tabId;
     });
     await take(

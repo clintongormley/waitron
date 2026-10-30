@@ -58,6 +58,7 @@ import {
   cancelPortions,
   carryLineReductions,
   expandPortionRows,
+  portionIdentities,
   refuseTooManyPortions,
   linkSalePortions,
   readGrowingPortions,
@@ -187,6 +188,8 @@ import {
   workingOrderLines,
   workingOrders,
   workingOrderStatus,
+  insertInChunks,
+  statementChunks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -1698,9 +1701,17 @@ export async function createOpenOrder(
     "added",
     placement.lateSend,
   );
-  const { gross, identities, lineContexts, offers } = pricedLines;
+  const { gross, offers } = pricedLines;
   if (recipient === null) refuseOverSimplifiedLimit(cfg.simplifiedInvoiceLimit, gross.total);
-  const lineRows = pricedLines.lineRows.map((row) => ({
+  const expanded = expandPortionRows(
+    pricedLines.lineRows,
+    pricedLines.lineContexts,
+    pricedLines.portionable,
+    1,
+  );
+  const identities = portionIdentities(pricedLines.identities, pricedLines.lineRows, expanded);
+  const lineContexts = expanded.lineContexts;
+  const lineRows = expanded.rows.map((row) => ({
     ...row,
     creditedTo: placement.creditedTo ?? null,
   }));
@@ -1732,16 +1743,14 @@ export async function createOpenOrder(
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
   }
 
-  // An empty tab has no lines, and `tx.insert(...).values([])` throws.
-  if (lineRows.length > 0) {
-    await tx.insert(workingOrderLines).values(lineRows);
-  }
+  await insertInChunks(tx, workingOrderLines, lineRows);
   if (placement.copyServiceContextFrom !== undefined) {
     await VENUE_SERVICE.copyOrderContext(tx, cfg, placement.copyServiceContextFrom, id);
   } else {
     await VENUE_SERVICE.recordOrderContext(tx, cfg, id, effectiveZoneId);
   }
   await VENUE_SERVICE.recordLineContexts(tx, cfg, id, lineContexts, offers);
+  await registerPortions(tx, expanded.portions);
 
   if (choice !== undefined) await selectOrderInvoice(tx, choice, cfg, id, gross.total);
   return { orderNumber, gross, identities, lineRows };
@@ -1988,14 +1997,18 @@ export async function insertSplitExtras(
   });
   if (values.length === 0) return [];
   try {
-    const inserted = await tx.insert(ticketItems).values(values).returning({
-      id: ticketItems.id,
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      firedAt: ticketItems.firedAt,
-      quantity: ticketItems.quantity,
-      madeHere: ticketItems.madeHere,
-    });
+    const inserted = [];
+    for (const chunk of statementChunks(ticketItems, values))
+      inserted.push(
+        ...(await tx.insert(ticketItems).values(chunk).returning({
+          id: ticketItems.id,
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+          firedAt: ticketItems.firedAt,
+          quantity: ticketItems.quantity,
+          madeHere: ticketItems.madeHere,
+        })),
+      );
     for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
     await attachKitchenAllergyCopies(tx, inserted, keepAllergies);
     await freezeKitchenAllergies(
@@ -2287,16 +2300,17 @@ export async function fireLines(
   await stampSent(tx, orderId, sentLineIds, firedAt);
   // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
   // already-fired items and reprint them.
-  const inserted =
-    values.length === 0
-      ? []
-      : await tx.insert(ticketItems).values(values).returning({
-          id: ticketItems.id,
-          workingOrderLineId: ticketItems.workingOrderLineId,
-          stationId: ticketItems.stationId,
-          firedAt: ticketItems.firedAt,
-          madeHere: ticketItems.madeHere,
-        });
+  const inserted = [];
+  for (const chunk of statementChunks(ticketItems, values))
+    inserted.push(
+      ...(await tx.insert(ticketItems).values(chunk).returning({
+        id: ticketItems.id,
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        firedAt: ticketItems.firedAt,
+        madeHere: ticketItems.madeHere,
+      })),
+    );
 
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
@@ -5849,7 +5863,7 @@ async function applyLineEdits(
         origin?: EditableParent;
         inheritMakeAt?: boolean;
         /** Written as portions of a cohort of their own: units added apart from a dish that is a
-         * portion, or a new line on a party bill. */
+         * portion, or any new line. */
         expand?: boolean;
       }
     | { kind: "extras" }
@@ -5857,7 +5871,7 @@ async function applyLineEdits(
   )[] = plan.fresh.map(() => ({
     kind: "line",
     kitchen: order.newWork,
-    expand: order.partyId !== null,
+    expand: true,
   }));
   const raised: RequestedLine[] = [];
   const resent: string[] = [];
@@ -6432,7 +6446,7 @@ async function applyLineEdits(
     }
   });
   if (inserted.length > 0) {
-    await tx.insert(workingOrderLines).values(inserted);
+    await insertInChunks(tx, workingOrderLines, inserted);
     await VENUE_SERVICE.recordLineContexts(tx, cfg, orderId, insertedContexts, priced.offers);
     await VENUE_SERVICE.copyLineContexts(tx, cfg, copiedContexts);
     await registerPortions(tx, newPortions);

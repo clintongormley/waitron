@@ -5644,26 +5644,29 @@ capitals between `**` above each such run; correction and MOVED slips print none
 
 ### Identical portions share one row
 
-A table's order stores each dish as its own portion, so two identical burgers are two lines. Screens
-draw identical portions in identical state as one row with a count, placed where its first member
+An order, at a table or the counter, stores each dish as its own portion, so two identical burgers
+are two lines. Screens draw identical portions in identical state as one row with a count, placed where its first member
 would stand, its members in line order: the till's Sent panel, its sent-line fallback list and the
 Transfer items and Split by item pickers (`portionGroups`, `tabLinePortionKey`,
 `sentSlicePortionKey`, `apps/till/src/state/portion-groups.ts`), the kitchen screen's cards and the
-pass ("2× Burger", `kitchenPortionKey`), and the dashboard's order detail (`readBillLines`,
-`apps/server/src/orders-list.ts`). Two rows stay apart when anything the row draws or acts on
+pass ("2× Burger", `kitchenPortionKey`), the counter basket's retrieved order while none of it is
+paid (`foldRetrievedPortions`, `apps/till/src/state/counter-portion-rows.ts`), and the dashboard's
+order detail (`readBillLines`, `apps/server/src/orders-list.ts`). Two rows stay apart when anything
+the row draws or acts on
 differs: the dish, its names and answers, note, course, release group, station, kitchen state,
 served or not, cancellation, prices, the extras as a set with their counts, and whatever else the
 screen shows for the line, such as an allergy or paid mark. Only a whole portion groups, a line of
-one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to (a
-counter order's), always stand alone.
+one in a unit with no decimals; a weighed or measured line, and a line no portion is bound to,
+always stand alone.
 
 On the till, Mark served and Undo served on a grouped row ask how many and act on its first that
 many members; Recall and Move station take every member; Transfer items ticks the whole row; Split
 by item's stepper picks its first members whole; Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
-kitchen screen a tap or a move takes every member, and the pass only draws the rows. Two lists keep
-one row per portion: Pay items, until the A739 payment window releases its files, and MOVED slips,
-which lay out each line alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
+kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
+one row per portion: Pay items, until the A739 payment window releases its files; the counter basket
+once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
+alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
 
 ### The kitchen screen's cards
 
