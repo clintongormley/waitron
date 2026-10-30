@@ -6119,6 +6119,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   pass-printer name remain.
   Venue-service period-deletion and zone-closure suites use English venue, station,
   zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
+  Season and day-resolver suites use English venue, zone and custom-season samples;
+  their deliberate staff-language cases, dates and clock settings stay.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
