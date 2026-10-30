@@ -1,10 +1,13 @@
 import { stageStreamRestore } from "./restore-request.js";
 import { recoveryStreamSourceId } from "./recovery-source.js";
 import { createHash } from "node:crypto";
+import { once } from "node:events";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { mkdir, mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
   CORE_MIGRATIONS,
   openVenueDatabase,
@@ -28,9 +31,16 @@ import { createMemoryObjectStore } from "@waitron/stream/testing/memory-store.js
 import { copyFile } from "node:fs/promises";
 import { mintBreakGlassSecret } from "./break-glass.js";
 import { previewRecoveryArchive } from "./recovery-backup-preview.js";
-import { startServer, type StartedServer } from "./boot.js";
+import type { StartedServer } from "./boot.js";
 import { awaitListening, copyMigrationsRoot, httpsVia } from "./testing/boot-harness.js";
-import { freePorts } from "./testing/free-ports.js";
+import { ephemeralServerFixture } from "./testing/ephemeral-server-fixture.js";
+
+vi.mock("@hono/node-server", async () => {
+  const { ephemeralHttpMock } = await import("./testing/ephemeral-listener.js");
+  return ephemeralHttpMock();
+});
+
+const { startServer, httpPort } = ephemeralServerFixture();
 
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const NODE = "d0000000-0000-4000-8000-000000000001";
@@ -38,6 +48,17 @@ const LOCATION = "d0000000-0000-4000-8000-000000000002";
 let scratch: string;
 let artifact: Uint8Array;
 let oldName: string | null;
+const occupied: Server[] = [];
+async function occupiedPort(): Promise<number> {
+  const server = createServer((_request, response) => {
+    response.writeHead(503);
+    response.end();
+  });
+  occupied.push(server);
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  return (server.address() as AddressInfo).port;
+}
 const modules = [
   {
     ...fakeModule("core"),
@@ -90,6 +111,14 @@ beforeEach(async () => {
   );
 });
 afterEach(async () => {
+  await Promise.all(
+    occupied.splice(0).map(
+      (server) =>
+        new Promise<void>((resolve, reject) => {
+          server.close((error) => (error ? reject(error) : resolve()));
+        }),
+    ),
+  );
   if (scratch) await rm(scratch, { recursive: true, force: true });
 });
 
@@ -130,7 +159,7 @@ it("the real setup listener previews the selected copy without restarting or pub
   await mintBreakGlassSecret(suite.db, NODE);
   const stateDir = join(scratch, "replacement");
   await copyMigrationsRoot(join(scratch, "migrations"));
-  const [port] = await freePorts(1);
+  const configuredPort = await occupiedPort();
   let server: StartedServer | undefined;
   let closeClient: (() => Promise<void>) | undefined;
   try {
@@ -139,11 +168,13 @@ it("the real setup listener previews the selected copy without restarting or pub
       WAITRON_VENUE_DIR: join(scratch, "empty-venue"),
       WAITRON_MIGRATIONS_DIR: join(scratch, "migrations"),
       WAITRON_LOG_DIR: join(scratch, "logs"),
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: String(configuredPort),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_ENV: "dev",
     });
-    await awaitListening(port!);
+    const port = httpPort();
+    expect(port).not.toBe(configuredPort);
+    await awaitListening(port);
     const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
     closeClient = client.close;
     const response = await fetch(`https://127.0.0.1:${port}/setup-api/restore/preview`, {
@@ -171,6 +202,7 @@ it("the real setup listener previews the selected copy without restarting or pub
     expect(await readFile(join(scratch, "logs/waitron.log"), "utf8")).not.toContain(
       "archive-key-separate",
     );
+    expect((await fetch(`http://127.0.0.1:${configuredPort}`)).status).toBe(503);
   } finally {
     await closeClient?.();
     await server?.close();
@@ -288,7 +320,7 @@ it("reviews the downloaded bucket key before explicitly staging its selected byt
 });
 
 it("the real setup listener reaches both private download previews without staging a restore", async () => {
-  const [port] = await freePorts(1);
+  const configuredPort = await occupiedPort();
   const stateDir = join(scratch, "remote-replacement");
   await copyMigrationsRoot(join(scratch, "remote-migrations"));
   let server: StartedServer | undefined;
@@ -299,12 +331,14 @@ it("the real setup listener reaches both private download previews without stagi
       WAITRON_MIGRATIONS_DIR: join(scratch, "remote-migrations"),
       WAITRON_VENUE_DIR: join(scratch, "remote-empty"),
       WAITRON_LOG_DIR: join(scratch, "remote-logs"),
-      WAITRON_HTTP_PORT: String(port),
+      WAITRON_HTTP_PORT: String(configuredPort),
       WAITRON_HTTP_LANDING_PORT: "0",
       WAITRON_ENV: "dev",
       WAITRON_CLOUD_ORIGIN: "https://cloud.example.test",
     });
-    await awaitListening(port!);
+    const port = httpPort();
+    expect(port).not.toBe(configuredPort);
+    await awaitListening(port);
     const client = httpsVia(await readFile(join(stateDir, "tls/ca.crt")));
     closeClient = client.close;
     const bucket = await fetch(`https://127.0.0.1:${port}/setup-api/restore-bucket/preview`, {
@@ -327,6 +361,7 @@ it("the real setup listener reaches both private download previews without stagi
     expect(await readFile(join(scratch, "remote-logs/waitron.log"), "utf8")).not.toContain(
       "synthetic-invalid-private-kit",
     );
+    expect((await fetch(`http://127.0.0.1:${configuredPort}`)).status).toBe(503);
   } finally {
     await closeClient?.();
     await server?.close();

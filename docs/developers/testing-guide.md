@@ -353,6 +353,14 @@ advertised-origin, tunnel-target, paired landing-listener, distinct unused-peer 
 The process-started fixtures and unused-peer reservations remain separate work in
 [the CI backlog](../backlog/ci.md#what-the-landing-port-fix-a80-pr-740-left-open).
 
+A1221, 30 October 2026, applies the same fixture to both real-listener cases in
+`recovery-backup-preview.test.ts`. Each keeps an HTTP listener on its configured port throughout
+boot and requests the actual HTTPS port instead. With the original boot call, the private-preview
+case failed with `EADDRINUSE` and the fatal-exit path. With the fixture, the preview suite and
+`testing/free-ports.test.ts` passed all ten cases; the competing listeners still answered 503.
+This reproduces the occupied-port condition from main run `40984093555`, not the identity of
+the process that held its port. Other setup/recovery suites remain in the linked backlog.
+
 ### A drawn port can be one an earlier test in the same database already registered
 
 A file that keeps one database across its tests (`resetPerTest: false`) keeps the rows earlier

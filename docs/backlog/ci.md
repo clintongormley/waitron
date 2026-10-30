@@ -176,7 +176,13 @@ only on macOS; the root project's thresholds still pass. Neither is queued. Rece
 port is drawn, then releases them. A different worker can take a released port before its
 intended server binds. The normal `WAITRON_HTTP_PORT` parser refuses `"0"`.
 
-The remaining work is in process-started server fixtures, including
+The remaining work includes in-process setup/recovery suites outside the migrated `boot*`
+siblings, such as `setup-tool-download.boot.test.ts` and `recovery-document.boot.test.ts`.
+Audit each case's origin and listener-release assertions before choosing the bind-time fixture.
+The recovery-backup preview suite uses that existing fixture with a competing configured-port
+listener; it needs no change to the shared helper.
+
+Other remaining work is in process-started server fixtures, including
 `bench/sqlite-failover/src/unreachable-store.ts` and the inline reservation in
 `apps/server/scripts/cloud-integration-fixture.ts`, and tests that must exercise configured ports,
 advertised origins or release of a particular listener. Keep those assertions when choosing how
