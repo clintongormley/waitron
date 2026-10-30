@@ -2029,6 +2029,32 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   (under "a paid bill stays on its original party", which lists `[ana, luis, second]`) in the same
   change.
 
+- **A1233. A paid bill a merged party kept cannot be named from the till (left open by A803 slice
+  2).** Name this bill acts on the bill on screen, and a paid row in the bills list offers only
+  Receipt copy, so nothing puts such a bill on screen. The server accepts the rename (seen in the
+  slice's LOOK by sending the screen's event by script: "1, 2, 3 · Bill 7 · Pat"). Slice 3's bill
+  dropdown may be where it belongs.
+
+- **A1234. Focus after the naming windows lands on "Table details" or the page (seen in A803 slice
+  2's LOOK).** Choosing Name this bill or Name the party closes the actions panel, so the action is
+  gone when the window closes: Cancel, Escape and Discard leave focus on "Table details", Save on
+  the page itself. Enter on "Table actions" also leaves focus on the page. Decide where focus goes
+  (the "Table actions" button is the likely place) for both windows together.
+
+- **A1235. The counter's Parked orders labels a table bill by its place, not its bill number (seen
+  in A803 slice 2's LOOK).** Sam's bill, "4 · Bill 1 · Sam" at table 4, is listed as "4 · 2"
+  (`apps/till/src/widgets/held-orders.ts`, `order-label.ts`, which slice 2 did not change). The
+  slice made table bills keep stored numbers, so these labels now disagree with the table. Believed
+  to predate the slice; not run on main.
+
+- **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
+  table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did
+  not change; believed to predate it, not run on main.
+
+- **A1237. The English till's "dishes not served" window showed the reason «No servido» (seen in
+  A803 slice 2's LOOK, on the demo venue).** Not traced: it may be the demo venue's own reason
+  name rather than a till string. Believed to predate the slice; not run on main.
+
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
   portions, and Fire now fires only the row's first portion. Slice 4's picker is meant to choose.
