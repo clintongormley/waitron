@@ -61,7 +61,7 @@ async function seedVenue(db: Database): Promise<Venue> {
   await seedLegacySellingUnits(db);
   const [loc] = await db
     .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
+    .values({ name: "Main bar", invoiceLocales: ["es-ES"], operationDescription: "Retail" })
     .returning({ id: locations.id });
   const locationId = brandLocationId(loc!.id);
   const kitchen = await seedKitchenStation(db, { locationId });
@@ -75,10 +75,10 @@ async function seedVenue(db: Database): Promise<Venue> {
     simplifiedInvoiceLimit: null,
   };
   return withTransaction(db, async (tx) => {
-    const menu = await createCatalogue(tx, { name: "Carta" });
+    const menu = await createCatalogue(tx, { name: "Main menu" });
     await assignCatalogueToLocation(tx, locationId, menu.id);
-    const drinks = await createCategory(tx, { name: "Bebidas" });
-    const food = await createCategory(tx, { name: "Comida" });
+    const drinks = await createCategory(tx, { name: "Drinks" });
+    const food = await createCategory(tx, { name: "Food" });
     const product = (name: string, unitPrice: string, categoryId: string | null) =>
       createProduct(tx, {
         catalogueId: menu.id,
@@ -88,18 +88,18 @@ async function seedVenue(db: Database): Promise<Venue> {
         unitPrice,
         vatClass: "general",
       });
-    const coffee = await product("Café", "1.50", drinks.id);
-    const toast = await product("Tostada", "2.00", food.id);
-    const water = await product("Agua", "1.20", null);
-    const sugar = await product("Azúcar", "0.10", null);
-    const counter = await createStation(tx, cfg, { name: "Barra" });
+    const coffee = await product("Coffee", "1.50", drinks.id);
+    const toast = await product("Toast", "2.00", food.id);
+    const water = await product("Water", "1.20", null);
+    const sugar = await product("Sugar", "0.10", null);
+    const counter = await createStation(tx, cfg, { name: "Bar" });
     const pass = await createStation(tx, cfg, { name: "Pass" });
     await routeProductTo(tx, cfg, coffee.id, counter.id);
     await routeCategoryTo(tx, cfg, food.id, pass.id);
     const list = await createExtraList(
       tx,
       {
-        name: "Añadidos",
+        name: "Add-ons",
         customerName: null,
         kitchenName: null,
         minPicks: 0,
@@ -419,7 +419,7 @@ describe("offerProducts", () => {
       createProduct(tx, {
         catalogueId: venue.catalogueId,
         categoryId: null,
-        name: "Pan",
+        name: "Bread",
         pricingUnit: "each",
         unitPrice: "0.80",
         vatClass: "reduced",

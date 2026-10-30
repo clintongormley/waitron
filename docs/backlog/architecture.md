@@ -468,10 +468,8 @@ until A977).
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as does the split-extras venue's operation description.
   The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
-  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the zone-offer suite
-  still names its location and a station "Barra" and its products "Café", "Tostada", "Agua"
-  and "Azúcar"; the fiscal sale-path suite's
-  venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
+  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
+  suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The device-api suite still names kitchen screens and stations "Uno",
   "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
@@ -529,6 +527,9 @@ until A977).
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description
   remains.
+  The server's zone-offer suite gives English location, menu, category, product, station and
+  extras-list names to what it creates; its es-ES locale, its extras list's language key and
+  the default kitchen station the shared seed helper names "Cocina" stay.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
   The device, device-delete, join-request, join-api, join-api database and device-session suites
