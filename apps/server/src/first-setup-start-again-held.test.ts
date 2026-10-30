@@ -57,9 +57,6 @@ vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
 type WithRecovery = Awaited<ReturnType<typeof heldSetup>>;
 type Held = Omit<WithRecovery, "service"> & { service: WithRecovery["service"] | undefined };
 
-// The rows a real activation stopped at `committed` leaves with the helper's module set.
-const ACTIVATION_ROWS = 106;
-
 async function tree(dir: string, prefix = ""): Promise<Record<string, string>> {
   const result: Record<string, string> = {};
   for (const name of (await readdir(join(dir, prefix))).sort()) {
@@ -115,7 +112,7 @@ async function expectRefused(
   expect(await snapshot(f)).toEqual(before);
 }
 
-it("a legitimate held setup database beside a stopped recovery answers the summary with what it holds", async () => {
+it("a legitimate held setup database beside a stopped recovery answers the summary", async () => {
   const f = await heldSetup();
   const shown = await summary(f);
   expect(shown).toEqual({
@@ -127,15 +124,61 @@ it("a legitimate held setup database beside a stopped recovery answers the summa
       failed: false,
       cloud: false,
     },
-    held: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
   });
 });
 
-it("a held setup database with an invoice record still answers the summary, counting it", async () => {
+it("a held setup database with an invoice record refuses the summary kept-records, and nothing changes", async () => {
+  await expectRefused(await heldSetup({ invoices: 1 }), {
+    code: "setup.start_again_refused",
+    params: { cause: "kept-records" },
+  });
+});
+
+it("the summary's kept-records refusal logs the counts, not the answer", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const shown = await summary(f);
-  expect(shown.held).toMatchObject({ records: 1, accepted: 0 });
-  expect(shown.held!.kept).toBeGreaterThanOrEqual(1);
+  const { owner, ids } = await f.signIn();
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+  });
+  const lines: { level: string; event: string; fields?: Record<string, unknown> }[] = [];
+  const app = new Hono();
+  mountFirstSetupResolutionApi(
+    app,
+    f.host,
+    (level, event, fields) => lines.push({ level, event, fields }),
+    {
+      summary: actions.startAgainSummary,
+    },
+  );
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again/summary",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Waitron-Setup-Owner": owner.capability,
+          "X-Waitron-Setup-Attempt": owner.attemptId,
+          "X-Waitron-Setup-Revision": String(owner.revision),
+          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
+        },
+        body: JSON.stringify(ids),
+      },
+      { incoming: { socket } },
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: { code: "setup.start_again_refused", params: { cause: "kept-records" } },
+    });
+  } finally {
+    socket.destroy();
+  }
+  const refusal = lines.find((line) => line.event === "setup.start_again_refused");
+  expect(refusal?.level).toBe("warn");
+  expect(refusal?.fields?.logReason).toMatch(/^rows=\d+ kept=\d+ records=1 accepted=0$/);
 });
 
 it.each([
@@ -259,7 +302,6 @@ const LEFT_STATE =
 it("in the held state, Start again confirming the summary deletes the setup, and keeps who chose it", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toBeDefined();
   await expect(startAgain.run()).resolves.toBeUndefined();
   const left = await snapshot(f);
   expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
@@ -267,7 +309,6 @@ it("in the held state, Start again confirming the summary deletes the setup, and
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({ database: "present", shown: startAgain.shown });
-  expect((records[0]!.shown as StartAgainSummary).held).toEqual(startAgain.shown.held);
   expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
 });
 
@@ -282,7 +323,7 @@ it("in the held state, a damaged recovery-key record: the summary shows it, and 
   const f = await heldSetup();
   await damageRecoveryRecord(f);
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true, held: expect.any(Object) });
+  expect(startAgain.shown).toMatchObject({ recoveryRecordDamaged: true });
   await expect(
     startAgain.run({
       confirmRecoveryDiscard: { shown: startAgain.shown },
@@ -337,8 +378,7 @@ it("a setup database that is not empty but holds no rows (a view only) is not th
     emptyDatabase: false,
   });
   await expectRefused(f, { code: "setup.not_ready" });
-  // The summary the page would have shown had the counts been read: nothing.
-  const shown = { ...before.shown, held: { rows: 0, kept: 0, records: 0, accepted: 0 } };
+  const { shown } = before;
   const { owner, ids } = await f.signIn();
   await expectStartAgainRefused(
     f,
@@ -353,18 +393,16 @@ it("in the held state, an invoice record refuses Start again kept-records even w
   expect(every).toContain(getTableName(registrosFacturacion));
   extraDeletable.set("fiscal-verifactu", every);
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toMatchObject({ kept: 0, records: 1 });
-  await expectStartAgainRefused(f, () => startAgain.run(), {
+  await expectStartAgainRefused(f, await handMade(f, true), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
+    reason: expect.stringMatching(/^rows=\d+ kept=0 records=1 accepted=0$/),
   });
 });
 
 it("in the held state, an invoice record refuses Start again kept-records, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
-  await expectStartAgainRefused(f, () => startAgain.run(), {
+  await expectStartAgainRefused(f, await handMade(f, true), {
     code: "setup.start_again_refused",
     params: { cause: "kept-records" },
   });
@@ -387,10 +425,7 @@ async function handMade(f: Held, signIn: boolean, confirm = true) {
     host: f.host,
     ...(f.service === undefined ? {} : { backupRecovery: f.service }),
   });
-  const shown: StartAgainSummary = {
-    reached: "fiscal-finished",
-    held: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
-  };
+  const shown: StartAgainSummary = { reached: "fiscal-finished" };
   return () =>
     actions.startAgainFirstSetup({
       ...ids.ids,
@@ -413,18 +448,6 @@ it("in the held state, a complete attempt with no saved trading settings refuses
     code: "setup.start_again_refused",
     params: { cause: "setup-finished" },
   });
-});
-
-it("in the held state, a confirmation whose summary has no held counts is refused setup.attempt_conflict, and nothing changes", async () => {
-  const f = await heldSetup();
-  const startAgain = await askStartAgain(f);
-  const withoutHeld = { ...startAgain.shown };
-  delete withoutHeld.held;
-  await expectStartAgainRefused(
-    f,
-    () => startAgain.run({ confirmRecoveryDiscard: { shown: withoutHeld } }),
-    { code: "setup.attempt_conflict" },
-  );
 });
 
 it("in the held state, a request carrying confirmMissingDatabase is refused setup.attempt_conflict, and nothing changes", async () => {
@@ -461,10 +484,9 @@ it("a held setup database with no recovery started still refuses Start again set
   await expectStartAgainRefused(f, await handMade(f, true, false), { code: "setup.not_ready" });
 });
 
-it("in the held state, the Start again route passes the shown held counts on, so confirming the summary over HTTPS starts again", async () => {
+it("in the held state, the Start again route passes the shown summary on, so confirming it over HTTPS starts again", async () => {
   const f = await heldSetup();
   const startAgain = await askStartAgain(f);
-  expect(startAgain.shown.held).toBeDefined();
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
     startAgain: startAgain.actions.startAgainFirstSetup,
@@ -499,10 +521,26 @@ it("in the held state, the Start again route passes the shown held counts on, so
 
 it("in the held state, the Start again route answers a refusal HTTP 409 with its cause, and nothing changes", async () => {
   const f = await heldSetup({ invoices: 1 });
-  const startAgain = await askStartAgain(f);
+  const { owner, ids } = await f.signIn();
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+  });
+  // The summary is refused here, so this is the one a page would last have shown.
+  const shown = {
+    reached: "fiscal-finished",
+    recovery: {
+      startedAt: "2026-10-24T13:50:12.000Z",
+      lastActiveAt: "2026-10-24T13:51:12.000Z",
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
+    },
+  };
   const app = new Hono();
   mountFirstSetupResolutionApi(app, f.host, () => {}, {
-    startAgain: startAgain.actions.startAgainFirstSetup,
+    startAgain: actions.startAgainFirstSetup,
   });
   const before = await snapshot(f);
   const socket = new TLSSocket(new Socket());
@@ -513,14 +551,14 @@ it("in the held state, the Start again route answers a refusal HTTP 409 with its
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": startAgain.owner.capability,
-          "X-Waitron-Setup-Attempt": startAgain.owner.attemptId,
-          "X-Waitron-Setup-Revision": String(startAgain.owner.revision),
-          "X-Waitron-Setup-Generation": String(startAgain.owner.ownerGeneration),
+          "X-Waitron-Setup-Owner": owner.capability,
+          "X-Waitron-Setup-Attempt": owner.attemptId,
+          "X-Waitron-Setup-Revision": String(owner.revision),
+          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
         },
         body: JSON.stringify({
-          ...startAgain.ids,
-          confirmRecoveryDiscard: { shown: startAgain.shown },
+          ...ids,
+          confirmRecoveryDiscard: { shown },
         }),
       },
       { incoming: { socket } },

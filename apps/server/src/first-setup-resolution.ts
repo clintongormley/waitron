@@ -57,8 +57,20 @@ export interface StartAgainSummaryRequest {
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
 }
-function refused(cause: "setup-finished" | "kept-records" | "trading-settings"): never {
-  throw new AppError("setup.start_again_refused", { cause });
+function refused(
+  cause: "setup-finished" | "kept-records" | "trading-settings",
+  reason?: string,
+): never {
+  throw new AppError(
+    "setup.start_again_refused",
+    { cause },
+    reason === undefined ? {} : { reason },
+  );
+}
+/** Counts only, for the log: the answer carries the cause alone. */
+function assertNoKeptRecords({ rows, kept, records, accepted }: SetupDatabaseHoldings): void {
+  if (kept > 0 || records > 0)
+    refused("kept-records", `rows=${rows} kept=${kept} records=${records} accepted=${accepted}`);
 }
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
@@ -81,14 +93,6 @@ function assertHeldStartAgainOffered(
   )
     refused("trading-settings");
   if (status === "complete") refused("setup-finished");
-}
-function heldShown({
-  rows,
-  kept,
-  records,
-  accepted,
-}: SetupDatabaseHoldings): NonNullable<StartAgainSummary["held"]> {
-  return { rows, kept, records, accepted };
 }
 function unused(state: FirstSetupState) {
   const attempts = [state, ...state.previous];
@@ -312,14 +316,14 @@ export function createFirstSetupResolutionActions(
           const snapshot = await host.resolution.captureFirstSetupOriginals();
           if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
           const discarding = found === undefined ? {} : { discarding: found.id };
-          let holdings: SetupDatabaseHoldings | undefined;
           if (held) {
             // Before the read, which may copy the whole database: a refusal here costs nothing.
             await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
             // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
-            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+            const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
             if (holdings.rows === 0) unavailable();
+            assertNoKeptRecords(holdings);
           } else if (inspection.database !== "missing") {
             const { eligible } = await presentAttemptEligibility(
               inspection,
@@ -330,13 +334,11 @@ export function createFirstSetupResolutionActions(
             );
             if (!eligible) unavailable();
           }
-          const summary = summaryOf(
+          return summaryOf(
             retained.state,
             recoveryRecordDamagedOf(retained.state, snapshot.originals, host.modules),
             recovery,
           );
-          if (holdings === undefined) return summary;
-          return { ...summary, held: heldShown(holdings) };
         }),
       );
     },
@@ -390,14 +392,13 @@ export function createFirstSetupResolutionActions(
           // the one the summary showed, checked below.
           const recoveryRecordDamaged =
             !missing && !held && typeof assignment === "object" && assignment.recoveryRecordDamaged;
-          let holdings: SetupDatabaseHoldings | undefined;
           if (held) {
             await assertRecoveredOwner(request.owner, state);
             if (request.register?.kind === "no-current-master") unavailable();
             // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
-            holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+            const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
             if (holdings.rows === 0) unavailable();
-            if (holdings.kept > 0 || holdings.records > 0) refused("kept-records");
+            assertNoKeptRecords(holdings);
           } else if (request.owner === undefined) {
             if (
               !unusedAssignment &&
@@ -442,12 +443,7 @@ export function createFirstSetupResolutionActions(
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped
-              ? {
-                  ...summaryOf(state, shownDamaged, recovery),
-                  ...(holdings !== undefined && { held: heldShown(holdings) }),
-                }
-              : undefined;
+            missing || discardsStopped ? summaryOf(state, shownDamaged, recovery) : undefined;
           if (
             missing &&
             (confirmation?.nothingFiledOrSold !== true ||

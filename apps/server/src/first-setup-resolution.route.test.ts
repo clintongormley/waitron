@@ -289,7 +289,7 @@ it("HTTPS rejects foreign origins, stale snapshots and malformed resolution requ
   }
 });
 
-it("HTTPS lets a shown summary carrying held counts past the body check, and refuses a malformed one", async () => {
+it("a shown summary carrying held counts is refused setup.request_invalid", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;
   let agent: Agent | undefined;
@@ -314,8 +314,14 @@ it("HTTPS lets a shown summary carrying held counts past the body check, and ref
       } as RequestInit)
     ).json();
     const before = await readFile(join(f.stateDir, "first-setup.json"));
-    const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
-    const send = (shownHeld: unknown) =>
+    const recovery = {
+      startedAt: "2026-10-24T13:50:12.000Z",
+      lastActiveAt: "2026-10-24T13:51:12.000Z",
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
+    };
+    const send = (confirm: "confirmMissingDatabase" | "confirmRecoveryDiscard", held: unknown) =>
       fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
         dispatcher: agent,
         method: "POST",
@@ -325,32 +331,21 @@ it("HTTPS lets a shown summary carrying held counts past the body check, and ref
           revision: inspection.revision,
           ownerGeneration: inspection.ownerGeneration,
           register: { kind: "no-current-master", confirmed: true },
-          confirmMissingDatabase: {
-            nothingFiledOrSold: true,
-            shown: { reached: "named", held: shownHeld },
-          },
+          [confirm]:
+            confirm === "confirmMissingDatabase"
+              ? { nothingFiledOrSold: true, shown: { reached: "named", held } }
+              : { shown: { reached: "named", recovery, held } },
         }),
       } as RequestInit);
-    // No owner is signed in, so Start again itself answers setup.not_ready once the body is read.
-    const reached = await send(held);
-    expect(reached.status).toBe(503);
-    expect(await reached.json()).toMatchObject({ error: { code: "setup.not_ready" } });
-    for (const malformed of [
-      { ...held, extra: 1 },
-      { rows: 20, kept: 3, records: 2 },
-      { ...held, kept: -1 },
-      { ...held, rows: 20.5 },
-      { ...held, records: "2" },
-      { ...held, accepted: 3 },
-      { ...held, kept: 21 },
-      null,
-    ]) {
-      const response = await send(malformed);
-      expect(response.status, JSON.stringify(malformed)).toBe(400);
-      expect(await response.json()).toMatchObject({
-        error: { code: "setup.request_invalid", params: { field: "body" } },
-      });
-    }
+    const held = { rows: 20, kept: 3, records: 2, accepted: 1 };
+    for (const confirm of ["confirmMissingDatabase", "confirmRecoveryDiscard"] as const)
+      for (const value of [held, { ...held, extra: 1 }, { ...held, kept: -1 }, null]) {
+        const response = await send(confirm, value);
+        expect(response.status, `${confirm} ${JSON.stringify(value)}`).toBe(400);
+        expect(await response.json()).toMatchObject({
+          error: { code: "setup.request_invalid", params: { field: "body" } },
+        });
+      }
     expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
   } finally {
     await server?.close();

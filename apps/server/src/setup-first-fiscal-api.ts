@@ -14,7 +14,6 @@ import { AppError, isAppError, sqliteFailureOf } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
 import {
   isCanonicalInstant,
-  type StartAgainHeld,
   type StartAgainRecoveryShown,
   type StartAgainSummary,
   type VenueRequest,
@@ -88,10 +87,9 @@ function recoveryDiscardConfirmation(value: unknown) {
   return { shown };
 }
 function shownSummary(value: unknown): StartAgainSummary {
-  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "recovery", "held"]);
+  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "recovery"]);
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
-  const held = Object.hasOwn(shown, "held") ? shownHeld(shown.held) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string)
@@ -101,25 +99,6 @@ function shownSummary(value: unknown): StartAgainSummary {
     reached: shown.reached as StartAgainSummary["reached"],
     ...(damaged && { recoveryRecordDamaged: true as const }),
     ...(recovery !== undefined && { recovery }),
-    ...(held !== undefined && { held }),
-  };
-}
-// The same bounds the confirmation record's reader holds, so a confirmation the route accepts
-// can always be written.
-function shownHeld(value: unknown): StartAgainHeld {
-  const held = exact(value, ["rows", "kept", "records", "accepted"]);
-  const counts = [held.rows, held.kept, held.records, held.accepted];
-  if (
-    !counts.every((count) => Number.isSafeInteger(count) && (count as number) >= 0) ||
-    (held.accepted as number) > (held.records as number) ||
-    (held.kept as number) > (held.rows as number)
-  )
-    invalid();
-  return {
-    rows: held.rows as number,
-    kept: held.kept as number,
-    records: held.records as number,
-    accepted: held.accepted as number,
   };
 }
 function shownRecovery(value: unknown): StartAgainRecoveryShown {

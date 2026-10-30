@@ -284,58 +284,14 @@ it("a record with the database present that showed no backup recovery is refused
   expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
 });
 
-const held = { rows: 105, kept: 1, records: 1, accepted: 0 };
-
-it("a confirmation that discards a stopped recovery beside a held database keeps what it held", async () => {
+it("a shown.held key is not stored in the record", async () => {
   const dir = await stateDir();
-  const present = {
-    ...record,
-    database: "present" as const,
-    shown: { ...record.shown, recovery, held },
-  };
-  await writeStartAgainConfirmation(dir, present);
-  const stored = JSON.parse(
-    await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
-  ) as { shown: { held: object } };
-  expect(stored).toEqual({ version: 1, ...present });
-  expect(Object.keys(stored.shown.held)).toEqual(["rows", "kept", "records", "accepted"]);
-});
-
-it("a held database with an invoice record its module lists as deletable is kept as shown", async () => {
-  const dir = await stateDir();
-  const present = {
-    ...record,
-    database: "present" as const,
-    shown: { ...record.shown, recovery, held: { rows: 2, kept: 0, records: 1, accepted: 1 } },
-  };
-  await writeStartAgainConfirmation(dir, present);
+  const present = { ...record, database: "present" as const, shown: { ...record.shown, recovery } };
+  await writeStartAgainConfirmation(dir, {
+    ...present,
+    shown: { ...present.shown, held: { rows: 105, kept: 1, records: 1, accepted: 0 } },
+  } as typeof present);
   expect(
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
   ).toEqual({ version: 1, ...present });
 });
-
-it.each([
-  ["not an object", null],
-  ["a list", [105, 0, 0, 0]],
-  ["an extra key", { ...held, extra: 1 }],
-  ["a missing count", { rows: 105, kept: 0, records: 0 }],
-  ["a negative count", { ...held, rows: -1 }],
-  ["a fractional count", { ...held, kept: 0.5 }],
-  ["a text count", { ...held, records: "1" }],
-  ["an unsafe integer", { ...held, rows: 2 ** 53 }],
-  ["more accepted than records", { ...held, records: 1, accepted: 2 }],
-  ["more kept than rows", { ...held, rows: 1, kept: 2 }],
-])(
-  "a shown held database with %s is refused setup.attempt_invalid and writes nothing",
-  async (_label, value) => {
-    const dir = await stateDir();
-    await expect(
-      writeStartAgainConfirmation(dir, {
-        ...record,
-        database: "present",
-        shown: { ...record.shown, recovery, held: value },
-      } as unknown as typeof record),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
-    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
-  },
-);
