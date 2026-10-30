@@ -810,16 +810,6 @@ describe("stream-settings-panel: once set up", () => {
     expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_too_short_managed"));
   });
 
-  it("explains, in this panel's words, a save refused because the box holds no recovery key", async () => {
-    const api = stubApi({
-      saveStreamSettings: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }),
-    });
-    const { el } = await mount(api);
-    fillRequired(el);
-    await press(el, "save");
-    expect(text(el, "[role=alert]")).toBe(t("stream.error.recovery_key_missing"));
-  });
-
   it("Cancel leaves the bucket as it was", async () => {
     const api = stubApi({}, ON);
     const { el } = await mount(api);

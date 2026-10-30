@@ -3581,7 +3581,11 @@ describe("startServer — what a trading boot wires behind its management routes
 
       backupQueue.gate = undefined;
       release();
-      expect((await rotation).status).toBe(400);
+      const rotationResponse = await rotation;
+      expect(rotationResponse.status).toBe(400);
+      expect(await rotationResponse.json()).toEqual({
+        error: { code: "backup.request_invalid", params: { field: "config" } },
+      });
       const switchOffResponse = await switchOff;
       expect(backupQueue.started).toBe(started + 2);
       expect(switchOffResponse.status).toBe(200);

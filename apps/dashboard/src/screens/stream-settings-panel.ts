@@ -89,7 +89,6 @@ const UNSAFE_FIELD_KEYS: Partial<Record<Field, StringKey>> = {
 /** Refusals whose wording elsewhere does not fit what this panel was doing. */
 const PANEL_CODE_KEYS: Readonly<Record<string, StringKey>> = {
   "backup.managed_by_environment": "stream.error.managed_by_environment",
-  "backup.recovery_key_missing": "stream.error.recovery_key_missing",
   "backup.recovery_key_too_short": "stream.error.recovery_key_too_short",
 };
 

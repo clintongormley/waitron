@@ -2050,8 +2050,6 @@ export const en = {
   "stream.field.check": "Check this value.",
   "stream.error.managed_by_environment":
     "This box's backup settings come from its environment and it holds no recovery key, so the bucket copy cannot be turned on from this page.",
-  "stream.error.recovery_key_missing":
-    "This box holds no recovery key, so there is no recovery kit to show.",
   "stream.error.recovery_key_too_short":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
   "stream.error.recovery_key_too_short_archives_on":
@@ -5778,8 +5776,6 @@ export const es: Record<StringKey, string> = {
   "stream.field.check": "Revisa este valor.",
   "stream.error.managed_by_environment":
     "Los ajustes de copia de este equipo vienen de su entorno y no tiene clave de recuperación, así que la copia en el bucket no se puede activar desde esta página.",
-  "stream.error.recovery_key_missing":
-    "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
   "stream.error.recovery_key_too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
   "stream.error.recovery_key_too_short_archives_on":

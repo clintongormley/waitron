@@ -186,7 +186,7 @@ describe("the pack's server-key page seat", () => {
   ];
   for (const withNewKey of [false, true])
     it.each(refusals)(
-      `refuses %s as the document seat does (new key: ${withNewKey}), with the seat's own code`,
+      `refuses %s (new key: ${withNewKey}), with the seat's own code`,
       async (_name, arrange) => {
         const options = (await arrange()) as Parameters<typeof page>[0];
         const before = await snapshot();

@@ -120,6 +120,7 @@ function fixture(
     now?: () => Date;
     evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
     loadFont?: () => Promise<Uint8Array>;
+    readBoxEnv?: () => Promise<Record<string, string | undefined>>;
   } = {},
 ) {
   const app = new Hono();
@@ -143,7 +144,7 @@ function fixture(
       venueId: VENUE,
       modules,
       turns: options.turns ?? createTurns(),
-      readBoxEnv: async () => ({ ...boxEnv }),
+      readBoxEnv: options.readBoxEnv ?? (async () => ({ ...boxEnv })),
       backups: () => ({
         managedByEnvironment: managed,
         schedule: ARCHIVES.schedule,
@@ -576,15 +577,27 @@ describe("a made pack", () => {
   });
 
   it("waits for a backup turn already running before it reads anything", async () => {
-    const turns = createTurns();
+    const queue = createTurns();
+    let handed = 0;
+    const turns: Turns = (body) => {
+      handed += 1;
+      return queue(body);
+    };
+    let reads = 0;
+    const readBoxEnv = async () => {
+      reads += 1;
+      return { ...boxEnv };
+    };
     let release!: () => void;
     const held = turns(() => new Promise<void>((resolve) => (release = resolve)));
-    const making = fixture({ turns }).make();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const making = fixture({ turns, readBoxEnv }).make();
+    await vi.waitFor(() => expect(handed).toBe(2));
+    expect(reads).toBe(0);
     expect(await packs()).toEqual([]);
     release();
     await held;
     expect((await making).status).toBe(200);
+    expect(reads).toBe(1);
     expect(await packs()).toHaveLength(1);
   });
 
