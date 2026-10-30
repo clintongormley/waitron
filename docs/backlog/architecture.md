@@ -471,10 +471,11 @@ until A977).
   printer, course, dish, extra, note and table names to what it creates; it keeps the default
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
   tickets), the party venue's dishes, the Spanish ticket words and unit
-  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print concurrency
-  suite (`kitchen-print.concurrency.test.ts`) still creates stations "Cocina" and "Barra" and a
-  printer "Cocina printer", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`)
-  a table "Mesa 7". The fiscal sale-path
+  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
+  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, catalogue,
+  station, printer and product but keeps its es-ES locale and the operation description "Venta en
+  establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
+  only English names. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
