@@ -165,8 +165,7 @@ function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
 
 /**
  * What a setup page explains about the clocks — a problem, the server's answer, or neither — and
- * the two timers that run `recheck` by themselves: the countdown at zero, and every 15 seconds
- * while no second clock is known.
+ * the two timers that run `recheck` by themselves.
  */
 export class ClockWait<Selected extends { status: "selected" }> {
   readonly #host: ReactiveControllerHost;

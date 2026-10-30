@@ -558,6 +558,40 @@ it("a box clock before this release shows only the release line when the preview
   expect(text(el)).toContain("Box time precedes this Waitron release.");
   expect(formError(el)).toBe("");
 });
+it("a preview refused for a taken minute starts no countdown and sends no select", async () => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    if (action === "preview")
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    return { status: "waiting", targetMs: instant + 180_000, remainingMs: 150_000 };
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+    vi.advanceTimersByTime(200_000);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=minute-taken]")).toBeNull();
+    expect(selects(prepare)).toEqual([]);
+    expect(formError(el)).toBe("");
+    expect(button(el, "select").disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("sends no installation code", async () => {
   const { el, prepare } = await mount();
   await ready(el);
@@ -893,6 +927,7 @@ it("a minute in use shows one countdown, checks again quietly and keeps saying w
     expect(remaining(el)).toBe("2:30");
     expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
     expect(el.readCredentials()).toBeNull();
+    expect(button(el, "compare").disabled).toBe(false);
   } finally {
     vi.useRealTimers();
   }

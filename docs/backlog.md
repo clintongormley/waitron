@@ -495,6 +495,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   are still worked out but nothing in the choice reads them. A backup's record keeps accepting
   `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`) until a check of
   shipped backups says it may stop.
+- **A1225. A lost automatic clock re-check drops the setup and restore pages' wait** (from A1207
+  review): when the page's own re-check fails with no refusal code (for example the network drops),
+  the sentence and countdown go, the form shows its general error, Make the series is enabled again,
+  and nothing checks again by itself (`ClockWait.settle`, `packages/fiscal-verifactu/src/setup/clock-wait.ts`,
+  is quiet about such a failure only while it waits for a second clock). It happens at the end of
+  the box's ordinary wait too, which I believe predates A1207 (#1990, `3ba85c7a6`); A1207's
+  taken-minute re-check can now meet it with up to 2:30 still showing. Keep the wait up and check
+  again on the next tick instead.
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).

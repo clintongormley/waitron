@@ -229,6 +229,8 @@ it("a pick is refused when a record naming its own minute appears after it", asy
     history: [{ reference: "venue", complete: true, records: [historyRow("0CNNW")] }],
   };
   await expect(f.run()).rejects.toMatchObject(refusal("minute_in_use"));
+  const refused = await f.run().catch((error: unknown) => error);
+  expect((refused as { params: unknown }).params).toEqual({ reason: "minute_in_use" });
 });
 const used = (...identities: string[]) =>
   identities.map((identity) => historyRow(identity, { reference: `used/${identity}` }));

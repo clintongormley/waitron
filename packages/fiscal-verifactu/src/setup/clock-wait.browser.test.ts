@@ -142,6 +142,15 @@ describe("a taken minute shows one countdown", () => {
     expect(fail).not.toHaveBeenCalled();
   });
 
+  it("after the re-check the figure follows the box's answer", () => {
+    const { wait, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.show(undefined, { ...WAITING, remainingMs: 90_001 });
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("1:31");
+  });
+
   it("a re-check refused again starts the same display again", () => {
     const { wait, fail, drawn } = setup();
     wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
