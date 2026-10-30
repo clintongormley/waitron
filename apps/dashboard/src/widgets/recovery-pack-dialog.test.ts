@@ -44,7 +44,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
   };
 }
 
-/** The current server key is on pack 3, which reached a browser. */
+/** The current server key is on pack 3, which a browser confirmed receiving. */
 const HELD = status({ keep: [{ number: 3, madeAt: MADE_AT, until: null, why: "server_key" }] });
 /** The current server key is on pack 3, which no browser confirmed receiving. */
 const UNRECEIVED = status({

@@ -432,7 +432,7 @@ describe("a made pack", () => {
     expect(JSON.stringify(record)).not.toContain(carried.secret);
   });
 
-  it("never names a new key as the key in force or a key an earlier pack carried is named", async () => {
+  it("never gives a new key the name of the key in force or of a key an earlier pack carried", async () => {
     const f = fixture();
     const keyName = async (response: Response) =>
       (await readRecoveryPackPdf(new Uint8Array(await response.arrayBuffer()))).serverKeyName;
@@ -447,7 +447,7 @@ describe("a made pack", () => {
     expect(await keyName(await f.make(true))).toBe("2026-10-30 · 6666");
   });
 
-  it("names the received pack holding the key, and an unreceived one as never reaching a browser", async () => {
+  it("names the received pack holding the key, and one no browser confirmed receiving", async () => {
     const f = fixture();
     await (await f.make(true)).arrayBuffer();
     const unreceived = await readRecoveryPackPdf(

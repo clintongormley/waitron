@@ -15,7 +15,7 @@ export function packDate(iso: string, timeZone: string | undefined): string {
 }
 
 /**
- * The pack the status names as holding the current server key, and whether it reached a browser.
+ * The pack the status names as holding the current server key, and whether a browser confirmed receiving it.
  * An unreceived holder comes first: its warning is the one a person must not miss.
  */
 export function keyHolder(

@@ -280,8 +280,9 @@ days), the interval default at `:47`; `keyFingerprint` at `apps/server/src/backu
     a card that always hedges, because an always-on hedge would tell every venue on every visit that
     they may not have their key.
     *(2026-10-30, after PR D's PDF look:* "never reached a browser" claimed more than the box knows,
-    which is only that no browser confirmed it. The words became "but the box was never told that
-    pack N arrived", and the matching sentences on the card, the dialog and setup's reader.)
+    which is only that no browser confirmed it. The card and the dialog now say the box "was never
+    told" the pack arrived; the pack and setup's reader, which print what was known when the pack
+    was made, say "when this pack was made the box had not been told that pack N arrived".)
 11. **No server key in force** (`readBreakGlassKeyName` null): the server-key part is `failed`
     ("this box has no server key yet"), ticked or not, and no key is made, as today's reissue
     refuses `key_missing` (`recovery-document-api.ts:96-97`).
@@ -469,9 +470,9 @@ does, in EN and ES):
 - the server-key page ends with the location line: "This pack holds the server key" / "The key
   itself is on recovery pack N, made on D. Keep that pack." (only for a received pack) / for an
   unreceived one, "The key itself is on recovery pack N, made on D, which never reached a browser.
-  If you do not have pack N, make a new pack with **Also make a new server key** ticked." / "… on the
-  recovery sheet whose key name is X, made on D"; a test per form, and *fails if* an unreceived
-  pack is told "Keep that pack"; every pack number in the PDF is printed with its date (decision 13);
+  If you do not have pack N, make a new pack with **Also make a new server key** ticked."
+  *(Words changed 2026-10-30: see decision 10.)* / "… on the recovery sheet whose key name is X,
+  made on D"; a test per form, and *fails if* an unreceived pack is told "Keep that pack"; every pack number in the PDF is printed with its date (decision 13);
 - every `secret` is drawn as text and as a QR code: render each page to an image (pdfjs +
   `@napi-rs/canvas`) and decode with `jsqr`; the decoded text equals the secret text, for a
   640-character bucket code. *Fails if* the QR drawing is removed or drawn from a different string;
@@ -510,7 +511,8 @@ only).
   key. It is on recovery pack N, made on D: choose that pack, or type the key from it." (or, with no
   pack number, "… choose the pack or sheet whose key name is X"), EN and ES; when
   `serverKeyHeldBy.received` is false it adds "That pack never reached a browser when it was made:
-  if you do not have it, the key cannot be read from any pack." (a case each);
+  if you do not have it, the key cannot be read from any pack." *(words changed 2026-10-30: see
+  decision 10)* (a case each);
 - the pack's own bucket code, archive code and backup key never leave the reader: the returned
   object has exactly `{ document, attachmentBytes }`, and `attachmentBytes` is the key document's
   canonical bytes, not the pack file's.

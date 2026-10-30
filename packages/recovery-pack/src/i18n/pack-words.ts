@@ -76,7 +76,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `The key itself is on recovery pack ${number}, made on ${day}. Keep that pack.`,
     keyOnUnreceivedPack: (number, day) =>
-      `The key itself is on recovery pack ${number}, made on ${day}, but the box was never told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
+      `The key itself is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
     keyOnSheet: (keyName, day) =>
       `The key itself is on the recovery sheet whose key name is ${keyName}, made on ${day}. Keep that sheet.`,
     spaceMark: "Each \u02fd is a space: type one space for it.",
@@ -129,7 +129,7 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     keyOnPack: (number, day) =>
       `La clave está en el paquete de recuperación ${number}, hecho el ${day}. Guarda ese paquete.`,
     keyOnUnreceivedPack: (number, day) =>
-      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero la caja nunca recibió la confirmación de que el paquete ${number} llegó. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete la caja no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
     keyOnSheet: (keyName, day) =>
       `La clave está en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}. Guarda esa hoja.`,
     spaceMark: "Cada \u02fd es un espacio: escribe un espacio en su lugar.",
@@ -222,7 +222,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     currentKeyOnPack: (number, day) =>
       `The current key, on recovery pack ${number} made on ${day}, still works.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `The current server key is on recovery pack ${number}, made on ${day}, but the box was never told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
+      `The current server key is on recovery pack ${number}, made on ${day}, but when this pack was made the box had not been told that pack ${number} arrived. If you do not have pack ${number}, make a new pack with Also make a new server key ticked.`,
     currentKeyOnSheet: (keyName, day) =>
       `The current key, on the recovery sheet whose key name is ${keyName}, made on ${day}, still works.`,
     failures: {
@@ -305,7 +305,7 @@ export const PART_WORDS: Record<PackLocale, PartWords> = {
     currentKeyOnPack: (number, day) =>
       `La clave actual, en el paquete de recuperación ${number} hecho el ${day}, sigue sirviendo.`,
     currentKeyOnUnreceivedPack: (number, day) =>
-      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero la caja nunca recibió la confirmación de que el paquete ${number} llegó. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
+      `La clave del servidor actual está en el paquete de recuperación ${number}, hecho el ${day}, pero cuando se hizo este paquete la caja no había recibido la confirmación de que el paquete ${number} había llegado. Si no tienes el paquete ${number}, haz un paquete nuevo marcando También crear una clave del servidor nueva.`,
     currentKeyOnSheet: (keyName, day) =>
       `La clave actual, en la hoja de recuperación cuyo nombre de clave es ${keyName}, hecha el ${day}, sigue sirviendo.`,
     failures: {

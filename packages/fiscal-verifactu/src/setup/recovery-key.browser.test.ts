@@ -395,13 +395,13 @@ it.each([
     "en",
     { number: 2, madeOn: "2026-09-12", received: false },
     "Caja principal",
-    "This recovery pack does not hold the server key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. The box that made that pack was never told it arrived: if you do not have it, the key cannot be read from any pack.",
+    "This recovery pack does not hold the server key. It is on recovery pack 2, made on 12 September 2026: choose that pack, or type the key from it. When this pack was made, the box that made it had not been told that pack 2 arrived: if you do not have it, the key cannot be read from any pack.",
   ],
   [
     "es",
     { number: 2, madeOn: "2026-09-12", received: false },
     "Caja principal",
-    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. La caja que hizo ese paquete nunca recibió la confirmación de que llegó: si no lo tienes, la clave no se puede leer de ningún paquete.",
+    "Este paquete de recuperación no tiene la clave del servidor. Está en el paquete de recuperación 2, hecho el 12 de septiembre de 2026: elige ese paquete o introduce su clave. Cuando se hizo este paquete, la caja que lo hizo no había recibido la confirmación de que el paquete 2 había llegado: si no lo tienes, la clave no se puede leer de ningún paquete.",
   ],
   [
     "en",
