@@ -475,7 +475,7 @@ export class RecoveryPackDialog extends LitElement {
       </wt-form-actions>`;
     const signIn = this.#signIn();
     const noWayIn = this.ways !== null && !this.ways.password && !this.ways.passkey;
-    const bottom = [this.refusal, signIn?.marked ? t("form.fix_fields") : ""]
+    const bottom = [this.refusal, signIn?.notice, signIn?.marked ? t("form.fix_fields") : ""]
       .filter(Boolean)
       .join(" ");
     return html`<wt-form-actions slot="footer" .error=${bottom}>

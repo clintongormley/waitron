@@ -67,8 +67,7 @@ describe.each(["light", "dark"] as const)("fresh sign-in accessibility (%s)", (t
       )
       .toBeTruthy();
     if (refusal !== undefined) el.refuse({ code: refusal, status: 401 });
-    if (state === "code no longer needed")
-      await expect.poll(() => root.querySelector("[data-error]")).toBeTruthy();
+    if (state === "code no longer needed") await expect.poll(() => el.notice).toBeTruthy();
     await el.updateComplete;
     for (const input of root.querySelectorAll("wt-input")) await input.updateComplete;
     await expectNoA11yViolations(host);

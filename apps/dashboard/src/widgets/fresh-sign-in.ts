@@ -5,7 +5,7 @@ import {
   WebAuthnAbortService,
   type PublicKeyCredentialRequestOptionsJSON,
 } from "@simplewebauthn/browser";
-import { baseStyles, formMessage, formMessageStyles } from "@waitron/ui";
+import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-input.js";
 import type { DashboardApi, FreshSignInBody, OwnProfile } from "../api/client.js";
@@ -24,15 +24,14 @@ type Field = "password" | "code";
 /**
  * Asks the signed-in person to prove again who they are, by their password or a passkey, plus their
  * authenticator or a recovery code when they have one. The screen holding it owns the action: it
- * calls `signIn()` for the body to send, hands any failure to `refuse()`, and calls `clear()` on
- * close. Fires `sign-in-ways` once the profile is read, `sign-in-passkey` when the passkey button is
+ * calls `signIn()` for the body to send, hands any failure to `refuse()`, shows `notice` in its own
+ * bottom message, and calls `clear()` on close. Fires `sign-in-ways` once the profile is read, `sign-in-passkey` when the passkey button is
  * pressed, and `sign-in-change` on every edit.
  */
 @customElement("dashboard-fresh-sign-in")
 export class FreshSignIn extends LitElement {
   static override styles = [
     baseStyles,
-    formMessageStyles,
     css`
       :host {
         display: flex;
@@ -81,6 +80,11 @@ export class FreshSignIn extends LitElement {
   get ways(): SignInWays | null {
     const own = this.profile;
     return own === null ? null : { password: own.hasPassword, passkey: own.passkeys.length > 0 };
+  }
+
+  /** A sentence for the screen's bottom message that no refusal answered; "" when there is none. */
+  get notice(): string {
+    return this.message;
   }
 
   /** Whether anything is typed into the password or the code. */
@@ -269,7 +273,6 @@ export class FreshSignIn extends LitElement {
           >${t(ways.password ? "fresh_sign_in.use_passkey_instead" : "fresh_sign_in.use_passkey")}</wt-button
         >
       </div>
-      ${formMessage(this.message)}
     `;
   }
 

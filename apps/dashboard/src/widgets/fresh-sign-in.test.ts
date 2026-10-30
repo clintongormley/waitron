@@ -474,20 +474,18 @@ describe("refusals", () => {
     },
   );
 
-  it("says the code is no longer needed when the second read shows no authenticator either", async () => {
+  it("hands over, for the bottom message, that the code is no longer needed when the second read shows no authenticator either", async () => {
     const api = stubApi(profile({ hasTotp: false }));
     const { el, root } = await mount(profile({ hasTotp: false }), api);
     expect(el.refuse({ code: "totp.invalid", status: 401 })).toBe("");
     await vi.waitFor(() => expect(api.getProfile).toHaveBeenCalledTimes(2));
-    await vi.waitFor(() =>
-      expect(root.querySelector("[data-error]")?.textContent?.trim()).toBe(
-        t("fresh_sign_in.code_no_longer_needed"),
-      ),
-    );
+    await vi.waitFor(() => expect(el.notice).toBe(t("fresh_sign_in.code_no_longer_needed")));
+    await el.updateComplete;
+    expect(root.querySelector("[data-error]")).toBeNull();
     expect(field(root, "totp")).toBeNull();
     type(root, "current-password", "hunter2-hunter2");
     await el.updateComplete;
-    expect(root.querySelector("[data-error]")).toBeNull();
+    expect(el.notice).toBe("");
   });
 
   it("never sends the password way for a person with no password", async () => {

@@ -753,6 +753,21 @@ describe("a refusal", () => {
     expect(button(el, "make-pack")!.disabled).toBe(false);
   });
 
+  it("says in the bottom message, and nowhere else, that a code asked for is no longer needed", async () => {
+    const api = stubApi(profile({ hasTotp: false }));
+    api.makeRecoveryPack.mockRejectedValue({ code: "totp.invalid", status: 401 });
+    const { el, signIn } = await open({ api });
+    type(signIn, "current-password", "hunter2-hunter2");
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.getProfile.mock.calls.length).toBe(2);
+    await expect.poll(() => bottom(el)).toBe(t("fresh_sign_in.code_no_longer_needed"));
+    expect(signIn.shadowRoot!.querySelector("[data-error]")).toBeNull();
+    type(signIn, "current-password", "hunter2-hunter3");
+    await signIn.updateComplete;
+    await el.updateComplete;
+    expect(bottom(el)).toBe("");
+  });
+
   it("shows the box's own recovery.pack_invalid as a refusal in words, not as a lost answer", async () => {
     const api = stubApi();
     api.makeRecoveryPack.mockRejectedValue({
