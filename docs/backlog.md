@@ -4798,11 +4798,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   changed the "not a pack" refusal and added the space mark, and nobody has looked at those two
   again. Part 2 waits for A1188 part 1, part 3 for B3's retained disk key.
   Left open by PR D:
-  - The pack's "which never reached a browser" sentences (`keyOnUnreceivedPack`,
-    `currentKeyOnUnreceivedPack` in `packages/recovery-pack/src/i18n/pack-words.ts`, English and
-    Spanish) claim more than the box knows: only that no receipt was confirmed. For PR E.
-  - A key a pack makes is named `YYYY-MM-DD · <uuid>`, where setup and the design use
-    `YYYY-MM-DD · XXXX`. For PR E.
   - The pack PDF uses one regular-weight font: no bold, codes not in a fixed-width face, so l and I
     look alike. For PR E.
   - The pack's cover says "The dashboard's Backups screen shows the same checks" beside a check
