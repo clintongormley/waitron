@@ -435,11 +435,11 @@ describe("moveSettledBillToCounter", () => {
     // A MOVED slip still names each line (A803 D16), and each burger is its own line.
     expect(slip!.filter((line) => line.includes("1.000 x BURG"))).toHaveLength(2);
     expect(text).not.toContain("2.000 x BURG");
-    expect(text).toContain("1.000 x CHULETA");
+    expect(text).toContain("1.000 x RIBEYE");
     expect(await noticesOn(p.billId)).toEqual([
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
-      { stationId: venue.stationId, kind: "moved", lineName: "CHULETA", movedTo: null },
+      { stationId: venue.stationId, kind: "moved", lineName: "RIBEYE", movedTo: null },
     ]);
   });
 
@@ -458,7 +458,7 @@ describe("moveSettledBillToCounter", () => {
     const jobs = jobsByPrinterAfter(before);
     expect(jobs.map((job) => job.printerId)).toEqual([venue.printerId]);
     expect(jobs[0]!.lines.join("\n")).toContain("1.000 x BURG");
-    expect(jobs[0]!.lines.join("\n")).not.toContain("ENSAL");
+    expect(jobs[0]!.lines.join("\n")).not.toContain("GREENS");
     expect(await noticesOn(p.billId)).toEqual([
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
     ]);
@@ -481,8 +481,8 @@ describe("moveSettledBillToCounter", () => {
     expect(jobs[0]!.printerId).toBe(venue.printerId);
     const text = jobs[0]!.lines.join("\n");
     expect(text).toContain("1.000 x BURG");
-    expect(text).not.toContain("CHULETA");
-    expect(text).not.toContain("ENSAL");
+    expect(text).not.toContain("RIBEYE");
+    expect(text).not.toContain("GREENS");
     expect(await noticesOn(p.billId)).toEqual([
       { stationId: venue.stationId, kind: "moved", lineName: "BURG", movedTo: null },
     ]);

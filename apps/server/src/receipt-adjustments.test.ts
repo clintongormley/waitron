@@ -439,8 +439,8 @@ describe("receiptLines", () => {
     const receipt = await receiptOf(billId);
 
     expect(shown(receipt)).toEqual([
-      ["Hamburguesa", "2", "24.00", undefined, undefined],
-      ["Hamburguesa", "1", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
+      ["Beef burger", "2", "24.00", undefined, undefined],
+      ["Beef burger", "1", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
     ]);
     expect(receipt).not.toHaveProperty("billAdjustments");
     expect(receipt.lines[0]).not.toHaveProperty("adjustments");
@@ -456,13 +456,13 @@ describe("receiptLines", () => {
 
     expect(shown(await receiptOf(billId))).toEqual([
       [
-        "Rioja crianza",
+        "Bottle of Rioja",
         "1",
         "27.00",
         "30.00",
         [{ kind: "discount", percentBp: 1000, amount: "3.00" }],
       ],
-      ["Pan de pueblo", "1", "2.50", undefined, undefined],
+      ["Country bread", "1", "2.50", undefined, undefined],
     ]);
   });
 
@@ -512,8 +512,8 @@ describe("receiptLines", () => {
 
     expect(receipt).not.toHaveProperty("billAdjustments");
     expect(shown(receipt)).toEqual([
-      ["Hamburguesa", "2", "19.80", "24.00", [{ kind: "discount", amount: "4.20" }]],
-      ["Rioja crianza", "1", "27.00", "30.00", [{ kind: "discount", amount: "3.00" }]],
+      ["Beef burger", "2", "19.80", "24.00", [{ kind: "discount", amount: "4.20" }]],
+      ["Bottle of Rioja", "1", "27.00", "30.00", [{ kind: "discount", amount: "3.00" }]],
     ]);
   });
 
@@ -536,10 +536,10 @@ describe("receiptLines", () => {
     });
 
     expect(shown(await receiptOf(billId))).toEqual([
-      ["Hamburguesa", "2", "22.00", "24.00", [{ kind: "discount", amount: "2.00" }]],
-      ["Pan de pueblo", "1", "2.50", undefined, undefined],
-      ["Pizza margarita", "1", "0.00", "9.00", [{ kind: "comp", amount: "10.50" }]],
-      ["Aceitunas", "1", "0.00", "1.50", undefined],
+      ["Beef burger", "2", "22.00", "24.00", [{ kind: "discount", amount: "2.00" }]],
+      ["Country bread", "1", "2.50", undefined, undefined],
+      ["Margherita pizza", "1", "0.00", "9.00", [{ kind: "comp", amount: "10.50" }]],
+      ["Marinated olives", "1", "0.00", "1.50", undefined],
     ]);
   });
 
@@ -555,7 +555,7 @@ describe("receiptLines", () => {
     });
 
     expect(shown(receipt)).toEqual([
-      ["Hamburguesa", "1", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
+      ["Beef burger", "1", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
     ]);
   });
 
@@ -608,11 +608,11 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("1  Hamburguesa", "12,00"),
+      at80("1  Beef burger", "12,00"),
       at80("  Descuento 100%", "-12,00"),
-      at80("1  Rioja crianza", "30,00"),
+      at80("1  Bottle of Rioja", "30,00"),
       at80("  Descuento 20%", "-6,00"),
-      at80("1  Pan de pueblo", "2,50"),
+      at80("1  Country bread", "2,50"),
       at80("Descuento 10%", "-2,65"),
     ]);
     expect(printed).toContain(`TOTAL${" ".repeat(9)}23,85 €`);
@@ -654,7 +654,7 @@ describe("receiptLines", () => {
       const { result, goods } = await payAndPrint(billId, "0.00");
 
       expect(result.lines[0]!.adjustments).toEqual([{ kind: "comp", amount: "12.00" }]);
-      expect(goods).toEqual([at80("1  Hamburguesa", "12,00"), at80("  Descuento 100%", "-12,00")]);
+      expect(goods).toEqual([at80("1  Beef burger", "12,00"), at80("  Descuento 100%", "-12,00")]);
     });
 
     // Each line prints what its own step took: everything a 50% left is 100% of it, however it was
@@ -687,7 +687,7 @@ describe("receiptLines", () => {
         entry,
       ]);
       expect(goods).toEqual([
-        at80("1  Hamburguesa", "12,00"),
+        at80("1  Beef burger", "12,00"),
         at80("  Descuento 50%", "-6,00"),
         at80("  Descuento 100%", "-6,00"),
       ]);
@@ -709,7 +709,7 @@ describe("receiptLines", () => {
       const { goods } = await payAndPrint(billId, "0.00");
 
       expect(goods).toEqual([
-        at80("1  Hamburguesa", "12,00"),
+        at80("1  Beef burger", "12,00"),
         at80("  Descuento 50%", "-6,00"),
         at80("  Descuento 100%", "-6,00"),
       ]);
@@ -726,14 +726,14 @@ describe("receiptLines", () => {
 
       expect(wholePrinted.result.billAdjustments).toEqual([{ kind: "comp", amount: "12.00" }]);
       expect(wholePrinted.goods).toEqual([
-        at80("1  Hamburguesa", "12,00"),
+        at80("1  Beef burger", "12,00"),
         at80("Descuento 100%", "-12,00"),
       ]);
       expect(partPrinted.result.billAdjustments).toEqual([
         { kind: "discount", percentBp: 4167, amount: "5.00" },
       ]);
       expect(partPrinted.goods).toEqual([
-        at80("1  Hamburguesa", "12,00"),
+        at80("1  Beef burger", "12,00"),
         at80("Descuento 41,67%", "-5,00"),
       ]);
     });
@@ -753,8 +753,8 @@ describe("receiptLines", () => {
         ["1", [{ kind: "comp", amount: "12.00" }]],
       ]);
       expect(goods).toEqual([
-        at80("2  Hamburguesa", "24,00"),
-        at80("1  Hamburguesa", "12,00"),
+        at80("2  Beef burger", "24,00"),
+        at80("1  Beef burger", "12,00"),
         at80("  Descuento 100%", "-12,00"),
       ]);
     });
@@ -823,10 +823,10 @@ describe("receiptLines", () => {
       label + " ".repeat(42 - label.length - amount.length) + amount;
     const rule = printed.findIndex((line, at) => at > start && /^-+$/.test(line));
     expect(printed.slice(start, rule)).toEqual([
-      at80("2  Croquetas de jamón", "6,66"),
+      at80("2  Ham croquettes", "6,66"),
       at80("  Descuento 10,01%", "-1,00"),
-      at80("1  Croquetas de jamón", "3,33"),
-      at80("1  Pan de pueblo", "2,50"),
+      at80("1  Ham croquettes", "3,33"),
+      at80("1  Country bread", "2,50"),
     ]);
   });
 
@@ -839,8 +839,8 @@ describe("receiptLines", () => {
     });
 
     expect(families(await invoiceOf(billId))).toEqual([
-      ["Croquetas de jamón", "2", 0],
-      ["Croquetas de jamón", "1", 0],
+      ["Ham croquettes", "2", 0],
+      ["Ham croquettes", "1", 0],
     ]);
   });
 
@@ -860,9 +860,9 @@ describe("receiptLines", () => {
 
     const lines = await invoiceOf(billId);
     expect(families(lines)).toEqual([
-      ["Croquetas de jamón", "2", 0],
-      ["Hamburguesa", "1", undefined],
-      ["Croquetas de jamón", "1", 0],
+      ["Ham croquettes", "2", 0],
+      ["Beef burger", "1", undefined],
+      ["Ham croquettes", "1", 0],
     ]);
     expect(lines[1]).not.toHaveProperty("dishFamily");
   });
@@ -878,9 +878,9 @@ describe("receiptLines", () => {
 
     const lines = await invoiceOf(billId);
     expect(families(lines)).toEqual([
-      ["Hamburguesa", "1", undefined],
-      ["Croquetas de jamón", "2", 1],
-      ["Croquetas de jamón", "1", 1],
+      ["Beef burger", "1", undefined],
+      ["Ham croquettes", "2", 1],
+      ["Ham croquettes", "1", 1],
     ]);
     expect(lines[0]).not.toHaveProperty("dishFamily");
   });
@@ -896,10 +896,10 @@ describe("receiptLines", () => {
 
     const lines = await invoiceOf(billId);
     expect(families(lines)).toEqual([
-      ["Pizza margarita", "2", 0],
-      ["Aceitunas", "2", 0],
-      ["Pizza margarita", "1", 0],
-      ["Aceitunas", "1", 0],
+      ["Margherita pizza", "2", 0],
+      ["Marinated olives", "2", 0],
+      ["Margherita pizza", "1", 0],
+      ["Marinated olives", "1", 0],
     ]);
   });
 

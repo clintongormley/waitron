@@ -79,7 +79,7 @@ const MENU: {
 }[] = [
   {
     name: "Burger",
-    customer: "Hamburguesa",
+    customer: "Beef burger",
     kitchen: "BURG",
     price: "12.00",
     unit: "each",
@@ -87,23 +87,23 @@ const MENU: {
   },
   {
     name: "Steak",
-    customer: "Chuletón a la brasa",
-    kitchen: "CHULETA",
+    customer: "Chargrilled rib steak",
+    kitchen: "RIBEYE",
     price: "25.00",
     unit: "each",
     vat: "general",
   },
   {
     name: "Bottle",
-    customer: "Rioja crianza",
-    kitchen: "TINTO",
+    customer: "Bottle of Rioja",
+    kitchen: "RED",
     price: "30.00",
     unit: "each",
     vat: "general",
   },
   {
     name: "Croquetas",
-    customer: "Croquetas de jamón",
+    customer: "Ham croquettes",
     kitchen: "CROQ",
     price: "3.33",
     unit: "each",
@@ -111,47 +111,47 @@ const MENU: {
   },
   {
     name: "Ham",
-    customer: "Jamón ibérico",
-    kitchen: "JAMON",
+    customer: "Iberian ham",
+    kitchen: "CURED",
     price: "24.00",
     unit: "weight",
     vat: "reduced",
   },
   {
     name: "Fish",
-    customer: "Merluza a la plancha",
-    kitchen: "MERLUZA",
+    customer: "Grilled hake",
+    kitchen: "HAKE",
     price: "12.99",
     unit: "weight",
     vat: "reduced",
   },
   {
     name: "Bread",
-    customer: "Pan de pueblo",
-    kitchen: "PAN",
+    customer: "Country bread",
+    kitchen: "LOAF",
     price: "2.50",
     unit: "each",
     vat: "reduced",
   },
   {
     name: "Water",
-    customer: "Agua mineral",
-    kitchen: "AGUA",
+    customer: "Mineral water",
+    kitchen: "STILL",
     price: "2.00",
     unit: "each",
     vat: "general",
   },
   {
     name: "Salad",
-    customer: "Ensalada de la casa",
-    kitchen: "ENSAL",
+    customer: "House salad",
+    kitchen: "GREENS",
     price: "10.00",
     unit: "each",
     vat: "general",
   },
   {
     name: "Tortilla",
-    customer: "Tapa de tortilla",
+    customer: "Tortilla tapa",
     kitchen: "TORT",
     price: "3.33",
     unit: "each",
@@ -159,23 +159,23 @@ const MENU: {
   },
   {
     name: "Pimientos",
-    customer: "Tapa de pimientos",
-    kitchen: "PIMI",
+    customer: "Pepper tapa",
+    kitchen: "PEPS",
     price: "3.33",
     unit: "each",
     vat: "reduced",
   },
   {
     name: "Cana",
-    customer: "Caña de cerveza",
-    kitchen: "CANA",
+    customer: "Small draught beer",
+    kitchen: "BEER",
     price: "3.34",
     unit: "each",
     vat: "general",
   },
   {
     name: "Pizza",
-    customer: "Pizza margarita",
+    customer: "Margherita pizza",
     kitchen: "PIZZA",
     price: "9.00",
     unit: "each",
@@ -183,8 +183,8 @@ const MENU: {
   },
   {
     name: "Olives",
-    customer: "Aceitunas",
-    kitchen: "ACEIT",
+    customer: "Marinated olives",
+    kitchen: "OLIV",
     price: "1.50",
     unit: "each",
     vat: "general",
@@ -192,8 +192,8 @@ const MENU: {
   // Sold only as its variant, the Wine glass (below).
   {
     name: "Wine",
-    customer: "Vino de la casa",
-    kitchen: "VINO",
+    customer: "House wine",
+    kitchen: "CARAFE",
     price: "18.00",
     unit: "each",
     vat: "general",
@@ -201,8 +201,8 @@ const MENU: {
   // Poured at the bar: routed to no preparation, so it is stamped sent and gets no kitchen item.
   {
     name: "Coffee",
-    customer: "Café solo",
-    kitchen: "CAFE",
+    customer: "Espresso",
+    kitchen: "SHOT",
     price: "1.50",
     unit: "each",
     vat: "general",
@@ -327,7 +327,7 @@ export async function provisionAdjustmentVenue(
         taxId: "62000003F",
         legalName: "Ajustes SL",
         location: {
-          name: "Sala",
+          name: "Dining room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Restaurante",
@@ -342,7 +342,7 @@ export async function provisionAdjustmentVenue(
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: fixturePinHash("1234"),
           passwordHash: fixturePasswordHash("dashPass123"),
           email: "owner@example.test",
@@ -368,7 +368,7 @@ export async function provisionAdjustmentVenue(
     const printer = await createPrinter(
       tx,
       { locationId: cfg.locationId },
-      { name: "Cocina", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
+      { name: "Kitchen printer", transport: "cloud_poll", pollId: `poll-${randomUUID()}` },
     );
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
@@ -376,12 +376,12 @@ export async function provisionAdjustmentVenue(
       printerId: printer.id,
     });
     const cat = await createCatalogue(tx, { name: `Adjustment menu ${cfg.locationId}` });
-    const platos = await createCategory(tx, { name: "Platos" });
+    const category = await createCategory(tx, { name: "Dishes" });
     const productIds = new Map<string, string>();
     for (const item of MENU) {
       const product = await createProduct(tx, {
         catalogueId: cat.id,
-        categoryId: platos.id,
+        categoryId: category.id,
         name: item.name,
         customerName: { [LOCALE]: item.customer },
         kitchenName: item.kitchen,
@@ -397,8 +397,8 @@ export async function provisionAdjustmentVenue(
       [
         {
           name: "Wine glass",
-          customerName: { es: "Copa de tinto" },
-          kitchenName: "COPA",
+          customerName: { es: "Glass of red" },
+          kitchenName: "GLASS",
           image: null,
           unitPrice: "4.00",
           available: true,
@@ -468,7 +468,10 @@ export async function provisionAdjustmentVenue(
     };
   });
   const [staffId, supervisorId, managerId] = seeded.people as [string, string, string];
-  const device = await enrolDeviceForTest(db, cfg, { name: "Barra", profileId: seeded.profileId });
+  const device = await enrolDeviceForTest(db, cfg, {
+    name: "Bar till",
+    profileId: seeded.profileId,
+  });
   const cookieOf = async (personId: string, pin: string) => {
     const session = await withTransaction(db, (tx) =>
       loginWithPin(tx, { deviceId: device.deviceId, personId, pin }),

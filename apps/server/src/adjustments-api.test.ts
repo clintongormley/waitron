@@ -153,7 +153,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect((await papers()).slice(1)).toEqual([
         expect.stringContaining(kitchenTicketWords("es").holdChanged),
       ]);
-      expect((await papers())[1]).toContain("CHULETA");
+      expect((await papers())[1]).toContain("RIBEYE");
       const removed = await send(
         venue.app,
         venue.cookie.staff,
@@ -175,7 +175,7 @@ describe("corrections through order actions on a station's printers", () => {
       expect((await papers()).slice(2)).toEqual([
         expect.stringContaining(kitchenTicketWords("es").holdCancelled),
       ]);
-      expect((await papers())[2]).toContain("CHULETA");
+      expect((await papers())[2]).toContain("RIBEYE");
     } finally {
       await inTx(venue, async (tx) => {
         await detachPrinterFromStation(
@@ -237,11 +237,11 @@ describe("corrections through order actions on a station's printers", () => {
         );
       const before = await Promise.all(printerIds.map(on));
       expect(before[0]).toHaveLength(1);
-      expect(printedLines(before[0]![0]!.payload).join(" ")).toContain("CHULETA");
-      expect(printedLines(before[0]![0]!.payload).join(" ")).toContain("CANA");
+      expect(printedLines(before[0]![0]!.payload).join(" ")).toContain("RIBEYE");
+      expect(printedLines(before[0]![0]!.payload).join(" ")).toContain("BEER");
       expect(before[1]).toHaveLength(1);
-      expect(printedLines(before[1]![0]!.payload).join(" ")).toContain("CHULETA");
-      expect(printedLines(before[1]![0]!.payload).join(" ")).not.toContain("CANA");
+      expect(printedLines(before[1]![0]!.payload).join(" ")).toContain("RIBEYE");
+      expect(printedLines(before[1]![0]!.payload).join(" ")).not.toContain("BEER");
       const beerVoid = await post(billId, {
         action: "cancel",
         ...(await todayLine(venue, billId, 2)),
@@ -252,7 +252,7 @@ describe("corrections through order actions on a station's printers", () => {
         jobs.filter((job) => !before[i]!.some((old) => old.id === job.id)),
       );
       expect(beerSlips[0]).toHaveLength(1);
-      expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain("CANA");
+      expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain("BEER");
       expect(printedLines(beerSlips[0]![0]!.payload).join(" ")).toContain(
         kitchenTicketWords("es").void,
       );
@@ -268,7 +268,7 @@ describe("corrections through order actions on a station's printers", () => {
           (job) => !afterBeer[i]!.some((old) => old.id === job.id),
         );
         expect(slips).toHaveLength(1);
-        expect(printedLines(slips[0]!.payload).join(" ")).toContain("CHULETA");
+        expect(printedLines(slips[0]!.payload).join(" ")).toContain("RIBEYE");
         expect(printedLines(slips[0]!.payload).join(" ")).toContain(kitchenTicketWords("es").void);
       }
     } finally {
@@ -1330,7 +1330,7 @@ describe("what the till reads", () => {
     const managers = await approvers("?roles=manager,admin");
     expect(managers.status).toBe(200);
     expect(managers.json).toEqual([
-      { personId: expect.any(String), displayName: "Administradora" },
+      { personId: expect.any(String), displayName: "Administrator" },
       { personId: venue.managerId, displayName: "Marta" },
     ]);
     const supervisors = await approvers("?roles=supervisor");

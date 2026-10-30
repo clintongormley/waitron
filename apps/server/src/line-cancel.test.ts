@@ -556,7 +556,7 @@ describe("Cancel item service command", () => {
           { kind: "void", lineName: "PIZZA", quantity: "2.000", wasStarted: false },
           {
             kind: "void",
-            lineName: expect.stringContaining("ACEIT"),
+            lineName: expect.stringContaining("OLIV"),
             quantity: "4.000",
             wasStarted: false,
           },
@@ -699,7 +699,7 @@ describe("Cancel item service command", () => {
       { kind: "void", lineName: "PIZZA", quantity: "2.000", wasStarted: false },
       {
         kind: "void",
-        lineName: expect.stringContaining("ACEIT"),
+        lineName: expect.stringContaining("OLIV"),
         quantity: "4.000",
         wasStarted: true,
       },
@@ -1146,14 +1146,14 @@ describe("Cancel item service command", () => {
       ).toEqual([]);
       expect(printed.map((job) => job.printerId)).toEqual([venue.printerId]);
       expect(printed[0]!.lines).toContain(`*** ${kitchenTicketWords("es").holdCancelled} ***`);
-      expect(printed[0]!.lines.join("\n")).toContain("1.000 x CHULETA");
+      expect(printed[0]!.lines.join("\n")).toContain("1.000 x RIBEYE");
       const told = async (stationId: string) =>
         (await inTx(venue, (tx) => listStationNotices(tx, venue.cfg, stationId)))
           .filter((notice) => notice.workingOrderId === order.billId)
           .map((notice) => ({ kind: notice.kind, lineName: notice.lineName }));
-      expect(await told(venue.stationId)).toEqual([{ kind: "void", lineName: "CHULETA" }]);
-      expect(await told(barId)).toEqual([{ kind: "void", lineName: "MERLUZA" }]);
-      expect(await told(screenId)).toEqual([{ kind: "void", lineName: "ENSAL" }]);
+      expect(await told(venue.stationId)).toEqual([{ kind: "void", lineName: "RIBEYE" }]);
+      expect(await told(barId)).toEqual([{ kind: "void", lineName: "HAKE" }]);
+      expect(await told(screenId)).toEqual([{ kind: "void", lineName: "GREENS" }]);
     } finally {
       await inTx(venue, async (tx) => {
         for (const cell of cells) await clearRoutingCell(tx, venue.cfg, cell);
@@ -1397,7 +1397,7 @@ describe("What a cancel records for refunds", () => {
         .map((row) => [row.kind, row.lineName, row.quantity, row.wasStarted]),
     ).toEqual([
       ["void", "PIZZA", "2.000", false],
-      ["void", expect.stringContaining("ACEIT"), "4.000", true],
+      ["void", expect.stringContaining("OLIV"), "4.000", true],
     ]);
     expect(await cancels(order)).toEqual([
       { chargeKept: false, preparationStarted: true, refundHandoff: false, refundValue: null },

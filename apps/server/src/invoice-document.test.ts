@@ -332,7 +332,7 @@ describe("stored invoice document projection", () => {
       total: "16.80",
       lines: [
         {
-          descriptions: { "es-ES": "Hamburguesa" },
+          descriptions: { "es-ES": "Beef burger" },
           quantity: "1",
           gross: "10.80",
           listGross: "12.00",
@@ -346,7 +346,7 @@ describe("stored invoice document projection", () => {
           adjustments: [{ kind: "discount", percentBp: 1000, amount: "1.20" }],
         },
         {
-          descriptions: { "es-ES": "Jamón ibérico" },
+          descriptions: { "es-ES": "Iberian ham" },
           quantity: "0.25",
           gross: "6.00",
           net: {
@@ -375,7 +375,10 @@ describe("stored invoice document projection", () => {
     expect(document.result.lines[1]).not.toHaveProperty("soldInEach");
     const [saved] = await suite.db.select().from(workingOrders).where(eq(workingOrders.id, billId));
     expect(document.result.orderLabel).toBe(saved!.label);
-    expect(document.receiptHeader).toMatchObject({ tradingName: "Sala", printTradingName: true });
+    expect(document.receiptHeader).toMatchObject({
+      tradingName: "Dining room",
+      printTradingName: true,
+    });
     expect(document.simulated).toBe(venue.cfg.practiceMode);
   });
 

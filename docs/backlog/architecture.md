@@ -467,6 +467,13 @@ until A977).
 - **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as does the split-extras venue's operation description.
+  The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English
+  customer-facing and kitchen names to its dishes and wine-glass variant, and English category,
+  printer, device, location and administrator names; it still keeps the staff names "Croquetas",
+  "Tortilla", "Pimientos" and "Cana", its legal name, street address and operation description,
+  its es-ES locale and its reasons' Spanish translations. Two of its suites keep their own Spanish
+  samples: the extra-cancel suite's "Hamburguesa completa", "Patatas fritas" and "Pepinillos", and
+  the apply suite's "Barra" counter zones.
   The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
   printer, course, dish, extra, note and table names to what it creates; it keeps the default
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
