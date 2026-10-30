@@ -22,7 +22,7 @@ export interface ClockWords {
   differDo: string;
   later: string;
   inUse: string;
-  nextMinute: string;
+  minuteTaken: string;
   newCodeIn: string;
   second: string;
   seconds: string;
@@ -55,7 +55,7 @@ export const clockWaitStrings = {
     later: "The series cannot be made yet: a later minute is already in use.",
     inUse:
       "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
-    nextMinute:
+    minuteTaken:
       "The auto-generated invoice series code (which is time-based) already exists in the database.",
     newCodeIn: "Generating a new code in:",
     second: "second",
@@ -76,7 +76,7 @@ export const clockWaitStrings = {
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     inUse:
       "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
-    nextMinute:
+    minuteTaken:
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     newCodeIn: "Generando un código nuevo en:",
     second: "segundo",
@@ -324,7 +324,7 @@ function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: bo
   return html`<section data-test="hour-wait">
     ${
       minuteTaken
-        ? html`<p role="status" data-test="minute-taken">${words.nextMinute}</p>`
+        ? html`<p role="status" data-test="minute-taken">${words.minuteTaken}</p>`
         : html`<p role="status">${words.whyWait}</p>`
     }
     <p>${words.nothingToDo}</p>

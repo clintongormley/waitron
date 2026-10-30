@@ -654,6 +654,42 @@ main at 21d01dfac gave the same result. A Cloud download may run for up to 14 mi
 (`apps/server/src/cloud-recovery.ts:121`). Not measured: whether a real box takes a fresh internet
 reading when it places the recovery. Next step: measure that on a box.
 
+## A1223. A stored series pick that turns out taken
+
+From A1207. An attempt whose chosen name is found taken before it finishes is refused
+(`minute_in_use`), and the person is not offered a way on. Start a new attempt by itself, and word
+the refusal where it shows at activation (the setup app's general message with the code,
+`apps/setup/src/setup-app.ts:2001-2008`). The setup-from-backup restore reuses its stored attempt
+when reopened (`apps/server/src/first-setup-backup-recovery.ts:893-899`), so a reload does not start
+one; `docs/operations/hour-recovery.md` said it did, which I believe predates A1207 (#1990,
+`3ba85c7a6`).
+
+## A1224. Delete the time floors the series choice no longer reads
+
+From A1207. `recordedTimeFloorMs`, the backup's `backup-created` floor and
+`readHourHistoryWithRecordFloor` are still worked out but nothing in the choice reads them. A
+backup's record keeps accepting `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`)
+until a check of shipped backups says it may stop.
+
+## A1225. A lost automatic clock re-check drops the setup and restore pages' wait
+
+From the A1207 review. When the page's own re-check fails with no refusal code (for example the
+network drops), the sentence and countdown go, the form shows its general error, Make the series is
+enabled again, and nothing checks again by itself (`ClockWait.settle`,
+`packages/fiscal-verifactu/src/setup/clock-wait.ts`, is quiet about such a failure only while it
+waits for a second clock). It happens at the end of the box's ordinary wait too, which I believe
+predates A1207 (#1990, `3ba85c7a6`); A1207's taken-minute re-check can now meet it with up to 2:30
+still showing. Keep the wait up and check again on the next tick instead.
+
+## A1226. Compare clocks on the restore page can choose a series name by itself
+
+From the A1207 finish-branch review. When the page's preview is refused because there is no second
+clock, the page starts its 15-second second-clock check, and once a second clock answers, that check
+sends a real `select` although Make the series was never pressed. This happens at A1207's base
+(`61625b0ab`) too; the code is from #1990 (`3ba85c7a6`). Make the page's own re-checks after a
+preview read-only, as A1207 did for a taken minute (`#compare` in
+`packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-29 ~10:38; A1206): Start again keeps no record of the names it

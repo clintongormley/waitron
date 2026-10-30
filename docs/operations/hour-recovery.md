@@ -112,7 +112,7 @@ ahead, and what it asks for:
   wrong, so ask for help. It does not retry by itself; press **Check again**
   (`recovery-hour.browser.test.ts`, "a clock refusal shows both readings and no countdown, and waits
   for Check again").
-- **The minute this box would use already has a series here**: after you press **Make the
+- **The minute this box would use is already taken**: after you press **Make the
   series**, the page says "The auto-generated invoice series code (which is time-based) already
   exists in the database." and "Generating a new code in: 3 minutes", counting down in minutes and
   seconds to the next free minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,

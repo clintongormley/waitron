@@ -138,9 +138,10 @@ Si la copia tiene ventas con una fecha posterior en más de un minuto a la hora 
 deja de cobrar al terminar la recuperación hasta que su reloj las alcance o se confirme su hora: consulta
 [Cuando se paran los cobros por la hora](box-status.md#clock-behind).
 
-Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si una comprobación
-lo impide, resuelve la causa e inténtalo de nuevo. No borres a mano los archivos del intento
-conservado ni edites sus registros de recuperación.
+Una clave que abre la copia no evita las comprobaciones del historial y del reloj. Si la comprobación
+del reloj lo impide, resuelve la causa e inténtalo de nuevo; si el minuto ya está en uso, la página
+espera sola. No borres a mano los archivos del intento conservado ni edites sus registros de
+recuperación.
 
 ## Si una recuperación se interrumpe {#resume}
 

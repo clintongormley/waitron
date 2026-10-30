@@ -482,35 +482,25 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1215. Correcting invoices issued under a wrong clock** (from A1207): a box can hold invoices
   dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
   corrects them, and what to do about them with AEAT is undesigned. Design first.
+
 - **A1223. A stored series pick that turns out taken** (from A1207): an attempt whose chosen name
   is found taken before it finishes is refused (`minute_in_use`), and the person is not offered a
-  way on. Start a new attempt by itself, and word the refusal where it shows at activation (the
-  setup app's general message with the code, `apps/setup/src/setup-app.ts:2001-2008`). The
-  setup-from-backup restore reuses its stored attempt when reopened
-  (`apps/server/src/first-setup-backup-recovery.ts:893-899`), so a reload does not start one;
-  `docs/operations/hour-recovery.md` said it did, which I believe predates A1207 (#1990,
-  `3ba85c7a6`).
-- **A1224. Delete the time floors the series choice no longer reads** (from A1207):
-  `recordedTimeFloorMs`, the backup's `backup-created` floor and `readHourHistoryWithRecordFloor`
-  are still worked out but nothing in the choice reads them. A backup's record keeps accepting
-  `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`) until a check of
-  shipped backups says it may stop.
+  way on. Start a new attempt by itself, and word the refusal where it shows at activation.
+  [Detail](backlog/setup.md#a1223-a-stored-series-pick-that-turns-out-taken)
+
+- **A1224. Delete the time floors the series choice no longer reads** (from A1207): they are still
+  worked out but nothing in the choice reads them.
+  [Detail](backlog/setup.md#a1224-delete-the-time-floors-the-series-choice-no-longer-reads)
+
 - **A1225. A lost automatic clock re-check drops the setup and restore pages' wait** (from A1207
-  review): when the page's own re-check fails with no refusal code (for example the network drops),
-  the sentence and countdown go, the form shows its general error, Make the series is enabled again,
-  and nothing checks again by itself (`ClockWait.settle`, `packages/fiscal-verifactu/src/setup/clock-wait.ts`,
-  is quiet about such a failure only while it waits for a second clock). It happens at the end of
-  the box's ordinary wait too, which I believe predates A1207 (#1990, `3ba85c7a6`); A1207's
-  taken-minute re-check can now meet it with up to 2:30 still showing. Keep the wait up and check
-  again on the next tick instead.
+  review): when the page's own re-check fails with no refusal code, the sentence and countdown go
+  and nothing checks again by itself. Keep the wait up and check again on the next tick instead.
+  [Detail](backlog/setup.md#a1225-a-lost-automatic-clock-re-check-drops-the-setup-and-restore-pages-wait)
+
 - **A1226. Compare clocks on the restore page can choose a series name by itself** (from the A1207
-  finish-branch review): when the page's preview is refused because there is no second clock, the
-  page starts its 15-second second-clock check, and once a second clock answers, that check sends a
-  real `select` although Make the series was never pressed. A probe that presses only Compare clocks
-  printed the requests `clock-challenge, compare-clocks, preview, clock-challenge, compare-clocks,
-  select`, at A1207's tip and at its base (`61625b0ab`); the code is from #1990 (`3ba85c7a6`).
-  Make the page's own re-checks after a preview read-only, as A1207 did for a taken minute
-  (`#compare` in `packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
+  finish-branch review): once a second clock answers, the page's 15-second second-clock check sends
+  a real `select` although Make the series was never pressed. Make those re-checks read-only.
+  [Detail](backlog/setup.md#a1226-compare-clocks-on-the-restore-page-can-choose-a-series-name-by-itself)
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
