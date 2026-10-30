@@ -108,7 +108,7 @@ async function seedPrintRouteFixture(db: Database) {
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: ["es-ES"],
       operationDescription: "Venta en establecimiento",
     })
@@ -217,7 +217,7 @@ it("refuses the retired venue-wide receipt mode write without changing the locat
 /** Accepts through the verb; the accept route is `join-api.ts`'s. */
 async function joinAndAccept(
   app: Hono,
-  label = "Cocina agent",
+  label = "Line kitchen agent",
 ): Promise<{ agentId: string; token: string }> {
   const { token, verificationNumber, joinId } = await knock(app, label);
   await withTransaction(suite.db, async (tx) => {
@@ -231,7 +231,7 @@ async function joinAndAccept(
 
 async function knock(
   app: Hono,
-  name = "Cocina agent",
+  name = "Line kitchen agent",
 ): Promise<{ token: string; verificationNumber: string; joinId: string }> {
   const res = await send(app, "POST", "/print-api/agent/join", { body: { name } });
   expect(res.status).toBe(201);
@@ -243,7 +243,11 @@ async function knock(
 }
 
 /** The create route ignores `agentId`; no agent binding is stored. */
-async function createPrinterVia(app: Hono, agentId: string, name = "Cocina"): Promise<string> {
+async function createPrinterVia(
+  app: Hono,
+  agentId: string,
+  name = "Kitchen printer",
+): Promise<string> {
   const res = await send(app, "POST", "/management-api/printers", {
     cookie: managerCookie,
     body: { name, transport: "network_tcp", agentId, host: "10.0.0.9" },
@@ -754,7 +758,7 @@ describe("mountPrintApi — agent claim + report", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const printerId = await createPrinterVia(app, agentId);
-    const payload = esc(WIDE).line("Mesa 4").cut().bytes();
+    const payload = esc(WIDE).line("Table 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
     const res = await send(app, "POST", "/print-api/agent/jobs", { bearer: token });
@@ -965,8 +969,8 @@ describe("POST /print-api/agent/jobs — inventory pull + discovery window", () 
     const { token } = await joinAndAccept(app);
     // Unique per test: the suite shares one location, and `local_key` is unique per location.
     const serial = `SN-${randomUUID()}`;
-    const printerId = await createUsbPrinter(app, serial, "Cocina USB");
-    const payload = esc(WIDE).line("Mesa 4").cut().bytes();
+    const printerId = await createUsbPrinter(app, serial, "Kitchen USB printer");
+    const payload = esc(WIDE).line("Table 4").cut().bytes();
     const jobId = await enqueue(printerId, payload);
 
     const blind = await pull(app, token, { visible: [], scanned: [] });
@@ -1668,7 +1672,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
   it("creates, lists, updates and deactivates a printer", async () => {
     const app = mountApp();
     const { agentId } = await joinAndAccept(app);
-    const printerId = await createPrinterVia(app, agentId, "Cocina");
+    const printerId = await createPrinterVia(app, agentId, "Kitchen printer");
 
     const list = await send(app, "GET", "/management-api/printers", { cookie: managerCookie });
     expect(list.status).toBe(200);
@@ -1679,11 +1683,11 @@ describe("mountPrintApi — management: printers CRUD", () => {
       host: string;
     }[];
     const mine = rows.find((r) => r.id === printerId)!;
-    expect(mine).toMatchObject({ name: "Cocina", host: "10.0.0.9", active: true });
+    expect(mine).toMatchObject({ name: "Kitchen printer", host: "10.0.0.9", active: true });
 
     const patch = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
       cookie: managerCookie,
-      body: { name: "Cocina 2", host: "10.0.0.20", ticketScope: "order" },
+      body: { name: "Kitchen printer 2", host: "10.0.0.20", ticketScope: "order" },
     });
     expect(patch.status).toBe(204);
     const afterPatch = await send(app, "GET", "/management-api/printers", {
@@ -1696,7 +1700,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
         host: string;
       }[]
     ).find((r) => r.id === printerId)!;
-    expect(patched).toMatchObject({ name: "Cocina 2", host: "10.0.0.20" });
+    expect(patched).toMatchObject({ name: "Kitchen printer 2", host: "10.0.0.20" });
     expect(patched).not.toHaveProperty("ticketScope");
 
     const deactivate = await send(app, "POST", `/management-api/printers/${printerId}/deactivate`, {
@@ -1722,7 +1726,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     expect(usb.status).toBe(201);
     const cloud = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Nube", transport: "cloud_poll", pollId: "poll-1" },
+      body: { name: "Cloud", transport: "cloud_poll", pollId: "poll-1" },
     });
     expect(cloud.status).toBe(201);
     const tcp = await send(app, "POST", "/management-api/printers", {
@@ -1884,7 +1888,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
-        name: "Estrecha",
+        name: "Narrow",
         transport: "network_tcp",
         host: "10.0.0.31",
         paperWidth: "58mm",
@@ -1892,7 +1896,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
     });
     expect(created.status).toBe(201);
     const { id } = (await created.json()) as { id: string };
-    const defaulted = await createNetworkPrinter(app, "10.0.0.32", 9100, "Por defecto");
+    const defaulted = await createNetworkPrinter(app, "10.0.0.32", 9100, "Defaulted");
     const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
       cookie: managerCookie,
       body: { resolution: "203dpi" },
@@ -1921,7 +1925,7 @@ describe("mountPrintApi — management: printers CRUD", () => {
       [
         "POST",
         "/management-api/printers",
-        { name: "Mala", transport: "network_tcp", host: "10.0.0.33", paperWidth: "70mm" },
+        { name: "Bad width", transport: "network_tcp", host: "10.0.0.33", paperWidth: "70mm" },
         "paperWidth",
       ],
       ["PATCH", `/management-api/printers/${id}`, { resolution: "300dpi" }, "resolution"],
@@ -1962,7 +1966,7 @@ describe("portable printers", () => {
   async function addPrinter(app: Hono, body: Record<string, unknown>): Promise<string> {
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Mano", transport: "network_tcp", host: "10.0.0.61", ...body },
+      body: { name: "Handheld", transport: "network_tcp", host: "10.0.0.61", ...body },
     });
     expect(created.status).toBe(201);
     return ((await created.json()) as { id: string }).id;
@@ -1979,11 +1983,11 @@ describe("portable printers", () => {
   it("names the device holding a portable printer and who is signed in on it", async () => {
     const app = mountApp();
     const id = await addPrinter(app, { host: "10.0.0.63", portable: true });
-    const deviceId = await seedHolder("Mano de Ana");
+    const deviceId = await seedHolder("Ana's handheld");
     await suite.db.insert(printerHolders).values({ printerId: id, deviceId });
     expect((await listed(app, id)).holder).toEqual({
       deviceId,
-      deviceName: "Mano de Ana",
+      deviceName: "Ana's handheld",
       personName: null,
     });
   });
@@ -2375,7 +2379,7 @@ describe("mountPrintApi — management: test-print", () => {
     "falls back to the venue language when user and browser have no preference (%s)",
     async (venueLocale) => {
       const app = mountApp({ venueLocale });
-      const printerId = await createNetworkPrinter(app, "10.0.0.41", 9100, `Prueba ${venueLocale}`);
+      const printerId = await createNetworkPrinter(app, "10.0.0.41", 9100, `Test ${venueLocale}`);
       const res = await send(app, "POST", `/management-api/printers/${printerId}/test-print`, {
         cookie: managerCookie,
       });
@@ -2550,11 +2554,11 @@ describe("mountPrintApi — management: print-test-page", () => {
 
   it("follows the printer's saved paper width: a 58mm and an 80mm printer differ", async () => {
     const app = mountApp({ now: () => NOW });
-    const narrow = await savedPrinter(app, "10.0.0.121", "Estrecha", {
+    const narrow = await savedPrinter(app, "10.0.0.121", "Narrow", {
       paperWidth: "58mm",
       resolution: "203dpi",
     });
-    const wide = await savedPrinter(app, "10.0.0.122", "Ancha", {
+    const wide = await savedPrinter(app, "10.0.0.122", "Wide", {
       paperWidth: "80mm",
       resolution: "203dpi",
     });
@@ -2576,7 +2580,7 @@ describe("mountPrintApi — management: print-test-page", () => {
 
   it("sends no drawer pulse, even to a printer with a cash drawer attached", async () => {
     const app = mountApp();
-    const printerId = await savedPrinter(app, "10.0.0.123", "Con cajón", { hasCashDrawer: true });
+    const printerId = await savedPrinter(app, "10.0.0.123", "With drawer", { hasCashDrawer: true });
     const res = await send(app, "POST", `/management-api/printers/${printerId}/print-test-page`, {
       cookie: managerCookie,
     });
@@ -2589,7 +2593,7 @@ describe("mountPrintApi — management: print-test-page", () => {
 
   it("refuses an unknown or a deactivated printer with 404 printer.not_found", async () => {
     const app = mountApp();
-    const deactivated = await createNetworkPrinter(app, "10.0.0.124", 9100, "Apagada");
+    const deactivated = await createNetworkPrinter(app, "10.0.0.124", 9100, "Switched off");
     const off = await send(app, "POST", `/management-api/printers/${deactivated}/deactivate`, {
       cookie: managerCookie,
     });
@@ -2614,7 +2618,7 @@ describe("mountPrintApi — management: print-test-page", () => {
 
   it("refuses no session with 401 and a staff session with 403", async () => {
     const app = mountApp();
-    const printerId = await createNetworkPrinter(app, "10.0.0.125", 9100, "Sin sesión");
+    const printerId = await createNetworkPrinter(app, "10.0.0.125", 9100, "No session");
     const path = `/management-api/printers/${printerId}/print-test-page`;
     const anonymous = await send(app, "POST", path);
     expect(anonymous.status).toBe(401);
@@ -2684,7 +2688,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
-        name: "Vista 58",
+        name: "Preview 58",
         transport: "network_tcp",
         host: "10.0.0.42",
         paperWidth: "58mm",
@@ -2722,7 +2726,7 @@ describe("mountPrintApi — management: recent jobs", () => {
       unsupported: false,
       truncated: false,
     });
-    const wide = await createNetworkPrinter(app, "10.0.0.43", 9100, "Vista 80");
+    const wide = await createNetworkPrinter(app, "10.0.0.43", 9100, "Preview 80");
     const wideJob = await enqueue(wide, esc(WIDE).init().line("x").bytes());
     const widePreview = await send(app, "GET", `/management-api/print-jobs/${wideJob}/preview`, {
       cookie: managerCookie,
@@ -2735,7 +2739,7 @@ describe("mountPrintApi — management: recent jobs", () => {
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
       body: {
-        name: "Vista 80 nueva",
+        name: "New preview 80",
         transport: "network_tcp",
         host: "10.0.0.44",
         paperWidth: "80mm",
@@ -3101,7 +3105,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
         "usb",
         { transport: "wifi", localKey: "wifi-1" },
         { transport: "usb", localKey: 42 },
-        { transport: "bluetooth", localKey: btKey, name: "Bolsillo" },
+        { transport: "bluetooth", localKey: btKey, name: "Pocket" },
       ],
       scanned: [
         null,
@@ -3118,7 +3122,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
         agentName: "Screening agent",
         transport: "bluetooth",
         localKey: btKey,
-        name: "Bolsillo",
+        name: "Pocket",
         alreadyRegistered: false,
         printerId: null,
         lastSeenAt: undefined,
@@ -3141,11 +3145,11 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const btKey = `BT-${randomUUID()}`;
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: btKey },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: btKey },
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 2").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 2").cut().bytes());
 
     const blind = await pull(app, token, { visible: [], scanned: [] });
     expect(blind.jobs.filter((job) => job.printerId === printerId)).toEqual([]);
@@ -3162,10 +3166,10 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const mac = lowerMac().toUpperCase();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: mac },
     });
     const { id: printerId } = (await created.json()) as { id: string };
-    return { mac, jobId: await enqueue(printerId, esc(WIDE).line("Mesa 2").cut().bytes()) };
+    return { mac, jobId: await enqueue(printerId, esc(WIDE).line("Table 2").cut().bytes()) };
   }
 
   it.each([false, "false", null, 0, [], {}].map((value) => [value]))(
@@ -3242,15 +3246,15 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const mac = lowerMac().toUpperCase();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: mac },
     });
     return { mac, printerId: ((await created.json()) as { id: string }).id };
   }
 
   it("leaves a paired bluetooth printer's job for another box that reported it can print to it within fifteen seconds", async () => {
     const app = mountApp();
-    const printing = await joinAndAccept(app, "Barra agent");
-    const blind = await joinAndAccept(app, "Cocina agent");
+    const printing = await joinAndAccept(app, "Back bar agent");
+    const blind = await joinAndAccept(app, "Line kitchen agent");
     const { mac, printerId } = await bluetoothPrinter(app);
     // The same device in the same pull's scan must not wipe what the visible report said.
     await pull(app, printing.token, {
@@ -3258,7 +3262,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       scanned: [{ transport: "bluetooth", localKey: mac }],
       pairedBluetooth: [{ localKey: mac }],
     });
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 6").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 6").cut().bytes());
 
     await pull(app, blind.token, {
       visible: [],
@@ -3275,8 +3279,8 @@ describe("agent inventory screening and the discovered-printer list", () => {
 
   it("keeps the job queued when the other box's visible report expires", async () => {
     const app = mountApp();
-    const printing = await joinAndAccept(app, "Barra agent");
-    const blind = await joinAndAccept(app, "Cocina agent");
+    const printing = await joinAndAccept(app, "Back bar agent");
+    const blind = await joinAndAccept(app, "Line kitchen agent");
     const { mac, printerId } = await bluetoothPrinter(app);
     const reportedAt = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(reportedAt);
@@ -3284,7 +3288,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
       visible: [{ transport: "bluetooth", localKey: mac }],
       pairedBluetooth: [{ localKey: mac }],
     });
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 7").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 7").cut().bytes());
 
     vi.spyOn(Date, "now").mockReturnValue(reportedAt + 15_001);
     await pull(app, blind.token, {
@@ -3301,14 +3305,14 @@ describe("agent inventory screening and the discovered-printer list", () => {
 
   it("keeps the job queued when neither box reports the printer visible", async () => {
     const app = mountApp();
-    const other = await joinAndAccept(app, "Barra agent");
-    const blind = await joinAndAccept(app, "Cocina agent");
+    const other = await joinAndAccept(app, "Back bar agent");
+    const blind = await joinAndAccept(app, "Line kitchen agent");
     const { mac, printerId } = await bluetoothPrinter(app);
     await pull(app, other.token, {
       visible: [],
       pairedBluetooth: [{ localKey: mac }],
     });
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 8").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 8").cut().bytes());
 
     await pull(app, blind.token, {
       visible: [],
@@ -3362,10 +3366,10 @@ describe("agent inventory screening and the discovered-printer list", () => {
 
   it("leaves the job when the other box reports it can print to the printer while this box's pull waits for the write lock", async () => {
     const app = mountApp();
-    const printing = await joinAndAccept(app, "Barra agent");
-    const blind = await joinAndAccept(app, "Cocina agent");
+    const printing = await joinAndAccept(app, "Back bar agent");
+    const blind = await joinAndAccept(app, "Line kitchen agent");
     const { mac, printerId } = await bluetoothPrinter(app);
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 9").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 9").cut().bytes());
 
     // Both pulls are past authentication, which takes the write lock, before a writer is held.
     const blindPull = heldPull(app, blind.token);
@@ -3442,13 +3446,13 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const mac = lowerMac();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: mac },
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -3476,7 +3480,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     const { token } = await joinAndAccept(app);
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: `BT-${randomUUID()}` },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: `BT-${randomUUID()}` },
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
@@ -3488,7 +3492,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(edited.status).toBe(204);
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 4").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -3506,7 +3510,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
     expect(edited.status).toBe(204);
     expect(await storedKey(app, printerId)).toBe(mac.toUpperCase());
 
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 5").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 5").cut().bytes());
     expect(await claimedFor(app, token, printerId, mac.toUpperCase())).toEqual([jobId]);
   });
 
@@ -3564,7 +3568,7 @@ describe("agent inventory screening and the discovered-printer list", () => {
 describe("printer layout and calibration requests", () => {
   it("patches a printer's paper width", async () => {
     const app = mountApp();
-    const id = await createNetworkPrinter(app, "10.0.0.46", 9100, "Ancho");
+    const id = await createNetworkPrinter(app, "10.0.0.46", 9100, "Wide");
     const patched = await send(app, "PATCH", `/management-api/printers/${id}`, {
       cookie: managerCookie,
       body: { paperWidth: "58mm" },
@@ -3578,7 +3582,7 @@ describe("printer layout and calibration requests", () => {
 
   it("refuses a sample receipt with no resolution", async () => {
     const app = mountApp();
-    const printerId = await createNetworkPrinter(app, "10.0.0.47", 9100, "Sin resolucion");
+    const printerId = await createNetworkPrinter(app, "10.0.0.47", 9100, "No resolution");
     const sample = await send(app, "POST", `/management-api/printers/${printerId}/sample-receipt`, {
       cookie: managerCookie,
       body: { paperWidth: "80mm" },
@@ -3931,7 +3935,7 @@ describe("Bluetooth Pair and Forget commands", () => {
     const app = mountApp();
     const { agentId, token } = await joinAndAccept(app);
     const mac = randomMac();
-    await pull(app, token, { pairedBluetooth: [{ localKey: mac, name: "Bolsillo" }] });
+    await pull(app, token, { pairedBluetooth: [{ localKey: mac, name: "Pocket" }] });
 
     const res = await command(app, agentId, "forget", { address: mac, pin: PIN });
     expect(res.status).toBe(202);
@@ -3942,14 +3946,14 @@ describe("Bluetooth Pair and Forget commands", () => {
 
     const reason = `Failed to remove device: ${"x".repeat(600)}`;
     await pull(app, token, {
-      pairedBluetooth: [{ localKey: mac, name: "Bolsillo" }],
+      pairedBluetooth: [{ localKey: mac, name: "Pocket" }],
       bluetoothOutcomes: [{ id: queued.id, ok: false, error: reason }],
     });
     const row = (await discoveredRows(app)).find((r) => r.localKey === mac);
     expect(row).toMatchObject({
       agentId,
       transport: "bluetooth",
-      name: "Bolsillo",
+      name: "Pocket",
       paired: true,
       bluetoothCommand: {
         id: queued.id,
@@ -4130,10 +4134,10 @@ describe("Bluetooth Pair and Forget commands", () => {
     const mac = randomMac();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: mac },
     });
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 7").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 7").cut().bytes());
 
     const reply = await pull(app, token, {
       visible: [{ transport: "bluetooth", localKey: mac.toLowerCase() }],
@@ -4189,16 +4193,16 @@ describe("Bluetooth Pair and Forget commands", () => {
     const mac = randomMac();
     const created = await send(app, "POST", "/management-api/printers", {
       cookie: managerCookie,
-      body: { name: "Bolsillo", transport: "bluetooth", localKey: mac },
+      body: { name: "Pocket printer", transport: "bluetooth", localKey: mac },
     });
     expect(created.status).toBe(201);
     const { id: printerId } = (await created.json()) as { id: string };
-    const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 5").cut().bytes());
+    const jobId = await enqueue(printerId, esc(WIDE).line("Table 5").cut().bytes());
 
     const reply = await pull(app, token, {
       visible: [],
       scanned: [],
-      pairedBluetooth: [{ localKey: mac.toLowerCase(), name: "Bolsillo" }],
+      pairedBluetooth: [{ localKey: mac.toLowerCase(), name: "Pocket" }],
     });
     expect(reply.jobs.filter((job) => job.printerId === printerId)).toEqual([]);
     expect((await jobRow(jobId)).status).toBe("queued");
@@ -4207,10 +4211,10 @@ describe("Bluetooth Pair and Forget commands", () => {
     expect(rows.map((r) => ({ ...r, lastSeenAt: undefined }))).toEqual([
       {
         agentId,
-        agentName: "Cocina agent",
+        agentName: "Line kitchen agent",
         transport: "bluetooth",
         localKey: mac,
-        name: "Bolsillo",
+        name: "Pocket",
         paired: true,
         alreadyRegistered: true,
         printerId,
@@ -4226,14 +4230,14 @@ describe("Bluetooth Pair and Forget commands", () => {
     const start = Date.now();
     vi.spyOn(Date, "now").mockReturnValue(start);
     await pull(app, token, {
-      scanned: [scannedMac(mac, { name: "Impresora", printerLike: true, make: "Epson" })],
+      scanned: [scannedMac(mac, { name: "Scanned printer", printerLike: true, make: "Epson" })],
     });
     vi.spyOn(Date, "now").mockReturnValue(start + 10_000);
     await pull(app, token, { pairedBluetooth: [{ localKey: mac, name: "Other name" }] });
 
     vi.spyOn(Date, "now").mockReturnValue(start + 20_000);
     expect((await discoveredRows(app)).find((r) => r.localKey === mac)).toMatchObject({
-      name: "Impresora",
+      name: "Scanned printer",
       make: "Epson",
       printerLike: true,
       paired: true,
@@ -4309,7 +4313,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const bystanderMac = randomMac();
       const printerId = await registerBluetooth(app, mac);
       const bystanderId = await registerBluetooth(app, bystanderMac);
-      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       expect(await isActive(printerId)).toBe(true);
 
@@ -4404,9 +4408,9 @@ describe("Bluetooth Pair and Forget commands", () => {
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
       const bystanderId = await registerBluetooth(app, randomMac());
-      const first = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
-      const second = await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
-      const bystanderJob = await enqueue(bystanderId, esc(WIDE).line("Mesa 5").cut().bytes());
+      const first = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
+      const second = await enqueue(printerId, esc(WIDE).line("Table 4").cut().bytes());
+      const bystanderJob = await enqueue(bystanderId, esc(WIDE).line("Table 5").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
 
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
@@ -4447,7 +4451,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
 
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: false, error: "Not available" }] });
@@ -4468,7 +4472,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const id = await queueUnpair(app, holder.agentId, holder.token, mac);
       await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
       // Enqueued after the other box's pull, so that pull has not claimed it.
-      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
 
       await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
 
@@ -4490,7 +4494,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       await pull(app, other.token, { visible: [{ transport: "bluetooth", localKey: mac }] });
       vi.spyOn(Date, "now").mockReturnValue(start + 15_001);
       const id = await queueUnpair(app, holder.agentId, holder.token, mac);
-      const jobId = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const jobId = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
 
       await pull(app, holder.token, { bluetoothOutcomes: [{ id, ok: true }] });
 
@@ -4502,7 +4506,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
       const reactivated = await send(app, "PATCH", `/management-api/printers/${printerId}`, {
@@ -4519,7 +4523,7 @@ describe("Bluetooth Pair and Forget commands", () => {
 
       expect(await alertsFor(later)).toEqual([]);
 
-      await enqueue(printerId, esc(WIDE).line("Mesa 4").cut().bytes());
+      await enqueue(printerId, esc(WIDE).line("Table 4").cut().bytes());
       expect(await alertsFor(later)).toMatchObject([
         { code: "printer.jobs_waiting", params: { count: 1 } },
       ]);
@@ -4530,7 +4534,7 @@ describe("Bluetooth Pair and Forget commands", () => {
       const { agentId, token } = await joinAndAccept(app);
       const mac = randomMac();
       const printerId = await registerBluetooth(app, mac);
-      const stale = await enqueue(printerId, esc(WIDE).line("Mesa 3").cut().bytes());
+      const stale = await enqueue(printerId, esc(WIDE).line("Table 3").cut().bytes());
       const id = await queueUnpair(app, agentId, token, mac);
       await pull(app, token, { bluetoothOutcomes: [{ id, ok: true }] });
 
@@ -4865,7 +4869,7 @@ describe("a deleted printer's job history", () => {
       },
     });
     const { id: original } = (await created.json()) as { id: string };
-    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).init().line("Mesa 7").bytes();
+    const narrow = esc({ paperWidth: "58mm", resolution: "203dpi" }).init().line("Table 7").bytes();
     const printed = await enqueue(original, narrow);
     const exhausted = await enqueue(original, esc(WIDE).line("lost").bytes());
     await finish(printed, "done");
@@ -4927,7 +4931,7 @@ describe("a deleted printer's job history", () => {
       cookie: managerCookie,
     });
     expect(preview.status).toBe(200);
-    expect(await preview.json()).toMatchObject({ widthDots: 384, text: "Mesa 7\n" });
+    expect(await preview.json()).toMatchObject({ widthDots: 384, text: "Table 7\n" });
 
     const jobsBefore = await suite.db.select({ id: printJobs.id }).from(printJobs);
     const resend = await send(app, "POST", `/management-api/print-jobs/${printed}/resend`, {
@@ -4955,8 +4959,8 @@ describe("a deleted printer's alerts", () => {
       { stationId: station.id, printerId: deleted },
       { stationId: station.id, printerId: live },
     ]);
-    const oldJob = await enqueue(deleted, esc(WIDE).line("Mesa 1").cut().bytes());
-    await enqueue(live, esc(WIDE).line("Mesa 2").cut().bytes());
+    const oldJob = await enqueue(deleted, esc(WIDE).line("Table 1").cut().bytes());
+    await enqueue(live, esc(WIDE).line("Table 2").cut().bytes());
     const kept = () =>
       suite.db
         .select({ id: printJobs.id, printerId: printJobs.printerId, payload: printJobs.payload })

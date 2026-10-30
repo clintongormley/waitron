@@ -6245,7 +6245,14 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   only English names. The print-problems suite (`apps/server/src/print-problems.test.ts`)
   gives English location, menu, category, station, printer and table names to what it creates,
   and names its kitchen station itself instead of taking the shared seed's default "Cocina"; it
-  keeps its es-ES locale and the operation description "Restaurante". The fiscal sale-path
+  keeps its es-ES locale and the operation description "Restaurante". The print API suite
+  (`apps/server/src/print-api.test.ts`) gives English location, printer, print-agent, table and
+  handheld-device names to what it creates, and names a registered printer apart from the name a
+  box reports for the same device; it keeps its es-ES locale, the operation description "Venta en
+  establecimiento", the "Café 12,50 €" line its preview case reads back and its Spanish date
+  check. The kitchen suite (`apps/server/src/kitchen.test.ts`) gives English location, station and
+  course names to what it creates; it keeps its es-ES locale, the operation description "Venta en
+  establecimiento" and its Spanish alphabetical-order case. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
