@@ -117,7 +117,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
     }),
   );
   const made = await withTransaction(suite.db, (tx) =>
-    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Cocina" }),
+    createJoinRequest(tx, venue.cfg, { kind: "device", label: "Kitchen" }),
   );
   const send = (verb: "check" | "accept", body: unknown) =>
     app.request(`/management-api/device-join-requests/${made.joinId}/${verb}`, {
@@ -130,7 +130,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
       .status,
   ).toBe(204);
   const malformed = await send("accept", {
-    name: "Cocina",
+    name: "Kitchen",
     profileId: profile!.id,
     kitchenScreens: [{ kind: "station", stationIds: "all", zoneIds: null }],
   });
@@ -139,7 +139,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
     error: { code: "management.request_invalid", params: { field: "kitchenScreens" } },
   });
   const notOffered = await send("accept", {
-    name: "Cocina",
+    name: "Kitchen",
     profileId: profile!.id,
     kitchenScreens: [{ kind: "pass", stationIds: null, zoneIds: null }],
   });
@@ -148,7 +148,7 @@ it("join approval gives a device the kitchen screens the accept names, refusing 
     error: { code: "kitchen_screen.not_allowed", params: { screen: "pass" } },
   });
   const accepted = await send("accept", {
-    name: "Cocina",
+    name: "Kitchen",
     profileId: profile!.id,
     kitchenScreens: [{ kind: "station", stationIds: [venue.defaultStationId], zoneIds: null }],
   });
@@ -174,8 +174,8 @@ it("join approval refuses a zone the profile's pass screen does not offer with k
   const [offered, other] = await suite.db
     .insert(floorZones)
     .values([
-      { locationId: venue.cfg.locationId, name: "Terraza" },
-      { locationId: venue.cfg.locationId, name: "Barra" },
+      { locationId: venue.cfg.locationId, name: "Terrace" },
+      { locationId: venue.cfg.locationId, name: "Bar" },
     ])
     .returning({ id: floorZones.id });
   const [profile] = await suite.db

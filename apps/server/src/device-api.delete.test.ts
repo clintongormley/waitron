@@ -96,7 +96,7 @@ async function enrol(
   app: Hono,
   venue: Venue,
   pairingMode: PairingMode,
-  name = "Barra",
+  name = "Bar",
 ): Promise<{ deviceId: string; jar: string }> {
   const profileId = await seedProfile();
   const hold = pairingMode.open();
@@ -128,7 +128,7 @@ async function paymentInProgress(venue: Venue, deviceId: string): Promise<void> 
     id: orderId,
     zoneId: offers.zoneId,
     lines: offers.toOfferLines([{ productId: venue.cafeId, quantity: "1" }]),
-    label: "Mesa 1",
+    label: "Table 1",
   });
   await suite.db.insert(payments).values({
     workingOrderId: orderId,
@@ -255,14 +255,14 @@ describe("device delete routes", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId } = await enrol(app, venue, mode, "Terraza");
+    const { deviceId } = await enrol(app, venue, mode, "Terrace");
     await openTillSession(deviceId);
 
     const read = await send(app, "GET", impactPath(deviceId), { cookie: venue.managerCookie });
     expect(read.status).toBe(200);
     const before = (await read.json()) as DeleteImpact;
     expect(before).toEqual({
-      target: { id: deviceId, name: "Terraza" },
+      target: { id: deviceId, name: "Terrace" },
       refusals: [],
       ends: [{ key: "sessions", count: 1, targets: [] }],
       removes: [],
@@ -354,7 +354,7 @@ describe("device delete routes", () => {
     const hold = mode.open();
     const knock = await send(app, "POST", "/api/device/join", {
       cookie: jar,
-      body: { name: "Barra" },
+      body: { name: "Bar" },
     });
     expect(knock.status).toBe(200);
     expect(((await knock.json()) as { joinId: string }).joinId).toBe(deviceId);
@@ -376,9 +376,9 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const gone = await enrol(app, venue, mode, "Barra");
-    const disabled = await enrol(app, venue, mode, "Terraza");
-    await enrol(app, venue, mode, "Cocina");
+    const gone = await enrol(app, venue, mode, "Bar");
+    const disabled = await enrol(app, venue, mode, "Terrace");
+    await enrol(app, venue, mode, "Kitchen");
     await deleteThroughRoute(app, venue, gone.deviceId);
     const revoked = await send(app, "POST", `${devicePath(disabled.deviceId)}/revoke`, {
       cookie: venue.managerCookie,
@@ -402,8 +402,8 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId } = await enrol(app, venue, mode, "Barra");
-    const control = await enrol(app, venue, mode, "Terraza");
+    const { deviceId } = await enrol(app, venue, mode, "Bar");
+    const control = await enrol(app, venue, mode, "Terrace");
     await deleteThroughRoute(app, venue, deviceId);
 
     const editBody = async (id: string, name: string) => ({
@@ -416,11 +416,11 @@ describe("a deleted device", () => {
     // body's.
     const live = await send(app, "PATCH", devicePath(control.deviceId), {
       cookie: venue.managerCookie,
-      body: await editBody(control.deviceId, "Terraza 2"),
+      body: await editBody(control.deviceId, "Terrace 2"),
     });
     expect(live.status).toBe(204);
 
-    const body = await editBody(deviceId, "Barra 2");
+    const body = await editBody(deviceId, "Bar 2");
     const state = await snapshot();
     for (const [method, path, sent] of [
       ["POST", `${devicePath(deviceId)}/revoke`, undefined],
@@ -441,13 +441,13 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId, jar } = await enrol(app, venue, mode, "Barra");
+    const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
     await deleteThroughRoute(app, venue, deviceId);
 
     const hold = mode.open();
     const knock = await send(app, "POST", "/api/device/join", {
       cookie: jar,
-      body: { name: "Barra" },
+      body: { name: "Bar" },
     });
     expect(knock.status).toBe(200);
     const { joinId } = (await knock.json()) as { joinId: string };
@@ -463,7 +463,7 @@ describe("a deleted device", () => {
 
     const profileId = await seedProfile();
     await withTransaction(suite.db, (tx) =>
-      acceptDeviceJoinRequest(tx, venue.cfg, joinId, { label: "Barra", profileId }),
+      acceptDeviceJoinRequest(tx, venue.cfg, joinId, { label: "Bar", profileId }),
     );
     mode.release(hold.holdId);
     expect(await deviceCount()).toBe(2);
@@ -497,7 +497,7 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId, jar } = await enrol(app, venue, mode, "Barra");
+    const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
     const revoked = await send(app, "POST", `${devicePath(deviceId)}/revoke`, {
       cookie: venue.managerCookie,
     });
@@ -509,7 +509,7 @@ describe("a deleted device", () => {
     const before = await deviceRow(deviceId);
     const code = await codeOf(() =>
       withTransaction(suite.db, (tx) =>
-        createJoinRequest(tx, venue.cfg, { kind: "device", label: "Barra", returning: proof }),
+        createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar", returning: proof }),
       ),
     );
 
@@ -523,14 +523,14 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId } = await enrol(app, venue, mode, "Barra");
+    const { deviceId } = await enrol(app, venue, mode, "Bar");
     await deleteThroughRoute(app, venue, deviceId);
     await suite.db.insert(joinRequests).values({
       id: deviceId,
       nodeId: venue.cfg.nodeId,
       locationId: venue.cfg.locationId,
       kind: "device",
-      label: "Barra",
+      label: "Bar",
       tokenHash: hashSecret("a token"),
       verificationNumber: "41",
       decoyNumbers: ["42", "43"],
@@ -540,7 +540,7 @@ describe("a deleted device", () => {
 
     const code = await codeOf(() =>
       withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, venue.cfg, deviceId, { label: "Barra", profileId }),
+        acceptDeviceJoinRequest(tx, venue.cfg, deviceId, { label: "Bar", profileId }),
       ),
     );
 
@@ -555,11 +555,11 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId } = await enrol(app, venue, mode, "Barra");
+    const { deviceId } = await enrol(app, venue, mode, "Bar");
     await deleteThroughRoute(app, venue, deviceId);
 
     const { holdId } = mode.open();
-    const knock = await send(app, "POST", "/api/device/join", { body: { name: "Nueva" } });
+    const knock = await send(app, "POST", "/api/device/join", { body: { name: "New" } });
     expect(knock.status).toBe(200);
     const { joinId, verificationNumber } = (await knock.json()) as {
       joinId: string;
@@ -583,14 +583,14 @@ describe("a deleted device", () => {
       app,
       "POST",
       `/management-api/device-join-requests/${joinId}/accept`,
-      { cookie: venue.managerCookie, body: { name: "Barra", profileId } },
+      { cookie: venue.managerCookie, body: { name: "Bar", profileId } },
     );
     expect(accepted.status).toBe(200);
 
     const named = await suite.db
       .select({ id: devices.id, locationId: devices.locationId })
       .from(devices)
-      .where(eq(devices.label, "Barra"));
+      .where(eq(devices.label, "Bar"));
     expect(named.map((row) => row.id).sort()).toEqual([deviceId, joinId].sort());
     expect(new Set(named.map((row) => row.locationId))).toEqual(new Set([venue.cfg.locationId]));
     await expectStillDeleted(deviceId);
@@ -612,7 +612,7 @@ describe("a deleted device", () => {
         return at;
       },
     });
-    const { deviceId, jar } = await enrol(app, venue, mode, "Barra");
+    const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
     deleteOnRead = deviceId;
 
     const res = await send(app, "PUT", "/api/device/battery", {
@@ -634,7 +634,7 @@ describe("a deleted device", () => {
     const venue = await setupVenue(suite.db);
     const mode = createPairingMode();
     const app = mountApp(venue.cfg, mode);
-    const { deviceId, jar } = await enrol(app, venue, mode, "Barra");
+    const { deviceId, jar } = await enrol(app, venue, mode, "Bar");
     await deleteThroughRoute(app, venue, deviceId);
     const realHash = hashSecret(parseDeviceCookie(cookieValue(jar))!.token);
     await suite.db.update(devices).set({ tokenHash: realHash }).where(eq(devices.id, deviceId));
@@ -642,7 +642,7 @@ describe("a deleted device", () => {
     const hold = mode.open();
     const knock = await send(app, "POST", "/api/device/join", {
       cookie: jar,
-      body: { name: "Barra" },
+      body: { name: "Bar" },
     });
     mode.release(hold.holdId);
 

@@ -411,7 +411,7 @@ describe("GET /management-api/join-requests", () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const device = await knock(venue, { kind: "device", label: "Bar till" });
-    await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
 
     const res = await send(app, "GET", "/management-api/join-requests?kind=device", {
       cookie: venue.managerCookie,
@@ -434,7 +434,7 @@ describe("GET /management-api/join-requests", () => {
   it("lists the print_agent kind under printer.manage, not device.manage", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     await knock(venue, { kind: "device", label: "Bar till" });
 
     const res = await send(app, "GET", "/management-api/join-requests?kind=print_agent", {
@@ -444,7 +444,7 @@ describe("GET /management-api/join-requests", () => {
       {
         id: agent.joinId,
         kind: "print_agent",
-        label: "Cocina agent",
+        label: "Kitchen agent",
         createdAt: expect.any(String),
       },
     ]);
@@ -502,7 +502,7 @@ describe("GET /management-api/join-requests/:id/challenge", () => {
   it("takes its permission from the row's kind", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const ok = await send(app, "GET", `/management-api/join-requests/${agent.joinId}/challenge`, {
       cookie: venue.managerCookie,
     });
@@ -553,7 +553,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const made = await knock(venue, { kind: "device", label: "Bar till" });
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const unnamed = await send(app, "POST", `/management-api/join-requests/${made.joinId}/deny`, {
       cookie: venue.managerCookie,
     });
@@ -576,7 +576,7 @@ describe("POST /management-api/join-requests/:id/deny", () => {
   it("denies a print_agent request under printer.manage", async () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const refused = await send(app, "POST", `/management-api/join-requests/${agent.joinId}/deny`, {
       cookie: venue.staffCookie,
     });
@@ -746,7 +746,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app } = openApp(venue.cfg);
     const profileId = await seedProfile("kds");
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -754,7 +754,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       {
         cookie: venue.managerCookie,
         body: {
-          name: "Cocina agent",
+          name: "Kitchen agent",
           profileId,
           kitchenScreens: [stationScreen(venue)],
         },
@@ -801,8 +801,8 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = openApp(venue.cfg);
     const profileId = await seedProfile("till");
-    await enrolDeviceForTest(suite.db, venue.cfg, { name: "Caja nueva", profileId });
-    const made = await knock(venue, { kind: "device", label: "Caja nueva" });
+    await enrolDeviceForTest(suite.db, venue.cfg, { name: "New till", profileId });
+    const made = await knock(venue, { kind: "device", label: "New till" });
     await claimFor(app, venue, made, holdId);
     const res = await send(
       app,
@@ -810,7 +810,7 @@ describe("POST /management-api/device-join-requests/:id/accept", () => {
       `/management-api/device-join-requests/${made.joinId}/accept`,
       {
         cookie: venue.managerCookie,
-        body: { name: "Caja nueva", profileId },
+        body: { name: "New till", profileId },
       },
     );
     expect(res.status).toBe(409);
@@ -972,7 +972,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   it("enrols the agent when the number matches, and the request is consumed", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -987,7 +987,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       .select({ name: printAgents.name, active: printAgents.active })
       .from(printAgents)
       .where(eq(printAgents.id, made.joinId));
-    expect(rows[0]).toMatchObject({ name: "Cocina agent", active: true });
+    expect(rows[0]).toMatchObject({ name: "Kitchen agent", active: true });
   });
 
   it("a wrong number is 400 device.join_mismatch, no print_agents row, and the request is gone on a FRESH retry", async () => {
@@ -995,7 +995,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     const app = mountApp(venue.cfg);
     const made = await knock(venue, {
       kind: "print_agent",
-      label: "Cocina agent",
+      label: "Kitchen agent",
       numbers: () => 42,
     });
     const path = `/management-api/print-agent-join-requests/${made.joinId}/accept`;
@@ -1032,13 +1032,13 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
     expect((await errorOf(asPrint)).code).toBe("join_request.not_found");
 
     // The device accept route cannot consume a print_agent request (the mirror predicate).
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const profileId = await seedProfile("till");
     const asDevice = await send(
       app,
       "POST",
       `/management-api/device-join-requests/${agent.joinId}/accept`,
-      { cookie: venue.managerCookie, body: { name: "Cocina agent", profileId } },
+      { cookie: venue.managerCookie, body: { name: "Kitchen agent", profileId } },
     );
     expect(asDevice.status).toBe(404);
     expect((await errorOf(asDevice)).code).toBe("join_request.not_found");
@@ -1051,7 +1051,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
   it("needs printer.manage — a staff session is 403 and the request survives", async () => {
     const venue = await setupVenue(suite.db);
     const app = mountApp(venue.cfg);
-    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const res = await send(
       app,
       "POST",
@@ -1080,7 +1080,7 @@ describe("POST /management-api/print-agent-join-requests/:id/accept", () => {
       expect(res.status).toBe(404);
       expect((await errorOf(res)).code).toBe("join_request.not_found");
     }
-    const made = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const made = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const noChoice = await send(
       app,
       "POST",
@@ -1277,20 +1277,20 @@ describe("device pairing: check, claim, approve", () => {
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId });
     const res = await accept(app, venue.managerCookie, made.joinId, {
-      name: "  Barra 2  ",
+      name: "  Bar 2  ",
       profileId,
     });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       deviceId: made.joinId,
-      name: "Barra 2",
+      name: "Bar 2",
       formFactor: "till",
     });
     const [row] = await suite.db
       .select({ label: devices.label })
       .from(devices)
       .where(eq(devices.id, made.joinId));
-    expect(row).toEqual({ label: "Barra 2" });
+    expect(row).toEqual({ label: "Bar 2" });
     expect(await pendingCount()).toBe(0);
     expect(mode.claimOf(made.joinId)).toBeUndefined();
   });
@@ -1313,22 +1313,22 @@ describe("device pairing: check, claim, approve", () => {
   it("a taken name is refused and the request survives for a corrected retry", async () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("till");
-    await enrolDeviceForTest(suite.db, venue.cfg, { name: "Barra", profileId });
+    await enrolDeviceForTest(suite.db, venue.cfg, { name: "Bar", profileId });
     const { app, holdId } = await pairingApp(venue);
     const made = await knock(venue, { kind: "device", label: "Bar till", numbers: () => 42 });
     await check(app, venue.managerCookie, made.joinId, { choice: "42", holdId });
-    const taken = await accept(app, venue.managerCookie, made.joinId, { name: "Barra", profileId });
+    const taken = await accept(app, venue.managerCookie, made.joinId, { name: "Bar", profileId });
     expect(taken.status).toBe(409);
     expect((await errorOf(taken)).code).toBe("device.name_taken");
     expect(await pendingCount()).toBe(1);
     const renamed = await accept(app, venue.managerCookie, made.joinId, {
-      name: "Barra 2",
+      name: "Bar 2",
       profileId,
     });
     expect(renamed.status).toBe(200);
     expect(await renamed.json()).toEqual({
       deviceId: made.joinId,
-      name: "Barra 2",
+      name: "Bar 2",
       formFactor: "till",
     });
   });
@@ -1415,7 +1415,7 @@ describe("device pairing: check, claim, approve", () => {
   it("keeps a print agent's request when the window shuts", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = await pairingApp(venue);
-    await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const released = await send(app, "DELETE", `/management-api/pairing-mode/holds/${holdId}`, {
       cookie: venue.managerCookie,
     });
@@ -1426,7 +1426,7 @@ describe("device pairing: check, claim, approve", () => {
   it("refuses a print agent's request on the check route 404, and leaves it", async () => {
     const venue = await setupVenue(suite.db);
     const { app, holdId } = await pairingApp(venue);
-    const agent = await knock(venue, { kind: "print_agent", label: "Cocina agent" });
+    const agent = await knock(venue, { kind: "print_agent", label: "Kitchen agent" });
     const wrong = agent.verificationNumber === "00" ? "01" : "00";
     const res = await check(app, venue.managerCookie, agent.joinId, { choice: wrong, holdId });
     expect(res.status).toBe(404);

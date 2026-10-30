@@ -469,12 +469,14 @@ until A977).
   still need English defaults, as do the split-extras venue's operation description and
   pass-printer name, and the "Pase" pass names in the kitchen-print, zone-offer and fiscal
   sale-path suites (left while #2265 changes those files), and the fiscal sale-path suite's
-  "Pantalla" screen names. The device, join and join-request suites still name kitchen screens
-  "Uno", "Dos", "Todo", "Cocina 1", "Plancha 1", "Cocina" and "Horno". Those suites and the
-  device-session, station-alert, party and configuration-transfer suites still hold other Spanish
-  samples, among them station, till, table, zone, location and device-profile names such as
-  "Plancha", "Fría", "Caja", "Mesa 7", "Terraza" and "Perfil KDS". Screen tests take translated
-  expectations from their strings file.
+  "Pantalla" screen names. The device-api suite still names kitchen screens and stations "Uno",
+  "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
+  and configuration-transfer suites still hold other Spanish samples, among them station, till,
+  table, zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The
+  device, device-delete, join-request, join-api, join-api database and device-session suites keep
+  only the Spanish names the shared test helpers create, and the device and device-session suites'
+  operation description "Venta en establecimiento". Screen tests take translated expectations from
+  their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language
   marker and form message from
@@ -521,6 +523,9 @@ until A977).
   pass-printer name remain.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
+  The device, device-delete, join-request, join-api, join-api database and device-session suites
+  give English names to what they create; the names the shared test helpers create and the
+  operation description stay Spanish.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's

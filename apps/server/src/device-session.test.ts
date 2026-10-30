@@ -84,7 +84,7 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
   const [loc] = await admin
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
@@ -100,7 +100,7 @@ async function setupStation(): Promise<{ cfg: TradingContext; stationId: string 
     simplifiedInvoiceLimit: null,
   };
   const st = await asApp(admin, (tx) =>
-    createStation(tx, cfg, { name: "Cocina", isDefault: true }),
+    createStation(tx, cfg, { name: "Kitchen", isDefault: true }),
   );
   return { cfg, stationId: st.id };
 }
@@ -815,7 +815,7 @@ describe("tryReadDevice dev override resolves a seeded device (venue database)",
     const [loc] = await admin
       .insert(locations)
       .values({
-        name: "Barra",
+        name: "Bar",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
       })

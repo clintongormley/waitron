@@ -640,13 +640,13 @@ describe("acceptDeviceJoinRequest", () => {
     const { made, accepted } = await withTransaction(suite.db, async (tx) => {
       const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Bar till" });
       const accepted = await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        label: "Barra 1",
+        label: "Bar 1",
         profileId,
       });
       return { made, accepted };
     });
     const status = await readJoinStatus(suite.db, venue.cfg, made.joinId, made.token, openWindow());
-    expect(accepted).toEqual({ deviceId: made.joinId, name: "Barra 1", formFactor: "till" });
+    expect(accepted).toEqual({ deviceId: made.joinId, name: "Bar 1", formFactor: "till" });
     expect(status).toBe("approved");
   });
 
@@ -953,15 +953,15 @@ describe("a returning disabled device", () => {
     const venue = await setupVenue(suite.db);
     const kds = await seedProfile("kds");
     const station = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Horno" }),
+      createStation(tx, venue.cfg, { name: "Oven" }),
     );
     await withTransaction(suite.db, (tx) =>
       offerOnProfile(tx, venue.cfg, kds, stationScreen(station.id)),
     );
     const deviceId = await withTransaction(suite.db, async (tx) => {
-      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Horno" });
+      const made = await createJoinRequest(tx, venue.cfg, { kind: "device", label: "Oven" });
       await acceptDeviceJoinRequest(tx, venue.cfg, made.joinId, {
-        label: "Horno",
+        label: "Oven",
         profileId: kds,
         kitchenScreens: [stationScreen(station.id)],
       });
@@ -978,11 +978,11 @@ describe("a returning disabled device", () => {
       withTransaction(suite.db, async (tx) => {
         await createJoinRequest(tx, venue.cfg, {
           kind: "device",
-          label: "Horno",
+          label: "Oven",
           returning: { deviceId, tokenHash },
         });
         await acceptDeviceJoinRequest(tx, venue.cfg, deviceId, {
-          label: "Horno",
+          label: "Oven",
           profileId: kds,
           kitchenScreens: [stationScreen(station.id)],
         });
@@ -1117,7 +1117,7 @@ describe("a returning disabled device", () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Plancha" }),
+      createStation(tx, venue.cfg, { name: "Grill" }),
     );
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
@@ -1170,7 +1170,7 @@ describe("a returning disabled device", () => {
     const venue = await setupVenue(suite.db);
     const profileId = await seedProfile("kds");
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, venue.cfg, { name: "Plancha" }),
+      createStation(tx, venue.cfg, { name: "Grill" }),
     );
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, venue.cfg, profileId, {
