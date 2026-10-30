@@ -35,11 +35,6 @@ async function codeOf(fn: () => Promise<unknown>): Promise<unknown> {
   return ((await captureError(fn)) as { code?: unknown }).code;
 }
 
-/**
- * Tapas places Tortilla twice: in its root and in its Fried list. Terrace reaches it through a list
- * nested two deep. Croquetas sits beside it in every one of those lists. Both products carry a menu
- * price and a variant price on both menus, and Tortilla is a shortcut on Tapas' Device Home Page.
- */
 async function removalFixture() {
   await menusFixture(fx.db);
   return app(async (tx) => {
@@ -58,8 +53,8 @@ async function removalFixture() {
           allergens: {},
         })
       ).id;
-    const omelette = await make("Tortilla");
-    const croquette = await make("Croquetas");
+    const omelette = await make("Omelette");
+    const croquette = await make("Croquettes");
     const half = async (productId: string) =>
       (
         await setProductVariants(
@@ -184,7 +179,7 @@ describe("a product made Inactive comes off every menu", () => {
       code: "product.on_live_menu",
       params: {
         products: [
-          { id: r.omelette, name: "Tortilla" },
+          { id: r.omelette, name: "Omelette" },
           { id: r.omeletteHalf, name: "Half" },
         ],
         menus: expect.arrayContaining([
@@ -305,7 +300,7 @@ describe("a product made Inactive comes off every menu", () => {
     const home = await app((tx) => readMenuHome(tx, r.tapas));
     expect(home.shortcuts.map(({ position, ref }) => ({ position, ref }))).toEqual([
       { position: 0, ref: product(r.croquette) },
-      { position: 1, ref: { kind: "missing", name: "Tortilla" } },
+      { position: 1, ref: { kind: "missing", name: "Omelette" } },
       { position: 2, ref: section(r.fried) },
     ]);
   });
@@ -322,7 +317,7 @@ describe("takeOffMenus", () => {
           await createProduct(tx, {
             catalogueId: r.tapas,
             categoryId: null,
-            name: "Gazpacho",
+            name: "Tomato soup",
             pricingUnit: "each",
             unitPrice: "4.00",
             vatClass: "reduced",
@@ -353,7 +348,7 @@ describe("an Inactive product cannot be added to a menu list", () => {
       const { id } = await createProduct(tx, {
         catalogueId: r.tapas,
         categoryId: null,
-        name: "Gazpacho",
+        name: "Tomato soup",
         pricingUnit: "each",
         unitPrice: "4.00",
         vatClass: "reduced",
@@ -412,10 +407,6 @@ describe("an Inactive product cannot be added to a menu list", () => {
   });
 });
 
-/**
- * {@link removalFixture} with a second variant of Tortilla, Whole, priced on both menus beside Half:
- * every variant of both products then holds a price row on Tapas and on Terrace.
- */
 async function variantFixture() {
   const r = await removalFixture();
   const omeletteWhole = await app(async (tx) => {
@@ -653,7 +644,7 @@ describe("menusHolding", () => {
         await createProduct(tx, {
           catalogueId: r.tapas,
           categoryId: null,
-          name: "Gazpacho",
+          name: "Tomato soup",
           pricingUnit: "each",
           unitPrice: "4.00",
           vatClass: "reduced",
