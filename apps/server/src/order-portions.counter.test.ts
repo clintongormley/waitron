@@ -580,14 +580,12 @@ describe("A1208 a counter order of more portions than one statement can bind", (
           requestedBy: venue.operatorId,
         })
         .returning({ id: adjustments.id });
-      await tx
-        .insert(adjustmentLines)
-        .values({
-          adjustmentId: adjustment!.id,
-          lineId: croqueta!.id,
-          reduction: 33,
-          quantity: 1000,
-        });
+      await tx.insert(adjustmentLines).values({
+        adjustmentId: adjustment!.id,
+        lineId: croqueta!.id,
+        reduction: 33,
+        quantity: 1000,
+      });
       await carryLineReductions(tx, copies);
       return adjustment!.id;
     });
