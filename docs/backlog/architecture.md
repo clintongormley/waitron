@@ -650,23 +650,30 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   (`apps/server/src/receipt-print.ts:622`, `:645-653`). Correct the comment to name every reason
   that sets it.
 
-## A table round of about a thousand lines is refused "too many SQL variables"
+## A table round of more than about 1,100 dishes is refused "too many SQL variables"
 
-The SQLite inside the official Node builds (CI, and the box's `node:26` image) binds at most 32,766
-values in one statement; a Homebrew Node on macOS allows 250,000, so a local run can pass what CI
-and the box refuse. A803 slice 1 writes one line per portion, and a line binds up to 33 values, so
-one insert holds about 990 lines. A1208 splits the counter's writes and `registerPortions` with
-`insertInChunks` (`packages/db/src/insert-in-chunks.ts`). The table round's line insert,
-`insertTabRound` (`apps/server/src/working-order.ts`), is still one statement: placing a party round
-of 30 lines of 99 through `submitGroups` was refused "too many SQL variables" under the official
-Node v26.13.0, and 11 lines of 99 passed (A1208's finishing review, 2026-10-30). It uses
-`.returning`, so splitting it means gathering the returned rows from every part.
-`copyRecalledPortion` (`apps/server/src/draft-recall.ts`) has the same one-statement shape (read,
-not run). The 99 limit (`tab.portions_too_many`) is per dish, so it does not bound a round.
+A connection the store opens binds at most 32,766 values in one statement
+(`SQL_VARIABLE_LIMIT`, `packages/store/src/index.ts`), the limit the official Node v26.13.0 for
+macOS reported; Homebrew's Node reported 250,000, and the store sets the lower one so a local run
+refuses what CI refused. A803 slice 1 writes one line per dish. A1208 routed the inserts it found
+growing with a counter order's dishes (the lines, their sale contexts and copies, portions and
+their bindings, cancellations, carried discounts, kitchen items and split extras, and the links
+from filed rows) through `insertInChunks` or `statementChunks`
+(`packages/db/src/insert-in-chunks.ts`). The table round's line insert, `insertTabRound`
+(`apps/server/src/working-order.ts`), is still one statement: placing one round of waters through
+`placeGroups` passed at 11 lines of 99 (1,089 dishes) and was refused "too many SQL variables" in
+`insertTabRound` at 12 lines of 99 (1,188 dishes), 20 and 30, under the official Node v26.13.0 and
+Homebrew's v26.11.1 alike (2026-10-30). It uses `.returning`, so splitting it means gathering the
+returned rows from every part, as `fireLines` now does. `copyRecalledPortion`
+(`apps/server/src/draft-recall.ts`) also writes its lines in one statement; it copies one recalled
+dish, so its size is bounded by that dish's quantity (read, not run). The 99 limit
+(`tab.portions_too_many`) is per dish, so it does not bound a round.
 
 Separately, drizzle's session and the store's adapter (`packages/store/src/node-sqlite-adapter.ts`)
 pass every bound value as a separate argument, and an `inArray` over 60,000 ids answered
-`RangeError: Maximum call stack size exceeded` on Homebrew's Node, where 57,500 passed.
+`RangeError: Maximum call stack size exceeded` on Homebrew's Node, where 57,500 passed. Through the
+store's connections, which now set the limit, a 60,000-value statement is refused "too many SQL
+variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
 
 ## Decisions and deliberate limits
 

@@ -6075,9 +6075,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **A table round of about a thousand lines is refused "too many SQL variables"**
-  `insertTabRound` writes a round's lines in one statement; 30 lines of 99 were refused under the
-  official Node. [Detail](backlog/architecture.md#a-table-round-of-about-a-thousand-lines-is-refused-too-many-sql-variables)
+- **A table round of more than about 1,100 dishes is refused "too many SQL variables"**
+  `insertTabRound` writes a round's lines in one statement; 1,089 waters passed and 1,188 were
+  refused. [Detail](backlog/architecture.md#a-table-round-of-more-than-about-1100-dishes-is-refused-too-many-sql-variables)
 
 - **A760. Squash every migration set before go-live.**
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
