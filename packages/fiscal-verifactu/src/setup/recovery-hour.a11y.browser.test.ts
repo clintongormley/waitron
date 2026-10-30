@@ -45,6 +45,7 @@ for (const theme of ["light", "dark"] as const)
             "waiting",
             "later",
             "in-use",
+            "in-use-no-time",
             "selected",
             "refusal",
           ] as const) {
@@ -99,6 +100,8 @@ for (const theme of ["light", "dark"] as const)
                         : clock,
                   };
                 if (action === "preview") return { status: "preview" };
+                if (state === "in-use-no-time")
+                  throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
                 if (state === "later" || state === "in-use")
                   throw {
                     code: "sif.allocation_invalid",
@@ -169,6 +172,7 @@ for (const theme of ["light", "dark"] as const)
                   waiting: "[data-test=remaining]",
                   later: "[data-test=minute-not-later]",
                   "in-use": "[data-test=minute-taken]",
+                  "in-use-no-time": "[data-test=minute-in-use]",
                   selected: "[data-test=selected-hour]",
                 }[state]!;
                 await vi.waitFor(() => expect(el.shadowRoot!.querySelector(shown)).not.toBeNull());

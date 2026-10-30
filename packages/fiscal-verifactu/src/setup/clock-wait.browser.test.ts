@@ -93,6 +93,26 @@ it.each([
   );
 });
 
+it("a stored pick refused as in use names no time in Spanish", () => {
+  const read = clockProblem({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_in_use" },
+  });
+  expect(read).toEqual({ kind: "in-use" });
+  const target = document.createElement("div");
+  render(
+    renderClockProblem(
+      read,
+      { ...clockWaitStrings.es, secondClockDo: "", secondClockEnds: "", differDo: "" },
+      undefined,
+    ),
+    target,
+  );
+  expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
+    "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+  );
+});
+
 describe("a taken minute shows one countdown", () => {
   afterEach(() => {
     vi.useRealTimers();

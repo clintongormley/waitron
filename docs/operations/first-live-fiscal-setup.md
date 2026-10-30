@@ -46,13 +46,15 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   refusal shows both readings and no countdown, and waits for Check again").
 - **The minute this box would use already has a series here**: the page says "The minute this box
   would use already has a series here, so it will use the next free minute." and counts down to that
-  minute with no button to press; it checks with the box again by itself, without changing what is on
-  screen, and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
-  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If this attempt
-  has already chosen its name and that name then turns up in the box's records, the page says "The
-  series cannot be made yet: this box's records already hold a series for the minute this box would
-  use." with no time and no countdown (`clock-wait.browser.test.ts`, "a minute in use with %j names no
-  time and does not count down").
+  minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). A reload before
+  the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
+  time are correct." and press **Make the series** again (read, not run: the page's check on load
+  ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt
+  has already chosen its name and that name then turns up in the box's records, the attempt is refused
+  (`minute_in_use`, with no time) and is offered no way on yet
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its
+  own minute appears after it"; backlog A1223).
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name

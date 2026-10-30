@@ -503,6 +503,14 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   the box's ordinary wait too, which I believe predates A1207 (#1990, `3ba85c7a6`); A1207's
   taken-minute re-check can now meet it with up to 2:30 still showing. Keep the wait up and check
   again on the next tick instead.
+- **A1226. Compare clocks on the restore page can choose a series name by itself** (from the A1207
+  finish-branch review): when the page's preview is refused because there is no second clock, the
+  page starts its 15-second second-clock check, and once a second clock answers, that check sends a
+  real `select` although Make the series was never pressed. A probe that presses only Compare clocks
+  printed the requests `clock-challenge, compare-clocks, preview, clock-challenge, compare-clocks,
+  select`, at A1207's tip and at its base (`61625b0ab`); the code is from #1990 (`3ba85c7a6`).
+  Make the page's own re-checks after a preview read-only, as A1207 did for a taken minute
+  (`#compare` in `packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).
