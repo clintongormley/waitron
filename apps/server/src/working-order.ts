@@ -1738,6 +1738,7 @@ export async function createOpenOrder(
     partyId: placement.partyId ?? null,
     receiptLocale: placement.receiptLocale ?? null,
   });
+  if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
 
   if (placement.kitchenNote !== undefined) {
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
