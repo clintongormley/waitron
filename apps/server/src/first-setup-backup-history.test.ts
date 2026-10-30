@@ -260,7 +260,7 @@ it("closes and deletes its private copy even when a module refuses its history",
   await expect(access(privatePath!)).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("hands later local names to real module selection and still permits a later minute", async () => {
+it("hands local names to real module selection, refusing the minute one holds and permitting a later one", async () => {
   const f = await fixture();
   const record = {
     reference: "independent-later-node",
@@ -269,8 +269,8 @@ it("hands later local names to real module selection and still permits a later m
     environment: scope.environment,
     softwareId: "OTHER",
     nodeId: "former-peer",
-    identity: "0CNVA",
-    recordedAtMs: Date.parse("2026-10-16T15:10:00Z"),
+    identity: "0CNQW",
+    recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
   };
   const directory = join(f.roots.stateDir, "module-evidence", binding.module);
   await mkdir(directory, { recursive: true });
@@ -297,7 +297,7 @@ it("hands later local names to real module selection and still permits a later m
   });
   await expect(recoverySelectPastWaits(clock, service, { onBox: false })).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   clock.set(Date.parse("2026-10-16T15:20:00Z"));
   expect(await recoverySelectPastWaits(clock, service, { onBox: false })).toMatchObject({

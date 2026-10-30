@@ -174,9 +174,9 @@ it("also refuses reuse after the original SIF and every original series are reti
   expect(await snapshot()).toEqual(before);
 });
 
-it("a promotion waits for the minute after the original box's, and refuses one far behind it", async () => {
+it("a promotion waits for the minute after the original box's", async () => {
   const f = fixture();
-  let instant = Date.parse("2026-10-16T11:37:00.000Z");
+  let instant = Date.parse("2026-10-16T11:40:30.000Z");
   let value: unknown = null;
   const writes: unknown[] = [];
   const selector = createHourSelection({
@@ -214,15 +214,6 @@ it("a promotion waits for the minute after the original box's, and refuses one f
   await withOperationAuthority(f.binding, f.operatorId, async (authority) => {
     const select = () =>
       selector.select({ binding: f.binding, authority, comparisonId: "comparison" });
-    await expect(select()).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: {
-        reason: "minute_not_later",
-        allowedFromMs: Date.parse("2026-10-16T11:41:00.000Z"),
-      },
-    });
-    expect(writes).toEqual([]);
-    instant = Date.parse("2026-10-16T11:40:30.000Z");
     expect(await select()).toEqual({
       status: "waiting",
       targetMs: Date.parse("2026-10-16T11:41:00.000Z"),

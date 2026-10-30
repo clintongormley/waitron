@@ -354,7 +354,7 @@ it("refuses selected bytes changed after the authenticated session before prepar
   expect(await f.workspace.read()).toEqual([]);
 });
 
-it("local database history independently raises the prepared floor when its preparation journal is absent", async () => {
+it("local database history independently carries its names into the prepared evidence when its preparation journal is absent", async () => {
   const f = await fixture(true);
   const retainedRoots = {
     stateDir: join(root, "retained-state"),
@@ -567,23 +567,4 @@ it("refuses to drop retained database history when its module has no public evid
     params: { module: session.binding.module },
   });
   expect(await f.workspace.read()).toEqual([]);
-});
-
-it("refuses a recovery clock too far before a retained selection", async () => {
-  const f = await fixture(true);
-  vi.setSystemTime(Date.parse("2026-10-16T12:39:00.000Z"));
-  const service = recovery(f.options);
-  const session = await service.open(f.request, { onBox: false });
-  await expect(
-    recoverySelectPastWaits(
-      clock,
-      {
-        prepare: (proposal, client) => service.prepare(session.sessionId, proposal, client),
-      },
-      { onBox: false },
-    ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-16T12:43:00.000Z") },
-  });
 });

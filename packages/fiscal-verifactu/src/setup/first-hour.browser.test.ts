@@ -493,7 +493,7 @@ it("a later minute allowed from beyond the date range is explained without a tim
     ),
   );
 });
-it("a later minute in use names its time and does not count down", async () => {
+it("a later minute in use is explained and does not count down", async () => {
   const allowedFromMs = Date.parse("2026-10-18T20:04:00Z");
   const { el, calls } = await mount({
     select: async () => {
@@ -509,13 +509,138 @@ it("a later minute in use names its time and does not count down", async () => {
     await userEvent.click(button(el, "select"));
     await vi.waitFor(() =>
       expect(text(el)).toContain(
-        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+        "The series cannot be made yet: a later minute is already in use.",
       ),
     );
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
     vi.advanceTimersByTime(60_000);
     await el.updateComplete;
     expect(calls.filter((c) => c.action === "candidates")).toHaveLength(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a minute in use shows one countdown, checks again quietly and keeps saying why", async () => {
+  const answers: (() => unknown)[] = [
+    () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+    () => ({ status: "waiting", targetMs: instant + 180_000, remainingMs: 150_000 }),
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift()!() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    const taken = () =>
+      el
+        .shadowRoot!.querySelector("[data-test=minute-taken]")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim();
+    await vi.waitFor(() =>
+      expect(taken()).toBe(
+        "The auto-generated invoice series code (which is time-based) already exists in the database.",
+      ),
+    );
+    expect(remaining(el)).toBe("03:00");
+    expect(text(el)).toContain("Generating a new code in: 03:00");
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    await el.updateComplete;
+    expect(taken()).toBe(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+    expect(remaining(el)).toBe("02:30");
+    expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a lost re-check during a taken minute keeps counting and checks again", async () => {
+  const answers: (() => unknown)[] = [
+    () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+    () => {
+      throw new TypeError("Failed to fetch");
+    },
+    () => ({ status: "waiting", targetMs: instant + 180_000, remainingMs: 135_000 }),
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift()!() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:29");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+      "false",
+    );
+    vi.advanceTimersByTime(14_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(3));
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:15");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("an answer it cannot read during a taken minute shows the failure", async () => {
+  const answers: (() => unknown)[] = [
+    () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+    () => ({ status: "waiting", targetMs: "soon", remainingMs: 150_000 }),
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift()!() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    expect(remaining(el)).toBeUndefined();
+    vi.advanceTimersByTime(60_000);
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2);
   } finally {
     vi.useRealTimers();
   }
@@ -1131,6 +1256,33 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
     vi.useRealTimers();
   }
 });
+it("an answer it cannot read while waiting for a second clock shows the failure", async () => {
+  const { state, prepare } = gatedClocks();
+  const { el, calls } = await mount({ prepare });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    // A comparison with no readings lists, which `readClocks` refuses as "invalid comparison".
+    state.decision = {} as typeof clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(SETUP_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it.each([
   ["en", "Series name: 0CSQW", "This date is outside the range of series names."],
   ["es", "Nombre de las series: 0CSQW", "Esta fecha está fuera del rango de nombres de serie."],
@@ -1144,6 +1296,35 @@ it.each([
   expect(text(el)).toContain(chosen);
   const blocked = await mount({ locale, decision: { ...clock, rangeBlocked: true } });
   await vi.waitFor(() => expect(text(blocked.el)).toContain(range));
+});
+it("says in Spanish that the series code already exists, with the countdown", async () => {
+  const { el } = await mount({
+    locale: "es",
+    select: async () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+  });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+      ),
+    );
+    expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("says in Spanish that the series cannot be made yet, with the plural verb", async () => {
   const { el } = await mount({
@@ -1159,7 +1340,7 @@ it("says in Spanish that the series cannot be made yet, with the plural verb", a
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     ),
   );
 });

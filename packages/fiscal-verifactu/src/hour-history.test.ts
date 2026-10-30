@@ -11,6 +11,7 @@ it("projects a positively complete empty history without inventing a floor", () 
     scope,
     greatestSpentMinute: null,
     recordedTimeFloorMs: null,
+    usedMinutes: [],
     references: ["venue"],
     contradictions: [],
   });
@@ -84,6 +85,29 @@ it.each([{ taxpayerNif: "89890002M" }, { environment: "production" }])(
     ).toBe(1792150800000);
   },
 );
+it("lists every minute a readable in-scope record names, once each, in order", () => {
+  const history = projectHourHistory({
+    scope,
+    sources: [
+      { reference: "host", complete: true, records: [row({ reference: "a", identity: "0CNPG" })] },
+      {
+        reference: "backup",
+        complete: true,
+        records: [
+          row({ reference: "b", identity: "0CNNW" }),
+          row({ reference: "a", identity: "0CNPG" }),
+          row({ reference: "foreign", identity: "0CNNX", taxpayerNif: "89890002M" }),
+          row({ reference: "broken", identity: "0cnny" }),
+        ],
+      },
+    ],
+  });
+  expect(history.usedMinutes).toEqual([
+    decodeMinuteIdentity("0CNNW"),
+    decodeMinuteIdentity("0CNPG"),
+  ]);
+  expect(history.contradictions).toEqual(["broken:invalid_record"]);
+});
 it("retains epoch minute zero as a spent minute", () => {
   expect(project([row({ identity: "00000", recordedAtMs: null })]).greatestSpentMinute).toBe(0);
 });

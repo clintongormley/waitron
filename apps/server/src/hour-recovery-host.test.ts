@@ -16,6 +16,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import {
+  incidents,
   invoiceSeries,
   readBreakGlassVerifier,
   setBreakGlassVerifierTx,
@@ -26,6 +27,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import { readHourHistory } from "@waitron/fiscal-verifactu/src/hour-history-reader.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { seedTenants } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
@@ -41,6 +43,9 @@ import { eq } from "drizzle-orm";
 import { recordSale } from "@waitron/core";
 import { seriesId } from "@waitron/shared";
 import { VerifactuBackend } from "@waitron/fiscal-verifactu/src/backend.js";
+import { clockBehindChain } from "@waitron/fiscal-verifactu/src/clock-behind.js";
+import { openClockCheck } from "@waitron/fiscal-verifactu/src/clock-checks.js";
+import { confirmClockStop } from "@waitron/fiscal-verifactu/src/clock-confirmation.js";
 import {
   fakeClient,
   saleInput,
@@ -179,7 +184,7 @@ it.each([
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("retains a higher surviving hour when the supplied copy is older", async () => {
+it("refuses the settle-target minute a surviving host already names", async () => {
   const f = await host();
   f.facts.history.push({
     reference: "retired-workspace",
@@ -191,15 +196,15 @@ it("retains a higher surviving hour when the supplied copy is older", async () =
         ...scope,
         softwareId: "OTHER",
         nodeId: "retired-node",
-        identity: "0CNRP",
-        recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+        identity: "0CNQT",
+        recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
       },
     ],
   });
   await f.compare();
   await expect(f.select()).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
@@ -239,7 +244,7 @@ it("binds durable host admission to the selected source and refuses a different 
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("adds the selected copy's opaque public floor to surviving host evidence", async () => {
+it("adds the selected copy's opaque public names to surviving host evidence", async () => {
   const f = await host();
   agreeInternet();
   const service = createSelectedRecoveryPreparation({
@@ -258,8 +263,8 @@ it("adds the selected copy's opaque public floor to surviving host evidence", as
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: "remote-node",
-                identity: "0CNRP",
-                recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+                identity: "0CNQT",
+                recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
               },
             ],
           },
@@ -272,7 +277,7 @@ it("adds the selected copy's opaque public floor to surviving host evidence", as
     service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
@@ -339,7 +344,7 @@ it("refuses a selected backup whose named key no longer matches the database", a
   expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
 });
 
-it("admits recovery from the real validated archive preview with its public spent-hour floor", async () => {
+it("admits recovery from the real validated archive preview with its public spent names", async () => {
   const f = await host();
   agreeInternet();
   const manifest = await buildManifest({
@@ -383,8 +388,8 @@ it("admits recovery from the real validated archive preview with its public spen
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: node.nodeId,
-                identity: "0CNRP",
-                recordedAtMs: Date.parse("2026-10-16T13:10:00Z"),
+                identity: "0CNQT",
+                recordedAtMs: Date.parse("2026-10-16T11:00:00Z"),
               },
             ],
           }),
@@ -414,7 +419,7 @@ it("admits recovery from the real validated archive preview with its public spen
     service.prepare({ action: "select", comparisonId }, { onBox: true }),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
   clock.set(Date.parse("2026-10-16T14:40:00Z"));
   const outcome = (await recoverySelectPastWaits(clock, service, { onBox: true })) as {
@@ -769,37 +774,106 @@ async function sellAt(instant: string) {
   );
 }
 
-describe("a backup's own floors", () => {
+describe("a backup whose newest record and creation time are near or past the clock", () => {
   const asBrowser = { onBox: false };
   const restoreService = (f: Awaited<ReturnType<typeof host>>, createdAt = f.selected.createdAt) =>
     createSelectedRecoveryPreparation({ ...f.options, selected: { ...f.selected, createdAt } });
 
-  it("refuses a minute before the backup's newest fiscal record, naming the record's time", async () => {
+  it("selects at the ordinary wait although the backup's newest record and creation time are later", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-21T10:00:00Z"));
     const f = await host();
-    await expect(
-      recoverySelectPastWaits(clock, restoreService(f), asBrowser),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-22T20:15:00Z") },
+    expect(
+      await recoverySelectPastWaits(clock, restoreService(f, "2026-10-23T08:00:00Z"), asBrowser),
+    ).toMatchObject({
+      status: "selected",
+      identity: encodeMinuteIdentity(Date.parse("2026-10-21T10:02:00Z")),
     });
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
   });
 
-  it("refuses a minute before the backup was created, naming its creation time", async () => {
-    clock.set(Date.parse("2026-10-23T07:50:00Z"));
+  it("a restore below the backup's newest invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale", async () => {
+    await sellAt("2026-10-22T20:15:00Z");
+    clock.set(Date.parse("2026-10-21T10:00:00Z"));
     const f = await host();
-    await expect(
-      recoverySelectPastWaits(clock, restoreService(f, "2026-10-23T08:00:00Z"), asBrowser),
-    ).rejects.toMatchObject({
-      code: "sif.allocation_invalid",
-      params: { reason: "minute_not_later", allowedFromMs: Date.parse("2026-10-23T08:00:00Z") },
+    const service = restoreService(f);
+    const selected = (await recoverySelectPastWaits(clock, service, asBrowser)) as {
+      status: string;
+      identity: string;
+      input: unknown;
+    };
+    expect(selected).toMatchObject({
+      status: "selected",
+      identity: encodeMinuteIdentity(Date.parse("2026-10-21T10:02:00Z")),
     });
-    expect(await readModulePreparationHistory(f.roots, binding.module)).toEqual([]);
+    await runRestoreHooks({
+      db: suite.db,
+      node,
+      modules: f.configured,
+      log: () => {},
+      withModuleOperations: service.runner(selected.input),
+    });
+    const boxClock = {
+      ...steadyClock,
+      now: () => ({ ...steadyClock.now(), instant: new Date(clock.wall()) }),
+    };
+    const reading = boxClock.now();
+    expect(await withTransaction(suite.db, (tx) => clockBehindChain(tx, reading))).toMatchObject({
+      lastRecordAt: "2026-10-22T20:15:00.000Z",
+    });
+    const [standard] = await suite.db
+      .select()
+      .from(invoiceSeries)
+      .where(eq(invoiceSeries.code, `A-${selected.identity}`));
+    const backend = new VerifactuBackend({
+      deploymentEnvironment: "preproduction",
+      clock: boxClock,
+      db: suite.db,
+      resolveClient: staticResolver(fakeClient),
+    });
+    await expect(
+      withTransaction(suite.db, (tx) =>
+        recordSale(
+          tx,
+          backend,
+          saleInput({ nodeId: node.nodeId, seriesId: seriesId(standard!.id), clock: boxClock }),
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "clock.behind_chain" });
+    const openIncidents = async () =>
+      (await suite.db.select().from(incidents))
+        .filter((row) => row.acknowledgedAt === null)
+        .map(({ code, params }) => ({ code, params }));
+    expect(await openIncidents()).toEqual([]);
+    const boot = { ms: 4 * 60_000, id: "boot-1" };
+    await withTransaction(suite.db, (tx) =>
+      openClockCheck(tx, { reading, boot, nodeId: node.nodeId }),
+    );
+    const at = reading.instant.toISOString();
+    const { confirmation } = await withTransaction(suite.db, (tx) =>
+      confirmClockStop(tx, {
+        reading,
+        boot,
+        witnesses: [
+          { kind: "authority", id: "authority", boxAt: at, witnessAt: at, uncertaintyMs: 0 },
+        ],
+        nodeId: node.nodeId,
+      }),
+    );
+    expect(confirmation).not.toBeNull();
+    const open = await openIncidents();
+    expect(open.map(({ code }) => code).sort()).toEqual([
+      "clock.behind_chain_restarted",
+      "clock.records_misdated",
+    ]);
+    expect(open.find(({ code }) => code === "clock.records_misdated")!.params).toMatchObject({
+      count: 1,
+      from: "2026-10-22T20:15:00.000Z",
+      to: "2026-10-22T20:15:00.000Z",
+      partial: false,
+    });
   });
 
-  it("waits and then selects once both clocks are past both floors", async () => {
+  it("waits the ordinary settle time and then selects when the clock is past the backup's record and creation time", async () => {
     await sellAt("2026-10-22T20:15:00Z");
     clock.set(Date.parse("2026-10-24T09:00:00Z"));
     const f = await host();

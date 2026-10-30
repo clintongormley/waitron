@@ -617,34 +617,55 @@ it("a promotion beside a leftover start-again note file is not held back by the 
   ).toMatchObject({ status: "selected" });
 });
 
-it("refuses a promotion minute no later than a recorded installation name, writing nothing", async () => {
+it("waits past the minute a recorded installation name holds, writing no fiscal rows", async () => {
   const s = await service();
   await admit(s);
   const [live] = await suite.db.select().from(registroSif);
-  const nameMs = Date.now() + 10 * 60_000;
+  const minute = Math.floor(Date.now() / 60_000) * 60_000;
   await suite.db.insert(registroSif).values({
     nodeId: primary.nodeId,
     nif: live!.nif,
     idSistemaInformatico: live!.idSistemaInformatico,
-    numeroInstalacion: encodeMinuteIdentity(nameMs),
+    numeroInstalacion: encodeMinuteIdentity(minute),
     registradoEn: new Date(Date.now() - 60 * 60_000),
     revocadoEn: new Date(Date.now() - 30 * 60_000),
   });
   await compare(s);
   const before = await rows();
-  await expect(
-    s.prepare(
+  expect(
+    await s.prepare(
       binding,
       { breakGlass: key.secret },
       context,
       { action: "select", comparisonId },
       { onBox: true },
     ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: nameMs + 60_000 },
-  });
+  ).toMatchObject({ status: "waiting", targetMs: minute + 60_000 });
   expect(await rows()).toEqual(before);
+});
+
+it("a promotion takes its current minute although a later installation name is recorded", async () => {
+  const s = await service();
+  await admit(s);
+  const [live] = await suite.db.select().from(registroSif);
+  await suite.db.insert(registroSif).values({
+    nodeId: primary.nodeId,
+    nif: live!.nif,
+    idSistemaInformatico: live!.idSistemaInformatico,
+    numeroInstalacion: encodeMinuteIdentity(Date.now() + 10 * 60_000),
+    registradoEn: new Date(Date.now() - 60 * 60_000),
+    revocadoEn: new Date(Date.now() - 30 * 60_000),
+  });
+  await compare(s);
+  expect(
+    await s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      { action: "select", comparisonId },
+      { onBox: true },
+    ),
+  ).toMatchObject({ status: "selected", identity: encodeMinuteIdentity(Date.now()) });
 });
 
 it("a key-only operation service refuses administrator credentials without a credential key ring", async () => {

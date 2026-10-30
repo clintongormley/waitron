@@ -365,9 +365,7 @@ it("the configured module validates, projects and prepares the same retained hou
   });
   expect(f.seat.inspect(held, input).input).toEqual(input);
   expect(f.seat.assignmentKeys!(held)).toEqual(['["89890001K","preproduction","hour","0CNNW"]']);
-  expect(f.seat.assignmentPositions!(held)).toEqual([
-    { namespace: '["89890001K","preproduction","hour"]', position: 415420 },
-  ]);
+  expect(f.seat.assignmentPositions).toBeUndefined();
   expect(f.seat.pending!(saved)).toBe(false);
   expect(f.seat.resolutionEvidence!()).toEqual({ files: [], directories: [] });
   const operations = FISCAL_OPERATIONS.configure!(f.host);
@@ -449,7 +447,7 @@ it("requires the module's fresh candidate rather than a copied or reused candida
 it("an unselected setup has no assignment to compare with an old attempt", () => {
   const f = configured();
   expect(f.seat.assignmentKeys!(context)).toEqual([]);
-  expect(f.seat.assignmentPositions!(context)).toEqual([]);
+  expect(f.seat.assignmentPositions).toBeUndefined();
 });
 it("configured setup cannot enrol or confirm legacy outside evidence", () => {
   const f = configured();

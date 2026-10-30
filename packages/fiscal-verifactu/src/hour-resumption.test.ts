@@ -200,8 +200,8 @@ it("a further owner cannot resume with a different document binding", async () =
   expect(f.history).toHaveLength(3);
 });
 
-it.each(["known-later-hour", "clock-rollback"])(
-  "resumption preserves the %s floor",
+it.each(["known-own-hour", "clock-rollback"])(
+  "resumption still refuses after a %s",
   async (change) => {
     const f = fixture();
     const selected = await f.select();
@@ -223,14 +223,16 @@ it.each(["known-later-hour", "clock-rollback"])(
                 kind: "intent",
                 softwareId: "OTHER",
                 nodeId: "other",
-                identity: "0CNPG",
+                identity: "0CNNW",
                 recordedAtMs: null,
               },
             ],
           },
         ],
       };
-    await expect(f.resume(selected.input)).rejects.toMatchObject(refused("minute_not_later"));
+    await expect(f.resume(selected.input)).rejects.toMatchObject(
+      refused(change === "clock-rollback" ? "minute_not_later" : "minute_in_use"),
+    );
     expect(f.history).toHaveLength(2);
   },
 );

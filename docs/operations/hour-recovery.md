@@ -66,27 +66,45 @@ or behind, and nothing confirms past it (`packages/fiscal-verifactu/src/hour-clo
 name needs a second clock within 30 seconds of the box").
 
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads
-the selected backup and any database still on the disk, and the name must be a later minute than
-every name in that history (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`,
-"D1: a known later name in the surviving database" and "D2: the old database still on the disk"),
-and not before the backup's newest invoice record or
-the moment the backup was made (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own
-floors"). Names
-made after the backup, or by a box this one never saw, are invisible to it.
+the selected backup and any database still on the disk. If a name there already holds the minute
+the box would take, the page says so, counts down to the next free minute and checks again by itself (see the list below;
+`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at the settle
+target in the surviving database"). A later name, or invoices dated after the box's time, no
+longer stop the restore (the same file's "selected although a later name is known" cases;
+`apps/server/src/hour-recovery-host.test.ts`, "selects at the ordinary wait although the backup's
+newest record and creation time are later"). Names made after the backup, or by a box this one
+never saw, are invisible to it, and a later name held only in the database the restore replaces is
+not in the database the restore places (`apps/server/src/hour-recovery-placement-3.test.ts`, "places an older
+selected hour over a newer surviving %s destination").
+
+If the backup holds sales dated after the box's time, the restore finishes (the test below runs the
+restore's hooks, not the restore route and the restart after it) and, when they are more than a
+minute later, the box then takes no payments until its clock catches up or is confirmed, as
+whenever the box's clock reads more than a minute earlier than its last sale. On a box that sends records to the tax agency, the box asks the agency for its time about
+once a minute, and an answer that agrees lifts the stop (`apps/server/src/guide/en/box-status.md`,
+"When payments stop because of the clock"; read, not run here). Once a confirmation lifts it, the alert
+`clock.records_misdated` lists how many sales are dated later than the real time and their first
+and last time (`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest
+invoice names its minute, a sale is then refused by the clock-behind stop, and a confirmation lists
+the later sale").
 
 After the clocks pass, the box waits 90 to 150 seconds before it takes the name, and the page
 counts down (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits until a minute
 start 90 to 150 seconds after its check"; `recovery-hour.browser.test.ts`, "explains a waiting
 restore with a countdown that goes back to the server at zero"). Keep the page open. A reloaded
-page is a new restore and starts a new 90 to 150 seconds: the page makes a new restore event each
-time it opens (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`),
-and the box keeps each event's wait apart (`packages/fiscal-verifactu/src/hour-selection.ts`,
-`sameEvent`); no test reloads a restore page end to end. What the page shows when it cannot go
+Cloud restore page is a new restore and starts a new 90 to 150 seconds: it makes a new restore
+event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the page with no
+binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
+`eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
+(`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). A restore from a backup during
+setup returns to the same restore when reopened: the server reuses the binding it stored
+(`apps/server/src/first-setup-backup-recovery.ts`, `before.record?.binding ?? …`; read, not run). No test reloads a
+restore page end to end. What the page shows when it cannot go
 ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
+  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
   clocks with no second clock explains the wait and checks again by itself" and "with no second
   clock it explains itself and carries on when the internet arrives").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
@@ -94,9 +112,26 @@ ahead, and what it asks for:
   wrong, so ask for help. It does not retry by itself; press **Check again**
   (`recovery-hour.browser.test.ts`, "a clock refusal shows both readings and no countdown, and waits
   for Check again").
-- **A later minute is already in use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
-  with no countdown (`recovery-hour.browser.test.ts`, "a later minute in use names its time and does
-  not count down").
+- **The minute this box would use is already taken**: after you press **Make the
+  series**, the page says "The auto-generated invoice series code (which is time-based) already
+  exists in the database." and "Generating a new code in: 03:00", counting down in minutes and
+  seconds to the next free minute with no button to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
+  checks is lost on the network, the countdown carries on and the page checks again about every 15
+  seconds; once the countdown reaches 00:00 it stays there until a check gets through
+  (`recovery-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
+  again"; `clock-wait.browser.test.ts`, "a taken minute's figure stays at 00:00 while lost re-checks
+  repeat"). An answer from the box the page cannot read still shows the page's failure message
+  (`recovery-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). If this attempt
+  has already chosen its name and that name then turns up in the box's records, the attempt is refused
+  (`minute_in_use`, with no time) and is offered no way on yet
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its
+  own minute appears after it"; backlog A1223).
+- **A later minute is already in use** (no time given): the box's clock has gone back behind the
+  name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
+  its name
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
+  refuses before writing anything").
 
 For example, a restore whose clocks are compared at 09:00:04 UTC on 24 October 2026 waits until
 09:02:00 and takes `0D0RY` (`hour-selection.test.ts`, the same restore test). With prefixes `A`,

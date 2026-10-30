@@ -11,6 +11,7 @@ import "@waitron/ui/src/components/wt-button.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import {
   ClockWait,
+  clockProblem,
   clockWaitStrings,
   dateTimeFormat,
   readClocks,
@@ -290,7 +291,9 @@ export class RecoveryHourEntry extends LitElement {
       if (this.comparison.clock.releaseBlocked) return;
       this.#wait.showPreview(await call({ action: "preview" }));
     } catch (cause) {
-      if (current()) this.#wait.settle(cause, false, (error) => this.#failed(error));
+      // A taken minute is counted down only after Make the series, whose select the box answers.
+      if (current() && clockProblem(cause)?.kind !== "next-minute")
+        this.#wait.settle(cause, false, (error) => this.#failed(error));
     } finally {
       if (current()) {
         this.busy = false;
@@ -412,9 +415,9 @@ export class RecoveryHourEntry extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.#wait.problem, words, clock, this.locale, this.context.selection.timeZone)}
+      ${renderClockProblem(this.#wait.problem, words, clock)}
       ${
-        result?.status === "waiting"
+        this.#wait.counting
           ? this.#wait.renderWait(words)
           : result?.status === "selected"
             ? html`<p role="status" data-test="selected-hour">

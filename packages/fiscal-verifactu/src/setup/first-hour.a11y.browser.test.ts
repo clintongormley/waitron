@@ -24,7 +24,15 @@ for (const theme of ["light", "dark"] as const)
           host.style.cssText =
             "background:var(--wt-color-surface-raised);color:var(--wt-color-text);font-family:var(--wt-font-family);padding:var(--wt-space-4)";
           const instant = Date.parse("2026-10-18T12:30:00Z");
-          let mode: "review" | "refused" | "second-clock" | "waiting" | "later" | "pdf" = "review";
+          let mode:
+            | "review"
+            | "refused"
+            | "second-clock"
+            | "waiting"
+            | "later"
+            | "in-use"
+            | "in-use-no-time"
+            | "pdf" = "review";
           const parent = FISCAL_SETUP.create({
             locale,
             request: {
@@ -78,10 +86,16 @@ for (const theme of ["light", "dark"] as const)
                 };
               },
               async candidates() {
-                if (mode === "later")
+                if (mode === "in-use-no-time")
+                  throw { code: "sif.allocation_invalid", params: { reason: "minute_in_use" } };
+                if (mode === "later" || mode === "in-use")
                   throw {
                     code: "sif.allocation_invalid",
-                    params: { reason: "minute_not_later", allowedFromMs: instant + 240000 },
+                    params: {
+                      reason: mode === "later" ? "minute_not_later" : "minute_in_use",
+                      allowedFromMs: instant + 240000,
+                      ...(mode === "in-use" ? { remainingMs: 240000, recheckInMs: 90000 } : {}),
+                    },
                   };
                 return mode === "waiting"
                   ? { status: "waiting", targetMs: instant + 1800000, remainingMs: 1800000 }
@@ -143,6 +157,8 @@ for (const theme of ["light", "dark"] as const)
             "second-clock": "clock-wait",
             waiting: "remaining",
             later: "minute-not-later",
+            "in-use": "minute-taken",
+            "in-use-no-time": "minute-in-use",
             pdf: "prepare-pdf",
           } as const;
           await vi.waitFor(() =>
@@ -154,6 +170,8 @@ for (const theme of ["light", "dark"] as const)
             "second-clock",
             "waiting",
             "later",
+            "in-use",
+            "in-use-no-time",
             "pdf",
           ] as const) {
             mode = state;

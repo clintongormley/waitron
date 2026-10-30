@@ -558,6 +558,40 @@ it("a box clock before this release shows only the release line when the preview
   expect(text(el)).toContain("Box time precedes this Waitron release.");
   expect(formError(el)).toBe("");
 });
+it("a preview refused for a taken minute starts no countdown and sends no select", async () => {
+  const prepare = vi.fn(async (request: { proposal: unknown }) => {
+    const action = (request.proposal as { action: string }).action;
+    if (action === "clock-challenge") return { id: "challenge" };
+    if (action === "compare-clocks") return { id: "comparison", clock };
+    if (action === "preview")
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    return { status: "waiting", targetMs: instant + 180_000, remainingMs: 150_000 };
+  });
+  const { el } = await mount(prepare);
+  await ready(el);
+  fakeClock();
+  try {
+    await compare(el);
+    await vi.waitFor(() => expect(button(el, "compare").disabled).toBe(false));
+    vi.advanceTimersByTime(200_000);
+    await el.updateComplete;
+    expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=minute-taken]")).toBeNull();
+    expect(selects(prepare)).toEqual([]);
+    expect(formError(el)).toBe("");
+    expect(button(el, "select").disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("sends no installation code", async () => {
   const { el, prepare } = await mount();
   await ready(el);
@@ -825,7 +859,7 @@ it("a missing second clock reported by the server starts the 15-second check", a
     vi.useRealTimers();
   }
 });
-it("a later minute in use names its time and does not count down", async () => {
+it("a later minute in use is explained and does not count down", async () => {
   const { prepare } = scripted([
     {
       code: "sif.allocation_invalid",
@@ -840,7 +874,7 @@ it("a later minute in use names its time and does not count down", async () => {
     await userEvent.click(button(el, "select"));
     await vi.waitFor(() =>
       expect(text(el)).toContain(
-        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+        "The series cannot be made yet: a later minute is already in use.",
       ),
     );
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
@@ -849,6 +883,129 @@ it("a later minute in use names its time and does not count down", async () => {
     expect(selects(prepare)).toHaveLength(1);
     expect(el.readCredentials()).toBeNull();
     expect(button(el, "compare").disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a minute in use shows one countdown, checks again quietly and keeps saying why", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
+    },
+    { status: "waiting", targetMs: instant + 180_000, remainingMs: 150_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    const taken = () =>
+      el
+        .shadowRoot!.querySelector("[data-test=minute-taken]")
+        ?.textContent?.replace(/\s+/g, " ")
+        .trim();
+    await vi.waitFor(() =>
+      expect(taken()).toBe(
+        "The auto-generated invoice series code (which is time-based) already exists in the database.",
+      ),
+    );
+    expect(remaining(el)).toBe("03:00");
+    expect(text(el)).toContain("Generating a new code in: 03:00");
+    expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    await el.updateComplete;
+    expect(taken()).toBe(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+    expect(remaining(el)).toBe("02:30");
+    expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
+    expect(el.readCredentials()).toBeNull();
+    expect(button(el, "compare").disabled).toBe(false);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a lost re-check during a taken minute keeps counting and checks again", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
+    },
+    new TypeError("Failed to fetch"),
+    { status: "waiting", targetMs: instant + 180_000, remainingMs: 135_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(2));
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:29");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+    expect(
+      (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+    ).toBe("");
+    vi.advanceTimersByTime(14_000);
+    await vi.waitFor(() => expect(selects(prepare)).toHaveLength(3));
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:15");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("an answer it cannot read during a taken minute shows the failure", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
+    },
+    { status: "waiting", targetMs: "soon", remainingMs: 150_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() =>
+      expect(
+        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+      ).not.toBe(""),
+    );
+    expect(remaining(el)).toBeUndefined();
+    vi.advanceTimersByTime(60_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(selects(prepare)).toHaveLength(2);
   } finally {
     vi.useRealTimers();
   }
@@ -952,6 +1109,35 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
     vi.useRealTimers();
   }
 });
+it("an answer it cannot read while waiting for a second clock shows the failure", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = noSecondClock;
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    // A comparison with no readings lists, which `readClocks` refuses as "invalid comparison".
+    state.decision = {} as typeof clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(
+        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+      ).not.toBe(""),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(RESTORE_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = prepare.mock.calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prepare.mock.calls).toHaveLength(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("an edit to a declaration stops the wait", async () => {
   const { prepare } = scripted([
     { status: "waiting", targetMs: instant + 1_000, remainingMs: 1_000 },
@@ -1034,6 +1220,36 @@ it("explains each wait in Spanish with the restore page's words", async () => {
   expect(text(el)).toContain("No hace falta hacer nada; deja esta página abierta.");
   expect(text(el)).toContain("Sigue en");
 });
+it("says in Spanish that the series code already exists, with the countdown", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
+    },
+  ]);
+  const { el } = await mount(prepare);
+  el.locale = "es";
+  await el.updateComplete;
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+      ),
+    );
+    expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([
     {
@@ -1049,7 +1265,7 @@ it("says in Spanish that the series cannot be made yet", async () => {
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     ),
   );
 });

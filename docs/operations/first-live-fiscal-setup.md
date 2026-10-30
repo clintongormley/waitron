@@ -38,21 +38,41 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or till on the venue's network and enter the setup
-  password. It checks again every 15 seconds and carries on by itself (`first-hour.browser.test.ts`,
+  password. It checks again about every 15 seconds and carries on by itself (`first-hour.browser.test.ts`,
   "with no second clock it explains itself and carries on when the internet arrives").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **A later minute is already in use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
-  with no countdown (`first-hour.browser.test.ts`, "a later minute in use names its time and does
-  not count down").
+- **The minute this box would use is already taken**: the page says "The auto-generated
+  invoice series code (which is time-based) already exists in the database." and "Generating a new
+  code in: 03:00", counting down in minutes and seconds to the next free minute with no button
+  to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
+  checks is lost on the network, the countdown carries on and the page checks again about every 15
+  seconds; once the countdown reaches 00:00 it stays there until a check gets through
+  (`first-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
+  again"; `clock-wait.browser.test.ts`, "a taken minute's figure stays at 00:00 while lost re-checks
+  repeat"). An answer from the box the page cannot read still shows the page's failure message
+  (`first-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). A reload before
+  the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
+  time are correct." and press **Make the series** again (read, not run: the page's check on load
+  ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt
+  has already chosen its name and that name then turns up in the box's records, the attempt is refused
+  (`minute_in_use`, with no time) and is offered no way on yet
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its
+  own minute appears after it"; backlog A1223).
+- **A later minute is already in use** (no time given): the box's clock has gone back behind the
+  name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
+  its name
+  (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a resume under a clock behind its own pick
+  refuses before writing anything").
 
 For example, a setup whose clocks are compared at 09:00:00 UTC on 24 October 2026 (11:00 Madrid
 summer time) waits until 09:02:00 (`hour-selection.test.ts`, the setup test above), and that
 minute's code is `0D0RY` (`hour-selection.test.ts`, "restore waits until a minute start 90 to 150
 seconds after its check"). Prefixes `A`, `FF` and `R` become `A-0D0RY`, `FF-0D0RY` and `R-0D0RY`.
-A later setup must use a minute later than every name already known to that box. Correct clocks
+Correct clocks
 and surviving history reduce accidental reuse; they cannot discover another box whose activity
 you did not report.
 
@@ -85,8 +105,8 @@ conflicting outcome. Do not delete records to get past a refusal.
 reset counters or require a new name because the clock has advanced. With the venue database
 present, **Start again** is limited to a positively empty, never-activated attempt. It deletes the
 attempt and keeps no record of the invoice series names it chose: a later setup's name is the
-box's current minute, after the clock check and the wait, and later than every name the box can
-still read (`CLAUDE.md` §5). If a Start again is cut off, for example by a power cut, the next start finishes it, or
+box's current minute, after the clock check and the wait, and not a minute a name the box can
+still read already holds (`CLAUDE.md` §5). If a Start again is cut off, for example by a power cut, the next start finishes it, or
 refuses with a page that says what to do. If that page lists files Start again did not create,
 such as a venue copied from a backup, it offers **Keep everything and stop** or **Move these files
 aside and finish Start again**, behind the administrator password you chose during setup. If the

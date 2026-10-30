@@ -123,9 +123,13 @@ Use the recovery controls below the authenticated details. Enter the matching ke
 the recovery conditions and choose **Compare clocks**. Follow the clock and waiting instructions;
 there is no installation code to type. Choose **Recover** once the new series is selected.
 
-A key that opens the backup does not bypass the history and clock checks. If a check refuses,
-resolve its cause and try again. Do not delete the retained attempt's files by hand or edit its
-recovery records.
+If the backup holds sales dated more than a minute after the box's time, the box stops taking
+payments once the recovery finishes, until its clock catches up or is confirmed: see
+[When payments stop because of the clock](box-status.md#clock-behind).
+
+A key that opens the backup does not bypass the history and clock checks. If the clock check
+refuses, resolve its cause and try again. Do not delete the retained attempt's files by hand or edit
+its recovery records.
 
 ## If a recovery is interrupted {#resume}
 

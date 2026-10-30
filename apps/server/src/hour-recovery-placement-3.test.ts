@@ -215,7 +215,7 @@ describe("selected-hour admission before archive placement", () => {
   );
 
   it.each(["archive", "stream"] as const)(
-    "refuses an older selected hour before replacing a newer surviving %s destination",
+    "places an older selected hour over a newer surviving %s destination",
     async (kind) => {
       const f = await archiveHost(kind);
       vi.setSystemTime(new Date("2026-10-16T13:40:00Z"));
@@ -239,47 +239,35 @@ describe("selected-hour admission before archive placement", () => {
         log: () => {},
         withModuleOperations: newer.runner(selected.input),
       });
-      const before = await suite.db.select().from(invoiceSeries);
       const fresh = (await f.service.prepare({ action: "clock-challenge" }, { onBox: true })) as {
         id: string;
       };
       await f.service.prepare(
-        {
-          action: "compare-clocks",
-          browser: { challengeId: fresh.id, instantMs: Date.now() },
-        },
+        { action: "compare-clocks", browser: { challengeId: fresh.id, instantMs: Date.now() } },
         { onBox: true },
       );
       await suite.db.archiveTo(join(f.roots.venueDir, "venue.db"));
-      await writeFile(join(f.roots.stateDir, "trading.env"), "surviving destination identity");
-      await expect(
-        kind === "archive"
-          ? restoreFromArtifact({
-              ...f.restore,
-              modules: f.service.modules,
-              withModuleOperations: f.service.runner(f.outcome.input),
-            })
-          : writeStreamRestore({
-              ...f.restore,
-              databasePath: f.database,
-              entries: f.entries,
-              modules: f.service.modules,
-              withModuleOperations: f.service.runner(f.outcome.input),
-            }),
-      ).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "minute_not_later" },
-      });
-      const retained = await openVenueDatabase(f.roots.venueDir);
+      await (kind === "archive"
+        ? restoreFromArtifact({
+            ...f.restore,
+            modules: f.service.modules,
+            withModuleOperations: f.service.runner(f.outcome.input),
+          })
+        : writeStreamRestore({
+            ...f.restore,
+            databasePath: f.database,
+            entries: f.entries,
+            modules: f.service.modules,
+            withModuleOperations: f.service.runner(f.outcome.input),
+          }));
+      const placed = await openVenueDatabase(f.roots.venueDir);
       try {
-        expect(await retained.venue.select().from(invoiceSeries)).toEqual(before);
-        expect(await retained.venue.select().from(fiscalAllocations)).toHaveLength(2);
+        const codes = (await placed.venue.select().from(invoiceSeries)).map((row) => row.code);
+        expect(codes).toContain(`A-${(f.outcome as unknown as { identity: string }).identity}`);
+        expect(codes.filter((code) => code.endsWith("-0CNSP"))).toEqual([]);
       } finally {
-        await retained.close();
+        await placed.close();
       }
-      expect(await readFile(join(f.roots.stateDir, "trading.env"), "utf8")).toBe(
-        "surviving destination identity",
-      );
     },
   );
 

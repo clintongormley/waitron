@@ -654,6 +654,40 @@ main at 21d01dfac gave the same result. A Cloud download may run for up to 14 mi
 (`apps/server/src/cloud-recovery.ts:121`). Not measured: whether a real box takes a fresh internet
 reading when it places the recovery. Next step: measure that on a box.
 
+## A1223. A stored series pick that turns out taken
+
+From A1207. An attempt whose chosen name is found taken before it finishes is refused
+(`minute_in_use`), and the person is not offered a way on. Start a new attempt by itself, and word
+the refusal where it shows at activation (the setup app's general message with the code,
+`apps/setup/src/setup-app.ts:2001-2008`). The setup-from-backup restore reuses its stored attempt
+when reopened (`apps/server/src/first-setup-backup-recovery.ts:893-899`), so a reload does not start
+one; `docs/operations/hour-recovery.md` said it did, which I believe predates A1207 (#1990,
+`3ba85c7a6`).
+
+## A1224. Delete the time floors the series choice no longer reads
+
+From A1207. `recordedTimeFloorMs`, the backup's `backup-created` floor and
+`readHourHistoryWithRecordFloor` are still worked out but nothing in the choice reads them. A
+backup's record keeps accepting `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`)
+until a check of shipped backups says it may stop.
+
+## A1226. Compare clocks on the restore page can choose a series name by itself
+
+From the A1207 finish-branch review. When the page's preview is refused because there is no second
+clock, the page starts its 15-second second-clock check, and once a second clock answers, that check
+sends a real `select` although Make the series was never pressed. This happens at A1207's base
+(`61625b0ab`) too; the code is from #1990 (`3ba85c7a6`). Make the page's own re-checks after a
+preview read-only, as A1207 did for a taken minute (`#compare` in
+`packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
+
+A related path (A1207's figure review, probe R1): when Compare clocks shows a wait the box has
+already recorded, the end of that countdown sends a real `select` although Make the series was not
+pressed on this page load (at A1207's base too, one `select`; since A1207, a lost one is
+repeated about every 15 seconds). The box records such a wait only after an earlier `select`, so
+this may be intended; decide it with the rest of this entry. The setup page has the same shape
+after a reload during the box's wait (read, not run: `#select(true)` in `first-hour.ts` skips
+`#canSelect`).
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-29 ~10:38; A1206): Start again keeps no record of the names it
@@ -665,7 +699,7 @@ and restore's 90–150 second wait. A1206 leaves the existing "strictly later th
 history the box can still read" check as it was; the owner retired it at ~10:52 the same day ("If
 later invoices exist then they are wrong, we should flag them up … but it doesn't stop us from
 issuing the correct series based on the current minute, just as long as that minute series doesn't
-exist in the database already"); it stays enforced until A1207 replaces it. The start-again
+exist in the database already"); A1207 replaced it (below). The start-again
 note, its floor, A1098's Move floor, A1099's damaged-name-record floor and A1131's counting of a
 held setup database's names are gone. A leftover note file is ignored; a plain `waitron.sh reset`
 deletes it. The trade-off the owner accepts: a name an abandoned attempt used is forgotten once
@@ -680,6 +714,41 @@ the earlier attempt's. A promotion has no wait
 is safe only if it comes long enough after a Start again, up to 120 seconds with each box 30
 seconds off; that a promotion comes that late is reasoning about how long joining as a standby
 takes, not measured.
+
+**DECIDED (owner, 2026-10-29 ~10:52; A1207): a new installation name needs only that its minute is
+not already in use.** The owner: "If later invoices exist then they are wrong, we should flag them
+up to be dealt with (how?) but it doesn't stop us from issuing the correct series based on the
+current minute, just as long as that minute series doesn't exist in the database already." Setup,
+restore and promotion name the box's current UTC minute after the second clock and (setup and
+restore) the 90–150 second wait, and refuse it only when a name in a history the box reads already
+holds that minute; a later name, a later record, the newest invoice's time and the backup's creation
+time no longer refuse or move it. Built with these defaults, open to the owner (A1207 plan, Q2–Q7):
+"in use" counts every history the choice read before (the database in hand, the module's own record
+of its picks, earlier abandoned attempts of the same setup, the database a restore replaces, the
+backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was
+before (Q3). The owner on Q4 (2026-10-30): "If the existing minute is taken then we should just wait
+for another minute before checking again. Explain that to the user and show a countdown." So the
+box's refusal (reason `minute_in_use`) says how long until the next free minute and when to check
+again, and the setup and restore pages say the owner's own words (2026-10-30): "The auto-generated
+invoice series code (which is time-based) already exists in the database." and "Generating a new
+code in: 52 seconds", count down to it and check again by themselves; a promotion waits up to 150
+seconds and is otherwise refused with those values. The owner then chose (2026-10-30) the Spanish
+«Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("00:52", "02:30")
+in both languages, and that a check the page makes by itself and loses on the network keeps the
+countdown going and checks again about every 15 seconds. After a restore of a backup whose invoices are more than a minute later than the box's time,
+payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
+more than a minute behind the last sale (Q5); a later name held only in a database a restore
+replaces is not in the database the restore places (Q6); a box whose clock went back behind
+its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
+longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
+minute in the past; and no alert names a later name with no invoices under it or the series names
+(A1207 plan, review experiment #7, a promotion only). The owner on Q1 (2026-10-30): "A later series
+with no invoices is not a problem. It's only a problem when an invoice is issued. Also, if the box is
+running fast and tries to file an invoice 3 days ahead, aeat will return an error code so we will
+discover the problem quickly." (the owner's statement; not tested). Later invoices are listed
+by `clock.records_misdated` once a clock confirmation lifts the stop
+(`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names its
+minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale").
 
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the

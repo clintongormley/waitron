@@ -276,7 +276,7 @@ it.each(["production", "preproduction"] as const)(
   },
 );
 
-it("the hosted selector refuses an older hour than another node's revoked real identity", async () => {
+it("the hosted selector refuses a minute another node's revoked identity already uses", async () => {
   await seedTenants(venue.db);
   await stampDeployment(venue.db, "preproduction");
   await withTransaction(venue.db, async (tx) => {
@@ -284,15 +284,15 @@ it("the hosted selector refuses an older hour than another node's revoked real i
       nodeId: TENANT_A.nodeId,
       nif: request.taxId,
       idSistemaInformatico: "OTHER",
-      numeroInstalacion: "0CNPH",
-      registradoEn: new Date("2026-10-16T12:01:00Z"),
-      revocadoEn: new Date("2026-10-16T12:02:00Z"),
+      numeroInstalacion: "0CNNY",
+      registradoEn: new Date("2026-10-16T11:00:00Z"),
+      revocadoEn: new Date("2026-10-16T11:30:00Z"),
     });
   });
   const f = await fixture();
   await expect(selectThroughHost(f)).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
+    params: { reason: "minute_in_use" },
   });
 });
 

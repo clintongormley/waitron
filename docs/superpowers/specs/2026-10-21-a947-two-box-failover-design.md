@@ -1,3 +1,7 @@
+> **A1207, 29 October 2026:** the 'strictly later than every name it knows' rule and the backup's time floor are retired; a name is refused when its minute is already in use, or while the box's clock is behind this attempt's own pick, and a minute in use gets new words (the 'a later minute is already in use' words remain only for a clock behind the attempt's own pick) ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Q4).
+>
+> **A1207, 30 October 2026:** a setup or restore whose minute is taken now waits with one countdown and checks again by itself, instead of the refusal with "carry on from" ([A1207 plan](../plans/2026-10-29-a1207-minute-not-in-database.md), Part 1b).
+
 # A947 — Go-live on two local boxes: a spare box that takes over
 
 **Date:** 2026-10-21, revised twice the same day for the owner's answers, amended 2026-10-22.
@@ -102,7 +106,7 @@ rewritten, and carries a dated pointer here.
 >    second clock". No test runs a browser in a container.
 > 10. **With no second clock, the page checks again every 15 seconds by itself**, and carries on
 >     once a second clock appears; a re-check that again finds none keeps the 15-second rhythm
->     (`setup/clock-wait.ts`, `createSecondClockPoll`). On the setup page this starts only once
+>     (`setup/clock-wait.ts`, `createSecondClockPoll`; renamed `createRecheckPoll` on 2026-10-30). On the setup page this starts only once
 >     **Make the series** is pressed (item 4).
 >     Tests: `first-hour.browser.test.ts` and `recovery-hour.browser.test.ts`, each "with no second
 >     clock it explains itself and carries on when the internet arrives" and "a missing second

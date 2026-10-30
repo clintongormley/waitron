@@ -4,7 +4,10 @@ import { createWaitCountdown, formatRemaining, type WaitCountdown } from "./wait
 
 /** What a page explains instead of a name: design §6.5, "Every wait explains itself". */
 export type ClockProblem =
-  { kind: "second-clock" } | { kind: "disagreement" } | { kind: "later"; allowedFromMs?: number };
+  | { kind: "second-clock" }
+  | { kind: "disagreement" }
+  | { kind: "later" | "in-use" }
+  | { kind: "next-minute"; remainingMs: number; recheckInMs: number };
 
 export interface ClockWords {
   whyWait: string;
@@ -18,8 +21,9 @@ export interface ClockWords {
   differ: string;
   differDo: string;
   later: string;
-  laterFrom: (time: string) => string;
-  laterFromDay: (date: string, time: string) => string;
+  inUse: string;
+  minuteTaken: string;
+  newCodeIn: string;
 }
 
 export interface ClockComparison {
@@ -45,8 +49,11 @@ export const clockWaitStrings = {
     whyRefused: "No series is made without a confirmed time, so none is ever repeated.",
     differ: "This box's time and this device's differ by more than 30 seconds.",
     later: "The series cannot be made yet: a later minute is already in use.",
-    laterFrom: (time: string) => `You can carry on from ${time}.`,
-    laterFromDay: (date: string, time: string) => `You can carry on from ${date}, ${time}.`,
+    inUse:
+      "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+    minuteTaken:
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    newCodeIn: "Generating a new code in:",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -59,9 +66,11 @@ export const clockWaitStrings = {
     differ: "La hora de este equipo y la de este dispositivo no coinciden (más de 30 segundos).",
     later:
       "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
-    laterFrom: (time: string) => `Podrás seguir a partir de las ${time}.`,
-    laterFromDay: (date: string, time: string) =>
-      `Podrás seguir a partir del ${date} a las ${time}.`,
+    inUse:
+      "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+    minuteTaken:
+      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+    newCodeIn: "Se generará un código nuevo en",
   },
 } satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
 
@@ -82,17 +91,12 @@ export function dateTimeFormat(
   return format;
 }
 
-function dayIn(ms: number, timeZone: string): number {
-  const parts = dateTimeFormat("en", timeZone, {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(ms);
-  const part = (type: string) => Number(parts.find((p) => p.type === type)?.value);
-  return part("year") * 10_000 + part("month") * 100 + part("day");
+/** "02:30": the taken-minute wait's figure, `formatRemaining` with two-digit minutes. */
+export function remainingAsClock(ms: number): string {
+  return formatRemaining(ms).padStart(5, "0");
 }
 
-export const SECOND_CLOCK_POLL_MS = 15_000;
+export const RECHECK_POLL_MS = 15_000;
 
 export const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -100,6 +104,9 @@ export const record = (value: unknown): value is Record<string, unknown> =>
 /** A whole millisecond a `Date` can hold. */
 const instantMs = (value: unknown): value is number =>
   Number.isSafeInteger(value) && Math.abs(value as number) <= 8_640_000_000_000_000;
+
+const countable = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
 
 export function validWait(result: Record<string, unknown>): boolean {
   return (
@@ -114,15 +121,14 @@ export function validWait(result: Record<string, unknown>): boolean {
 export function clockProblem(error: unknown): ClockProblem | undefined {
   if (!record(error) || error.code !== "sif.allocation_invalid" || !record(error.params))
     return undefined;
-  const { reason, allowedFromMs } = error.params;
+  const { reason, remainingMs, recheckInMs } = error.params;
   if (reason === "second_clock_missing") return { kind: "second-clock" };
   if (reason === "clock_disagreement") return { kind: "disagreement" };
-  if (reason === "minute_not_later")
-    return {
-      kind: "later",
-      ...(instantMs(allowedFromMs) ? { allowedFromMs } : {}),
-    };
-  return undefined;
+  if (reason === "minute_not_later") return { kind: "later" };
+  if (reason !== "minute_in_use") return undefined;
+  return countable(recheckInMs) && countable(remainingMs) && recheckInMs <= remainingMs
+    ? { kind: "next-minute", remainingMs, recheckInMs }
+    : { kind: "in-use" };
 }
 
 /** Asks the box for a clock challenge, then for its comparison with this browser's time. */
@@ -147,7 +153,7 @@ export async function readClocks(
 }
 
 /** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
-function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
+function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
   let timer: ReturnType<typeof setInterval> | undefined;
   const stop = () => {
     if (timer !== undefined) clearInterval(timer);
@@ -159,7 +165,7 @@ function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
       return timer !== undefined;
     },
     start() {
-      timer ??= setInterval(run, SECOND_CLOCK_POLL_MS);
+      timer ??= setInterval(run, RECHECK_POLL_MS);
     },
     stop,
   };
@@ -167,20 +173,21 @@ function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
 
 /**
  * What a setup page explains about the clocks — a problem, the server's answer, or neither — and
- * the two timers that run `recheck` by themselves: the countdown at zero, and every 15 seconds
- * while no second clock is known.
+ * the two timers that run `recheck` by themselves.
  */
 export class ClockWait<Selected extends { status: "selected" }> {
   readonly #host: ReactiveControllerHost;
   readonly #countdown: WaitCountdown;
-  readonly #poll: ReturnType<typeof createSecondClockPoll>;
+  readonly #poll: ReturnType<typeof createRecheckPoll>;
   #problem: ClockProblem | undefined;
   #result: Selected | ClockWaitAnswer | undefined;
+  /** Reached this wait through a taken minute: kept by the box's wait that follows. */
+  #minuteTaken = false;
 
   constructor(host: ReactiveControllerHost, recheck: () => void) {
     this.#host = host;
     this.#countdown = createWaitCountdown(host, recheck);
-    this.#poll = createSecondClockPoll(host, recheck);
+    this.#poll = createRecheckPoll(host, recheck);
   }
 
   get problem(): ClockProblem | undefined {
@@ -191,23 +198,34 @@ export class ClockWait<Selected extends { status: "selected" }> {
     return this.#result;
   }
 
-  /** Waiting on the server's countdown or for a second clock. */
+  /** Counting down, to the box's wait or through a taken minute. */
+  get counting(): boolean {
+    return this.#result?.status === "waiting" || this.#problem?.kind === "next-minute";
+  }
+
+  /** Counting down or waiting for a second clock. */
   get waiting(): boolean {
-    return this.#result?.status === "waiting" || this.#problem?.kind === "second-clock";
+    return this.counting || this.#problem?.kind === "second-clock";
   }
 
   /** Replaces what the page explains: a problem, a server answer, or neither. */
   show(problem?: ClockProblem, result?: Selected | ClockWaitAnswer): void {
     this.#countdown.stop();
     this.#poll.stop();
+    this.#minuteTaken =
+      problem?.kind === "next-minute" ||
+      (this.#minuteTaken && problem === undefined && result?.status === "waiting");
     this.#problem = problem;
     this.#result = result;
     this.#host.requestUpdate();
-    if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
+    if (problem?.kind === "next-minute")
+      this.#countdown.start(problem.remainingMs, problem.recheckInMs);
+    else if (result?.status === "waiting") this.#countdown.start(result.remainingMs);
   }
 
   waitForSecondClock(): void {
     this.#result = undefined;
+    this.#minuteTaken = false;
     this.#countdown.stop();
     this.#problem = { kind: "second-clock" };
     this.#poll.start();
@@ -226,25 +244,30 @@ export class ClockWait<Selected extends { status: "selected" }> {
   }
 
   /**
-   * Shows what a failed request means. While the page checks for a second clock by itself
-   * (`automatic`), a request lost on the way (no refusal code) is left to the next check.
+   * Shows what a failed request means. A check the page made by itself (`automatic`) that ends in
+   * a `TypeError` with no code — what a request throws when it or its answer is lost on the
+   * network, though any other `TypeError` with no code takes the same path — leaves a countdown or
+   * second-clock wait up and starts the 15-second re-check; the next `show` stops it.
    */
   settle(error: unknown, automatic: boolean, fail: (error: unknown) => void): void {
     const problem = clockProblem(error);
     if (problem?.kind === "second-clock") this.waitForSecondClock();
     else if (problem) this.show(problem);
-    else if (!(
+    else if (
       automatic &&
-      this.#poll.running &&
-      (error as { code?: unknown } | null)?.code === undefined
-    )) {
+      (this.#poll.running || this.counting) &&
+      error instanceof TypeError &&
+      (error as { code?: unknown }).code === undefined
+    )
+      this.#poll.start();
+    else {
       this.show();
       fail(error);
     }
   }
 
   renderWait(words: ClockWords) {
-    return renderWait(words, this.#countdown);
+    return renderWait(words, this.#countdown, this.#minuteTaken);
   }
 }
 
@@ -252,8 +275,6 @@ export function renderClockProblem(
   problem: ClockProblem | undefined,
   words: ClockWords,
   clock: HourClockDecision | undefined,
-  locale: "en" | "es",
-  timeZone: string,
 ) {
   if (problem?.kind === "second-clock")
     return html`<section data-test="clock-wait">
@@ -272,41 +293,35 @@ export function renderClockProblem(
       <p>${words.differ}</p>
       <p>${words.differDo}</p>
     </section>`;
-  if (problem?.kind === "later") {
-    const from = problem.allowedFromMs;
-    let carryOn: string | undefined;
-    if (from !== undefined) {
-      const time = dateTimeFormat(locale, timeZone, {
-        hour: "2-digit",
-        minute: "2-digit",
-        hourCycle: "h23",
-      }).format(from);
-      carryOn =
-        dayIn(from, timeZone) > dayIn(Date.now(), timeZone)
-          ? words.laterFromDay(
-              dateTimeFormat(locale, timeZone, { dateStyle: "medium" }).format(from),
-              time,
-            )
-          : words.laterFrom(time);
-    }
-    return html`<p role="status" data-test="minute-not-later">
-      ${words.later}${carryOn === undefined ? nothing : html` ${carryOn}`}
+  if (problem?.kind === "later" || problem?.kind === "in-use")
+    return html`<p
+      role="status"
+      data-test=${problem.kind === "later" ? "minute-not-later" : "minute-in-use"}
+    >
+      ${problem.kind === "later" ? words.later : words.inUse}
     </p>`;
-  }
   return nothing;
 }
 
-function renderWait(words: ClockWords, countdown: WaitCountdown) {
+function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: boolean) {
   return html`<section data-test="hour-wait">
-    <p role="status">${words.whyWait}</p>
+    ${
+      minuteTaken
+        ? html`<p role="status" data-test="minute-taken">${words.minuteTaken}</p>`
+        : html`<p role="status">${words.whyWait}</p>`
+    }
     <p>${words.nothingToDo}</p>
     ${
       countdown.remainingMs === undefined
         ? nothing
         : html`<p>
-            ${words.continuesIn}
+            ${minuteTaken ? words.newCodeIn : words.continuesIn}
             <span role="timer" data-test="remaining"
-              >${formatRemaining(countdown.remainingMs)}</span
+              >${
+                minuteTaken
+                  ? remainingAsClock(countdown.remainingMs)
+                  : formatRemaining(countdown.remainingMs)
+              }</span
             >
           </p>`
     }

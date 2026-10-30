@@ -817,10 +817,11 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
 - **Never put our own metadata into a hash.** `entorno` must not enter `computeHuella`;
   differing only in it must leave hashes identical.
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
-  after another machine's clock agrees within 30 seconds (no confirmation), strictly later than
-  all readable historical names (the fiscal module's own record of the names it chose, a restored or surviving database, a backup's newest record or creation time;
-  still enforced: the owner retired it on 2026-10-29 and A1207, not yet built, will replace it with "refuse
-  only if this minute's name exists"). Start again keeps no record of the names it deletes (owner, 2026-10-29,
+  after another machine's clock agrees within 30 seconds (no confirmation); a minute whose name is
+  already in a history the box reads is not taken (the box waits for the next free one if it starts within 150 seconds, and otherwise
+  refuses with when it can; the setup and restore pages count that down and check again by themselves; owner, 2026-10-30, A1207), and no
+  other name or record refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose
+  own pick is ahead of the box's clock is refused until the clock reaches it. Start again keeps no record of the names it deletes (owner, 2026-10-29,
   A1206): a box and the machine confirming its clock, wrong by the same amount, can repeat a name. Setup/restore wait
   90–150 seconds; promotion does not. [Detail](docs/developers/conventions-data.md). Only preproduction throwaway
   skips second-clock/history checks; refuse it outside preproduction. Restore takes one source;

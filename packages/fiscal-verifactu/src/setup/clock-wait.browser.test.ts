@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render } from "lit";
+import { nothing, render, type ReactiveControllerHost } from "lit";
 import {
+  ClockWait,
   clockProblem,
   clockWaitStrings,
   dateTimeFormat,
+  remainingAsClock,
   renderClockProblem,
   validWait,
   type ClockWords,
@@ -22,25 +24,332 @@ it.each([
   expect(validWait(wait)).toBe(valid);
 });
 
-const words = {
-  later: "A later minute is in use.",
-  laterFrom: (t: string) => `From ${t}.`,
-  laterFromDay: (d: string, t: string) => `From ${d}, ${t}.`,
+const words: ClockWords = {
+  ...clockWaitStrings.en,
+  secondClockDo: "",
+  secondClockEnds: "",
+  differDo: "",
 };
 
-it.each([
-  [LAST_DATE_MS + 60_000, { kind: "later" }],
-  [-LAST_DATE_MS - 60_000, { kind: "later" }],
-  [LAST_DATE_MS, { kind: "later", allowedFromMs: LAST_DATE_MS }],
-])("a later minute allowed from %d keeps only a time it can draw", (allowedFromMs, problem) => {
+const text = (element: Element | null | undefined) =>
+  element?.textContent?.replace(/\s+/g, " ").trim();
+
+it.each([undefined, Date.parse("2026-10-18T20:04:00Z"), LAST_DATE_MS + 60_000])(
+  "a later minute names no time (allowed from %s)",
+  (allowedFromMs) => {
+    const read = clockProblem({
+      code: "sif.allocation_invalid",
+      params: { reason: "minute_not_later", allowedFromMs },
+    });
+    expect(read).toEqual({ kind: "later" });
+    const target = document.createElement("div");
+    render(renderClockProblem(read, words, undefined), target);
+    expect(text(target.querySelector("[data-test=minute-not-later]"))).toBe(
+      "The series cannot be made yet: a later minute is already in use.",
+    );
+  },
+);
+
+it("a minute in use counts down when the box says how long", () => {
   const read = clockProblem({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs },
+    params: {
+      reason: "minute_in_use",
+      allowedFromMs: Date.parse("2026-10-18T20:04:00Z"),
+      remainingMs: 180_000,
+      recheckInMs: 30_000,
+    },
   });
-  expect(read).toEqual(problem);
+  expect(read).toEqual({ kind: "next-minute", remainingMs: 180_000, recheckInMs: 30_000 });
   const target = document.createElement("div");
-  render(renderClockProblem(read, words as ClockWords, undefined, "en", "UTC"), target);
-  expect(target.textContent).toContain("A later minute is in use.");
+  render(renderClockProblem(read, words, undefined), target);
+  expect(text(target)).toBe("");
+});
+
+it.each([
+  [{}],
+  [{ remainingMs: 180_000 }],
+  [{ recheckInMs: 30_000 }],
+  [{ remainingMs: "180000", recheckInMs: 30_000 }],
+  [{ remainingMs: Number.POSITIVE_INFINITY, recheckInMs: 30_000 }],
+  [{ remainingMs: 180_000, recheckInMs: Number.NaN }],
+  [{ remainingMs: 0, recheckInMs: 0 }],
+  [{ remainingMs: 180_000, recheckInMs: 0 }],
+  [{ remainingMs: 180_000, recheckInMs: -1 }],
+  [{ remainingMs: 30_000, recheckInMs: 30_001 }],
+])("a minute in use with %j names no time and does not count down", (values) => {
+  const read = clockProblem({
+    code: "sif.allocation_invalid",
+    params: {
+      reason: "minute_in_use",
+      allowedFromMs: Date.parse("2026-10-18T20:04:00Z"),
+      ...values,
+    },
+  });
+  expect(read).toEqual({ kind: "in-use" });
+  const target = document.createElement("div");
+  render(renderClockProblem(read, words, undefined), target);
+  expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
+    "The series cannot be made yet: this box's records already hold a series for the minute this box would use.",
+  );
+});
+
+it("a stored pick refused as in use names no time in Spanish", () => {
+  const read = clockProblem({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_in_use" },
+  });
+  expect(read).toEqual({ kind: "in-use" });
+  const target = document.createElement("div");
+  render(
+    renderClockProblem(
+      read,
+      { ...clockWaitStrings.es, secondClockDo: "", secondClockEnds: "", differDo: "" },
+      undefined,
+    ),
+    target,
+  );
+  expect(text(target.querySelector("[data-test=minute-in-use]"))).toBe(
+    "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
+  );
+});
+
+describe("a taken minute shows one countdown", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const NEXT_MINUTE = (remainingMs: number, recheckInMs: number) => ({
+    code: "sif.allocation_invalid",
+    params: { reason: "minute_in_use", allowedFromMs: 1, remainingMs, recheckInMs },
+  });
+  const WAITING = { status: "waiting", targetMs: 1, remainingMs: 150_000 } as const;
+  const TAKEN =
+    "The auto-generated invoice series code (which is time-based) already exists in the database.";
+
+  const setup = () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+    const host: ReactiveControllerHost = {
+      addController: () => undefined,
+      removeController: () => undefined,
+      requestUpdate: () => undefined,
+      updateComplete: Promise.resolve(true),
+    };
+    const recheck = vi.fn();
+    const fail = vi.fn();
+    const wait = new ClockWait<{ status: "selected" }>(host, recheck);
+    const drawn = () => {
+      const target = document.createElement("div");
+      render(wait.counting ? wait.renderWait(words) : nothing, target);
+      return target;
+    };
+    return { wait, recheck, fail, drawn };
+  };
+
+  it("a taken minute shows one countdown and checks again quietly", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    expect(wait.waiting).toBe(true);
+    expect(wait.counting).toBe(true);
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(drawn().querySelector("[data-test=minute-taken]")?.getAttribute("role")).toBe("status");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("03:00");
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Generating a new code in: 03:00",
+    );
+    expect(text(drawn())).toContain("Nothing to do; keep this page open.");
+    vi.advanceTimersByTime(30_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:30");
+    wait.show(undefined, WAITING);
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:30");
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it("after the re-check the figure follows the box's answer", () => {
+    const { wait, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.show(undefined, { ...WAITING, remainingMs: 90_001 });
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("01:31");
+  });
+
+  it("a re-check refused again starts the same display again", () => {
+    const { wait, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.settle(NEXT_MINUTE(120_000, 60_000), true, fail);
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:00");
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it("the taken-minute sentence goes when the person starts again", () => {
+    const { wait, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.show();
+    wait.show(undefined, WAITING);
+    expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
+    expect(text(drawn().querySelector("[role=status]"))).toBe(
+      "Waiting to confirm the time, so no invoice series is ever repeated.",
+    );
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Continues in 2:30",
+    );
+  });
+
+  it("a lost re-check keeps the countdown going and checks again", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    expect(fail).not.toHaveBeenCalled();
+    expect(wait.counting).toBe(true);
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    vi.advanceTimersByTime(1_000);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:29");
+    vi.advanceTimersByTime(14_000);
+    expect(recheck).toHaveBeenCalledTimes(2);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(3);
+    wait.show(undefined, WAITING);
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(3);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("01:30");
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it("a taken minute's figure stays at 00:00 while lost re-checks repeat", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    for (let check = 2; check <= 13; check++) {
+      vi.advanceTimersByTime(15_000);
+      expect(recheck).toHaveBeenCalledTimes(check);
+      wait.settle(new TypeError("Failed to fetch"), true, fail);
+    }
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Generating a new code in: 00:00",
+    );
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(fail).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(14);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("00:00");
+  });
+
+  it("a lost check at the end of the box's wait checks again", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.show(undefined, { ...WAITING, remainingMs: 1_000 });
+    vi.advanceTimersByTime(1_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    expect(fail).not.toHaveBeenCalled();
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Continues in 0:00",
+    );
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(2);
+  });
+
+  it("a person's action after a lost re-check stops the quiet checks", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    wait.show();
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(drawn().textContent?.trim()).toBe("");
+  });
+
+  it.each([
+    ["a request the person made is lost", new TypeError("Failed to fetch"), false],
+    ["the box refuses the re-check", { code: "setup.invalid" }, true],
+    ["the page cannot read the box's answer to a re-check", new Error("invalid wait"), true],
+  ])("the wait goes when %s", (_case, error, automatic) => {
+    const { wait, recheck, fail } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.settle(error, automatic, fail);
+    expect(fail).toHaveBeenCalledWith(error);
+    expect(wait.counting).toBe(false);
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    [
+      "the series is selected",
+      (wait: ClockWait<{ status: "selected" }>) => wait.show(undefined, { status: "selected" }),
+    ],
+    [
+      "the clocks disagree",
+      (wait: ClockWait<{ status: "selected" }>) => wait.show({ kind: "disagreement" }),
+    ],
+    [
+      "a second clock is needed",
+      (wait: ClockWait<{ status: "selected" }>) => wait.waitForSecondClock(),
+    ],
+  ])("the taken-minute sentence goes when %s", (_case, next) => {
+    const { wait, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    next(wait);
+    wait.show(undefined, WAITING);
+    expect(drawn().querySelector("[data-test=minute-taken]")).toBeNull();
+  });
+});
+
+it.each([
+  [0, "00:00"],
+  [1_000, "00:01"],
+  [51_001, "00:52"],
+  [60_000, "01:00"],
+  [61_000, "01:01"],
+  [150_000, "02:30"],
+  [180_000, "03:00"],
+  [600_000, "10:00"],
+])("a taken minute's %i ms left reads %s", (ms, shown) => {
+  expect(remainingAsClock(ms)).toBe(shown);
+});
+
+it("says in Spanish that the code exists and when a new one is made", () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "performance"] });
+  const host: ReactiveControllerHost = {
+    addController: () => undefined,
+    removeController: () => undefined,
+    requestUpdate: () => undefined,
+    updateComplete: Promise.resolve(true),
+  };
+  try {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show({ kind: "next-minute", remainingMs: 52_000, recheckInMs: 1_000 });
+    const target = document.createElement("div");
+    render(
+      wait.renderWait({
+        ...clockWaitStrings.es,
+        secondClockDo: "",
+        secondClockEnds: "",
+        differDo: "",
+      }),
+      target,
+    );
+    expect(text(target.querySelector("[data-test=minute-taken]"))).toBe(
+      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+    );
+    expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Se generará un código nuevo en 00:52",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("builds each language, zone and style's formatter once", () => {
@@ -51,76 +360,4 @@ it("builds each language, zone and style's formatter once", () => {
   expect(dateTimeFormat("en", "Atlantic/Canary", minute)).not.toBe(first);
   expect(dateTimeFormat("es", "Europe/Madrid", minute)).not.toBe(first);
   expect(dateTimeFormat("es", "Atlantic/Canary", { dateStyle: "medium" })).not.toBe(first);
-});
-
-describe("the wait line names the day only when the floor falls on a later day in the venue's zone", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  const line = (locale: "en" | "es", timeZone: string, nowIso: string, floorIso: string) => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(Date.parse(nowIso));
-    const target = document.createElement("div");
-    const pageWords = {
-      ...clockWaitStrings[locale],
-      secondClockDo: "",
-      secondClockEnds: "",
-      differDo: "",
-    };
-    render(
-      renderClockProblem(
-        { kind: "later", allowedFromMs: Date.parse(floorIso) },
-        pageWords,
-        undefined,
-        locale,
-        timeZone,
-      ),
-      target,
-    );
-    return target.textContent?.replace(/\s+/g, " ").trim();
-  };
-
-  it.each([
-    ["en", "You can carry on from 18 Oct 2026, 15:45."],
-    ["es", "Podrás seguir a partir del 18 oct 2026 a las 15:45."],
-  ] as const)("a floor two days later shows its date in %s", (locale, sentence) => {
-    expect(
-      line(locale, "Europe/Madrid", "2026-10-16T14:15:00+02:00", "2026-10-18T15:45:00+02:00"),
-    ).toContain(sentence);
-  });
-
-  it("a floor just past the venue's midnight shows its date although the UTC date is the same", () => {
-    expect(line("en", "Atlantic/Canary", "2026-10-20T22:50:00Z", "2026-10-20T23:05:00Z")).toContain(
-      "You can carry on from 21 Oct 2026, 00:05.",
-    );
-  });
-
-  it.each([
-    [
-      "later today",
-      "Europe/Madrid",
-      "2026-10-16T14:15:00+02:00",
-      "2026-10-16T23:30:00+02:00",
-      "23:30",
-    ],
-    [
-      "later today in the venue's zone, on the next UTC day",
-      "Atlantic/Canary",
-      "2026-10-20T23:05:00Z",
-      "2026-10-21T00:00:00Z",
-      "01:00",
-    ],
-    [
-      "an earlier day",
-      "Europe/Madrid",
-      "2026-10-16T14:15:00+02:00",
-      "2026-10-15T15:45:00+02:00",
-      "15:45",
-    ],
-  ])("a floor %s shows the time alone", (_case, timeZone, nowIso, floorIso, time) => {
-    const text = line("en", timeZone, nowIso, floorIso);
-    expect(text).toContain(`You can carry on from ${time}.`);
-    expect(text).not.toMatch(/Oct/);
-  });
 });
