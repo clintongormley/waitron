@@ -125,9 +125,9 @@ async function casaMarina() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa Marina ${randomUUID()}`,
+      name: `Seaside House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     })
@@ -170,7 +170,7 @@ async function casaMarina() {
       [counter, ["B1"]],
     ] as const)
       for (const label of labels) await tx.insert(floorPlanTables).values({ zoneId, label });
-    const menu = (await createCatalogue(tx, { name: "Carta" })).id;
+    const menu = (await createCatalogue(tx, { name: "Menu" })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (name: string, colour: "grey" | "blue") =>

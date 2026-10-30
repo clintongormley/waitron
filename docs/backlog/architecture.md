@@ -468,6 +468,8 @@ until A977).
   listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as do the split-extras venue's operation description and the
   adjustment venue's Spanish staff dish names, legal name and operation description.
+  Native provisioning and floor-plan-set route suites use English venue, operation and menu
+  samples; their Spanish locale and starter-content checks remain.
   The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English
   customer-facing and kitchen names to its dishes and wine-glass variant, and English category,
   printer, device, location and administrator names. Its staff names "Croquetas", "Tortilla",
