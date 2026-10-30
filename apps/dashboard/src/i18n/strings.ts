@@ -4844,7 +4844,7 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
   "recovery_pack_dialog.intro":
     "El paquete contiene todas las claves de este local. Vuelve a iniciar sesión para hacerlo. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
-  "recovery_pack_dialog.new_key": "Hacer también una nueva clave del servidor",
+  "recovery_pack_dialog.new_key": "También crear una clave del servidor nueva",
   "recovery_pack_dialog.new_key_held":
     "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",
   "recovery_pack_dialog.new_key_unknown":

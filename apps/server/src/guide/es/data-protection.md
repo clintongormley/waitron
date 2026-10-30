@@ -554,8 +554,8 @@ proveedor. Mientras las copias programadas están activadas, **Copias de segurid
 seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio se siguen
 abriendo con la clave antigua, igual que la parte sellada con las contraseñas y claves en el
 historial de la copia del bucket anterior al cambio, que se guarda una semana. Un paquete también
-puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **Hacer también una
-nueva clave del servidor** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
+puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **También crear una
+clave del servidor nueva** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
 necesitando la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
