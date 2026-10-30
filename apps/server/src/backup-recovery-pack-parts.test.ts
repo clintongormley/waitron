@@ -310,6 +310,61 @@ describe("the archives part", () => {
       expect(await revisionFor(change)).not.toBe(first);
     }
   });
+
+  it("carries the whole archive code for a switched-off record's bucket, listed after its folder", async () => {
+    const bucket = { ...BUCKET, prefix: "archives/" };
+    await storeArchives({
+      ...ARCHIVES,
+      enabled: false,
+      destinations: [
+        { kind: "local-fs", id: "primary", dir: "/var/backups/venue" },
+        { kind: "s3", id: "bucket", bucket, venueId: VENUE },
+      ],
+    });
+    const built = await inTx((tx) => buildArchivesPart(tx, context));
+    expect(built.record.destination).toBe("bucket");
+    expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toEqual({
+      version: 1,
+      format: "WBK1",
+      venueId: VENUE,
+      bucket,
+      archivePrefix: `archives/archives/${VENUE}/`,
+      recoveryKey: KEY,
+    });
+  });
+
+  it("names the environment's first bucket when it lists several, a hyphen folder kept", async () => {
+    const first = { ...BUCKET, bucket: "first-bucket", prefix: "-" };
+    const second = { ...BUCKET, bucket: "second-bucket", prefix: "" };
+    const built = await inTx((tx) =>
+      buildArchivesPart(tx, {
+        ...context,
+        managedByEnvironment: true,
+        env: {
+          ...context.env,
+          WAITRON_BACKUP_DESTINATIONS: JSON.stringify([
+            { kind: "s3", id: "one", ...first },
+            { kind: "s3", id: "two", ...second },
+          ]),
+        },
+      }),
+    );
+    expect(decodeArchiveRecoveryPack(built.file.archiveCode!)).toMatchObject({
+      bucket: first,
+      archivePrefix: `-/archives/${VENUE}/`,
+    });
+  });
+
+  it("with no backup key, says archives are absent when there are none and names an unreadable record", async () => {
+    const keyless = { ...context, env: {} };
+    expect((await inTx((tx) => buildArchivesPart(tx, keyless))).part.state).toBe("absent");
+    await inTx((tx) =>
+      putCredential(tx, RING, { purpose: ARCHIVE_PURPOSE, value: { settings: "{not json" } }),
+    );
+    expect((await inTx((tx) => buildArchivesPart(tx, keyless))).failedWith).toBe(
+      "backup.archive_settings_unreadable",
+    );
+  });
 });
 
 describe("the server key part", () => {

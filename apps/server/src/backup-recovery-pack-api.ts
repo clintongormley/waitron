@@ -60,7 +60,7 @@ import type { Turns } from "./backup-turns.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle } from "./password-throttle.js";
-import type { RecoveryDocumentEvidence } from "./recovery-document-api.js";
+import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
 import "./errors.js";
 

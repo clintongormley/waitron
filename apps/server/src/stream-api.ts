@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { readMembershipTrustSet, withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database } from "@waitron/db";
 import {
   credentialRevision,
   deleteCredential,
@@ -11,7 +11,6 @@ import { authorizeManager } from "@waitron/identity";
 import { AppError, hasCode, isAppError } from "@waitron/shared";
 import { createErrorBoundary, readJsonBody, requireManagementSession } from "@waitron/server-kit";
 import {
-  encodeRecoveryKit,
   readBucketConfig,
   type BucketConfig,
   type ProbeResult,
@@ -30,7 +29,6 @@ import type { SealedStateRefresher } from "./sealed-state.js";
 import type { Turns } from "./backup-turns.js";
 import {
   STREAM_PURPOSE,
-  readStreamSettings,
   readStreamSettingsIn,
   streamSettingsPayload,
   type StreamHost,
@@ -93,8 +91,6 @@ const STATUS: Record<string, ContentfulStatusCode> = {
   "backup.stream_not_configured": 409,
   "backup.archive_namespace_overlap": 400,
   "backup.archive_settings_unreadable": 409,
-  "backup.stream_signer_missing": 409,
-  "backup.recovery_key_missing": 409,
   // The bucket gave no answer at all: not a refusal of the owner's settings, so not 422.
   "backup.stream_request_failed": 502,
 };
@@ -266,35 +262,6 @@ export function mountStreamApi(app: Hono, deps: StreamApiDeps, log: Logger): voi
         await withTransaction(deps.db, (tx) => deleteCredential(tx, { purpose: STREAM_PURPOSE }));
         await deps.stream.reload();
         return c.json(await view());
-      });
-    }),
-  );
-
-  // Read in a turn: a Save and a rotation landing between two unqueued reads could pair the old
-  // bucket with a key that cannot open the locked secrets row in that bucket's copy.
-  app.get("/api/backup/stream/kit", (c) =>
-    run(c, log, async () => {
-      await authorize(c);
-      return deps.turns(async () => {
-        const settings = await readStreamSettings(deps.db, deps.ring);
-        if (settings === null) throw new AppError("backup.stream_not_configured", {});
-        const recoveryKey = await deps.readRecoveryKey();
-        if (recoveryKey === undefined) throw new AppError("backup.recovery_key_missing", {});
-        const pointerSignerPublicKey = (await readMembershipTrustSet(deps.db))[deps.nodeId];
-        if (pointerSignerPublicKey === undefined) {
-          throw new AppError("backup.stream_signer_missing", {});
-        }
-        c.header("Cache-Control", "no-store");
-        return c.json({
-          kit: encodeRecoveryKit({
-            version: 1,
-            venueId: settings.venueId,
-            bucket: settings.bucket,
-            recoveryKey,
-            pointerSignerPublicKey,
-          }),
-          keyFingerprint: keyFingerprint(recoveryKey),
-        });
       });
     }),
   );

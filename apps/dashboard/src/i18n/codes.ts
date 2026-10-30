@@ -1100,10 +1100,6 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The saved settings for scheduled backups can't be read. Save them again on the Backups screen to replace them.",
     es: "No se pueden leer los ajustes guardados de las copias programadas. Vuelve a guardarlos en la pantalla Copias de seguridad para sustituirlos.",
   },
-  "backup.archive_bucket_not_configured": {
-    en: "Scheduled backups don't go to a bucket, so there is no recovery pack to download.",
-    es: "Las copias programadas no van a un bucket, así que no hay paquete de recuperación que descargar.",
-  },
   "recovery.pack_connection_insecure": {
     en: "Open the dashboard at its secure address (https://…) to make a recovery pack.",
     es: "Abre el panel en su dirección segura (https://…) para hacer un paquete de recuperación.",

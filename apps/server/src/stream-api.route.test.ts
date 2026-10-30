@@ -18,12 +18,7 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import { AppError } from "@waitron/shared";
-import {
-  parseRecoveryKit,
-  type BucketConfig,
-  type ProbeFailure,
-  type StreamStatus,
-} from "@waitron/stream";
+import { type BucketConfig, type ProbeFailure, type StreamStatus } from "@waitron/stream";
 import { ARCHIVE_PURPOSE, readArchiveSettings, writeArchiveSettings } from "./archive-settings.js";
 import { destinationView, keyFingerprint } from "./backup-supervisor.js";
 import { createTurns, type Turns } from "./backup-turns.js";
@@ -258,7 +253,6 @@ describe("stream settings routes", () => {
       ["PUT", "/api/backup/stream"],
       ["POST", "/api/backup/stream/test"],
       ["DELETE", "/api/backup/stream"],
-      ["GET", "/api/backup/stream/kit"],
     ] as const) {
       const res = await app.request(path, { method });
       expect(res.status).toBe(401);
@@ -648,87 +642,6 @@ describe("stream settings routes", () => {
     expect(res.status).toBe(409);
     expect(await res.json()).toMatchObject({ error: { code: "backup.not_primary" } });
     expect(deps.probe).not.toHaveBeenCalled();
-  });
-
-  it("the kit carries the bucket, the venue, the recovery key and this node's signing key", async () => {
-    const { app } = harness({}, "recovery-key-one-strong");
-    const cookie = await login(app);
-    await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    const res = await app.request("/api/backup/stream/kit", { headers: { cookie } });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { kit: string; keyFingerprint: string };
-    expect(parseRecoveryKit(body.kit)).toEqual({
-      version: 1,
-      venueId: VENUE_ID,
-      bucket: BUCKET,
-      recoveryKey: "recovery-key-one-strong",
-      pointerSignerPublicKey: publicKey,
-    });
-    expect(body.keyFingerprint).toBe(keyFingerprint("recovery-key-one-strong"));
-    // It carries the recovery key and the bucket's secret key.
-    expect(res.headers.get("cache-control")).toBe("no-store");
-  });
-
-  it("the kit waits its turn, so it never pairs one Save's bucket with a later rotation's key", async () => {
-    const other: BucketConfig = { ...BUCKET, bucket: "venue-copy-two" };
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        purpose: "backup.stream",
-        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: BUCKET }),
-      }),
-    );
-    const queue = heldTurns();
-    const { app, key } = harness({ turns: queue.turns }, "recovery-key-one-strong");
-    const cookie = await login(app);
-    const pending = app.request("/api/backup/stream/kit", { headers: { cookie } });
-    await Promise.race([queue.waiting, pending]);
-    await withTransaction(suite.db, (tx) =>
-      putCredential(tx, RING, {
-        purpose: "backup.stream",
-        value: streamSettingsPayload({ venueId: VENUE_ID, bucket: other }),
-      }),
-    );
-    key.value = "recovery-key-two-strong";
-    await queue.release();
-    const res = await pending;
-    expect(res.status).toBe(200);
-    const kit = parseRecoveryKit(((await res.json()) as { kit: string }).kit);
-    expect(kit).toMatchObject({ bucket: other, recoveryKey: "recovery-key-two-strong" });
-  });
-
-  it("offers no kit while no bucket is configured", async () => {
-    await clearBucket();
-    const { app } = harness({}, "recovery-key-one-strong");
-    const cookie = await login(app);
-    const res = await app.request("/api/backup/stream/kit", { headers: { cookie } });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.stream_not_configured" } });
-  });
-
-  it("offers no kit while the box holds no recovery key", async () => {
-    const { app } = harness({}, "recovery-key-one-strong");
-    const cookie = await login(app);
-    await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    const keyless = harness();
-    const res = await keyless.app.request("/api/backup/stream/kit", { headers: { cookie } });
-    expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: { code: "backup.recovery_key_missing" } });
-  });
-
-  it("offers no kit when this node has no signing key, since no rebuild could verify the pointer", async () => {
-    const { app } = harness({}, "recovery-key-one-strong");
-    const cookie = await login(app);
-    await app.request("/api/backup/stream", { method: "PUT", ...json(cookie, BODY) });
-    await withTransaction(suite.db, (tx) =>
-      tx.update(nodes).set({ publicKey: null }).where(eq(nodes.id, nodeId)),
-    );
-    try {
-      const res = await app.request("/api/backup/stream/kit", { headers: { cookie } });
-      expect(res.status).toBe(409);
-      expect(await res.json()).toMatchObject({ error: { code: "backup.stream_signer_missing" } });
-    } finally {
-      await setNodePublicKey(suite.db, nodeId, publicKey);
-    }
   });
 
   it("switching off removes the bucket and stops streaming", async () => {

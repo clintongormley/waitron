@@ -8,6 +8,10 @@ import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import "./errors.js";
 
+export type RecoveryDocumentEvidence = (
+  module: WaitronModule,
+) => Promise<Readonly<Record<string, unknown>>>;
+
 export async function readRecoveryDocumentEvidence(
   roots: { stateDir: string; venueDir: string },
   module: WaitronModule,
