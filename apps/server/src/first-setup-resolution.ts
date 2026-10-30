@@ -32,10 +32,7 @@ import { startFailureCode } from "./boot-failure.js";
 import { errnoOf } from "./errno.js";
 import "./errors.js";
 import { firstSetupUnusedAssignment } from "./first-setup-unused-assignment.js";
-import {
-  readSetupDatabaseHoldings,
-  type SetupDatabaseHoldings,
-} from "./first-setup-database-holdings.js";
+import { readSetupDatabase, type SetupDatabaseHoldings } from "./first-setup-database-holdings.js";
 
 export interface StartAgainFirstSetupRequest {
   inspectionId: string;
@@ -341,7 +338,10 @@ export function createFirstSetupResolutionActions(
     const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
     if (held) {
       if (host.modules === undefined) unavailable();
-      const holdings = await readSetupDatabaseHoldings(roots, host.modules);
+      const read = await readSetupDatabase(roots, host.modules);
+      if (read.kind === "damaged")
+        throw new AppError("setup.not_ready", {}, { reason: `database damaged: ${read.code}` });
+      const { holdings } = read;
       // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
       if (holdings.rows === 0) unavailable();
       assertNoKeptRecords(holdings);

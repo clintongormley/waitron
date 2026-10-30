@@ -4,6 +4,7 @@ import { root } from "../test/hour-recovery-host.js";
 import * as fileSystem from "node:fs/promises";
 import {
   access,
+  chmod,
   copyFile,
   mkdir,
   mkdtemp,
@@ -21,13 +22,20 @@ import { AppError } from "@waitron/shared";
 import { applyMigrations, manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import type { Database } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
+import * as provisioning from "@waitron/provisioning";
 import { appendOnlyTriggers } from "@waitron/store";
+import { damagePages, checkpointed } from "../test/damaged-database.js";
 import { MODULE } from "../test/first-fiscal.js";
-import { readSetupDatabaseHoldings } from "./first-setup-database-holdings.js";
+import { foreignHotJournal } from "../test/foreign-journal.js";
+import { readSetupDatabase } from "./first-setup-database-holdings.js";
 
 vi.mock("node:fs/promises", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs/promises")>();
   return { ...actual, mkdtemp: vi.fn(actual.mkdtemp), rm: vi.fn(actual.rm) };
+});
+vi.mock("@waitron/provisioning", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@waitron/provisioning")>();
+  return { ...actual, openImmutableWhenWalEmpty: vi.fn(actual.openImmutableWhenWalEmpty) };
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -40,11 +48,15 @@ const ADJUSTMENT_REFUND = `insert into adjustment_refunds
 const ACTIVATION_ROWS = 106;
 
 type Held = Pick<Awaited<ReturnType<typeof heldSetup>>, "roots" | "host">;
-function read(held: Held, modules: readonly WaitronModule[] = held.host.modules!) {
-  return held.host.resolution.withVenueExclusion(() =>
-    readSetupDatabaseHoldings(held.roots, modules),
-  );
+function readDatabase(held: Held, modules: readonly WaitronModule[] = held.host.modules!) {
+  return held.host.resolution.withVenueExclusion(() => readSetupDatabase(held.roots, modules));
 }
+async function read(held: Held, modules?: readonly WaitronModule[]) {
+  const answer = await readDatabase(held, modules);
+  if (answer.kind !== "read") throw new Error(`read as ${JSON.stringify(answer)}`);
+  return answer.holdings;
+}
+const venueDb = (held: Held) => join(held.roots.venueDir, "venue.db");
 async function files(dir: string) {
   const entries = (await readdir(dir, { withFileTypes: true })).filter((entry) => entry.isFile());
   return Promise.all(
@@ -244,13 +256,127 @@ it("reads through a private copy, read-write, when a leftover -journal sits besi
   expect(await files(held.roots.venueDir)).toEqual(before);
 });
 
-it("answers setup.not_ready when the database file cannot be read", async () => {
+it("reports a file that is not a database as damaged with errcode 26, nothing counted", async () => {
   const held = await heldSetup({ recovery: false });
   await writeFile(join(held.roots.venueDir, "venue.db"), "not a database");
-  await expect(read(held)).rejects.toMatchObject({
-    code: "setup.not_ready",
-    reason: expect.stringMatching(/^read failed: ERR_SQLITE_ERROR/),
+  expect(await readDatabase(held)).toEqual({
+    kind: "damaged",
+    code: "errcode 26",
+    seen: { rows: 0, kept: 0, records: 0, accepted: 0 },
   });
+});
+
+it("reports damage in one table with errcode 11, keeping every other table's counts", async () => {
+  const held = await heldSetup({ recovery: false });
+  damagePages(venueDb(held), "department_days");
+  const answer = await readDatabase(held);
+  expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
+  const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;
+  expect(seen.rows).toBeGreaterThan(0);
+  expect(seen.rows).toBeLessThan(ACTIVATION_ROWS);
+  expect(seen).toMatchObject({ kept: 0, records: 0, accepted: 0 });
+});
+
+it("reports damage in tenants beside an invoice, still counting the kept rows and the invoice record", async () => {
+  const held = await heldSetup({ invoices: 1, recovery: false });
+  damagePages(venueDb(held), "tenants");
+  const answer = await readDatabase(held);
+  expect(answer).toMatchObject({ kind: "damaged", code: "errcode 11" });
+  const { seen } = answer as Extract<typeof answer, { kind: "damaged" }>;
+  expect(seen.kept).toBeGreaterThanOrEqual(1);
+  expect(seen.records).toBe(1);
+});
+
+it("reports a damaged invoice table with no sale as damaged, with nothing kept and no records seen", async () => {
+  const held = await heldSetup({ recovery: false });
+  damagePages(venueDb(held), "registros_facturacion");
+  expect(await readDatabase(held)).toMatchObject({
+    kind: "damaged",
+    code: "errcode 11",
+    seen: { kept: 0, records: 0 },
+  });
+});
+
+it("marks the read damaged when a module seat fails with code 11", async () => {
+  const held = await heldSetup({ recovery: false });
+  const modules = withHoldings(held, async () => {
+    throw Object.assign(new Error("x"), { errcode: 11 });
+  });
+  expect(await readDatabase(held, modules)).toMatchObject({
+    kind: "damaged",
+    code: "errcode 11",
+    seen: { rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 },
+  });
+});
+
+it("reports a damaged first page with errcode 26 and nothing counted", async () => {
+  const held = await heldSetup({ recovery: false });
+  damagePages(venueDb(held), null);
+  expect(await readDatabase(held)).toEqual({
+    kind: "damaged",
+    code: "errcode 26",
+    seen: { rows: 0, kept: 0, records: 0, accepted: 0 },
+  });
+});
+
+it("is not ready, never damaged, for an intact database with another database's hot journal beside it", async () => {
+  const held = await heldSetup({ invoices: 1, recovery: false });
+  checkpointed(venueDb(held));
+  const before = await readFile(venueDb(held));
+  foreignHotJournal(`${venueDb(held)}-journal`, "rolls-back");
+  await expect(readDatabase(held)).rejects.toMatchObject({
+    code: "setup.not_ready",
+    reason: "journal beside a damaged read: errcode 11",
+  });
+  expect(await readFile(venueDb(held))).toEqual(before);
+});
+
+it("reads the same intact database without the journal, with its invoice record", async () => {
+  const held = await heldSetup({ invoices: 1, recovery: false });
+  checkpointed(venueDb(held));
+  expect(await readDatabase(held)).toMatchObject({ kind: "read", holdings: { records: 1 } });
+});
+
+it("is not ready, never damaged, for a database the box may not open", async () => {
+  const held = await heldSetup({ recovery: false });
+  checkpointed(venueDb(held));
+  await chmod(venueDb(held), 0o000);
+  try {
+    await expect(readDatabase(held)).rejects.toMatchObject({
+      code: "setup.not_ready",
+      reason: expect.stringMatching(/^database unreadable: open /),
+    });
+  } finally {
+    await chmod(venueDb(held), 0o600);
+  }
+});
+
+it.each([
+  ["open", 26, { kind: "damaged", code: "errcode 26" }],
+  ["open", 14, { code: "setup.not_ready", reason: "database unreadable: open unknown 14" }],
+  ["wal", 11, { code: "setup.not_ready", reason: "database unreadable: wal unknown 11" }],
+] as const)(
+  "an opening that fails at %s with code %i answers %o",
+  async (stage, errcode, answer) => {
+    const held = await heldSetup({ recovery: false });
+    vi.mocked(provisioning.openImmutableWhenWalEmpty).mockResolvedValueOnce({
+      kind: "failed",
+      stage,
+      error: { errcode },
+    });
+    if ("kind" in answer)
+      expect(await readDatabase(held)).toEqual({
+        ...answer,
+        seen: { rows: 0, kept: 0, records: 0, accepted: 0 },
+      });
+    else await expect(readDatabase(held)).rejects.toMatchObject(answer);
+  },
+);
+
+it("is not ready for a 0-byte database", async () => {
+  const held = await heldSetup({ recovery: false });
+  await writeFile(venueDb(held), "");
+  await expect(readDatabase(held)).rejects.toMatchObject({ code: "setup.not_ready" });
 });
 
 it("sums records and accepted filings over every module with a holdings seat", async () => {
@@ -301,8 +427,11 @@ it("reads an empty migrated database as holding no rows", async () => {
   const venueDir = join(root, "empty-venue");
   await mkdir(venueDir);
   await applyMigrations(venueDir, migrationOptionsFor(manifestSets(), null));
-  const result = await readSetupDatabaseHoldings({ venueDir }, ALL_MODULES);
-  expect(result).toMatchObject({ rows: 0, kept: 0, records: 0, accepted: 0 });
+  const result = await readSetupDatabase({ venueDir }, ALL_MODULES);
+  expect(result).toMatchObject({
+    kind: "read",
+    holdings: { rows: 0, kept: 0, records: 0, accepted: 0 },
+  });
 });
 
 it("keeps a row in an append-only table of a manifest module that is not enabled", async () => {

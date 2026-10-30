@@ -25,9 +25,22 @@ export interface SetupDatabaseHoldings {
   readonly accepted: number;
 }
 
+type Damage = "errcode 11" | "errcode 26";
+/** `damaged`: some step failed as damage; `seen` holds what every other step counted. */
+export type SetupDatabaseRead =
+  | { kind: "read"; holdings: SetupDatabaseHoldings }
+  | { kind: "damaged"; code: Damage; seen: SetupDatabaseHoldings };
+
 // Reasons are log-only codes: they never carry a path or a value read from the database.
 const notReady = (reason: string): never => {
   throw new AppError("setup.not_ready", {}, { reason });
+};
+/** SQLite's primary code 11 (corrupt) or 26 (not a database); anything else is not damage. */
+const damageOf = (error: unknown): Damage | undefined => {
+  const { errcode } = (error ?? {}) as { errcode?: unknown };
+  if (typeof errcode !== "number") return undefined;
+  const primary = errcode & 0xff;
+  return primary === 11 || primary === 26 ? `errcode ${primary}` : undefined;
 };
 const codeOf = (error: unknown) => {
   const { code, errcode } = (error ?? {}) as { code?: unknown; errcode?: unknown };
@@ -39,10 +52,10 @@ const codeOf = (error: unknown) => {
  * venue exclusion and the coordinator turn. `modules` are the attempt's modules; which tables are
  * append-only and which may be deleted is taken from every module, enabled or not.
  */
-export async function readSetupDatabaseHoldings(
+export async function readSetupDatabase(
   roots: Pick<FirstSetupRoots, "venueDir">,
   modules: readonly WaitronModule[],
-): Promise<SetupDatabaseHoldings> {
+): Promise<SetupDatabaseRead> {
   const database = join(roots.venueDir, "venue.db");
   let scratch: string | undefined;
   let connection: DatabaseSync | undefined;
@@ -57,9 +70,16 @@ export async function readSetupDatabaseHoldings(
     );
     // Opening the original in place avoids a copy, which a nearly full disk may have no room for.
     const opened = journal ? ({ kind: "wal" } as const) : await openImmutableWhenWalEmpty(database);
-    if (opened.kind === "failed")
+    if (opened.kind === "failed") {
+      const damage = opened.stage === "open" ? damageOf(opened.error) : undefined;
+      if (damage !== undefined)
+        return {
+          kind: "damaged",
+          code: damage,
+          seen: { rows: 0, kept: 0, records: 0, accepted: 0 },
+        };
       notReady(`database unreadable: ${opened.stage} ${codeOf(opened.error)}`);
-    else if (opened.kind === "open") connection = opened.connection;
+    } else if (opened.kind === "open") connection = opened.connection;
     else {
       scratch = await mkdtemp(join(tmpdir(), "waitron-setup-holdings-")).catch((error: unknown) =>
         notReady(`copy failed: ${codeOf(error)}`),
@@ -76,7 +96,11 @@ export async function readSetupDatabaseHoldings(
       connection = new DatabaseSync(join(scratch, "venue.db"));
       connection.exec("pragma query_only = 1");
     }
-    return await readHoldings(connection!, modules);
+    const { holdings, damage } = await readHoldings(connection!, modules);
+    if (damage === undefined) return { kind: "read", holdings };
+    // Another database's journal rolled into the copy fails an intact database in the same way.
+    if (journal) notReady(`journal beside a damaged read: ${damage}`);
+    return { kind: "damaged", code: damage, seen: holdings };
   } catch (error) {
     failed = true;
     if (error instanceof AppError && error.code === "setup.not_ready") throw error;
@@ -95,14 +119,35 @@ export async function readSetupDatabaseHoldings(
   }
 }
 
+/**
+ * Each step runs on its own: one that fails as damage is skipped and the rest still count, so a
+ * damaged table cannot hide a record kept elsewhere. Any other failure throws.
+ */
 async function readHoldings(
   connection: DatabaseSync,
   modules: readonly WaitronModule[],
-): Promise<SetupDatabaseHoldings> {
+): Promise<{ holdings: SetupDatabaseHoldings; damage: Damage | undefined }> {
+  let damage: Damage | undefined;
+  const step = async <T>(read: () => T | Promise<T>, otherwise: T): Promise<T> => {
+    try {
+      return await read();
+    } catch (error) {
+      const found = damageOf(error);
+      if (found === undefined) throw error;
+      damage ??= found;
+      return otherwise;
+    }
+  };
   const target = executeTarget(connection);
-  const schema = connection
-    .prepare("select type, name, tbl_name as tableName from sqlite_schema")
-    .all() as { type: string; name: string; tableName: string }[];
+  const schema = await step(
+    () =>
+      connection.prepare("select type, name, tbl_name as tableName from sqlite_schema").all() as {
+        type: string;
+        name: string;
+        tableName: string;
+      }[],
+    [],
+  );
   const sets = manifestSets();
   const journals = new Set(sets.map((set) => set.table));
   const tables = schema
@@ -132,21 +177,27 @@ async function readHoldings(
   let rows = 0;
   let kept = 0;
   for (const table of tables) {
-    const { n } = connection.prepare(`select count(*) as n from ${quoteIdent(table)}`).get() as {
-      n: number;
-    };
+    const n = await step(
+      () =>
+        (
+          connection.prepare(`select count(*) as n from ${quoteIdent(table)}`).get() as {
+            n: number;
+          }
+        ).n,
+      0,
+    );
     rows += n;
     if (appendOnly.has(table) && !deletable.has(table)) kept += n;
   }
   let records = 0;
   let accepted = 0;
   for (const module of modules) {
-    const initialSetup = module.provisioning?.initialSetup;
-    if (initialSetup?.startAgainHoldings !== undefined) {
-      const held = await initialSetup.startAgainHoldings(target);
+    const seat = module.provisioning?.initialSetup?.startAgainHoldings;
+    if (seat !== undefined) {
+      const held = await step(() => seat(target), { records: 0, accepted: 0 });
       records += held.records;
       accepted += held.accepted;
     }
   }
-  return { rows, kept, records, accepted };
+  return { holdings: { rows, kept, records, accepted }, damage };
 }

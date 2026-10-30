@@ -57,9 +57,9 @@ vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./first-setup-database-holdings.js")>();
   return {
     ...actual,
-    readSetupDatabaseHoldings: (...args: Parameters<typeof actual.readSetupDatabaseHoldings>) => {
+    readSetupDatabase: (...args: Parameters<typeof actual.readSetupDatabase>) => {
       holdingsRead.calls += 1;
-      return actual.readSetupDatabaseHoldings(...args);
+      return actual.readSetupDatabase(...args);
     },
   };
 });
