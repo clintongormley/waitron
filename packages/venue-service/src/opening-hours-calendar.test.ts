@@ -43,19 +43,17 @@ const suite = useVenueDb({
 const run = <T>(fn: (tx: Transaction) => Promise<T>) => withTransaction(suite.db, fn);
 const AT = new Date("2026-10-09T10:00:00Z");
 
-/** A Sevilla venue with a department per entry of `closedOn`, each serving lunch every day but
- *  the weekdays its entry lists. */
 async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
   await suite.db
     .insert(tenants)
-    .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "Casa SL" })
+    .values({ id: 1, country: "ES", taxId: "B00000000", legalName: "House Ltd" })
     .onConflictDoUpdate({ target: tenants.id, set: { country: "ES" } });
   const [location] = await suite.db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
       province: "Sevilla",
@@ -64,12 +62,12 @@ async function venue(closedOn: readonly (readonly number[])[] = [[1]]) {
     .returning({ id: locations.id });
   const cfg: VenueScope = { locationId: locationId(location!.id) };
   return run(async (tx) => {
-    const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
+    const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     for (const [index, closed] of closedOn.entries()) {
       const department = (
-        await createDepartment(tx, cfg, { name: `Sala ${index}`, orderStart: "table" })
+        await createDepartment(tx, cfg, { name: `Dining ${index}`, orderStart: "table" })
       ).id;
       const lunch = (
         await saveMenuPeriod(tx, cfg, department, { name: "Lunch", menuId, staffMenuIds: [] })
@@ -109,7 +107,7 @@ describe("the Opening hours year read", () => {
   it("gives 2030's days by value: a Winter day, a closed Monday and a special day's Closed tick", async () => {
     const v = await venue();
     const closure = await special(v, {
-      name: "Cierre",
+      name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2030-07-10", closedAllDay: true }],
     });
@@ -140,7 +138,7 @@ describe("the Opening hours year read", () => {
     expect(dayOf(year, "2030-07-10")).toEqual({
       date: "2030-07-10",
       seasonId: v.seasons.Summer,
-      specialDay: { id: closure.id, name: "Cierre" },
+      specialDay: { id: closure.id, name: "Closure" },
       holidays: [],
       tone: "special_day",
       closed: true,
@@ -206,7 +204,7 @@ describe("the Opening hours year read", () => {
   it("says 2027's public holidays are not available yet, and names the repeating date with no holiday of its name", async () => {
     const v = await venue();
     const easterWeek = await special(v, {
-      name: "Semana Santa",
+      name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2026-04-03", closedAllDay: true }],
     });
@@ -218,7 +216,7 @@ describe("the Opening hours year read", () => {
       "missing_year",
     ]);
     expect(next.missingHolidays).toEqual([
-      { specialDayId: easterWeek.id, name: "Semana Santa", holidayName: "Viernes Santo" },
+      { specialDayId: easterWeek.id, name: "Easter week", holidayName: "Viernes Santo" },
     ]);
     const known = new Map([[2027, new Map([["Viernes Santo", "2027-03-26"]])]]);
     expect(await run((tx) => missingHolidaysIn(tx, v.cfg, [2027], known))).toEqual([]);
@@ -288,13 +286,10 @@ describe("the Opening hours year read", () => {
   });
 });
 
-/** A Sevilla venue: Sala serves lunch 12:00–16:00 in Autumn and dinner 20:00–23:30 in Winter, every
- *  day, with a Terrace closed 20:00–22:00 on Winter Sundays and a Bar; Barra serves lunch 13:00–15:00
- *  every day of every season, with its own Counter zone. */
 async function monthVenue() {
   const { cfg } = await venue([]);
   return run(async (tx) => {
-    const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
+    const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
     const { document } = await buildMenuDocument(tx, menuId);
     await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
     const department = async (name: string) =>
@@ -314,8 +309,8 @@ async function monthVenue() {
       await configureZone(tx, cfg, { zoneId: row!.id, departmentId });
       return row!.id;
     };
-    const diningDepartment = await department("Sala");
-    const barDepartment = await department("Barra");
+    const diningDepartment = await department("Dining");
+    const barDepartment = await department("Counter department");
     await ensureDefaultSeasons(tx, cfg);
     const seasons = Object.fromEntries(
       (await readSeasons(tx, cfg)).map((season) => [
@@ -370,7 +365,7 @@ describe("the Opening hours month read", () => {
   it("gives December 2030 by value: Autumn's last Saturday, Winter's first Sunday and a painted special day", async () => {
     const v = await monthVenue();
     const christmasEve = await special(v, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: false,
       dates: [{ date: "2030-12-24", closedAllDay: false }],
       paint: [
@@ -464,7 +459,7 @@ describe("the Opening hours month read", () => {
       dayCutover: "06:00",
       endMinute: 1440,
       seasonId: v.seasons.Winter,
-      specialDay: { id: christmasEve.id, name: "Nochebuena" },
+      specialDay: { id: christmasEve.id, name: "Christmas Eve" },
       holidays: [],
       closedAllDay: false,
       departments: [
@@ -535,7 +530,7 @@ describe("the Opening hours month read", () => {
   it("gives the next year's public holidays on December's trailing dates, and the Closed tick", async () => {
     const v = await monthVenue();
     await special(v, {
-      name: "Cierre",
+      name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
     });
@@ -565,7 +560,7 @@ describe("the Opening hours month read", () => {
   it("plans the month as the month read does, with each special date's id, reading no hours, zones or holidays", async () => {
     const v = await monthVenue();
     const closure = await special(v, {
-      name: "Cierre",
+      name: "Closure",
       repeatsYearly: false,
       dates: [{ date: "2025-12-29", closedAllDay: true }],
     });
@@ -666,9 +661,9 @@ describe("the Opening hours month read", () => {
     const [location] = await suite.db
       .insert(locations)
       .values({
-        name: `Casa ${randomUUID()}`,
+        name: `House ${randomUUID()}`,
         invoiceLocales: ["es-ES"],
-        operationDescription: "Hostelería",
+        operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
         dayCutover: "06:00",
         province: "Sevilla",
@@ -686,7 +681,7 @@ describe("the Opening hours month read", () => {
   it("plans the month from the tables it declares, holidays and special-day paint included", async () => {
     const v = await venue();
     const easterWeek = await special(v, {
-      name: "Semana Santa",
+      name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2025-04-18", closedAllDay: false }],
     });
@@ -716,7 +711,7 @@ describe("the Opening hours month read", () => {
   it("reads the location once when a repeating special day follows a public holiday, and places it by that holiday", async () => {
     const v = await venue();
     const easterWeek = await special(v, {
-      name: "Semana Santa",
+      name: "Easter week",
       repeatsYearly: true,
       dates: [{ date: "2025-04-18", closedAllDay: true }],
     });
@@ -744,7 +739,7 @@ describe("the Opening hours month read", () => {
     });
     // Viernes Santo falls on 2026-04-03.
     const day = (date: string) => month.days.find((d) => d.date === date)!;
-    expect(day("2026-04-03").specialDay).toEqual({ id: easterWeek.id, name: "Semana Santa" });
+    expect(day("2026-04-03").specialDay).toEqual({ id: easterWeek.id, name: "Easter week" });
     expect(day("2026-04-18").specialDay).toBeNull();
     expect(tables.filter((table) => table === "locations")).toHaveLength(1);
   });
@@ -772,7 +767,7 @@ describe("the season days read", () => {
   it("gives each asked date its season's hours and closures by value, under a special day's paint and Closed tick", async () => {
     const v = await monthVenue();
     await special(v, {
-      name: "Nochebuena",
+      name: "Christmas Eve",
       repeatsYearly: false,
       dates: [
         { date: "2030-12-24", closedAllDay: false },
@@ -872,9 +867,6 @@ describe("the season days read", () => {
 
 describe("a past day's range around a start change", () => {
   const AFTER_RETURN = new Date("2026-11-02T12:00:00Z");
-  /** 05:00, then 03:00 from 2026-10-21, then 05:00 again from 2026-10-28, with Sala's dinner
-   *  stored at 22:00–04:30 on Tuesdays and Saturdays after the start came back to 05:00, and Terrace closed
-   *  23:00–04:00 then. */
   async function lateSaturday() {
     const { cfg } = await venue([]);
     await suite.db
@@ -891,11 +883,11 @@ describe("a past day's range around a start change", () => {
       ]);
     });
     return run(async (tx) => {
-      const menuId = (await createCatalogue(tx, { name: `Carta ${randomUUID()}` })).id;
+      const menuId = (await createCatalogue(tx, { name: `Menu ${randomUUID()}` })).id;
       const { document } = await buildMenuDocument(tx, menuId);
       await publishMenu(tx, menuId, menuDocumentHash(document), "person-1");
       const diningDepartment = (
-        await createDepartment(tx, cfg, { name: "Sala", orderStart: "table" })
+        await createDepartment(tx, cfg, { name: "Dining", orderStart: "table" })
       ).id;
       const period = async (name: string) =>
         (await saveMenuPeriod(tx, cfg, diningDepartment, { name, menuId, staffMenuIds: [] })).id;
@@ -977,7 +969,7 @@ describe("a past day's range around a start change", () => {
         v.cfg,
         null,
         {
-          name: "Feria",
+          name: "Fair",
           repeatsYearly: false,
           dates: [{ date: "2026-10-24", closedAllDay: false }],
           paint: [
@@ -1006,7 +998,7 @@ describe("a past day's range around a start change", () => {
         v.cfg,
         null,
         {
-          name: "Feria",
+          name: "Fair",
           repeatsYearly: false,
           dates: [
             { date: "2026-10-24", closedAllDay: false },

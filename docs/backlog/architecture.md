@@ -503,6 +503,9 @@ until A977).
   names, keeping locale settings, dates, permissions and refusal checks.
   Period-deletion HTTP route samples use English location, operation, station, menu and special-day
   names, keeping dates, locale keys, permission refusals and replacement checks.
+  The native opening-hours calendar suite uses English venue, operation, menu, department and
+  custom-day samples; official holiday names, staff-language season checks, geography, dates
+  and calendar behavior checks stay.
   Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package

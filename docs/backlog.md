@@ -6199,6 +6199,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   names; locale settings, dates, permissions and refusal checks stay.
   Period-deletion HTTP route samples use English location, operation, station, menu and special-day
   names; dates, locale keys, permission refusals and replacement checks stay.
+  The native opening-hours calendar suite uses English venue, operation, menu, department and
+  custom-day samples; official holiday names, staff-language season checks, geography, dates
+  and calendar behavior checks stay.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
