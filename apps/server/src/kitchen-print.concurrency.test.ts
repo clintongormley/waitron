@@ -87,7 +87,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     const [loc] = await suite.db
       .insert(locations)
       .values({
-        name: "Barra",
+        name: "Bar",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
       })
@@ -106,11 +106,11 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
     const { kitchenId, printerId, orderId, lineId } = await withTransaction(
       suite.db,
       async (tx) => {
-        const cat = await createCatalogue(tx, { name: "Carta" });
+        const cat = await createCatalogue(tx, { name: "Menu" });
         await assignCatalogueToLocation(tx, locationId, cat.id);
-        const kitchen = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+        const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
         const { id: printerId } = await createPrinter(tx, printCfg(cfg), {
-          name: "Cocina printer",
+          name: "Kitchen printer",
           transport: "cloud_poll",
           pollId: `poll-${randomUUID()}`,
         });
@@ -122,7 +122,7 @@ describe("print-on-fire concurrency — the write queue around the mapping read"
         const { id: product } = await createProduct(tx, {
           catalogueId: cat.id,
           categoryId: null,
-          name: "Chuleton",
+          name: "Ribeye",
           pricingUnit: "each",
           unitPrice: "1.50",
           vatClass: "general",

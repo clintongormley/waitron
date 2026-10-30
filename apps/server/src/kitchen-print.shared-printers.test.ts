@@ -138,7 +138,7 @@ async function seatAndSubmit(
 ): Promise<string> {
   await setStationPrinting(tx, { printHeldWork: true });
   const offers = await offerProducts(tx, cfg, { zone: "tables" });
-  const { id: tableId } = await createTable(tx, cfg, { label: "Mesa 7", zoneId: offers.zoneId });
+  const { id: tableId } = await createTable(tx, cfg, { label: "Table 7", zoneId: offers.zoneId });
   const { partyId, tabId, revision } = await seatTable(tx, cfg, {
     tableId,
     guestCount: 2,
