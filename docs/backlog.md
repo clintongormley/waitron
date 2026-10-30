@@ -6183,14 +6183,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   defining regeneration behavior; today's generator produces a different tile.
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
-- **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
-  suites, server till-API fixtures, and file names.
-  Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
-  display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
-  labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
-  payment/queue widget display text,
-  variant media fixtures and device/printer deletion fixture text.
-  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only). Low priority.
+- **A974. Finish the remaining English names in general code.**
+  Remaining: boot and counter-payment suites, server till-API fixtures, and file names. Keep accented search fixtures unchanged. Low priority.
+  [Detail](backlog/architecture.md#a974-finish-the-remaining-english-names-in-general-code).
 
 - **Setup's receipt-language selection still reads inherited object properties.** Its
   `venue-screen.ts` lookup needs qualification with a country-pack code such as `constructor`;
@@ -6201,119 +6196,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   demos after moving their useful checks into English tests. Low priority; needed before A977
   can scan them. [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
-- **A976. Finish the server's English test-venue defaults.** Bookings’ native suites use English
-  sample location, operation, contact and note text. Native provisioning and floor-plan-set route
-  suites use English venue, operation and menu samples; their Spanish locale and starter-content
-  checks remain. UI switch behavior and accessibility suites
-  use English sample labels and descriptions. Disclosure accessibility samples use English headings,
-  summaries and body text; deliberate EN/ES summary examples remain. Printing layout and printer
-  samples use English, with the layout samples retaining their character counts and word boundaries.
-  Database kitchen-course, station and station-printer suites use English sample names.
-  Floor-plan, catalogue-membership and ticket-item samples use English names and notes.
-  Layouts' receipt, address and operation-description samples use English.
-  Database zone and party-label suites use English sample zone, group and guest names.
-  UI-core input and textarea samples use English label and note text; phone-label checks
-  retain their 120-character inputs and existing bounds.
-  UI floor-model, table-token and floor-map suites use English sample zone and party names.
-  UI-core field-label and input accessibility samples use English price and contact text.
-  UI combobox and row-menu suites use English sample staff names; deliberate bilingual
-  trigger labels and accented-search examples remain.
-  Catalogue stored-name-key samples use English dish and template names; accented folding,
-  variant renaming, batch boundaries and clash checks stay.
-  Catalogue pricing samples use English dish and modifier text; pricing checks retain
-  their existing amounts, quantities, dates and language keys.
-  Catalogue menu-removal and availability suites use English dish samples; removal,
-  sibling-price, archived-product and availability checks remain.
-  Dashboard hardware save-state, equipment-label and page-printer panel suites use English
-  sample names; IDs, permissions, saved choices and save-state checks stay in place.
-  Dashboard overview behavior and accessibility suites use English dish and variant samples;
-  currency, ordering, overflow and deliberate EN/ES checks stay in place.
-  Catalogue import-validation samples use English menu, dessert and drink names;
-  accented-name collision and multilingual unit examples remain.
-  The server's split-extras test venue and its suites use English customer, kitchen and location
-  names; staff names, language keys and the venue's locale stay, and its operation description
-  remains.
-  The server's zone-offer suite gives English location, menu, category, product, station and
-  extras-list names to what it creates; its es-ES locale, its extras list's language key and
-  the default kitchen station the shared seed helper names "Cocina" stay.
-  The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
-  printer, course, dish, extra, note and table names to what it creates; it keeps the default
-  kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
-  tickets), the party venue's dishes, the Spanish ticket words and unit
-  names its es-ES venue prints, and its Spanish alphabetical-order case. The kitchen-print
-  concurrency suite (`kitchen-print.concurrency.test.ts`) creates an English location, catalogue,
-  station, printer and product but keeps its es-ES locale and the operation description "Venta en
-  establecimiento", and the shared-printers suite (`kitchen-print.shared-printers.test.ts`) creates
-  only English names. The print-problems suite (`apps/server/src/print-problems.test.ts`)
-  gives English location, menu, category, station, printer and table names to what it creates,
-  and names its kitchen station itself instead of taking the shared seed's default "Cocina"; it
-  keeps its es-ES locale and the operation description "Restaurante". The print API suite
-  (`apps/server/src/print-api.test.ts`) gives English location, printer, print-agent, table and
-  handheld-device names to what it creates, and names a registered printer apart from the name a
-  box reports for the same device; it keeps its es-ES locale, the operation description "Venta en
-  establecimiento", the "Café 12,50 €" line its preview case reads back and its Spanish date
-  check. The kitchen suite (`apps/server/src/kitchen.test.ts`) gives English location, station and
-  course names to what it creates; it keeps its es-ES locale, the operation description "Venta en
-  establecimiento" and its Spanish alphabetical-order case. The fiscal sale-path
-  suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
-  "Venta en establecimiento".
-  The print-alert suite (`apps/server/src/alert-sources.test.ts`) gives English print-agent,
-  station and printer names to what it creates, and the order-places suite
-  (`apps/server/src/order-places.test.ts`) English table and group names; the alert suite keeps
-  its es-ES locale and the printer name "Epson", and the order-places suite keeps the Spanish names
-  its shared party venue (`apps/server/src/testing/party-venue.ts`) creates.
-  The service-period suite (`apps/server/src/till-api.service-periods.test.ts`) gives English
-  names to what it creates and names no menu after a period, and the service-step suite
-  (`apps/server/src/service-step-signals.test.ts`) English table names; the service-period suite
-  keeps the Spanish names its shared signed-in till (`apps/server/src/testing/signed-in-till.ts`)
-  creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
-  ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
-  shared party venue creates.
-  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
-  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
-  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
-  The server's adjustment venue gives English customer-facing and kitchen dish names and English
-  category, printer, device, location and administrator names; its locale, street address,
-  reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
-  dish names, legal name and operation description remain.
-  The server's kitchen-ticket renderer suite uses English station, table, dish, note and place
-  names; it keeps the Spanish ticket words its es-ES cases print, its accented wrapping and
-  character samples and one French sample.
-  The server's station-alert and party suites still hold Spanish sample names. The
-  configuration-transfer suite gives English names to what it creates; it still reads setup's
-  Spanish default station "Cocina", and keeps Spanish translation-map values, its accented
-  name-key case, official holiday and place names, its street lines and "Fiesta". The device,
-  device-api, device-api pass, device-delete, join-request, join-api, join-api database and
-  device-session suites give English names to what they create; the names the shared test helpers
-  create stay Spanish, as does the device and device-session suites' operation description.
-  Venue-service period-deletion and zone-closure suites use English venue, station,
-  zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
-  Season and day-resolver suites use English venue, zone and custom-season samples;
-  their deliberate staff-language cases, dates and clock settings stay.
-  The native special-day save/delete suite uses English venue, operation, zone and custom-day
-  samples; official holiday names, dates, locale settings and behavior checks stay.
-  Opening-hours route samples use English venue, station, zone, menu, period and custom-date
-  names; locale settings, dates, permissions and refusal checks stay.
-  Period-deletion HTTP route samples use English location, operation, station, menu and special-day
-  names; dates, locale keys, permission refusals and replacement checks stay.
-  The native opening-hours calendar suite uses English venue, operation, menu, department and
-  custom-day samples; official holiday names, staff-language season checks, geography, dates
-  and calendar behavior checks stay.
-  Special-day HTTP route samples use English venue, operation, zone and custom-day names;
-  dates, permissions, refusal details, saved paint and name ordering stay.
-  Named-day occurrence samples use English custom-day names; repetition, closure, public-holiday
-  tone and area-selection checks stay.
-  Holiday-route custom fair samples use English names; official holiday names, geography,
-  permissions, sources and dates stay.
-  Native season route and season week suites use English venue, operation, zone and custom-season
-  samples; Spanish starter-season names, locale keys, clock revisions and refusal checks stay.
-  Native kitchen-notice samples use English menu, dish, table, note and removed-extra text;
-  unit translations, unit identities, quantities and all six day-boundary readings stay.
-  Other helpers and screen expectations remain.
-  Continue package by package from A977's list; keep accent-sensitive
-  combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
-  glyph cases. Preserve text lengths when translating remaining printing samples. Low priority.
-  [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
+- **A976. Finish the server's English test-venue defaults.**
+  Other helpers and screen expectations remain. Low priority.
+  [Detail](backlog/architecture.md#a976-finish-the-servers-english-test-venue-defaults).
 
 - **Cloud's cost-test fixtures still carry Spanish operation and street examples.** The two
   backend fixtures need their own English wording change in the Cloud repository.
