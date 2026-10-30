@@ -40,7 +40,7 @@ async function setupVenue(): Promise<SeededVenue> {
   const [loc] = await admin
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
@@ -56,7 +56,7 @@ async function setupVenue(): Promise<SeededVenue> {
     simplifiedInvoiceLimit: null,
   };
   const st = await withTransaction(admin, async (tx) => {
-    return createStation(tx, cfg, { name: "Cocina", isDefault: true });
+    return createStation(tx, cfg, { name: "Kitchen", isDefault: true });
   });
   return { cfg, stationId: st.id };
 }
@@ -119,35 +119,35 @@ async function deviceRow(deviceId: string): Promise<{ device_profile_id: string;
 describe("device join-and-accept binds the device by its profile's form factor", () => {
   it("accepting a till profile writes the device row and nothing else", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
+    const profileId = await seedProfile("till", "Till profile");
     const before = await rowCounts();
 
-    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Caja Nueva", profileId });
+    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "New till", profileId });
 
     expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
     expect(await deviceRow(dev.deviceId)).toEqual({
       device_profile_id: profileId,
-      label: "Caja Nueva",
+      label: "New till",
     });
   });
 
   it("accepting a handheld needs no till and stores no binding beyond its profile", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("phone-portrait", "Perfil Móvil");
+    const profileId = await seedProfile("phone-portrait", "Phone profile");
     const before = await rowCounts();
 
-    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Camarero 1", profileId });
+    const dev = await enrolDeviceForTest(suite.db, cfg, { name: "Waiter 1", profileId });
 
     expect(changedCounts(before, await rowCounts())).toEqual({ devices: 1 });
     expect(await deviceRow(dev.deviceId)).toEqual({
       device_profile_id: profileId,
-      label: "Camarero 1",
+      label: "Waiter 1",
     });
   });
 
   it("a kds profile shows the named station on its station screen", async () => {
     const { cfg, stationId } = await setupVenue();
-    const profileId = await seedProfile("kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "KDS profile");
 
     const dev = await enrolDeviceForTest(suite.db, cfg, {
       name: "Kitchen screen",
@@ -164,7 +164,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
   it("accepting a kds device refuses a station its profile does not list, and the request survives", async () => {
     const { cfg, stationId } = await setupVenue();
-    const profileId = await seedProfile("kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "KDS profile");
     const grill = await withTransaction(suite.db, (tx) =>
       createStation(tx, cfg, { name: "Grill" }),
     );
@@ -198,7 +198,7 @@ describe("device join-and-accept binds the device by its profile's form factor",
 
   it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "KDS profile");
     await expect(
       enrolDeviceForTest(suite.db, cfg, { name: "Screen", profileId }),
     ).rejects.toMatchObject({ code: "kitchen_screen.required" });
@@ -240,9 +240,9 @@ describe("accepting a device writes its kitchen screens", () => {
   it("a kitchen display's station screen on two stations is stored", async () => {
     const { cfg, stationId } = await setupVenue();
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Plancha" }),
+      createStation(tx, cfg, { name: "Rotisserie" }),
     );
-    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    const profileId = await offering(cfg, "kds", "KDS profile");
     const { deviceId } = await accept(cfg, profileId, [
       { kind: "station", stationIds: [stationId, grill.id], zoneIds: null },
     ]);
@@ -254,8 +254,8 @@ describe("accepting a device writes its kitchen screens", () => {
         everyZone: true,
         profileEveryStation: true,
         stations: [
-          { id: stationId, name: "Cocina", available: true, switchedOff: false },
-          { id: grill.id, name: "Plancha", available: true, switchedOff: false },
+          { id: stationId, name: "Kitchen", available: true, switchedOff: false },
+          { id: grill.id, name: "Rotisserie", available: true, switchedOff: false },
         ],
         zones: null,
       },
@@ -264,7 +264,7 @@ describe("accepting a device writes its kitchen screens", () => {
 
   it("a kitchen display's station screen on one station is stored", async () => {
     const { cfg, stationId } = await setupVenue();
-    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    const profileId = await offering(cfg, "kds", "KDS profile");
     const { deviceId } = await accept(cfg, profileId, [
       { kind: "station", stationIds: [stationId], zoneIds: null },
     ]);
@@ -275,7 +275,7 @@ describe("accepting a device writes its kitchen screens", () => {
 
   it("a kitchen display accepted with no kitchen screen is kitchen_screen.required", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await offering(cfg, "kds", "Perfil KDS");
+    const profileId = await offering(cfg, "kds", "KDS profile");
     await expect(accept(cfg, profileId, [])).rejects.toMatchObject({
       code: "kitchen_screen.required",
     });
@@ -283,7 +283,7 @@ describe("accepting a device writes its kitchen screens", () => {
 
   it("a till accepted with a station screen and a pass screen stores both", async () => {
     const { cfg, stationId } = await setupVenue();
-    const profileId = await offering(cfg, "till", "Perfil Caja");
+    const profileId = await offering(cfg, "till", "Till profile");
     const { deviceId } = await accept(cfg, profileId, [
       { kind: "station", stationIds: [stationId], zoneIds: null },
       { kind: "pass", stationIds: null, zoneIds: null },
@@ -294,16 +294,16 @@ describe("accepting a device writes its kitchen screens", () => {
   it("the enrol helper adds each station it is given to the profile's station screen, and the device shows it", async () => {
     const { cfg, stationId } = await setupVenue();
     const grill = await withTransaction(suite.db, (tx) =>
-      createStation(tx, cfg, { name: "Plancha" }),
+      createStation(tx, cfg, { name: "Rotisserie" }),
     );
-    const profileId = await seedProfile("kds", "Perfil KDS");
+    const profileId = await seedProfile("kds", "KDS profile");
     const first = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Cocina 1",
+      name: "Kitchen 1",
       profileId,
       stationId,
     });
     const second = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Plancha 1",
+      name: "Rotisserie 1",
       profileId,
       stationId: grill.id,
     });
@@ -320,20 +320,20 @@ describe("accepting a device writes its kitchen screens", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: false,
-        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
+        stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
         zones: null,
       },
     ]);
     expect((await shown(cfg, second.deviceId))[0]?.stations).toEqual([
-      { id: grill.id, name: "Plancha", available: true, switchedOff: false },
+      { id: grill.id, name: "Rotisserie", available: true, switchedOff: false },
     ]);
   });
 
   it("the enrol helper gives a kitchen screen it is handed, offered on the profile first", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
+    const profileId = await seedProfile("till", "Till profile");
     const { deviceId } = await enrolDeviceForTest(suite.db, cfg, {
-      name: "Caja",
+      name: "Till",
       profileId,
       kitchenScreen: { kind: "pass", stationIds: null, zoneIds: null },
     });
@@ -344,14 +344,16 @@ describe("accepting a device writes its kitchen screens", () => {
         everyStation: true,
         everyZone: true,
         profileEveryStation: true,
-        stations: [{ id: expect.any(String), name: "Cocina", available: true, switchedOff: false }],
+        stations: [
+          { id: expect.any(String), name: "Kitchen", available: true, switchedOff: false },
+        ],
         zones: null,
       },
     ]);
   });
 
   async function offeringMonitor(cfg: TradingContext) {
-    const profileId = await seedProfile("till", "Perfil Caja");
+    const profileId = await seedProfile("till", "Till profile");
     await withTransaction(suite.db, (tx) =>
       VENUE_SERVICE.setProfileKitchenScreens(tx, cfg, profileId, {
         pass: { stationIds: null, zoneIds: null },
@@ -374,7 +376,7 @@ describe("accepting a device writes its kitchen screens", () => {
         everyStation: false,
         everyZone: true,
         profileEveryStation: true,
-        stations: [{ id: stationId, name: "Cocina", available: true, switchedOff: false }],
+        stations: [{ id: stationId, name: "Kitchen", available: true, switchedOff: false }],
         zones: null,
       },
     ]);
@@ -382,7 +384,7 @@ describe("accepting a device writes its kitchen screens", () => {
 
   it("a till whose profile has no pass monitor row, accepted with a pass monitor, is kitchen_screen.not_allowed", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await offering(cfg, "till", "Perfil Caja");
+    const profileId = await offering(cfg, "till", "Till profile");
     await expect(
       accept(cfg, profileId, [{ kind: "pass_monitor", stationIds: null, zoneIds: null }]),
     ).rejects.toMatchObject({
@@ -409,55 +411,55 @@ describe("accepting a device writes its kitchen screens", () => {
 describe("device names among a location's active devices", () => {
   it("refuses a second active device of the same name there as device.name_taken, and the request survives", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
-    await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    const profileId = await seedProfile("till", "Till profile");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
     // Opened before the request, or the status read discards it as made while the window was shut.
     const window = createPairingMode();
     window.open();
     const made = await withTransaction(suite.db, (tx) =>
-      createJoinRequest(tx, cfg, { kind: "device", label: "Barra" }),
+      createJoinRequest(tx, cfg, { kind: "device", label: "Bar" }),
     );
 
     await expect(
       withTransaction(suite.db, (tx) =>
-        acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: "Barra", profileId }),
+        acceptDeviceJoinRequest(tx, cfg, made.joinId, { label: "Bar", profileId }),
       ),
     ).rejects.toMatchObject({ code: "device.name_taken" });
 
     expect(await readJoinStatus(suite.db, cfg, made.joinId, made.token, window)).toBe("pending");
-    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
+    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
   });
 
   it("accepts the same name at another location", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
-    await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    const profileId = await seedProfile("till", "Till profile");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
     const [other] = await suite.db
       .insert(locations)
       .values({
-        name: "Terraza",
+        name: "Terrace",
         invoiceLocales: [LOCALE],
         operationDescription: "Venta en establecimiento",
       })
       .returning({ id: locations.id });
     const otherCfg: TradingContext = { ...cfg, locationId: brandLocationId(other!.id) };
 
-    await enrolDeviceForTest(suite.db, otherCfg, { name: "Barra", profileId });
+    await enrolDeviceForTest(suite.db, otherCfg, { name: "Bar", profileId });
 
-    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
-    expect(await activeNamed(other!.id, "Barra")).toBe(1);
+    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
+    expect(await activeNamed(other!.id, "Bar")).toBe(1);
   });
 
   it("accepts the name of a revoked device there", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
-    const first = await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    const profileId = await seedProfile("till", "Till profile");
+    const first = await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
     await suite.db.execute(sql`update devices set active = 0 where id = ${first.deviceId}`);
 
-    const second = await enrolDeviceForTest(suite.db, cfg, { name: "Barra", profileId });
+    const second = await enrolDeviceForTest(suite.db, cfg, { name: "Bar", profileId });
 
     expect(second.deviceId).not.toBe(first.deviceId);
-    expect(await activeNamed(cfg.locationId, "Barra")).toBe(1);
+    expect(await activeNamed(cfg.locationId, "Bar")).toBe(1);
   });
 });
 
@@ -473,10 +475,10 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
 
   it("rethrows a device insert that fails for a reason other than a duplicate name, untranslated", async () => {
     await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
+    const profileId = await seedProfile("till", "Till profile");
     // A location id no `locations` row carries, so the insert breaks its foreign key.
     const refusal = await withTransaction(suite.db, (tx) =>
-      insertDevice(tx, deviceValues(randomUUID(), profileId, "Caja 9")),
+      insertDevice(tx, deviceValues(randomUUID(), profileId, "Till 9")),
     ).then(
       () => undefined,
       (error: unknown) => error,
@@ -488,8 +490,8 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
 
   it("rethrows a duplicate on a unique index other than the device name, untranslated", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
-    await enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId });
+    const profileId = await seedProfile("till", "Till profile");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Till 1", profileId });
     // One device per location makes a differently named device collide on a key that is not the
     // name key.
     await suite.db.execute(
@@ -497,7 +499,7 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
     );
     try {
       const refusal = await withTransaction(suite.db, (tx) =>
-        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Caja 2")),
+        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Till 2")),
       ).then(
         () => undefined,
         (error: unknown) => error,
@@ -512,15 +514,15 @@ describe("resolveDeviceKitchenScreens and insertDevice, called directly", () => 
 
   it("rethrows a duplicate on a unique index that names no key, untranslated", async () => {
     const { cfg } = await setupVenue();
-    const profileId = await seedProfile("till", "Perfil Caja");
-    await enrolDeviceForTest(suite.db, cfg, { name: "Caja 1", profileId });
+    const profileId = await seedProfile("till", "Till profile");
+    await enrolDeviceForTest(suite.db, cfg, { name: "Till 1", profileId });
     // An index over an expression: its refusal names the index, not a table and columns.
     await suite.db.execute(
       sql`create unique index devices_one_per_location_expr on devices (lower(location_id))`,
     );
     try {
       const refusal = await withTransaction(suite.db, (tx) =>
-        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Caja 2")),
+        insertDevice(tx, deviceValues(cfg.locationId, profileId, "Till 2")),
       ).then(
         () => undefined,
         (error: unknown) => error,
