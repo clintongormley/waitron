@@ -17,7 +17,7 @@ const document: RecoveryDocument = {
     secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
   },
 };
-const { secret: _secret, ...publicKey } = document.nodeKey;
+const publicKey = { nodeId: document.nodeKey.nodeId, name: document.nodeKey.name };
 const withoutSecret = { ...document, nodeKey: publicKey };
 const zone = { timeZone: "Atlantic/Canary" };
 
