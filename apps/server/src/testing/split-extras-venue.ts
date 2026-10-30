@@ -47,7 +47,7 @@ export async function setupVenue(): Promise<Venue> {
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
@@ -180,14 +180,14 @@ export async function setupSplitExtrasVenue() {
         })
       ).id;
     const products = {
-      burger: await product("Burger", "Hamburguesa clásica", "BURG", burgers.id),
-      chips: await product("Chips", "Patatas fritas", "CHIPS", sides.id, {
+      burger: await product("Burger", "Classic beef burger", "BURG", burgers.id),
+      chips: await product("Chips", "Hand-cut fries", "CHIPS", sides.id, {
         gluten: { kinds: ["wheat" as const] },
       }),
-      cheese: await product("Cheese", "Queso extra", "QUESO", toppings.id),
-      sauce: await product("Sauce", "Salsa brava", "SALSA", sauces.id),
-      water: await product("Water", "Agua mineral", "AGUA", bottled.id),
-      onionRings: await product("Onion rings", "Aros de cebolla", "AROS", sides.id),
+      cheese: await product("Cheese", "Extra cheddar", "CHED", toppings.id),
+      sauce: await product("Sauce", "Smoky barbecue sauce", "BBQ", sauces.id),
+      water: await product("Water", "Still mineral water", "H2O", bottled.id),
+      onionRings: await product("Onion rings", "Battered onion rings", "RINGS", sides.id),
     };
     const listItems = [products.chips, products.onionRings, products.cheese, products.sauce].map(
       (productId) => ({ productId, maxQuantity: 2, preselected: false, price: null }),

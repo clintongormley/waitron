@@ -230,7 +230,7 @@ describe("editing split-off extras", () => {
       const grill = await slips(tx, venue.printers.grill);
       expect(grill).toHaveLength(3);
       expect(grill.at(-1)).toContain("HOLD CHANGED");
-      expect(grill.at(-1)).toContain("AROS");
+      expect(grill.at(-1)).toContain("RINGS");
     });
   });
 

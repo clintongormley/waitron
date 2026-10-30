@@ -1592,8 +1592,8 @@ describe("dish extras on kitchen tickets", () => {
       ),
     ).toHaveLength(1);
     for (const job of jobs) {
-      expect(decodeTicket(job.payload)).not.toContain("Patatas fritas");
-      expect(decodeTicket(job.payload)).not.toContain("Hamburguesa clásica");
+      expect(decodeTicket(job.payload)).not.toContain("Hand-cut fries");
+      expect(decodeTicket(job.payload)).not.toContain("Classic beef burger");
     }
   });
 
@@ -1654,7 +1654,7 @@ describe("dish extras on kitchen tickets", () => {
     });
     expect(jobs.some((job) => job.printerId === printers.grill)).toBe(false);
     expect(decodeTicket(jobs.find((job) => job.printerId === printers.fryer)!.payload)).toContain(
-      "> for AGUA, no preparation",
+      "> for H2O, no preparation",
     );
   });
 
