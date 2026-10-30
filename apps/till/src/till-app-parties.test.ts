@@ -3009,6 +3009,39 @@ describe("A803 name bill", () => {
     },
   );
 
+  it.each(["draft.taken_over", "draft.out_of_date", "tab.not_open"])(
+    "says nothing of a late %s refusal against the bill the waiter has moved to",
+    async (code) => {
+      let refuse!: (reason: unknown) => void;
+      const { el } = await mountApp({
+        setBillName: vi.fn(
+          () =>
+            new Promise<never>((_resolve, reject) => {
+              refuse = reject;
+            }),
+        ),
+      });
+      const order = await openMesa(el);
+      emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+      await flush(el);
+      emit(order, "take-payment", { workingOrderId: "wo-check" });
+      await flush(el, 6);
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      const billReads = vi.mocked(api.getPartyBills).mock.calls.length;
+      const draftReads = vi.mocked(drafts.listDrafts).mock.calls.length;
+      const reveals = tableOrder(el)!.revealOtherDrafts;
+
+      refuse({ code, ownerName: "Bea" });
+      await flush(el, 8);
+
+      expect(tableOrder(el)!.orderId).toBe("wo-check");
+      expect(banner(el)).toBeNull();
+      expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(billReads);
+      expect(vi.mocked(drafts.listDrafts).mock.calls.length).toBe(draftReads);
+      expect(tableOrder(el)!.revealOtherDrafts).toBe(reveals);
+    },
+  );
+
   it("does not hand a refused bill name to the next table opened", async () => {
     const { el } = await mountApp({
       setBillName: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),

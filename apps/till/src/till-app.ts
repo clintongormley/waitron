@@ -15464,24 +15464,33 @@ export class TillApp extends LitElement {
       if (!live()) return;
       const refused = error as
         { code?: string; field?: string; ownerName?: string | null } | undefined;
-      if (refused?.code === "management.request_invalid" && refused.field === "name") {
-        if (this.activeTabId === billId)
-          this.billNameRefusal = { billId, name: name ?? "", message: t("table.name_too_long") };
-        return;
-      }
-      if (refused?.code === "draft.taken_over")
-        this.errorKey = { billNameTakenOver: refused.ownerName ?? "" };
-      else if (refused?.code === "draft.out_of_date") this.errorKey = { code: refused.code };
-      else if (refused?.code === "tab.not_open") {
-        this.errorKey = "table.bill_name_not_open";
-        await this.#loadPartyBills();
-        return;
-      } else {
+      const code = refused?.code;
+      const billRefusal =
+        (code === "management.request_invalid" && refused?.field === "name") ||
+        code === "draft.taken_over" ||
+        code === "draft.out_of_date" ||
+        code === "tab.not_open";
+      if (!billRefusal) {
         await this.#onTableRefusal(error, live);
         return;
       }
-      await this.#refreshBillDraft();
-      if (live() && refused?.code === "draft.taken_over") this.revealOtherDrafts += 1;
+      // Said only against the bill it was sent for: the waiter may have moved to another bill of
+      // the party while it was on its way.
+      const onBill = () => live() && this.activeTabId === billId;
+      if (!onBill()) return;
+      if (code === "management.request_invalid")
+        this.billNameRefusal = { billId, name: name ?? "", message: t("table.name_too_long") };
+      else if (code === "tab.not_open") {
+        this.errorKey = "table.bill_name_not_open";
+        await this.#loadPartyBills();
+      } else {
+        this.errorKey =
+          code === "draft.taken_over"
+            ? { billNameTakenOver: refused?.ownerName ?? "" }
+            : { code: "draft.out_of_date" };
+        await this.#refreshBillDraft();
+        if (onBill() && code === "draft.taken_over") this.revealOtherDrafts += 1;
+      }
       return;
     }
     if (live()) await this.#loadPartyBills();
