@@ -1997,6 +1997,21 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   one, where a table's draft merges them. Not re-checked after A1208.
   [Detail](backlog/till.md#a1217-two-separate-adds-of-the-same-dish-with-extras-stay-two-counter-rows)
 
+- **A1218. A counter device showing two counter zones cannot get back to its menu after a
+  retrieve.** Seen in A1208's LOOK (2026-10-30, demo Counter device with Downstairs bar and Upstairs
+  bar): after Retrieve the Parked orders list stays, and choosing the zone again, or Floor and back,
+  is refused "Clear the basket before changing service area" (`#onCounterZoneSelected`,
+  `apps/till/src/till-app.ts`), so no dish can be added to the retrieved order. With one counter zone
+  the plain Counter tab brings the menu back. I believe this predates A1208 (the refusal is from
+  c90856059; A1208 changes no zone or Parked orders code); not run on main.
+
+- **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
+  one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
+
+- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
+  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
+  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
+
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
   portions, and Fire now fires only the row's first portion. Slice 4's picker is meant to choose.
