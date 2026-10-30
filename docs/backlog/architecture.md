@@ -464,16 +464,20 @@ until A977).
   stays selected, with the QR caption taken from the existing fiscal invoice fixture. The demo
   seed itself is A972's; script-suite test fixtures belong to A976 below. Low priority; A977
   cannot scan `apps/*/scripts` until the remaining demos and test-fixture cleanup land.
-- **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
-  fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
-  still need English defaults, as does the split-extras venue's operation description.
+- **A976 — remaining test-venue defaults.** The bill, party, boot, stream and clock fixtures
+  listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
+  still need English defaults, as do the split-extras venue's operation description and the
+  adjustment venue's Spanish staff dish names, legal name and operation description.
   The adjustment venue (`apps/server/src/testing/adjustment-venue.ts`) now gives English
   customer-facing and kitchen names to its dishes and wine-glass variant, and English category,
-  printer, device, location and administrator names; it still keeps the staff names "Croquetas",
-  "Tortilla", "Pimientos" and "Cana", its legal name, street address and operation description,
-  its es-ES locale and its reasons' Spanish translations. Two of its suites keep their own Spanish
-  samples: the extra-cancel suite's "Hamburguesa completa", "Patatas fritas" and "Pepinillos", and
-  the apply suite's "Barra" counter zones.
+  printer, device, location and administrator names. Its staff names "Croquetas", "Tortilla",
+  "Pimientos" and "Cana", its legal name and its operation description remain; it keeps its
+  street address, its es-ES locale, its reasons' Spanish translations, setup's default station
+  "Cocina" and the Spanish ticket and receipt words its es-ES venue prints. Some of its suites
+  keep their own Spanish samples, among them the extra-cancel suite's "Hamburguesa completa",
+  "Sándwich tostado", "Patatas fritas" and "Pepinillos", the apply suite's "Barra" counter zones,
+  the collect-at-counter suite's "Fríos" printer and the receipt and portions suites' customer
+  "Cliente SL".
   The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
   printer, course, dish, extra, note and table names to what it creates; it keeps the default
   kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
