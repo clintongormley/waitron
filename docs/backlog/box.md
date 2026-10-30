@@ -823,6 +823,72 @@ after its release. Cloud cannot stop an on-prem upgrade (C41 keeps that consent 
 so the updater must read the hold before offering or applying the version, and offer the fix
 once released. Belongs with A1016.
 
+## A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).
+
+- **A1187 part 2: the recovery pack's emergency start page (owner, 2026-10-29).** Waits for A1188
+  part 1, whose card facts the page prints, for people holding `node.promote`. Part 1 landed in
+  pull requests from #2250 to setup's first pack (PR E): one PDF holding the bucket copy, the
+  archives and the server key, made from the Backups card or by setup.
+  [Design](../superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md), [how part 1 leaves room](../superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md#how-part-1-leaves-room-for-parts-2-and-3).
+
+## A1187: wording part 1's reviews left on the restore command and setup.
+
+- **A1187: wording part 1's reviews left on the restore command and setup.** `waitron-restore`'s
+  usage line still says `<pack-file>` for `--from-archive`, and its refusals for a file holding no
+  kit or no archive pack still name the kit file and the archive recovery pack file, though both
+  forms take the pack PDF; tests pin both word for word. Setup's pack refusals say "paste the code"
+  where the field's help says "paste the kit".
+  [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
+
+## A1187: code part 1 built twice.
+
+- **A1187: code part 1 built twice.** The same-origin TLS check is copied across several routes,
+  and `promote-api.ts` still answers a plain-HTTP or cross-site request with
+  `authorization.not_permitted`. The archive code, the backup-key check, the bucket recovery kit,
+  the server key's name and its created date are each built in more than one place.
+  [Detail](box.md#a1187-part-1-what-its-reviews-left-open)
+
+## A1187: looks nobody has taken.
+
+- **A1187: looks nobody has taken.** The Backups card after a real setup (pack 1 recorded, then a
+  bucket copy set up) has not been looked at on a running box: Docker Desktop was unresponsive for
+  PR D and PR E. Nobody has looked at the card since #2276 lengthened its unreceived sentences. The
+  look images for #2250 were taken before its review changed the "not a pack" refusal and added the
+  space mark.
+
+## Backups says "try again" after a saved-settings failure it has no words for.
+
+- **Backups says "try again" after a saved-settings failure it has no words for.** The "Backups
+  are off because the saved settings can't be used" line appends the code's dashboard message
+  (`backup-screen.ts`, from #1642), and a code with none, such as `credentials.decrypt_failed`,
+  falls back to "Something went wrong, try again". That names nothing to try, beside a "What the box
+  recorded" panel saying Read again turns nothing on.
+
+## Backup status sends a saved bucket address as stored, password included.
+
+- **Backup status sends a saved bucket address as stored, password included.** A bucket address
+  written as `https://user:secret@host` passes the settings checks, and `GET /api/backup/status`
+  returns it unchanged (`destinationView`, `apps/server/src/backup-supervisor.ts`, since
+  2026-10-13). The settings-evidence answer masks that password with `redactSecrets`; the status
+  reply does not, and the Backups form may need the address back as saved, so check the form
+  before masking it there.
+
+## A route whose failure is the system's `ENOSPC` still answers `server.internal`.
+
+- **A route whose failure is the system's `ENOSPC` still answers `server.internal`.** `diskFullIn`
+  (`@waitron/shared`) knows a full disk by code 13 or `storage.disk_full`, never `ENOSPC`; `fullDiskFailure`
+  (`apps/server/src/boot-failure.ts`) names `ENOSPC` a full disk at start, and on the repair page's
+  recover, summary and start-again routes and its inspection read (A1127); every other route still answers
+  `server.internal`, because adding it to `diskFullIn` changes every route's answer.
+
+## The full-disk bar waits for the owner's answers.
+
+- **The full-disk bar waits for the owner's answers.** Its words; naming a deletion only from an
+  open alert under a day old (so a fresh deletion is not named while an older alert stays
+  unhandled); not saying "every backup it may"; a red edge and border rather than a filled bar; the
+  bar beside the bell's toast; and reading the queue's "no button" as the dropped Box status button.
+  The seven questions are in #2223's description. Left open by A1127 slice 3 (#2223).
+
 ## Decisions and deliberate limits
 
 **A798-B clock, disk and printer decisions.**
