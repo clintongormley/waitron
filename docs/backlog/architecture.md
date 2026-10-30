@@ -527,6 +527,9 @@ until A977).
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description
   remains.
+  The server's zone-offer suite gives English location, menu, category, product, station and
+  extras-list names to what it creates; its es-ES locale, its extras list's language key and
+  the default kitchen station the shared seed helper names "Cocina" stay.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
   The device, device-delete, join-request, join-api, join-api database and device-session suites

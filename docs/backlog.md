@@ -6163,8 +6163,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description
   remains.
-  The server's zone-offer suite uses English location, menu, category, product, station and
-  extras-list samples; its es-ES locale and its extras list's language key stay.
+  The server's zone-offer suite gives English location, menu, category, product, station and
+  extras-list names to what it creates; its es-ES locale, its extras list's language key and
+  the default kitchen station the shared seed helper names "Cocina" stay.
   The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
   ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
