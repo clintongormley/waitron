@@ -1256,6 +1256,33 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
     vi.useRealTimers();
   }
 });
+it("an answer it cannot read while waiting for a second clock shows the failure", async () => {
+  const { state, prepare } = gatedClocks();
+  const { el, calls } = await mount({ prepare });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(SETUP_DO));
+    // A comparison with no readings lists, which `readClocks` refuses as "invalid comparison".
+    state.decision = {} as typeof clock;
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(SETUP_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(calls).toHaveLength(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it.each([
   ["en", "Series name: 0CSQW", "This date is outside the range of series names."],
   ["es", "Nombre de las series: 0CSQW", "Esta fecha está fuera del rango de nombres de serie."],
@@ -1286,13 +1313,18 @@ it("says in Spanish that the series code already exists, with the countdown", as
     },
   });
   await ready(el);
-  await userEvent.click(button(el, "select"));
-  await vi.waitFor(() =>
-    expect(text(el)).toContain(
-      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
-    ),
-  );
-  expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+      ),
+    );
+    expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("says in Spanish that the series cannot be made yet, with the plural verb", async () => {
   const { el } = await mount({

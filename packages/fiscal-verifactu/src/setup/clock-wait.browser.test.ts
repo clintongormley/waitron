@@ -224,6 +224,27 @@ describe("a taken minute shows one countdown", () => {
     expect(fail).not.toHaveBeenCalled();
   });
 
+  it("a taken minute's figure stays at 00:00 while lost re-checks repeat", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    for (let check = 2; check <= 13; check++) {
+      vi.advanceTimersByTime(15_000);
+      expect(recheck).toHaveBeenCalledTimes(check);
+      wait.settle(new TypeError("Failed to fetch"), true, fail);
+    }
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Generating a new code in: 00:00",
+    );
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    expect(fail).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(14);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("00:00");
+  });
+
   it("a lost check at the end of the box's wait checks again", () => {
     const { wait, recheck, fail, drawn } = setup();
     wait.show(undefined, { ...WAITING, remainingMs: 1_000 });

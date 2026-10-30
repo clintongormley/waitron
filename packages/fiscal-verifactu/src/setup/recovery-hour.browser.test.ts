@@ -976,6 +976,40 @@ it("a lost re-check during a taken minute keeps counting and checks again", asyn
     vi.useRealTimers();
   }
 });
+it("an answer it cannot read during a taken minute shows the failure", async () => {
+  const { prepare } = scripted([
+    {
+      code: "sif.allocation_invalid",
+      params: {
+        reason: "minute_in_use",
+        allowedFromMs: instant + 180_000,
+        remainingMs: 180_000,
+        recheckInMs: 30_000,
+      },
+    },
+    { status: "waiting", targetMs: "soon", remainingMs: 150_000 },
+  ]);
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() =>
+      expect(
+        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+      ).not.toBe(""),
+    );
+    expect(remaining(el)).toBeUndefined();
+    vi.advanceTimersByTime(60_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(selects(prepare)).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("draws Make the series quiet and disabled while a countdown runs", async () => {
   const { prepare } = scripted([
     { status: "waiting", targetMs: instant + 84_000, remainingMs: 84_000 },
@@ -1058,6 +1092,35 @@ it("stops checking for a second clock when a re-check is refused, and shows the 
     await userEvent.click(button(el, "select"));
     await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
     state.refusal = { code: "setup.attempt_conflict" };
+    vi.advanceTimersByTime(15_000);
+    await vi.waitFor(() =>
+      expect(
+        (el.shadowRoot!.querySelector("wt-form-actions") as HTMLElement & { error: string }).error,
+      ).not.toBe(""),
+    );
+    await el.updateComplete;
+    expect(text(el)).not.toContain(RESTORE_ENDS);
+    expect(quiet(el)).toEqual({ disabled: false, variant: "primary" });
+    const after = prepare.mock.calls.length;
+    vi.advanceTimersByTime(45_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(prepare.mock.calls).toHaveLength(after);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("an answer it cannot read while waiting for a second clock shows the failure", async () => {
+  const { state, prepare } = scripted();
+  const { el } = await mount(prepare);
+  await ready(el);
+  await compare(el);
+  state.decision = noSecondClock;
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(text(el)).toContain(RESTORE_DO));
+    // A comparison with no readings lists, which `readClocks` refuses as "invalid comparison".
+    state.decision = {} as typeof clock;
     vi.advanceTimersByTime(15_000);
     await vi.waitFor(() =>
       expect(
@@ -1174,13 +1237,18 @@ it("says in Spanish that the series code already exists, with the countdown", as
   await el.updateComplete;
   await ready(el);
   await compare(el);
-  await userEvent.click(button(el, "select"));
-  await vi.waitFor(() =>
-    expect(text(el)).toContain(
-      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
-    ),
-  );
-  expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(text(el)).toContain(
+        "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+      ),
+    );
+    expect(text(el)).toContain("Se generará un código nuevo en 03:00");
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("says in Spanish that the series cannot be made yet", async () => {
   const { prepare } = scripted([

@@ -104,7 +104,7 @@ ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or laptop on the venue's network that has the backup. It
-  checks again every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
+  checks again about every 15 seconds and carries on by itself (`recovery-hour.browser.test.ts`, "Compare
   clocks with no second clock explains the wait and checks again by itself" and "with no second
   clock it explains itself and carries on when the internet arrives").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
@@ -120,7 +120,9 @@ ahead, and what it asks for:
   checks is lost on the network, the countdown carries on and the page checks again about every 15
   seconds; once the countdown reaches 00:00 it stays there until a check gets through
   (`recovery-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
-  again"). An answer from the box the page cannot read still shows the page's failure message. If this attempt
+  again"; `clock-wait.browser.test.ts`, "a taken minute's figure stays at 00:00 while lost re-checks
+  repeat"). An answer from the box the page cannot read still shows the page's failure message
+  (`recovery-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). If this attempt
   has already chosen its name and that name then turns up in the box's records, the attempt is refused
   (`minute_in_use`, with no time) and is offered no way on yet
   (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a pick is refused when a record naming its

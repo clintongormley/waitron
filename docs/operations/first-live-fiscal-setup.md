@@ -38,7 +38,7 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
   internet, or open the page on a phone or till on the venue's network and enter the setup
-  password. It checks again every 15 seconds and carries on by itself (`first-hour.browser.test.ts`,
+  password. It checks again about every 15 seconds and carries on by itself (`first-hour.browser.test.ts`,
   "with no second clock it explains itself and carries on when the internet arrives").
 - **The clocks differ by more than 30 seconds**: the page shows both readings and asks you to try
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
@@ -52,7 +52,9 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   checks is lost on the network, the countdown carries on and the page checks again about every 15
   seconds; once the countdown reaches 00:00 it stays there until a check gets through
   (`first-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
-  again"). An answer from the box the page cannot read still shows the page's failure message. A reload before
+  again"; `clock-wait.browser.test.ts`, "a taken minute's figure stays at 00:00 while lost re-checks
+  repeat"). An answer from the box the page cannot read still shows the page's failure message
+  (`first-hour.browser.test.ts`, "an answer it cannot read during a taken minute shows the failure"). A reload before
   the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
   time are correct." and press **Make the series** again (read, not run: the page's check on load
   ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt

@@ -244,8 +244,9 @@ export class ClockWait<Selected extends { status: "selected" }> {
   }
 
   /**
-   * Shows what a failed request means. A check the page made by itself (`automatic`) that never
-   * reached the box — `fetch`'s `TypeError`, which carries no code — leaves a countdown or
+   * Shows what a failed request means. A check the page made by itself (`automatic`) that ends in
+   * a `TypeError` with no code — what a request throws when it or its answer is lost on the
+   * network, though any other `TypeError` with no code takes the same path — leaves a countdown or
    * second-clock wait up and starts the 15-second re-check; the next `show` stops it.
    */
   settle(error: unknown, automatic: boolean, fail: (error: unknown) => void): void {

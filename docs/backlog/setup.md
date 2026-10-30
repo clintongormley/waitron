@@ -682,7 +682,7 @@ preview read-only, as A1207 did for a taken minute (`#compare` in
 
 A related path (A1207's figure review, probe R1): when Compare clocks shows a wait the box has
 already recorded, the end of that countdown sends a real `select` although Make the series was not
-pressed on this page load (at A1207's base too, one `select`; since A1225's fix a lost one is
+pressed on this page load (at A1207's base too, one `select`; since A1207, a lost one is
 repeated about every 15 seconds). The box records such a wait only after an earlier `select`, so
 this may be intended; decide it with the rest of this entry. The setup page has the same shape
 after a reload during the box's wait (read, not run: `#select(true)` in `first-hour.ts` skips
