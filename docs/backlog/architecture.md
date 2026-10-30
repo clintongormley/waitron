@@ -519,8 +519,8 @@ until A977).
   Dashboard overview behavior and accessibility suites use English dish and variant samples;
   currency, ordering, overflow and deliberate EN/ES checks stay in place.
   The server's split-extras test venue and its suites use English customer, kitchen and location
-  names; staff names, language keys and the venue's locale stay, and its operation description and
-  pass-printer name remain.
+  names; staff names, language keys and the venue's locale stay, and its operation description
+  remains.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
   The device, device-delete, join-request, join-api, join-api database and device-session suites
