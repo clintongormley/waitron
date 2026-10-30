@@ -134,6 +134,7 @@ import {
 import type { LineExtras, OrderLinePatch, TicketState, OrderAttendance } from "./working-order.js";
 import { listStationsToday } from "./kitchen.js";
 import {
+  createPartyBill,
   partyFamily,
   holderOf,
   markTableCleared,
@@ -3172,6 +3173,28 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         );
       });
       return c.json(result);
+    }),
+  );
+
+  app.post("/api/parties/:id/bills", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const cfg = requestCfg(deps.cfg, session);
+      const partyId = requirePartyParam(c.req.param("id")).toLowerCase();
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      const expectedPartyRevision = requireRevision(
+        body.expectedPartyRevision,
+        "expectedPartyRevision",
+      );
+      const created = await withTransaction(deps.db, async (tx) => {
+        await catchUpFloor(tx);
+        await checkZones(tx, deps.cfg, session, [{ partyId }]);
+        return createPartyBill(tx, cfg, partyId, {
+          expectedPartyRevision,
+          operatorId: session.personId,
+        });
+      });
+      return c.json(created);
     }),
   );
 

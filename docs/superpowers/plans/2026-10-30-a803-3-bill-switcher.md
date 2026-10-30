@@ -807,7 +807,7 @@ is written to `questions.md` at Task 0, before any file it names is edited.** Th
       >
       > Answer "a803-3 q5 y" for all, or name the items you want done differently.
 
-- [ ] Baselines, each separately, recording the Tests counts: S, H2, F, Filing, G, words and codes.
+- [x] Baselines, each separately, recording the Tests counts: S, H2, F, Filing, G, words and codes.
 
 ## Task 1: `createPartyBill`, `insertPartyBill` and `POST /api/parties/:id/bills` (≈45 calls)
 
@@ -820,7 +820,7 @@ tests `apps/server/src/party-bill-create.test.ts` (new), `apps/server/src/till-a
 rows in `till-api.profile-actions.test.ts` (table at `:112-114`, case list near `:439`) and
 `till-api.profile-zones.test.ts` (table `:164-167`, list near `:934-941`).
 
-- [ ] Cases `A803 create bill:` (domain, `useVenueDb`): "makes an empty open bill on the party
+- [x] Cases `A803 create bill:` (domain, `useVenueDb`): "makes an empty open bill on the party
       numbered next after its highest number, in the party's zone, and moves the revision by one";
       "after Bill 2 was merged away the new bill is Bill 3" (slice 2's history rule); "a stale
       revision refuses `party.out_of_date` and writes nothing" (compare `working_orders`,
@@ -832,13 +832,13 @@ rows in `till-api.profile-actions.test.ts` (table at `:112-114`, case list near 
       malformed revision, 401 without a session, `party.not_open` for a malformed party id;
       profile-action row (`take-orders`) and profile-zone row (a party outside the device's zones
       is refused) — new rows only.
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-bill-create.test.ts src/till-api.parties.test.ts src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts -t 'A803|bills'`.
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-bill-create.test.ts src/till-api.parties.test.ts src/till-api.profile-actions.test.ts src/till-api.profile-zones.test.ts -t 'A803|bills'`.
       The domain cases fail on the missing export as the first red; once a stub returns nothing,
       they must fail on the bill/revision assertions; the route cases on a 404 status.
-- [ ] Implement (D1). No submission replay: the revision guard is what stops a resend making two
+- [x] Implement (D1). No submission replay: the revision guard is what stops a resend making two
       bills, as for every other party command that takes `expectedPartyRevision`.
-- [ ] GREEN: the four files unfiltered; F; server typecheck; till typecheck (untouched, still clean).
-- [ ] Commit: "Let the till ask for a new empty bill at a table".
+- [x] GREEN: the four files unfiltered; F; server typecheck; till typecheck (untouched, still clean).
+- [x] Commit: "Let the till ask for a new empty bill at a table".
 
 ## Task 2: Move this bill never merges on arrival (≈55 calls)
 

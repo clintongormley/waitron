@@ -194,6 +194,37 @@ export async function partyMainBill(
 }
 
 /**
+ * Make an empty open bill on the party, in its zone, numbered next in the party. The party's
+ * revision is left alone: a caller moves it once for its whole command.
+ */
+export async function insertPartyBill(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<string> {
+  const billId = randomUUID();
+  const zoneId = await partyZone(tx, cfg, partyId);
+  await createOpenOrder(tx, cfg, billId, [], null, {
+    zoneId: zoneId ?? undefined,
+    partyId,
+    existingService: true,
+  });
+  return billId;
+}
+
+/** A new empty bill at an open party, asked for by staff; a party command guarded by its revision. */
+export async function createPartyBill(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+  command: { expectedPartyRevision: number; operatorId: string },
+): Promise<{ billId: string; revision: number }> {
+  const revision = await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
+  const billId = await insertPartyBill(tx, cfg, partyId);
+  return { billId, revision };
+}
+
+/**
  * Name the party's main bill. This is the only writer of `parties.main_bill_id` in apps/server. The
  * database checks only that it names an existing order; nothing checks that the bill is open or the
  * party's, and the triggers in `0038_main_bill_release.sql` only clear it.
