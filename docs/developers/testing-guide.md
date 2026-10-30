@@ -536,7 +536,7 @@ continuing above its starting value. The two timer setups in
 The SQLite inside the official Node v26.13.0 for macOS reported `limits.variableNumber` 32,766;
 Homebrew's Node v26.11.1, linked to Homebrew's SQLite, reported 250,000 (both read on
 2026-10-30 with `new DatabaseSync(":memory:").limits.variableNumber`). So an insert binding more
-than 32,766 values passed on this Mac and failed in CI: per commit 5fd7807db, four cases in
+than 32,766 values passed on this Mac and failed in CI: per PR #2265, four cases in
 `apps/server/src/till-sale-integrated.db.test.ts` (the walk-up invoice and unfiled-F1 cases with
 2,001 coffees) failed in CI with "too many SQL variables" once a counter order stored each dish as
 its own line, and failed the same way here under the official Node. The box image's `node:26`
@@ -551,12 +551,14 @@ were put back to one statement; with the setting deleted as well, they passed th
 
 An insert whose rows grow with an order goes through `insertInChunks`, or `statementChunks` where
 the inserted rows are needed back (`packages/db/src/insert-in-chunks.ts`); both count one bound
-value per column per row. The guard, "refuses a statement binding one value more on the reader and
+value per column per row. The table round's line insert, `insertTabRound`, is still one statement;
+`docs/backlog/architecture.md` tracks it. The guard, "refuses a statement binding one value more on the reader and
 the writer of both files" in `packages/store/src/index.test.ts`, failed with the setting deleted
 from the writer alone and from the reader alone. It is weaker than the rule: it proves the store's
 connections refuse, not that every growing insert is chunked, and other openers (the read-only
-copies in `packages/provisioning/src/` and `apps/server/src/backup-verification.ts`, the lock files)
-keep their runtime's own limit.
+copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
+`apps/server/src/backup-verification.ts` and `apps/server/src/first-setup-database-holdings.ts`, the
+lock files, and the inline Node script in `deploy/waitron.sh`) keep their runtime's own limit.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 

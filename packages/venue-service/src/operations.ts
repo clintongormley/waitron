@@ -1517,7 +1517,7 @@ export async function copyWorkingLineContext(
   });
 }
 
-/** {@link copyWorkingLineContext} for many lines, in one read and one write. */
+/** {@link copyWorkingLineContext} for many lines, in one read. */
 export async function copyWorkingLineContexts(
   tx: Transaction,
   cfg: VenueScope,

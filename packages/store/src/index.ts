@@ -133,7 +133,7 @@ const BUSY_TIMEOUT_MS = 5000;
  * The most values one statement may bind on a connection this store opens. It is the limit the
  * official Node v26.13.0 for macOS reported (`limits.variableNumber`), where Homebrew's Node
  * v26.11.1 reported 250000; setting it on every connection makes a run on either refuse the same
- * statements. Inserts whose rows grow with an order go through `insertInChunks` in `@waitron/db`.
+ * statements.
  */
 export const SQL_VARIABLE_LIMIT = 32766;
 
