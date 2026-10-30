@@ -2519,7 +2519,7 @@ describe("mountPrintApi — management: print-test-page", () => {
     "enqueues one document job drawn at the printer's saved setting ($locale)",
     async ({ acceptLanguage, locale, dateTime }) => {
       const app = mountApp({ now: () => NOW });
-      const printerId = await savedPrinter(app, "10.0.0.120", `Página ${locale}`, {
+      const printerId = await savedPrinter(app, "10.0.0.120", `Front printer ${locale}`, {
         paperWidth: "58mm",
         resolution: "203dpi",
       });
@@ -2540,13 +2540,13 @@ describe("mountPrintApi — management: print-test-page", () => {
         ...formatPrinterTestPage({
           locale,
           printer: { paperWidth: "58mm", resolution: "203dpi" },
-          printerName: `Página ${locale}`,
+          printerName: `Front printer ${locale}`,
           now: NOW,
           timeZone: "Atlantic/Canary",
         }),
       ]);
       const text = printedLines(jobs[0]!.payload).join("\n");
-      expect(text).toContain(`Página ${locale}`);
+      expect(text).toContain(`Front printer ${locale}`);
       expect(text).toContain("58mm · 203dpi");
       expect(text).toContain(dateTime);
     },
