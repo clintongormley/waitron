@@ -326,8 +326,7 @@ export function createFirstSetupResolutionActions(
     const presentStatus = PRESENT_START_AGAIN_STATUSES.includes(state.status);
     if (label === "unreadable" || label === "partial") unavailable();
     const held = !missing && (label === "occupied" || !presentStatus);
-    // The unused setup's database that the inspection could not show empty: only a read that
-    // finds damage lets it go further, as an empty one.
+    // An unused setup's database the inspection could not show empty (D3 row c).
     const readFirst = !missing && !held && !(label === "no-venue-rows" && inspection.emptyDatabase);
     if (held) assertHeldStartAgainOffered(inspection, state.status);
     else if (missing) {
@@ -336,28 +335,22 @@ export function createFirstSetupResolutionActions(
     }
     const snapshot = await host.resolution.captureFirstSetupOriginals();
     if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-    const eligibility = (asEmpty: boolean) =>
-      presentAttemptEligibility(
-        asEmpty ? { ...inspection, emptyDatabase: true } : inspection,
-        state,
-        snapshot.originals,
-        host.modules,
-        request.register,
-      );
-    const assertEligible = ({
-      emptyWorkspace,
-      eligible,
-    }: {
-      emptyWorkspace: boolean;
-      eligible: boolean;
-    }) => {
-      if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
-      if (!missing && !eligible) unavailable();
-    };
-    let present = held || readFirst ? undefined : await eligibility(false);
-    if (held) {
+    // Row c's proof counts the database as empty; only a read that finds damage keeps it so.
+    const present = held
+      ? undefined
+      : await presentAttemptEligibility(
+          readFirst ? { ...inspection, emptyDatabase: true } : inspection,
+          state,
+          snapshot.originals,
+          host.modules,
+          request.register,
+        );
+    if (present === undefined) {
       if (request.register?.kind === "no-current-master") unavailable();
-    } else if (present !== undefined) assertEligible(present);
+    } else {
+      if (request.register?.kind === "no-current-master" && !present.emptyWorkspace) unavailable();
+      if (!missing && !present.eligible) unavailable();
+    }
     if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
       unavailable();
     const heldOption = held ? { held: true as const } : {};
@@ -374,13 +367,7 @@ export function createFirstSetupResolutionActions(
         // Not empty yet no rows (a view, a part-applied setup), or read whole where the
         // inspection could not: not what the held state names.
         if (read.holdings.rows === 0 || DAMAGED_LABELS.includes(label)) unavailable();
-      } else {
-        databaseUnreadable = true;
-        if (readFirst) {
-          present = await eligibility(true);
-          assertEligible(present);
-        }
-      }
+      } else databaseUnreadable = true;
     }
     const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
     // With the database present and not held, Start again compares the assignment's own reading.

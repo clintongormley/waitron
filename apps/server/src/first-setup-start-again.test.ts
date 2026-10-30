@@ -61,6 +61,7 @@ import { startServerOrFirstSetupResolution } from "./first-setup-launch.js";
 import { mountSetup } from "./setup-api.js";
 import { createRecoveryEntryRunner } from "./recovery-entry.js";
 import { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
+import { readSetupDatabase } from "./first-setup-database-holdings.js";
 import { mountFirstSetupBackupApi } from "./setup-first-backup-api.js";
 
 vi.mock("@waitron/provisioning", async (importOriginal) => {
@@ -69,6 +70,10 @@ vi.mock("@waitron/provisioning", async (importOriginal) => {
     ...actual,
     writeStartAgainMarker: vi.fn(actual.writeStartAgainMarker),
   };
+});
+vi.mock("./first-setup-database-holdings.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./first-setup-database-holdings.js")>();
+  return { ...actual, readSetupDatabase: vi.fn(actual.readSetupDatabase) };
 });
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -1066,7 +1071,7 @@ it("an unused attempt whose database cannot be read: the summary says so, and St
   );
 });
 
-it("an unused attempt whose database cannot be read, beside saved trading settings, is refused setup.not_ready by the disk check, and nothing changes", async () => {
+it("an unused attempt whose database cannot be read, beside saved trading settings, is refused setup.not_ready before the database is read, and nothing changes", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
   await writeFile(join(f.stateDir, "trading.env"), "WAITRON_ENV=preproduction\n");
@@ -1077,13 +1082,35 @@ it("an unused attempt whose database cannot be read, beside saved trading settin
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
   };
-  const refusal = { code: "setup.not_ready", reason: "refused artifact: state/trading.env" };
-  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
+  vi.mocked(readSetupDatabase).mockClear();
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
   await expectRefusedUnchanged(
     f,
     () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
     "setup.not_ready",
   );
+  expect(vi.mocked(readSetupDatabase)).not.toHaveBeenCalled();
+});
+
+it("an unused attempt whose database cannot be read, beside a public record, is refused setup.not_ready before the database is read, and nothing changes", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  await writeFile(join(f.venueDir, "venue.db"), "not a database");
+  await createDamaged(join(f.stateDir, "module-operation-public.json"));
+  const inspected = await f.host.resolution.inspectFirstSetupResolution();
+  expect(inspected.database).toBe("corrupt");
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
+  vi.mocked(readSetupDatabase).mockClear();
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({ code: "setup.not_ready" });
+  await expectRefusedUnchanged(
+    f,
+    () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
+    "setup.not_ready",
+  );
+  expect(vi.mocked(readSetupDatabase)).not.toHaveBeenCalled();
 });
 
 it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(

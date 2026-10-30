@@ -33,7 +33,7 @@ const LEGACY = [
 const DOCUMENTS = "first-fiscal-documents";
 const STEP = /^step-\d{6}$/;
 const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
-// A journal left beside a later database would be rolled into it on its first open.
+// A journal left beside a later database would be rolled into it on its first read-write open.
 const SIDE_FILES = [
   "venue.db-wal",
   "venue.db-shm",

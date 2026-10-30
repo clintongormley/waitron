@@ -30,7 +30,7 @@ import {
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { foreignHotJournal } from "../test/foreign-journal.js";
-import { damagePages } from "../test/damaged-database.js";
+import { damageIndexes, damagePages } from "../test/damaged-database.js";
 import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
@@ -144,8 +144,8 @@ it("a held setup database with an invoice record refuses the summary kept-record
   });
 });
 
-it("the summary's kept-records refusal logs the counts, not the answer", async () => {
-  const f = await heldSetup({ invoices: 1 });
+/** Asks for the summary through its route; answers the kept-records refusal's log reason. */
+async function keptRecordsLogReason(f: Held) {
   const { ids } = await f.signIn();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
@@ -184,7 +184,21 @@ it("the summary's kept-records refusal logs the counts, not the answer", async (
   }
   const refusal = lines.find((line) => line.event === "setup.start_again_refused");
   expect(refusal?.level).toBe("warn");
-  expect(refusal?.fields?.logReason).toMatch(/^rows=\d+ kept=\d+ records=1 accepted=0$/);
+  return refusal?.fields?.logReason;
+}
+
+it("the summary's kept-records refusal logs the counts, not the answer", async () => {
+  expect(await keptRecordsLogReason(await heldSetup({ invoices: 1 }))).toMatch(
+    /^rows=\d+ kept=\d+ records=1 accepted=0$/,
+  );
+});
+
+it("a kept-records refusal after a damaged read logs the damage's code after the counts", async () => {
+  const f = await heldSetup({ invoices: 1 });
+  damagePages(venueDb(f), "tenants");
+  expect(await keptRecordsLogReason(f)).toMatch(
+    /^rows=\d+ kept=[1-9]\d* records=\d+ accepted=\d+ damaged=errcode 11$/,
+  );
 });
 
 it.each([
@@ -880,6 +894,12 @@ it("a damaged tenants page beside an invoice refuses kept-records, and deletes n
 it("the same sale with only the invoice table and its indexes damaged refuses kept-records, and deletes nothing", async () => {
   const f = await heldSetup({ invoices: 1, recovery: false });
   damagePages(venueDb(f), invoiceTable);
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("damaged indexes beside an intact sale and invoice refuse kept-records, and delete nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  damageIndexes(venueDb(f));
   await expectHeldRefused(f, keptRecords);
 });
 

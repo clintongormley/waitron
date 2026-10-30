@@ -177,10 +177,14 @@ async function readHoldings(
   let rows = 0;
   let kept = 0;
   for (const table of tables) {
+    // SQLite counts from the smallest index unless told not to; a damaged index alone must not
+    // make a readable table count as empty.
     const n = await step(
       () =>
         (
-          connection.prepare(`select count(*) as n from ${quoteIdent(table)}`).get() as {
+          connection
+            .prepare(`select count(*) as n from ${quoteIdent(table)} not indexed`)
+            .get() as {
             n: number;
           }
         ).n,
