@@ -134,14 +134,14 @@ export interface StartAgainSummary {
   reached: "claimed" | "named" | "fiscal-started" | "fiscal-finished";
   recoveryRecordDamaged?: true;
   recovery?: StartAgainRecoveryShown;
-  held?: StartAgainHeld;
+  databaseUnreadable?: true;
 }
-/** What the setup database holds beside a stopped recovery: its rows, the kept ones, and invoices. */
-export interface StartAgainHeld {
-  rows: number;
-  kept: number;
-  records: number;
-  accepted: number;
+/** What Start again sends beside the snapshot; at most one `confirm*` field. */
+export interface StartAgainConfirm {
+  confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
+  recoveryRecordDamagedShown?: true;
+  confirmRecoveryDiscard?: { shown: StartAgainSummary };
+  confirmUnreadableDatabase?: { shown: StartAgainSummary };
 }
 /** Why the server refused Start again with `setup.start_again_refused`. */
 export type StartAgainRefusalCause = "trading-settings" | "setup-finished" | "kept-records";

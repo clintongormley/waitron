@@ -14,6 +14,7 @@ import type {
   FirstSetupProvisionBody,
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
+  StartAgainConfirm,
   StartAgainSummary,
 } from "./first-setup-types.js";
 
@@ -641,36 +642,18 @@ export class SetupApi {
     });
   }
 
-  startAgainSummary(
-    snapshot: FirstSetupResolutionSnapshot,
-    owner: FirstSetupOwner,
-  ): Promise<StartAgainSummary> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/start-again/summary",
-      "POST",
-      snapshot,
-      firstSetupHeaders(owner),
-    );
+  startAgainSummary(snapshot: FirstSetupResolutionSnapshot): Promise<StartAgainSummary> {
+    return this.#request("/setup-api/first-setup/resolution/start-again/summary", "POST", snapshot);
   }
 
   startAgainFirstSetup(
     snapshot: FirstSetupResolutionSnapshot,
-    owner?: FirstSetupOwner,
-    confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary },
-    recoveryRecordDamagedShown?: true,
-    confirmRecoveryDiscard?: { shown: StartAgainSummary },
+    confirm: StartAgainConfirm = {},
   ): Promise<{ restarting: true }> {
-    return this.#request(
-      "/setup-api/first-setup/resolution/start-again",
-      "POST",
-      {
-        ...snapshot,
-        ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
-        ...(recoveryRecordDamagedShown === undefined ? {} : { recoveryRecordDamagedShown }),
-        ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
-      },
-      owner === undefined ? undefined : firstSetupHeaders(owner),
-    );
+    return this.#request("/setup-api/first-setup/resolution/start-again", "POST", {
+      ...snapshot,
+      ...confirm,
+    });
   }
 
   finishFirstSetup(
