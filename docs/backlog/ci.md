@@ -745,15 +745,6 @@ exhausted both 120-second attempts with `--depth=1`, before installation or test
 full-history transfers does not eliminate this observed shallow-checkout failure mode.
 
 
-## Profile provisioning's busiest shard after the A679 split
-
-All six shards and merged
-coverage pass in run `39380412391`, but shard 1 takes 297 s in Vitest and 330 s overall.
-Find the slow files or setup cost before changing its distribution; keep every check and
-coverage threshold. This exceeds the approximate four-minute target without reproducing
-the former shared light-job timeout.
-
-
 ## Investigate two full-run till browser failures seen during A669 validation
 
 On

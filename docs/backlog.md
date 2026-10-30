@@ -5746,9 +5746,6 @@ values rather than PIN substrings inside random IDs. See the
   both attempts before running tests. Their underlying causes remain unknown.
   [Detail](backlog/ci.md#whether-the-2026-10-20-checkout-stalls-were-a-github-side-incident-was-not-checked-a935).
 
-- **Profile provisioning's busiest shard after the A679 split.**
-  [Detail](backlog/ci.md#profile-provisionings-busiest-shard-after-the-a679-split).
-
 - **Investigate two full-run till browser failures seen during A669 validation.**
   [Detail](backlog/ci.md#investigate-two-full-run-till-browser-failures-seen-during-a669-validation).
 

@@ -1158,6 +1158,24 @@ repository's history does not contain (an image built outside CI, or a rewritten
 wedge every later publish identically until `:main` is deleted or retagged by hand. Its suite,
 `scripts/main-tag-guard.test.mjs`, runs the real script against a stubbed `docker` and `gh`.
 
+### Compare database files as bytes
+
+For a database-file preservation check, use `Buffer.equals` on the two `readFile` results.
+It checks the complete bytes and length without asking the test framework to compare every
+Buffer entry as an object property. Keep the read-only connection and the before/after file
+reads; the assertion still has to detect writes to the inspected file.
+
+A1228 (2026-10-30) profiled `first-setup-empty-database.test.ts` after main CI run
+`41016184133`, job `123933113351`, spent 231.9 seconds in its 16 cases. Shard 1 took
+359.21 seconds in Vitest and 391 seconds overall; the other five jobs took 84–154 seconds.
+A local Node CPU profile attributed 44.16 seconds to Vitest's `iterableEquality`, compared
+with 0.65 seconds in `archiveTo`. The unchanged focused command passed all 16 cases in
+61.19 seconds; with the file comparison changed to `Buffer.equals`, the same command passed
+all 16 in 3.53 seconds. The latter run had no profiler, so these local wall times do not
+measure a controlled speed ratio. CI timing on the changed head is the shard-budget receipt.
+No migration, database reset, test case, expected admission result, shard count or coverage
+threshold changes with this assertion.
+
 ### Every CI test job should finish in about 4 minutes
 
 Owner decision (2026-10-09, restated 2026-10-11 in the watcher session: "if something regularly

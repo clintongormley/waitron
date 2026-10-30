@@ -27,7 +27,7 @@ async function inspect(
     const result = await firstSetupDatabaseIsEmpty(connection, root, requiredSets);
     connection.close();
     connection = undefined;
-    expect(await readFile(file)).toEqual(before);
+    expect((await readFile(file)).equals(before)).toBe(true);
     return result;
   } finally {
     connection?.close();
