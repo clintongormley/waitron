@@ -6267,6 +6267,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
   ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
   shared party venue creates.
+  The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
+  still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
+  Copas, "Deli para llevar") and uses "Sala" and "Terraza".
   The server's adjustment venue gives English customer-facing and kitchen dish names and English
   category, printer, device, location and administrator names; its locale, street address,
   reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
