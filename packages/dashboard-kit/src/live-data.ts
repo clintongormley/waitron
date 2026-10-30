@@ -113,9 +113,10 @@ export class LiveData {
     this.#paused = true;
   }
 
-  resume(): void {
+  resume(): boolean {
+    const paused = this.#paused;
     this.#paused = false;
-    this.refresh();
+    return paused;
   }
 
   refresh(): void {

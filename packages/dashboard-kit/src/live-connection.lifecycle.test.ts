@@ -96,6 +96,8 @@ it("holds timer and newly observed reads until the document returns", async () =
   expect(streams).toHaveLength(1);
   page.dispatchEvent(new Event("pageshow"));
   await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(0);
   expect(values).toEqual([1, 10, 3, 10, 20]);
   expect(streams).toHaveLength(2);
 });
@@ -109,6 +111,8 @@ it("retains observers and snapshots for history restoration then refreshes once"
   expect(observed.snapshot.value).toBe(1);
   page.dispatchEvent(new Event("pageshow"));
   page.dispatchEvent(new Event("pageshow"));
+  await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
   await vi.advanceTimersByTimeAsync(0);
   expect(values).toEqual([1, 2]);
   expect(observed.snapshot.value).toBe(2);
@@ -158,6 +162,7 @@ it("ignores every old-stream event while hidden and after history restoration", 
   expect(invalid).not.toHaveBeenCalled();
   page.dispatchEvent(new Event("pageshow"));
   await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
   old.dispatchEvent(new Event("error"));
   old.send("session-invalid", { code: "management_session.expired" });
   await vi.advanceTimersByTimeAsync(1);
@@ -178,4 +183,79 @@ it("cancels a closed-stream retry while the page is away", async () => {
   page.dispatchEvent(new Event("pageshow"));
   await vi.advanceTimersByTimeAsync(0);
   expect(streams).toHaveLength(2);
+});
+
+it("refreshes a restored query once including the replacement stream's open", async () => {
+  page.dispatchEvent(new Event("pagehide"));
+  page.dispatchEvent(new Event("pageshow"));
+  await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 2]);
+});
+
+it("reconnects when a closed-stream error follows a temporary error before recovery runs", async () => {
+  streams[0]!.dispatchEvent(new Event("error"));
+  streams[0]!.readyState = 2;
+  streams[0]!.dispatchEvent(new Event("error"));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(values).toEqual([1, 2]);
+  expect(streams).toHaveLength(2);
+});
+
+it("holds a replacement session's reads and stream if stopped and restarted while hidden", async () => {
+  page.dispatchEvent(new Event("pagehide"));
+  connection.stop();
+  data.observe(
+    { key: "replacement", dependencies: [{ type: "alerts" }], read: async () => values.push(50) },
+    () => {},
+  );
+  generation = 2;
+  connection.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1]);
+  expect(streams).toHaveLength(1);
+  page.dispatchEvent(new Event("pageshow"));
+  await vi.advanceTimersByTimeAsync(0);
+  streams[1]!.dispatchEvent(new Event("open"));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 50]);
+});
+
+it("restarts after a stopped hidden document returned before the next start", async () => {
+  page.dispatchEvent(new Event("pagehide"));
+  connection.stop();
+  page.dispatchEvent(new Event("pageshow"));
+  data.observe(
+    { key: "replacement", dependencies: [{ type: "alerts" }], read: async () => values.push(50) },
+    () => {},
+  );
+  connection.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 50]);
+  expect(streams).toHaveLength(2);
+});
+
+it("stops affecting the cache after stopping in the visible document", async () => {
+  connection.stop();
+  page.dispatchEvent(new Event("pagehide"));
+  data.observe(
+    { key: "standalone", dependencies: [], read: async () => values.push(50) },
+    () => {},
+  );
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 50]);
+});
+
+it("refreshes a returning document that has only queries with no stream interests", async () => {
+  connection.stop();
+  data.observe({ key: "timer", dependencies: [], read: async () => values.push(10) }, () => {});
+  connection.start();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 10]);
+  page.dispatchEvent(new Event("pagehide"));
+  page.dispatchEvent(new Event("pageshow"));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(values).toEqual([1, 10, 10]);
+  expect(streams).toHaveLength(1);
 });

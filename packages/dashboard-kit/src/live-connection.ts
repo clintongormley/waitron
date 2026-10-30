@@ -38,7 +38,12 @@ export class LiveConnection {
   #onPageShow = (): void => {
     if (!this.#suspended) return;
     this.#suspended = false;
+    if (!this.#active) {
+      this.#detachPage();
+      return;
+    }
     this.data.resume();
+    if (this.data.interestKeys.length === 0) this.data.refresh();
     this.#schedule();
   };
 
@@ -54,6 +59,7 @@ export class LiveConnection {
     }
     this.#generation = generation;
     this.#active = true;
+    if (!this.#suspended && this.data.resume()) this.data.refresh();
     this.#page = typeof window === "undefined" ? undefined : window;
     this.#page?.addEventListener("pagehide", this.#onPageHide);
     this.#page?.addEventListener("pageshow", this.#onPageShow);
@@ -63,15 +69,23 @@ export class LiveConnection {
 
   stop(): void {
     this.#active = false;
-    this.#page?.removeEventListener("pagehide", this.#onPageHide);
-    this.#page?.removeEventListener("pageshow", this.#onPageShow);
-    this.#page = undefined;
+    if (this.#suspended) {
+      // Keep the return listener so a delayed start cannot resume a departed document.
+      this.#page?.removeEventListener("pagehide", this.#onPageHide);
+    } else {
+      this.#detachPage();
+      this.data.resume();
+    }
     this.#unsubscribe?.();
     this.#unsubscribe = undefined;
     this.#close();
     this.data.clear();
-    this.#suspended = false;
-    this.data.resume();
+  }
+
+  #detachPage(): void {
+    this.#page?.removeEventListener("pagehide", this.#onPageHide);
+    this.#page?.removeEventListener("pageshow", this.#onPageShow);
+    this.#page = undefined;
   }
 
   #close(): void {
@@ -102,6 +116,7 @@ export class LiveConnection {
       this.#stream = stream;
       const generation = this.#generation;
       let refreshed = false;
+      let closed = false;
       const current = (allowStale = false): boolean =>
         this.#active &&
         !this.#suspended &&
@@ -115,13 +130,14 @@ export class LiveConnection {
       listen("open", () => {
         this.#retryMs = 1000;
         refreshed = false;
+        closed = false;
         this.data.refresh();
       });
       listen("error", () => {
         // EventSource retries transport interruptions itself, but HTTP failures can leave it CLOSED.
         // Chromium fires `error` on every one of its own retries, so only this stream's first error,
         // or its first since it last opened, re-reads everything.
-        const closed = stream.readyState === 2;
+        closed ||= stream.readyState === 2;
         if (!closed && refreshed) return;
         if (!closed) refreshed = true;
         if (this.#errorRefresh !== undefined) return;

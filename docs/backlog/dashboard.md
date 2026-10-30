@@ -665,7 +665,7 @@ plans to retire the editor.
 - **Dashboard document lifecycle (A1229, 2026-10-30).** Suspend live streams and cached reads
   when the document leaves; preserve mounted observers for Back/Forward restoration and retain
   updates after a cancelled navigation. Error recovery waits one task so pagehide can cancel it.
-  [Lifecycle contract and regression commands](../developers/dashboard-live-updates.md).
+  [Lifecycle contract and regression tests](../developers/dashboard-live-updates.md).
 
 
 - The owner's answer to Q41 (B): signed in, the language choices are in the account menu after

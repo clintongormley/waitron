@@ -167,7 +167,7 @@ it("restores the same cached document's observers and stream on Back", async () 
       "globalThis.restored === true && stream.readyState === 1 && !observed.snapshot.loading && globalThis.completed >= 3",
     );
     expect(await page.evaluate("observed.snapshot.value")).toEqual([]);
-    expect(reads.slice(2)).toContain(1);
+    expect(reads.slice(2)).toEqual([1]);
     expect(reads.every((document) => document === 1)).toBe(true);
     const completed = await page.evaluate<number>("globalThis.completed");
     await page.goForward({ waitUntil: "commit" });
