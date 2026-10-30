@@ -81,7 +81,7 @@ function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
 /** Labels the inspection gives a database that may be damaged, which only a read can tell. */
-const DAMAGED_LABELS: readonly string[] = ["corrupt", "unknown"];
+const DAMAGED_LABELS: readonly string[] = ["corrupt", "unknown", "partial"];
 /** The held state's refusals made before what its database holds is read, in this order. */
 function assertHeldStartAgainOffered(
   inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
@@ -325,7 +325,7 @@ export function createFirstSetupResolutionActions(
     if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
     const label = inspection.database;
     const presentStatus = PRESENT_START_AGAIN_STATUSES.includes(state.status);
-    if (label === "unreadable" || label === "partial") unavailable();
+    if (label === "unreadable") unavailable();
     const held = !missing && (label === "occupied" || !presentStatus);
     // An unused setup's database the inspection could not show empty (D3 row c).
     const readFirst = !missing && !held && !(label === "no-venue-rows" && inspection.emptyDatabase);

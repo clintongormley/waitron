@@ -30,7 +30,7 @@ import {
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
 import { foreignHotJournal } from "../test/foreign-journal.js";
-import { damageIndexes, damagePages } from "../test/damaged-database.js";
+import { checkpointed, damageIndexes, damagePages } from "../test/damaged-database.js";
 import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
@@ -256,7 +256,11 @@ it.each([
     { tradingSettings: true },
     { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
   ],
-  ["partial", { tradingSettings: true }, notReady],
+  [
+    "partial",
+    { tradingSettings: true },
+    { code: "setup.start_again_refused", params: { cause: "trading-settings" } },
+  ],
 ] as const)(
   "a database read as %s beside a stopped recovery (%o) is refused as %o, and nothing changes",
   async (database, options, refusal) => {
@@ -1137,6 +1141,47 @@ it("an intact held database with an invoice and another database's hot journal b
   foreignHotJournal(`${venueDb(f)}-journal`, "rolls-back");
   expect(await labelOf(f)).toBe("unknown");
   await expectHeldRefused(f, { code: "setup.not_ready" });
+});
+
+it("an intact held database with an invoice and an empty-original journal from another database beside it is refused setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  checkpointed(venueDb(f));
+  foreignHotJournal(`${venueDb(f)}-journal`, "empty-original");
+  await expectHeldRefused(f, {
+    code: "setup.not_ready",
+    reason: "journal beside a damaged read: no such table",
+  });
+});
+
+/** Drops tables beside the reader, with foreign keys off, as a part-applied setup leaves them. */
+function dropTables(f: Pick<Held, "roots">, tables: readonly string[]) {
+  const db = new DatabaseSync(venueDb(f));
+  try {
+    db.exec("pragma foreign_keys = off");
+    for (const table of tables) db.exec(`drop table ${table}`);
+  } finally {
+    db.close();
+  }
+}
+
+it("a held database missing its invoice table: the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
+  const f = await heldSetup({ recovery: false });
+  dropTables(f, [invoiceTable]);
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("a held database missing a table beside a readable sale refuses kept-records, and deletes nothing", async () => {
+  const f = await heldSetup({ invoices: 1, recovery: false });
+  dropTables(f, ["department_days"]);
+  await expectHeldRefused(f, keptRecords);
+});
+
+it("with a readable held venue.db, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  await writeFile(join(f.roots.venueDir, "node.db"), "not a database");
+  await expectHeldRefused(f, { code: "setup.not_ready", reason: "node.db unreadable" });
 });
 
 it("control: without the journal, the same held database refuses kept-records", async () => {

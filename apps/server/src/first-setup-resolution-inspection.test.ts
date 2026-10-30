@@ -344,7 +344,7 @@ it("retirement snapshots retain configured public files, receipt directories and
 it.each([
   ["missing", "setup.not_ready"],
   ["corrupt", "setup.attempt_conflict"],
-  ["partial", "setup.not_ready"],
+  ["partial", "setup.attempt_conflict"],
 ] as const)("password-free Start again refuses a %s database %s", async (kind, code) => {
   const f = await actionsFixture({ modules: ALL_MODULES });
   const unchanged = await startAgainUnchanged(f);
@@ -356,6 +356,15 @@ it.each([
     code,
   });
   await unchanged();
+});
+it("password-free Start again, with the confirmation, deletes a 0-byte database", async () => {
+  const f = await actionsFixture({ modules: ALL_MODULES });
+  await writeFile(join(f.venueDir, "venue.db"), Buffer.alloc(0));
+  const { register, ...ids } = await f.startRequest();
+  const shown = await f.actions.startAgainSummary(ids);
+  expect(shown).toEqual({ reached: "claimed", databaseUnreadable: true });
+  await f.actions.startAgainFirstSetup({ ...ids, register, confirmUnreadableDatabase: { shown } });
+  await expectStartAgainDeleted(f);
 });
 it("Start again from two browsers deletes the attempt once and refuses the second with setup.attempt_conflict", async () => {
   const f = await actionsFixture(),

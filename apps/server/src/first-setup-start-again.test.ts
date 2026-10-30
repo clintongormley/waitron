@@ -396,6 +396,29 @@ it("a missing database: Start again without the confirmation is refused, and not
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
+it("with venue.db missing, a damaged node.db refuses the summary and Start again setup.not_ready, and nothing changes", async () => {
+  const { f, actions, request } = await missingDatabase();
+  await writeFile(join(f.venueDir, "node.db"), "not a database");
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const before = await attemptFiles(f);
+  const refusal = { code: "setup.not_ready", reason: "node.db unreadable" };
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      register: request.register,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named" } },
+    }),
+  ).rejects.toMatchObject(refusal);
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
 it("a confirmation whose summary differs from the box's own is refused, and nothing is written", async () => {
   const { f, actions, request } = await missingDatabase();
   const before = await attemptFiles(f);

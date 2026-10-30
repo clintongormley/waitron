@@ -25,7 +25,7 @@ export interface SetupDatabaseHoldings {
   readonly accepted: number;
 }
 
-type Damage = "errcode 11" | "errcode 26";
+type Damage = "errcode 11" | "errcode 26" | "no such table";
 /** `damaged`: some step failed as damage; `seen` holds what every other step counted. */
 export type SetupDatabaseRead =
   | { kind: "read"; holdings: SetupDatabaseHoldings }
@@ -35,12 +35,18 @@ export type SetupDatabaseRead =
 const notReady = (reason: string): never => {
   throw new AppError("setup.not_ready", {}, { reason });
 };
-/** SQLite's primary code 11 (corrupt) or 26 (not a database); anything else is not damage. */
+/**
+ * SQLite's primary code 11 (corrupt) or 26 (not a database), or a table a reader expects missing
+ * (a part-applied setup, a 0-byte file); anything else is not damage.
+ */
 const damageOf = (error: unknown): Damage | undefined => {
-  const { errcode } = (error ?? {}) as { errcode?: unknown };
+  const { errcode, message } = (error ?? {}) as { errcode?: unknown; message?: unknown };
   if (typeof errcode !== "number") return undefined;
   const primary = errcode & 0xff;
-  return primary === 11 || primary === 26 ? `errcode ${primary}` : undefined;
+  if (primary === 11 || primary === 26) return `errcode ${primary}`;
+  return primary === 1 && typeof message === "string" && message.startsWith("no such table")
+    ? "no such table"
+    : undefined;
 };
 const codeOf = (error: unknown) => {
   const { code, errcode } = (error ?? {}) as { code?: unknown; errcode?: unknown };

@@ -45,5 +45,9 @@ export function foreignHotJournal(dest: string, shape: "rolls-back" | "empty-ori
   if (shape === "rolls-back") {
     expect(records, "journal records").toBeGreaterThan(0);
     expect(originalPages, "original size in pages").toBeGreaterThan(0);
-  } else expect([records, originalPages], "records, original size").toEqual([0, 0]);
+  } else {
+    // No page is written past the header's sector, whatever `records` says.
+    expect(header.length, "journal size").toBe(header.readUInt32BE(20));
+    expect(originalPages, "original size in pages").toBe(0);
+  }
 }
