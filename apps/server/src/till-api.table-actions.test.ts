@@ -108,7 +108,7 @@ describe("the table action routes", () => {
     expect(tablesOf(ana.partyId)).toEqual([to]);
   });
 
-  it("move guests to another party's table merges the bills by default, or keeps them separate", async () => {
+  it("move guests to another party's table keeps every bill, with no bills key or with one", async () => {
     const ana = await seatedWith(venue, "Tarta");
     const luis = await seatedWith(venue, "Caña");
     const bea = await seatedWith(venue, "Pulpo");
@@ -129,8 +129,9 @@ describe("the table action routes", () => {
     });
 
     expect(merged.status).toBe(200);
-    expect(merged.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: true });
-    expect(await statusOf(venue, ana.tabId)).toBe("abandoned");
+    expect(merged.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+    expect(await statusOf(venue, ana.tabId)).toBe("open");
+    expect(await statusOf(venue, luis.tabId)).toBe("open");
     expect(separate.status).toBe(200);
     expect(separate.json).toEqual({ partyId: cris.partyId, mainBillId: cris.tabId, merged: false });
     expect(await statusOf(venue, bea.tabId)).toBe("open");

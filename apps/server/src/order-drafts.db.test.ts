@@ -3415,7 +3415,10 @@ describe("pricing (D9)", () => {
   });
 });
 
-/** `into` joins `from`'s table, combining the parties and merging their bills, as the till does. */
+/**
+ * `into` joins `from`'s table, combining the parties, and Merge bills then merges `from`'s bill
+ * into `into`'s in the same transaction, as staff do.
+ */
 async function merge(v: Venue, into: Seated, from: Seated, operatorId: string): Promise<void> {
   const command = {
     bills: "merge" as const,
@@ -3424,7 +3427,18 @@ async function merge(v: Venue, into: Seated, from: Seated, operatorId: string): 
     expectedOtherPartyRevision: await partyRevision(from.partyId),
     operatorId,
   };
-  await inTx((tx) => joinTables(tx, v.cfg, into.partyId, from.tableId, command));
+  await inTx(async (tx) => {
+    await joinTables(tx, v.cfg, into.partyId, from.tableId, command);
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, into.partyId));
+    await mergeBills(tx, v.cfg, into.tabId, from.tabId, {
+      partyId: into.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId,
+    });
+  });
 }
 
 async function openOwnersOn(partyId: string): Promise<string[]> {
@@ -3502,10 +3516,10 @@ describe("merging parties (D2)", () => {
     expect(await draftsOf(v, table5.partyId)).toEqual([]);
 
     expect(await draftRow(alexOn5.id)).toMatchObject({
-      partyId: table5.partyId,
+      partyId: table4.partyId,
       state: "discarded",
       ownerId: ALEX,
-      revision: alexOn5.revision + 1,
+      revision: alexOn5.revision + 2,
     });
     expect(await storedLines(alexOn5.id)).toEqual([]);
     expect(await eventsOf(alexOn5.id)).toEqual([
@@ -3539,7 +3553,7 @@ describe("merging parties (D2)", () => {
       },
       {
         billId: samOn5.billId,
-        billNumber: 2,
+        billNumber: 3,
         ownerId: SAM,
         ownerName: "Sam",
         savedAt: await savedAtOf(samOn5.id),
@@ -3565,7 +3579,7 @@ describe("merging parties (D2)", () => {
       [table5.partyId, samOn5, SAM, "party.not_open"],
       [table4.partyId, samOn5, SAM, "draft.out_of_date"],
       [table5.partyId, alexOn5, ALEX, "party.not_open"],
-      [table4.partyId, alexOn5, ALEX, "draft.not_found"],
+      [table4.partyId, alexOn5, ALEX, "draft.out_of_date"],
       [table4.partyId, alexOn4, ALEX, "draft.out_of_date"],
     ] as const) {
       await refusedWritingNothing(
@@ -3642,7 +3656,7 @@ describe("a retried submission of a draft a merge moved or discarded", () => {
         ),
       {
         code: "draft.out_of_date",
-        params: { draftId: samOn5.id, revision: samOn5.revision + 2 },
+        params: { draftId: samOn5.id, revision: samOn5.revision + 3 },
       },
     );
   });

@@ -1802,7 +1802,7 @@ async function reprintPrinted(v: Venue, orderId: string): Promise<void> {
 
 /**
  * Merge `source`'s bill into `destination`'s: `destination`'s party joins `source`'s table, which
- * combines the parties and merges their main bills.
+ * combines the parties and keeps both bills, then Merge bills merges them in the same transaction.
  */
 async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
   const merge = {
@@ -1812,12 +1812,22 @@ async function mergeBills(v: Venue, source: Seated, destination: Seated): Promis
     expectedOtherPartyRevision: (await command(source.partyId)).expectedPartyRevision,
     operatorId: ALEX,
   };
-  const result = await inTx((tx) =>
-    joinTables(tx, v.cfg, destination.partyId, source.tableId, merge),
-  );
+  const result = await inTx(async (tx) => {
+    const joined = await joinTables(tx, v.cfg, destination.partyId, source.tableId, merge);
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, destination.partyId));
+    await mergeBillsCommand(tx, v.cfg, destination.tabId, source.tabId, {
+      partyId: destination.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId: ALEX,
+    });
+    return joined;
+  });
   expect(result).toEqual({
     partyId: destination.partyId,
     mainBillId: destination.tabId,
-    merged: true,
+    merged: false,
   });
 }

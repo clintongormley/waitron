@@ -94,6 +94,28 @@ function command(app: Hono, action: "join" | "move", p: Awaited<ReturnType<typeo
     at: "2026-01-06T20:00:00Z",
   });
 }
+/** Merge bills, after the combine, of the incoming party's bill into the surviving party's. */
+async function mergeAfter(
+  app: Hono,
+  action: "join" | "move",
+  p: Awaited<ReturnType<typeof prepare>>,
+) {
+  const [into, from] = action === "join" ? [p.source, p.target] : [p.target, p.source];
+  const [party] = await suite.db.select().from(parties).where(eq(parties.id, into.partyId));
+  return send(
+    app,
+    v.cookie,
+    "POST",
+    `/api/bills/${into.tabId}/merge`,
+    await observedBillActionBody(v.db, `/api/bills/${into.tabId}/merge`, {
+      fromBillId: from.tabId,
+      expectedPartyRevision: party!.revision,
+      partyId: into.partyId,
+      operatorId: v.adminId,
+      at: "2026-01-06T20:00:00Z",
+    }),
+  );
+}
 const state = async () => ({
   orders: await suite.db.select().from(workingOrders),
   parties: await suite.db.select().from(parties),
@@ -165,18 +187,43 @@ describe("draft-event attendance in table combines", () => {
     expect(after.days).toEqual([]);
   });
   it.each(["join", "move"] as const)(
-    "%s snapshots the admitted mover at the trusted instant",
+    "%s keeps every bill and records nothing; Merge bills afterwards snapshots the admitted mover at the trusted instant",
     async (action) => {
       const p = await prepare();
       const before = await state();
       expect(await command(api(recordAttendanceFact), action, p)).toMatchObject({ status: 200 });
+      const combined = await state();
+      expect(combined.events).toEqual(before.events);
+      expect(combined.facts).toEqual([]);
+      expect(combined.drafts.map((draft) => draft.state)).toEqual(["open", "open"]);
+      expect(await mergeAfter(api(recordAttendanceFact), action, p)).toMatchObject({
+        status: 204,
+      });
       const saved = await state();
       const events = saved.events.filter((e) => !before.events.some((old) => old.id === e.id));
       expect(events.map((e) => [e.kind, e.actorId])).toEqual([["discarded", v.operatorId]]);
-      expect(saved.facts).toEqual([
+      expect(saved.facts.filter((fact) => fact.source === "draft")).toEqual([
         expect.objectContaining({
           source: "draft",
           key: `event:${events[0]!.id}`,
+          personId: v.operatorId,
+          locationId: v.cfg.locationId,
+          at: "2026-01-05T16:40:00.000Z",
+          outcome: "qualifying",
+        }),
+      ]);
+      expect(saved.facts.filter((fact) => fact.source !== "draft")).toEqual([
+        expect.objectContaining({
+          source: "order",
+          kind: "order",
+          personId: v.operatorId,
+          locationId: v.cfg.locationId,
+          at: "2026-01-05T16:40:00.000Z",
+          outcome: "qualifying",
+        }),
+        expect.objectContaining({
+          source: "order",
+          kind: "order",
           personId: v.operatorId,
           locationId: v.cfg.locationId,
           at: "2026-01-05T16:40:00.000Z",
@@ -215,15 +262,17 @@ describe("draft-event attendance in table combines", () => {
     },
   );
   it.each(["join", "move"] as const)(
-    "%s rolls back every table on snapshot refusal",
+    "%s asks for no snapshot; Merge bills afterwards rolls back every table on snapshot refusal",
     async (action) => {
       const p = await prepare();
-      const before = await state();
       const refuse: AttendanceRecorder = async (tx, fact) => {
         await recordAttendanceFact(tx, fact);
         throw new AppError("attendance.invalid", { reason: "merge snapshot refused" });
       };
-      expect(await command(api(refuse), action, p)).toMatchObject({
+      expect(await command(api(refuse), action, p)).toMatchObject({ status: 200 });
+      const before = await state();
+      expect(before.facts).toEqual([]);
+      expect(await mergeAfter(api(refuse), action, p)).toMatchObject({
         status: 400,
         json: { code: "attendance.invalid" },
       });
@@ -289,9 +338,11 @@ describe("draft-event attendance in table combines", () => {
     },
   );
 
-  it("a table combine without workforce capture retains the event without attendance writes", async () => {
+  it("a table combine and Merge bills without workforce capture retain the event without attendance writes", async () => {
     const p = await prepare();
     expect(await command(api(), "join", p)).toMatchObject({ status: 200 });
+    expect((await state()).events.filter((e) => e.kind === "discarded")).toEqual([]);
+    expect(await mergeAfter(api(), "join", p)).toMatchObject({ status: 204 });
     const saved = await state();
     expect(saved.events.filter((e) => e.kind === "discarded")).toHaveLength(1);
     expect(saved.facts).toEqual([]);

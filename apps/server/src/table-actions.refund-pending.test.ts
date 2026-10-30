@@ -245,7 +245,7 @@ describe("a pending card refund and the table actions", () => {
     },
   );
 
-  it("has its table joined while another bill holds the refund: the main bills merge, the refund's bill does not change", async () => {
+  it("has its table joined while another bill holds the refund: every bill stays its own, the refund's bill does not change", async () => {
     const ana = await seatedWith(venue, "Caña", "Pulpo", "Croquetas", "Croquetas");
     const splitBill = await post(`/api/bills/${ana.tabId}/split`, {
       transfers: [{ lineNo: 2 }, { lineNo: 3 }, { lineNo: 4 }],
@@ -267,12 +267,15 @@ describe("a pending card refund and the table actions", () => {
     });
 
     expect(joined.status).toBe(200);
-    expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: true });
-    expect((await charges(luis.tabId)).bill).toMatchObject({
-      status: "open",
-      total: "6.00",
-      outstanding: "6.00",
-    });
+    expect(joined.json).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+    for (const kept of [luis.tabId, ana.tabId]) {
+      expect((await charges(kept)).bill).toMatchObject({
+        status: "open",
+        total: "3.00",
+        outstanding: "3.00",
+      });
+      expect(partyOfBill(kept)).toBe(luis.partyId);
+    }
     expect(partyOfBill(billId)).toBe(luis.partyId);
     expect(await charges(billId)).toEqual(before);
     await expectLocked(billId);

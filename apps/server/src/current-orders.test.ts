@@ -72,7 +72,7 @@ import { offerProducts } from "./testing/zone-offers.js";
 import { finishTable, seatTable } from "./testing/party-close-fixture.js";
 import { listTablesWithState, markGroupServed, markServed } from "./working-order.js";
 import "./errors.js";
-import { splitBill } from "./testing/bill-action-fixture.js";
+import { mergeBills, splitBill } from "./testing/bill-action-fixture.js";
 import { joinTables } from "./testing/table-action-fixture.js";
 import { nifWithControlLetter } from "@waitron/fiscal-verifactu/src/testing/seed.js";
 import { deviceRequestCfg } from "./testing/session-device.js";
@@ -1556,7 +1556,18 @@ describe("a party another was merged into", () => {
       expectedOtherPartyRevision: await revisionOf(b.partyId),
       operatorId: ALEX,
     };
-    await inTx((tx) => joinTables(tx, v.cfg, a.partyId, b.tableId, command));
+    await inTx(async (tx) => {
+      await joinTables(tx, v.cfg, a.partyId, b.tableId, command);
+      const [party] = await tx
+        .select({ revision: parties.revision })
+        .from(parties)
+        .where(eq(parties.id, a.partyId));
+      await mergeBills(tx, v.cfg, a.tabId, bNext, {
+        partyId: a.partyId,
+        expectedPartyRevision: party!.revision,
+        operatorId: ALEX,
+      });
+    });
 
     const read = await currentOrders(a.partyId);
 

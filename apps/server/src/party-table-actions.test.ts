@@ -55,6 +55,7 @@ import {
   floorRow,
 } from "./testing/party-venue.js";
 import { needingMoving } from "./testing/floor-today-venue.js";
+import { numbersOf } from "./testing/bill-identities.js";
 import "./errors.js";
 
 // Move guests, join tables and split a table (table actions plan, Task 8; spec §6, §8, §15).
@@ -312,7 +313,7 @@ describe("move guests", () => {
     expect((await billRow(v, second)).status).toBe("placed");
   });
 
-  it("combines the party into the party at a held table, which keeps its name and main bill", async () => {
+  it("combines the party into the party at a held table, which keeps its name and main bill, and every bill stays its own", async () => {
     const [m4, m7] = await tables("Uno", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -329,9 +330,14 @@ describe("move guests", () => {
     const moving = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
-    expect(result).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: true });
-    expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Agua", "Burger"]);
-    expect((await billRow(v, ana.tabId)).status).toBe("abandoned");
+    expect(result).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+    expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Agua"]);
+    expect((await linesOf(v, ana.tabId)).map((l) => l.name)).toEqual(["Burger"]);
+    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [ana.tabId, 2, null],
+    ]);
     expect(await partyRow(v, ana.partyId)).toMatchObject({
       state: "closed",
       mergedIntoPartyId: luis.partyId,
@@ -906,7 +912,7 @@ describe("kitchen groups when parties combine", () => {
 });
 
 describe("drafts when parties combine", () => {
-  it("adds the operator's draft on the moving party to their draft on the receiving one", async () => {
+  it("keeps the operator's draft on each bill, both now on the receiving party", async () => {
     const [m4, m7] = await tables("Borrador", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -928,9 +934,20 @@ describe("drafts when parties combine", () => {
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     const drafts = await act((tx) => readDrafts(tx, v.cfg, luis.partyId));
-    expect(drafts).toHaveLength(1);
-    expect(drafts[0]!.lines.map((line) => line.menuItemId).sort()).toEqual(
-      [v.item("Agua"), v.item("Flan")].sort(),
+    expect(
+      drafts
+        .map((draft) => ({
+          partyId: draft.partyId,
+          billId: draft.billId,
+          ownerId: draft.ownerId,
+          items: draft.lines.map((line) => line.menuItemId),
+        }))
+        .sort((a, b) => a.billId.localeCompare(b.billId)),
+    ).toEqual(
+      [
+        { partyId: luis.partyId, billId: ana.tabId, ownerId: OPERATOR, items: [v.item("Flan")] },
+        { partyId: luis.partyId, billId: luis.tabId, ownerId: OPERATOR, items: [v.item("Agua")] },
+      ].sort((a, b) => a.billId.localeCompare(b.billId)),
     );
   });
 });
@@ -974,7 +991,7 @@ describe("join tables", () => {
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m7, m8, m9]);
   });
 
-  it("combines the party at a held table into this one, with all of its tables", async () => {
+  it("combines the party at a held table into this one, with all of its tables, and every bill stays its own", async () => {
     const [m4, m7, m8] = await tables("Juntar", 4, 7, 8);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -985,15 +1002,20 @@ describe("join tables", () => {
     const joining = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
 
-    expect(result).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: true });
+    expect(result).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
     expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m7, m8]);
     expect(await activeTablesOf(v, luis.partyId)).toEqual([]);
     expect(await partyRow(v, luis.partyId)).toMatchObject({
       state: "closed",
       mergedIntoPartyId: ana.partyId,
     });
-    expect((await linesOf(v, ana.tabId)).map((l) => l.name)).toEqual(["Burger", "Agua"]);
-    expect((await billRow(v, luis.tabId)).status).toBe("abandoned");
+    expect((await linesOf(v, ana.tabId)).map((l) => l.name)).toEqual(["Burger"]);
+    expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Agua"]);
+    expect(await billRow(v, luis.tabId)).toMatchObject({ status: "open", partyId: ana.partyId });
+    expect(await numbersOf(v, ana.partyId)).toEqual([
+      [ana.tabId, 1, null],
+      [luis.tabId, 2, null],
+    ]);
     for (const joined of [m7, m8]) {
       expect(await tableRow(v, joined)).toMatchObject({
         needsClearingSince: null,
@@ -1325,7 +1347,7 @@ describe("MOVED notices after a table action", () => {
     ]);
   });
 
-  it("tells the kitchen once of a sent dish merged away when parties combine", async () => {
+  it("tells the kitchen once of a sent dish when parties combine, on the bill it stays on", async () => {
     const [m4, m7] = await tables("AvisoM", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1336,11 +1358,11 @@ describe("MOVED notices after a table action", () => {
     const moving = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
-    expect(result.merged).toBe(true);
-    expect((await billRow(v, ana.tabId)).status).toBe("abandoned");
+    expect(result.merged).toBe(false);
+    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
     expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
       ...luisNotices,
-      { working_order_id: luis.tabId, kind: "moved", line_name: "BURG", moved_to: "AvisoM 7" },
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "AvisoM 7" },
     ]);
   });
 });
@@ -1547,7 +1569,7 @@ describe("a party combined into another (Review Focus 3)", () => {
 });
 
 describe("combineParties", () => {
-  it("answers each bill it merged away with the bill it merged into", async () => {
+  it("answers no bill merged away: every bill stays its own", async () => {
     const [m4, m7] = await tables("Combina", 4, 7);
     const ana = await seat(v, m4);
     const luis = await seat(v, m7);
@@ -1564,10 +1586,15 @@ describe("combineParties", () => {
     );
 
     expect(result).toEqual({
-      merged: true,
+      merged: false,
       mainBillId: luis.tabId,
-      mergedInto: new Map([[ana.tabId, luis.tabId]]),
+      mergedInto: new Map(),
     });
+    expect(await billRow(v, ana.tabId)).toMatchObject({ status: "open", partyId: luis.partyId });
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [ana.tabId, 2, null],
+    ]);
     expect(await activeTablesOf(v, luis.partyId)).toEqual([m7, m4]);
   });
 });
@@ -1644,5 +1671,94 @@ describe("guest counts when parties combine", () => {
     );
 
     expect((await partyRow(v, into.partyId)).guestCount).toBe(999);
+  });
+});
+
+describe("A803 no main bill (join)", () => {
+  it("joining a seated table whose party has an untouched bill of the same mode keeps both parties' bills, each with its own number and lines", async () => {
+    const [m4, m7] = await tables("A803 Junta", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await order(v, luis.tabId, "Agua");
+    const receivingBefore = await lineRows(ana.tabId);
+    const incomingBefore = await lineRows(luis.tabId);
+
+    const joining = await opts(ana.partyId, luis.partyId);
+    const result = await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
+
+    expect(result).toEqual({ partyId: ana.partyId, mainBillId: ana.tabId, merged: false });
+    for (const billId of [ana.tabId, luis.tabId]) {
+      const row = await billRow(v, billId);
+      expect({ partyId: row.partyId, status: row.status }).toEqual({
+        partyId: ana.partyId,
+        status: "open",
+      });
+    }
+    expect(await lineRows(ana.tabId)).toEqual(receivingBefore);
+    expect((await lineRows(luis.tabId)).map((line) => [line.id, line.name])).toEqual(
+      incomingBefore.map((line) => [line.id, line.name]),
+    );
+    expect(await numbersOf(v, ana.partyId)).toEqual([
+      [ana.tabId, 1, null],
+      [luis.tabId, 2, null],
+    ]);
+    expect(await activeTablesOf(v, ana.partyId)).toEqual([m4, m7]);
+  });
+
+  it("Move guests onto a seated table keeps every bill and every payment on its own bill", async () => {
+    const [m4, m7] = await tables("A803 Mover", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger", "Vino");
+    const second = await splitOff(ana.partyId, ana.tabId, [2]);
+    await order(v, luis.tabId, "Agua");
+    await cashContribution(v, second, "5.00");
+    const bills = [luis.tabId, ana.tabId, second];
+    const paymentsBefore = [];
+    for (const billId of bills) paymentsBefore.push(await paymentsOf(v, billId));
+    expect(paymentsBefore.map((payments) => payments.length)).toEqual([0, 0, 1]);
+    const receivingBefore = await lineRows(luis.tabId);
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+    expect(result).toEqual({ partyId: luis.partyId, mainBillId: luis.tabId, merged: false });
+    const paymentsAfter = [];
+    for (const billId of bills) paymentsAfter.push(await paymentsOf(v, billId));
+    expect(paymentsAfter).toEqual(paymentsBefore);
+    for (const billId of bills) {
+      const row = await billRow(v, billId);
+      expect({ partyId: row.partyId, status: row.status }).toEqual({
+        partyId: luis.partyId,
+        status: "open",
+      });
+    }
+    expect(await lineRows(luis.tabId)).toEqual(receivingBefore);
+    expect((await linesOf(v, ana.tabId)).map((l) => l.name)).toEqual(["Burger"]);
+    expect((await linesOf(v, second)).map((l) => l.name)).toEqual(["Vino"]);
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [ana.tabId, 2, null],
+      [second, 3, null],
+    ]);
+  });
+
+  it("the kitchen hears only that dishes moved table, never a merge", async () => {
+    const [m4, m7] = await tables("A803 Aviso", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await order(v, luis.tabId, "Tarta");
+    const before = noticesOn([ana.tabId, luis.tabId]);
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
+
+    expect((await billRow(v, ana.tabId)).status).toBe("open");
+    expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
+      ...before,
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Aviso 7" },
+    ]);
   });
 });

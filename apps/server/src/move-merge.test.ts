@@ -9,6 +9,7 @@ import {
   floorTodayJoins,
   kitchenStations,
   locations,
+  parties,
   printJobs,
   ticketItems,
   withTransaction,
@@ -67,6 +68,25 @@ import { joinTables, moveGuests, splitTable } from "./testing/table-action-fixtu
 import { moveBill } from "./testing/move-bill-fixture.js";
 import { mergeBills, splitBill, transferItems } from "./testing/bill-action-fixture.js";
 import { enqueueCorrectionSlips, reprintOrderTickets } from "./kitchen-print.js";
+
+/** Merge bills of `from` into `into` at `partyId`, in the caller's transaction, as staff do. */
+async function mergeInTx(
+  tx: Transaction,
+  v: PartyVenue,
+  partyId: string,
+  into: string,
+  from: string,
+) {
+  const [party] = await tx
+    .select({ revision: parties.revision })
+    .from(parties)
+    .where(eq(parties.id, partyId));
+  return mergeBills(tx, v.cfg, into, from, {
+    partyId,
+    expectedPartyRevision: party!.revision,
+    operatorId: OPERATOR,
+  });
+}
 
 const LOCALE = "es-ES";
 const suite = useVenueDb({
@@ -474,15 +494,16 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     const before = await noticesOf([ana.tabId, checkId, other.tabId]);
     await nextMillisecond();
 
-    await inTx(v, (tx) =>
-      joinTables(tx, v.cfg, ana.partyId, mesa7, {
+    await inTx(v, async (tx) => {
+      await joinTables(tx, v.cfg, ana.partyId, mesa7, {
         bills: "merge",
         expectedPartyRevision,
         otherPartyId: other.partyId,
         expectedOtherPartyRevision,
         operatorId: OPERATOR,
-      }),
-    );
+      });
+      await mergeInTx(tx, v, ana.partyId, ana.tabId, other.tabId);
+    });
 
     expect(await noticesOf([ana.tabId, checkId, other.tabId])).toEqual([
       ...before,
@@ -490,7 +511,7 @@ describe("a table action tells the kitchen of every bill of the party", () => {
     ]);
   });
 
-  it("tells the kitchen of the main bill of the party taken in, which merges, and nothing of its kept bill, which keeps its table and its name", async () => {
+  it("tells the kitchen nothing of the bills of the party taken in, which all stay their own and keep their table and name", async () => {
     const v = await setupPartyVenue(db);
     const mesa4 = await v.table("Mesa 4");
     const mesa7 = await v.table("Mesa 7");
@@ -514,10 +535,9 @@ describe("a table action tells the kitchen of every bill of the party", () => {
       }),
     );
 
-    expect(await noticesOf([ana.tabId, other.tabId, otherCheckId])).toEqual([
-      ...before,
-      { workingOrderId: ana.tabId, kind: "moved", lineName: "FLAN", movedTo: "Mesa 4, 7" },
-    ]);
+    expect(await noticesOf([ana.tabId, other.tabId, otherCheckId])).toEqual(before);
+    for (const kept of [other.tabId, otherCheckId])
+      expect(await billRow(v, kept)).toMatchObject({ status: "open", partyId: ana.partyId });
   });
 });
 
@@ -843,7 +863,7 @@ function movedSlip(station: string, orderLine: string, from: string, to: string,
 }
 
 describe("when a MOVED slip prints: the dishes are on an order with another number (§3 (c))", () => {
-  it("a join of another party's table, bills merging, prints the merged-in order's dishes from Mesa 74 to Mesa 73, 74, and nothing for the surviving order (row 7)", async () => {
+  it("a join of another party's table prints nothing, every order keeping its number; Merge bills afterwards prints the merged-in order's dishes at Mesa 73, 74, and nothing for the surviving order (row 7)", async () => {
     const v = await setupPartyVenue(db);
     const grill = await stationWithPrinter(v, "Grill", ["Burger", "Paella"]);
     const mesa73 = await v.table("Mesa 73");
@@ -868,11 +888,16 @@ describe("when a MOVED slip prints: the dishes are on an order with another numb
       }),
     );
 
+    expect(await slipsSince(grill, before)).toEqual([]);
+    expect(await numbersOf([ana.tabId, luis.tabId])).toEqual(numbers);
+
+    await inTx(v, (tx) => mergeInTx(tx, v, ana.partyId, ana.tabId, luis.tabId));
+
     expect(await slipsSince(grill, before)).toEqual([
       movedSlip(
         "Grill",
         `Pedido ${numbers.get(luis.tabId)} -> ${numbers.get(ana.tabId)}`,
-        "Mesa 74",
+        "Mesa 73, 74",
         "Mesa 73, 74",
         ["1.000 x PAELLA"],
       ),

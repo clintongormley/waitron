@@ -635,6 +635,20 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `apps/server/src/bill-identities.test.ts:595` (join with Merge the bills), `:167` (main bill after all paid) | B | separate numbering; `:167` → no main bill, `openingBillId` | §3.4, D7 | 3a, 6c |
 | `apps/server/src/move-merge.test.ts:493` ("the main bill of the party taken in, which merges") | B | both bills kept; kitchen told of the moved bills' dishes | §3.4 | 3a |
 | `apps/server/src/move-merge.filing.test.ts:300-331`, `:333-` ("parties combined, bills merged → one registro (H2)", "tables joined across parties, bills merged"), and its helper's `bills: "merge" as const` (`:215`) | **S, Q5 item 1** | the combine no longer merges, so the setup adds an explicit `mergeBills(tx, cfg, intoTab, fromTab, …)` in the same transaction after `moveGuests`/`joinTables`, and the `:215` property goes; **every `expect` byte-identical** (`git diff` of the file shows only setup lines) | §3.4 "staff merge afterwards" | 3a |
+| Task 3a's planned rows, as built | B / S | `party-table-actions.test.ts:316`, `:994`, `:1350`, `:1572` (B): `merged: false`, the incoming bill open on the receiving party with its own lines and `numbersOf` `[[receiving, 1], [incoming, 2]]`; `:1350`'s MOVED notice is on the incoming bill itself. `table-actions.refund-pending.test.ts:248` (B): both bills open on the receiving party, each "3.00" total and outstanding (each bill's own Caña; the merged total was "6.00"); the refund's bill unchanged as before. `bill-identities.test.ts:599` (B): no bill abandoned; incoming bills numbered 2 and 3. `move-merge.test.ts:514` (B, plan said "kitchen told of the moved bills' dishes"; the run shows a join tells the kitchen nothing, as `party-table-actions.test.ts`' paid-bill join case already pins): notices `toEqual(before)`, both incoming bills open on the receiving party. `order-drafts.db.test.ts` `merge()` helper `:3420` (S): join, then `mergeBills(into.tabId, from.tabId)` in the same transaction; `:4494` byte-identical under it. `move-merge.filing.test.ts:300`, `:339` (S, Q5 item 1): as the row above | spec §3.4 bullet 2, §6 | 3a |
+| `order-drafts.db.test.ts:3474`, `:3565`, `:3627` (draft details of the merge-on-join, under the S helper) | B (found at Task 3a's red run) | join-then-Merge moves the incoming draft to the receiving party before Merge bills discards it: the discarded draft's row is on the receiving party at revision +2 (was the closed party, +1); saving it on the receiving party refuses `draft.out_of_date` (was `draft.not_found`); the retried submission's refusal names revision +3 (was +2); Sam's bill is number 3 (was 2: the merged-away bill had already taken 2, numbers are never reused — the plan row's "confirm at red") | spec §3.4 bullet 2 "staff merge afterwards"; slice 2's numbering | 3a |
+| `party-table-actions.test.ts:915` ("adds the operator's draft on the moving party to their draft on the receiving one") | B (found at Task 3a's red run) | two drafts on the receiving party, each on its own bill with its own line (`{partyId, billId, ownerId, items}` per draft) | spec §3.4 | 3a |
+| `till-api.table-actions.test.ts:111` ("merges the bills by default", planned for 4a) | B (red at 3a) | the default request answers `merged: false`; both bills open | §3.4 | 3a |
+| `bill-identities.test.ts:689` ("after a join … hold no number twice") | B (found at Task 3a's red run) | no abandoned bill in the list (was the merged-away one); the numbers are 1–5 (was 1–4) | §3.4 | 3a |
+| `move-merge.test.ts:482` (join; kitchen told of the merged-in dish only) | S (found at Task 3a's red run) | join, then `mergeBills` in the same transaction (local `mergeInTx`); every `expect` byte-identical. Deletion control: without the merge, its notices assertion fails | §3.4 bullet 2 | 3a |
+| `move-merge.test.ts:866` (row 7: a join with bills merging prints a MOVED slip From Mesa 74) | B (found at Task 3a's red run; S does not hold: after the join, Merge bills prints From "Mesa 73, 74") | the join prints nothing and each order keeps its number; Merge bills afterwards prints the merged-in order's dishes From and To "Mesa 73, 74" (as row 16a, a Merge bills at one party) | §3.4 bullet 2; MOVED-slip rule §3 (c) | 3a |
+| `parties.test.ts` helper `merge()` `:103` (6 cases) | S (found at Task 3a's red run) | the join or move is followed, in the same transaction, by `mergeBills(into.tabId, from.tabId)`; every `expect` byte-identical. Deletion control: without it, 3 cases fail (`:974` absorbs …, "lists the absorbed party's bills …", "follows a chain of merges …"); the other 3 pass either way | §3.4 bullet 2 | 3a |
+| `parties.test.ts:1244` (a merged party's invoiced bill; joined over HTTP) | B (found at Task 3a's red run) | the presented bill's `billNumber` 2 → 3 (the closed party's own bill is no longer merged away, so it takes 2); every other value of the object, and every money, invoice and filing check, unchanged | §3.4; slice 2's numbering | 3a |
+| `current-orders.test.ts:1538`, `order-groups.test.ts:490`, `:2375`, `receipt-guests.test.ts:145` (join used to merge the bills as setup) | S (found at Task 3a's red run) | join, then `mergeBills` in the same transaction (`receipt-guests`' `joinOther` gains an optional `mergeInto`); every `expect` byte-identical. Deletion control: each fails without the merge | §3.4 bullet 2 | 3a |
+| `print-problems.test.ts` helper `mergeBills(v, source, destination)` `:1806` (7 cases) | S, plus B for the helper's own answer check (found at Task 3a's red run) | join, then `mergeBillsCommand(destination.tabId, source.tabId)` in the same transaction; the helper's `expect(result)` `merged: true` → `false` (B); every case `expect` byte-identical. Deletion control: without the merge, 4 of the 7 fail; the 3 that check a merged-in failure does NOT come back pass either way | §3.4 bullet 2 | 3a |
+| `floor-today-flatten-api.test.ts:466`, `:495`, `:548` (floor and till joins with `bills: "merge"`; notices filed on the bill merged into) | B (found at Task 3a's red run; HTTP, so no same-transaction merge) | `:466`: one notice, Long table's own dish on its own bill (was two on it); Bar's bill open. `:495`: the one notice is on Long table's own bill (was the bill it merged into). `:548`: no notice (Bar's dish stays on Bar's bill at Bar); Bar's bill open | §3.4 bullet 2 | 3a |
+| `attendance-draft-merge-routes.test.ts:190`, `:265`, `:341` (a combine's merge discarded a draft, so it took an attendance snapshot) | B (found at Task 3a's red run) | the combine now writes no draft event and no attendance fact (pinned), and a refusing recorder no longer refuses it (200); then Merge bills over HTTP (`/api/bills/:id/merge`, helper `mergeAfter`) carries every original check: the one `discarded` event, its `draft` fact at the trusted instant (filtered by `source: "draft"`, as the file's direct-merge case does) plus the merge's two `order` facts pinned, the "Elsewhere" location re-read, the refusal rollback `toEqual(before)`, and no facts without capture | §3.4 bullet 2 | 3a |
+| `bill-editing.table-actions.test.ts:216`, `:242`, `:266` (`it.each` join/move/combine: the implicit merge's editor authority and service mode) | B (found at Task 3a's red run) | the action asked to merge answers `merged: false` and keeps both bills (editors and drafts pinned); then `mergeBills` of the pair refuses `draft.taken_over` with the full conflict, no row changed (`:216`, `:242`, after the source's mode changed and relocation), or, authorised, succeeds and abandons the source bill (`:266`) | spec §6 bullet 2, §3.4 bullet 2 | 3a |
 | `apps/server/src/order-portions.filing.test.ts:1159` (`bills: "separate"` passed to `moveBill`) | **F, Q5 item 2** | the property line goes; no other line; no `expect` changes ("separate" is now the only behaviour) | D13 | 4b |
 | `apps/server/src/split-bill.test.ts:539` (`bills: "separate"`), `:1019` (`bills: "merge"`) | F | the property lines go, no other change — provided both files' cases are green at Task 3a's run (where `bills: "merge"` stops merging); if `:1019`'s case goes red there, it is a stop (this file was meant to stay unchanged) | D13 | 4b |
 | every other `bills: "merge" \| "separate"` property in the 61 server files | F | property deletion only; a file whose behaviour changed was handled, with its own row, in Tasks 2–3a | D13 | 4b |
@@ -673,6 +687,10 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `till-table-order-screen.panel-footer.test.ts:29-54` (one tender-pay, Full invoice count, Discount in the foot) | B, R | one Full invoice on the table's payment step (D8); `data-discount-bill` found in the ⋮ bill section, not the foot (D16) | amendment 1, amendment 4, Owner questions 3 and 7 | 12 |
 | `data-discount-bill` sites: `panel-footer.test.ts` (7), `till-table-order-screen.adjustments.test.ts` (4), `till-app-adjustments.test.ts` (2), `panel-footer.a11y.test.ts` (1) | R | open the ⋮ first, then the same button, same event and detail | D16, Owner question 7 | 12 |
 | Any case that pins the payment step's Full invoice on a presented bill that already has an invoice number | B | not drawn (D8 gate, matching the server's `working_order.not_open`); confirm at red, none found by reading | master plan "an issued/paid bill never opens that editor" | 12 |
+
+**Task 3a's red run found 50 red cases (each `it.each` row counted) in 15 files** (trace: the union of the plan's command and
+`rg -l 'joinTables\(|moveGuests\(|combineParties\(|/join|/move-guests'`, 84 files); the rows
+marked "found at Task 3a's red run" above are the ones planning did not list.
 
 **The planning pass missed seven Task 2 rows** (the seven "found at Task 2's red run" rows above,
 15 red cases). All six files are in Task 2's trace command (`rg -l 'moveBill\(|/api/bills/.*/move|bills: "merge"'`),
@@ -904,7 +922,7 @@ empty and is retired in 3b; the answer keeps today's shape with `merged: false` 
 `bill-identities.test.ts:595`, `move-merge.test.ts:493`, `move-merge.filing.test.ts` (Owner question
 5 item 1: built on the default), and every other file in the trace whose red run changes.
 
-- [ ] **New cases first, red before touching `table-actions.ts`** (minor 8: they rely on `opts()`'s
+- [x] **New cases first, red before touching `table-actions.ts`** (minor 8: they rely on `opts()`'s
       default `bills: "merge"`, `party-table-actions.test.ts:87-100`, which stays until 4b). Cases
       `A803 no main bill (join):` in `party-table-actions.test.ts`: "joining a seated table whose
       party has an untouched bill of the same mode keeps both parties' bills, each with its own
@@ -912,16 +930,18 @@ empty and is retired in 3b; the answer keeps today's shape with `merged: false` 
       table keeps every bill and every payment on its own bill" (pay part of one bill first;
       compare `bill_payments` rows by bill before and after); "the kitchen hears only that dishes
       moved table, never a merge" (moved notices only).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts -t 'A803 no main bill'`
-      — fails on the receiving party's bill count (merged to one).
-- [ ] Implement; `move-merge.filing.test.ts` gets its kind-S setup change and its `:215` line's
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts -t 'A803 no main bill'`
+      — fails on the receiving party's bill count (merged to one). (Run: 3 failed — the two
+      answer checks on `merged: true` and the kitchen case on the incoming bill `abandoned`.)
+- [x] Implement; `move-merge.filing.test.ts` gets its kind-S setup change and its `:215` line's
       removal only (Q5 item 1).
-- [ ] Run every file in `rg -l 'joinTables\(|moveGuests\(|combineParties\(|/api/parties/.*/(join|move)|bills: "merge"|bills = "merge"' apps/server/src -g '*.test.ts'`;
+- [x] Run every file in `rg -l 'joinTables\(|moveGuests\(|combineParties\(|/api/parties/.*/(join|move)|bills: "merge"|bills = "merge"' apps/server/src -g '*.test.ts'`;
       each red assertion is a listed row or a stop. `split-bill.test.ts` must stay green (its
       `:1019` passes `bills: "merge"`; if it goes red, stop: that file was meant to stay unchanged).
-- [ ] GREEN: that list; F; H2; Filing; `git diff a90f4f87b -- apps/server/src/move-merge.filing.test.ts | /usr/bin/grep '^[-+].*expect'`
-      prints nothing; server typecheck.
-- [ ] Commit: "Joining or moving guests keeps every bill separate".
+- [x] GREEN: that list; F; H2; Filing; `git diff a90f4f87b -- apps/server/src/move-merge.filing.test.ts | /usr/bin/grep '^[-+].*expect'`
+      prints nothing; server typecheck. (That grep also matches the two added
+      `expectedPartyRevision:` setup lines; `/usr/bin/grep '^[-+].*expect('` prints nothing.)
+- [x] Commit: "Joining or moving guests keeps every bill separate".
 
 ## Task 3b: retire the merge helpers and the kitchen-slip merge map (≈30 calls)
 

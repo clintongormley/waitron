@@ -5,14 +5,11 @@ import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
 import {
   readPartyBillIds,
   relocateBillEditor,
-  requireBillEditors,
   requireRelocatableBillEditors,
 } from "./bill-editing.js";
 import type { BillEditExpected } from "./order-drafts.js";
-import { mergeCheckedBills } from "./bill-actions.js";
 import { leaveMergesRestoring, mergeMembers } from "./floor-today-merges.js";
 import {
-  isUntouched,
   leaveParty,
   readTargetTable,
   refuseUnseatable,
@@ -43,7 +40,6 @@ import {
   setMainBill,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
-import { serviceModesMatch } from "./working-order.js";
 import type { OrderAttendance } from "./working-order.js";
 import "./errors.js";
 
@@ -56,7 +52,8 @@ import "./errors.js";
 
 export interface TableActionOptions extends OtherPartyRead {
   expectedEdits: BillEditExpected[];
-  bills: "merge" | "separate";
+  /** Ignored: joining and moving guests keep every bill. Removed in A803 slice 3 Task 4b. */
+  bills?: "merge" | "separate";
   /** The party in the path. */
   expectedPartyRevision: number;
   operatorId: string;
@@ -237,9 +234,8 @@ function combinedGuests(from: number | null, into: number | null): number | null
 /**
  * Party `from` becomes part of `into` and closes, recorded as merged into it. Its groups and drafts
  * move, and its open and presented bills move across whole (P13); its paid and abandoned bills stay
- * on it and count through the family. The bill choice (P12): with `"merge"`, `from`'s main bill
- * merges into `into`'s when both are untouched and in one service mode; otherwise `into`'s main
- * bill stays, or, when it has none, `from`'s becomes main if it is open. `from`'s tables are left
+ * on it and count through the family. No bill merges (spec §3.4): `into`'s main bill stays, or,
+ * when it has none, `from`'s becomes main if it is open. `from`'s tables are left
  * for clearing, or join `into`. The caller has checked and moved on both parties' revisions, and
  * tells the kitchen.
  */
@@ -250,14 +246,17 @@ export async function combineParties(
     from: string;
     into: string;
     expectedEdits: BillEditExpected[];
-    bills: "merge" | "separate";
+    /** Ignored, as {@link TableActionOptions.bills} is. */
+    bills?: "merge" | "separate";
     tables: "leave" | "join";
     operatorId: string;
     /** `into`'s zone, when the caller has just read it. */
     intoZoneId?: string | null;
   },
-  attendance?: OrderAttendance,
+  /** Unread since no bill merges here; removed in A803 slice 3 Task 3b. */
+  _attendance?: OrderAttendance,
 ): Promise<CombineResult> {
+  void _attendance;
   const { from, into } = args;
   const mains = await tx
     .select({ id: parties.id, mainBillId: parties.mainBillId, guestCount: parties.guestCount })
@@ -273,24 +272,6 @@ export async function combineParties(
     args.expectedEdits,
   );
   const zoneId = args.intoZoneId !== undefined ? args.intoZoneId : await partyZone(tx, cfg, into);
-  const merging =
-    args.bills === "merge" &&
-    fromMain !== null &&
-    intoMain !== null &&
-    (await isUntouched(tx, fromMain)) &&
-    (await isUntouched(tx, intoMain)) &&
-    // The incoming bill takes the zone's mode; the existing main bill keeps its own context.
-    (zoneId === null
-      ? await serviceModesMatch(tx, cfg, fromMain, intoMain)
-      : (await VENUE_SERVICE.resolveZoneContext(tx, cfg, zoneId)).serviceMode ===
-        (await VENUE_SERVICE.findOrderContext(tx, cfg, intoMain))?.serviceMode);
-  if (merging)
-    await requireBillEditors(
-      tx,
-      [fromMain!, intoMain!],
-      args.operatorId,
-      args.expectedEdits.filter((edit) => edit.billId === fromMain || edit.billId === intoMain),
-    );
   await inheritKitchenNote(tx, cfg, { partyId: from }, { partyId: into }, "combine");
   await VENUE_SERVICE.mergePartyAllergies(tx, from, into, args.operatorId);
   await moveGroupsToParty(tx, from, into);
@@ -301,41 +282,14 @@ export async function combineParties(
     const state = await takeIntoParty(tx, cfg, billId, into, zoneId);
     if (billId === fromMain) fromMainState = state;
   }
+  if (intoMain === null && fromMainState?.status === "open") await setMainBill(tx, into, fromMain!);
 
-  const mergedInto = new Map<string, string>();
-  if (fromMain !== null && fromMainState !== undefined) {
-    if (merging && intoMain !== null) {
-      await mergeCheckedBills(tx, cfg, into, intoMain, fromMain, {
-        operatorId: args.operatorId,
-        expectedEdits: args.expectedEdits.filter(
-          (e) => e.billId === fromMain || e.billId === intoMain,
-        ),
-        ...(attendance === undefined
-          ? {}
-          : {
-              attendance: {
-                recorder: attendance.recorder,
-                at: attendance.clock.now().instant.toISOString(),
-              },
-            }),
-        mainBillId: intoMain,
-        kitchenTold: true,
-      });
-      mergedInto.set(fromMain, intoMain);
-    } else if (intoMain === null && fromMainState.status === "open") {
-      await setMainBill(tx, into, fromMain);
-    }
-  }
-
-  // After any merge, so a main bill merged away is already abandoned and takes no number.
   await VENUE_SERVICE.rescopeBillNumbers(tx, from, into);
   await moveDraftsToParty(
     tx,
     from,
     into,
-    args.expectedEdits.filter(
-      (edit) => movingBills.includes(edit.billId) && !mergedInto.has(edit.billId),
-    ),
+    args.expectedEdits.filter((edit) => movingBills.includes(edit.billId)),
   );
 
   const at = nowIso();
@@ -359,7 +313,7 @@ export async function combineParties(
     .where(eq(parties.id, from));
   await closePartyTables(tx, from);
 
-  return { merged: mergedInto.size > 0, mainBillId: await readMainBill(tx, into), mergedInto };
+  return { merged: false, mainBillId: await readMainBill(tx, into), mergedInto: new Map() };
 }
 
 export interface SplitGuestCounts {

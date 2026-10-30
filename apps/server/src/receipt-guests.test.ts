@@ -6,6 +6,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import {
   billPayments,
   invoiceSeries,
+  parties,
   saleReceiptGuests,
   sales,
   tenants,
@@ -70,11 +71,13 @@ async function guestsOnPaying(billId: string, amount: string): Promise<number | 
   });
 }
 
+/** With `mergeInto`, Merge bills then merges `from` into `into` in the same transaction. */
 async function joinOther(
   partyId: string,
   tableId: string,
   otherPartyId: string,
   bills: "merge" | "separate",
+  mergeInto?: { into: string; from: string },
 ) {
   await nextMillisecond();
   const options = {
@@ -84,7 +87,19 @@ async function joinOther(
     expectedOtherPartyRevision: await revisionOf(v, otherPartyId),
     operatorId: OPERATOR,
   };
-  await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, tableId, options));
+  await inTx(v, async (tx) => {
+    await joinTables(tx, v.cfg, partyId, tableId, options);
+    if (mergeInto === undefined) return;
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, partyId));
+    await mergeBills(tx, v.cfg, mergeInto.into, mergeInto.from, {
+      partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId: OPERATOR,
+    });
+  });
 }
 
 describe("the default guests (readReceiptGuests)", () => {
@@ -134,7 +149,10 @@ describe("the default guests (readReceiptGuests)", () => {
     const five = await seat(v, mesa5, 3);
     await orderForParty(v, four.partyId, ["Burger"], four.tabId);
     await orderForParty(v, five.partyId, ["Paella"], five.tabId);
-    await joinOther(four.partyId, mesa5, five.partyId, "merge");
+    await joinOther(four.partyId, mesa5, five.partyId, "merge", {
+      into: four.tabId,
+      from: five.tabId,
+    });
 
     expect(await guestsOnPaying(four.tabId, "32.00")).toBe(5);
   });

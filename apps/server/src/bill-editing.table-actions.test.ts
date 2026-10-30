@@ -18,6 +18,7 @@ import {
   type BillEditState,
 } from "./order-drafts.js";
 import { combineParties, joinTables, moveGuests } from "./table-actions.js";
+import { mergeBills } from "./bill-actions.js";
 import { setChangesAfterSending } from "./testing/changes-after-sending.js";
 import { VENUE_SERVICE } from "./modules.js";
 import { recallToDraft } from "./draft-recall.js";
@@ -143,6 +144,24 @@ async function request(
       : moveGuests(tx, venue.cfg, from.partyId, into.tableId, options);
   });
 }
+/** Merge bills of `from` into `into`, both now on `partyId`, as staff ask afterwards. */
+async function explicitMerge(
+  partyId: string,
+  into: string,
+  from: string,
+  expectedEdits: BillEditExpected[],
+  operatorId = venue.operatorId,
+) {
+  const [row] = await venue.db.select().from(parties).where(eq(parties.id, partyId));
+  return inTx(venue, (tx) =>
+    mergeBills(tx, venue.cfg, into, from, {
+      partyId,
+      expectedPartyRevision: row!.revision,
+      operatorId,
+      expectedEdits,
+    }),
+  );
+}
 function conflict(edit: BillEditState, conflicts = [edit]) {
   return {
     billId: edit.billId,
@@ -194,23 +213,33 @@ describe("table composition compares every affected bill before moving anything"
     },
   );
   it.each(actions)(
-    "%s refuses an actual bill merge without the common editor's authority",
+    "%s asked to merge keeps both bills with their common foreign editor, and Merge bills afterwards still refuses without that editor's authority",
     async (action) => {
       const from = await party(),
         into = await party();
-      await save(from.partyId, from.tabId, venue.adminId);
-      await save(into.partyId, into.tabId, venue.adminId);
+      const left = await save(from.partyId, from.tabId, venue.adminId);
+      const right = await save(into.partyId, into.tabId, venue.adminId);
       const expected = await edits(from.partyId, into.partyId);
+      expect(await request(action, from, into, expected, "merge")).toMatchObject({
+        merged: false,
+      });
+      const after = await edits(into.partyId);
+      expect(after.map((e) => [e.billId, e.editorId, e.draftId])).toEqual(
+        [
+          [from.tabId, venue.adminId, left.draft!.id],
+          [into.tabId, venue.adminId, right.draft!.id],
+        ].sort((a, b) => a[0]!.localeCompare(b[0]!)),
+      );
       await refused(
-        () => request(action, from, into, expected, "merge"),
+        () => explicitMerge(into.partyId, into.tabId, from.tabId, after),
         "draft.taken_over",
-        conflict(expected[0]!, expected),
+        conflict(after[0]!, after),
       );
     },
   );
 
   it.each(actions)(
-    "%s compares merge authority using the service mode after relocation",
+    "%s asked to merge keeps both bills; Merge bills afterwards compares authority using the service mode after relocation",
     async (action) => {
       const from = await party(),
         into = await party();
@@ -221,15 +250,20 @@ describe("table composition compares every affected bill before moving anything"
         await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
       });
       const expected = await edits(from.partyId, into.partyId);
+      expect(await request(action, from, into, expected, "merge")).toMatchObject({
+        merged: false,
+      });
+      const after = await edits(into.partyId);
+      expect(after.map((e) => e.billId)).toEqual([from.tabId, into.tabId].sort());
       await refused(
-        () => request(action, from, into, expected, "merge"),
+        () => explicitMerge(into.partyId, into.tabId, from.tabId, after),
         "draft.taken_over",
-        conflict(expected[0]!, expected),
+        conflict(after[0]!, after),
       );
     },
   );
   it.each(actions)(
-    "%s retains an authorised bill merge after the source changes service mode",
+    "%s asked to merge keeps both bills; an authorised Merge bills afterwards succeeds after the source changed service mode",
     async (action) => {
       const from = await party(),
         into = await party();
@@ -241,7 +275,18 @@ describe("table composition compares every affected bill before moving anything"
       });
       expect(
         await request(action, from, into, await edits(from.partyId, into.partyId), "merge"),
-      ).toMatchObject({ merged: true });
+      ).toMatchObject({ merged: false });
+      const [kept] = await venue.db
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, from.tabId));
+      expect(kept).toEqual({ status: "open" });
+      await explicitMerge(into.partyId, into.tabId, from.tabId, await edits(into.partyId));
+      const [merged] = await venue.db
+        .select({ status: workingOrders.status })
+        .from(workingOrders)
+        .where(eq(workingOrders.id, from.tabId));
+      expect(merged).toEqual({ status: "abandoned" });
     },
   );
   it.each(actions)("%s rejects a stale version on an empty destination bill", async (action) => {

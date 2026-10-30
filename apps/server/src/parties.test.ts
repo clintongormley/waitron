@@ -96,14 +96,14 @@ async function join(cfg: DeviceRequestConfig, partyId: string, tableId: string):
 }
 
 /**
- * Combines party `from` into `into`, merging their main bills: `into` joins `from`'s table, whose
- * tables then join `into`; or, with `guestsMove`, `from`'s guests move to `into`'s table and
- * leave theirs.
+ * Combines party `from` into `into`: `into` joins `from`'s table, whose tables then join `into`;
+ * or, with `guestsMove`, `from`'s guests move to `into`'s table and leave theirs. Merge bills then
+ * merges `from`'s tab into `into`'s in the same transaction, as staff do.
  */
 async function merge(
   cfg: DeviceRequestConfig,
-  into: { partyId: string; tableId: string },
-  from: { partyId: string; tableId: string },
+  into: { partyId: string; tableId: string; tabId: string },
+  from: { partyId: string; tableId: string; tabId: string },
   guestsMove = false,
 ): Promise<void> {
   const [mover, holder] = guestsMove ? [from, into] : [into, from];
@@ -114,11 +114,20 @@ async function merge(
     expectedOtherPartyRevision: await revisionOf(suite, holder.partyId),
     operatorId: OPERATOR,
   };
-  await inTx(suite, (tx) =>
-    guestsMove
+  await inTx(suite, async (tx) => {
+    await (guestsMove
       ? moveGuests(tx, cfg, mover.partyId, holder.tableId, options)
-      : joinTables(tx, cfg, mover.partyId, holder.tableId, options),
-  );
+      : joinTables(tx, cfg, mover.partyId, holder.tableId, options));
+    const [party] = await tx
+      .select({ revision: parties.revision })
+      .from(parties)
+      .where(eq(parties.id, into.partyId));
+    await mergeBills(tx, cfg, into.tabId, from.tabId, {
+      partyId: into.partyId,
+      expectedPartyRevision: party!.revision,
+      operatorId: OPERATOR,
+    });
+  });
 }
 
 async function partyIdOf(orderId: string): Promise<string | null> {
@@ -1279,7 +1288,7 @@ describe("a merged party's invoiced bill, collected at the till (spec §12 item 
       recipient: null,
       partyId: t.partyId,
       label: null,
-      billNumber: 2,
+      billNumber: 3,
       billName: null,
       status: "placed",
       total: "18.00",

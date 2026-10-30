@@ -596,7 +596,7 @@ describe("A803 bill numbers: tables", () => {
     await everyPartyBillNumbered();
   });
 
-  it("joining with Merge the bills: the incoming main bill merges and takes no number, and the other incoming bills take the next numbers with no gap", async () => {
+  it("joining with Merge the bills asked for: no bill merges, and every incoming bill takes the next numbers with no gap", async () => {
     const ours = await seat(v, await v.table("S6 ours"));
     await order(v, ours.tabId, "Agua");
     const theirs = await tableWithBills("S6 theirs", 2);
@@ -605,11 +605,12 @@ describe("A803 bill numbers: tables", () => {
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
-    expect(result.merged).toBe(true);
-    expect(await statusOf(v, theirs.tabId)).toBe("abandoned");
+    expect(result.merged).toBe(false);
+    expect(await statusOf(v, theirs.tabId)).toBe("open");
     expect(await numbersOf(v, ours.partyId)).toEqual([
       [ours.tabId, 1, null],
-      [theirs.bills[1], 2, null],
+      [theirs.bills[0], 2, null],
+      [theirs.bills[1], 3, null],
     ]);
     await everyPartyBillNumbered();
   });
@@ -813,13 +814,11 @@ describe("A803 bill list", () => {
     await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
     const list = await listOf(ours.partyId);
-    expect(list.filter(([, , , status]) => status === "abandoned")).toEqual([
-      [theirs.tabId, null, null, "abandoned"],
-    ]);
+    expect(list.filter(([, , , status]) => status === "abandoned")).toEqual([]);
     const numbers = list
       .filter(([, , , status]) => status !== "abandoned")
       .map(([, number]) => number);
-    expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4]);
+    expect([...numbers].sort((a, b) => a! - b!)).toEqual([1, 2, 3, 4, 5]);
   });
 
   it("an abandoned bill is listed with billNumber null, and a counter order arriving with Merge the bills asked for is listed with the next number", async () => {
