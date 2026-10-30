@@ -463,8 +463,8 @@ export async function tendersOfBill(venue: BillVenue, billId: string) {
 
 /**
  * A party seated through the till's routes at a fresh table, made with `createTable`, one of each
- * named dish sent to the kitchen as one group on its main bill, in order (line 1, 2, …). `revision`
- * is the party's after the order.
+ * named dish sent to the kitchen as one group on the bill seating opens, in order (line 1, 2, …).
+ * `revision` is the party's after the order.
  */
 export async function seatedWith(
   venue: BillVenue,

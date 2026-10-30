@@ -1195,17 +1195,39 @@ for that reason is re-expressed (kind S, its own Changed-checks row with file:li
 calls `insertPartyBill` and passes that id, which is exactly what the old helper did, and every
 `expect` stays byte-identical. A red case for any other reason is a stop.
 
-- [ ] Case `A803 fixtures:` in `apps/server/src/testing/party-bill-of.test.ts`: "names the
+- [x] Case `A803 fixtures:` in `apps/server/src/testing/party-bill-of.test.ts`: "names the
       lowest-numbered open bill, skipping paid and presented ones", "names none for a party whose
       bills are all paid", "names Bill 1 over an older-opened Bill 2" (numbers against opening order).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/testing/party-bill-of.test.ts`.
-- [ ] Implement; the main bill still exists. Run `pnpm --filter @waitron/server exec vitest run src/party-main-bill.test.ts src/order-groups.test.ts src/order-drafts.db.test.ts src/till-api.drafts.test.ts src/party-arriving-dishes.test.ts src/served.test.ts`
+      (As built: `firstOpenBillOf` orders by the `bill_identities` number, unnumbered last, then
+      id, reading that table itself, so it does not rest on Task 5's list order.)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/testing/party-bill-of.test.ts`.
+      (Failed to load: "Cannot find module './party-bill-of.js'", Tests: no tests.)
+- [x] Implement; the main bill still exists. Run `pnpm --filter @waitron/server exec vitest run src/party-main-bill.test.ts src/order-groups.test.ts src/order-drafts.db.test.ts src/till-api.drafts.test.ts src/party-arriving-dishes.test.ts src/served.test.ts`
       and every file importing the helpers whose cases send without a bill
       (`rg -l 'orderForParty\(|observedGroupSubmitBody|observedDraftCommandBody|submitGroups\(|placeGroups\(' apps/server/src -g '*.test.ts'`),
       including `party-main-bill.test.ts:157` ("moves the party revision once") and `:356-358`,
       which must stay green unedited.
-- [ ] GREEN: those files; F; Filing; server typecheck.
-- [ ] Commit: "Server test helpers find a party's bill by number".
+      (**Departure, driver's decision 2026-10-31.** Built as written, the helper turned 15
+      existing cases red, none of them for the one difference above: 13 assert that the party's
+      `mainBillId` is the bill the helper made (`party-main-bill.test.ts:98`, `:115`, `:171`,
+      `:362`, `:422`, `:460`; `parties.test.ts:662`, `:767`; `party-move-bill.test.ts:774`,
+      `:1218`; `party-table-actions.test.ts:682` twice, `:1181`), and 2 expect the old helper's
+      `tab.not_open` when a hand-written main bill names a presented or another party's bill
+      (`party-main-bill.test.ts:148`). So `group-submit-fixture.ts`'s `openBillFor` still writes
+      the main bill on a bill it creates (`setMainBill`, as Task 4a's `insertMainBill` does) and
+      keeps the old refusal when `mainBillId` names a bill that is not this party's open one;
+      otherwise it sends to `firstOpenBillOf`. Both spots carry a one-line comment that Task 6c
+      removes them with its `party-main-bill.test.ts` rewrite. It also keeps the old helper's
+      `party.not_open` refusal of a closed party. No test was edited and no Changed-checks row is
+      added. `serve-line.ts` loses its `setMainBill` as planned; nothing went red for it.)
+- [x] GREEN: those files; F; Filing; server typecheck. (Every server test file importing
+      `group-submit-fixture`, `draft-command-fixture` or `serve-line`, directly or through another
+      `testing/` helper, plus F's `till-api.fiscal-sale-paths`: 320 files, 9740 passed, 0 failed,
+      run in four chunks. F 267 passed (5 files); Filing 67 passed; H2 20 passed; new file 3
+      passed; server typecheck clean; `pnpm format:check` clean. Controls: the open-status filter
+      deleted → 2 of 3 fail; ordering by opening time instead of number → "names Bill 1 over an
+      older-opened Bill 2" fails.)
+- [x] Commit: "Server test helpers find a party's bill by number".
 
 ## Task 6b: the table actions stop reading and writing the main bill (≈60 calls)
 
@@ -1259,6 +1281,10 @@ in 4a), `till-api.move-bill.test.ts` (its one read) — every row above for Task
       opening order).
 - [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-main-bill.test.ts -t 'A803 no main bill'`
       — fails on `openingBillId` (undefined).
+- [ ] Remove, with the `party-main-bill.test.ts` rewrite, the two spots Task 6a left in
+      `testing/group-submit-fixture.ts` `openBillFor` (each commented): the `setMainBill` on a bill
+      the helper creates, and the `tab.not_open` refusal when `mainBillId` names a bill that is not
+      the party's open one. The 15 cases Task 6a's note lists are the ones that rest on them.
 - [ ] Implement; rewrite the main-bill cases (Changed test checks); run the files above and
       `rg -l 'readSeatedParties|listTablesWithState|/api/tables/state' apps/server/src -g '*.test.ts'`.
 - [ ] GREEN: those files; F; H2; Filing; server typecheck;
