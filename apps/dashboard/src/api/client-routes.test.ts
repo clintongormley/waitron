@@ -1907,7 +1907,7 @@ describe("the recovery pack calls", () => {
     return new Response(body, { status: 200, headers });
   }
 
-  /** A whole PDF as small as the format allows: its header, one object, its trailer and end mark. */
+  /** A tiny PDF: its header, one object, its trailer and end mark, with no cross-reference table. */
   const MINIMAL_PDF =
     "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
 

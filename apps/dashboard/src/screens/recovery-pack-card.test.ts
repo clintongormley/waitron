@@ -340,6 +340,32 @@ describe("an unreceived pack", () => {
   });
 });
 
+describe("which pack holds the server key", () => {
+  it("is the same pack on the card and in the dialog when the status names a kept and an unreceived holder", async () => {
+    setLocale("en-GB");
+    const both = status({
+      latest: latest({ number: 4, received: false }),
+      unreceived: { number: 4, madeAt: MADE_AT, holdsCurrentServerKey: true },
+      keep: [{ number: 1, madeAt: FIRST_AT, until: null, why: "server_key" }],
+    });
+    const el = await mount(stubApi(both));
+    const unreceived = fill("recovery_pack_dialog.unreceived", {
+      number: "4",
+      date: "12 October",
+      option: option(),
+    });
+    expect(row(el, "server-key")).toBe(
+      fill("recovery_pack.server_key_on_unreceived", { number: "4", date: "12 October" }),
+    );
+    expect(line(el)).toContain(unreceived);
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-recovery-pack]")!.click();
+    const dialog = dialogOf(el);
+    await expect
+      .poll(() => words(dialog.shadowRoot!.querySelector("[data-test=new-key-why]")))
+      .toBe(`${unreceived} ${t("recovery_pack_dialog.new_key_effect")}`);
+  });
+});
+
 describe("dates", () => {
   it.each([
     ["Pacific/Kiritimati", "2026-10-12T11:30:00.000Z", "13 October"],

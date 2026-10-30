@@ -6,13 +6,9 @@ import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../ap
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
-import {
-  packDate,
-  unreceivedWords,
-  type RecoveryPackDialog,
-  type RecoveryPackMade,
-} from "../widgets/recovery-pack-dialog.js";
+import type { RecoveryPackDialog, RecoveryPackMade } from "../widgets/recovery-pack-dialog.js";
 import "../widgets/recovery-pack-dialog.js";
+import { keyHolder, packDate, unreceivedWords } from "../widgets/recovery-pack-words.js";
 
 type Status = RecoveryPackStatus;
 type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" }>;
@@ -299,7 +295,8 @@ export class RecoveryPackCard extends LitElement {
   #line(status: Status): TemplateResult {
     const date = (iso: string) => this.#date(iso);
     const latest = status.latest;
-    const holder = status.unreceived?.holdsCurrentServerKey ? status.unreceived : null;
+    const keyOn = keyHolder(status);
+    const holder = keyOn !== null && !keyOn.received ? keyOn : null;
     const lines: (string | TemplateResult)[] = [];
     let warn = true;
     if (latest === null) {
@@ -402,18 +399,12 @@ export class RecoveryPackCard extends LitElement {
   }
 
   #serverKey(status: Status): string {
-    const unreceived = status.unreceived;
-    if (unreceived?.holdsCurrentServerKey)
-      return fill("recovery_pack.server_key_on_unreceived", {
-        number: String(unreceived.number),
-        date: this.#date(unreceived.madeAt),
-      });
-    const kept = status.keep.find((pack) => pack.why === "server_key");
-    if (kept)
-      return fill("recovery_pack.server_key_on", {
-        number: String(kept.number),
-        date: this.#date(kept.madeAt),
-      });
+    const holder = keyHolder(status);
+    if (holder !== null)
+      return fill(
+        holder.received ? "recovery_pack.server_key_on" : "recovery_pack.server_key_on_unreceived",
+        { number: String(holder.number), date: this.#date(holder.madeAt) },
+      );
     const part = status.latest?.parts.find((p) => p.part === "server-key");
     return t(
       part?.state === "absent"
