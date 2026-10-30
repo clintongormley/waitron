@@ -467,8 +467,11 @@ until A977).
 - **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as does the split-extras venue's operation description.
-  The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
-  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
+  The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
+  printer, course, dish, extra, note and table names to what it creates; it keeps the default
+  kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
+  tickets), the party venue's dishes, the Spanish ticket words and unit
+  names its es-ES venue prints, and its Spanish alphabetical-order case. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it

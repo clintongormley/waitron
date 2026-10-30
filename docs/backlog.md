@@ -2252,11 +2252,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   A758-1).** `override.pick_supervisor` became "Choose who approves" but stays «Elige a un
   responsable» (`apps/till/src/i18n/strings.ts`). Not wrong; reword the Spanish to match.
 
-- **Three server tests find the default kitchen station by the name «Cocina» (left open by A918
-  slice 2, #2130).** `apps/server/src/table-signals.test.ts:89-95`, `watchers.leave.test.ts:28-35`
-  and `kitchen-print.test.ts:1258-1261` pass only because their venues have Spanish receipts. Find
-  it by `is_default` instead (`kitchen-print.test.ts` creates its own «Cocina» default, so it needs
-  reading, not a swap).
+- **Two server tests find the default kitchen station by the name «Cocina» (left open by A918
+  slice 2, #2130).** `apps/server/src/table-signals.test.ts:89-95` and `watchers.leave.test.ts:28-35`
+  pass only because their venues have Spanish receipts. Find it by `is_default` instead.
 - **A912. A new venue's set-up report still says "default cancel reason ready" (left open by
   A758-1).** It now seeds nine starter reasons (`packages/adjustments/src/provisioning.ts`; pinned
   in `provisioning.test.ts` and `packages/provisioning/src/venue-apply.test.ts`). Reword it.
@@ -6188,8 +6186,11 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   The server's zone-offer suite gives English location, menu, category, product, station and
   extras-list names to what it creates; its es-ES locale, its extras list's language key and
   the default kitchen station the shared seed helper names "Cocina" stay.
-  The kitchen-print suite still holds its own Spanish station, printer, course and dish samples
-  ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
+  The kitchen-print suite (`apps/server/src/kitchen-print.test.ts`) gives English station,
+  printer, course, dish, extra, note and table names to what it creates; it keeps the default
+  kitchen station setup names "Cocina" for its Spanish party venue (printed on its party-name
+  tickets), the party venue's dishes, the Spanish ticket words and unit
+  names its es-ES venue prints, and its Spanish alphabetical-order case. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
   The server's station-alert and party suites still hold Spanish sample names. The

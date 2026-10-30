@@ -548,15 +548,15 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
   it("heads no group on the ticket of an order whose lines are in no group", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { kitchenPrinterId, pGroup, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const kitchenPrinterId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const kitchenPrinterId = await makePrinter(tx, cfg, "Kitchen printer");
       const pGroup = await makeSharedPrinter(tx, cfg, "Pass", [kitchenStation.id]);
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId: kitchenPrinterId,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
 
@@ -567,7 +567,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     for (const printerId of [kitchenPrinterId, pGroup]) {
       const printed = jobs.filter((j) => j.printerId === printerId);
       expect(printed).toHaveLength(1);
-      expect(decodeTicket(printed[0]!.payload)).toContain("Chuleton");
+      expect(decodeTicket(printed[0]!.payload)).toContain("Ribeye");
       expect(decodeTicket(printed[0]!.payload)).not.toContain("GROUP");
     }
   });
@@ -576,10 +576,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     const { cfg, catalogueId } = await setupVenue();
     const connectSpy = spyOnNoSocketOpened();
     const { pActive, pDead, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, cfg, { name: "Barra" });
-      const pActive = await makePrinter(tx, cfg, "Cocina printer");
-      const pDead = await makePrinter(tx, cfg, "Barra printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, cfg, { name: "Bar" });
+      const pActive = await makePrinter(tx, cfg, "Kitchen printer");
+      const pDead = await makePrinter(tx, cfg, "Bar printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
@@ -593,10 +593,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
       // Deactivated after attaching (attach requires a live printer): `enqueuePrintJob` would throw
       // `printer.not_found` for it, so it must never be handed this id.
       await deactivatePrinter(tx, printCfg(cfg), pDead);
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
-      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barStation.id });
+      const beer = await makeProduct(tx, cfg, catalogueId, "Beer", { stationId: barStation.id });
 
       await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
       return { pActive, pDead, jobs: await printJobsFor(tx) };
@@ -613,25 +613,25 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
   it("a later line release prints only round-2 items and never reprints round 1 (R-D)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, afterRound1, afterRound2, afterRefire } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const starterCourse = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
-      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+      const starterCourse = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Soup", {
         stationId: kitchenStation.id,
         courseId: starterCourse.id,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
         courseId: mainCourse.id,
       });
 
-      // Round 1: firing auto-fires the earliest course (Entrantes) and HOLDS the later one (steak).
+      // Round 1: firing auto-fires the earliest course (Starters) and HOLDS the later one (steak).
       const orderId = await fireTableKitchenOrder(tx, cfg, [line(soup), line(steak)]);
       const afterRound1 = await printJobsFor(tx);
       const [held] = await tx
@@ -662,16 +662,16 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     // Round 1: one ticket, the soup only — the steak is held, so it is NOT printed yet.
     expect(jobsFor(afterRound1)).toHaveLength(1);
     const round1Ticket = decodeTicket(afterRound1[0]!.payload);
-    expect(round1Ticket).toContain("Sopa");
-    expect(round1Ticket).not.toContain("Chuleton");
+    expect(round1Ticket).toContain("Soup");
+    expect(round1Ticket).not.toContain("Ribeye");
 
     // Round 2: the new job carries the steak only; round 1's soup is not reprinted.
     expect(jobsFor(afterRound2)).toHaveLength(2);
     const round1Ids = new Set(afterRound1.map((j) => j.id));
     const round2New = afterRound2.filter((j) => !round1Ids.has(j.id));
     expect(round2New).toHaveLength(1);
-    expect(decodeTicket(round2New[0]!.payload)).toContain("Chuleton");
-    expect(decodeTicket(round2New[0]!.payload)).not.toContain("Sopa");
+    expect(decodeTicket(round2New[0]!.payload)).toContain("Ribeye");
+    expect(decodeTicket(round2New[0]!.payload)).not.toContain("Soup");
 
     expect(jobsFor(afterRefire)).toHaveLength(2);
   });
@@ -682,21 +682,21 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     // the venue-language description rather than a blank line.
     const foreignCfg: OriginConfig = { ...cfg, locale: "de-DE" };
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const drink = await makeProduct(tx, cfg, catalogueId, "Cafe con leche", {
+      const drink = await makeProduct(tx, cfg, catalogueId, "Milky coffee", {
         stationId: kitchenStation.id,
       });
       // A tab bound to a dining table → the order carries the table label the ticket header prints.
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
       const [table] = await tx
         .insert(diningTables)
-        .values({ locationId: cfg.locationId, label: "Mesa 5", zoneId: offers.zoneId })
+        .values({ locationId: cfg.locationId, label: "Table 5", zoneId: offers.zoneId })
         .returning({ id: diningTables.id });
       await tx.insert(floorTodayTables).values({ tableId: table!.id });
       const { tabId } = await openPartyTab(tx, cfg, { tableId: table!.id });
@@ -707,21 +707,21 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
-    expect(ticket).toContain("Mesa 5"); // the dining-table label on the header
-    expect(ticket).toContain("Cafe con leche"); // venue-language fallback (de-DE absent → the es-ES value)
+    expect(ticket).toContain("Table 5"); // the dining-table label on the header
+    expect(ticket).toContain("Milky coffee"); // venue-language fallback (de-DE absent → the es-ES value)
   });
 
   it("enqueues no print jobs when the fire transaction rolls back (same-tx atomicity)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const setup = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
       return { printerId, steak };
@@ -743,14 +743,14 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     // The seated-tab direction of the table label is tested above; this pins the counter-delivery one.
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const drink = await makeProduct(tx, cfg, catalogueId, "Zumo", {
+      const drink = await makeProduct(tx, cfg, catalogueId, "Orange juice", {
         stationId: kitchenStation.id,
       });
       const orderId = randomUUID();
@@ -759,7 +759,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
         .insert(diningTables)
         .values({
           locationId: cfg.locationId,
-          label: "Barra 3",
+          label: "Bar 3",
           zoneId: (await offerProducts(tx, cfg)).zoneId,
         })
         .returning({ id: diningTables.id });
@@ -778,7 +778,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
 
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
-    expect(decodeTicket(stationJobs[0]!.payload)).toContain("Barra 3");
+    expect(decodeTicket(stationJobs[0]!.payload)).toContain("Bar 3");
   });
 
   it("returns early after the single mapping read when the involved stations have NO attached printer", async () => {
@@ -786,8 +786,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     // early return.
     const { cfg, catalogueId } = await setupVenue();
     const { selectCalls, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Tortilla", {
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Omelette", {
         stationId: kitchenStation.id,
       });
       const orderId = randomUUID();
@@ -812,10 +812,10 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
   it("builds one kitchen ticket per distinct paper width and resolution among the printers", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const ids = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const wide = await makePrinter(tx, cfg, "Cocina 80 A");
-      const wideTwin = await makePrinter(tx, cfg, "Cocina 80 B");
-      const narrow = await makePrinter(tx, cfg, "Cocina 58");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const wide = await makePrinter(tx, cfg, "Kitchen 80 A");
+      const wideTwin = await makePrinter(tx, cfg, "Kitchen 80 B");
+      const narrow = await makePrinter(tx, cfg, "Kitchen 58");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
       const pass = await makeSharedPrinter(tx, cfg, "Pass 180", [kitchenStation.id]);
       const pass203 = await makeSharedPrinter(tx, cfg, "Pass 203", [kitchenStation.id]);
@@ -831,7 +831,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
         tx,
         cfg,
         catalogueId,
-        "Chuletón de buey madurado a la brasa",
+        "Dry-aged beef rib from the wood fire",
         {
           stationId: kitchenStation.id,
         },
@@ -856,7 +856,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
     for (const printed of wideLines) expect(printed.length, printed).toBeLessThanOrEqual(42);
     expect(wideLines.some((printed) => printed.length > 30)).toBe(true);
     expect(wideLines.map((l) => l.trimStart()).join(" ")).toContain(
-      "Chuletón de buey madurado a la brasa",
+      "Dry-aged beef rib from the wood fire",
     );
     expect(payloadOf(ids.pass203).equals(payloadOf(ids.pass))).toBe(false);
     expect(lineWidths(payloadOf(ids.pass))).toEqual(new Set([512]));
@@ -866,8 +866,8 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
   it("draws the next ticket at the paper width and resolution the printer was changed to", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const widths = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
@@ -897,9 +897,9 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
   it("builds a correction slip once per distinct layout among the line's printers", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const result = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const wide = await makePrinter(tx, cfg, "Cocina 80");
-      const narrow = await makePrinter(tx, cfg, "Cocina 58");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const wide = await makePrinter(tx, cfg, "Kitchen 80");
+      const narrow = await makePrinter(tx, cfg, "Kitchen 58");
       await updatePrinter(tx, printCfg(cfg), narrow, { paperWidth: "58mm" });
       for (const printerId of [wide, narrow]) {
         await attachPrinterToStation(tx, {
@@ -912,7 +912,7 @@ describe("print-on-fire (enqueueKitchenTickets wired into fireLines / fireOrderL
         tx,
         cfg,
         catalogueId,
-        "Chuletón de buey madurado a la brasa",
+        "Dry-aged beef rib from the wood fire",
         {
           stationId: kitchenStation.id,
         },
@@ -953,18 +953,18 @@ describe("correction slips for a station with no printer", () => {
   it("sends a correction slip only for the lines whose station has an active printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, slips } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const barStation = await createStation(tx, cfg, { name: "Barra", isDefault: false });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const barStation = await createStation(tx, cfg, { name: "Bar", isDefault: false });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
-      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barStation.id });
+      const beer = await makeProduct(tx, cfg, catalogueId, "Beer", { stationId: barStation.id });
       const orderId = await fireNewOrder(tx, cfg, [line(steak), line(beer)]);
       const fired = await tx
         .select({
@@ -988,8 +988,8 @@ describe("correction slips for a station with no printer", () => {
 
     expect(slips.map((slip) => slip.printerId)).toEqual([printerId]);
     const slip = decodeTicket(slips[0]!.payload);
-    expect(slip).toContain("Chuleton");
-    expect(slip).not.toContain("Cerveza");
+    expect(slip).toContain("Ribeye");
+    expect(slip).not.toContain("Beer");
   });
 });
 
@@ -997,8 +997,8 @@ describe("every correction reaches the station as a notice, printer or not", () 
   it("records the notice at a station with no printer, and enqueues no print job", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, notices, jobs } = await asApp(cfg, async (tx) => {
-      const barStation = await createStation(tx, cfg, { name: "Barra", isDefault: true });
-      const beer = await makeProduct(tx, cfg, catalogueId, "Cerveza", { stationId: barStation.id });
+      const barStation = await createStation(tx, cfg, { name: "Bar", isDefault: true });
+      const beer = await makeProduct(tx, cfg, catalogueId, "Beer", { stationId: barStation.id });
       const orderId = await fireNewOrder(tx, cfg, [line(beer)]);
       const [fired] = await tx
         .select({
@@ -1022,7 +1022,7 @@ describe("every correction reaches the station as a notice, printer or not", () 
     });
 
     expect(notices).toMatchObject([
-      { stationId, kind: "void", lineName: "Cerveza", quantity: "1.000", wasStarted: true },
+      { stationId, kind: "void", lineName: "Beer", quantity: "1.000", wasStarted: true },
     ]);
     expect(jobs).toEqual([]);
   });
@@ -1030,14 +1030,14 @@ describe("every correction reaches the station as a notice, printer or not", () 
   it("records the notice and prints the slip where the station has a printer", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, notices, slips } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
       const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
@@ -1063,22 +1063,22 @@ describe("every correction reaches the station as a notice, printer or not", () 
       };
     });
 
-    expect(notices).toMatchObject([{ kind: "recalled", lineName: "Chuleton", wasStarted: false }]);
+    expect(notices).toMatchObject([{ kind: "recalled", lineName: "Ribeye", wasStarted: false }]);
     expect(slips.map((slip) => slip.printerId)).toEqual([printerId]);
-    expect(decodeTicket(slips[0]!.payload)).toContain("Chuleton");
+    expect(decodeTicket(slips[0]!.payload)).toContain("Ribeye");
   });
 
   it("a partial void's slip prints the quantity removed, not what is left", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const slips = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
       const offers = await offerProducts(tx, cfg, { zone: "tables" });
@@ -1096,20 +1096,20 @@ describe("every correction reaches the station as a notice, printer or not", () 
 
     expect(slips).toHaveLength(1);
     const slip = decodeTicket(slips[0]!.payload);
-    expect(slip).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
+    expect(slip).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
   });
 });
 
 describe("a dish sold by the piece prints no unit", () => {
   /**
-   * Five dishes at Cocina, each sold in a different unit: Croqueta in Each as a product with no
-   * stored unit, Bomba in the stored unit seeded "each", renamed so only its identity marks it Each,
-   * Pulpo in the kg seed, Almendras in grams, and Pan in a stored unit spelled exactly like Each but
-   * not seeded as it.
+   * Five dishes at the Kitchen station, each sold in a different unit: Croquette in Each as a
+   * product with no stored unit, Meatball in the stored unit seeded "each", renamed so only its
+   * identity marks it Each, Octopus in the kg seed, Almonds in grams, and Bread in a stored unit
+   * spelled exactly like Each but not seeded as it.
    */
   async function sellInEveryUnit(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
-    const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-    const printerId = await makePrinter(tx, cfg, "Cocina printer");
+    const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+    const printerId = await makePrinter(tx, cfg, "Kitchen printer");
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
       stationId: kitchenStation.id,
@@ -1159,11 +1159,11 @@ describe("a dish sold by the piece prints no unit", () => {
     };
     return {
       printerId,
-      croqueta: await dish("Croqueta", { pricingUnit: "each" }),
-      bomba: await dish("Bomba", { unitId: seededEach!.id }),
-      pulpo: await dish("Pulpo", { pricingUnit: "weight" }),
-      almendras: await dish("Almendras", { unitId: gram!.id }),
-      pan: await dish("Pan", { unitId: lookAlike!.id }),
+      croquette: await dish("Croquette", { pricingUnit: "each" }),
+      meatball: await dish("Meatball", { unitId: seededEach!.id }),
+      octopus: await dish("Octopus", { pricingUnit: "weight" }),
+      almonds: await dish("Almonds", { unitId: gram!.id }),
+      bread: await dish("Bread", { unitId: lookAlike!.id }),
     };
   }
 
@@ -1172,24 +1172,24 @@ describe("a dish sold by the piece prints no unit", () => {
     const jobs = await asApp(cfg, async (tx) => {
       const sold = await sellInEveryUnit(tx, cfg, catalogueId);
       await fireNewOrder(tx, cfg, [
-        { productId: sold.croqueta, quantity: "2" },
-        { productId: sold.bomba, quantity: "3" },
-        { productId: sold.pulpo, quantity: "0.5" },
-        { productId: sold.almendras, quantity: "200" },
-        { productId: sold.pan, quantity: "1" },
+        { productId: sold.croquette, quantity: "2" },
+        { productId: sold.meatball, quantity: "3" },
+        { productId: sold.octopus, quantity: "0.5" },
+        { productId: sold.almonds, quantity: "200" },
+        { productId: sold.bread, quantity: "1" },
       ]);
       return printJobsFor(tx);
     });
 
     expect(jobs).toHaveLength(1);
     const lines = printedLines(jobs[0]!.payload);
-    expect(lines).toContain(`${thousandthsToDecimal(2000)} x Croqueta`);
-    expect(lines).toContain(`${thousandthsToDecimal(3000)} x Bomba`);
-    expect(lines).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
-    expect(lines).toContain(`${thousandthsToDecimal(200_000)} g x Almendras`);
+    expect(lines).toContain(`${thousandthsToDecimal(2000)} x Croquette`);
+    expect(lines).toContain(`${thousandthsToDecimal(3000)} x Meatball`);
+    expect(lines).toContain(`${thousandthsToDecimal(500)} kg x Octopus`);
+    expect(lines).toContain(`${thousandthsToDecimal(200_000)} g x Almonds`);
     // Spelled like Each, but a unit of the venue's own: its abbreviation still prints, in the
     // default content language the line stored it in.
-    expect(lines).toContain(`${thousandthsToDecimal(1000)} ud x Pan`);
+    expect(lines).toContain(`${thousandthsToDecimal(1000)} ud x Bread`);
   });
 
   it("a correction slip also leaves out the Each unit", async () => {
@@ -1197,8 +1197,8 @@ describe("a dish sold by the piece prints no unit", () => {
     const slips = await asApp(cfg, async (tx) => {
       const sold = await sellInEveryUnit(tx, cfg, catalogueId);
       const orderId = await fireNewOrder(tx, cfg, [
-        { productId: sold.croqueta, quantity: "2" },
-        { productId: sold.pulpo, quantity: "0.5" },
+        { productId: sold.croquette, quantity: "2" },
+        { productId: sold.octopus, quantity: "0.5" },
       ]);
       const fired = await tx
         .select({
@@ -1226,42 +1226,42 @@ describe("a dish sold by the piece prints no unit", () => {
 
     expect(slips).toHaveLength(2);
     const printed = slips.flatMap((slip) => printedLines(slip.payload));
-    expect(printed).toContain(`${thousandthsToDecimal(2000)} x Croqueta`);
-    expect(printed).toContain(`${thousandthsToDecimal(500)} kg x Pulpo`);
+    expect(printed).toContain(`${thousandthsToDecimal(2000)} x Croquette`);
+    expect(printed).toContain(`${thousandthsToDecimal(500)} kg x Octopus`);
   });
 
   // Fails if merging and splitting go by the unit's spelling while the unit's printing goes by its
-  // identity: Pan's unit is spelled like Each but is the venue's own, and Bomba's is Each renamed.
+  // identity: Bread's unit is spelled like Each but is the venue's own, and Meatball's is Each renamed.
   // `["2"]` is one stored line of two, as a counter order written before portions holds it.
   const at = (thousandths: number, rest: string) => `${thousandthsToDecimal(thousandths)} ${rest}`;
   it.each([
     {
       grouping: "combined",
-      dish: "pan",
-      name: "Pan",
+      dish: "bread",
+      name: "Bread",
       sold: ["1", "1"],
-      printed: [at(1000, "ud x Pan"), at(1000, "ud x Pan")],
+      printed: [at(1000, "ud x Bread"), at(1000, "ud x Bread")],
     },
     {
       grouping: "separate",
-      dish: "pan",
-      name: "Pan",
+      dish: "bread",
+      name: "Bread",
       sold: ["2"],
-      printed: [at(2000, "ud x Pan")],
+      printed: [at(2000, "ud x Bread")],
     },
     {
       grouping: "combined",
-      dish: "bomba",
-      name: "Bomba",
+      dish: "meatball",
+      name: "Meatball",
       sold: ["1", "1"],
-      printed: [at(2000, "x Bomba")],
+      printed: [at(2000, "x Meatball")],
     },
     {
       grouping: "separate",
-      dish: "bomba",
-      name: "Bomba",
+      dish: "meatball",
+      name: "Meatball",
       sold: ["2"],
-      printed: [at(1000, "x Bomba"), at(1000, "x Bomba")],
+      printed: [at(1000, "x Meatball"), at(1000, "x Meatball")],
     },
   ] as const)(
     "merges or splits an entry only when its unit does not print ($dish, $grouping)",
@@ -1272,7 +1272,7 @@ describe("a dish sold by the piece prints no unit", () => {
         const [kitchenStation] = await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
-          .where(eq(kitchenStations.name, "Cocina"));
+          .where(eq(kitchenStations.name, "Kitchen"));
         await setStationPrinting(tx, { ticketGrouping: grouping }, [kitchenStation!.id]);
         await fireGroupedOrder(
           tx,
@@ -1298,7 +1298,7 @@ describe("a dish sold by the piece prints no unit", () => {
         const [kitchenStation] = await tx
           .select({ id: kitchenStations.id })
           .from(kitchenStations)
-          .where(eq(kitchenStations.name, "Cocina"));
+          .where(eq(kitchenStations.name, "Kitchen"));
         await setStationPrinting(tx, { ticketGrouping: grouping }, [kitchenStation!.id]);
         const newJobs = async (fn: () => Promise<unknown>) => {
           const before = new Set((await printJobsFor(tx)).map((job) => job.id));
@@ -1310,26 +1310,26 @@ describe("a dish sold by the piece prints no unit", () => {
         const { tabId } = await openPartyTab(tx, cfg, { tableId });
         return {
           counter: await newJobs(() =>
-            fireNewOrder(tx, cfg, [{ productId: dishes.pan, quantity: "2" }]),
+            fireNewOrder(tx, cfg, [{ productId: dishes.bread, quantity: "2" }]),
           ),
           table: await newJobs(() =>
             addPortionRound(
               tx,
               cfg,
               tabId,
-              [{ menuItemId: offers.offerFor(dishes.pan), quantity: "2" }],
+              [{ menuItemId: offers.offerFor(dishes.bread), quantity: "2" }],
               { fire: true },
             ),
           ),
         };
       });
 
-      const pans = (jobs: { payload: Uint8Array }[]) => {
+      const breads = (jobs: { payload: Uint8Array }[]) => {
         expect(jobs).toHaveLength(1);
-        return printedLines(jobs[0]!.payload).filter((text) => text.endsWith(" x Pan"));
+        return printedLines(jobs[0]!.payload).filter((text) => text.endsWith(" x Bread"));
       };
-      expect(pans(counter)).toEqual([at(1000, "ud x Pan"), at(1000, "ud x Pan")]);
-      expect(pans(table)).toEqual(pans(counter));
+      expect(breads(counter)).toEqual([at(1000, "ud x Bread"), at(1000, "ud x Bread")]);
+      expect(breads(table)).toEqual(breads(counter));
     },
   );
 
@@ -1365,10 +1365,10 @@ describe("dish extras on kitchen tickets", () => {
   it("names a cancelled weighted extra by its saved physical amount", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const label = await asApp(cfg, async (tx) => {
-      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Toast", { stationId: station.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+        { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
       ]);
       const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
       await assignProductUnit(tx, productIds[0]!, kg!.id);
@@ -1386,22 +1386,22 @@ describe("dish extras on kitchen tickets", () => {
       return (await readCancelledExtra(tx, child.rows[0]!.id, cfg.locale)).label;
     });
 
-    expect(label).toBe("Jamón 0.150 kg");
+    expect(label).toBe("Ham 0.150 kg");
   });
 
   it("prints the physical amount of a weighted extra from its saved unit", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: station.id,
         printerId,
       });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Toast", { stationId: station.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+        { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
       ]);
       const [kg] = await tx.select({ id: units.id }).from(units).where(eq(units.seedKey, "kg"));
       await assignProductUnit(tx, productIds[0]!, kg!.id);
@@ -1432,7 +1432,7 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(ticket).toContain("+ Jamón 0.150 kg");
+    expect(ticket).toContain("+ Ham 0.150 kg");
   });
 
   // The kitchen looks the line's frozen `unit_name` up under its own `es-ES`, which is no key of it,
@@ -1441,16 +1441,16 @@ describe("dish extras on kitchen tickets", () => {
   it("prints a measured extra's unit in the default content language, not the language its unit stores first", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: station.id,
         printerId,
       });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Toast", { stationId: station.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+        { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
       ]);
       const [gram] = await tx
         .insert(units)
@@ -1478,17 +1478,17 @@ describe("dish extras on kitchen tickets", () => {
     });
 
     const ticket = decodeTicket(jobs.find((job) => job.printerId === printerId)!.payload);
-    expect(ticket).toContain("+ Jamón 150.000 ES-g");
+    expect(ticket).toContain("+ Ham 150.000 ES-g");
     expect(ticket).not.toContain("CA-g");
   });
 
   it("gives the station queue a measured extra's amount on each dish, and no count", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const items = await asApp(cfg, async (tx) => {
-      const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+      const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const dish = await makeProduct(tx, cfg, catalogueId, "Toast", { stationId: station.id });
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-        { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+        { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
       ]);
       const [gram] = await tx
         .insert(units)
@@ -1526,11 +1526,11 @@ describe("dish extras on kitchen tickets", () => {
     async (shape) => {
       const { cfg, catalogueId } = await setupVenue();
       const { stored, items } = await asApp(cfg, async (tx) => {
-        const station = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-        const dish = await makeProduct(tx, cfg, catalogueId, "Cortado", { stationId: station.id });
+        const station = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+        const dish = await makeProduct(tx, cfg, catalogueId, "Toast", { stationId: station.id });
         const { listId, productIds } = await addExtras(tx, cfg, catalogueId, dish, [
-          { name: "Queso", customerName: "Queso cliente", kitchenName: "QUESO", maxQuantity: 2 },
-          { name: "Jamón", customerName: "Jamón cliente", kitchenName: "JAMÓN" },
+          { name: "Cheese", customerName: "Mature cheddar", kitchenName: "CHEESE", maxQuantity: 2 },
+          { name: "Ham", customerName: "Smoked ham", kitchenName: "HAM" },
         ]);
         const [cheese, ham] = productIds as [string, string];
         const [gram] = await tx
@@ -1819,15 +1819,15 @@ describe("dish extras on kitchen tickets", () => {
   it("keeps two extras no cell decides on their dish's one kitchen record", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { orderId, parentLineId, ticketItemRows } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
       // No cell decides for either extra, so both follow their dish instead of the default.
-      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Cortado", {
+      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
       const { listId, productIds } = await addExtras(
@@ -1835,7 +1835,7 @@ describe("dish extras on kitchen tickets", () => {
         cfg,
         catalogueId,
         espressoProduct,
-        [{ name: "Nata" }, { name: "Leche avena" }],
+        [{ name: "Cream" }, { name: "Oat milk" }],
         { staffNameOnly: true },
       );
 
@@ -1871,21 +1871,21 @@ describe("dish extras on kitchen tickets", () => {
   it("renders the dish then its two extras as indented '+' sub-text on the kitchen ticket", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Cortado", {
+      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
       // Each extra carries three DIFFERENT names, so a sub-line that read the customer-facing text
       // instead of the staff name the child line froze reads differently (CLAUDE.md §3).
       const { listId, productIds } = await addExtras(tx, cfg, catalogueId, espressoProduct, [
-        { name: "Nata", customerName: "Nata montada", kitchenName: "NAT" },
-        { name: "Leche avena", customerName: "Bebida de avena", kitchenName: "AVE" },
+        { name: "Cream", customerName: "Whipped cream", kitchenName: "CRM" },
+        { name: "Oat milk", customerName: "Oat drink", kitchenName: "OAT" },
       ]);
 
       await fireNewOrder(tx, cfg, [
@@ -1901,37 +1901,37 @@ describe("dish extras on kitchen tickets", () => {
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
-    expect(ticket).toContain("Cortado");
-    expect(ticket).toContain("+ Nata");
-    expect(ticket).toContain("+ Leche avena");
-    expect(ticket).not.toContain("Nata montada");
-    expect(ticket).not.toContain("Bebida de avena");
-    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Nata"));
-    expect(ticket.indexOf("Cortado")).toBeLessThan(ticket.indexOf("+ Leche avena"));
+    expect(ticket).toContain("Flat white");
+    expect(ticket).toContain("+ Cream");
+    expect(ticket).toContain("+ Oat milk");
+    expect(ticket).not.toContain("Whipped cream");
+    expect(ticket).not.toContain("Oat drink");
+    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ Cream"));
+    expect(ticket.indexOf("Flat white")).toBeLessThan(ticket.indexOf("+ Oat milk"));
   });
 
   it("prints the line's note as a sub-line on the kitchen ticket (order-line customisation)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const steakProduct = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steakProduct = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
       });
 
-      await fireNewOrder(tx, cfg, [{ productId: steakProduct, quantity: "1", note: "sin sal" }]);
+      await fireNewOrder(tx, cfg, [{ productId: steakProduct, quantity: "1", note: "no salt" }]);
       return { printerId, jobs: await printJobsFor(tx) };
     });
 
     const ticket = decodeTicket(jobs.filter((j) => j.printerId === printerId)[0]!.payload);
-    expect(ticket).toContain("Chuleton");
-    expect(ticket).toContain("* sin sal");
-    expect(ticket.indexOf("Chuleton")).toBeLessThan(ticket.indexOf("* sin sal"));
+    expect(ticket).toContain("Ribeye");
+    expect(ticket).toContain("* no salt");
+    expect(ticket.indexOf("Ribeye")).toBeLessThan(ticket.indexOf("* no salt"));
   });
 
   it("badges an extra's PER-DISH count when it exceeds one, leaving a single pick's line unchanged", async () => {
@@ -1939,14 +1939,14 @@ describe("dish extras on kitchen tickets", () => {
     // an ASCII "xN" suffix only when it exceeds 1.
     const { cfg, catalogueId } = await setupVenue();
     const { printerId, jobs } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Cortado", {
+      const espressoProduct = await makeProduct(tx, cfg, catalogueId, "Flat white", {
         stationId: kitchenStation.id,
       });
       const { listId, productIds } = await addExtras(
@@ -1955,8 +1955,8 @@ describe("dish extras on kitchen tickets", () => {
         catalogueId,
         espressoProduct,
         [
-          { name: "Nata", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
-          { name: "Leche avena" }, // single pick (cap 1)
+          { name: "Cream", maxQuantity: 3 }, // a per-dish cap of 3 admits a ×2
+          { name: "Oat milk" }, // single pick (cap 1)
         ],
         { staffNameOnly: true },
       );
@@ -1983,18 +1983,18 @@ describe("dish extras on kitchen tickets", () => {
     const stationJobs = jobs.filter((j) => j.printerId === printerId);
     expect(stationJobs).toHaveLength(1);
     const ticket = decodeTicket(stationJobs[0]!.payload);
-    expect(ticket).toContain("Cortado");
-    expect(ticket).toContain("+ Nata x2");
-    expect(ticket).toContain("+ Leche avena");
-    expect(ticket).not.toContain("Leche avena x");
-    expect(ticket).not.toMatch(/\+ Nata(?! x)/u);
+    expect(ticket).toContain("Flat white");
+    expect(ticket).toContain("+ Cream x2");
+    expect(ticket).toContain("+ Oat milk");
+    expect(ticket).not.toContain("Oat milk x");
+    expect(ticket).not.toMatch(/\+ Cream(?! x)/u);
   });
 
   it("lets an unclaimed extra follow its dish when no default station is on", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { stationId, ticketItemRows } = await asApp(cfg, async (tx) => {
-      const barStation = await createStation(tx, cfg, { name: "Barra", isDefault: false });
-      const coffeeProduct = await makeProduct(tx, cfg, catalogueId, "Cafe", {
+      const barStation = await createStation(tx, cfg, { name: "Bar", isDefault: false });
+      const coffeeProduct = await makeProduct(tx, cfg, catalogueId, "Filter coffee", {
         stationId: barStation.id,
       });
       const { productIds } = await addExtras(
@@ -2002,7 +2002,7 @@ describe("dish extras on kitchen tickets", () => {
         cfg,
         catalogueId,
         coffeeProduct,
-        [{ name: "Nata" }],
+        [{ name: "Cream" }],
         {
           staffNameOnly: true,
         },
@@ -2028,21 +2028,21 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
   it("re-enqueues EVERY currently-fired item across all fire rounds — not just the last round (the print-on-fire contrast)", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { pStation, pGroup, beforeReprint, afterReprint } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const pStation = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const pStation = await makePrinter(tx, cfg, "Kitchen printer");
       const pGroup = await makeSharedPrinter(tx, cfg, "Pass", [kitchenStation.id]);
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId: pStation,
       });
-      const starterCourse = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
-      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+      const starterCourse = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Soup", {
         stationId: kitchenStation.id,
         courseId: starterCourse.id,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
         courseId: mainCourse.id,
       });
@@ -2081,34 +2081,34 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     expect(newGroup).toHaveLength(1);
     expect(newJobs).toHaveLength(2);
 
-    // Both rounds' items, where round 2's print-on-fire ticket carried only Chuleton.
+    // Both rounds' items, where round 2's print-on-fire ticket carried only Ribeye.
     const stationTicket = decodeTicket(newStation[0]!.payload);
-    expect(stationTicket).toContain("Sopa");
-    expect(stationTicket).toContain("Chuleton");
+    expect(stationTicket).toContain("Soup");
+    expect(stationTicket).toContain("Ribeye");
 
     const groupTicket = decodeTicket(newGroup[0]!.payload);
-    expect(groupTicket).toContain("Sopa");
-    expect(groupTicket).toContain("Chuleton");
-    expect(groupTicket).toContain("Cocina");
+    expect(groupTicket).toContain("Soup");
+    expect(groupTicket).toContain("Ribeye");
+    expect(groupTicket).toContain("Kitchen");
   });
 
   it("prints the quantity each item was fired at, not its line's current quantity", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const { released, reprinted } = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      const starterCourse = await createCourse(tx, cfg, { name: "Entrantes", displayOrder: 0 });
-      const mainCourse = await createCourse(tx, cfg, { name: "Principales", displayOrder: 1 });
-      const soup = await makeProduct(tx, cfg, catalogueId, "Sopa", {
+      const starterCourse = await createCourse(tx, cfg, { name: "Starters", displayOrder: 0 });
+      const mainCourse = await createCourse(tx, cfg, { name: "Mains", displayOrder: 1 });
+      const soup = await makeProduct(tx, cfg, catalogueId, "Soup", {
         stationId: kitchenStation.id,
         courseId: starterCourse.id,
       });
-      const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+      const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
         stationId: kitchenStation.id,
         courseId: mainCourse.id,
       });
@@ -2139,13 +2139,11 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
     });
 
     expect(released).toHaveLength(1);
-    expect(decodeTicket(released[0]!.payload)).toContain(
-      `${thousandthsToDecimal(2000)} x Chuleton`,
-    );
+    expect(decodeTicket(released[0]!.payload)).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
     expect(reprinted).toHaveLength(1);
     const reprint = decodeTicket(reprinted[0]!.payload);
-    expect(reprint).toContain(`${thousandthsToDecimal(3000)} x Sopa`);
-    expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Chuleton`);
+    expect(reprint).toContain(`${thousandthsToDecimal(3000)} x Soup`);
+    expect(reprint).toContain(`${thousandthsToDecimal(2000)} x Ribeye`);
   });
 
   it("a reprint prints the HOLD part only for a station recorded for the group", async () => {
@@ -2163,7 +2161,7 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
       await setStationPrinting(tx, { printHeldWork: true }, [kitchen.id]);
       return { kitchen, bar, screen };
     });
-    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Mesa 131"));
+    const { partyId, tabId } = await seatWithNoAllergies(v, await v.table("Table 131"));
     const dish = (name: string) => ({ menuItemId: v.item(name), quantity: "1" });
     await inTx(v, (tx) =>
       placeGroups(tx, v.cfg, partyId, {
@@ -2202,14 +2200,14 @@ describe("reprintOrderTickets (re-enqueue the WHOLE current ticket for an order)
   it("enqueues nothing (and does NOT throw) for an order with no fired items", async () => {
     const { cfg, catalogueId } = await setupVenue();
     const jobs = await asApp(cfg, async (tx) => {
-      const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
-      const printerId = await makePrinter(tx, cfg, "Cocina printer");
+      const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
+      const printerId = await makePrinter(tx, cfg, "Kitchen printer");
       await attachPrinterToStation(tx, {
         locationId: cfg.locationId,
         stationId: kitchenStation.id,
         printerId,
       });
-      await makeProduct(tx, cfg, catalogueId, "Chuleton", { stationId: kitchenStation.id });
+      await makeProduct(tx, cfg, catalogueId, "Ribeye", { stationId: kitchenStation.id });
 
       await reprintOrderTickets(tx, cfg, randomUUID());
       return printJobsFor(tx);
@@ -2245,20 +2243,20 @@ it("prints a line's stored options answers, each side taking its KITCHEN name", 
         optionSnapshots: [
           // Six names, six different texts: the ticket can only print the kitchen pair.
           {
-            listName: { [defaultLanguage]: "Leche staff" },
-            listCustomerName: { [defaultLanguage]: "Leche cliente" },
-            listKitchenName: "LECHE",
-            labelName: { [defaultLanguage]: "Avena staff" },
-            labelCustomerName: { [defaultLanguage]: "Avena cliente" },
-            labelKitchenName: "AVENA",
+            listName: { [defaultLanguage]: "Milk staff" },
+            listCustomerName: { [defaultLanguage]: "Milk customer" },
+            listKitchenName: "MILK",
+            labelName: { [defaultLanguage]: "Oat staff" },
+            labelCustomerName: { [defaultLanguage]: "Oat customer" },
+            labelKitchenName: "OAT",
           },
           // Neither side has a kitchen name: a cook reads the STAFF name, never the diner's wording.
           {
-            listName: { [defaultLanguage]: "Azucar" },
-            listCustomerName: { [defaultLanguage]: "Azucar cliente" },
+            listName: { [defaultLanguage]: "Sugar" },
+            listCustomerName: { [defaultLanguage]: "Sugar customer" },
             listKitchenName: null,
-            labelName: { [defaultLanguage]: "Sin" },
-            labelCustomerName: { [defaultLanguage]: "Sin cliente" },
+            labelName: { [defaultLanguage]: "None" },
+            labelCustomerName: { [defaultLanguage]: "None customer" },
             labelKitchenName: null,
           },
         ],
@@ -2271,10 +2269,10 @@ it("prints a line's stored options answers, each side taking its KITCHEN name", 
   });
   expect(jobs).toHaveLength(1);
   const paper = decodeTicket(jobs[0]!.payload);
-  expect(paper).toContain("+ LECHE: AVENA");
-  expect(paper).not.toContain("Leche staff");
-  expect(paper).toContain("+ Azucar: Sin");
-  expect(paper).not.toContain("cliente");
+  expect(paper).toContain("+ MILK: OAT");
+  expect(paper).not.toContain("Milk staff");
+  expect(paper).toContain("+ Sugar: None");
+  expect(paper).not.toContain("customer");
 });
 
 /**
@@ -2299,7 +2297,7 @@ async function ticketWithNames(frozen: {
       catalogueId,
       categoryId: null,
       name: "Coffee",
-      customerName: { [LOCALE]: "Café recién hecho" },
+      customerName: { [LOCALE]: "Fresh filter brew" },
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -2343,39 +2341,39 @@ it("falls back to the product's staff name when it has no kitchen name", async (
     variantKitchenName: null,
   });
   expect(paper).toContain("Coffee");
-  expect(paper).not.toContain("Café recién hecho");
+  expect(paper).not.toContain("Fresh filter brew");
 });
 
 describe("the table a slip names (spec decision 9)", () => {
   it("names every table of the party, in the order they joined", async () => {
     const v = await setupPartyVenue(db);
-    // Joined Mesa 5 first: sorting by id or by label would both put Mesa 4 first.
-    const table4 = await tableAt(v, `00000000-${randomUUID().slice(9)}`, "Mesa 4");
-    const table5 = await tableAt(v, `ffffffff-${randomUUID().slice(9)}`, "Mesa 5");
+    // Joined Table 5 first: sorting by id or by label would both put Table 4 first.
+    const table4 = await tableAt(v, `00000000-${randomUUID().slice(9)}`, "Table 4");
+    const table5 = await tableAt(v, `ffffffff-${randomUUID().slice(9)}`, "Table 5");
     const { partyId, tabId } = await seat(v, table5);
     await join(v, partyId, table4);
     await orderForParty(v, partyId, ["Burger"], tabId);
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Mesa 5, 4");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, tabId))).toBe("Table 5, 4");
   });
 
   it("names the party's tables on a bill split from the tab, not the label it was split with", async () => {
     const v = await setupPartyVenue(db);
-    const table4 = await v.table("Mesa 4");
-    const table5 = await v.table("Mesa 5");
+    const table4 = await v.table("Table 4");
+    const table5 = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
     await join(v, partyId, table5);
 
-    expect((await billRow(v, checkId)).label).toBe("Mesa 4");
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Mesa 4, 5");
+    expect((await billRow(v, checkId)).label).toBe("Table 4");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, checkId))).toBe("Table 4, 5");
   });
 
   it("copies the party's tables, not its name, as a split bill's own label", async () => {
     const v = await setupPartyVenue(db);
-    const table4 = await v.table("Mesa 4");
-    const table5 = await v.table("Mesa 5");
+    const table4 = await v.table("Table 4");
+    const table5 = await v.table("Table 5");
     const { partyId, tabId } = await seat(v, table4);
     await join(v, partyId, table5);
     await nameParty(v, partyId, "Ana");
@@ -2383,12 +2381,12 @@ describe("the table a slip names (spec decision 9)", () => {
 
     const checkId = await split(v, partyId, tabId, [2]);
 
-    expect((await billRow(v, checkId)).label).toBe("Mesa 4, 5");
+    expect((await billRow(v, checkId)).label).toBe("Table 4, 5");
   });
 
   it("names a bill by its own label once its party holds no table", async () => {
     const v = await setupPartyVenue(db);
-    const table4 = await v.table("Mesa 4");
+    const table4 = await v.table("Table 4");
     const { partyId, tabId } = await seat(v, table4);
     await orderForParty(v, partyId, ["Burger", "Vino"], tabId);
     const checkId = await split(v, partyId, tabId, [2]);
@@ -2405,23 +2403,23 @@ describe("the table a slip names (spec decision 9)", () => {
 
   it("names a counter order's delivery table, and an unlabelled walk-up nothing", async () => {
     const v = await setupPartyVenue(db);
-    const terraceTable = await v.table("Terraza 2");
+    const terraceTable = await v.table("Terrace 2");
     const [delivered, walkUp] = [randomUUID(), randomUUID()];
     await inTx(v, async (tx) => {
       await createOpenOrder(tx, v.cfg, delivered, [], null, { deliveryTableId: terraceTable });
       await createOpenOrder(tx, v.cfg, walkUp, [], null);
     });
 
-    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, delivered))).toBe("Terraza 2");
+    expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, delivered))).toBe("Terrace 2");
     expect(await inTx(v, (tx) => orderTableLabel(tx, v.cfg, walkUp))).toBeNull();
   });
 });
 
 describe("a station printer that was deleted", () => {
   async function stationWithTwo(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
-    const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+    const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const p = await makePrinter(tx, cfg, "Old kitchen");
-    const q = await makePrinter(tx, cfg, "Cocina Q");
+    const q = await makePrinter(tx, cfg, "Kitchen Q");
     await attachPrinterToStation(tx, {
       locationId: cfg.locationId,
       stationId: kitchenStation.id,
@@ -2432,7 +2430,7 @@ describe("a station printer that was deleted", () => {
       stationId: kitchenStation.id,
       printerId: q,
     });
-    const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+    const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
       stationId: kitchenStation.id,
     });
     const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
@@ -2489,14 +2487,14 @@ describe("a station printer that was deleted", () => {
     const { orderId, added, problemsBefore, problems, linksBefore, linksAfter } = await asApp(
       cfg,
       async (tx) => {
-        const kitchenStation = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+        const kitchenStation = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
         const p = await makePrinter(tx, cfg, "Old kitchen");
         await attachPrinterToStation(tx, {
           locationId: cfg.locationId,
           stationId: kitchenStation.id,
           printerId: p,
         });
-        const steak = await makeProduct(tx, cfg, catalogueId, "Chuleton", {
+        const steak = await makeProduct(tx, cfg, catalogueId, "Ribeye", {
           stationId: kitchenStation.id,
         });
         const orderId = await fireNewOrder(tx, cfg, [line(steak)]);
@@ -2597,7 +2595,7 @@ describe("the party's name on a kitchen ticket", () => {
         .select({ id: kitchenStations.id })
         .from(kitchenStations)
         .where(eq(kitchenStations.locationId, v.cfg.locationId));
-      const id = await makePrinter(tx, v.cfg, "Cocina");
+      const id = await makePrinter(tx, v.cfg, "Kitchen");
       await attachPrinterToStation(tx, {
         locationId: v.cfg.locationId,
         stationId: station!.id,
@@ -2620,20 +2618,20 @@ describe("the party's name on a kitchen ticket", () => {
   it("prints the order line as Pedido N · name for a named party's order", async () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
-    const { partyId, tabId } = await seat(v, await v.table("Mesa 71"));
+    const { partyId, tabId } = await seat(v, await v.table("Table 71"));
     await nameParty(v, partyId, "Ana");
     await order(v, tabId, "Burger");
     const { orderNumber } = await billRow(v, tabId);
     const tickets = await ticketsSince(printer);
     expect(tickets).toHaveLength(1);
-    expect(tickets[0]!.slice(0, 3)).toEqual(["Cocina", "Mesa 71", `Pedido ${orderNumber} · Ana`]);
+    expect(tickets[0]!.slice(0, 3)).toEqual(["Cocina", "Table 71", `Pedido ${orderNumber} · Ana`]);
   });
 
   it("prints the name of the party a bill's party was merged into", async () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
-    const table72 = await v.table("Mesa 72");
-    const ana = await seat(v, await v.table("Mesa 73"));
+    const table72 = await v.table("Table 72");
+    const ana = await seat(v, await v.table("Table 73"));
     await nameParty(v, ana.partyId, "Ana");
     await nextMillisecond();
     const luis = await seat(v, table72);
@@ -2665,7 +2663,7 @@ describe("the party's name on a kitchen ticket", () => {
           ),
         ),
         "Cocina",
-        "Mesa 72",
+        "Table 72",
         `Pedido ${orderNumber} · Luis`,
       ],
     ]);
@@ -2674,7 +2672,7 @@ describe("the party's name on a kitchen ticket", () => {
   it("prints the bare order number for an unnamed party's order and a counter order", async () => {
     const v = await setupPartyVenue(db);
     const printer = await kitchenPrinter(v);
-    const { tabId } = await seat(v, await v.table("Mesa 74"));
+    const { tabId } = await seat(v, await v.table("Table 74"));
     await order(v, tabId, "Burger");
     const counter = await counterOrder(v, "Burger");
     await inTx(v, async (tx) =>
@@ -2699,7 +2697,7 @@ describe("the party's name on a kitchen ticket", () => {
     expect(tickets.map((lines) => lines.slice(0, 4))).toEqual([
       [
         "Cocina",
-        "Mesa 74",
+        "Table 74",
         String((await billRow(v, tabId)).orderNumber),
         expect.stringMatching(/^\d\d:\d\d$/),
       ],
@@ -2736,17 +2734,17 @@ it("A725 shared kitchen paper lists stations in Spanish alphabetical order", asy
 });
 
 describe("A803 portion grouping", () => {
-  /** Cocina (with a printer, showing the rest of the order) and Fryer (with its own printer); a
-   * Burger with a Cheese extra of up to two and Oysters at Cocina, Chips and Octopus (sold by
+  /** Kitchen (with a printer, showing the rest of the order) and Fryer (with its own printer); a
+   * Burger with a Cheese extra of up to two and Oysters at Kitchen, Chips and Octopus (sold by
    * weight) at Fryer; and a party's open bill at a fresh table. */
   async function portionKitchen(tx: Transaction, cfg: OriginConfig, catalogueId: string) {
-    const cocina = await createStation(tx, cfg, { name: "Cocina", isDefault: true });
+    const kitchen = await createStation(tx, cfg, { name: "Kitchen", isDefault: true });
     const fryer = await createStation(tx, cfg, { name: "Fryer" });
-    await updateStation(tx, cfg, cocina.id, { showsRestOfOrder: true });
-    const cocinaPrinter = await makeSharedPrinter(tx, cfg, "Cocina printer", [cocina.id]);
+    await updateStation(tx, cfg, kitchen.id, { showsRestOfOrder: true });
+    const kitchenPrinter = await makeSharedPrinter(tx, cfg, "Kitchen printer", [kitchen.id]);
     const fryerPrinter = await makeSharedPrinter(tx, cfg, "Fryer printer", [fryer.id]);
-    const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: cocina.id });
-    const oysters = await makeProduct(tx, cfg, catalogueId, "Oysters", { stationId: cocina.id });
+    const burger = await makeProduct(tx, cfg, catalogueId, "Burger", { stationId: kitchen.id });
+    const oysters = await makeProduct(tx, cfg, catalogueId, "Oysters", { stationId: kitchen.id });
     const chips = await makeProduct(tx, cfg, catalogueId, "Chips", { stationId: fryer.id });
     const { id: octopus } = await createProduct(tx, {
       catalogueId,
@@ -2776,9 +2774,9 @@ describe("A803 portion grouping", () => {
       { listId, picks: [{ productId: productIds[0]!, quantity: count }] },
     ];
     return {
-      cocina: cocina.id,
+      kitchen: kitchen.id,
       fryer: fryer.id,
-      cocinaPrinter,
+      kitchenPrinter,
       fryerPrinter,
       tabId,
       offer: offers.offerFor,
@@ -2828,7 +2826,7 @@ describe("A803 portion grouping", () => {
       const grouped = await jobsDuring(tx, async () => {
         await addTabRound(tx, cfg, k.tabId, burgers);
       });
-      await setStationPrinting(tx, { ticketGrouping: "separate" }, [k.cocina]);
+      await setStationPrinting(tx, { ticketGrouping: "separate" }, [k.kitchen]);
       const separate = await jobsDuring(tx, () =>
         addPortionRound(tx, cfg, k.tabId, burgers, { fire: true }),
       );
@@ -2895,7 +2893,7 @@ describe("A803 portion grouping", () => {
         ],
         { fire: true },
       );
-      const queue = await listStationQueue(tx, k.cocina);
+      const queue = await listStationQueue(tx, k.kitchen);
       return queue.filter((group) => group.orderId === k.tabId).flatMap((group) => group.items);
     });
 
@@ -2925,7 +2923,7 @@ describe("A803 portion grouping", () => {
       return {
         fired: fired.length,
         ticket: ticket.filter((job) => job.printerId === k.fryerPrinter),
-        rest: rest.filter((job) => job.printerId === k.cocinaPrinter),
+        rest: rest.filter((job) => job.printerId === k.kitchenPrinter),
         slips,
       };
     });
@@ -2941,7 +2939,7 @@ describe("A803 portion grouping", () => {
 
   it("A803 portion grouping: Also on order lists identical portions once with their sum", async () => {
     const { cfg, catalogueId } = await setupVenue();
-    const cocinaTicket = await asApp(cfg, async (tx) => {
+    const kitchenTicket = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg, catalogueId);
       await addPortionRound(
         tx,
@@ -2955,18 +2953,18 @@ describe("A803 portion grouping", () => {
           fire: true,
         }),
       );
-      return jobs.filter((job) => job.printerId === k.cocinaPrinter);
+      return jobs.filter((job) => job.printerId === k.kitchenPrinter);
     });
 
-    expect(cocinaTicket).toHaveLength(1);
-    const lines = printedLines(cocinaTicket[0]!.payload);
+    expect(kitchenTicket).toHaveLength(1);
+    const lines = printedLines(kitchenTicket[0]!.payload);
     expect(count(lines, `${thousandthsToDecimal(2000)} x Chips — Fryer`)).toBe(1);
     expect(count(lines, `${thousandthsToDecimal(1000)} x Chips — Fryer`)).toBe(0);
   });
 
   it("A803 portion grouping: Also on order keeps identical unbound lines apart, as today", async () => {
     const { cfg, catalogueId } = await setupVenue();
-    const cocinaTicket = await asApp(cfg, async (tx) => {
+    const kitchenTicket = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg, catalogueId);
       const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
       await addTabRound(tx, cfg, k.tabId, [chips]);
@@ -2976,17 +2974,17 @@ describe("A803 portion grouping", () => {
           fire: true,
         }),
       );
-      return jobs.filter((job) => job.printerId === k.cocinaPrinter);
+      return jobs.filter((job) => job.printerId === k.kitchenPrinter);
     });
 
-    expect(cocinaTicket).toHaveLength(1);
-    const lines = printedLines(cocinaTicket[0]!.payload);
+    expect(kitchenTicket).toHaveLength(1);
+    const lines = printedLines(kitchenTicket[0]!.payload);
     expect(count(lines, `${thousandthsToDecimal(1000)} x Chips — Fryer`)).toBe(2);
   });
 
   it("A803 portion grouping: Also on order keeps a held portion apart from a fired one, and a portion with a printed unit on its own row", async () => {
     const { cfg, catalogueId } = await setupVenue();
-    const cocinaTicket = await asApp(cfg, async (tx) => {
+    const kitchenTicket = await asApp(cfg, async (tx) => {
       const k = await portionKitchen(tx, cfg, catalogueId);
       const [piece] = await tx
         .insert(units)
@@ -3029,11 +3027,11 @@ describe("A803 portion grouping", () => {
           fire: true,
         }),
       );
-      return jobs.filter((job) => job.printerId === k.cocinaPrinter);
+      return jobs.filter((job) => job.printerId === k.kitchenPrinter);
     });
 
-    expect(cocinaTicket).toHaveLength(1);
-    const lines = printedLines(cocinaTicket[0]!.payload);
+    expect(kitchenTicket).toHaveLength(1);
+    const lines = printedLines(kitchenTicket[0]!.payload);
     const oneChips = `${thousandthsToDecimal(1000)} x Chips — Fryer`;
     expect(count(lines, oneChips)).toBe(1);
     expect(lines.filter((line) => line.startsWith(oneChips) && line !== oneChips)).toHaveLength(1);
@@ -3052,7 +3050,7 @@ describe("A803 portion grouping", () => {
         [{ menuItemId: k.offer(k.ids.burger), quantity: "2" }],
         { fire: true },
       );
-      const [first, second] = await firedAt(tx, k.tabId, k.cocina);
+      const [first, second] = await firedAt(tx, k.tabId, k.kitchen);
       const slips = await jobsDuring(tx, () =>
         enqueueCorrectionSlips(
           tx,
@@ -3062,7 +3060,7 @@ describe("A803 portion grouping", () => {
           "RECALLED",
         ),
       );
-      return { slips, printers: [k.cocinaPrinter, k.fryerPrinter] };
+      return { slips, printers: [k.kitchenPrinter, k.fryerPrinter] };
     });
 
     expect(slips.map((slip) => slip.printerId).sort()).toEqual([...printers].sort());
@@ -3080,8 +3078,8 @@ describe("A803 portion grouping", () => {
         await addPortionRound(tx, cfg, k.tabId, [{ menuItemId: burger, quantity: "2" }], {
           fire: true,
         });
-        await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.cocina), kind);
-        const portions = await listStationNotices(tx, cfg, k.cocina);
+        await enqueueCorrectionSlips(tx, cfg, k.tabId, await firedAt(tx, k.tabId, k.kitchen), kind);
+        const portions = await listStationNotices(tx, cfg, k.kitchen);
         const chips = { menuItemId: k.offer(k.ids.chips), quantity: "1" };
         await addTabRound(tx, cfg, k.tabId, [chips]);
         await addTabRound(tx, cfg, k.tabId, [chips]);
@@ -3114,13 +3112,13 @@ describe("A803 portion grouping", () => {
         ],
         { fire: true },
       );
-      const [first, second, noted] = await firedAt(tx, k.tabId, k.cocina);
+      const [first, second, noted] = await firedAt(tx, k.tabId, k.kitchen);
       const noticesAt = async (stationId: string) =>
         (await listStationNotices(tx, cfg, stationId)).length;
       const during = async (items: CorrectionItem[]) => {
-        const before = [await noticesAt(k.cocina), await noticesAt(k.fryer)];
+        const before = [await noticesAt(k.kitchen), await noticesAt(k.fryer)];
         await enqueueCorrectionSlips(tx, cfg, k.tabId, items, "RECALLED");
-        return [(await noticesAt(k.cocina)) - before[0]!, (await noticesAt(k.fryer)) - before[1]!];
+        return [(await noticesAt(k.kitchen)) - before[0]!, (await noticesAt(k.fryer)) - before[1]!];
       };
       return {
         stations: await during([first!, { ...second!, stationId: k.fryer }]),
@@ -3131,7 +3129,7 @@ describe("A803 portion grouping", () => {
           const burger = { menuItemId: k.offer(k.ids.burger), quantity: "1" };
           await addTabRound(tx, cfg, k.tabId, [burger]);
           await addTabRound(tx, cfg, k.tabId, [burger]);
-          const unbound = (await firedAt(tx, k.tabId, k.cocina)).slice(3);
+          const unbound = (await firedAt(tx, k.tabId, k.kitchen)).slice(3);
           expect(unbound).toHaveLength(2);
           return during([first!, second!, ...unbound]);
         })(),
@@ -3193,7 +3191,7 @@ describe("A803 portion grouping", () => {
         [{ menuItemId: k.offer(k.ids.burger), quantity: "2" }],
         { fire: true },
       );
-      const [first, second] = await firedAt(tx, k.tabId, k.cocina);
+      const [first, second] = await firedAt(tx, k.tabId, k.kitchen);
       await enqueueHoldCorrections(
         tx,
         cfg,
@@ -3204,7 +3202,7 @@ describe("A803 portion grouping", () => {
         ],
         { kind: "HOLD CANCELLED" },
       );
-      return (await listStationNotices(tx, cfg, k.cocina)).length;
+      return (await listStationNotices(tx, cfg, k.kitchen)).length;
     });
 
     expect(added).toBe(2);
@@ -3217,7 +3215,7 @@ describe("A803 portion grouping", () => {
       const burger = { menuItemId: k.offer(k.ids.burger), quantity: "1" };
       await addTabRound(tx, cfg, k.tabId, [burger]);
       await addTabRound(tx, cfg, k.tabId, [burger]);
-      const fired = await firedAt(tx, k.tabId, k.cocina);
+      const fired = await firedAt(tx, k.tabId, k.kitchen);
       expect(fired).toHaveLength(2);
       return jobsDuring(tx, () => enqueueCorrectionSlips(tx, cfg, k.tabId, fired, "RECALLED"));
     });
@@ -3231,7 +3229,7 @@ describe("A803 portion grouping", () => {
       const { cfg, catalogueId } = await setupVenue();
       const printed = await asApp(cfg, async (tx) => {
         const k = await portionKitchen(tx, cfg, catalogueId);
-        await setStationPrinting(tx, { ticketGrouping: grouping }, [k.cocina]);
+        await setStationPrinting(tx, { ticketGrouping: grouping }, [k.kitchen]);
         await addPortionRound(
           tx,
           cfg,
@@ -3239,7 +3237,7 @@ describe("A803 portion grouping", () => {
           [{ menuItemId: k.offer(k.ids.oysters), quantity: "12" }],
           { fire: true },
         );
-        const oysters = (await firedAt(tx, k.tabId, k.cocina)).map((item) => ({
+        const oysters = (await firedAt(tx, k.tabId, k.kitchen)).map((item) => ({
           ...item,
           group: 1,
         }));
@@ -3252,7 +3250,7 @@ describe("A803 portion grouping", () => {
         const cancelled = await jobsDuring(tx, () =>
           enqueueHoldCorrections(tx, cfg, k.tabId, oysters, { kind: "HOLD CANCELLED" }),
         );
-        const notices = await listStationNotices(tx, cfg, k.cocina);
+        const notices = await listStationNotices(tx, cfg, k.kitchen);
         return { count: oysters.length, changed, cancelled, notices };
       });
 
@@ -3294,7 +3292,7 @@ describe("A803 portion grouping", () => {
         [{ menuItemId: k.offer(k.ids.burger), quantity: "2" }],
         { fire: true },
       );
-      const burgers = await firedAt(tx, k.tabId, k.cocina);
+      const burgers = await firedAt(tx, k.tabId, k.kitchen);
       const same = await jobsDuring(tx, () =>
         enqueueAllergyCorrectionSlips(
           tx,
