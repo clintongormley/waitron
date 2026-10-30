@@ -505,6 +505,10 @@ until A977).
   establecimiento" and its Spanish alphabetical-order case. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
+  The print-alert suite (`apps/server/src/alert-sources.test.ts`) gives English print-agent,
+  station and printer names to what it creates, and the order-places suite
+  (`apps/server/src/order-places.test.ts`) English table and group names; the alert suite keeps
+  its es-ES locale and the printer name "Epson".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
   products (café, agua), names no check in it reads. The station-alert and party suites still
