@@ -223,6 +223,23 @@ venue cannot share a short name, whatever the capitals: if Save says "Terrace 1 
 type another, such as "Tb1". **Add tables** shows the short names it will give, and lets you type
 them when you choose custom names; **Add joined table** asks for one.
 
+## Name a bill {#bill-names}
+
+A party's bills are numbered, and the till shows each one with the party's name, its number and any
+name you give it, such as **4 · Bill 2 · Clint**. To name the bill on screen, for example after the
+guest paying it, open **Table actions**, choose **Name this bill**, type up to 40 characters and
+choose **Save**. Empty the field to remove the name. **Name the party**, just above it, names the
+whole party instead. If someone else has dishes on the bill that are not sent yet, take over their
+order first.
+
+A bill keeps its number for as long as it stays with the party. Merging one bill into another leaves
+a gap: merge Bill 2 into Bill 1 and Bills 1 and 3 remain. A bill that arrives from another table or
+from the counter takes the party's next number, and so do the bills of a table you join, except a
+bill that **Merge the bills** folds into this party's main bill. A table split off with a bill starts
+again at Bill 1, and so does a table seated again after its party finishes. A bill keeps its name
+when it moves, including to the counter, where it has no number. You can name a bill only at a
+table. The name is not printed on kitchen tickets or receipts.
+
 ## See which tables have food ready {#ready-bar}
 
 When the kitchen has dishes ready, you want to know which tables to take them to without going to
