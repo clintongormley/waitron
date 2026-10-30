@@ -473,10 +473,13 @@ until A977).
   "Venta en establecimiento".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
-  products (café, agua), names no check in it reads. The device-api pass suite and the
-  station-alert, party and configuration-transfer suites still hold other Spanish samples, among
-  them "Mesa 7" and "Terraza" in the party suites and "Barra" and "Cocina" in the
-  configuration-transfer suite. The
+  products (café, agua), names no check in it reads. The station-alert and party suites still
+  hold other Spanish samples, among them "Mesa 7" and "Terraza" in the party suites. The
+  device-api pass suite (`apps/server/src/device-api.pass.test.ts`) and the configuration-transfer
+  suite (`apps/server/src/configuration-transfer.test.ts`) give English names to what they create;
+  the transfer suite still reads the default kitchen station setup names "Cocina" for a Spanish
+  venue (`packages/provisioning/src/starter-content.ts`), and keeps Spanish values inside its
+  translation maps, its accented name-key case, and official holiday and place names. The
   device, device-delete, join-request, join-api, join-api database and device-session suites keep
   only the Spanish names the shared test helpers create, and the device and device-session suites'
   operation description "Venta en establecimiento". Screen tests take translated expectations from
