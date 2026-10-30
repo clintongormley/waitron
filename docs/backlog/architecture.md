@@ -471,10 +471,12 @@ until A977).
   ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
-  The device-api suite still names kitchen screens and stations "Uno",
-  "Dos", "Todo", "Cocina" and "Horno". It, the device-api pass suite and the station-alert, party
-  and configuration-transfer suites still hold other Spanish samples, among them station, till,
-  table, zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The
+  The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
+  creates; two of its comments still name the shared helper's default station "Cocina" and one its
+  products (café, agua), names no check in it reads. The device-api pass suite and the
+  station-alert, party and configuration-transfer suites still hold other Spanish samples, among
+  them "Mesa 7" and "Terraza" in the party suites and "Barra" and "Cocina" in the
+  configuration-transfer suite. The
   device, device-delete, join-request, join-api, join-api database and device-session suites keep
   only the Spanish names the shared test helpers create, and the device and device-session suites'
   operation description "Venta en establecimiento". Screen tests take translated expectations from
