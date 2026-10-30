@@ -521,12 +521,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   Check again gets the same refusal while nothing changes on the box. Wanted: a cause of its own
   from the server and words for it. Left open by A1206.
 
-- **Owner approval for "did not start activation" / «no empezó la activación».** The
-  missing-database ask shows it when the attempt's record reached neither activation line, in
-  place of the retired series-name line (`reachedNotStarted`,
-  `apps/setup/src/screens/initial-owner-strings.ts`). Derived words, not yet approved. Left open by
-  A1206 (its question Q1).
-
 _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 - **A box on an older configuration format blames the export when it is the box that is out of
