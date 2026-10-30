@@ -349,10 +349,22 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   write(words.sameChecks, 9, GREY, 14);
   boxed(() => {
     write(words.lockedAway, 12, "black", 2);
-    write(
-      serverKeyPage === undefined
+    const opens =
+      input.file.bucketCode !== null ||
+      input.file.archiveCode !== null ||
+      input.file.backupKey !== null
         ? words.anyoneHolding
-        : `${words.anyoneHolding} ${words.serverKeyPage(serverKeyPage)}`,
+        : input.file.serverKey !== null
+          ? words.anyoneHoldingServerKey
+          : undefined;
+    write(
+      [
+        opens,
+        words.whichToKeep,
+        serverKeyPage === undefined ? undefined : words.serverKeyPage(serverKeyPage),
+      ]
+        .filter((sentence) => sentence !== undefined)
+        .join(" "),
       11,
       "black",
       0,

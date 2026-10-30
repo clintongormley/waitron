@@ -17,7 +17,11 @@ type Words = {
   sameChecks: string;
   couldNotBeDrawn: string;
   lockedAway: string;
+  /** For a pack that holds the backup key, in a code or on its own. */
   anyoneHolding: string;
+  /** For a pack that holds the server key and not the backup key. */
+  anyoneHoldingServerKey: string;
+  whichToKeep: string;
   serverKeyPage: (page: number) => string;
   part: Record<PartKind, string>;
   situation: Record<PartKind, string>;
@@ -51,7 +55,10 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "Could not be drawn",
     lockedAway: "Keep this pack locked away, and off the box.",
     anyoneHolding:
-      "Anyone holding it can open every backup of this venue and start the venue somewhere else. When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
+      "Anyone holding it can open every backup of this venue and start the venue somewhere else.",
+    anyoneHoldingServerKey: "Anyone holding it and its matching backup can recover the server.",
+    whichToKeep:
+      "When you make a new pack, the dashboard's Backups screen says which older packs to keep and until when.",
     serverKeyPage: (page) =>
       `Always keep the pack that holds the server key (page ${page} says which).`,
     part: { bucket: "Bucket copy", archives: "Archives", "server-key": "Server key" },
@@ -99,7 +106,11 @@ export const PACK_WORDS: Record<PackLocale, Words> = {
     couldNotBeDrawn: "No se pudo generar",
     lockedAway: "Guarda este paquete bajo llave, y fuera de la caja.",
     anyoneHolding:
-      "Quien lo tenga puede abrir todas las copias de seguridad de este local y poner el local en marcha en otro sitio. Cuando hagas un paquete nuevo, la pantalla Copias de seguridad del panel te dice qué paquetes anteriores guardar y hasta cuándo.",
+      "Quien lo tenga puede abrir todas las copias de seguridad de este local y poner el local en marcha en otro sitio.",
+    anyoneHoldingServerKey:
+      "Quien lo tenga, junto con su copia correspondiente, puede recuperar el servidor.",
+    whichToKeep:
+      "Cuando hagas un paquete nuevo, la pantalla Copias de seguridad del panel te dice qué paquetes anteriores guardar y hasta cuándo.",
     serverKeyPage: (page) =>
       `Guarda siempre el paquete que tiene la clave del servidor (la página ${page} dice cuál).`,
     part: {

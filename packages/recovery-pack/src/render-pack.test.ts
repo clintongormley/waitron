@@ -197,6 +197,72 @@ describe("the recovery pack's cover", () => {
   });
 });
 
+describe("what the cover says holding the pack opens", () => {
+  const keyOnly = (locale: "en" | "es") =>
+    input({
+      locale,
+      parts: [
+        { kind: "bucket", state: "not-set-up" },
+        { kind: "archives", state: "not-set-up" },
+        { ...serverKey, serverKeyLocation: { kind: "this-pack" } },
+      ],
+      file: {
+        ...file,
+        bucketCode: null,
+        archiveCode: null,
+        backupKey: null,
+        serverKey: { kind: "a-key-file" },
+        serverKeyHeldBy: null,
+      },
+    });
+
+  it.each(["en", "es"] as const)(
+    "a pack holding the server key and no backup key says it recovers the server with its matching backup, in %s",
+    async (locale) => {
+      const [cover] = await rendered(await renderRecoveryPack(keyOnly(locale)));
+      const words = PACK_WORDS[locale];
+      expect(cover!.text).toContain(`${words.anyoneHoldingServerKey} ${words.whichToKeep}`);
+      expect(cover!.text).not.toContain(words.anyoneHolding);
+    },
+  );
+
+  it.each([
+    ["the bucket code", { bucketCode }],
+    ["the archive code", { archiveCode }],
+    ["the backup key", { backupKey: "a backup passphrase" }],
+  ] as const)("a pack holding %s says it opens every backup", async (_, held) => {
+    const pack = keyOnly("en");
+    const [cover] = await rendered(
+      await renderRecoveryPack({ ...pack, file: { ...pack.file, ...held } }),
+    );
+    expect(cover!.text).toContain(`${PACK_WORDS.en.anyoneHolding} ${PACK_WORDS.en.whichToKeep}`);
+  });
+
+  it("a pack holding no secret claims nothing about what it opens", async () => {
+    const [cover] = await rendered(
+      await renderRecoveryPack(
+        input({
+          parts: [
+            { kind: "bucket", state: "absent" },
+            { kind: "archives", state: "absent" },
+            { kind: "server-key", state: "absent" },
+          ],
+          file: {
+            ...file,
+            bucketCode: null,
+            archiveCode: null,
+            serverKeyName: null,
+            serverKeyHeldBy: null,
+          },
+        }),
+      ),
+    );
+    expect(cover!.text).toContain(PACK_WORDS.en.whichToKeep);
+    expect(cover!.text).not.toContain(PACK_WORDS.en.anyoneHolding);
+    expect(cover!.text).not.toContain(PACK_WORDS.en.anyoneHoldingServerKey);
+  });
+});
+
 describe("the Spanish pack's other wording", () => {
   it("covers setup, a failed page and each place the key can be", async () => {
     const es = (parts: PackPart[], madeBy: string | null = "Marta Puig") =>
