@@ -1,6 +1,7 @@
 export { runCli } from "./cli.js";
 export type { CliDeps } from "./cli.js";
 export { generatePassword, quoteIdent } from "./identifiers.js";
+export { newBreakGlassKeyName } from "./server-key-name.js";
 export { generateKeyRing, runKeyring } from "./keyring-command.js";
 export type { GeneratedKeyRing } from "./keyring-command.js";
 export type { ProvisioningIo } from "./io.js";

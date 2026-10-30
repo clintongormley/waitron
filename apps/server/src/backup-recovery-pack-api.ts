@@ -25,7 +25,7 @@ import {
   type TotpKeyRing,
 } from "@waitron/identity";
 import type { ProvisionedNode, WaitronModule } from "@waitron/module";
-import { generatePassword } from "@waitron/provisioning";
+import { generatePassword, newBreakGlassKeyName } from "@waitron/provisioning";
 import { renderRecoveryPack, type PackLocale } from "@waitron/recovery-pack";
 import {
   createErrorBoundary,
@@ -35,7 +35,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
-import { newBreakGlassKeyName, takenKeyNames } from "./break-glass.js";
+import { takenKeyNames } from "./break-glass.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,

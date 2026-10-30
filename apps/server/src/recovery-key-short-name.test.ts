@@ -8,7 +8,8 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mintBreakGlassKey, newBreakGlassKeyName, verifyBreakGlass } from "./break-glass.js";
+import { newBreakGlassKeyName } from "@waitron/provisioning";
+import { mintBreakGlassKey, verifyBreakGlass } from "./break-glass.js";
 
 vi.mock("node:crypto", async (original) => {
   const actual = await original<typeof import("node:crypto")>();

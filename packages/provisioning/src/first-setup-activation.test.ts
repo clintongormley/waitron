@@ -8,7 +8,7 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { TEST_MIGRATIONS } from "@waitron/fiscal-verifactu/test/migrations.js";
 import { AppError } from "@waitron/shared";
 import { initialSetupFor } from "@waitron/module";
-import { withTransaction, stampDeployment, nodeRoles } from "@waitron/db";
+import { withTransaction, stampDeployment, nodeRoles, readRecoveryPacks } from "@waitron/db";
 import { createFirstSetupRuntime } from "./first-setup-runtime.js";
 import { prepareCommandPastWaits } from "../test/settle-wait.js";
 import { firstSetupModuleContext } from "./first-setup-module-context.js";
@@ -651,6 +651,48 @@ it("retains the caller's legacy key adapter for a module without the recovery-do
   );
   expect(f.steps).toEqual(["selection", "identity", "settings", "trading", "clear"]);
   expect((await f.runtime.store.read())!.status).toBe("complete");
+});
+
+it("publication records recovery pack 1, received, for the node it sets up", async () => {
+  const f = await publicationFixture();
+  const stage = await f.runtime.keys.readStage(f.owner);
+  await f.publish(f.state, f.checked);
+  expect(await readRecoveryPacks(venue.db, f.checked.venue.nodeId)).toMatchObject([
+    {
+      number: 1,
+      madeBy: null,
+      receivedAt: expect.any(Date),
+      parts: [
+        { part: "bucket", state: "not-set-up" },
+        { part: "archives", state: "not-set-up" },
+        { part: "server-key", state: "included", keyName: stage.name, carriedKey: true },
+      ],
+    },
+  ]);
+});
+
+it("a module without the recovery-document seat records no recovery pack", async () => {
+  const f = await publicationFixture();
+  const modules = f.runtime.modules.map((module) => {
+    const seat = module.provisioning?.initialSetup;
+    if (seat === undefined) return module;
+    const { recoveryDocument: _, ...legacy } = seat;
+    void _;
+    return { ...module, provisioning: { ...module.provisioning, initialSetup: legacy } };
+  });
+  await f.runtime.coordinator.run((hold) =>
+    publishCheckedFirstSetup(
+      { ...f.runtime, modules },
+      { ...f.publication, installLegacyKey: async () => {} },
+      f.state,
+      f.checked,
+      f.owner,
+      f.digest,
+      hold,
+    ),
+  );
+  expect((await f.runtime.store.read())!.status).toBe("complete");
+  expect(await readRecoveryPacks(venue.db, f.checked.venue.nodeId)).toEqual([]);
 });
 
 async function finishFixture(recover = true) {
