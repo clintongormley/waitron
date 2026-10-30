@@ -650,21 +650,23 @@ The comment (`packages/db/src/schema/drawer-opens.ts:50-51`) omits a cash refund
   (`apps/server/src/receipt-print.ts:622`, `:645-653`). Correct the comment to name every reason
   that sets it.
 
-## A query with tens of thousands of bound values crashes before it reaches the database
+## A table round of about a thousand lines is refused "too many SQL variables"
 
-Drizzle's session (`drizzle-orm/better-sqlite3/session.js`) and the store's adapter
-  (`packages/store/src/node-sqlite-adapter.ts`, `stmt.all(...bind(params))`) each pass every bound
-  value as a separate argument, and an `inArray` over 60,000 ids answered `RangeError: Maximum
-  call stack size exceeded` while 57,500 passed (macOS, Node 26; the limit follows the stack
-  size). Any query that binds one value per row can still meet it.
+The SQLite inside the official Node builds (CI, and the box's `node:26` image) binds at most 32,766
+values in one statement; a Homebrew Node on macOS allows 250,000, so a local run can pass what CI
+and the box refuse. A803 slice 1 writes one line per portion, and a line binds up to 33 values, so
+one insert holds about 990 lines. A1208 splits the counter's writes and `registerPortions` with
+`insertInChunks` (`packages/db/src/insert-in-chunks.ts`). The table round's line insert,
+`insertTabRound` (`apps/server/src/working-order.ts`), is still one statement: placing a party round
+of 30 lines of 99 through `submitGroups` was refused "too many SQL variables" under the official
+Node v26.13.0, and 11 lines of 99 passed (A1208's finishing review, 2026-10-30). It uses
+`.returning`, so splitting it means gathering the returned rows from every part.
+`copyRecalledPortion` (`apps/server/src/draft-recall.ts`) has the same one-statement shape (read,
+not run). The 99 limit (`tab.portions_too_many`) is per dish, so it does not bound a round.
 
-Since A803 slice 1 a table send writes one line per portion. Run on that branch (2026-10-29, a
-throwaway case in `order-drafts.db.test.ts`): 999 burgers with a sauce (1,998 lines) were written;
-1,500 with a sauce (3,000 lines), and 3,000, 5,000 or 10,000 plain, failed with "Maximum call stack
-size exceeded" in the adapter's insert. The slice refuses more than 99 of one dish in one write
-(`tab.portions_too_many`), but per dish, so a send of about 31 different dishes at 99 each (about
-15 with an extra each) could still reach the limit — the build review's estimate, not measured.
-The review's suggested fix: insert in chunks in `node-sqlite-adapter.ts`.
+Separately, drizzle's session and the store's adapter (`packages/store/src/node-sqlite-adapter.ts`)
+pass every bound value as a separate argument, and an `inArray` over 60,000 ids answered
+`RangeError: Maximum call stack size exceeded` on Homebrew's Node, where 57,500 passed.
 
 ## Decisions and deliberate limits
 

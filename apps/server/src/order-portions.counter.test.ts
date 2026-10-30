@@ -447,9 +447,7 @@ function linesOfAtMost99(count: number, of: (quantity: string) => TabRoundLine[]
   return lines;
 }
 
-// Node's own SQLite binds at most 32,766 values per statement. Written in one statement each, the
-// walk-up's 1,630 lines and their sale contexts, and the saved order's 2,002 lines, were refused
-// "too many SQL variables" on Node v26.13.0.
+// Node's own SQLite binds at most 32,766 values per statement; each case writes more than that to one table.
 describe("A1208 a counter order of more portions than one statement can bind", () => {
   it("A1208 a walk-up of 815 burgers with cheese stores 1,630 lines and files every portion", async () => {
     const id = await walkUp(linesOfAtMost99(815, burgersWithCheese), "2999.20");

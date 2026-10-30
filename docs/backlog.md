@@ -6075,9 +6075,9 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
 - **Go-live day steps.**
   [Detail](backlog/architecture.md#go-live-day-steps).
 
-- **A query with tens of thousands of bound values crashes before it reaches the database**
-  A803 slice 1's limit of 99 portions is per dish, so one table send of many dishes can still
-  reach it (not measured). [Detail](backlog/architecture.md#a-query-with-tens-of-thousands-of-bound-values-crashes-before-it-reaches-the-database)
+- **A table round of about a thousand lines is refused "too many SQL variables"**
+  `insertTabRound` writes a round's lines in one statement; 30 lines of 99 were refused under the
+  official Node. [Detail](backlog/architecture.md#a-table-round-of-about-a-thousand-lines-is-refused-too-many-sql-variables)
 
 - **A760. Squash every migration set before go-live.**
   [Detail](backlog/architecture.md#a760-squash-every-migration-set-before-go-live)
