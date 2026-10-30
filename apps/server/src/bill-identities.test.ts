@@ -34,6 +34,7 @@ import {
   partyRow,
   partyAt,
   pay,
+  placeByHand,
   revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
@@ -323,6 +324,23 @@ describe("A803 bill numbers: move bill", () => {
     await everyPartyBillNumbered();
   });
 
+  it("a bill moved with Merge the bills to a table whose main bill is presented stays separate and takes that table's next number", async () => {
+    const from = await tableWithBills("M3b", 2);
+    const to = await seat(v, await v.table("M3b to"));
+    await order(v, to.tabId, "Agua");
+    await placeByHand(v, to.tabId);
+    const toTable = (await activeTablesOf(v, to.partyId))[0]!;
+
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+
+    expect(moved).toMatchObject({ merged: false, billId: from.bills[1] });
+    expect(await numbersOf(v, to.partyId)).toEqual([
+      [to.tabId, 1, null],
+      [from.bills[1], 2, null],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
   it("a counter order moved to a table takes that table's next number, with no name", async () => {
     const to = await tableWithBills("M4", 2);
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
@@ -508,7 +526,8 @@ describe("A803 bill numbers: tables", () => {
 
   it("joining a seated table gives its bills our next numbers in their own number order, names kept", async () => {
     const ours = await tableWithBills("S3 ours", 4);
-    const theirs = await tableWithBills("S3 theirs", 2);
+    // Four bills, so an order by bill id rather than by number shows here nearly every run.
+    const theirs = await tableWithBills("S3 theirs", 4);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
     await nameBill(theirs.bills[0]!, "Clint");
     const options = await tableOptions(ours.partyId, theirs.partyId);
@@ -518,6 +537,8 @@ describe("A803 bill numbers: tables", () => {
     expect((await numbersOf(v, ours.partyId)).slice(4)).toEqual([
       [theirs.bills[0], 5, "Clint"],
       [theirs.bills[1], 6, null],
+      [theirs.bills[2], 7, null],
+      [theirs.bills[3], 8, null],
     ]);
     expect(await numbersOf(v, theirs.partyId)).toEqual([]);
     await everyPartyBillNumbered();
@@ -593,6 +614,63 @@ describe("A803 bill numbers: tables", () => {
     await inTx(v, (tx) => moveGuests(tx, v.cfg, ours.partyId, moveTo, options));
 
     expect(await billNumberTables(v)).toEqual(before);
+    await everyPartyBillNumbered();
+  });
+
+  it("splitting off a table with a presented bill makes it Bill 1 there, and the staying party never gives its number again", async () => {
+    const t1 = await v.table("S9 a");
+    const t2 = await v.table("S9 b");
+    const { partyId, tabId } = await seat(v, t1);
+    await join(v, partyId, t2);
+    await order(v, tabId, "Agua", "Flan", "Caña");
+    const second = await split(v, partyId, tabId, [1]);
+    const third = await split(v, partyId, tabId, [2]);
+    await placeByHand(v, third);
+    const command = await commandFor(v, partyId);
+
+    const leaving = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t1, third, command));
+
+    expect(leaving.mainBillId).toBeNull();
+    expect(await numbersOf(v, leaving.partyId)).toEqual([[third, 1, null]]);
+    expect(await numbersOf(v, partyId)).toEqual([
+      [tabId, 1, null],
+      [second, 2, null],
+    ]);
+    expect(await allocationsOf(v, partyId)).toEqual([
+      [1, tabId],
+      [2, second],
+      [3, third],
+    ]);
+    await everyPartyBillNumbered();
+  });
+
+  it("a paid bill left on a party merged twice is numbered in the last party that shows it", async () => {
+    const aTable = await v.table("S10 a");
+    const bTable = await v.table("S10 b");
+    const cTable = await v.table("S10 c");
+    const a = await seat(v, aTable);
+    const b = await seat(v, bTable);
+    const c = await seat(v, cTable);
+    await order(v, a.tabId, "Burger", "Vino");
+    await order(v, b.tabId, "Agua");
+    await order(v, c.tabId, "Agua");
+    const open = await split(v, a.partyId, a.tabId, [2]);
+    await pay(v, a.tabId, "12.00");
+    const ontoB = await tableOptions(a.partyId, b.partyId);
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, a.partyId, bTable, ontoB));
+    const ontoC = await tableOptions(b.partyId, c.partyId);
+
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, b.partyId, cTable, ontoC));
+
+    expect((await billRow(v, a.tabId)).partyId).toBe(a.partyId);
+    expect(await numbersOf(v, c.partyId)).toEqual([
+      [c.tabId, 1, null],
+      [b.tabId, 2, null],
+      [a.tabId, 3, null],
+      [open, 4, null],
+    ]);
+    expect(await numbersOf(v, b.partyId)).toEqual([]);
+    expect(await numbersOf(v, a.partyId)).toEqual([]);
     await everyPartyBillNumbered();
   });
 
