@@ -211,8 +211,14 @@ describe("demo seed end-to-end", () => {
       !p.offeredModifiers.some(
         (entry) => entry.kind === "options" || (entry.kind === "extras" && entry.minPicks > 0),
       );
+    // Products seeded under the frozen clock share one creation time, so the list's order among
+    // them follows their random ids: pick the second menu's dish by what it is, sold in whole
+    // portions, which a counter order stores one line per dish.
+    const wholePortions = ({ unit }: (typeof read.products)[number]): boolean =>
+      unit.hardwareUnit === null && unit.precision === 0 && unit.measure !== true;
     const casaProduct = casaProducts.find(optionFree) ?? casaProducts[0]!;
-    const diaProduct = diaProducts.find(optionFree) ?? diaProducts[0]!;
+    const diaProduct = diaProducts.find((p) => optionFree(p) && wholePortions(p))!;
+    expect(diaProduct).toBeDefined();
 
     expect(read.image).not.toBeNull();
     expect(read.image!).toMatch(MEDIA_FILENAME);
