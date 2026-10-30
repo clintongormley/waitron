@@ -1263,9 +1263,10 @@ export const en = {
   "table.name_title": "Name the party at {tables}",
   "table.bill_name_title": "Name this bill: {bill}",
   "table.bill_name_taken_over":
-    "{name} has dishes on this bill that are not sent yet, so its name was not saved. Take over their order to name it.",
+    "{name} has dishes on this bill that are not sent yet, so the bill's name was not saved. Choose Take over draft to name it now, or name it once those dishes are sent.",
   "table.bill_name_taken_over_unnamed":
-    "Someone else has dishes on this bill that are not sent yet, so its name was not saved. Take over their order to name it.",
+    "Someone else has dishes on this bill that are not sent yet, so the bill's name was not saved. Choose Take over draft to name it now, or name it once those dishes are sent.",
+  "table.bill_name_not_open": "That bill is no longer open, so its name was not saved.",
   "table.name_label": "Name",
   "table.name_too_long": "Use at most 40 characters",
   "table.name_save": "Save",
@@ -3041,9 +3042,10 @@ export const es: Record<StringKey, string> = {
   "table.name_title": "Poner nombre a los clientes de {tables}",
   "table.bill_name_title": "Poner nombre a esta cuenta: {bill}",
   "table.bill_name_taken_over":
-    "{name} tiene platos sin enviar en esta cuenta, así que no se ha guardado su nombre. Toma su pedido para ponerle nombre.",
+    "{name} tiene platos sin enviar en esta cuenta, así que no se ha guardado el nombre de la cuenta. Elige Tomar el pedido para ponérselo ahora, o pónselo cuando se envíen esos platos.",
   "table.bill_name_taken_over_unnamed":
-    "Otra persona tiene platos sin enviar en esta cuenta, así que no se ha guardado su nombre. Toma su pedido para ponerle nombre.",
+    "Otra persona tiene platos sin enviar en esta cuenta, así que no se ha guardado el nombre de la cuenta. Elige Tomar el pedido para ponérselo ahora, o pónselo cuando se envíen esos platos.",
+  "table.bill_name_not_open": "Esa cuenta ya no está abierta, así que no se ha guardado el nombre.",
   "table.name_label": "Nombre",
   "table.name_too_long": "Usa como máximo 40 caracteres",
   "table.name_save": "Guardar",

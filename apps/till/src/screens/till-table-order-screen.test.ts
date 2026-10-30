@@ -5984,6 +5984,14 @@ describe("till-table-order-screen", () => {
         expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
       });
 
+      it("does not offer Name this bill while the bill on screen is not in the party's list", async () => {
+        const { el } = await mount({ ...onCheck(), bills: [tabBill, paidBill] });
+        await toMenu(el);
+
+        expect(el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
+      });
+
       it("opens the window headed with the bill on screen and its stored name in the field", async () => {
         const { el } = await mount(onCheck());
 

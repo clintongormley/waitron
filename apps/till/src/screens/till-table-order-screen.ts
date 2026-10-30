@@ -1409,6 +1409,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
+  /** Moved on by the app when a refusal is lifted by taking over another person's order: on a
+   * narrow screen, Review opens so that order and its Take over button are on view. */
+  @property({ attribute: false }) revealOtherDrafts = 0;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
@@ -1987,6 +1990,13 @@ export class TillTableOrderScreen extends LitElement {
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
       this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
     }
+    if (
+      changed.get("revealOtherDrafts") !== undefined &&
+      this.revealOtherDrafts !== changed.get("revealOtherDrafts") &&
+      !this.wide &&
+      !this.reviewing
+    )
+      void this.#openReview();
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }

@@ -3082,6 +3082,7 @@ export class TillApp extends LitElement {
   /** A name the server refused for the party, and why, which the table screen shows beside its field. */
   @state() private nameRefusal: { name: string; message: string } | null = null;
   @state() private billNameRefusal: { billId: string; name: string; message: string } | null = null;
+  @state() private otherDraftsRevealed = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
@@ -15441,10 +15442,7 @@ export class TillApp extends LitElement {
   }
 
   /** Sent with the party the screen shows, never the bill's own `partyId`: a paid bill a merged
-   * party left behind still names the closed party. A refusal of the name itself goes back to that
-   * bill's window while the waiter is still on it. Another person's unsent dishes holding the bill
-   * are said with the take-over that lifts them, and the drafts are read again so their order shows
-   * with its Take over button. */
+   * party left behind still names the closed party. */
   async #onNameBill(event: Event): Promise<void> {
     const { billId, name } = (event as CustomEvent<{ billId: string; name: string | null }>).detail;
     const party = this.orderParty;
@@ -15475,7 +15473,7 @@ export class TillApp extends LitElement {
         this.errorKey = { billNameTakenOver: refused.ownerName ?? "" };
       else if (refused?.code === "draft.out_of_date") this.errorKey = { code: refused.code };
       else if (refused?.code === "tab.not_open") {
-        this.errorKey = { code: refused.code };
+        this.errorKey = "table.bill_name_not_open";
         await this.#loadPartyBills();
         return;
       } else {
@@ -15483,6 +15481,7 @@ export class TillApp extends LitElement {
         return;
       }
       await this.#refreshBillDraft();
+      if (live() && refused?.code === "draft.taken_over") this.otherDraftsRevealed += 1;
       return;
     }
     if (live()) await this.#loadPartyBills();
@@ -18728,6 +18727,7 @@ export class TillApp extends LitElement {
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
       .billNameRefusal=${this.billNameRefusal}
+      .revealOtherDrafts=${this.otherDraftsRevealed}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
       .busy=${this.submitting || this.invoiceRecipientReading}
@@ -18863,6 +18863,7 @@ export class TillApp extends LitElement {
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
           .billNameRefusal=${this.billNameRefusal}
+          .revealOtherDrafts=${this.otherDraftsRevealed}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
           .busy=${this.submitting || this.invoiceRecipientReading}
