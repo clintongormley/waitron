@@ -1,8 +1,16 @@
 import { setImmediate as yieldTurn } from "node:timers/promises";
 import { randomUUID } from "node:crypto";
 import { eq, inArray, sql } from "drizzle-orm";
+import { adjustmentLines, adjustments } from "@waitron/adjustments";
 import { createExtraList, createProduct, writeProductModifiers } from "@waitron/catalogue";
-import { locationCatalogues, saleLinePortions, saleLines, sales, workingOrders } from "@waitron/db";
+import {
+  locationCatalogues,
+  orderPortionEvents,
+  saleLinePortions,
+  saleLines,
+  sales,
+  workingOrders,
+} from "@waitron/db";
 import { withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -10,6 +18,7 @@ import { insertCapturedPayment, type PaymentProvider } from "@waitron/payments";
 import { decimal } from "@waitron/shared";
 import { afterEach, describe, expect, it } from "vitest";
 import { readBillEditState } from "./bill-editing.js";
+import { carryLineReductions } from "./order-portions.js";
 import { inTx, provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { createTable } from "./testing/live-table.js";
 import { openPartyTab } from "./testing/serve-line.js";
@@ -488,5 +497,113 @@ describe("A1208 a counter order of more portions than one statement can bind", (
     expect(lines).toHaveLength(2002);
     expect(new Set(lines.map((line) => line.portionId)).size).toBe(2002);
     expect(lines.every((line) => line.portionId !== null && line.quantity === 1000)).toBe(true);
+  });
+
+  it("A1208 a parked order of 17 croquetas each raised to 99 copies every sale context", async () => {
+    const { id } = await park(croquetas("17"));
+    const stored = linesOf(id);
+    const [revision, expectedEdit] = await inTx(venue, async (tx) => [
+      await readOrderRevision(tx, id),
+      await readBillEditState(tx, id),
+    ]);
+
+    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+      operatorId: venue.operatorId,
+      expectedEdit,
+      revision,
+      lines: stored.map((line) => ({ workingOrderLineId: line.id, ...croquetas("99")[0]! })),
+    });
+
+    const lines = linesOf(id);
+    expect(lines).toHaveLength(17 * 99);
+    expect(new Set(lines.map((line) => line.portionId)).size).toBe(17 * 99);
+    const [contexts] = venue.db.all<{ count: number }>(
+      sql`select count(*) as count from working_line_contexts c
+          join working_order_lines l on l.id = c.working_order_line_id
+          where l.working_order_id = ${id}`,
+    );
+    expect(contexts!.count).toBe(17 * 99);
+  });
+
+  it("A1208 a parked order of 4,700 croquetas saved down to one records a cancellation for each other", async () => {
+    const { id } = await park(linesOfAtMost99(4700, croquetas));
+    const [kept, ...removed] = linesOf(id);
+    const [revision, expectedEdit] = await inTx(venue, async (tx) => [
+      await readOrderRevision(tx, id),
+      await readBillEditState(tx, id),
+    ]);
+
+    await updateHeldOrder({ db: venue.db }, venue.cfg, id, {
+      operatorId: venue.operatorId,
+      expectedEdit,
+      revision,
+      lines: [{ workingOrderLineId: kept!.id, ...croquetas("1")[0]! }],
+    });
+
+    expect(linesOf(id).map((line) => line.id)).toEqual([kept!.id]);
+    const cancelled = await venue.db
+      .select({ portionId: orderPortionEvents.portionId })
+      .from(orderPortionEvents)
+      .where(eq(orderPortionEvents.fromOrderId, id));
+    expect(cancelled.map((event) => event.portionId).sort()).toEqual(
+      sorted(removed.map((line) => line.portionId)),
+    );
+  });
+
+  it("A1208 carryLineReductions gives each of 6,554 copies the reduction its line carries", async () => {
+    const { id } = await park(croquetas("1"));
+    const [croqueta] = linesOf(id);
+    const copies = Array.from({ length: 6554 }, () => ({ from: croqueta!.id, to: randomUUID() }));
+
+    const adjustmentId = await inTx(venue, async (tx) => {
+      const [adjustment] = await tx
+        .insert(adjustments)
+        .values({
+          workingOrderId: id,
+          splits: [],
+          reasonId: randomUUID(),
+          reasonName: "Regular",
+          policySnapshot: {
+            kind: "comp",
+            actions: ["discount_amount"],
+            maxPercentBp: null,
+            maxAmount: null,
+            applyRoles: [],
+            approverRoles: [],
+            noteRequired: false,
+          },
+          action: "discount_amount",
+          beforeAmount: 333,
+          afterAmount: 300,
+          reduction: 33,
+          nominalValue: 333,
+          requestedBy: venue.operatorId,
+        })
+        .returning({ id: adjustments.id });
+      await tx
+        .insert(adjustmentLines)
+        .values({
+          adjustmentId: adjustment!.id,
+          lineId: croqueta!.id,
+          reduction: 33,
+          quantity: 1000,
+        });
+      await carryLineReductions(tx, copies);
+      return adjustment!.id;
+    });
+
+    const carried = await venue.db
+      .select({
+        lineId: adjustmentLines.lineId,
+        reduction: adjustmentLines.reduction,
+        quantity: adjustmentLines.quantity,
+      })
+      .from(adjustmentLines)
+      .where(eq(adjustmentLines.adjustmentId, adjustmentId));
+    expect(carried).toHaveLength(6555);
+    expect(new Set(carried.map((row) => row.lineId))).toEqual(
+      new Set([croqueta!.id, ...copies.map((copy) => copy.to)]),
+    );
+    expect(carried.every((row) => row.reduction === 33 && row.quantity === 1000)).toBe(true);
   });
 });

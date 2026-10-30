@@ -1536,7 +1536,7 @@ export async function copyWorkingLineContexts(
     const context = byLine.get(from);
     return context === undefined ? [] : [{ ...context, workingOrderLineId: to }];
   });
-  if (copies.length > 0) await tx.insert(workingLineContexts).values(copies);
+  await insertInChunks(tx, workingLineContexts, copies);
 }
 
 type ZoneKeepOpenState = NonNullable<ZoneMenuState["service"]["zoneKeepOpen"]>;

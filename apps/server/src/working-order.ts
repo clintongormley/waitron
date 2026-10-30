@@ -189,6 +189,7 @@ import {
   workingOrders,
   workingOrderStatus,
   insertInChunks,
+  statementChunks,
 } from "@waitron/db";
 import type { Database, Transaction } from "@waitron/db";
 import {
@@ -1996,14 +1997,18 @@ export async function insertSplitExtras(
   });
   if (values.length === 0) return [];
   try {
-    const inserted = await tx.insert(ticketItems).values(values).returning({
-      id: ticketItems.id,
-      workingOrderLineId: ticketItems.workingOrderLineId,
-      stationId: ticketItems.stationId,
-      firedAt: ticketItems.firedAt,
-      quantity: ticketItems.quantity,
-      madeHere: ticketItems.madeHere,
-    });
+    const inserted = [];
+    for (const chunk of statementChunks(ticketItems, values))
+      inserted.push(
+        ...(await tx.insert(ticketItems).values(chunk).returning({
+          id: ticketItems.id,
+          workingOrderLineId: ticketItems.workingOrderLineId,
+          stationId: ticketItems.stationId,
+          firedAt: ticketItems.firedAt,
+          quantity: ticketItems.quantity,
+          madeHere: ticketItems.madeHere,
+        })),
+      );
     for (const row of inserted) if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);
     await attachKitchenAllergyCopies(tx, inserted, keepAllergies);
     await freezeKitchenAllergies(
@@ -2295,16 +2300,17 @@ export async function fireLines(
   await stampSent(tx, orderId, sentLineIds, firedAt);
   // Printing from `.returning()`, not a re-query: a re-query would sweep up earlier rounds'
   // already-fired items and reprint them.
-  const inserted =
-    values.length === 0
-      ? []
-      : await tx.insert(ticketItems).values(values).returning({
-          id: ticketItems.id,
-          workingOrderLineId: ticketItems.workingOrderLineId,
-          stationId: ticketItems.stationId,
-          firedAt: ticketItems.firedAt,
-          madeHere: ticketItems.madeHere,
-        });
+  const inserted = [];
+  for (const chunk of statementChunks(ticketItems, values))
+    inserted.push(
+      ...(await tx.insert(ticketItems).values(chunk).returning({
+        id: ticketItems.id,
+        workingOrderLineId: ticketItems.workingOrderLineId,
+        stationId: ticketItems.stationId,
+        firedAt: ticketItems.firedAt,
+        madeHere: ticketItems.madeHere,
+      })),
+    );
 
   for (const row of inserted) {
     if (row.madeHere) cfg.madeHereSink?.add(row.workingOrderLineId);

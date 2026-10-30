@@ -2,7 +2,12 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
-import { insertInChunks, rowsPerStatement, SQL_VARIABLE_LIMIT } from "./insert-in-chunks.js";
+import {
+  insertInChunks,
+  rowsPerStatement,
+  SQL_VARIABLE_LIMIT,
+  statementChunks,
+} from "./insert-in-chunks.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
 import { orderPortions } from "./schema/order-portions.js";
 import { withTransaction } from "./tenancy.js";
@@ -10,7 +15,7 @@ import { useVenueDb } from "./testing/venue-db.js";
 
 describe("rowsPerStatement", () => {
   it("fits as many whole rows as the limit allows", () => {
-    expect(rowsPerStatement(33, 32766)).toBe(992);
+    expect(rowsPerStatement(7, 32766)).toBe(4680);
     expect(rowsPerStatement(5, 10)).toBe(2);
     expect(rowsPerStatement(5, 14)).toBe(2);
     expect(rowsPerStatement(5, 15)).toBe(3);
@@ -21,6 +26,29 @@ describe("rowsPerStatement", () => {
     expect(() => rowsPerStatement(5, 4)).toThrow(
       "rowsPerStatement: a row of 5 columns does not fit in 4 bound values",
     );
+  });
+});
+
+describe("statementChunks", () => {
+  it("cuts rows into runs of as many as fit the limit at one value per column, in order", () => {
+    expect(statementChunks(orderPortions, ["a", "b", "c", "d", "e"], 10)).toEqual([
+      ["a", "b"],
+      ["c", "d"],
+      ["e"],
+    ]);
+    expect(statementChunks(orderPortions, ["a", "b"], 10)).toEqual([["a", "b"]]);
+  });
+
+  it("gives no runs for no rows", () => {
+    expect(statementChunks(orderPortions, [], 10)).toEqual([]);
+  });
+
+  it("by default fills each run up to SQLite's limit", () => {
+    const rows = Array.from({ length: Math.floor(SQL_VARIABLE_LIMIT / 5) + 1 }, (_, i) => i);
+    expect(statementChunks(orderPortions, rows).map((run) => run.length)).toEqual([
+      rows.length - 1,
+      1,
+    ]);
   });
 });
 

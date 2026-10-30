@@ -226,7 +226,7 @@ export async function carryLineReductions(
   const rows = pairs.flatMap(({ from, to }) =>
     (byLine.get(from) ?? []).map((row) => ({ ...row, lineId: to })),
   );
-  if (rows.length > 0) await tx.insert(adjustmentLines).values(rows);
+  await insertInChunks(tx, adjustmentLines, rows);
 }
 
 /** The portion each of `lineIds` holds; a line holding none is absent. */
@@ -362,7 +362,7 @@ export async function recordPortionEvents(
           },
         ];
   });
-  if (rows.length > 0) await tx.insert(orderPortionEvents).values(rows);
+  await insertInChunks(tx, orderPortionEvents, rows);
 }
 
 /**

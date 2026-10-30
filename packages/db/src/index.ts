@@ -282,8 +282,8 @@ export {
   type ReservedSeriesInput,
 } from "./reserved-identity.js";
 export { allocateInvoiceNumber } from "./allocate-number.js";
-export { insertInChunks } from "./insert-in-chunks.js";
 export { allocateOrderNumber } from "./allocate-order-number.js";
+export { insertInChunks, statementChunks } from "./insert-in-chunks.js";
 export {
   billParties,
   billPartyTableLabels,
