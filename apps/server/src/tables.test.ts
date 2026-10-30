@@ -74,7 +74,7 @@ async function setupVenue(opts: { timeZone?: string } = {}): Promise<OriginConfi
   const [location] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
       timeZone,
@@ -103,7 +103,7 @@ function asApp<T>(cfg: OriginConfig, fn: (tx: Transaction) => Promise<T> | T): P
 describe("table CRUD", () => {
   it("creates a table WITH a zone and lists it (active, by label)", async () => {
     const cfg = await setupVenue();
-    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    const { id: zoneId } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
     const { id } = await asApp(cfg, (tx) => createTable(tx, cfg, { label: "12", zoneId }));
     const tables = await asApp(cfg, (tx) => listTables(tx, cfg, new Date()));
     expect(tables).toEqual([
@@ -166,34 +166,34 @@ describe("zone CRUD", () => {
   it("creates, lists (ordered by display_order, active-only), renames, deactivates a zone", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Comedor", displayOrder: 1 }),
+      createZone(tx, cfg, { name: "Dining room", displayOrder: 1 }),
     );
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza", displayOrder: 0 }));
-    // Ordered by display_order: Terraza (0) before Comedor (1).
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace", displayOrder: 0 }));
+    // Ordered by display_order: Terrace (0) before Dining room (1).
     expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
-      "Terraza",
-      "Comedor",
+      "Terrace",
+      "Dining room",
     ]);
-    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Salón", displayOrder: 2 }));
-    // Renamed and reordered (Terraza 0, Salón 2), both still active.
+    await asApp(cfg, (tx) => updateZone(tx, cfg, id, { name: "Lounge", displayOrder: 2 }));
+    // Renamed and reordered (Terrace 0, Lounge 2), both still active.
     expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual([
-      "Terraza",
-      "Salón",
+      "Terrace",
+      "Lounge",
     ]);
     await asApp(cfg, async (tx) =>
       tx.execute(sql`update floor_zones set active = false where id = ${id}`),
     );
     // Inactive hidden.
-    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terraza"]);
+    expect((await asApp(cfg, (tx) => listZones(tx, cfg))).map((z) => z.name)).toEqual(["Terrace"]);
   });
 
   it("listZones returns exactly the FloorZone shape (id/name/displayOrder/active — no createdAt)", async () => {
     const cfg = await setupVenue();
     const { id } = await asApp(cfg, (tx) =>
-      createZone(tx, cfg, { name: "Comedor", displayOrder: 3 }),
+      createZone(tx, cfg, { name: "Dining room", displayOrder: 3 }),
     );
     const [z] = await asApp(cfg, (tx) => listZones(tx, cfg));
-    expect(z).toEqual({ id, name: "Comedor", displayOrder: 3, active: true });
+    expect(z).toEqual({ id, name: "Dining room", displayOrder: 3, active: true });
   });
 
   it("hides deleted zones even when management requests inactive entries", async () => {
@@ -218,10 +218,10 @@ describe("zone CRUD", () => {
 
   it("rejects a duplicate name (zone.name_taken) and an unknown id (zone.not_found)", async () => {
     const cfg = await setupVenue();
-    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" }));
+    await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining room" }));
     await expect(
-      asApp(cfg, (tx) => createZone(tx, cfg, { name: "Comedor" })),
-    ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Comedor" } });
+      asApp(cfg, (tx) => createZone(tx, cfg, { name: "Dining room" })),
+    ).rejects.toMatchObject({ code: "zone.name_taken", params: { name: "Dining room" } });
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) => updateZone(tx, cfg, missing, { name: "X" })),
@@ -373,7 +373,7 @@ describe("zone CRUD", () => {
 
   it("updateZone rethrows a NON-unique DB error raw, not as zone.name_taken", async () => {
     const cfg = await setupVenue();
-    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terraza" }));
+    const { id } = await asApp(cfg, (tx) => createZone(tx, cfg, { name: "Terrace" }));
     // `floor_zones` declares no CHECK, so a temporary trigger supplies the non-unique refusal.
     await db.execute(sql`
       create trigger floor_zones_refuse_update before update on floor_zones
@@ -407,13 +407,13 @@ async function setupTabVenue(): Promise<{
   const [location] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
     .returning({ id: locations.id });
   const locationId = location!.id;
-  await seedKitchenStation(db, { locationId: brandLocationId(locationId) });
+  await seedKitchenStation(db, { locationId: brandLocationId(locationId), name: "Kitchen" });
   const nodeId = await seedNode(db, brandLocationId(locationId));
   const cfg: OriginConfig = {
     origin: jobOrigin("dashboard"),
@@ -425,12 +425,12 @@ async function setupTabVenue(): Promise<{
     simplifiedInvoiceLimit: null,
   };
   const { coffeeId, waterId, tableId, offers } = await withTransaction(db, async (tx) => {
-    const cat = await createCatalogue(tx, { name: "Carta" });
-    const drinks = await createCategory(tx, { name: "Bebidas" });
+    const cat = await createCatalogue(tx, { name: "Menu" });
+    const drinks = await createCategory(tx, { name: "Drinks" });
     const coffee = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
-      name: "Café",
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -438,7 +438,7 @@ async function setupTabVenue(): Promise<{
     const water = await createProduct(tx, {
       catalogueId: cat.id,
       categoryId: drinks.id,
-      name: "Agua",
+      name: "Water",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "general",

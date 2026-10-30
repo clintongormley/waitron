@@ -516,6 +516,13 @@ until A977).
   creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
   ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
   shared party venue creates.
+  The tables suite (`apps/server/src/tables.test.ts`) gives English location, zone, menu,
+  category, product and station names to what it creates, naming its kitchen station itself
+  instead of taking the shared seed's default "Cocina"; it keeps its es-ES locale and the
+  operation description "Venta en establecimiento". The receipt-lines suite
+  (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
+  keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
+  variant-name case joins.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -846,6 +853,13 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   creates, among them the administrator "Administradora" it reads as the manager, and the Spanish
   ticket words that till's es-ES venue prints, and the service-step suite the Spanish dishes its
   shared party venue creates.
+  The tables suite (`apps/server/src/tables.test.ts`) gives English location, zone, menu,
+  category, product and station names to what it creates, naming its kitchen station itself
+  instead of taking the shared seed's default "Cocina"; it keeps its es-ES locale and the
+  operation description "Venta en establecimiento". The receipt-lines suite
+  (`apps/server/src/receipt-lines.test.ts`) uses English dish, extra, unit and option samples; it
+  keeps its `es-ES` language keys, its "kg" unit and the Spanish names its two-language
+  variant-name case joins.
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
