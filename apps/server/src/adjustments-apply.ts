@@ -27,6 +27,7 @@ import {
 } from "@waitron/adjustments";
 import { staffPresentationName } from "@waitron/catalogue";
 import {
+  insertInChunks,
   nowIso,
   orderDrafts,
   orderDraftLines,
@@ -1465,7 +1466,9 @@ export async function applyAdjustment(
         preparationStarted: args.recordedPreparationStarted ?? null,
       });
       if (taken.length > 0) {
-        await tx.insert(adjustmentLines).values(
+        await insertInChunks(
+          tx,
+          adjustmentLines,
           taken.map(({ lineId, reduction, quantity }) => ({
             adjustmentId: id,
             lineId,

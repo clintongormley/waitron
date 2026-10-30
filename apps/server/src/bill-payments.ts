@@ -11,6 +11,7 @@ import {
   billPaymentLines,
   billPaymentRefunds,
   billPayments,
+  insertInChunks,
   withTransaction,
   workingOrderLines,
   workingOrders,
@@ -1121,9 +1122,11 @@ async function beginBillPayment(
     })
     .returning();
   if (items !== null) {
-    await tx
-      .insert(billPaymentLines)
-      .values(items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })));
+    await insertInChunks(
+      tx,
+      billPaymentLines,
+      items.rows.map((row) => ({ billPaymentId: payment!.id, ...row })),
+    );
   }
   await captureBillPaymentAttendance(
     tx,

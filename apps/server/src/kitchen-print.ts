@@ -2,6 +2,7 @@ import { and, eq, gt, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-or
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/sqlite-core";
 import {
+  insertInChunks,
   kitchenPrintJobLines,
   kitchenPrintJobs,
   kitchenStations,
@@ -800,9 +801,11 @@ async function enqueueKitchenJobs(
   for (const job of jobs) {
     const { jobId } = await enqueuePrintJob(tx, printCfg, job.printerId, job.bytes);
     await linkKitchenJob(tx, jobId, orderId, job.stationIds, reprint);
-    await tx
-      .insert(kitchenPrintJobLines)
-      .values(job.lineIds.map((workingOrderLineId) => ({ printJobId: jobId, workingOrderLineId })));
+    await insertInChunks(
+      tx,
+      kitchenPrintJobLines,
+      job.lineIds.map((workingOrderLineId) => ({ printJobId: jobId, workingOrderLineId })),
+    );
   }
 }
 
