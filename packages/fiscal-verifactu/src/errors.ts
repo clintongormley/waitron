@@ -61,7 +61,12 @@ declare module "@waitron/shared" {
      * reports this code rather than `sif.id_sistema_invalid`. `reason` is our own English
      * description, never the payload. */
     "sif.reservation_invalid": { reason: string };
-    "sif.allocation_invalid": { reason: string; allowedFromMs?: number };
+    "sif.allocation_invalid": {
+      reason: string;
+      allowedFromMs?: number;
+      remainingMs?: number;
+      recheckInMs?: number;
+    };
     /** A throwaway allocation was asked for where an environment is not exactly "preproduction"
      * (`environment` describes the first such value), or none was named (`"none"`). Thrown by
      * ./throwaway-allocation.ts before any key is made. */

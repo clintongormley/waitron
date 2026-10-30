@@ -67,11 +67,11 @@ const SETTLE_MS = 90_000;
 const WAIT_REUSE_MS = 60_000;
 const EPOCH_MS = Date.parse("2026-01-01T00:00:00Z");
 const END_MS = EPOCH_MS + 32 ** 5 * MINUTE_MS;
-function refuse(reason: string, allowedFromMs?: number): never {
-  throw new AppError(
-    "sif.allocation_invalid",
-    allowedFromMs === undefined ? { reason } : { reason, allowedFromMs },
-  );
+function refuse(
+  reason: string,
+  wait?: { allowedFromMs: number; remainingMs: number; recheckInMs: number },
+): never {
+  throw new AppError("sif.allocation_invalid", { reason, ...wait });
 }
 function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -454,7 +454,11 @@ export function createHourSelection(options: {
       while (used.has((targetMs - EPOCH_MS) / MINUTE_MS)) targetMs += MINUTE_MS;
       if (targetMs >= END_MS) return refuse("minute_not_later");
       if (targetMs - now > WAIT_BOUND_MS && targetMs !== settleTarget)
-        return refuse("minute_in_use", targetMs);
+        return refuse("minute_in_use", {
+          allowedFromMs: targetMs,
+          remainingMs: targetMs - now,
+          recheckInMs: targetMs - now - WAIT_BOUND_MS,
+        });
       const waiting = (wait: Wait) => {
         const timerKey = JSON.stringify([fingerprint(wait), wait.targetMs]);
         const monotonic = options.monotonicNow();

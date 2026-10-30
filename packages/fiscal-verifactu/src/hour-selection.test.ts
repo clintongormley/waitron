@@ -255,6 +255,74 @@ it("a setup whose settle-target minute is in use is refused from the minute afte
   expect(f.writes).toEqual([]);
 });
 it.each([
+  {
+    base: restore,
+    t0: "11:40:00",
+    taken: ["0CNNY"],
+    free: "11:43",
+    remaining: 180_000,
+    recheck: 30_000,
+    name: "0CNNZ",
+  },
+  {
+    base: restore,
+    t0: "11:40:45",
+    taken: ["0CNNZ"],
+    free: "11:44",
+    remaining: 195_000,
+    recheck: 45_000,
+    name: "0CNP0",
+  },
+  {
+    base: setup,
+    t0: "11:40:00",
+    taken: ["0CNNY", "0CNNZ"],
+    free: "11:44",
+    remaining: 240_000,
+    recheck: 90_000,
+    name: "0CNP0",
+  },
+  {
+    base: binding,
+    t0: "11:40:00",
+    taken: ["0CNNW", "0CNNX", "0CNNY"],
+    free: "11:43",
+    remaining: 180_000,
+    recheck: 30_000,
+    name: "0CNNZ",
+  },
+])(
+  "a $base.action refused for a minute in use says when the name will be taken and when to check again",
+  async ({ base, t0, taken, free, remaining, recheck, name }) => {
+    const f = fixture();
+    const start = Date.parse(`2026-10-16T${t0}Z`);
+    const allowedFromMs = Date.parse(`2026-10-16T${free}:00Z`);
+    f.facts = {
+      ...f.facts,
+      history: [{ reference: "venue", complete: true, records: used(...taken) }],
+    };
+    f.at(start, 0);
+    const refused = await f.run(base).catch((error: unknown) => error);
+    expect((refused as { params?: unknown }).params).toEqual({
+      reason: "minute_in_use",
+      allowedFromMs,
+      remainingMs: remaining,
+      recheckInMs: recheck,
+    });
+    f.at(start + recheck - 1, recheck - 1);
+    await expect(f.run(base)).rejects.toMatchObject(refusal("minute_in_use"));
+    expect(f.writes).toEqual([]);
+    f.at(start + recheck, recheck);
+    expect(await f.run(base)).toEqual({
+      status: "waiting",
+      targetMs: allowedFromMs,
+      remainingMs: remaining - recheck,
+    });
+    f.at(allowedFromMs, remaining);
+    expect(await f.run(base)).toMatchObject({ status: "selected", identity: name });
+  },
+);
+it.each([
   ["0CNNY", "2026-10-16T11:41:50Z", 110_000, "2026-10-16T11:43:00Z", 70_000],
   ["0CNNZ", "2026-10-16T11:43:00Z", 180_000, "2026-10-16T11:44:00Z", 60_000],
 ])(
