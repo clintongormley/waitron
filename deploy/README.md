@@ -376,39 +376,34 @@ the box had just been installed. Use it to get a demo or test box back to a know
 recovery tool for a box holding real trading data — see the refusal below.
 
 ```bash
-sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate, the start-again note and records, and the files a Move set aside
+sudo bash waitron.sh reset          # wipe the database and settings, keep the certificate, the start-again records, and the files a Move set aside
 sudo bash waitron.sh reset --all    # also wipe those, so a new certificate is minted on next boot
 ```
 
-Both forms wipe every volume in the table above. Plain `reset` keeps five things inside the box's
+Both forms wipe every volume in the table above. Plain `reset` keeps four things inside the box's
 `state` volume:
 
 - `tls/`, which holds the certificate authority the box's devices already trust and the box's own
   certificate signed by it. Because that folder survives, a device that has already been told to
   trust this box does not need to trust it again after a plain `reset`.
-- `first-setup-start-again.json`, the start-again note: the earliest moment a later invoice
-  series name may be taken after a first setup that someone abandoned with **Start again**, and
-  the last name that setup chose. When a record of that setup's names was damaged, the note may hold
-  no name, only a moment worked out from the setup's file times. The box never issues a
-  production series name before that moment, so keeping the note stops a reset box from reusing
-  a name.
 - `first-setup-start-again-confirmations/`, one small record for each Start again that someone
-  confirmed while the venue database was missing, that discarded a stopped backup recovery, or
-  that went past a damaged record of the invoice series names the box chose: who confirmed, when,
-  and what the repair page showed them.
+  confirmed while the venue database was missing, or that discarded a stopped backup recovery: who
+  confirmed, when, and what the repair page showed them.
 - `first-setup-start-again-choices/`, one small record for each Keep or Move choice someone made
   at Start again.
 - `first-setup-set-aside/`, the files a Move set aside rather than deleted.
 
-`reset --all` removes the whole `state` volume, those five included, so the box mints a brand-new
+`reset --all` removes the whole `state` volume, those four included, so the box mints a brand-new
 certificate authority on its next boot and every device has to go through the trust step again. That includes any device with a dashboard or till tab left open across the reset:
 take it through the trust step, then reopen the dashboard or till. Neither form touches `.env`, so if
 a branch install pinned an image there, the box comes back on that same image. Only the data in the
 volumes is wiped, and that includes the venue's databases, because they live in the `state` volume.
 
-A reset during an unfinished first setup forgets the series name that setup chose; the box's clock
-check still guards it (outside the preproduction throwaway, a new name is the current UTC minute,
-taken only after a clock on another machine agrees with the box's within 30 seconds).
+A reset during an unfinished first setup forgets the series name that setup chose, as Start again
+does; the clock check and setup's 90–150 second wait still guard it (outside the preproduction
+throwaway, a new name is the current UTC minute, taken only after a clock on another machine agrees
+with the box's within 30 seconds), unless the box and the machine that confirms its clock are wrong
+by the same amount.
 
 At a terminal, `reset` asks you to type the word `reset` to confirm before it wipes anything; run
 without a terminal (an unattended script) it needs `--yes` instead.
@@ -445,7 +440,7 @@ It is the way to put a branch on a test box whose database that branch cannot us
 
 ```bash
 sudo bash waitron.sh --reset install <branch-or-ref>
-sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate, the start-again note and records, and the files a Move set aside
+sudo bash waitron.sh --reset --all install <branch-or-ref>   # also wipe the certificate, the start-again records, and the files a Move set aside
 ```
 
 The full form is `waitron.sh --reset [--all] [--yes] [--force-production] install [ref]`. The script

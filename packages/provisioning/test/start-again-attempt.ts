@@ -6,7 +6,6 @@ import {
   startAgainMarkerFor,
   writeStartAgainMarker,
 } from "../src/first-setup-start-again-deletion.js";
-import { raiseStartAgainNote } from "../src/first-setup-start-again-note.js";
 import {
   createFirstSetupCoordinator,
   createFirstSetupStore,
@@ -71,15 +70,14 @@ function frozenAttempt(passwordHash: string): FirstSetupFrozen {
  * A first setup claimed through `createFirstSetupStore(...).claim(...)`, whose `first-setup.json`
  * `parseFirstSetupState` accepts and whose `ownerVerifier` is `hashPassword(START_AGAIN_ADMIN_PASSWORD)`,
  * then A1042's marker over it: the box a cut left between the marker and the deletion. `before` runs
- * after the claim and before the marker, for files the attempt itself wrote (they are marked); `note`
- * raises a note first. `base` is an empty scratch folder the caller made and removes; the roots are
- * `<base>/venue` and `<base>/state`.
+ * after the claim and before the marker, for files the attempt itself wrote (they are marked).
+ * `base` is an empty scratch folder the caller made and removes; the roots are `<base>/venue` and
+ * `<base>/state`.
  */
 export async function startAgainAttempt(
   base: string,
   options: {
     before?: (roots: { venueDir: string; stateDir: string }) => Promise<void>;
-    note?: { floorMs: number; lastName: string; module: string };
   } = {},
 ): Promise<StartAgainAttempt> {
   const ownerVerifier = hashPassword(START_AGAIN_ADMIN_PASSWORD);
@@ -98,7 +96,6 @@ export async function startAgainAttempt(
     venueDir: join(base, "venue"),
     stateDir: join(base, "state"),
   });
-  if (options.note !== undefined) await raiseStartAgainNote(roots.stateDir, options.note);
   await options.before?.(roots);
   await writeStartAgainMarker(
     roots,

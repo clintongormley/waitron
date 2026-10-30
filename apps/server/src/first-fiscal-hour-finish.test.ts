@@ -49,11 +49,7 @@ import { seedTermZeroMembership } from "./membership-seed.js";
 import { parseEnvFile } from "./env-file.js";
 import type { SetupDeps } from "./setup-api.js";
 import { keepHourRecoveryDocument } from "../test/hour-recovery-delivery.js";
-import {
-  expectStartAgainDeleted,
-  startAgainNoteName,
-  startAgainUnchanged,
-} from "../test/start-again-deleted.js";
+import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 import {
   createFakeTimersHourClock,
   selectPastWaits,
@@ -288,15 +284,11 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
     revision: before.inspection.revision!,
     ownerGeneration: before.inspection.ownerGeneration!,
   };
-  const abandoned = (
-    firstSetupModuleContext((await f.host.store.read())!, MODULE).request as { identity: string }
-  ).identity;
   await actions.startAgainFirstSetup(restart as Parameters<typeof actions.startAgainFirstSetup>[0]);
   await expect(
     readFile(join(f.stateDir, "module-preparation-state.json"), "utf8"),
   ).rejects.toMatchObject({ code: "ENOENT" });
   await expectStartAgainDeleted(f);
-  expect(await startAgainNoteName(f)).toBe(abandoned);
   const next = createFirstSetupModuleHost({
     stateDir: f.stateDir,
     venueDir: f.venueDir,
@@ -317,11 +309,6 @@ it("empty never-activated hour restart deletes the attempt and burns the entire 
     randomBytes(32).toString("base64url"),
   );
   const owner = { ...claim.state, capability: claim.capability };
-  vi.setSystemTime("2026-10-16T11:40:00Z");
-  await expect(compareAndSelect(next, owner)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
-  });
   vi.setSystemTime("2026-10-16T12:01:00Z");
   const selected = await chooseMinute(next, owner);
   expect(firstSetupModuleContext(selected.state, MODULE).request).toMatchObject({
@@ -467,7 +454,7 @@ it("HTTPS hour restart takes local observations without a register declaration",
   }
 });
 
-it("a missing hour database starts again only once confirmed, records the confirmation and notes the name", async () => {
+it("a missing hour database starts again only once confirmed, and records the confirmation", async () => {
   const f = await fixture();
   await f.recover();
   const snapshot = await f.host.resolution.captureFirstSetupOriginals();
@@ -486,7 +473,7 @@ it("a missing hour database starts again only once confirmed, records the confir
     code: "setup.not_ready",
   });
   const shown = await actions.startAgainSummary(input);
-  expect(shown).toEqual(await hourShown(f));
+  expect(shown).toEqual(HOUR_SHOWN);
   const at = new Date().toISOString();
   const state = (await f.host.store.read())!;
   const pending = actions.startAgainFirstSetup({
@@ -516,16 +503,9 @@ it("a missing hour database starts again only once confirmed, records the confir
     shown,
   });
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
-  expect(await startAgainNoteName(f)).toBe(shown.lastName);
 });
 
-async function hourShown(f: Awaited<ReturnType<typeof fixture>>) {
-  const state = (await f.host.store.read())!;
-  return {
-    reached: "named" as const,
-    lastName: (firstSetupModuleContext(state, MODULE).request as { identity: string }).identity,
-  };
-}
+const HOUR_SHOWN = { reached: "named" as const };
 
 it("a missing hour database refuses a confirmed Start again from an owner whose latest event is not a fresh recovery", async () => {
   const f = await fixture();
@@ -536,7 +516,7 @@ it("a missing hour database refuses a confirmed Start again from an owner whose 
     venueDir: f.venueDir,
     host: f.host,
   });
-  const shown = await hourShown(f);
+  const shown = HOUR_SHOWN;
   await expect(
     actions.startAgainFirstSetup({
       inspectionId: snapshot.inspection.inspectionId,

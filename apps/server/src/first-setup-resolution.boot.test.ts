@@ -1,14 +1,4 @@
-import {
-  mkdtemp,
-  mkdir,
-  readdir,
-  readFile,
-  rm,
-  stat,
-  symlink,
-  utimes,
-  writeFile,
-} from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { IncomingHttpHeaders } from "node:http";
@@ -20,8 +10,6 @@ import { FRESH } from "./recovery-state.js";
 import { firstFiscalFixture } from "../test/first-fiscal.js";
 import {
   readStartAgainChoices,
-  readStartAgainNote,
-  START_AGAIN_FLOOR_MARGIN_MS,
   START_AGAIN_MARKER_FILE,
   START_AGAIN_SET_ASIDE_DIR,
   startAgainMarkerFor,
@@ -649,10 +637,10 @@ it("a deletion refused for an unlisted file names that file under 'Why the last 
 });
 
 /** A real interrupted attempt with a venue.db written after its marker, and healthy TLS. */
-async function foundFilesBox(note?: { floorMs: number; lastName: string; module: string }) {
+async function foundFilesBox() {
   const base = await mkdtemp(join(tmpdir(), "found-files-start-"));
   dirs.push(base);
-  const attempt = await startAgainAttempt(base, note === undefined ? {} : { note });
+  const attempt = await startAgainAttempt(base);
   const { stateDir, venueDir } = attempt.roots;
   await mkdir(join(stateDir, "tls"), { recursive: true });
   for (const [name, value] of Object.entries({
@@ -811,7 +799,6 @@ it.each(MODES)(
       attemptId: f.attempt.attemptId.toLowerCase(),
       frozenDigest: f.attempt.frozenDigest,
       setAside: null,
-      noteFloorMs: null,
     });
     expect(await readFile(join(f.venueDir, "venue.db"), "utf8")).toBe("found database");
     expect(await stat(join(f.venueDir, START_AGAIN_MARKER_FILE))).toBeTruthy();
@@ -834,16 +821,9 @@ it.each(MODES)(
 );
 
 it.each(MODES)(
-  "Move: the answer, one restart, the next start serves setup, venue.db is at state/first-setup-set-aside/<stem>/venue/venue.db with its original bytes, and the note's floor is raised (%s)",
+  "Move: the answer, one restart, the next start serves setup, venue.db is at state/first-setup-set-aside/<stem>/venue/venue.db with its original bytes (%s)",
   async (mode) => {
-    const note = { floorMs: 60_000, lastName: "S000001-W1-A", module: "probe" };
-    const f = await foundFilesBox(note);
-    // Hours ahead of the clock, on the hour, so a floor taken from the clock cannot match.
-    const hourMs = 3_600_000;
-    const fileMs = Math.ceil(Date.now() / hourMs) * hourMs + 5 * hourMs;
-    await utimes(join(f.venueDir, "venue.db"), fileMs / 1000, fileMs / 1000);
-    const floorMs = fileMs + Math.ceil(START_AGAIN_FLOOR_MARGIN_MS / 60_000) * 60_000;
-    expect(floorMs).toBeGreaterThan(note.floorMs);
+    const f = await foundFilesBox();
     const started = await startIn(mode, f);
     const answer = await postFormOverHttps(started.port, "/recovery-api/start-again", {
       password: START_AGAIN_ADMIN_PASSWORD,
@@ -862,7 +842,6 @@ it.each(MODES)(
         state: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/state`,
         venue: `${START_AGAIN_SET_ASIDE_DIR}/${stem}/venue`,
       },
-      noteFloorMs: floorMs,
     });
     expect(answer.body).toContain(
       escapeHtml(
@@ -879,7 +858,6 @@ it.each(MODES)(
         "utf8",
       ),
     ).toBe("found database");
-    expect(await readStartAgainNote(f.stateDir)).toEqual({ version: 1, ...note, floorMs });
     await gone(join(f.venueDir, START_AGAIN_MARKER_FILE));
     expect(started.startServer).not.toHaveBeenCalled();
 

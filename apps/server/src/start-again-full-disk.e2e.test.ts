@@ -14,7 +14,6 @@ import "@waitron/provisioning";
 import {
   SPARE_SPACE_FILE,
   isEmptiedTombstone,
-  readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
 import { selectedRepair } from "../test/first-setup-backup-recovery-fixture.js";
@@ -162,7 +161,7 @@ async function filesUnder(dir: string): Promise<string[]> {
   return names;
 }
 
-it("with the box's spare file, the password step, the summary and Start again all work on a full disk, the stopped recovery's copy is emptied, and the note carries its series name", async (ctx) => {
+it("with the box's spare file, the password step, the summary and Start again all work on a full disk, and the stopped recovery's copy is emptied", async (ctx) => {
   const small = needDisk(ctx);
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
@@ -184,7 +183,7 @@ it("with the box's spare file, the password step, the summary and Start again al
 
   const shown = await startAgainOverRoutes(entry.app);
 
-  expect(shown.recovery).toMatchObject({ lastName: f.selected.identity });
+  expect(shown.recovery).toBeDefined();
   await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -195,7 +194,6 @@ it("with the box's spare file, the password step, the summary and Start again al
   await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
     code: "ENOENT",
   });
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
 });
 
 it("a recovery whose placement fills the disk stops, and Start again on the same page, still on a full disk, discards it and deletes the spare", async (ctx) => {
@@ -227,13 +225,12 @@ it("a recovery whose placement fills the disk stops, and Start again on the same
 
   const shown = await startAgainOverRoutes(entry.app);
 
-  expect(shown.recovery).toMatchObject({ lastName: f.selected.identity, failed: true });
+  expect(shown.recovery).toMatchObject({ failed: true });
   await expect(stat(spare)).rejects.toMatchObject({ code: "ENOENT" });
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
     target: { recoveryId: f.session.recoveryId },
   });
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.selected.identity);
 });
 
 it("without a spare file, the password step of the Start-again flow on a full disk answers 507 storage.disk_full", async (ctx) => {
@@ -313,5 +310,4 @@ it("in the held state, with the box's spare file, the summary answers with what 
     target: { recoveryId },
   });
   expect(await isEmptiedTombstone(f.roots, recoveryId)).toBe(true);
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(f.installationName);
 });

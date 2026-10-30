@@ -3,9 +3,9 @@ import { userEvent } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import { SetupApp } from "./setup-app.js";
 import { FIRST_SETUP_SESSION_KEY } from "./first-setup-session.js";
-import type { FirstSetupInspection, StartAgainSummary } from "./api/first-setup-types.js";
+import type { FirstSetupInspection } from "./api/first-setup-types.js";
 import { setLocale } from "./i18n/t.js";
-import { initialOwnerStrings, namesFromText } from "./screens/initial-owner-strings.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial, venue, wizardApi } from "../test/first-setup-browser.js";
 import { cleanupWidgets, mountWidget } from "./widgets/test-helpers.js";
@@ -127,10 +127,6 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   );
   expect(en.noInvoiceSent).toBe("No invoice was sent to AEAT.");
   expect(es.noInvoiceSent).toBe("No se envió ninguna factura a la AEAT.");
-  expect(en.startAgainHelp).toBe("This box will not use this setup's invoice series names again.");
-  expect(es.startAgainHelp).toBe(
-    "Este equipo no volverá a usar los nombres de serie de facturas de esta configuración.",
-  );
   for (const strings of [en, es])
     for (const key of ["heldNoInvoices", "heldNoInvoicesOne"])
       expect(Object.hasOwn(strings, key)).toBe(false);
@@ -153,7 +149,6 @@ it.each(["en-GB", "es-ES"])(
     expect(q(app, "start-again-deletes").textContent!.trim()).toBe(
       `${t.heldLost} ${t.noInvoiceSent}`,
     );
-    expect(section.textContent).toContain(t.startAgainHelp);
     expect(q<HTMLInputElement>(app, "retire-confirmed").closest("label")!.textContent).toBe(
       t.retireConfirmed,
     );
@@ -166,13 +161,12 @@ it.each(["en-GB", "es-ES"])(
     await expect
       .poll(() => app.shadowRoot!.querySelector('[role="status"]')?.textContent)
       .toBe(t.restarting);
-    expect(app.shadowRoot!.textContent).not.toContain(t.startAgainHelp);
     expect(requests.filter((r) => r.path.endsWith("/start-again"))).toHaveLength(1);
   },
 );
 
 it.each(["en-GB", "es-ES"])(
-  "with an empty setup database, the confirmation says what Start again deletes and that no invoice was sent, above the help line, in %s",
+  "with an empty setup database, the confirmation says what Start again deletes and that no invoice was sent, above the tick box, in %s",
   async (locale) => {
     const t = initialOwnerStrings[locale.startsWith("es") ? "es" : "en"];
     const { app } = await mount();
@@ -182,13 +176,9 @@ it.each(["en-GB", "es-ES"])(
     await app.updateComplete;
     const deletes = q(app, "start-again-deletes");
     expect(deletes.textContent!.trim()).toBe(`${t.heldLost} ${t.noInvoiceSent}`);
-    const help = [...app.shadowRoot!.querySelectorAll("p")].find(
-      (p) => p.textContent === t.startAgainHelp,
-    )!;
-    expect(help).toBeDefined();
-    expect(deletes.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
-      help.compareDocumentPosition(q(app, "retire-confirmed")) & Node.DOCUMENT_POSITION_FOLLOWING,
+      deletes.compareDocumentPosition(q(app, "retire-confirmed")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   },
 );
@@ -649,16 +639,8 @@ async function damagedRecord(
     inspectionFailsAfterRefusal?: boolean;
     /** Merged into every inspection read after the refused send. */
     inspectionAfterRefusal?: Partial<FirstSetupInspection>;
-    /** The password refusal says the series picks file is damaged; the summary route answers this. */
-    damagedSummary?: StartAgainSummary;
-    /** The summary route refuses instead of answering `damagedSummary`. */
-    summaryRefused?: boolean;
-    /** The code of that refusal; `server.internal` when not given. */
-    summaryRefusedCode?: string;
-    /** That refusal's params; a full disk's say a restart deletes logs when not given. */
-    summaryRefusedParams?: Record<string, unknown>;
-    /** Answered by the summary route in place of `damagedSummary` once a send was refused. */
-    damagedSummaryAfterRefusal?: StartAgainSummary;
+    /** The params of the password refusal; none when not given. */
+    passwordParams?: Record<string, unknown>;
   } = {},
 ) {
   let generation = 1;
@@ -671,29 +653,11 @@ async function damagedRecord(
           {
             error: {
               code: "setup.start_again_password_required",
-              params: options.damagedSummary ? { seriesPicksUnreadable: true } : {},
+              params: options.passwordParams ?? {},
             },
           },
           { status: 403 },
         );
-      if (path.endsWith("/start-again/summary") && options.damagedSummary)
-        return options.summaryRefused
-          ? Response.json(
-              {
-                error: {
-                  code: options.summaryRefusedCode ?? "server.internal",
-                  params:
-                    options.summaryRefusedParams ??
-                    (options.summaryRefusedCode === "storage.disk_full"
-                      ? { restartDeletesLogs: true }
-                      : {}),
-                },
-              },
-              { status: options.summaryRefusedCode === "storage.disk_full" ? 507 : 500 },
-            )
-          : Response.json(
-              (refused ? options.damagedSummaryAfterRefusal : undefined) ?? options.damagedSummary,
-            );
       if (path.endsWith("/resolution/start-again") && refusals > 0) {
         refusals -= 1;
         refused = true;
@@ -777,152 +741,21 @@ async function unlockDamagedRecord(app: SetupApp) {
   await expect.poll(() => q(app, "recovery-record-damaged")).not.toBeNull();
 }
 
-const picksFloorMs = new Date(2026, 9, 25, 15, 3).getTime();
-const picksSummary = (recoveryDamaged: boolean): StartAgainSummary => ({
-  reached: "claimed",
-  lastName: null,
-  ...(recoveryDamaged ? { recoveryRecordDamaged: true as const } : {}),
-  unreadable: { records: ["series-picks"], floorMs: picksFloorMs },
-});
 const summaryRequests = <R extends { path: string }>(requests: R[]) =>
   requests.filter((r) => r.path.endsWith("/start-again/summary"));
 
-it("with the database present and only the series picks file damaged: the password, then the summary's lines, and no damaged recovery-key line; Cancel sends nothing, Confirm sends the summary", async () => {
-  const t = initialOwnerStrings.en;
-  const { app, requests } = await damagedRecord({ damagedSummary: picksSummary(false) });
-  expect(summaryRequests(requests)).toEqual([]);
-  await password(app);
-  await click(app, "damaged-record-continue");
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(summaryRequests(requests)).toHaveLength(1);
-  expect(summaryRequests(requests)[0]!.headers.get(ownerHeader)).toBe("B".repeat(43));
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
-  expect(
-    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
-      p.textContent!.trim(),
-    ),
-  ).toEqual([t.seriesPicksDamaged]);
-  expect(app.shadowRoot!.textContent).toContain(t.startAgainHelp);
-  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
-  expect(q(app, "retire-confirmed")).not.toBeNull();
-  expect(startAgainRequests(requests)).toHaveLength(1);
-  await click(app, "cancel-start-again");
-  await app.updateComplete;
-  expect(startAgainRequests(requests)).toHaveLength(1);
-  await click(app, "start-again");
-  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
-  const sent = startAgainRequests(requests)[1]!;
-  expect(sent.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 2,
-    ownerGeneration: 2,
-    confirmUnreadable: { shown: picksSummary(false) },
-  });
-  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
-});
-
-it("with the database present, the series picks file and the recovery-key record both damaged: both lines, and the request carries both keys", async () => {
-  const t = initialOwnerStrings.en;
-  const { app, requests } = await damagedRecord({ damagedSummary: picksSummary(true) });
-  await unlockDamagedRecord(app);
-  expect(q(app, "recovery-record-damaged").textContent).toBe(t.recoveryRecordDamaged);
-  expect(
-    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
-      p.textContent!.trim(),
-    ),
-  ).toEqual([t.seriesPicksDamaged]);
-  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(2);
-  expect(startAgainRequests(requests)[1]!.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 2,
-    ownerGeneration: 2,
-    recoveryRecordDamagedShown: true,
-    confirmUnreadable: { shown: picksSummary(true) },
-  });
-});
-
-it("with the database present, a failed read of the damaged records' summary offers no Start again and says the details could not be read", async () => {
-  const { app, requests } = await damagedRecord({
-    damagedSummary: picksSummary(false),
-    summaryRefused: true,
-  });
-  await password(app);
-  await click(app, "damaged-record-continue");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  expect(summaryRequests(requests)).toHaveLength(1);
-  expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
-  expect(formErrors(app)).toContain(initialOwnerStrings.en.recoveryDetailsUnread);
-  expect(startAgainRequests(requests)).toHaveLength(1);
-});
-
-it("with the database present, a damaged records' summary that also carries a stopped recovery the activity read did not show offers no Start again and sends nothing", async () => {
-  const { app, requests } = await damagedRecord({
-    damagedSummary: {
-      ...picksSummary(false),
-      recovery: { ...stoppedSummary(false).recovery, lastActiveSource: "memory" },
-    },
-  });
-  await password(app);
-  await click(app, "damaged-record-continue");
-  await expect.poll(() => q(app, "check-again")).not.toBeNull();
-  expect(summaryRequests(requests)).toHaveLength(1);
-  expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
-  expect(formErrors(app)).toContain(initialOwnerStrings.en.recoveryDetailsUnread);
-  expect(startAgainRequests(requests)).toHaveLength(1);
-});
-
-it("with the database present, a retry after a refused send draws and sends the damaged records' summary read again, not the one shown before", async () => {
-  const laterFloorMs = new Date(2026, 9, 26, 9, 41).getTime();
-  const later: StartAgainSummary = {
-    ...picksSummary(false),
-    unreadable: { records: ["series-picks"], floorMs: laterFloorMs },
-  };
-  const { app, requests } = await damagedRecord({
-    damagedSummary: picksSummary(false),
-    damagedSummaryAfterRefusal: later,
-    refuseFlagged: 1,
-  });
-  await password(app);
-  await click(app, "damaged-record-continue");
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=names-from]")).toBeNull();
-  await password(app);
-  await click(app, "damaged-record-continue");
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(summaryRequests(requests)).toHaveLength(2);
-  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", laterFloorMs));
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(3);
-  expect(startAgainRequests(requests)[2]!.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 3,
-    ownerGeneration: 3,
-    confirmUnreadable: { shown: later },
-  });
-});
-
-it("with the database present, a password refusal without the picks flag reads no summary and keeps today's warning", async () => {
-  const { app, requests } = await damagedRecord();
-  await unlockDamagedRecord(app);
-  expect(summaryRequests(requests)).toEqual([]);
-  expect(app.shadowRoot!.querySelector("[data-test=name-record-damaged]")).toBeNull();
-  expect(app.shadowRoot!.querySelector("[data-test=names-from]")).toBeNull();
-});
+it.each([{}, { seriesPicksUnreadable: true }])(
+  "with the database present and no stopped recovery, a password refusal with params %o reads no summary and keeps today's warning",
+  async (passwordParams) => {
+    const { app, requests } = await damagedRecord({ passwordParams });
+    await unlockDamagedRecord(app);
+    expect(summaryRequests(requests)).toEqual([]);
+    expect(q(app, "recovery-record-damaged").textContent).toBe(
+      initialOwnerStrings.en.recoveryRecordDamaged,
+    );
+    expect(q(app, "retire-confirmed")).not.toBeNull();
+  },
+);
 
 it.each(["en-GB", "es-ES"])(
   "a damaged recovery-key record asks for the administrator password, and shows no error, in %s",
@@ -962,11 +795,6 @@ it.each(["en-GB", "es-ES"])(
     await app.updateComplete;
     const warning = q(app, "recovery-record-damaged");
     expect(warning.textContent).toBe(t.recoveryRecordDamaged);
-    const help = [...app.shadowRoot!.querySelectorAll("p")].find(
-      (p) => p.textContent === t.startAgainHelp,
-    )!;
-    expect(help).toBeDefined();
-    expect(warning.compareDocumentPosition(help) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(
       warning.compareDocumentPosition(q(app, "start-again-deletes")) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -1507,13 +1335,11 @@ const stoppedActivity = (overrides: Record<string, unknown> = {}) => ({
 const summaryLastActiveAt = new Date(2026, 9, 25, 14, 47).toISOString();
 const stoppedSummary = (damaged: boolean) => ({
   reached: "claimed",
-  lastName: null,
   ...(damaged ? { recoveryRecordDamaged: true } : {}),
   recovery: {
     startedAt: stoppedAt.startedAt,
     lastActiveAt: summaryLastActiveAt,
     lastActiveSource: "memory",
-    lastName: "ABCDE",
     failed: false,
     cloud: false,
   },
@@ -1685,41 +1511,6 @@ it("with the database present, a damaged record and a stopped recovery: both lin
   });
 });
 
-it("with the database present, a stopped recovery and a damaged series picks file: the stopped lines, the name-record line and when new names can start; Confirm sends the summary as the recovery discard only", async () => {
-  const t = initialOwnerStrings.en;
-  const shown = {
-    ...stoppedSummary(false),
-    unreadable: { records: ["series-picks"], floorMs: picksFloorMs },
-  };
-  const { app, requests } = await stoppedPresent({ summary: () => Response.json(shown) });
-  await passwordAccepted(app);
-  await expect.poll(() => q(app, "confirm-start-again")).not.toBeNull();
-  expect(stoppedLines(app)).toEqual([
-    t.recoveryStopped.replace("{started}", "25 Oct 2026, 14:35"),
-    t.recoveryLastActive.replace("{at}", "25 Oct 2026, 14:47"),
-  ]);
-  expect(app.shadowRoot!.querySelector("[data-test=recovery-record-damaged]")).toBeNull();
-  expect(
-    [...app.shadowRoot!.querySelectorAll("[data-test=name-record-damaged]")].map((p) =>
-      p.textContent!.trim(),
-    ),
-  ).toEqual([t.seriesPicksDamaged]);
-  expect(q(app, "names-from").textContent!.trim()).toBe(namesFromText("en-GB", picksFloorMs));
-  expect(startAgainRequests(requests)).toEqual([]);
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed"));
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainRequests(requests)).toHaveLength(1);
-  const sent = startAgainRequests(requests)[0]!;
-  expect(sent.body).toEqual({
-    inspectionId: "a".repeat(64),
-    revision: 2,
-    ownerGeneration: 2,
-    confirmRecoveryDiscard: { shown },
-  });
-  expect(sent.headers.get(ownerHeader)).toBe("B".repeat(43));
-});
-
 it("with the database present, while a recovery runs, no Start again, password or confirmation is offered and nothing is sent", async () => {
   const { app, requests } = await stoppedPresent({ running: true });
   for (const name of [
@@ -1845,7 +1636,7 @@ it.each([
   {
     name: "a summary that names no recovery",
     locale: "en-GB",
-    answer: () => Response.json({ reached: "claimed", lastName: null }),
+    answer: () => Response.json({ reached: "claimed" }),
     shown: () => initialOwnerStrings.en.recoveryDetailsUnread,
   },
   {
@@ -2048,9 +1839,6 @@ it.each(["en-GB", "es-ES"])(
     const order = [
       q(app, "start-again-deletes"),
       q(app, "recovery-stopped"),
-      [...q(app, "screen-first-owner").querySelectorAll("p")].find(
-        (p) => p.textContent === t.startAgainHelp,
-      )!,
       q(app, "retire-confirmed"),
       q(app, "cancel-start-again"),
       q(app, "confirm-start-again"),
@@ -2479,14 +2267,11 @@ it.each(["en-GB", "es-ES"] as const)(
   },
 );
 
-it("with the database present, a summary read refused storage.disk_full says the disk is full", async () => {
-  const { app } = await damagedRecord({
-    damagedSummary: picksSummary(false),
-    summaryRefused: true,
-    summaryRefusedCode: "storage.disk_full",
+it("with the database present, a stopped recovery's summary read refused storage.disk_full says the disk is full", async () => {
+  const { app } = await stoppedPresent({
+    summary: (read) => (read === 0 ? diskFull() : undefined),
   });
-  await password(app);
-  await click(app, "damaged-record-continue");
+  await passwordAccepted(app);
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL["en-GB"]);
   expect(app.shadowRoot!.querySelector("[data-test=confirm-start-again]")).toBeNull();
 });
@@ -2499,15 +2284,11 @@ it("with the database present, a stopped recovery's summary read refused storage
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_FREES_NOTHING["en-GB"]);
 });
 
-it("with the database present, a summary read refused storage.disk_full without the field says nothing about restarting", async () => {
-  const { app } = await damagedRecord({
-    damagedSummary: picksSummary(false),
-    summaryRefused: true,
-    summaryRefusedCode: "storage.disk_full",
-    summaryRefusedParams: {},
+it("with the database present, a stopped recovery's summary read refused storage.disk_full without the field says nothing about restarting", async () => {
+  const { app } = await stoppedPresent({
+    summary: (read) => (read === 0 ? diskFull({}) : undefined),
   });
-  await password(app);
-  await click(app, "damaged-record-continue");
+  await passwordAccepted(app);
   await expect.poll(() => formErrors(app)).toContain(DISK_FULL_RESTART_UNKNOWN["en-GB"]);
 });
 

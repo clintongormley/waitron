@@ -377,7 +377,6 @@ it.each([
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
-  "first-setup-start-again.json",
   "first-setup-deleting.json",
   "first-setup-start-again-confirmations/x.json",
 ])("cannot import retirement or current setup authority through %s", async (name) => {

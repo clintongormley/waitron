@@ -215,139 +215,6 @@ for (const locale of ["en-GB", "es-ES"] as const)
 for (const locale of ["en-GB", "es-ES"] as const)
   for (const theme of ["light", "dark"] as const)
     for (const width of [390, 1280])
-      for (const stopped of [false, true])
-        for (const step of ["password", "confirmation"] as const)
-          it(`${locale} ${theme} ${width} damaged names ${stopped ? "beside a stopped recovery " : ""}${step}: accessible Start again with the database present`, async () => {
-            const previous = [innerWidth, innerHeight];
-            try {
-              await page.viewport(width, 1200);
-              let recovered = false;
-              const startedAt = new Date(2026, 9, 25, 14, 35).toISOString();
-              const lastActiveAt = new Date(2026, 9, 25, 14, 41).toISOString();
-              const { api, requests } = wizardApi({
-                claimed: true,
-                intercept(path, _body, headers) {
-                  if (path.endsWith("/resolution"))
-                    return Response.json({
-                      version: 2,
-                      inspectionId: "a".repeat(64),
-                      pair: "valid",
-                      database: "no-venue-rows",
-                      emptyDatabase: true,
-                      password: "checkable",
-                      revision: recovered ? 2 : 1,
-                      ownerGeneration: recovered ? 2 : 1,
-                      repairEligible: false,
-                      artifacts: [],
-                    });
-                  if (path.endsWith("/backup/activity") && stopped)
-                    return Response.json({
-                      activity: {
-                        state: "stopped",
-                        startedAt,
-                        lastActiveAt,
-                        lastActiveSource: "saved-step",
-                        phase: "prepared",
-                        recoveryId: "r1",
-                        failed: false,
-                        cloud: true,
-                      },
-                    });
-                  if (
-                    path.endsWith("/resolution/start-again") &&
-                    !headers.has("X-Waitron-Setup-Owner")
-                  )
-                    return Response.json(
-                      {
-                        error: {
-                          code: "setup.start_again_password_required",
-                          params: { seriesPicksUnreadable: true },
-                        },
-                      },
-                      { status: 403 },
-                    );
-                  if (path.endsWith("/start-again/summary"))
-                    return Response.json({
-                      reached: "claimed",
-                      lastName: null,
-                      unreadable: {
-                        records: ["series-picks"],
-                        floorMs: new Date(2026, 9, 25, 15, 3).getTime(),
-                      },
-                      ...(stopped
-                        ? {
-                            recovery: {
-                              startedAt,
-                              lastActiveAt,
-                              lastActiveSource: "saved-step",
-                              lastName: "ABCDE",
-                              failed: false,
-                              cloud: true,
-                            },
-                          }
-                        : {}),
-                    });
-                  if (path.endsWith("/resolution/recover")) {
-                    recovered = true;
-                    return Response.json({
-                      state: { ...initial, revision: 2, ownerGeneration: 2 },
-                      capability: "B".repeat(43),
-                      ownerGeneration: 2,
-                    });
-                  }
-                },
-              });
-              const { el, host } = await mountWidget<SetupApp>(
-                "setup-app",
-                { api, browserLanguages: [locale] },
-                theme,
-              );
-              const find = <T extends Element>(name: string) =>
-                el.shadowRoot!.querySelector<T>(`[data-test=${name}]`);
-              await expect.poll(() => find("start-again")).not.toBeNull();
-              await userEvent.click(
-                find<WtButton>("start-again")!.shadowRoot!.querySelector("button")!,
-              );
-              if (!stopped) {
-                await userEvent.click(find<HTMLInputElement>("retire-confirmed")!);
-                await userEvent.click(
-                  find<WtButton>("confirm-start-again")!.shadowRoot!.querySelector("button")!,
-                );
-              }
-              await expect.poll(() => find("damaged-record-password")).not.toBeNull();
-              if (step === "confirmation") {
-                const field = find<HTMLElement>("resume-password")!;
-                await userEvent.fill(
-                  field.shadowRoot!.querySelector("input")!,
-                  "original password",
-                );
-                await userEvent.click(
-                  find<WtButton>("damaged-record-continue")!.shadowRoot!.querySelector("button")!,
-                );
-                await expect.poll(() => find("names-from")).not.toBeNull();
-                expect(find("name-record-damaged")).not.toBeNull();
-                expect(find("recovery-stopped") !== null).toBe(stopped);
-                await userEvent.click(find<HTMLInputElement>("retire-confirmed")!);
-              }
-              await el.updateComplete;
-              await expectNoA11yViolations(host);
-              expect(innerWidth).toBe(width);
-              expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(width);
-              expect(
-                el
-                  .shadowRoot!.querySelector("[data-test=screen-first-owner]")!
-                  .getBoundingClientRect().right,
-              ).toBeLessThanOrEqual(width);
-              expect(
-                requests.filter((request) => request.path.endsWith("/start-again")),
-              ).toHaveLength(stopped ? 0 : 1);
-            } finally {
-              await page.viewport(previous[0]!, previous[1]!);
-            }
-          });
-for (const locale of ["en-GB", "es-ES"] as const)
-  for (const theme of ["light", "dark"] as const)
-    for (const width of [390, 1280])
       for (const step of ["stopped", "password", "confirmation", "unread"] as const)
         it(`${locale} ${theme} ${width} stopped recovery ${step}: accessible Start again with the database present`, async () => {
           const previous = [innerWidth, innerHeight];
@@ -393,13 +260,11 @@ for (const locale of ["en-GB", "es-ES"] as const)
                 if (path.endsWith("/start-again/summary"))
                   return Response.json({
                     reached: "claimed",
-                    lastName: null,
                     recoveryRecordDamaged: true,
                     recovery: {
                       startedAt,
                       lastActiveAt,
                       lastActiveSource: "saved-step",
-                      lastName: "ABCDE",
                       failed: false,
                       cloud: true,
                     },

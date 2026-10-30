@@ -424,7 +424,7 @@
   "src/first-setup-start-again-backup-restart.test.ts": 110.5,
   "src/first-setup-start-again-backup.test.ts": 141.7,
   "src/first-setup-start-again-damaged-recovery.test.ts": 33.3,
-  "src/first-setup-start-again-note.test.ts": 90.5,
+  "src/first-setup-start-again.test.ts": 90.5,
   "src/first-setup-unused-pdf.test.ts": 76.7,
   "src/first-setup-workspace.test.ts": 3,
   "src/fiscal-certificate-api.test.ts": 12.5,

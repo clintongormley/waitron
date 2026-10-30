@@ -75,35 +75,12 @@ export interface InitialSetupContribution {
     readonly positions: readonly { namespace: string; position: number }[];
   };
   /**
-   * Given more items it accepts one at a time, it never answers an earlier floor: Start again keeps
-   * every item it can read from a damaged record.
-   */
-  startAgainFloor?(input: {
-    readonly attempts: readonly {
-      readonly context: InitialSetupContext;
-      readonly input: unknown;
-    }[];
-    readonly preparations: readonly unknown[];
-    readonly publicEvidence: readonly unknown[];
-    /** A backup recovery journal's recorded inputs, passed untouched; one the module cannot read names nothing. */
-    readonly recoveryInputs?: readonly unknown[];
-    /** The newest modification time among the attempt's own files and folders other than its databases, given when a name record could not be read. */
-    readonly lastWriteMs?: number;
-    /** What `startAgainHistory` returned; one the module cannot read in full refuses. */
-    readonly databaseHistory?: readonly unknown[];
-  }): { readonly floorMs: number; readonly lastName: string | null } | null;
-  /**
    * Invoice records in a setup database Start again is about to delete. Throws when its own tables
    * are missing from a database whose migration set is applied, never counts them as 0.
    */
   startAgainHoldings?(
     db: Pick<Database, "execute">,
   ): Promise<{ readonly records: number; readonly accepted: number }>;
-  /**
-   * The module's name history of a setup database Start again is about to delete, read with plain
-   * reads only: no transaction, no write lock, no change-log drain, so a read-only connection serves it.
-   */
-  startAgainHistory?(db: Pick<Database, "execute">): Promise<readonly unknown[]>;
 
   assignmentPositions?(
     context: InitialSetupContext,

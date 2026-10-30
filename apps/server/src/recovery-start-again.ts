@@ -32,7 +32,6 @@ export interface StartAgainPageText {
   moveTitle: string;
   moveDetail: string;
   moveUnsent: string;
-  moveFloor: (time: string) => string;
   continue: string;
   insecureForm: string;
   passwordMissing: string;
@@ -68,11 +67,9 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
     keepDetail: "Nothing is moved. This page stays until Waitron is reinstalled on this box.",
     moveTitle: "Move these files aside and finish Start again.",
     moveDetail:
-      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again. Its invoice series names are never used again.",
+      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again.",
     moveUnsent:
       "If these files are a venue that has made sales, invoice records it had not yet sent to AEAT stay unsent: the box sends nothing from moved files.",
-    moveFloor: (time) =>
-      `These files carry a time later than the box's clock, so a new setup can start invoice series names only from ${time}.`,
     continue: "Continue",
     insecureForm: "Open this page over the box's secure connection to choose.",
     passwordMissing: "Enter the administrator password.",
@@ -111,11 +108,9 @@ export const START_AGAIN_PAGE_TEXT: Readonly<Record<SupportedLocale, StartAgainP
       "No se mueve nada. Esta página sigue hasta que se reinstale Waitron en este equipo.",
     moveTitle: "Apartar estos archivos y terminar «Empezar de nuevo».",
     moveDetail:
-      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo. Sus nombres de serie de facturas no se vuelven a usar.",
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
     moveUnsent:
       "Si estos archivos son un local que ha vendido, los registros de facturas que aún no había enviado a la AEAT se quedan sin enviar: el equipo no envía nada desde archivos apartados.",
-    moveFloor: (time) =>
-      `Estos archivos llevan una hora posterior a la del reloj del equipo, así que una configuración nueva solo puede empezar nombres de serie de facturas a partir de ${time}.`,
     continue: "Continuar",
     insecureForm: "Abre esta página con la conexión segura del equipo para elegir.",
     passwordMissing: "Introduce la contraseña de administrador.",
@@ -192,11 +187,6 @@ ${shown.map((line) => `<li>${escapeHtml(line)}</li>`).join("\n")}
 `;
 }
 
-/** `YYYY-MM-DD HH:MM UTC`, the form `moveFloor` names. */
-function utcMinute(ms: number): string {
-  return `${new Date(ms).toISOString().slice(0, 16).replace("T", " ")} UTC`;
-}
-
 function bottomText(message: StartAgainMessage, text: StartAgainPageText): string {
   switch (message.kind) {
     case "passwordMissing":
@@ -224,11 +214,10 @@ export function renderStartAgainSection(input: {
   survey: Choice;
   locale: SupportedLocale;
   secure: boolean;
-  now: Date;
   message?: StartAgainMessage;
   chosen?: "keep" | "move";
 }): string {
-  const { survey, locale, secure, now, message, chosen } = input;
+  const { survey, locale, secure, message, chosen } = input;
   const text = START_AGAIN_PAGE_TEXT[locale];
   const list = foundList(survey, text);
   const bottom =
@@ -253,10 +242,6 @@ export function renderStartAgainSection(input: {
   // A Move this box cannot do is not offered back as the person's choice.
   const preselected = message?.kind === "moveUnavailable" ? undefined : chosen;
   const checked = (value: "keep" | "move") => (preselected === value ? " checked" : "");
-  const floor =
-    survey.noteFloorMs !== null && survey.noteFloorMs > now.getTime()
-      ? `<p>${escapeHtml(text.moveFloor(utcMinute(survey.noteFloorMs)))}</p>\n`
-      : "";
   const fieldError = (id: string, value: string | null) =>
     value === null ? "" : `<p id="${id}">${escapeHtml(value)}</p>\n`;
 
@@ -270,7 +255,7 @@ ${fieldError("start-again-password-error", passwordError)}<fieldset${choiceInval
 <p><label><input type="radio" name="choice" value="move" required${checked("move")}> <strong>${escapeHtml(text.moveTitle)}</strong></label></p>
 <p>${escapeHtml(text.moveDetail)}</p>
 <p>${escapeHtml(text.moveUnsent)}</p>
-${floor}</fieldset>
+</fieldset>
 ${fieldError("start-again-choice-error", choiceError)}<input type="hidden" name="listed" value="${escapeHtml(survey.digest)}">
 ${bottom}<p><button type="submit">${escapeHtml(text.continue)}</button></p>
 </form>

@@ -323,15 +323,6 @@ that slice 3 has to restore:
   `apps/server/src/finish-adoption.ts`'s `PendingAdoption` header; whatever replaces the initial copy
   in slice 3 has to close this.
 
-- **Every node holds the current start-again note.** Owner, 2026-10-24 (A1042 Q3): every new
-  start-again note the primary writes is written on each secondary too, so every node knows the
-  current note; a secondary joining a venue takes the primary's note first. Not built: a venue has
-  one node. The note is `first-setup-start-again.json` in the state folder, the floor below which
-  no new invoice series name may be taken; it is not in `venue.db`, so the database stream does not
-  carry it. Today only Start again writes it (the setup entry "Move the start-again note whenever a
-  series name is put into use, and when a plain reset ends an unfinished setup" is what makes it
-  "the current note").
-
 - **OWNER DECISION, open since #443: should the setup wizard still OFFER "Add a mirror node"?** The
   wizard's copy was made honest rather than the option removed — `apps/setup`'s role, connect and done
   screens say plainly that joining does not work in this version and that the box ends up holding

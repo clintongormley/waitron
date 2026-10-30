@@ -115,7 +115,8 @@ attempts/quarantine, spare-first and these receipt/policy choices have whole-des
 
 The design retains B3's five encrypted subvolumes, complete stopped-state inventory, old images
 by immutable digest plus container references, logs/host evidence outside rollback and the
-monotonic start-again overlay. Closure/rollback races and lost completion answers use a durable
+monotonic start-again overlay (2026-10-29, A1206: the start-again note it builds on is retired;
+re-plan the overlay before building). Closure/rollback races and lost completion answers use a durable
 host journal; uncertain evidence stops admission rather than guessing. RESTORED retires that
 attempt's restore permission before old service reopens. Normal work needs no per-operation
 updater roundtrip. Bucket/spare publication stays frozen during validation, with qualified
@@ -127,12 +128,6 @@ App updates remain separate from B3 host/TPM updates. Signed manifest/A1049 Clou
 precede freeze without putting Cloud on the sale path. Non-B3 disks need a separately qualified
 whole-state copy adapter. Failure reporting stays local with existing authorised
 notifications; A9/Cloud reporting and A1016 backup/support choices remain separate.
-
-**The series-name note** (owner, 2026-10-24, A1042 Q5): rollback keeps the newer floor. An ordinary
-upgrade never advances it or chooses a new installation name. The separate setup entry governs
-when setup, restore, promotion or an exceptional provider-name change puts a name into use. Preserve released name-unknown and
-damage-unknown evidence, not just known-name notes; no downgrade bypass or direct recovery/lock-file
-rewrite is proposed. Bind the overlay against the released helpers and both candidate/old parsers.
 
 The source inventory is explicitly historical READ evidence at
 `9d5853c310e691ed558d80a8a12d0dbddccab2e7`, not today's runtime. Later source changes prove no
@@ -405,11 +400,6 @@ today); generalise archive entry routing off declared source ids when a second n
 
 ## Box image constraints (B3)
 
-- **The series-name note survives a reinstall** (owner, 2026-10-24, A1042 Q3): a reinstall from the
-  stick, and the dashboard's reinstall, keep the box's series-name note. Proposed change to the
-  design, waiting for the owner's review of B3:
-  `docs/superpowers/plans/2026-10-24-a1042-start-again-series-note.md`, 'Proposed change to B3's
-  design'.
 - **A setup box's `/health` returns 503 by design** (no duty loop); a liveness probe must gate on
   `/setup-api/status` (200), or it restart-loops an unprovisioned box.
 - **Android certificate trust needs actual-device qualification.** The 2026-09-08 receipt

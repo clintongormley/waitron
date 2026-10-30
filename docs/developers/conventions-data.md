@@ -3430,7 +3430,7 @@ the cap and opens with `O_NOFOLLOW`, leaving anything that is not a regular file
 step still take the venue locks; the spare only gives them room to.
 
 **Which walks see it.** Only code that lists the state folder: the originals walk (which leaves it
-and its marker out). Start again's deletion list, its leftovers survey and its series-name floor read named entries
+and its marker out). Start again's deletion list and its leftovers survey read named entries
 only, as do the setup inspection's fingerprints. The design
 (`docs/superpowers/specs/2026-10-28-a1127-full-disk-spare-file-design.md`, "Which walks see it") has
 the line references and says which were read rather than run.
@@ -3777,9 +3777,7 @@ after a second clock on another machine agrees within 30 seconds
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). The minute is strictly later than every name in the history it can read
 (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
-the surviving database"), no earlier than the box's start-again note's floor
-(`apps/server/src/hour-recovery-host.test.ts`, "a restore with the clock set back behind the
-start-again note is refused, not given a repeated name") and begins no earlier than the backup's newest record or creation time
+the surviving database") and begins no earlier than the backup's newest record or creation time
 (`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"), and is taken 90 to 150
 seconds after the clock check (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore
 waits until a minute start 90 to 150 seconds after its check"). It retains recovered invoices
@@ -4662,6 +4660,15 @@ trusting the installation start the [backup room note](#the-backup-room-note) ho
 full disk the database may not open: on HFS+ the store's open failed at 0 B and 4 KiB free, and a
 read-only open of a cleanly stopped database failed there and worked at 64 KiB.
 
+## Start again's records and the set-aside folder
+
+Start again's confirmation and choice records and the set-aside folder survive a plain
+`waitron.sh reset` and are removed only by `reset --all` (A1042, A1098; `deploy/waitron.sh`,
+`wipe_box`). Guard: `scripts/start-again-records-writers.test.ts`, weaker than its name — it reads
+which files name the confirmation folder, the choice folder or the set-aside folder as text, so a
+path built from pieces escapes it, and it never sees code that empties the whole state folder
+without naming the file.
+
 ## The backup room note
 
 A1167's start slice (plan `docs/superpowers/plans/2026-10-29-a1167-start-deletes-backups.md`). On a
@@ -5081,18 +5088,37 @@ unverifiable under the other environment.
 identity and chain; there is no operator chain-reset path. A setup, restore or promotion names
 its installation from the box's clock — five symbols for the UTC minute — only after a check
 against a clock on another machine (within 30 seconds, no confirmation) and strictly later than
-every name in the history it can read and no earlier than the start-again note's floor
-(`first-setup-start-again.json` in the state folder, which only `waitron.sh reset --all` removes;
-owner, 2026-10-24, A1042; a Start again Move raises the floor, if lower, to the first whole minute
-at least 150 seconds after the moved files' newest modification time, A1098; a Start again past a
-damaged name record raises it, if lower, to the first whole minute more than 150 seconds after the
-newest modification time among the attempt's files and folders other than its databases, A1099;
-a Start again beside a stopped recovery, with a setup database that holds records, also counts
-every installation name that database held, whatever its taxpayer or environment, A1131); a setup or restore waits 90 to 150 seconds first. Guard for the note:
-`scripts/start-again-note-writers.test.ts`, weaker than its name — it reads which files name the
-note, its confirmation and choice records or the set-aside folder as text, so a path built from pieces escapes it, and it never sees code that empties the whole
-state folder without naming the file. The one
-exception is the preproduction throwaway, which names with no second clock and no history check
+every name in the history it can read: the module's own record of the names it has chosen, a restored or surviving database
+(`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a known later name in
+the surviving database") and a backup's newest record or creation time
+(`apps/server/src/hour-recovery-host.test.ts`, "a backup's own floors"). That later-than-history
+check is still enforced; A1206 leaves it unchanged. The owner retired it on 2026-10-29 (~10:52), and
+A1207, not yet built, will replace it with "refuse only if this minute's name already exists". A setup or restore waits
+90 to 150 seconds first (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits
+until a minute start 90 to 150 seconds after its check"); a promotion does not
+(`packages/fiscal-verifactu/src/hour-selection.ts`, `settles` is setup and restore only).
+
+Start again keeps no record of the names it deletes (owner, 2026-10-29, A1206: "I think we must
+remove this concept of storing the used series name on disk. It introduces too many
+complications. We use the current minute, with confirmed clock times, and the latest invoice
+numbers if we have any."). This retired A1042's start-again note (`first-setup-start-again.json`)
+and every floor built on it (A1098's Move floor, A1099's damaged-name-record floor, A1131's
+counting of a held setup database's names). A leftover note file is ignored (the "leftover
+start-again note file" cases in `apps/server/src/first-setup-start-again.test.ts`,
+`hour-promotion.test.ts` and `hour-recovery-host.test.ts`), and a plain `waitron.sh reset` deletes
+it (`scripts/waitron-sh.test.mjs`, "the reset's state clean-up keeps tls/ …"). What keeps a later setup or restore from repeating a forgotten name
+is the clock check plus the wait: a name is written only once the box's clock reaches its minute,
+and the next setup or restore targets a minute more than 90 seconds after its own clock reading, so
+two attempts whose boxes are each within 30 seconds of the true time cannot share a name
+(`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a $action that has forgotten an earlier
+attempt's name still names a later minute when each clock was within 30 seconds"). The accepted
+limit: if a box and the machine that confirms its clock are both wrong by the same amount, the check
+passes, and that setup can repeat an earlier attempt's name once its clock is more than about 90
+seconds behind the earlier attempt's. A promotion has
+no wait, so it relies on coming long enough after a Start again (up to 120 seconds with each box
+30 seconds off); that is reasoning about how long joining as a standby takes, not measured.
+
+The one exception to the second clock and the history check is the preproduction throwaway, which names with no second clock and no history check
 and is refused outside preproduction. Guards: `packages/fiscal-verifactu/src/hour-selection.test.ts`,
 `packages/fiscal-verifactu/src/hour-clock.test.ts` and
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, the last weaker than its

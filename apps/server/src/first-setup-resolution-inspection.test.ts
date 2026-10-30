@@ -22,11 +22,7 @@ import {
 import { createFirstSetupOwner } from "./first-setup-owner.js";
 import { createFirstSetupResolutionInspection } from "./first-setup-resolution-inspection.js";
 import { request, PASSWORD } from "../test/first-fiscal.js";
-import {
-  expectStartAgainDeleted,
-  startAgainNoteName,
-  startAgainUnchanged,
-} from "../test/start-again-deleted.js";
+import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 const suite = useVenueDb({ migrations: [CORE_MIGRATIONS] });
 const dirs: string[] = [];
 afterEach(async () => {
@@ -231,7 +227,7 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
     ownerGeneration,
     owner,
   });
-  expect(shown).toEqual({ reached: "named", lastName: null });
+  expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });
   const confirmations = await readdir(join(f.stateDir, "first-setup-start-again-confirmations"));
   expect(confirmations).toHaveLength(1);
@@ -251,7 +247,7 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
     code: "ENOENT",
   });
 });
-it("Start again rejects a stale snapshot, leaving no marker and the note unchanged", async () => {
+it("Start again rejects a stale snapshot, leaving no marker", async () => {
   const f = await actionsFixture();
   const unchanged = await startAgainUnchanged(f);
   const request = await f.startRequest();
@@ -327,11 +323,10 @@ it("Start again from two browsers deletes the attempt once and refuses the secon
   await expectStartAgainDeleted(f);
 });
 
-it("Start again deletes two attempts in turn in the same folders, writing no note when no name was picked", async () => {
+it("Start again deletes two attempts in turn in the same folders", async () => {
   const f = await actionsFixture();
   await f.actions.startAgainFirstSetup(await f.startRequest());
   await expectStartAgainDeleted(f);
-  expect(await startAgainNoteName(f)).toBeUndefined();
   const { createFirstSetupModuleHost } = await import("./module-operation-host.js");
   const { createFirstSetupResolutionActions } = await import("./first-setup-resolution.js");
   const host = createFirstSetupModuleHost({
@@ -354,7 +349,6 @@ it("Start again deletes two attempts in turn in the same folders, writing no not
     register: { kind: "no-current-master", confirmed: true },
   });
   await expectStartAgainDeleted(f);
-  expect(await startAgainNoteName(f)).toBeUndefined();
 });
 
 it("retirement captures stable physical paths for configured ancestor aliases and deduplicates the same original", async () => {

@@ -93,8 +93,6 @@ it("reads a legitimate held setup in place: every activation row, nothing kept, 
   const result = await read(held);
   expect(fileSystem.mkdtemp).not.toHaveBeenCalled();
   expect(result).toMatchObject({ rows: ACTIVATION_ROWS, kept: 0, records: 0, accepted: 0 });
-  expect(Object.keys(result.history)).toEqual([MODULE]);
-  expect(JSON.stringify(result.history[MODULE])).toContain(held.installationName);
 });
 
 it("counts an invoice as a record and as a kept row", async () => {
@@ -252,20 +250,6 @@ it("answers setup.not_ready when the database file cannot be read", async () => 
   await expect(read(held)).rejects.toMatchObject({
     code: "setup.not_ready",
     reason: expect.stringMatching(/^read failed: ERR_SQLITE_ERROR/),
-  });
-});
-
-it("answers setup.not_ready when a module that sets a floor has no history reader", async () => {
-  const held = await heldSetup({ recovery: false });
-  const modules = held.host.modules!.map((module) => {
-    if (module.name !== MODULE) return module;
-    const initialSetup = { ...module.provisioning!.initialSetup! };
-    delete initialSetup.startAgainHistory;
-    return { ...module, provisioning: { ...module.provisioning!, initialSetup } };
-  });
-  await expect(read(held, modules)).rejects.toMatchObject({
-    code: "setup.not_ready",
-    reason: `history reader missing: ${MODULE}`,
   });
 });
 

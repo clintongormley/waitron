@@ -11,7 +11,6 @@ import {
 import { readStartAgainMarker } from "./first-setup-start-again-deletion.js";
 import type { StartAgainUnit } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
-import { raiseStartAgainNote, readStartAgainNote } from "./first-setup-start-again-note.js";
 import { syncFolder } from "./folder-sync.js";
 import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
 import "./errors.js";
@@ -233,17 +232,6 @@ function chain(top: string, bottom: string): string[] {
   return out;
 }
 
-async function raiseNoteToRecord(stateDir: string, record: StartAgainChoiceRecord) {
-  if (record.noteFloorMs === null) return;
-  const note = await readStartAgainNote(stateDir);
-  if (note !== null)
-    await raiseStartAgainNote(stateDir, {
-      floorMs: record.noteFloorMs,
-      lastName: note.lastName,
-      module: note.module,
-    });
-}
-
 /** The record's destination folders, made if absent, each synced from its root down. */
 async function makeDestinationFolders(
   roots: Roots,
@@ -354,8 +342,8 @@ async function deleteNoteFirst(stateDir: string): Promise<void> {
 }
 
 /**
- * D4 steps 3 and 4: raises the note to the record's floor, then renames each unit's pieces, in
- * survey order and each unit's move order, into the record's folders. Never overwrites: a present
+ * D4 steps 3 and 4: renames each unit's pieces, in survey order and each unit's move order, into
+ * the record's folders. Never overwrites: a present
  * destination refuses. The caller holds the venue lock.
  */
 export async function moveStartAgainUnits(
@@ -366,7 +354,6 @@ export async function moveStartAgainUnits(
   if (record.choice !== "move" || record.setAside === null)
     throw new AppError("setup.attempt_invalid", {});
   await deleteNoteFirst(roots.stateDir);
-  await raiseNoteToRecord(roots.stateDir, record);
   const folders = await makeDestinationFolders(roots, { ...record, setAside: record.setAside }, io);
   for (const unit of record.listed.units)
     for (const piece of unit.pieces) {
@@ -453,7 +440,6 @@ export async function resumeStartAgainSetAside(
     if (record === null) return "none";
     await deleteNoteFirst(canonical.stateDir);
     await removeLeftoverProbes(canonical, io);
-    await raiseNoteToRecord(canonical.stateDir, record);
     const folders = await makeDestinationFolders(canonical, record, io);
     for (const unit of record.listed.units)
       for (const piece of unit.pieces) {

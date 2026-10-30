@@ -1,3 +1,5 @@
+> 2026-10-29, A1206: the start-again note is retired, so a reinstall has no note to keep.
+
 # B3 USB Installer Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task, after separate build authority. Steps use checkbox (`- [ ]`) syntax for tracking. A separate documentation author supplies this plan; a fresh reviewer must review it before execution. This document author neither builds nor dispatches that reviewer.

@@ -17,11 +17,7 @@ import {
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { ALL_MODULES } from "@waitron/composition";
-import {
-  createFirstSetupCoordinator,
-  raiseStartAgainNote,
-  readModulePreparationHistory,
-} from "@waitron/provisioning";
+import { createFirstSetupCoordinator, readModulePreparationHistory } from "@waitron/provisioning";
 import {
   withOperationAuthority,
   withPreparedModuleOperations,
@@ -32,6 +28,7 @@ import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { TENANT_A } from "@waitron/fiscal-verifactu/test/fixtures.js";
 import { createHourPreparation } from "@waitron/fiscal-verifactu/src/hour-preparation.js";
 import { compareHourClocks } from "@waitron/fiscal-verifactu/src/hour-clock.js";
+import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 import { activatePreparedModuleAllocation } from "@waitron/fiscal-verifactu/src/allocation-preparation.js";
 import { ALLOCATED_FISCAL_STANDBY } from "@waitron/fiscal-verifactu/src/allocated-standby.js";
 import { fiscalAllocations } from "@waitron/fiscal-verifactu/src/schema/allocations.js";
@@ -598,21 +595,54 @@ it("serves clock, selection and authenticated promotion through the management r
   }
 });
 
-it("a promotion with the clock behind the start-again note is refused, not given a repeated name", async () => {
+it("a promotion beside a leftover start-again note file is not held back by the file's floor", async () => {
   const stateDir = join(root, "state");
   const s = await service();
   await admit(s);
-  const floorMs = Date.now() + 10 * 60_000;
-  await raiseStartAgainNote(stateDir, { floorMs, lastName: "0CNQT", module: binding.module });
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(
+    join(stateDir, "first-setup-start-again.json"),
+    JSON.stringify({
+      version: 1,
+      floorMs: Date.now() + 10 * 60_000,
+      lastName: "0CNQT",
+      module: binding.module,
+    }),
+  );
   const recovery = binding;
   const auth = { breakGlass: key.secret };
   await compare(s, auth, recovery);
+  expect(
+    await s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
+  ).toMatchObject({ status: "selected" });
+});
+
+it("refuses a promotion minute no later than a recorded installation name, writing nothing", async () => {
+  const s = await service();
+  await admit(s);
+  const [live] = await suite.db.select().from(registroSif);
+  const nameMs = Date.now() + 10 * 60_000;
+  await suite.db.insert(registroSif).values({
+    nodeId: primary.nodeId,
+    nif: live!.nif,
+    idSistemaInformatico: live!.idSistemaInformatico,
+    numeroInstalacion: encodeMinuteIdentity(nameMs),
+    registradoEn: new Date(Date.now() - 60 * 60_000),
+    revocadoEn: new Date(Date.now() - 30 * 60_000),
+  });
+  await compare(s);
   const before = await rows();
   await expect(
-    s.prepare(recovery, auth, context, { action: "select", comparisonId }, { onBox: true }),
+    s.prepare(
+      binding,
+      { breakGlass: key.secret },
+      context,
+      { action: "select", comparisonId },
+      { onBox: true },
+    ),
   ).rejects.toMatchObject({
     code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: floorMs },
+    params: { reason: "minute_not_later", allowedFromMs: nameMs + 60_000 },
   });
   expect(await rows()).toEqual(before);
 });

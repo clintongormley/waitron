@@ -5,7 +5,7 @@
 #   curl -fsSL https://raw.githubusercontent.com/clintongormley/waitron/main/deploy/waitron.sh -o waitron.sh
 #   sudo bash waitron.sh install            # published main image
 #   sudo bash waitron.sh install <ref>      # build and run a branch or commit on the box
-#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate, the start-again note and records, and the files a Move set aside)
+#   sudo bash waitron.sh reset [--all]      # wipe back to a clean box (keeps the certificate, the start-again records and the files a Move set aside)
 #   sudo bash waitron.sh --reset install [ref]   # build or pull the ref's images, wipe the box, start it on them
 #
 # Operating this file is deploy/README.md. It replaces the old install.sh / prepare.sh /
@@ -29,7 +29,7 @@ waitron.sh: usage:
   waitron.sh update [ref]      same as install
   waitron.sh status            show each running Waitron image and its build time
   waitron.sh reset [--all]     wipe the box to a clean state (keeps the certificate, the start-again
-                               note and records, and the files a Move set aside; --all drops them too)
+                               records and the files a Move set aside; --all drops them too)
   waitron.sh --reset [--all] [--yes] [--force-production] install [ref]
                                build or pull ref's images, then wipe the box as reset does and start it
                                on them
@@ -740,13 +740,12 @@ wipe_box() {
     rm_volume waitron_state
   else
     # Empty state except tls/, keeping the CA + leaf so an already-trusting phone needs no new step,
-    # and except the start-again note, which holds the floor below which no new invoice series name
-    # may be taken, the confirmation records of who confirmed a Start again, the records of each
-    # Keep or Move choice, and the files a Move set aside. Only --all removes them.
+    # and except the confirmation records of who confirmed a Start again, the records of each Keep
+    # or Move choice, and the files a Move set aside. Only --all removes them.
     # Same container shape as the trading.env read above, and `--entrypoint` for the same reason.
     docker compose -f "$WAITRON_DIR/compose.yml" run --rm --no-deps -T \
       --entrypoint sh app \
-      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} +'
+      -c 'find "${WAITRON_STATE_DIR:?}" -mindepth 1 -maxdepth 1 ! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside -exec rm -rf {} +'
   fi
 }
 

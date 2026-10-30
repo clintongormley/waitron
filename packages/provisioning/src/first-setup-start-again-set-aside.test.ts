@@ -27,7 +27,6 @@ import { finishStartAgainDeletion } from "./first-setup-start-again-deletion.js"
 import { surveyStartAgainLeftovers } from "./first-setup-start-again-leftovers.js";
 import { START_AGAIN_SET_ASIDE_DIR } from "./first-setup-start-again-names.js";
 import { BACKUP_ROOM_NOTE_FILE } from "./spare-space-name.js";
-import { readStartAgainNote } from "./first-setup-start-again-note.js";
 import {
   moveStartAgainUnits,
   prepareSetAside,
@@ -134,7 +133,6 @@ async function prepared(
     ownerGeneration: 0,
     listed: { digest: survey.digest, units: survey.units },
     setAside,
-    noteFloorMs: survey.noteFloorMs,
   });
   const records = await readStartAgainChoices(roots.stateDir, survey);
   return records.at(-1)!;
@@ -418,42 +416,31 @@ it("a leftover probe folder from a cut is removed by the next prepare, and nothi
   expect(await readFile(file, "utf8")).toBe("a file, not a probe");
 });
 
-it("the note is raised to the record's floor, keeping its last name and module; with no note nothing is written", async () => {
-  const noted = await startAgainAttempt(await scratch(), {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
-  await writeFile(join(noted.roots.stateDir, "trading.env"), "X=1\n");
-  const record = await prepared(noted.roots, noted.administratorId);
-  expect(record.noteFloorMs).toBeGreaterThan(60_000);
-  await moveStartAgainUnits(noted.roots, record);
-  expect(await readStartAgainNote(noted.roots.stateDir)).toEqual({
-    version: 1,
-    floorMs: record.noteFloorMs,
-    lastName: "0CNQT",
-    module: "probe",
-  });
+it("a Move on a box holding a leftover note file leaves the file byte for byte and moves the found files", async () => {
+  const attempt = await startAgainAttempt(await scratch());
+  const { roots } = attempt;
+  const noteFile = join(roots.stateDir, "first-setup-start-again.json");
+  const noteBytes = `${JSON.stringify({ version: 1, floorMs: 60_000, lastName: "0CNQT", module: "probe" })}\n`;
+  await writeFile(noteFile, noteBytes);
+  const noteBefore = await lstat(noteFile, { bigint: true });
+  const found = join(roots.stateDir, "trading.env");
+  await writeFile(found, "X=1\n");
+  const ahead = new Date(Date.now() + 5 * 60 * 60 * 1000);
+  await fs.utimes(found, ahead, ahead);
 
-  const bare = await startAgainAttempt(await scratch());
-  await writeFile(join(bare.roots.stateDir, "trading.env"), "X=1\n");
-  expect(await readStartAgainNote(bare.roots.stateDir)).toBeNull();
-  await moveStartAgainUnits(bare.roots, await prepared(bare.roots, bare.administratorId));
-  expect(await readStartAgainNote(bare.roots.stateDir)).toBeNull();
+  const record = await prepared(roots, attempt.administratorId);
+  await moveStartAgainUnits(roots, record);
 
-  // Only folders found: no file time, no floor, and the note is left as it was.
-  const folders = await startAgainAttempt(await scratch(), {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
-  await mkdir(join(folders.roots.venueDir, ".venue.db-litestream"));
-  const empty = await prepared(folders.roots, folders.administratorId);
-  expect(empty.noteFloorMs).toBeNull();
-  await moveStartAgainUnits(folders.roots, empty);
-  expect((await readStartAgainNote(folders.roots.stateDir))!.floorMs).toBe(60_000);
+  expect(await readFile(join(roots.stateDir, record.setAside!.state, "trading.env"), "utf8")).toBe(
+    "X=1\n",
+  );
+  await expect(lstat(found)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await readFile(noteFile, "utf8")).toBe(noteBytes);
+  expect((await lstat(noteFile, { bigint: true })).ino).toBe(noteBefore.ino);
 });
 
-it("a found file dated before 1970 is recorded and moved, and the note's floor stays where it was", async () => {
-  const attempt = await startAgainAttempt(await scratch(), {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
+it("a found file dated before 1970 is recorded and moved", async () => {
+  const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
   const found = join(roots.stateDir, "trading.env");
   await writeFile(found, "X=1\n");
@@ -470,7 +457,6 @@ it("a found file dated before 1970 is recorded and moved, and the note's floor s
 
   const moved = join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env");
   expect((await lstat(moved, { bigint: true })).mtimeNs).toBe(recorded);
-  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
 });
 
 it("venue.lock, venue.holder.json and recovery.lock are never moved or unlinked", async () => {
@@ -535,7 +521,7 @@ it("a keep record moves nothing and refuses setup.attempt_invalid", async () => 
   const before = await snapshot(base);
 
   await expect(
-    moveStartAgainUnits(roots, { ...record, choice: "keep", setAside: null, noteFloorMs: null }),
+    moveStartAgainUnits(roots, { ...record, choice: "keep", setAside: null }),
   ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
   expect(await snapshot(base)).toEqual(before);
 });
@@ -868,28 +854,6 @@ it("a resume after a move that finished finds everything already moved and renam
 
   expect(renames).toEqual([]);
   await expectAllAside(roots, record, before);
-});
-
-it("a cut before the note was raised: the resume raises it", async () => {
-  const attempt = await startAgainAttempt(await scratch(), {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
-  const { roots } = attempt;
-  await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
-  const record = await prepared(roots, attempt.administratorId);
-  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
-
-  expect(await resumeStartAgainSetAside(roots)).toBe("resumed");
-
-  expect(await readStartAgainNote(roots.stateDir)).toEqual({
-    version: 1,
-    floorMs: record.noteFloorMs,
-    lastName: "0CNQT",
-    module: "probe",
-  });
-  expect(
-    await readFile(join(setAsideFolderPaths(roots, record.setAside!).state, "trading.env"), "utf8"),
-  ).toBe("X=1\n");
 });
 
 it("the resume removes leftover probe folders a cut left", async () => {
@@ -1268,9 +1232,7 @@ it("no move record, or only a keep record: none, and nothing touched", async () 
   expect(await resumeStartAgainSetAside(none.roots)).toBe("none");
 
   const base = await scratch();
-  const attempt = await startAgainAttempt(base, {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
+  const attempt = await startAgainAttempt(base);
   const { roots } = attempt;
   await writeFile(join(roots.stateDir, "trading.env"), "X=1\n");
   await mkdir(join(roots.stateDir, `${PROBE}1700000000000-${attempt.attemptId}`));
@@ -1289,12 +1251,10 @@ it("no move record, or only a keep record: none, and nothing touched", async () 
     ownerGeneration: 0,
     listed: { digest: survey.digest, units: survey.units },
     setAside: null,
-    noteFloorMs: null,
   });
   const kept = await snapshot(base);
   expect(await resumeStartAgainSetAside(roots)).toBe("none");
   expect(await snapshot(base)).toEqual(kept);
-  expect((await readStartAgainNote(roots.stateDir))!.floorMs).toBe(60_000);
 });
 
 it("two move records: the latest is resumed, into its own folder", async () => {
@@ -1459,14 +1419,11 @@ it("a resumed Move deletes the backup room note first", async () => {
 });
 
 it("a backup room note that cannot be deleted stops a Move, and a resumed Move, before the venue or state folder changes", async () => {
-  // A start-again note the Move would raise, and destination folders it would make again.
-  const attempt = await startAgainAttempt(await scratch(), {
-    note: { floorMs: 60_000, lastName: "0CNQT", module: "probe" },
-  });
+  // Destination folders the Move would make again.
+  const attempt = await startAgainAttempt(await scratch());
   const { roots } = attempt;
   await foundEverywhere(roots);
   const record = await prepared(roots, attempt.administratorId);
-  expect(record.noteFloorMs).toBeGreaterThan(60_000);
   for (const folder of Object.values(setAsideFolderPaths(roots, record.setAside!)))
     await fs.rmdir(folder);
   await mkdir(join(roots.stateDir, BACKUP_ROOM_NOTE_FILE));

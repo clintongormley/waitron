@@ -2,16 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 
 import "node:fs";
 
-import {
-  access,
-  lstat,
-  readFile,
-  readdir,
-  symlink,
-  unlink,
-  utimes,
-  writeFile,
-} from "node:fs/promises";
+import { access, lstat, readFile, readdir, symlink, unlink, writeFile } from "node:fs/promises";
 
 import { Socket } from "node:net";
 
@@ -33,15 +24,8 @@ import {
   START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
   readStartAgainMarker,
-  readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
-
-import {
-  EPOCH_MS,
-  MINUTE_MS,
-  decodeMinuteIdentity,
-} from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { clock } from "../test/hour-recovery-host.js";
 
@@ -136,7 +120,6 @@ async function expectNothingWritten(
   await expect(
     access(join(f.roots.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
 // A discarded recovery's folder keeps its records and its target's lock files, nothing else.
@@ -154,7 +137,7 @@ async function confirmations(stateDir: string) {
 
 async function expectDiscarded(
   f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
-  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+  expected: { shown: StartAgainSummary; lock: { ino: number } },
 ) {
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -170,7 +153,6 @@ async function expectDiscarded(
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
   expect(expected.shown.recovery).toBeDefined();
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
     expected.shown,
@@ -384,7 +366,7 @@ it("the box's repair app fences its writes and names a stopped recovery in its s
     tls(),
   );
   expect(summary.status, await summary.clone().text()).toBe(200);
-  expect(await summary.json()).toMatchObject({ recovery: { lastName: f.selected.identity } });
+  expect((await summary.json()).recovery).toBeDefined();
 });
 
 async function startAgainOver(
@@ -420,7 +402,7 @@ it("once A's lease lapsed, B's password step rewrites the attempt and B's Start 
   expect(await readFile(join(f.roots.stateDir, "first-setup.json"))).not.toEqual(attempt);
   const startAgain = await startAgainOver(f, f.service, recovered);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
 it("A's late step after B's Start again is refused setup.recovery_discarded, in the same process and after a restart", async () => {
@@ -524,129 +506,14 @@ it("with the database present, the password and the confirmed summary discard a 
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await presentOver(f, f.service);
-  expect(startAgain.shown.recovery).toMatchObject({ lastName: f.selected.identity });
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({
     database: "present",
     administrator: { displayName: "Elena", email: "elena@example.test" },
   });
-});
-
-async function stampTree(path: string, at: Date) {
-  const found = await lstat(path).catch(() => null);
-  if (found === null) return;
-  if (found.isDirectory())
-    for (const entry of await readdir(path)) {
-      // A kept backup recovery is not on the attempt's list (`itemsOnDisk`), so it keeps its times.
-      if (entry === "backup-recovery") continue;
-      await stampTree(join(path, entry), at);
-    }
-  await utimes(path, at, at);
-}
-
-/** Every attempt file at `listedMs`, the damaged picks file at `picksMs`. */
-async function damagedPicksDiscard(
-  times: (nameMs: number) => { listedMs: number; picksMs: number },
-) {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const picks = join(f.roots.stateDir, "module-preparation-state.json");
-  await writeFile(picks, "{damaged");
-  const recoveryNameMs = EPOCH_MS + decodeMinuteIdentity(f.selected.identity) * MINUTE_MS;
-  const { listedMs, picksMs } = times(recoveryNameMs);
-  const startAgain = await presentOver(f, f.service, async () => {
-    await stampTree(f.roots.stateDir, new Date(listedMs));
-    await stampTree(join(f.roots.venueDir, "first-setup-claim.json"), new Date(listedMs));
-    await utimes(picks, new Date(picksMs), new Date(picksMs));
-  });
-  return {
-    f,
-    startAgain,
-    recoveryFloorMs: recoveryNameMs + MINUTE_MS,
-    timeFloorMs: (Math.floor((picksMs + 150_000) / MINUTE_MS) + 1) * MINUTE_MS,
-  };
-}
-
-it("with the database present, a stopped recovery's discard past a damaged picks file shows it, and the note keeps the later time floor with no name", async () => {
-  const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
-    listedMs: nameMs + MINUTE_MS,
-    picksMs: nameMs + 120 * MINUTE_MS,
-  }));
-  expect(timeFloorMs).toBeGreaterThan(recoveryFloorMs);
-  expect(startAgain.shown.unreadable).toEqual({ records: ["series-picks"], floorMs: timeFloorMs });
-  await expect(startAgain.run()).resolves.toBeUndefined();
-  expect(await readStartAgainNote(f.roots.stateDir)).toEqual({
-    version: 1,
-    floorMs: timeFloorMs,
-    lastName: null,
-    module: "fiscal-verifactu",
-  });
-});
-
-it("with the database present, a stopped recovery's discard past a damaged picks file keeps the unreadable records in its confirmation record", async () => {
-  const { f, startAgain, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
-    listedMs: nameMs + MINUTE_MS,
-    picksMs: nameMs + 120 * MINUTE_MS,
-  }));
-  await expect(startAgain.run()).resolves.toBeUndefined();
-  expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
-    {
-      reached: startAgain.shown.reached,
-      lastName: startAgain.shown.lastName,
-      recovery: startAgain.shown.recovery,
-      unreadable: { records: ["series-picks"], floorMs: timeFloorMs },
-    },
-  ]);
-});
-
-it("with the database present, a stopped recovery's discard past a damaged picks file with confirmUnreadable beside confirmRecoveryDiscard is refused setup.attempt_conflict, and nothing changes", async () => {
-  const { f, startAgain } = await damagedPicksDiscard((nameMs) => ({
-    listedMs: nameMs + MINUTE_MS,
-    picksMs: nameMs + 120 * MINUTE_MS,
-  }));
-  expect(startAgain.shown.unreadable).toBeDefined();
-  const last = (await f.workspace.readChain()).at(-1)!;
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  await expect(
-    startAgain.actions.startAgainFirstSetup({
-      ...startAgain.ids,
-      owner: startAgain.owner,
-      confirmRecoveryDiscard: { shown: startAgain.shown },
-      confirmUnreadable: { shown: startAgain.shown },
-    }),
-  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
-  await expectNothingWritten(f, before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
-});
-
-it("with the database present, a stopped recovery's later floor wins over a damaged picks file's time floor", async () => {
-  const { f, startAgain, recoveryFloorMs, timeFloorMs } = await damagedPicksDiscard((nameMs) => ({
-    listedMs: nameMs - 120 * MINUTE_MS,
-    picksMs: nameMs - 120 * MINUTE_MS,
-  }));
-  expect(timeFloorMs).toBeLessThan(recoveryFloorMs);
-  expect(startAgain.shown.unreadable).toEqual({
-    records: ["series-picks"],
-    floorMs: recoveryFloorMs,
-  });
-  await expect(startAgain.run()).resolves.toBeUndefined();
-  expect(await readStartAgainNote(f.roots.stateDir)).toEqual({
-    version: 1,
-    floorMs: recoveryFloorMs,
-    lastName: f.selected.identity,
-    module: "fiscal-verifactu",
-  });
-});
-
-it("with the database present, a stopped recovery's summary past a damaged public record still refuses setup.attempt_invalid", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  await writeFile(join(f.roots.stateDir, "module-operation-public.json"), "{damaged");
-  await expect(presentOver(f, f.service)).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 });
 
 it("with the database present, a stopped recovery's Start again without the setup password is refused setup.start_again_password_required, and nothing changes", async () => {
@@ -739,7 +606,7 @@ it("with the database present and no recovery, the summary refuses setup.not_rea
     actions.startAgainFirstSetup({
       ...ids,
       owner,
-      confirmRecoveryDiscard: { shown: { reached: "claimed", lastName: null } },
+      confirmRecoveryDiscard: { shown: { reached: "claimed" } },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
   await expectNothingWritten(f, before);
@@ -775,55 +642,6 @@ it.each([
 );
 
 it.each([
-  ["without confirmUnreadable", false],
-  ["with confirmUnreadable", true],
-] as const)(
-  "with the database present, Start again finishing an abandoned recovery not yet emptied beside a damaged picks file %s is refused setup.attempt_invalid, and nothing is written",
-  async (_label, confirm) => {
-    const f = await selectedRepair();
-    await f.service.close(f.session.sessionId);
-    const planted = join(f.record.target.target.stateDir, "planted");
-    await symlink("/nonexistent", planted);
-    await expect((await presentOver(f, f.service)).run()).rejects.toMatchObject({
-      code: "setup.attempt_uncertain",
-    });
-    expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
-    await unlink(planted);
-    await writeFile(join(f.roots.stateDir, "module-preparation-state.json"), "{damaged");
-    const { owner, ids } = await signedIn(f.host);
-    const actions = createFirstSetupResolutionActions({
-      ...f.roots,
-      host: databasePresent(f.host),
-      backupRecovery: f.service,
-    });
-    const recorded = await confirmations(f.roots.stateDir);
-    expect(recorded).toHaveLength(1);
-    const note = await readStartAgainNote(f.roots.stateDir);
-    const last = (await f.workspace.readChain()).at(-1)!;
-    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-    const shown: StartAgainSummary = {
-      reached: "claimed",
-      lastName: null,
-      unreadable: { records: ["series-picks"], floorMs: EPOCH_MS },
-    };
-    await expect(
-      actions.startAgainFirstSetup({
-        ...ids,
-        owner,
-        ...(confirm ? { confirmUnreadable: { shown } } : {}),
-      }),
-    ).rejects.toMatchObject({ code: "setup.attempt_invalid" });
-    expect({ venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) }).toEqual(
-      before,
-    );
-    expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-    expect(await confirmations(f.roots.stateDir)).toEqual(recorded);
-    expect(await readStartAgainNote(f.roots.stateDir)).toEqual(note);
-    expect((await f.workspace.readChain()).at(-1)).toEqual(last);
-  },
-);
-
-it.each([
   ["the venue database holds rows", (host: Host) => databasePresent(host, "occupied")],
   [
     "the attempt reached activation",
@@ -843,6 +661,40 @@ it.each([
     await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
       code: "setup.not_ready",
     });
+  },
+);
+
+it.each([
+  ["damaged", "{damaged"],
+  ["intact", JSON.stringify({ version: 1, modules: {}, history: [] })],
+] as const)(
+  "with the database present and empty, a %s public fiscal record beside a stopped recovery refuses the summary and Start again setup.not_ready, and nothing is written",
+  async (_label, bytes) => {
+    const f = await selectedRepair();
+    await f.service.close(f.session.sessionId);
+    const startAgain = await presentOver(f, f.service);
+    expect(startAgain.shown.recovery).toBeDefined();
+    await writeFile(join(f.roots.stateDir, "module-operation-public.json"), bytes);
+    const current = await f.host.resolution.inspectFirstSetupResolution();
+    const ids = {
+      inspectionId: current.inspectionId,
+      revision: current.revision!,
+      ownerGeneration: current.ownerGeneration!,
+    };
+    const last = (await f.workspace.readChain()).at(-1)!;
+    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+    await expect(
+      startAgain.actions.startAgainSummary({ ...ids, owner: startAgain.owner }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(
+      startAgain.actions.startAgainFirstSetup({
+        ...ids,
+        owner: startAgain.owner,
+        confirmRecoveryDiscard: { shown: startAgain.shown },
+      }),
+    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expectNothingWritten(f, before);
+    expect((await f.workspace.readChain()).at(-1)).toEqual(last);
   },
 );
 
@@ -866,12 +718,10 @@ it("with the database present, the fence refuses a well-formed discard while the
   expect(activity.state).toBe("running");
   const shown: StartAgainSummary = {
     reached: "claimed",
-    lastName: null,
     recovery: {
       startedAt: activity.startedAt,
       lastActiveAt: activity.lastActiveAt,
       lastActiveSource: "memory",
-      lastName: null,
       failed: false,
       cloud: false,
     },
@@ -904,7 +754,7 @@ it("with the database present, the fence refuses a well-formed discard while the
   expect(startAgain).toHaveBeenCalledTimes(1);
 });
 
-it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it and raises the note to its series name", async () => {
+it("an inspection read under a nearly full reading releases the spare, and Start again over the stopped recovery then discards it", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
@@ -926,15 +776,15 @@ it("an inspection read under a nearly full reading releases the spare, and Start
   await expect(access(spare)).rejects.toMatchObject({ code: "ENOENT" });
   const startAgain = await presentOver(f, f.service);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
-it("when the note cannot be written, Start again abandons, empties and deletes nothing", async () => {
+it("when the confirmation record cannot be written, Start again abandons, empties and deletes nothing", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const last = (await f.workspace.readChain()).at(-1)!;
   const startAgain = await presentOver(f, f.service);
-  vi.mocked(provisioning.raiseStartAgainNote).mockRejectedValueOnce(
+  vi.mocked(provisioning.writeStartAgainConfirmation).mockRejectedValueOnce(
     new AppError("setup.attempt_invalid", {}),
   );
   await expect(startAgain.run()).rejects.toMatchObject({ code: "setup.attempt_invalid" });

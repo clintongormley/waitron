@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 import { projectHourHistory } from "./hour-history.js";
-import { EPOCH_MS, decodeMinuteIdentity } from "./hour-identity.js";
+import { decodeMinuteIdentity } from "./hour-identity.js";
 
 const scope = { taxpayerNif: "89890001K", environment: "preproduction" as const };
 
@@ -245,30 +245,3 @@ it.each([NaN, Infinity, 1.5, "2026-10-23T08:00:00Z", null])(
     expect(project([row()], { timeFloorMs }).contradictions).toEqual(["venue:invalid_source"]);
   },
 );
-const startAgainNote = (timeFloorMs: unknown) =>
-  projectHourHistory({
-    scope,
-    sources: [
-      { reference: "venue", complete: true, records: [] },
-      { reference: "start-again-note", complete: true, records: [], timeFloorMs },
-    ],
-  });
-it.each([
-  ["zero", 0],
-  ["one ms before the epoch", EPOCH_MS - 1],
-  ["fractional", EPOCH_MS + 0.5],
-  ["text", String(EPOCH_MS)],
-  ["absent", undefined],
-])("refuses a start-again note whose floor is %s", (_name, timeFloorMs) => {
-  expect(() => startAgainNote(timeFloorMs)).toThrow(
-    expect.objectContaining({
-      code: "sif.allocation_invalid",
-      params: { reason: "history_invalid" },
-    }),
-  );
-});
-it("accepts a start-again note whose floor is exactly the epoch", () => {
-  const result = startAgainNote(EPOCH_MS);
-  expect(result.recordedTimeFloorMs).toBe(EPOCH_MS);
-  expect(result.contradictions).toEqual([]);
-});

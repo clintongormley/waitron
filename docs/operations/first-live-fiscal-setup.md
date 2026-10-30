@@ -84,59 +84,25 @@ conflicting outcome. Do not delete records to get past a refusal.
 **Finish** publishes an exactly checked committed result. It does not activate another identity,
 reset counters or require a new name because the clock has advanced. With the venue database
 present, **Start again** is limited to a positively empty, never-activated attempt. It deletes the
-attempt and keeps one small note (`first-setup-start-again.json` in the state folder) of the first
-minute a later invoice series name may use: the minute after the last name the attempt chose, or a
-later minute worked out from the attempt's files when a record of its names is damaged (below).
-From then on the box issues no production series name before that minute. Nothing deletes the note except `sudo bash waitron.sh reset
---all`. If a Start again is cut off, for example by a power cut, the next start finishes it, or
+attempt and keeps no record of the invoice series names it chose: a later setup's name is the
+box's current minute, after the clock check and the wait, and later than every name the box can
+still read (`CLAUDE.md` §5). If a Start again is cut off, for example by a power cut, the next start finishes it, or
 refuses with a page that says what to do. If that page lists files Start again did not create,
 such as a venue copied from a backup, it offers **Keep everything and stop** or **Move these files
-aside and finish Start again**, behind the administrator password you chose during setup. A Move
-raises the note, if it is lower, to the first whole minute at least 150 seconds after the newest
-time on the moved files. If the
+aside and finish Start again**, behind the administrator password you chose during setup. If the
 attempt's recovery-key record is damaged, ticking the confirmation and pressing **Start again**
 asks for the administrator password you chose during setup, then shows the confirmation again with "This setup's recovery-key record is damaged and
 cannot be read." above it; you can still choose **Cancel**.
 
 When the venue database is missing, the box cannot check whether the attempt filed anything to
 AEAT or made a sale. After the setup password step, the repair page says so, lists what the
-attempt's own record says it reached — the invoice series name it chose, if any, and whether it
-started or finished activation — and offers **Recover from backup** beside **Start again**, unless
+attempt's own record says it reached — whether it did not start, started or finished
+activation — and offers **Recover from backup** beside **Start again**, unless
 a backup recovery has stopped (below). Start again then asks you to tick "Nothing was filed to AEAT
 and nothing was sold."; before it deletes anything, the box records who confirmed, when, and what
 the page showed. If the attempt's recovery-key record is damaged, the page also says "This setup's
 recovery-key record is damaged and cannot be read." above what Start again deletes, and you can
 still choose **Cancel**.
-
-If a record of the invoice series names the attempt used is damaged, or holds something the box
-cannot use, Start again still goes ahead, after a warning. There are three such records, all in the
-state folder: the box's record of the names it chose (`module-preparation-state.json`), the setup's
-public fiscal record (`module-operation-public.json`), and its fiscal documents
-(`first-fiscal-documents/`). With the venue database missing, the warning covers any of the three
-that the box has to read, and appears after the setup password step. With the venue database present, only the record of chosen names
-does: ticking the confirmation and pressing **Start again** asks for the administrator password you
-chose during setup, then shows the confirmation again with the warning. With the venue database
-present and a stopped backup recovery (below), the same warning appears beside the stopped
-recovery's details, and Start again sends the damaged records and the minute it showed with the
-recovery's discard. A damaged public record or
-fiscal documents beside a present database still refuses Start again, as an intact one does. The
-warning names each damaged record — "This box's record of the invoice series names it chose is
-damaged and cannot be read.", "This setup's public fiscal record is damaged and cannot be read." or
-"This setup's fiscal documents on this box are damaged and cannot be read." — then "Start again
-deletes what was entered in the setup that stopped part way." (followed by "No invoice was sent to
-AEAT." when the venue database is present) and, under "This box will not use this setup's invoice
-series names again.", says "New series names can start from {date}, {time}." Because the box
-cannot read every name the attempt used, it takes that time from the attempt's own files and
-folders instead (not the databases): the first whole minute more than 150 seconds after their
-newest modification time. The setup password step itself rewrites some of those files, so the time
-is usually two and a half to three and a half minutes after you entered the password. Start again
-then keeps the note with that minute and no name, unless a name the box can still read is later.
-With the venue database present, it also writes a confirmation record
-(`database` set to `present`) holding what the page showed, before it deletes anything. A later
-setup that reaches its name before that minute waits, if the minute is at most two and a half
-minutes away; otherwise it says "The series cannot be made yet: a later minute is already in use.
-You can carry on from {time}.", with the date before the time when the minute falls on a later
-day.
 
 While a backup recovery is running on another device, the repair page says so, with when it
 started and when it was last active, and offers only **Reconnect** and **Set up secure

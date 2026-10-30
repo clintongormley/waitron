@@ -5,23 +5,13 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  readStartAgainNote,
-  type RegisterAnswer,
-  type StartAgainSummary,
-} from "@waitron/provisioning";
+import { type RegisterAnswer, type StartAgainSummary } from "@waitron/provisioning";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
-import {
-  expectStartAgainDeleted,
-  startAgainNoteName,
-  startAgainUnchanged,
-} from "../test/start-again-deleted.js";
+import { expectStartAgainDeleted, startAgainUnchanged } from "../test/start-again-deleted.js";
 import { firstFiscalPublicDigest as publicDigest } from "./first-fiscal-delivery.js";
-import { request } from "../test/first-fiscal.js";
-import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
-import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
+import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 vi.mock("@waitron/fiscal-verifactu/src/hour-clock-internet.js", () => ({
@@ -78,80 +68,15 @@ async function fixture(workspace?: { root: string; stateDir: string; venueDir: s
   };
   return { ...f, host, actions, start, answer };
 }
-const nameOf = (f: { context: { request?: unknown } }) =>
-  (f.context.request as { identity: string }).identity;
 it.each(["Consumed", "Not consumed", "Unknown"] as const)(
   "a never-activated box with a delivered PDF can start again after answering %s",
   async (status) => {
     const f = await fixture();
     await f.start(f.answer(status));
     await expectStartAgainDeleted(f);
-    expect(await startAgainNoteName(f)).toBe(nameOf(f));
     await expect(f.host.owner.status(f.ownerAttempt)).rejects.toMatchObject({
       code: "setup.owner_required",
     });
-  },
-);
-it.each([
-  { identity: "0CNJ4", issuedAt: "2026-10-16T09:40:00.000Z", spent: true },
-  { identity: "0CNM0", issuedAt: "2026-10-16T10:40:00.000Z", spent: true },
-  { identity: "0CNNW", issuedAt: "2026-10-16T11:40:00.000Z", spent: true },
-  { identity: "0CNQR", issuedAt: "2026-10-16T12:40:00.000Z", spent: false },
-])(
-  "after Start again, a new attempt with changed bases in the same folders is refused hour $identity at or before the note and picks it after, spent=$spent",
-  async ({ identity, issuedAt, spent }) => {
-    const f = await fixture();
-    await f.start();
-    const next = createFirstSetupModuleHost({
-      stateDir: f.stateDir,
-      venueDir: f.venueDir,
-      modules: f.modules,
-      environment: {},
-      database: () => suite.db,
-    });
-    const claim = await next.owner.claimFirstSetup(
-      {
-        environment: "production",
-        request: {
-          ...request,
-          seriesCode: "B",
-          fullSeriesCode: "BFF",
-          rectificativeSeriesCode: "BR",
-        },
-      },
-      randomBytes(32).toString("base64url"),
-    );
-    const owner = { ...claim.state, capability: claim.capability };
-    const note = (await readStartAgainNote(f.stateDir))!;
-    // Production setup settles 90 seconds and names the next whole minute, so two minutes early
-    // aims the selection at this row's own minute.
-    vi.setSystemTime(Date.parse(issuedAt) - 2 * 60_000);
-    const select = async () => {
-      const compared = (await next.preparation.prepare(
-        owner,
-        f.module,
-        { action: "compare-clocks", browser: null },
-        { onBox: true },
-      )) as { id: string };
-      return next.preparation.select(
-        owner,
-        f.module,
-        { comparisonId: compared.id },
-        await next.owner.reconfirm(owner, f.password, "block-use"),
-      );
-    };
-    if (spent)
-      await expect(select()).rejects.toMatchObject({
-        code: "sif.allocation_invalid",
-        params: { reason: "minute_not_later", allowedFromMs: note.floorMs },
-      });
-    else {
-      await selectPastWaits(f.clock, select);
-      const state = (await next.store.read())!;
-      expect(
-        (firstSetupModuleContext(state, f.module).request as { identity: string }).identity,
-      ).toBe(identity);
-    }
   },
 );
 it.each(["activation-started", "uncertain"] as const)(
@@ -172,9 +97,8 @@ it("an unused PDF remains eligible after a publication binding was staged but ac
     digest: "a".repeat(64),
   });
   await expect(f.start()).resolves.toBeUndefined();
-  expect(await startAgainNoteName(f)).toBe(nameOf(f));
 });
-it("three never-activated PDFs start again in the same folders, and the note holds the latest name", async () => {
+it("three never-activated PDFs start again in the same folders", async () => {
   const first = await fixture();
   const folders = { root: first.root, venueDir: first.venueDir, stateDir: first.stateDir };
   await first.start();
@@ -183,7 +107,6 @@ it("three never-activated PDFs start again in the same folders, and the note hol
   const third = await fixture(folders);
   await expect(third.start()).resolves.toBeUndefined();
   await expectStartAgainDeleted(folders);
-  expect(await startAgainNoteName(folders)).toBe(nameOf(third));
 });
 const CONFIRMATIONS = "first-setup-start-again-confirmations";
 async function abandonedWithMissingDatabase(
@@ -246,16 +169,16 @@ async function abandonedWithMissingDatabase(
   const summary = () => f.actions.startAgainSummary(ids);
   return { f, name, ids, startAgain, summary, attemptFiles, confirmations };
 }
-it("an abandoned activation with a missing database starts again only once confirmed, and a later attempt cannot pick an earlier minute", async () => {
-  const { f, name, startAgain, summary, attemptFiles, confirmations } =
+it("an abandoned activation with a missing database starts again only once confirmed", async () => {
+  const { f, startAgain, summary, attemptFiles, confirmations } =
     await abandonedWithMissingDatabase(["activation-started"]);
   const before = await attemptFiles();
   await expect(startAgain()).rejects.toMatchObject({ code: "setup.not_ready" });
   expect(await attemptFiles()).toEqual(before);
   expect(await confirmations()).toEqual([]);
   const shown = await summary();
-  expect(shown).toEqual({ reached: "fiscal-started", lastName: name });
-  await expect(startAgain({ reached: "named", lastName: name })).rejects.toMatchObject({
+  expect(shown).toEqual({ reached: "fiscal-started" });
+  await expect(startAgain({ reached: "named" })).rejects.toMatchObject({
     code: "setup.attempt_conflict",
   });
   expect(await attemptFiles()).toEqual(before);
@@ -266,54 +189,14 @@ it("an abandoned activation with a missing database starts again only once confi
   expect(
     JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, written[0]!), "utf8")),
   ).toMatchObject({ database: "missing", shown });
-  const note = (await readStartAgainNote(f.stateDir))!;
-  const fresh = createFirstSetupModuleHost({
-    stateDir: f.stateDir,
-    venueDir: f.venueDir,
-    modules: f.modules,
-    environment: {},
-    database: () => suite.db,
-  });
-  const claim = await fresh.owner.claimFirstSetup(
-    {
-      environment: "production",
-      request: {
-        ...request,
-        seriesCode: "B",
-        fullSeriesCode: "BFF",
-        rectificativeSeriesCode: "BR",
-      },
-    },
-    randomBytes(32).toString("base64url"),
-  );
-  const owner = { ...claim.state, capability: claim.capability };
-  vi.setSystemTime(note.floorMs - 10 * 60_000);
-  const compared = (await fresh.preparation.prepare(
-    owner,
-    f.module,
-    { action: "compare-clocks", browser: null },
-    { onBox: true },
-  )) as { id: string };
-  await expect(
-    fresh.preparation.select(
-      owner,
-      f.module,
-      { comparisonId: compared.id },
-      await fresh.owner.reconfirm(owner, f.password, "block-use"),
-    ),
-  ).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later" },
-  });
-  expect(await startAgainNoteName(f)).toBe(name);
 });
 it("an attempt committed before it was abandoned, with a missing database, is shown as fiscal-finished and starts again on confirmation", async () => {
-  const { f, name, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
+  const { f, startAgain, summary, confirmations } = await abandonedWithMissingDatabase([
     "activation-started",
     "committed",
   ]);
   const shown = await summary();
-  expect(shown).toEqual({ reached: "fiscal-finished", lastName: name });
+  expect(shown).toEqual({ reached: "fiscal-finished" });
   await startAgain(shown);
   const written = await confirmations();
   expect(written).toHaveLength(1);
@@ -457,7 +340,7 @@ it("a rehashed document with an invalid module confirmation cannot authorise unu
   await unchanged();
 });
 it.each(["manifest", "binding", "rehashed"] as const)(
-  "with the setup password and the warning shown, a damaged recovery-key record (%s) starts again, and the note keeps the attempt's own name",
+  "with the setup password and the warning shown, a damaged recovery-key record (%s) starts again",
   async (why) => {
     const f = await fixture();
     await damageRecord(f, why);
@@ -471,7 +354,6 @@ it.each(["manifest", "binding", "rehashed"] as const)(
       }),
     ).resolves.toBeUndefined();
     await expectStartAgainDeleted(f);
-    expect(await startAgainNoteName(f)).toBe(nameOf(f));
   },
 );
 it("with the setup password but without the warning shown, a damaged record is refused, and nothing changes", async () => {
@@ -573,23 +455,6 @@ it("a damaged record beside a refused artifact refuses setup.not_ready without a
   await expect(f.start(f.answer())).rejects.toMatchObject({ code: "setup.not_ready" });
   await unchanged();
 });
-async function damagePicks(f: Awaited<ReturnType<typeof fixture>>) {
-  const path = join(f.stateDir, "module-preparation-state.json");
-  await expect(readFile(path)).resolves.toBeInstanceOf(Buffer);
-  await writeFile(path, "{damaged");
-}
-it("with the database present, a damaged kept picks file asks for the setup password, says so, and nothing changes", async () => {
-  const f = await fixture();
-  await damagePicks(f);
-  const unchanged = await startAgainUnchanged(f);
-  const refused = await f.start().then(
-    () => null,
-    (error: unknown) => error,
-  );
-  expect(refused).toMatchObject({ code: "setup.start_again_password_required" });
-  expect((refused as { params: unknown }).params).toEqual({ seriesPicksUnreadable: true });
-  await unchanged();
-});
 it("a damaged recovery-key record alone asks for the setup password with no params", async () => {
   const f = await fixture();
   await damageRecord(f, "manifest");
@@ -599,30 +464,4 @@ it("a damaged recovery-key record alone asks for the setup password with no para
   );
   expect(refused).toMatchObject({ code: "setup.start_again_password_required" });
   expect((refused as { params: unknown }).params).toEqual({});
-});
-it("a damaged kept picks file is not read for a frozen module with no start-again seat, so Start again goes ahead without the password", async () => {
-  const f = await fixture();
-  await damagePicks(f);
-  const modules = f.host.modules!.map((module) =>
-    module.name !== f.module
-      ? module
-      : {
-          ...module,
-          provisioning: {
-            ...module.provisioning,
-            initialSetup: { ...module.provisioning!.initialSetup!, startAgainFloor: undefined },
-          },
-        },
-  );
-  const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules } });
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  await expect(
-    actions.startAgainFirstSetup({
-      inspectionId: inspected.inspectionId,
-      revision: inspected.revision!,
-      ownerGeneration: inspected.ownerGeneration!,
-      register: f.answer(),
-    }),
-  ).resolves.toBeUndefined();
-  await expectStartAgainDeleted(f);
 });

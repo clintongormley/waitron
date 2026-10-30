@@ -81,8 +81,8 @@ async function setupRecord(roots: Roots, survey: Choice): Promise<FirstSetupStat
  * The recovery page's Keep or Move after a cut-off Start again. Refuses a page whose list is no
  * longer the box's before counting a guess; counts the guess before checking the password; then,
  * under the venue lock, refuses unless the box still shows the list the page showed. Keep records
- * the choice. Move probes the renames, records the choice, raises the note, moves the units aside
- * and finishes Start again; any failure once the Move is recorded is
+ * the choice. Move probes the renames, records the choice, moves the units aside and finishes
+ * Start again; any failure once the Move is recorded is
  * `setup.start_again_move_unfinished`, carrying the cause as its reason.
  */
 export async function chooseStartAgainLeftovers(input: {
@@ -128,7 +128,6 @@ export async function chooseStartAgainLeftovers(input: {
         ownerGeneration: state.ownerGeneration,
         listed: { digest: locked.digest, units: locked.units },
         setAside: null,
-        noteFloorMs: null,
       };
       if (input.choice === "keep") {
         await writeStartAgainChoice(roots.stateDir, record);
@@ -137,12 +136,7 @@ export async function chooseStartAgainLeftovers(input: {
       const stem = startAgainChoiceStem(record);
       const setAside = await setAsideDestinations(roots, stem, input.io);
       const made = await prepareSetAside(roots, locked.units, setAside, input.io);
-      const move = {
-        ...record,
-        choice: "move",
-        setAside,
-        noteFloorMs: locked.noteFloorMs,
-      } as const;
+      const move = { ...record, choice: "move", setAside } as const;
       try {
         await writeStartAgainChoice(roots.stateDir, move);
       } catch (error) {

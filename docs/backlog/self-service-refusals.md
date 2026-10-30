@@ -457,7 +457,7 @@ missing-database path is not one that page expects (`#readMissingAsk`, called fr
 
 State: Saved setup/owner data cannot be parsed or checked, or a protected read fails. Corruption and filesystem errors are not proved to be bug-only. Receipt: `packages/provisioning/src/durable-host-json.ts:15`; `packages/provisioning/src/first-setup-owner.ts:131`; `apps/setup/src/setup-app.ts:200`.
 
-Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. A1099 lets it go ahead past a damaged record of the attempt's series names (the kept picks file, the public fiscal record or the fiscal documents), after a warning; a damaged setup record or claim marker (A1158), an unreadable present database (A1159), a damaged start-again note (A1160), the database-present case in A1161 and a recovery's damaged copy of the series-name record (A1162) still refuse.
+Route: Missing: a next step for each place above. A1042 (S7l) lets Start again go ahead past a damaged recovery-key record, after a warning; it does not change these words. Since A1206 (2026-10-29) Start again no longer reads the attempt's series names, so a damaged record of them neither refuses nor warns; a damaged setup record or claim marker (A1158), an unreadable present database (A1159) and the database-present case in A1161 still refuse.
 
 ### `shell.operation_conflict`
 
@@ -705,7 +705,7 @@ Left open by A1099. When an abandoned first setup's own record (`state/first-set
 claim marker (`venue/first-setup-claim.json`) is damaged, Start again is refused before any warning
 can be shown: `setup.owner_required` at the password step with the venue database missing, and
 `setup.attempt_conflict` with it present (A1099 plan, PROBE 2/3, re-run on `b8a06f203`). Wanted: the
-same kind of warned way out A1099 gives a damaged record of series names.
+same kind of warned way out A1042 gives a damaged recovery-key record.
 
 #### A1159: a venue database that is present but cannot be read refuses setup.not_ready
 
@@ -713,39 +713,19 @@ Left open by A1099. An unreadable `venue.db` with the file present refuses `setu
 (`apps/server/src/first-setup-resolution.ts`, the unreadable-database refusal). It could be treated
 as missing, so that the missing-database Start again applies, with its warning.
 
-#### A1160: a damaged start-again note is refused late and blocks every later naming
-
-Left open by A1099. A damaged `state/first-setup-start-again.json` is read only when Start again
-raises it, after the summary has been shown and after the confirmation record is written
-(`writeStartAgainConfirmation`, then `raiseStartAgainNote`, in
-`apps/server/src/first-setup-resolution.ts`); it refuses `setup.attempt_invalid`, and every later
-series-name choice on the box refuses with it. Separately, a file time later than the naming range
-(`END_MS`, `packages/fiscal-verifactu/src/hour-selection.ts`) would give a floor past every name, and
-naming on the box would be refused for good.
-
 #### A1161: with the database present, a public record or documents file still dead-ends Start again
 
-Left open by A1099 (plan difference D-4, owner point 2). With the venue database present and no
-stopped recovery beside it, Start again is allowed only for a provably unused attempt, and that proof refuses `setup.not_ready`
+Left open by A1099 (plan difference D-4, owner point 2). With the venue database present, Start
+again is allowed only for a provably unused attempt, and that proof refuses `setup.not_ready`
 whenever a public fiscal record (`state/module-operation-public.json`) or an unexpected
 fiscal-documents file exists, damaged or intact (`firstSetupUnusedAssignment` in
 `apps/server/src/first-setup-unused-assignment.ts` and `noOtherHistory` in
-`apps/server/src/first-setup-resolution.ts`, both from #1752). Beside a stopped recovery, the
-summary refuses a damaged public record `setup.attempt_invalid`
-(`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "a stopped recovery's summary
-past a damaged public record still refuses setup.attempt_invalid"). So a damaged one there gets no
-warned way out. Wanted: decide with the owner whether a damaged one can count as "name unknown"
-on this path too.
-
-#### A1162: a recovery's damaged copy of the series-name record still dead-ends Start again
-
-Left open by A1099 (plan R-6). A stopped backup recovery whose copy of the series-name record is
-damaged, with nothing recorded in its journal, still refuses the summary `setup.not_ready`
-(`apps/server/src/first-setup-start-again-backup.test.ts`, "a stopped recovery whose journal %s and
-whose copy's picks %s refuses the summary"). With the database present, an abandoned recovery not
-yet emptied beside a damaged series-name record still refuses (A1099 Task 9 keeps
-`setup.not_ready`); Start again on that path refuses `setup.attempt_invalid`, whose page words send
-the person to support. Both readers are outside A1099's approved design.
+`apps/server/src/first-setup-resolution.ts`, both from #1752). Since A1206 (2026-10-29) the summary
+beside a stopped recovery makes the same check and refuses `setup.not_ready` too
+(`apps/server/src/first-setup-start-again-backup-discard.test.ts`, "with the database present and
+empty, a %s public fiscal record beside a stopped recovery refuses the summary and Start again
+setup.not_ready, and nothing is written"). Wanted: decide with the owner whether such a file should
+still block Start again on this path.
 
 ### setup-environment
 

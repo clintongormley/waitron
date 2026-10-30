@@ -1468,7 +1468,7 @@ describe("waitron.sh reset", () => {
     for (const read of reads) expect(read).toMatch(/^run\b.*--entrypoint /);
   });
 
-  it("removes the transient volumes, empties state except tls, the start-again note and the confirmation records, keeps .env", () => {
+  it("removes the transient volumes, empties state except tls and the confirmation records, keeps .env", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
@@ -1495,19 +1495,19 @@ describe("waitron.sh reset", () => {
 
   // Weaker than its name: under the stubbed docker it can only match the command's text. The next
   // case runs the command itself.
-  it("a plain reset's state clean-up spares the start-again note, the confirmation records, the choice records and the set-aside folder", () => {
+  it("a plain reset's state clean-up spares the confirmation records, the choice records and the set-aside folder", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["reset", "--yes"]);
     expect(r.status).toBe(0);
     expect(composeCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
+        /^run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });
 
-  it("the reset's state clean-up keeps tls/, the note and the confirmation records and removes the rest", () => {
+  it("the reset's state clean-up keeps tls/ and the confirmation records and removes the rest, a leftover start-again note included", () => {
     const match = readFileSync(SCRIPT, "utf8").match(
       /-c '(find "\$\{WAITRON_STATE_DIR:\?\}"[^']*)'/,
     );
@@ -1528,11 +1528,7 @@ describe("waitron.sh reset", () => {
       timeout: 10_000,
     });
     expect(r.status).toBe(0);
-    expect(readdirSync(state).sort()).toEqual([
-      "first-setup-start-again-confirmations",
-      "first-setup-start-again.json",
-      "tls",
-    ]);
+    expect(readdirSync(state).sort()).toEqual(["first-setup-start-again-confirmations", "tls"]);
     expect(readdirSync(join(state, "first-setup-start-again-confirmations"))).toEqual(["one.json"]);
     expect(readdirSync(join(state, "tls"))).toEqual(["ca.pem"]);
   });
@@ -1585,16 +1581,6 @@ describe("waitron.sh reset", () => {
     const r = run(sb, ["reset", "--all", "--yes"]);
     expect(r.status).toBe(0);
     expect(readFileSync(sb.log, "utf8")).toMatch(/docker volume rm .*waitron_state\b/);
-  });
-
-  it("reset --all removes the state volume, note included", () => {
-    const sb = sandbox();
-    installedBox(sb);
-    const r = run(sb, ["reset", "--all", "--yes"]);
-    expect(r.status).toBe(0);
-    const calls = readFileSync(sb.log, "utf8");
-    expect(calls).toMatch(/docker volume rm .*waitron_state\b/);
-    expect(calls).not.toMatch(/! -name first-setup-start-again\.json/);
   });
 
   it("refuses on a production box (trading.env signal) and removes no volume", () => {
@@ -1703,14 +1689,14 @@ describe("waitron.sh --reset install", () => {
     expect(r.stdout).toContain("https://waitron.local/setup/trust");
   });
 
-  it("--reset install keeps the start-again note, the confirmation records, the choice records and the set-aside folder too", () => {
+  it("--reset install keeps the confirmation records, the choice records and the set-aside folder too", () => {
     const sb = sandbox();
     installedBox(sb);
     const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
     expect(r.status).toBe(0);
     expect(loggedCalls(sb)).toContainEqual(
       expect.stringMatching(
-        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again\.json ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
+        /^compose run\b.*-c find "\$\{WAITRON_STATE_DIR:\?\}" .*! -name tls ! -name first-setup-start-again-confirmations ! -name first-setup-start-again-choices ! -name first-setup-set-aside /,
       ),
     );
   });

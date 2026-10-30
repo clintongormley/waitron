@@ -13,7 +13,6 @@ it("excludes setup authority and its children without excluding similarly named 
     "first-setup-selection.json",
     "first-setup-retirement.json",
     "first-setup-workspace.json",
-    "first-setup-start-again.json",
     "first-setup-deleting.json",
     "first-setup-start-again-confirmations",
   ]) {

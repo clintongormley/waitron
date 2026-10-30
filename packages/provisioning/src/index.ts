@@ -20,10 +20,7 @@ export {
 } from "./privacy-contact.js";
 export type { InitialModuleInput, VenueApplyDeps, VenueResult } from "./venue-apply.js";
 export { FISCAL_TERRITORIES, resolveFiscalModules } from "./fiscal-modules.js";
-export {
-  readModulePreparationHistory,
-  readWellFormedModulePreparations,
-} from "./module-preparation-state.js";
+export { readModulePreparationHistory } from "./module-preparation-state.js";
 export { createRecoveryPreparationHost } from "./recovery-preparation-host.js";
 export type { FiscalModules } from "./fiscal-modules.js";
 export { venueFiscalSelection } from "./venue-fiscal.js";
@@ -175,14 +172,6 @@ export * from "./artifact-cipher.js";
 export * from "./backup-archive.js";
 export * from "./scrypt-kdf.js";
 export * from "./kitchen-timing.js";
-export { boxFolders, readStartAgainFloors } from "./box-folders.js";
-export {
-  START_AGAIN_NOTE_FILE,
-  raiseStartAgainNote,
-  readStartAgainNote,
-  startAgainFloorSources,
-  type StartAgainNote,
-} from "./first-setup-start-again-note.js";
 export {
   START_AGAIN_CONFIRMATIONS_DIR,
   isCanonicalInstant,
@@ -191,7 +180,6 @@ export {
   type StartAgainConfirmation,
   type StartAgainSummary,
   type StartAgainRecoveryShown,
-  type StartAgainUnreadable,
   type StartAgainHeld,
 } from "./first-setup-start-again-confirmation.js";
 export {
@@ -199,7 +187,6 @@ export {
   START_AGAIN_MARKER_LIMIT,
   assertNoStartAgainDeletion,
   assertStartAgainAllowedOnDisk,
-  attemptLastWriteMs,
   clearStartAgainMarker,
   deleteMarkedAttempt,
   finishStartAgainDeletion,
@@ -239,9 +226,7 @@ export {
 } from "./first-setup-start-again-guesses.js";
 export {
   START_AGAIN_ENTRY_LIMIT,
-  START_AGAIN_FLOOR_MARGIN_MS,
   classifyStartAgainRefusal,
-  startAgainSetAsideFloorMs,
   surveyStartAgainLeftovers,
   type StartAgainEntry,
   type StartAgainSurvey,

@@ -6,10 +6,9 @@ import { Agent } from "undici";
 import { afterEach, expect, it, vi } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { firstFiscalFixture, MODULE, PASSWORD } from "../test/first-fiscal.js";
+import { firstFiscalFixture, PASSWORD } from "../test/first-fiscal.js";
 import { hourFirstFiscalFixture } from "../test/hour-first-fiscal.js";
 import { ensureBoxSecrets } from "./box-secrets.js";
-import { firstSetupModuleContext } from "./first-fiscal-evidence.js";
 import { startServerOrFirstSetupResolution } from "./node-entry.js";
 import { freePorts } from "./testing/free-ports.js";
 import { createFakeTimersHourClock } from "./testing/hour-test-clock.js";
@@ -118,11 +117,7 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       const summary = await post("start-again/summary", ids, ownerHeaders);
       expect(summary.status, await summary.clone().text()).toBe(200);
       const shown = await summary.json();
-      expect(shown).toEqual({
-        reached: "named",
-        lastName: (firstSetupModuleContext(before, MODULE).request as { identity: string })
-          .identity,
-      });
+      expect(shown).toEqual({ reached: "named" });
       const attemptFile = await readFile(join(f.stateDir, "first-setup.json"));
       const unconfirmed = await post("start-again", { ...ids, register }, ownerHeaders);
       expect(unconfirmed.status).toBe(503);
@@ -332,7 +327,7 @@ it("HTTPS lets a shown summary carrying held counts past the body check, and ref
           register: { kind: "no-current-master", confirmed: true },
           confirmMissingDatabase: {
             nothingFiledOrSold: true,
-            shown: { reached: "named", lastName: null, held: shownHeld },
+            shown: { reached: "named", held: shownHeld },
           },
         }),
       } as RequestInit);

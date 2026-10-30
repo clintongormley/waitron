@@ -1,18 +1,16 @@
 import { randomBytes } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
 import { expect, it, vi } from "vitest";
 // First: hour-recovery-host's vi.mock of the internet clock and hour-release reaches only modules loaded after it.
 import { fixture, recovery } from "../test/first-setup-backup-recovery-fixture.js";
-import { external, root, suite } from "../test/hour-recovery-host.js";
+import { root } from "../test/hour-recovery-host.js";
 import { ALL_MODULES } from "@waitron/composition";
 import { LOG_FILE_NAME, lockVenueDatabase, readVenueHolder } from "@waitron/db";
 import {
   chooseStartAgainLeftovers,
   readStartAgainMarker,
-  readStartAgainNote,
   START_AGAIN_CHOICES_DIR,
-  START_AGAIN_NOTE_FILE,
   START_AGAIN_SET_ASIDE_DIR,
   surveyStartAgainLeftovers,
 } from "@waitron/provisioning";
@@ -20,7 +18,6 @@ import {
   START_AGAIN_ADMIN_PASSWORD,
   startAgainAttempt,
 } from "@waitron/provisioning/testing/start-again-attempt";
-import { MINUTE_MS } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { PASSWORD, request } from "../test/first-fiscal.js";
 import { BACKUP_KEY_PREFIX } from "./backup-keys.js";
@@ -29,7 +26,6 @@ import { createFirstSetupResolutionActions } from "./first-setup-resolution.js";
 import { createFirstSetupModuleHost } from "./module-operation-host.js";
 import { clearReplacedDatabases, restoreDatabase, restoreSecrets } from "./restore.js";
 import { BACKUP_STAGING_DIR, START_FREE_SPACE_FLOOR, freeSpaceAtStart } from "./start-space.js";
-import { createFakeTimersHourClock, selectPastWaits } from "./testing/hour-test-clock.js";
 
 vi.mock("./first-setup-backup-source.js", { spy: true });
 
@@ -100,18 +96,11 @@ it("recover from a backup after a Move", async () => {
       expect((await readFile(path)).equals(bytes)).toBe(false);
 });
 
-const NOTE_FLOOR_MS = Date.parse("2026-10-16T11:00:00Z");
-
-/** A box after a real Move of a found venue.db and node.db, with a note the Move may raise. */
-async function movedBox(foundAt?: Date) {
-  const attempt = await startAgainAttempt(root, {
-    note: { floorMs: NOTE_FLOOR_MS, lastName: "EARLIER", module: "fiscal-verifactu" },
-  });
-  for (const name of ["venue.db", "node.db"]) {
-    const path = join(attempt.roots.venueDir, name);
-    await writeFile(path, `found ${name} bytes`);
-    if (foundAt !== undefined) await utimes(path, foundAt, foundAt);
-  }
+/** A box after a real Move of a found venue.db and node.db. */
+async function movedBox() {
+  const attempt = await startAgainAttempt(root);
+  for (const name of ["venue.db", "node.db"])
+    await writeFile(join(attempt.roots.venueDir, name), `found ${name} bytes`);
   const survey = await surveyStartAgainLeftovers(attempt.roots);
   if (survey?.kind !== "choice") throw new Error(`expected choice, got ${survey?.kind}`);
   const chosen = await chooseStartAgainLeftovers({
@@ -132,13 +121,12 @@ async function movedBox(foundAt?: Date) {
       .sort(),
   ).toEqual(["found node.db bytes", "found venue.db bytes"]);
   expect([...before.keys()].some((path) => path.includes(START_AGAIN_CHOICES_DIR))).toBe(true);
-  expect(before.has(join(roots.stateDir, START_AGAIN_NOTE_FILE))).toBe(true);
   return { roots, before };
 }
 
 type Kept = { ino: number; bytes: Buffer } | { ino: number; names: string[] };
 
-/** Every file and folder of the set-aside folders and the choices folder, and the note. */
+/** Every file and folder of the set-aside folders and the choices folder. */
 async function kept(roots: { venueDir: string; stateDir: string }) {
   const out = new Map<string, Kept>();
   const walk = async (path: string) => {
@@ -157,7 +145,6 @@ async function kept(roots: { venueDir: string; stateDir: string }) {
   for (const dir of new Set([roots.venueDir, roots.stateDir]))
     await walk(join(dir, START_AGAIN_SET_ASIDE_DIR));
   await walk(join(roots.stateDir, START_AGAIN_CHOICES_DIR));
-  await walk(join(roots.stateDir, START_AGAIN_NOTE_FILE));
   return out;
 }
 
@@ -273,59 +260,5 @@ it("lifetime: a restore placement leaves the moved files, and a backup naming on
       log: () => {},
     }),
   ).rejects.toMatchObject({ code: "recovery.bundle_invalid" });
-  expect(await kept(roots)).toEqual(before);
-});
-
-type Host = ReturnType<typeof createFirstSetupModuleHost>;
-
-async function compareAndSelect(host: Host, owner: Parameters<Host["preparation"]["select"]>[0]) {
-  const compared = (await host.preparation.prepare(
-    owner,
-    "fiscal-verifactu",
-    { action: "compare-clocks", browser: null },
-    { onBox: true },
-  )) as { id: string };
-  return host.preparation.select(
-    owner,
-    "fiscal-verifactu",
-    { comparisonId: compared.id },
-    await host.owner.reconfirm(owner, PASSWORD, "block-use"),
-  );
-}
-
-it("lifetime: the next setup's name is later than the note a Move raised", async () => {
-  const foundAt = new Date("2026-10-16T13:00:00Z");
-  const { roots, before } = await movedBox(foundAt);
-  const floorMs = (await readStartAgainNote(roots.stateDir))!.floorMs;
-  expect(floorMs).toBeGreaterThan(foundAt.getTime());
-  external.internet.mockImplementation(async () => ({
-    source: "internet",
-    result: "usable",
-    instantMs: Date.now(),
-    uncertaintyMs: 500,
-    wallStartedMs: Date.now(),
-    wallFinishedMs: Date.now(),
-    monotonicStartedMs: performance.now(),
-    monotonicFinishedMs: performance.now(),
-  }));
-  const host = createFirstSetupModuleHost({
-    ...roots,
-    modules: ALL_MODULES.filter((module) =>
-      ["core", "fiscal-verifactu", "fiscal-none"].includes(module.name),
-    ),
-    environment: {},
-    database: () => suite.db,
-  });
-  const claim = await host.owner.claimFirstSetup(
-    { environment: "preproduction", request },
-    randomBytes(32).toString("base64url"),
-  );
-  const owner = { ...claim.state, capability: claim.capability };
-  await expect(compareAndSelect(host, owner)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "minute_not_later", allowedFromMs: floorMs },
-  });
-  vi.setSystemTime(floorMs + 5 * MINUTE_MS);
-  await selectPastWaits(createFakeTimersHourClock(), () => compareAndSelect(host, owner), 1);
   expect(await kept(roots)).toEqual(before);
 });

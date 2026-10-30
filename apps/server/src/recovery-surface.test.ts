@@ -1331,14 +1331,13 @@ describe("a start refused before it began", () => {
       Object.entries({
         ...text,
         more: text.more(3),
-        moveFloor: text.moveFloor("2026-10-27 10:00 UTC"),
         throttled: `${text.throttled(1)} ${text.throttled(5)}`,
         moved: text.moved("state/first-setup-set-aside/2026-10-27T10-00-00Z"),
       });
     const checked = { "en-GB": NEVER_DELETE_EN, "es-ES": NEVER_DELETE_ES } as const;
     for (const lang of ["en-GB", "es-ES"] as const) {
       const entries = strings(START_AGAIN_PAGE_TEXT[lang]);
-      expect(entries.length, lang).toBe(28);
+      expect(entries.length, lang).toBe(27);
       for (const [key, value] of entries) {
         expect(typeof value, `${lang} ${key}`).toBe("string");
         if (key === "moveDetail") continue;
@@ -1347,10 +1346,10 @@ describe("a start refused before it began", () => {
       expect(START_AGAIN_PAGE_TEXT[lang].moveDetail, lang).toMatch(checked[lang]);
     }
     expect(START_AGAIN_PAGE_TEXT["en-GB"].moveDetail).toBe(
-      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again. Its invoice series names are never used again.",
+      "The files are moved, unchanged, into a new folder on the box, and the rest of the interrupted setup is removed. The box then starts a new first setup, where you can recover from a backup or set up again.",
     );
     expect(START_AGAIN_PAGE_TEXT["es-ES"].moveDetail).toBe(
-      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo. Sus nombres de serie de facturas no se vuelven a usar.",
+      "Los archivos se mueven, sin cambios, a una carpeta nueva del equipo, y se quita el resto de la configuración interrumpida. Después el equipo empieza una configuración inicial nueva, donde puedes recuperar desde una copia de seguridad o configurar de nuevo.",
     );
   });
 
@@ -1405,7 +1404,6 @@ describe("recoveryApp's Start again choice", () => {
       },
     ],
     digest: "d".repeat(64),
-    noteFloorMs: null,
   };
   const FOUND = OPERATOR_TEXT["setup.start_again_files_found"]!["en-GB"];
   const KEPT = OPERATOR_TEXT["setup.start_again_kept"]!["en-GB"];

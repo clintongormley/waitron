@@ -1,3 +1,5 @@
+> 2026-10-29, A1206: the start-again note and its floor are retired, so the note-floor overlay this plan builds (`floor.mjs`, `upgrade-floor-entry.ts`) must be re-planned before anyone builds it.
+
 **Execution authority, 29 October 2026:** the owner approved option A: build each eligible cut in its own pull request, respecting every named prerequisite and existing experiment, fiscal and hardware boundary. This supersedes the planning-only approval statements below. Cut 1 supplies pure policy libraries; application and real-platform qualification remain separate.
 
 # A950 Automatic Upgrades Implementation Plan

@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,7 +61,7 @@ function folderUnit(root: "venue" | "state", path: string): StartAgainUnit {
   };
 }
 
-function survey(units: StartAgainUnit[], noteFloorMs: number | null = null): Choice {
+function survey(units: StartAgainUnit[]): Choice {
   return {
     kind: "choice",
     attemptId: "attempt",
@@ -69,7 +69,6 @@ function survey(units: StartAgainUnit[], noteFloorMs: number | null = null): Cho
     markerSha256: "marker",
     units,
     digest: "d".repeat(64),
-    noteFloorMs,
   };
 }
 
@@ -80,7 +79,6 @@ function render(input: Partial<Parameters<typeof renderStartAgainSection>[0]> = 
     survey: OWNER_EXAMPLE,
     locale: "en-GB",
     secure: true,
-    now: NOW,
     ...input,
   });
 }
@@ -340,51 +338,6 @@ describe("renderStartAgainSection", () => {
     );
   });
 
-  it("shows moveFloor only when the floor is later than now, in UTC", () => {
-    const later = Date.parse("2026-10-27T11:05:00.000Z");
-    for (const locale of LANGS) {
-      const text = START_AGAIN_PAGE_TEXT[locale];
-      const floor = escapeHtml(text.moveFloor("2026-10-27 11:05 UTC"));
-      const shown = render({ locale, survey: survey([fileUnit("venue", "venue.db")], later) });
-      expect(shown, locale).toContain(floor);
-      expect(shown.indexOf(floor), locale).toBeGreaterThan(
-        shown.indexOf(escapeHtml(text.moveUnsent)),
-      );
-      const floorStart = escapeHtml(text.moveFloor("TIME").split("TIME")[0]!);
-      expect(shown, locale).toContain(floorStart);
-      const equal = render({
-        locale,
-        survey: survey([fileUnit("venue", "venue.db")], NOW.getTime()),
-      });
-      expect(equal, locale).not.toContain(floorStart);
-      const none = render({ locale, survey: survey([fileUnit("venue", "venue.db")], null) });
-      expect(none, locale).not.toContain(floorStart);
-    }
-  });
-
-  it("a found file dated hours ahead shows moveFloor from a real survey only on a box with a note", async () => {
-    const floorStart = escapeHtml(
-      START_AGAIN_PAGE_TEXT["en-GB"].moveFloor("TIME").split("TIME")[0]!,
-    );
-    const ahead = new Date(NOW.getTime() + 5 * 60 * 60_000);
-    const sectionFor = async (note?: { floorMs: number; lastName: string; module: string }) => {
-      const base = await mkdtemp(join(tmpdir(), "recovery-start-again-floor-"));
-      dirs.push(base);
-      const attempt = await startAgainAttempt(base, note === undefined ? {} : { note });
-      const database = join(attempt.roots.venueDir, "venue.db");
-      await writeFile(database, "found database");
-      await utimes(database, ahead, ahead);
-      const found = await surveyStartAgainLeftovers(attempt.roots);
-      if (found?.kind !== "choice")
-        throw new Error(`expected choice, got ${JSON.stringify(found)}`);
-      return render({ survey: found });
-    };
-    expect(await sectionFor()).not.toContain(floorStart);
-    expect(
-      await sectionFor({ floorMs: NOW.getTime() - 60_000, lastName: "AB123", module: "probe" }),
-    ).toContain(floorStart);
-  });
-
   it("a Spanish string differs from its English twin for every key", () => {
     const english = START_AGAIN_PAGE_TEXT["en-GB"];
     const spanish = START_AGAIN_PAGE_TEXT["es-ES"];
@@ -392,7 +345,6 @@ describe("renderStartAgainSection", () => {
     const sample = (text: typeof english) => ({
       ...text,
       more: text.more(3),
-      moveFloor: text.moveFloor("2026-10-27 11:05 UTC"),
       throttled: text.throttled(4),
       moved: text.moved("state/aside"),
     });

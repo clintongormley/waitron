@@ -535,7 +535,7 @@ async function checkedRecords(
   }
   if (digest(records[0]) !== selection.initialRecordDigest) uncertain();
   // An abandoned recovery is a tombstone; the attempt it was taken against may be deleted.
-  // Abandoning checks only the chain too: Start again writes its note and confirmation
+  // Abandoning checks only the chain too: Start again writes its confirmation
   // into the box's state folder before it abandons.
   if (chainOnly || records.at(-1)!.phase === "abandoned") return records;
   const manifest = await read(join(path, "originals.json"));

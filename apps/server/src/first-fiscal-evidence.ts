@@ -101,26 +101,6 @@ export function readFirstFiscalEvidenceSnapshot(
   }
 }
 
-/** This module's well-formed entries from a public record the strict read refuses. */
-export function readWellFormedFirstFiscalEvidence(
-  module: string,
-  originals: readonly { name: string; bytes: Uint8Array | null }[],
-): unknown[] {
-  const bytes = publicRecordBytes(originals);
-  if (bytes == null || bytes.length > PUBLIC_RECORD_LIMIT) return [];
-  let value: unknown;
-  try {
-    value = JSON.parse(Buffer.from(bytes).toString("utf8"));
-  } catch {
-    return [];
-  }
-  if (!record(value) || !Array.isArray(value.history)) return [];
-  return (value.history as unknown[])
-    .filter(wellFormedHistoryEntry)
-    .filter((entry) => entry.module === module)
-    .map((entry) => entry.current);
-}
-
 export function createFirstFiscalEvidence(options: EvidenceOptions) {
   const path = join(options.stateDir, "module-operation-public.json");
   const grants = new Map<

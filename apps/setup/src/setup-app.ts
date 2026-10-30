@@ -11,11 +11,10 @@ import type {
   FirstSetupInspection,
   FirstSetupResolutionSnapshot,
   StartAgainSummary,
-  StartAgainUnreadableRecord,
 } from "./api/first-setup-types.js";
 import "./screens/initial-setup-screen.js";
 import { shownAt } from "./screens/first-setup-backup-screen.js";
-import { initialOwnerStrings, namesFromText } from "./screens/initial-owner-strings.js";
+import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   LeaveController,
   ThemeChoiceController,
@@ -79,11 +78,6 @@ import type { StringKey } from "./i18n/strings.js";
 import { currentLocale, format, setLocale, t } from "./i18n/t.js";
 
 const setupLocale = (): "en" | "es" => (currentLocale().startsWith("es") ? "es" : "en");
-const damagedRecordLine = {
-  "series-picks": "seriesPicksDamaged",
-  "public-record": "publicRecordDamaged",
-  "fiscal-documents": "fiscalDocumentsDamaged",
-} as const satisfies Record<StartAgainUnreadableRecord, keyof (typeof initialOwnerStrings)["en"]>;
 
 /** The wizard's screens, shown one at a time from in-memory state, never a URL route. */
 export type Screen =
@@ -1131,8 +1125,6 @@ export class SetupApp extends LitElement {
   @state() private firstDamagedRecord?: "password" | "confirm" | "unread";
   /** With the database present, the summary of a stopped backup recovery read after the password. */
   @state() private firstStoppedSummary?: StartAgainSummary;
-  /** With the database present and no stopped recovery, the summary naming damaged name records. */
-  @state() private firstDamagedSummary?: StartAgainSummary;
   @state() private firstBackupPhase?: BackupRepairStatus["phase"];
   /** Read before anything is offered on this page, so nothing is offered while a recovery runs elsewhere. */
   @state() private firstActivity?: BackupRepairActivity | null;
@@ -1148,8 +1140,6 @@ export class SetupApp extends LitElement {
   #firstReplacing = false;
   /** The password step was asked for by a refusal while no recovery was known: a record is damaged. */
   #damagedInferred = false;
-  /** The password refusal said the series picks file is damaged. */
-  #seriesPicksUnreadable = false;
   #firstPasswordOwner = {};
   #firstPasswordScope?: DraftScope<string>;
 
@@ -1413,7 +1403,6 @@ export class SetupApp extends LitElement {
     this.#firstSession = undefined;
     this.firstDamagedRecord = undefined;
     this.firstStoppedSummary = undefined;
-    this.firstDamagedSummary = undefined;
     await session?.forgetOwner();
   }
   #firstResolutionSnapshot(): FirstSetupResolutionSnapshot {
@@ -1455,9 +1444,7 @@ export class SetupApp extends LitElement {
     try {
       if (missing) await this.#firstSession!.retireMissingDatabase(shown!);
       else if (this.firstDamagedRecord === "confirm")
-        await this.#firstSession!.retireDamagedRecord(
-          this.firstStoppedSummary ?? this.firstDamagedSummary,
-        );
+        await this.#firstSession!.retireDamagedRecord(this.firstStoppedSummary);
       else await this.api.startAgainFirstSetup(this.#firstResolutionSnapshot());
       if (!current()) return;
       this.firstDamagedRecord = undefined;
@@ -1488,8 +1475,6 @@ export class SetupApp extends LitElement {
             this.#watchActivity();
           }
           this.#damagedInferred = activity === null;
-          this.#seriesPicksUnreadable =
-            (error as { params?: Record<string, unknown> }).params?.seriesPicksUnreadable === true;
           this.firstDamagedRecord = "password";
           return;
         } else if (this.firstDamagedRecord === "confirm") {
@@ -1501,7 +1486,6 @@ export class SetupApp extends LitElement {
           this.firstDamagedRecord = "password";
           const stopped = this.firstStoppedSummary !== undefined;
           this.firstStoppedSummary = undefined;
-          this.firstDamagedSummary = undefined;
           this.firstOwnerError =
             startAgainRefusalCause(error) === "kept-records"
               ? () => initialOwnerStrings[setupLocale()].heldChanged
@@ -1551,7 +1535,6 @@ export class SetupApp extends LitElement {
     current: () => boolean,
   ): Promise<void> {
     this.firstStoppedSummary = undefined;
-    this.firstDamagedSummary = undefined;
     let activity: BackupRepairActivity | null;
     try {
       activity = await this.#readActivityAnswer();
@@ -1574,15 +1557,6 @@ export class SetupApp extends LitElement {
       } catch (error) {
         if (current() && !(await this.#refusedForGood(error, current)))
           this.#presentReadsFailed(error);
-        return;
-      }
-    } else if (this.#damagedInferred && this.#seriesPicksUnreadable) {
-      try {
-        const summary = await session.damagedRecordSummary();
-        if (!current()) return;
-        this.firstDamagedSummary = summary;
-      } catch (error) {
-        if (current()) this.#presentReadsFailed(error);
         return;
       }
     }
@@ -1654,7 +1628,6 @@ export class SetupApp extends LitElement {
     }
     this.firstDamagedRecord = undefined;
     this.firstStoppedSummary = undefined;
-    this.firstDamagedSummary = undefined;
     this.firstRestartConfirm = false;
     this.firstRetireConfirmed = false;
     this.firstPasswordAttempted = false;
@@ -1667,7 +1640,7 @@ export class SetupApp extends LitElement {
   }
   #showsDamagedRecord(missing: boolean, ask: StartAgainSummary | undefined): boolean {
     if (missing) return ask?.recoveryRecordDamaged === true;
-    const summary = this.firstStoppedSummary ?? this.firstDamagedSummary;
+    const summary = this.firstStoppedSummary;
     return (
       this.firstDamagedRecord === "confirm" &&
       (summary === undefined || summary.recoveryRecordDamaged === true)
@@ -1691,7 +1664,6 @@ export class SetupApp extends LitElement {
       this.firstMissingSummary = undefined;
       this.firstDamagedRecord = undefined;
       this.firstStoppedSummary = undefined;
-      this.firstDamagedSummary = undefined;
       this.firstBackupPhase = undefined;
       this.firstRecoveryUnsettled = false;
       this.firstStartAgainRefused = undefined;
@@ -2533,9 +2505,6 @@ export class SetupApp extends LitElement {
       !this.#firstSession?.recoveryRequired &&
       state.status !== "complete";
     const ask = authenticatedMissing ? this.firstMissingSummary : undefined;
-    const unreadable = (missing ? ask : (this.firstStoppedSummary ?? this.firstDamagedSummary))
-      ?.unreadable;
-    const namesFrom = unreadable && namesFromText(currentLocale(), unreadable.floorMs);
     // Any journal, an unreadable one ("uncertain") included, means a recovery has started.
     const recoveryStarted = this.firstBackupPhase !== "unstarted";
     const running = this.firstActivity?.state === "running" ? this.firstActivity : undefined;
@@ -2607,7 +2576,6 @@ export class SetupApp extends LitElement {
         if (stoppedHere && damaged === undefined) {
           this.firstDamagedRecord = "password";
           this.#damagedInferred = false;
-          this.#seriesPicksUnreadable = false;
         } else if (damaged === "confirm" && this.firstStoppedSummary)
           void this.#checkPresentAgain();
         else this.firstRestartConfirm = true;
@@ -2705,16 +2673,10 @@ export class SetupApp extends LitElement {
                 ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
                 : nothing
             }
-            ${(unreadable?.records ?? []).map(
-              (record) =>
-                html`<p data-test="name-record-damaged">${t[damagedRecordLine[record]]}</p>`,
-            )}
             <p data-test="start-again-deletes">
               ${noInvoiceFound ? `${t.heldLost} ${t.noInvoiceSent}` : t.heldLost}
             </p>
             ${stoppedShown ? stoppedBlock(stoppedShown) : nothing}
-            <p>${t.startAgainHelp}</p>
-            ${namesFrom ? html`<p data-test="names-from">${namesFrom}</p>` : nothing}
             <label
               ><input
                 data-test="retire-confirmed"
@@ -2826,18 +2788,13 @@ export class SetupApp extends LitElement {
                   <ul data-test="missing-reached">
                     <li>
                       ${
-                        ask.lastName === null
-                          ? t.reachedNoName
-                          : t.reachedName.replace("{name}", ask.lastName)
+                        ask.reached === "fiscal-started"
+                          ? t.reachedFiscalStarted
+                          : ask.reached === "fiscal-finished"
+                            ? t.reachedFiscalFinished
+                            : t.reachedNotStarted
                       }
                     </li>
-                    ${
-                      ask.reached === "fiscal-started"
-                        ? html`<li>${t.reachedFiscalStarted}</li>`
-                        : ask.reached === "fiscal-finished"
-                          ? html`<li>${t.reachedFiscalFinished}</li>`
-                          : nothing
-                    }
                   </ul>
                   ${
                     stopped

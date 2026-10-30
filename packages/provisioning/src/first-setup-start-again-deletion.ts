@@ -107,7 +107,7 @@ const checkFailed = (error: unknown) =>
 const entryName = (name: string) =>
   name !== "" && name !== "." && name !== ".." && !name.includes("/") && !name.includes("\0");
 
-/** Only the deletion list's own names; the note, the confirmation folder and `tls/` are not among them. */
+/** Only the deletion list's own names; the confirmation folder and `tls/` are not among them. */
 function listed(root: Root, name: string): boolean {
   const parts = name.split("/");
   if (!parts.every(entryName)) return false;
@@ -328,31 +328,6 @@ async function itemsOnDisk(roots: Roots, options: Options = {}): Promise<Item[]>
   await file("venue", "first-setup-claim.json");
   await file("state", "first-setup.json");
   return items;
-}
-
-/**
- * The newest file time, rounded up to a whole millisecond, among the attempt's own items on the
- * deletion list, other than the databases and their side files, or null when none is present.
- */
-export async function attemptLastWriteMs(
-  roots: Roots,
-  options: Options = {},
-): Promise<number | null> {
-  const canonical = await canonicalFirstSetupRoots(roots);
-  try {
-    const databases = new Set(
-      ["venue.db", "node.db"].map((name) => join(canonical.venueDir, name)),
-    );
-    let latest: number | null = null;
-    for (const item of await itemsOnDisk(canonical, options)) {
-      if (item.kind === "side" || databases.has(item.path)) continue;
-      const { mtimeMs } = await lstat(item.path);
-      if (latest === null || mtimeMs > latest) latest = mtimeMs;
-    }
-    return latest === null ? null : Math.ceil(latest);
-  } catch (error) {
-    throw error instanceof AppError ? error : checkFailed(error);
-  }
 }
 
 async function sha256(path: string): Promise<StartAgainFingerprint> {

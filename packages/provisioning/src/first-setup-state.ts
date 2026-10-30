@@ -8,7 +8,6 @@ import type { DeploymentEnvironment } from "@waitron/db";
 import type { VenueRequest } from "./venue-plan.js";
 import { readDurableHostJson, writeDurableHostJson } from "./durable-host-json.js";
 import { assertNoStartAgainDeletion } from "./first-setup-start-again-deletion.js";
-import { START_AGAIN_NOTE_FILE } from "./first-setup-start-again-note.js";
 import { START_AGAIN_CONFIRMATIONS_DIR } from "./first-setup-start-again-confirmation.js";
 import {
   START_AGAIN_CHOICES_DIR,
@@ -150,7 +149,6 @@ export const FIRST_SETUP_HOST_FILES = [
   "first-setup-selection.json",
   "first-setup-retirement.json",
   "first-setup-workspace.json",
-  START_AGAIN_NOTE_FILE,
   // Not START_AGAIN_MARKER_FILE: the deletion module imports this one through the backup
   // workspace, so loading it first would read that name before it exists.
   "first-setup-deleting.json",

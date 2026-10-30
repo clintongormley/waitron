@@ -21,11 +21,8 @@ import "@waitron/db";
 import {
   START_AGAIN_CONFIRMATIONS_DIR,
   readStartAgainMarker,
-  readStartAgainNote,
   type StartAgainSummary,
 } from "@waitron/provisioning";
-
-import { encodeMinuteIdentity } from "@waitron/fiscal-verifactu/src/hour-identity.js";
 
 import { clock } from "../test/hour-recovery-host.js";
 
@@ -157,7 +154,6 @@ async function expectNothingWritten(
   await expect(
     access(join(f.roots.stateDir, "first-setup-start-again-confirmations")),
   ).rejects.toMatchObject({ code: "ENOENT" });
-  expect(await readStartAgainNote(f.roots.stateDir)).toBeNull();
 }
 
 // A discarded recovery's folder keeps its records and its target's lock files, nothing else.
@@ -175,7 +171,7 @@ async function confirmations(stateDir: string) {
 
 async function expectDiscarded(
   f: Pick<Repair, "roots" | "record" | "session" | "workspace">,
-  expected: { lastName: string; shown: StartAgainSummary; lock: { ino: number } },
+  expected: { shown: StartAgainSummary; lock: { ino: number } },
 ) {
   expect((await f.workspace.read()).at(-1)).toMatchObject({
     phase: "abandoned",
@@ -191,21 +187,19 @@ async function expectDiscarded(
     code: "ENOENT",
   });
   expect(await readStartAgainMarker(f.roots.venueDir)).toBeNull();
-  expect((await readStartAgainNote(f.roots.stateDir))?.lastName).toBe(expected.lastName);
   expect(expected.shown.recovery).toBeDefined();
   expect((await confirmations(f.roots.stateDir)).map(({ shown }) => shown)).toEqual([
     expected.shown,
   ]);
 }
 
-it("a backup recovery prepared and given up is discarded by Start again: the note holds its name, its lock stays", async () => {
+it("a backup recovery prepared and given up is discarded by Start again, and its lock stays", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await confirmedStartAgain(f, f.service);
-  expect(startAgain.shown.lastName).not.toBe(f.selected.identity);
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
 it("a recovery that failed at placement-started is discarded by Start again at once", async () => {
@@ -226,7 +220,7 @@ it("a recovery that failed at placement-started is discarded by Start again at o
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
   const startAgain = await confirmedStartAgain(f, recovery(f.options));
   await expect(startAgain.run()).resolves.toBeUndefined();
-  await expectDiscarded(f, { lastName: f.selected.identity, shown: startAgain.shown, lock });
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
   await expect(access(join(f.record.target.target.venueDir, "venue.db"))).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -349,7 +343,6 @@ it("once A's lease lapsed, B's password step seals A: A's renewal and step are r
     startedAt: stopped!.startedAt,
     lastActiveAt: stopped!.lastActiveAt,
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: false,
     cloud: false,
   });
@@ -375,7 +368,7 @@ it("B gets no summary and no Start again while A's lease is fresh, and nothing i
       owner,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
-        shown: { reached: "claimed", lastName: null },
+        shown: { reached: "claimed" },
       },
     }),
   ).rejects.toEqual(expect.objectContaining(inProgress(activity).error));
@@ -434,7 +427,7 @@ it("the fence lets the backup routes and every read through while A's recovery r
   expect(await renewed.json()).toEqual({ renewed: true });
 });
 
-it("a stopped recovery is named in the summary with the name it chose", async () => {
+it("a stopped recovery is named in the summary", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const { owner, ids } = await signedIn(f.host);
@@ -443,14 +436,12 @@ it("a stopped recovery is named in the summary with the name it chose", async ()
   const stopped = (await f.service.liveness())!;
   expect(stopped.state).toBe("stopped");
   const plain = await attemptOnly.startAgainSummary({ ...ids, owner });
-  expect(plain.lastName).not.toBe(f.selected.identity);
   expect(await actions.startAgainSummary({ ...ids, owner })).toEqual({
     ...plain,
     recovery: {
       startedAt: stopped.startedAt,
       lastActiveAt: stopped.lastActiveAt,
       lastActiveSource: "memory",
-      lastName: f.selected.identity,
       failed: false,
       cloud: false,
     },
@@ -469,7 +460,6 @@ it("a recovery that failed at placement-started is named as failed at once", asy
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: true,
     cloud: false,
   });
@@ -477,7 +467,7 @@ it("a recovery that failed at placement-started is named as failed at once", asy
 
 type Repair = Awaited<ReturnType<typeof preparedRepair>>;
 
-// The kept picks in the recovery's own copy, which the summary reads first.
+// The kept picks in the recovery's own copy.
 async function removeTargetPicks(f: Pick<Repair, "record">) {
   await unlink(join(f.record.target.target.stateDir, "module-preparation-state.json")).catch(
     (error: unknown) => {
@@ -485,46 +475,6 @@ async function removeTargetPicks(f: Pick<Repair, "record">) {
     },
   );
 }
-
-it("a stopped recovery whose own copy holds no picks is named from its journal's input", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  expect(f.record.input).toEqual(f.selected.input);
-  await access(join(f.record.target.target.stateDir, "module-preparation-state.json"));
-  await removeTargetPicks(f);
-  const { owner, ids } = await signedIn(f.host);
-  const { actions } = repairApp(f);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
-    lastName: f.selected.identity,
-  });
-});
-
-it.each([
-  ["cannot be read", () => "unreadable"],
-  [
-    "hold an entry its module cannot read",
-    (binding: unknown) =>
-      JSON.stringify({
-        version: 1,
-        revisions: [{ binding, value: { version: 1, entries: [{}] } }],
-      }),
-  ],
-])(
-  "a stopped recovery whose own copy's picks %s is named from its journal's input",
-  async (_name, picksOf) => {
-    const f = await selectedRepair();
-    await f.service.close(f.session.sessionId);
-    await writeFile(
-      join(f.record.target.target.stateDir, "module-preparation-state.json"),
-      picksOf(f.record.binding),
-    );
-    const { owner, ids } = await signedIn(f.host);
-    const { actions } = repairApp(f);
-    expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
-      lastName: f.selected.identity,
-    });
-  },
-);
 
 async function appendInput(f: Pick<Repair, "workspace" | "record">, input: unknown) {
   const { version, sequence, previousRecordDigest, recordedAt, ...last } = f.record;
@@ -534,58 +484,6 @@ async function appendInput(f: Pick<Repair, "workspace" | "record">, input: unkno
   void recordedAt;
   await f.workspace.append({ ...last, input });
 }
-
-function laterInput(input: unknown, minutes: number) {
-  const later = structuredClone(input) as {
-    allocation: {
-      installationIdentity: string;
-      issuedAt: string;
-      series: { code: string; purpose: string }[];
-    };
-  };
-  const ms = Date.parse(later.allocation.issuedAt) + minutes * 60_000;
-  const identity = encodeMinuteIdentity(ms);
-  later.allocation.series = later.allocation.series.map((series) => ({
-    ...series,
-    code: series.code.replace(later.allocation.installationIdentity, identity),
-  }));
-  later.allocation.installationIdentity = identity;
-  later.allocation.issuedAt = new Date(ms).toISOString();
-  return { input: later, identity };
-}
-
-it("a later name in a stopped recovery's journal wins over an older name in its own copy's picks", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  await access(join(f.record.target.target.stateDir, "module-preparation-state.json"));
-  const later = laterInput(f.selected.input, 5);
-  expect(later.identity).not.toBe(f.selected.identity);
-  await appendInput(f, later.input);
-  const { owner, ids } = await signedIn(f.host);
-  const { actions } = repairApp(f);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toMatchObject({
-    lastName: later.identity,
-  });
-});
-
-it("a stopped recovery that never chose a name, and whose copy holds no picks file, is named with no name", async () => {
-  const f = await preparedRepair();
-  expect(f.record).toMatchObject({ phase: "prepared", input: null });
-  await f.service.close(f.session.sessionId);
-  await removeTargetPicks(f);
-  const stopped = (await f.service.liveness())!;
-  expect(stopped.state).toBe("stopped");
-  const { owner, ids } = await signedIn(f.host);
-  const { actions } = repairApp(f);
-  expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
-    startedAt: stopped.startedAt,
-    lastActiveAt: stopped.lastActiveAt,
-    lastActiveSource: "memory",
-    lastName: null,
-    failed: false,
-    cloud: false,
-  });
-});
 
 it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
   ["named nothing", "cannot be read", null, () => "unreadable"],
@@ -622,7 +520,7 @@ it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
     null,
   ],
 ])(
-  "a stopped recovery whose journal %s and whose copy's picks %s refuses the summary setup.not_ready, and nothing is written",
+  "a stopped recovery whose journal %s and whose copy's picks %s gets a summary: no name is read",
   async (_name, _picks, input, picksOf) => {
     const f = await preparedRepair();
     expect(f.record).toMatchObject({ phase: "prepared", input: null });
@@ -635,41 +533,19 @@ it.each<[string, string, unknown, ((binding: unknown) => string) | null]>([
         join(f.record.target.target.stateDir, "module-preparation-state.json"),
         picksOf(f.record.binding),
       );
-    expect((await f.service.liveness())?.state).toBe("stopped");
+    const stopped = (await f.service.liveness())!;
+    expect(stopped.state).toBe("stopped");
     const { owner, ids } = await signedIn(f.host);
     const { actions } = repairApp(f);
-    const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
-      code: "setup.not_ready",
+    expect((await actions.startAgainSummary({ ...ids, owner })).recovery).toEqual({
+      startedAt: stopped.startedAt,
+      lastActiveAt: stopped.lastActiveAt,
+      lastActiveSource: "memory",
+      failed: false,
+      cloud: false,
     });
-    await expectNothingWritten(f, before);
   },
 );
-
-it("a stopped recovery whose module has no start-again seat refuses the summary setup.not_ready", async () => {
-  const f = await selectedRepair();
-  await f.service.close(f.session.sessionId);
-  const { owner, ids } = await signedIn(f.host);
-  const modules = f.host.modules.map((module) =>
-    module.name === f.record.binding.module
-      ? {
-          ...module,
-          provisioning: {
-            ...module.provisioning,
-            initialSetup: { ...module.provisioning!.initialSetup!, startAgainFloor: undefined },
-          },
-        }
-      : module,
-  );
-  const actions = createFirstSetupResolutionActions({
-    ...f.roots,
-    host: { ...f.host, modules },
-    backupRecovery: f.service,
-  });
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
-});
 
 it("after a restart, a stopped recovery is named with its saved steps' times", async () => {
   const f = await selectedRepair();
@@ -687,7 +563,6 @@ it("after a restart, a stopped recovery is named with its saved steps' times", a
     startedAt: records[0]!.recordedAt,
     lastActiveAt: records.at(-1)!.recordedAt,
     lastActiveSource: "saved-step",
-    lastName: f.selected.identity,
     failed: false,
     cloud: false,
   });
@@ -706,7 +581,6 @@ it("a recovery that failed after it was restored is named as failed", async () =
     startedAt: expect.any(String),
     lastActiveAt: expect.any(String),
     lastActiveSource: "memory",
-    lastName: f.selected.identity,
     failed: true,
     cloud: false,
   });
