@@ -81,9 +81,9 @@ async function routed() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00:00",
     })
@@ -92,7 +92,7 @@ async function routed() {
   const cfg = { locationId };
   const [station] = await db
     .insert(kitchenStations)
-    .values({ locationId, name: "Cocina", isDefault: true })
+    .values({ locationId, name: "Kitchen", isDefault: true })
     .returning({ id: kitchenStations.id });
   const made = await scoped(async (tx) => {
     const seasons = await ensureDefaultSeasons(tx, cfg);
@@ -102,7 +102,7 @@ async function routed() {
       await createDepartment(tx, cfg, { name: "Restaurant", orderStart: "table" })
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
-    const menu = (await createCatalogue(tx, { name: "Carta" })).id;
+    const menu = (await createCatalogue(tx, { name: "Menu" })).id;
     const { document } = await buildMenuDocument(tx, menu);
     await publishMenu(tx, menu, menuDocumentHash(document), "person-1");
     const period = async (departmentId: string, name: string) =>
@@ -139,11 +139,11 @@ async function routed() {
           0,
         )
       ).id;
-    const aniversario = await specialDay("Aniversario", FUTURE, [
+    const anniversary = await specialDay("Anniversary", FUTURE, [
       slot(lunch, "13:00", "15:00"),
       slot(afternoon, "15:00", "18:00"),
     ]);
-    await specialDay("Fiesta pasada", PAST, [slot(lunch, "13:00", "15:00")]);
+    await specialDay("Past celebration", PAST, [slot(lunch, "13:00", "15:00")]);
     const [cell] = await tx
       .insert(routingCells)
       .values({ locationId, stationId: station!.id, noCategory: true })
@@ -168,7 +168,7 @@ async function routed() {
       lunch,
       afternoon,
       deliLunch,
-      aniversario,
+      anniversary,
       seasons: { summer: season("Summer"), autumn: season("Autumn") },
       manager: await person("manager"),
       supervisor: await person("supervisor"),
@@ -263,7 +263,7 @@ describe("the period-delete routes", () => {
       {
         periodId: r.afternoon,
         seasons: [],
-        specialDays: [{ id: r.aniversario, name: "Aniversario" }],
+        specialDays: [{ id: r.anniversary, name: "Anniversary" }],
       },
       { periodId: r.deliLunch, seasons: [], specialDays: [] },
       {
@@ -280,7 +280,7 @@ describe("the period-delete routes", () => {
           { id: r.seasons.summer, name: starterSeasonName("Summer", "es") },
           { id: r.seasons.autumn, name: starterSeasonName("Autumn", "es") },
         ],
-        specialDays: [{ id: r.aniversario, name: "Aniversario" }],
+        specialDays: [{ id: r.anniversary, name: "Anniversary" }],
       },
     ]);
   });
