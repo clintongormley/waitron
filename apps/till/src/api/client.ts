@@ -4698,14 +4698,15 @@ export class TillApi {
 
   /**
    * Name a bill, or clear its name with null or "" → `PUT /api/bills/:id/name`, answering the
-   * party's revision and the bill's number and name. A name over 40 characters is
-   * `management.request_invalid` naming the field `name`; another till's unsent dishes on the bill
-   * are `draft.taken_over` until this till takes the bill over.
+   * party's revision and the bill's number and name. Rejects, among others, a name over 40
+   * characters as `management.request_invalid` naming the field `name`; unsent dishes another person
+   * is editing on the bill as `draft.taken_over`, until this person takes the bill over; a stale
+   * editor expectation as `draft.out_of_date`; and `party.out_of_date`.
    */
   renameBill(
     billId: string,
     name: string | null,
-    revisions: BillRevisions & { expectedEdit: BillEditExpected },
+    revisions: Required<BillRevisions> & { expectedEdit: BillEditExpected },
   ): Promise<{ revision: number; billNumber: number | null; billName: string | null }> {
     return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
   }

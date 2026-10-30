@@ -140,7 +140,7 @@ describe("till-table-order-screen: the party's bills", () => {
     expect(bills(el).querySelector("[data-party-outstanding]")!.textContent).toBe(money("30.00"));
   });
 
-  it("names each bill after the party, numbered in the order listed", async () => {
+  it("names each bill after the party, with the number it holds", async () => {
     const el = await mountScreen();
 
     expect(bill(el, "wo-tab")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
@@ -149,6 +149,25 @@ describe("till-table-order-screen: the party's bills", () => {
     expect(bill(el, "wo-check")!.querySelector(".bill-name")!.textContent!.trim()).toBe(
       t("table.bill_of").replace("{party}", "Ana").replace("{n}", "2"),
     );
+  });
+
+  it("A803 bill names: lists bills by the number each holds and adds the name staff gave one", async () => {
+    const el = await mountScreen({
+      bills: [
+        { ...check, billName: "Clint" },
+        { ...paidTab, status: "open", outstanding: "14.00" },
+      ],
+    });
+
+    expect(
+      [...bills(el).querySelectorAll(".bill-name")].map((name) => name.textContent!.trim()),
+    ).toEqual([
+      t("table.bill_of").replace("{party}", "Ana").replace("{n}", "1"),
+      t("table.bill_of_named")
+        .replace("{party}", "Ana")
+        .replace("{n}", "2")
+        .replace("{name}", "Clint"),
+    ]);
   });
 
   it("names an unnamed party's bills after its tables, and never after a bill's own label", async () => {

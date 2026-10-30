@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { PartyBill } from "../api/client.js";
-import { setLocale } from "../i18n/t.js";
+import { setLocale, t } from "../i18n/t.js";
 import { billName, shownBills } from "./bill-state.js";
 
 afterEach(() => setLocale("en"));
@@ -43,6 +43,18 @@ describe("A803 bill names", () => {
     setLocale("es");
     expect(billName("Ana", bill({ billNumber: null }))).not.toContain("null");
     expect(billName("Ana", bill({ billNumber: null }))).not.toContain("{n}");
+  });
+
+  it.each([
+    "table.bill_of",
+    "table.bill_of_named",
+    "table.bill_of_unnumbered",
+    "table.bill_of_unnumbered_named",
+    "floor.unsent_bill_unnumbered",
+  ] as const)("%s has its own Spanish words and the same slots as the English", (key) => {
+    const slots = (text: string) => [...text.matchAll(/\{\w+\}/g)].map(([slot]) => slot).sort();
+    expect(t(key, "es")).not.toBe(t(key, "en"));
+    expect(slots(t(key, "es"))).toEqual(slots(t(key, "en")));
   });
 
   it("shownBills leaves out abandoned bills and sorts the rest by number", () => {

@@ -9149,6 +9149,17 @@ describe("till-app: recording an unpaid departure", () => {
     expect(tableOrder(el)).not.toBeNull();
   });
 
+  it("A803 bill names: the dialog lists bills by the number each holds, with the name staff gave one", async () => {
+    const { el } = await openDeparture({
+      getPartyBills: vi.fn().mockResolvedValue([{ ...checkBill, billName: "Clint" }, tabBill]),
+    });
+
+    expect(dialog(el)!.bills).toEqual([
+      { workingOrderId: "wo-4", name: "4 · Bill 1", outstanding: "14.00" },
+      { workingOrderId: "wo-check", name: "4 · Bill 2 · Clint", outstanding: "30.00" },
+    ]);
+  });
+
   it("leaves out of the dialog a bill with nothing left to pay", async () => {
     drafts.bills.add("wo-empty");
     const empty: PartyBill = {

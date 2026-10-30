@@ -4059,7 +4059,7 @@ describe("till-table-order-screen", () => {
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("keeps bill identity when a new sibling takes the abandoned bill's display number", async () => {
+    it("keeps bill identity when the bill on screen is abandoned beside an open sibling", async () => {
       const thirdBill = bill({ workingOrderId: "wo-third", billNumber: 3 });
       const { el } = await mount({
         party: anaParty,

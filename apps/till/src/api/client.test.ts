@@ -3961,6 +3961,8 @@ describe("TillApi: a seated party", () => {
         workingOrderId: "wo-1",
         partyId: "v1",
         label: null,
+        billNumber: 1,
+        billName: null,
         status: "settled",
         total: "14.00",
         outstanding: "0.00",
