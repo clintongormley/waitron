@@ -3551,7 +3551,7 @@ describe("startServer — what a trading boot wires behind its management routes
     }
   }, 60_000);
 
-  it("gives the archive routes and the bucket-copy routes one queue: a bucket-copy read waits behind a held rotation", async () => {
+  it("gives the archive routes and the bucket-copy routes one queue: switching the bucket copy off waits behind a held rotation", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -3569,8 +3569,9 @@ describe("startServer — what a trading boot wires behind its management routes
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
       });
 
-      const kit = fetch(`http://127.0.0.1:${httpPort()}/api/backup/stream/kit`, {
-        headers: { cookie },
+      const switchOff = fetch(`http://127.0.0.1:${httpPort()}/api/backup/stream`, {
+        method: "DELETE",
+        headers: { cookie, origin: ORIGIN },
       });
       await vi.waitFor(() => expect(backupQueue.handed).toBe(handed + 2), {
         timeout: POLL_TRIES * POLL_INTERVAL_MS,
@@ -3585,12 +3586,10 @@ describe("startServer — what a trading boot wires behind its management routes
       expect(await rotationResponse.json()).toEqual({
         error: { code: "backup.request_invalid", params: { field: "config" } },
       });
-      const kitResponse = await kit;
+      const switchOffResponse = await switchOff;
       expect(backupQueue.started).toBe(started + 2);
-      expect(kitResponse.status).toBe(409);
-      expect(await kitResponse.json()).toEqual({
-        error: { code: "backup.stream_not_configured", params: {} },
-      });
+      expect(switchOffResponse.status).toBe(200);
+      expect(await switchOffResponse.json()).toMatchObject({ configured: false });
     } finally {
       release();
       backupQueue.gate = undefined;

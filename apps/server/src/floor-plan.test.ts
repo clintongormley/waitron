@@ -1295,7 +1295,10 @@ describe("floor plans without adoption", () => {
 });
 
 describe("short names", () => {
-  const short = () => `S${randomUUID().slice(0, 4)}`;
+  // Counted, never random: a random name could match one already claimed in this file's shared
+  // database, and no label here starts with "#", so no proposed short name can either.
+  let shortCount = 0;
+  const short = () => `#${(shortCount++).toString(36).padStart(4, "0")}`;
   const digits = () => String(1000 + Math.floor(Math.random() * 9000));
 
   function entry(key: string, label: string, extra: Partial<SaveEntry> = {}): SaveEntry {

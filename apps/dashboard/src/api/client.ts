@@ -2039,12 +2039,57 @@ export interface BackupSettingsEvidence {
   recoveryKey: { held: boolean; tooShort: boolean; fingerprint?: string };
 }
 
-/** `GET /api/backup/archive-recovery-pack`. `pack` is the pack's code line alone, and secret. */
-export interface ArchiveRecoveryPackAnswer {
-  pack: string;
-  keyFingerprint: string;
-  keyRotatedAt?: string;
-  revision?: string;
+/** The `signIn` field of `POST /api/backup/recovery-pack` — LOCAL copy of what
+ * `apps/server/src/fresh-sign-in.ts` reads. */
+export type FreshSignInBody = (
+  | { method: "password"; password: string }
+  | { method: "passkey"; challengeHandle: string; response: unknown }
+) & { totp?: string; recoveryCode?: string };
+
+export type RecoveryPackKeyState = "replaced" | "unchanged" | "failed";
+
+export interface MadeRecoveryPack {
+  pdf: Blob;
+  number: number;
+  key: RecoveryPackKeyState;
+}
+
+type RecoveryPackPart = "bucket" | "archives" | "server-key";
+
+/** Each reason names only the parts the box can give it for. */
+export type RecoveryPackReason =
+  | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
+  | { part: "bucket" | "archives"; kind: "settings_changed" }
+  | { part: RecoveryPackPart; kind: "set_up_after" }
+  | { part: RecoveryPackPart; kind: "removed" }
+  | { part: "server-key"; kind: "key_replaced" };
+
+/** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
+ * `PackStatus`. */
+export interface RecoveryPackStatus {
+  latest: null | {
+    number: number;
+    madeAt: string;
+    madeByName: string | null;
+    received: boolean;
+    parts: {
+      part: RecoveryPackPart;
+      state: "included" | "absent" | "failed" | "not-set-up";
+    }[];
+  };
+  upToDate: boolean;
+  incomplete: boolean;
+  unreceived: null | { number: number; madeAt: string; holdsCurrentServerKey: boolean };
+  reasons: RecoveryPackReason[];
+  keep: {
+    number: number;
+    madeAt: string;
+    until: string | null;
+    why: "server_key" | "backup_key" | "replaced_server_key";
+  }[];
+  backupsUseOlderKey: boolean;
+  /** The venue's time zone, which the pack's pages are dated in. */
+  timeZone: string;
 }
 
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
@@ -4574,16 +4619,49 @@ export class DashboardApi {
     });
   }
 
-  async reissueRecoveryDocument(locale: "en" | "es"): Promise<Blob> {
-    const pdf = await this.#request<Blob>(
-      "/api/box/recovery-document/reissue",
-      "POST",
-      { locale },
-      { as: "blob" },
-    );
-    if (pdf.type !== "application/pdf" || pdf.size === 0 || pdf.size > 8 * 1024 * 1024)
+  /**
+   * Refuses, as `recovery.pack_invalid`, an answer without its pack headers or whose body does not
+   * start `%PDF-` and end `%%EOF` (whitespace after it allowed); nothing between is read. A non-2xx
+   * that is not the box's refusal rejects as `connection.failed`.
+   */
+  async makeRecoveryPack(body: {
+    locale: "en" | "es";
+    newServerKey: boolean;
+    signIn: FreshSignInBody;
+  }): Promise<MadeRecoveryPack> {
+    const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
+      as: "file",
+      headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+      refusals: "envelope",
+    });
+    const pdf = file.blob;
+    const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
+    const key = file.headers?.["X-Waitron-Recovery-Pack-Key"];
+    if (
+      pdf.type !== "application/pdf" ||
+      pdf.size === 0 ||
+      pdf.size > 8 * 1024 * 1024 ||
+      !/^[1-9][0-9]*$/.test(number) ||
+      (key !== "replaced" && key !== "unchanged" && key !== "failed") ||
+      (await pdf.slice(0, 5).text()) !== "%PDF-" ||
+      !/%%EOF\s*$/.test(await pdf.slice(-16).text())
+    )
       throw { code: "recovery.pack_invalid" };
-    return pdf;
+    return { pdf, number: Number(number), key };
+  }
+
+  getRecoveryPackStatus(): Promise<RecoveryPackStatus> {
+    return this.#request<RecoveryPackStatus>("/api/backup/recovery-pack", "GET", undefined, {
+      passive: true,
+    });
+  }
+
+  recoveryPackPasskeyOptions(): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>("/api/backup/recovery-pack/passkey-options", "POST");
+  }
+
+  markRecoveryPackReceived(packNumber: number): Promise<void> {
+    return this.#request<void>(`/api/backup/recovery-pack/${packNumber}/received`, "POST", {});
   }
 
   mintBackupKey(): Promise<{ key: string }> {
@@ -4624,14 +4702,6 @@ export class DashboardApi {
   /** What is already in the bucket stays there. */
   turnOffStream(): Promise<StreamSettingsView> {
     return this.#request<StreamSettingsView>("/api/backup/stream", "DELETE");
-  }
-
-  getRecoveryKit(): Promise<{ kit: string; keyFingerprint: string }> {
-    return this.#request<{ kit: string; keyFingerprint: string }>("/api/backup/stream/kit", "GET");
-  }
-
-  getArchiveRecoveryPack(): Promise<ArchiveRecoveryPackAnswer> {
-    return this.#request<ArchiveRecoveryPackAnswer>("/api/backup/archive-recovery-pack", "GET");
   }
 
   // ── Card payments (providers + readers) ──────────────────────────────────────────────────────────

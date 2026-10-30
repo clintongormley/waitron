@@ -5,7 +5,12 @@ import { cleanupWidgets, mountWidget, quietRejection } from "../widgets/test-hel
 import { codeMessage } from "../i18n/codes.js";
 import { alertMessage } from "../i18n/alerts.js";
 import { currentLocale, setLocale, t } from "../i18n/t.js";
-import type { BackupStatusView, DashboardApi, StreamSettingsView } from "../api/client.js";
+import type {
+  BackupStatusView,
+  DashboardApi,
+  RecoveryPackStatus,
+  StreamSettingsView,
+} from "../api/client.js";
 import { BackupScreen } from "./backup-screen.js";
 import type { BackupSettingsEvidenceDialog } from "../widgets/backup-settings-evidence.js";
 import { apiAnswering, evidence } from "../testing/backup-settings-evidence-fixture.js";
@@ -31,14 +36,16 @@ const OFF: BackupStatusView = {
   recoveryKeyTooShort: false,
 };
 
-it("offers the manager recovery PDF even with archives and bucket streaming off", async () => {
+it("offers the manager the recovery pack card first, even with archives and bucket streaming off", async () => {
   const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
     api: stubApi({}, OFF),
     canManage: true,
   });
-  const panel = el.shadowRoot!.querySelector("dashboard-recovery-document");
+  const panel = el.shadowRoot!.querySelector("dashboard-recovery-pack-card");
   expect(panel).not.toBeNull();
   expect(panel!.api).toBe(el.api);
+  expect(panel!.canManage).toBe(true);
+  expect(el.shadowRoot!.querySelector(".card")!.contains(panel)).toBe(true);
 });
 
 it("does not offer key replacement without system.manage", async () => {
@@ -46,7 +53,7 @@ it("does not offer key replacement without system.manage", async () => {
     api: stubApi({}, OFF),
     canManage: false,
   });
-  expect(el.shadowRoot!.querySelector("dashboard-recovery-document")).toBeNull();
+  expect(el.shadowRoot!.querySelector("dashboard-recovery-pack-card")).toBeNull();
   expect(el.shadowRoot!.querySelector("dashboard-node-recovery")).toBeNull();
 });
 
@@ -119,13 +126,38 @@ function stubApi(
       recoveryKeySet: false,
       keyFingerprint: null,
     }),
-    getRecoveryKit: vi
-      .fn()
-      .mockResolvedValue({ kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ffee0011" }),
+    getRecoveryPackStatus: vi.fn().mockResolvedValue(NO_PACK),
     liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;
 }
+
+const NO_PACK: RecoveryPackStatus = {
+  latest: null,
+  upToDate: false,
+  incomplete: false,
+  unreceived: null,
+  reasons: [],
+  keep: [],
+  backupsUseOlderKey: false,
+  timeZone: "Europe/Madrid",
+};
+const PACK_UP_TO_DATE: RecoveryPackStatus = {
+  ...NO_PACK,
+  latest: {
+    number: 1,
+    madeAt: "2026-10-12T10:00:00.000Z",
+    madeByName: "Marta Puig",
+    received: true,
+    parts: [{ part: "bucket", state: "not-set-up" }],
+  },
+  upToDate: true,
+};
+const PACK_OUT_OF_DATE: RecoveryPackStatus = {
+  ...PACK_UP_TO_DATE,
+  upToDate: false,
+  reasons: [{ part: "bucket", kind: "set_up_after" }],
+};
 
 const panelOf = (el: BackupScreen) =>
   el.shadowRoot!.querySelector("dashboard-stream-settings")!.shadowRoot!;
@@ -338,50 +370,6 @@ describe("backup-screen", () => {
       timeout: 2_000,
     });
     expect(q(el, "[data-test=minted-key]")).toBeNull();
-  });
-
-  it("lets the bucket copy re-issue its kit when the key changes while archives are off", async () => {
-    const api = stubApi(
-      { getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON) },
-      { ...OFF, recoveryKeySet: true },
-    );
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    vi.mocked(api.getStreamSettings).mockResolvedValue({
-      ...STREAM_ON,
-      keyFingerprint: "ffee0011",
-    });
-    api.liveData.invalidate([{ type: "backup_status" }]);
-    await vi.waitFor(() =>
-      expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
-    );
-    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
-  });
-
-  it("has the bucket copy re-issue its kit as soon as a rotate here changes the key", async () => {
-    const api = stubApi(
-      {
-        getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
-        rotateBackupKey: vi.fn().mockResolvedValue({ ...ENABLED, keyFingerprint: "ffee0011" }),
-      },
-      ENABLED,
-    );
-    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", { api });
-    await flush(el);
-    q(el, "[data-test=show-old-key]")!.click();
-    await flush(el);
-    tickCheckbox(el, "[data-test=saved-it]");
-    await el.updateComplete;
-    vi.mocked(api.getStreamSettings).mockResolvedValue({
-      ...STREAM_ON,
-      keyFingerprint: "ffee0011",
-    });
-    q(el, "[data-test=rotate-confirm]")!.click();
-    await vi.waitFor(
-      () => expect(panelOf(el).querySelector("[data-test=kit-reissued]")).not.toBeNull(),
-      { timeout: 2_000 },
-    );
-    expect(api.getRecoveryKit).toHaveBeenCalledOnce();
   });
 
   it("treats a key change whose settings record failed as done: the old key goes, the next read shows the new key, and a fresh key is made", async () => {
@@ -2308,5 +2296,119 @@ describe("A1089 what the box recorded", () => {
     await expect.poll(signIn).not.toBeNull();
     signIn()!.click();
     expect(heard).toHaveBeenCalledOnce();
+  });
+});
+
+describe("the recovery pack card after the screen's own writes", () => {
+  const packLine = (el: BackupScreen) =>
+    (
+      el
+        .shadowRoot!.querySelector("dashboard-recovery-pack-card")!
+        .shadowRoot!.querySelector("[data-test=pack-status]")?.textContent ?? ""
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+  const reads = (api: DashboardApi) => vi.mocked(api.getRecoveryPackStatus).mock.calls.length;
+
+  it("turns to out of date after the bucket copy's Save, where the kit used to appear", async () => {
+    const api = stubApi({ saveStreamSettings: vi.fn().mockResolvedValue(STREAM_ON) });
+    vi.mocked(api.getRecoveryPackStatus).mockResolvedValue(PACK_UP_TO_DATE);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    await vi.waitFor(() => expect(packLine(el)).not.toBe(""));
+    expect(packLine(el)).not.toContain(t("recovery_pack.make_new"));
+    vi.mocked(api.getRecoveryPackStatus).mockResolvedValue(PACK_OUT_OF_DATE);
+    const panel = panelOf(el);
+    for (const [name, value] of [
+      ["bucket-region", "eu-west-1"],
+      ["bucket-name", "venue-copy"],
+      ["bucket-access-key-id", "AKIAEXAMPLE"],
+      ["bucket-secret-access-key", "not-a-real-secret-0123456789"],
+    ]) {
+      panel
+        .querySelector(`wt-input[name=${name}]`)!
+        .dispatchEvent(
+          new CustomEvent("wt-change", { detail: { value }, bubbles: true, composed: true }),
+        );
+    }
+    await el.updateComplete;
+    panel.querySelector<HTMLElement>("[data-test=save]")!.click();
+    await vi.waitFor(() => expect(packLine(el)).toContain(t("recovery_pack.make_new")), {
+      timeout: 2_000,
+    });
+  });
+
+  it.each([
+    [
+      "Apply",
+      OFF,
+      {},
+      async (el: BackupScreen) => {
+        setInput(el, "[data-test=destination]", "/mnt/usb/waitron");
+        tickCheckbox(el, "[data-test=saved-it]");
+        await el.updateComplete;
+        q(el, "[data-test=apply]")!.click();
+      },
+    ],
+    [
+      "Rotate",
+      ENABLED,
+      {},
+      async (el: BackupScreen) => {
+        q(el, "[data-test=show-old-key]")!.click();
+        await flush(el);
+        tickCheckbox(el, "[data-test=saved-it]");
+        await el.updateComplete;
+        q(el, "[data-test=rotate-confirm]")!.click();
+      },
+    ],
+    [
+      "a Rotate whose settings record failed",
+      ENABLED,
+      {
+        rotateBackupKey: vi.fn().mockRejectedValue({ code: "backup.rotation_metadata_failed" }),
+      },
+      async (el: BackupScreen) => {
+        q(el, "[data-test=show-old-key]")!.click();
+        await flush(el);
+        tickCheckbox(el, "[data-test=saved-it]");
+        await el.updateComplete;
+        q(el, "[data-test=rotate-confirm]")!.click();
+      },
+    ],
+    [
+      "Save settings",
+      ENABLED,
+      {},
+      async (el: BackupScreen) => {
+        q(el, "[data-test=edit-settings]")!.click();
+        await vi.waitFor(() => expect(q(el, "[data-test=save-settings]")).not.toBeNull());
+        await editDestination(el);
+        q(el, "[data-test=save-settings]")!.click();
+      },
+    ],
+    [
+      "Turn off",
+      ENABLED,
+      { disableBackup: vi.fn().mockResolvedValue({ ...OFF, storedDisabled: true }) },
+      async (el: BackupScreen) => {
+        q(el, "[data-test=turn-off]")!.click();
+        await flush(el);
+        q(el, "[data-test=turn-off]")!.click();
+      },
+    ],
+  ] as const)("reads the card's status again after %s", async (_name, status, overrides, act) => {
+    const api = stubApi(overrides as Partial<DashboardApi>, status);
+    const { el } = await mountWidget<BackupScreen>("dashboard-backup-screen", {
+      api,
+      canManage: true,
+    });
+    await flush(el);
+    await vi.waitFor(() => expect(reads(api)).toBe(1));
+    await act(el);
+    await vi.waitFor(() => expect(reads(api)).toBeGreaterThan(1), { timeout: 2_000 });
   });
 });

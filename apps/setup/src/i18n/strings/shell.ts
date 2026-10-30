@@ -96,11 +96,11 @@ export const shellEn = {
   "shell.bucket.no_answer": "The copy could not be restored. Check the connection and try again.",
   "shell.bucket.refused_code": "The copy could not be restored. ({code})",
   "shell.bucket.kit_damaged":
-    "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Upload the kit file as it was saved, or paste the whole kit.",
+    "This recovery kit is incomplete or damaged, perhaps cut short when it was copied. Choose your recovery pack or kit file as it was saved, or paste the whole kit.",
   "shell.bucket.kit_invalid":
-    "This is not a Waitron recovery kit. Upload the kit file, or paste the whole kit.",
+    "This is not a Waitron recovery kit. Choose your recovery pack or kit file, or paste the whole kit.",
   "shell.bucket.key_does_not_open":
-    "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest kit.",
+    "The recovery key in this kit does not open the latest copy. If the recovery key was changed, use the newest recovery pack or kit.",
   "shell.bucket.newer_software":
     "The copy in the bucket was made by newer Waitron software than this server has. Update this server, then try again.",
   "shell.bucket.pointer_missing": "The bucket in this kit holds no copy of this restaurant.",
@@ -262,11 +262,11 @@ export const shellEs: Record<keyof typeof shellEn, string> = {
     "No se ha podido restaurar la copia. Comprueba la conexión e inténtalo de nuevo.",
   "shell.bucket.refused_code": "No se ha podido restaurar la copia. ({code})",
   "shell.bucket.kit_damaged":
-    "Este kit de recuperación está incompleto o dañado; quizá se cortó al copiarlo. Sube el archivo del kit tal como se guardó, o pega el kit completo.",
+    "Este kit de recuperación está incompleto o dañado; quizá se cortó al copiarlo. Elige tu paquete de recuperación o el archivo del kit tal como se guardó, o pega el kit completo.",
   "shell.bucket.kit_invalid":
-    "Esto no es un kit de recuperación de Waitron. Sube el archivo del kit, o pega el kit completo.",
+    "Esto no es un kit de recuperación de Waitron. Elige tu paquete de recuperación o el archivo del kit, o pega el kit completo.",
   "shell.bucket.key_does_not_open":
-    "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el kit más reciente.",
+    "La clave de recuperación de este kit no abre la copia más reciente. Si se cambió la clave de recuperación, usa el último paquete de recuperación o el último kit.",
   "shell.bucket.newer_software":
     "La copia del bucket la hizo una versión de Waitron más nueva que la de este servidor. Actualiza este servidor e inténtalo de nuevo.",
   "shell.bucket.pointer_missing":

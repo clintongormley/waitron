@@ -10,17 +10,24 @@ export interface DownloadedFile {
   readonly blob: Blob;
   /** From `Content-Disposition: attachment; filename="<name>"` only; otherwise null. */
   readonly fileName: string | null;
+  /** Present only when the call named `headers`: each named header's value, or null when absent. */
+  readonly headers?: Readonly<Record<string, string | null>>;
 }
 
 /**
  * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download;
- * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name. A refusal is
+ * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name, plus the values
+ * of any response `headers` the call names. A refusal is
  * decoded exactly as without either. Explicit deadlines apply to any method; ordinary reads
  * retain their default deadline. Cancellation bounds both fetch and response-body waits.
+ * `refusals: "envelope"` rejects a non-2xx whose body names no `{ error: { code } }` as
+ * `connection.failed`, with no status: a gateway's own page says nothing of whether the server acted.
  */
 export interface RequestOptions {
   passive?: boolean;
+  refusals?: "envelope";
   as?: "blob" | "file";
+  headers?: readonly string[];
   timeLimitMs?: number;
   signal?: AbortSignal;
   sessionErrors?: "caller";
@@ -142,11 +149,14 @@ export function createRequest(
         // `text/plain`, on which `res.json()` throws; and the literal `null` is valid JSON, so a bare
         // try/catch is not enough — the parsed value is checked for being an object before `.error` is
         // read off it, and `code` is used only when it is a string. Any of these falls back to
-        // `server.internal` rather than surfacing a parse error as a fake network outage.
+        // `server.internal` rather than surfacing a parse error as a fake network outage, or to
+        // `connection.failed` with no status under `refusals: "envelope"`.
         const parsed: unknown = await within(res.json()).catch(() => undefined);
         if (stopped !== undefined) throw fail(stopped);
         const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;
         const rawCode = envelope?.code;
+        if (typeof rawCode !== "string" && options?.refusals === "envelope")
+          throw fail("connection.failed");
         const code = typeof rawCode === "string" ? rawCode : "server.internal";
         reportError(code, res.status);
         // Carry the envelope's `params` through so a caller that needs a code's structured detail can
@@ -171,10 +181,16 @@ export function createRequest(
       }
       if (typeof read !== "string") {
         if (options?.as !== "file") return read as T;
-        const file: DownloadedFile = {
-          blob: read,
-          fileName: attachmentName(res.headers.get("content-disposition")),
-        };
+        const fileName = attachmentName(res.headers.get("content-disposition"));
+        const named = options.headers;
+        const file: DownloadedFile =
+          named === undefined
+            ? { blob: read, fileName }
+            : {
+                blob: read,
+                fileName,
+                headers: Object.fromEntries(named.map((name) => [name, res.headers.get(name)])),
+              };
         return file as T;
       }
       return (read === "" ? undefined : JSON.parse(read)) as T;

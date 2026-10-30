@@ -119,6 +119,8 @@ function fixture(
     turns?: Turns;
     now?: () => Date;
     evidence?: (module: WaitronModule) => Promise<Readonly<Record<string, unknown>>>;
+    loadFont?: () => Promise<Uint8Array>;
+    readBoxEnv?: () => Promise<Record<string, string | undefined>>;
   } = {},
 ) {
   const app = new Hono();
@@ -142,7 +144,7 @@ function fixture(
       venueId: VENUE,
       modules,
       turns: options.turns ?? createTurns(),
-      readBoxEnv: async () => ({ ...boxEnv }),
+      readBoxEnv: options.readBoxEnv ?? (async () => ({ ...boxEnv })),
       backups: () => ({
         managedByEnvironment: managed,
         schedule: ARCHIVES.schedule,
@@ -150,7 +152,7 @@ function fixture(
         recoveryKey: loadedKey,
       }),
       documentEvidence: options.evidence ?? (async () => ({})),
-      loadFont: async () => invoiceFontBytes,
+      loadFont: options.loadFont ?? (async () => invoiceFontBytes),
       now: options.now ?? (() => new Date("2026-10-30T09:00:00.000Z")),
     },
     (...values) => logs.push(values),
@@ -288,6 +290,78 @@ describe("the make route's refusals", () => {
     );
     expect(response.status).toBe(401);
     expect((await codeOf(response)).code).toBe("password.invalid");
+    expect(await packs()).toEqual([]);
+    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+  });
+
+  it.each([
+    [
+      "a forwarded claim of HTTPS",
+      { tls: false, headers: { "X-Forwarded-Proto": "https" } },
+      403,
+      "recovery.pack_connection_insecure",
+    ],
+    [
+      "a same-site fetch",
+      { headers: { "Sec-Fetch-Site": "same-site" } },
+      403,
+      "recovery.pack_origin_refused",
+    ],
+  ] as const)(
+    "refuses %s, writing no record and keeping the key",
+    async (_name, extra, status, code) => {
+      const response = await fixture().make(true, extra);
+      expect(response.status).toBe(status);
+      expect((await codeOf(response)).code).toBe(code);
+      expect(await packs()).toEqual([]);
+      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    },
+  );
+
+  it.each(["unknown", "suspended"] as const)(
+    "refuses the %s session, writing no record and keeping the key",
+    async (who) => {
+      let token = "not-a-session";
+      if (who === "suspended") {
+        const manager = await openManagementSession(suite.db, "admin");
+        await suite.db
+          .update(persons)
+          .set({ status: "suspended" })
+          .where(eq(persons.id, manager.personId));
+        token = manager.token;
+      }
+      const response = await fixture().make(true, { token });
+      expect(response.status).toBe(who === "unknown" ? 401 : 403);
+      expect((await codeOf(response)).code).toBe(
+        who === "unknown" ? "management_session.required" : "person.suspended",
+      );
+      expect(await packs()).toEqual([]);
+      expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+    },
+  );
+
+  it("refuses a person without system.manage before reading the fiscal evidence", async () => {
+    const supervisor = await openManagementSession(suite.db, "supervisor");
+    let reads = 0;
+    const response = await fixture({
+      evidence: async () => {
+        reads++;
+        return {};
+      },
+    }).make(true, { token: supervisor.token });
+    expect(response.status).toBe(403);
+    expect(reads).toBe(0);
+  });
+
+  it("checks system.manage again after the fiscal evidence is read", async () => {
+    const response = await fixture({
+      evidence: async () => {
+        await suite.db.update(persons).set({ role: "staff" }).where(eq(persons.id, admin.personId));
+        return {};
+      },
+    }).make(true);
+    expect(response.status).toBe(403);
+    expect((await codeOf(response)).code).toBe("authorization.not_permitted");
     expect(await packs()).toEqual([]);
     expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
   });
@@ -503,15 +577,27 @@ describe("a made pack", () => {
   });
 
   it("waits for a backup turn already running before it reads anything", async () => {
-    const turns = createTurns();
+    const queue = createTurns();
+    let handed = 0;
+    const turns: Turns = (body) => {
+      handed += 1;
+      return queue(body);
+    };
+    let reads = 0;
+    const readBoxEnv = async () => {
+      reads += 1;
+      return { ...boxEnv };
+    };
     let release!: () => void;
     const held = turns(() => new Promise<void>((resolve) => (release = resolve)));
-    const making = fixture({ turns }).make();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    const making = fixture({ turns, readBoxEnv }).make();
+    await vi.waitFor(() => expect(handed).toBe(2), { timeout: 30_000 });
+    expect(reads).toBe(0);
     expect(await packs()).toEqual([]);
     release();
     await held;
     expect((await making).status).toBe(200);
+    expect(reads).toBe(1);
     expect(await packs()).toHaveLength(1);
   });
 
@@ -564,6 +650,69 @@ describe("a made pack", () => {
       "jane-doe",
     ])
       expect(seen).not.toContain(value);
+  });
+
+  it("a pack that cannot be drawn writes no record and keeps the key", async () => {
+    const verifier = await readBreakGlassVerifier(suite.db, node.nodeId);
+    const response = await fixture({
+      loadFont: async () => {
+        throw new Error("font missing");
+      },
+    }).make(true);
+    expect(response.status).toBe(500);
+    expect(await packs()).toEqual([]);
+    expect(await readBreakGlassVerifier(suite.db, node.nodeId)).toBe(verifier);
+    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(keyInForce.name);
+  });
+
+  it("makes two packs asked for at once one after the other, the later one's key in force", async () => {
+    let active = 0;
+    let peak = 0;
+    let entered = 0;
+    let bothIn!: () => void;
+    const together = new Promise<void>((resolve) => (bothIn = resolve));
+    const f = fixture({
+      evidence: async () => {
+        active++;
+        peak = Math.max(peak, active);
+        if (++entered === 2) bothIn();
+        // Long enough for the other request's sign-in check to finish, were they not taking turns.
+        await Promise.race([together, new Promise((resolve) => setTimeout(resolve, 500))]);
+        active--;
+        return {};
+      },
+    });
+    const replies = await Promise.all([f.make(true), f.make(true)]);
+    expect(replies.map((reply) => reply.status)).toEqual([200, 200]);
+    expect(peak).toBe(1);
+    const files = await Promise.all(
+      replies.map(async (reply) => readRecoveryPackPdf(new Uint8Array(await reply.arrayBuffer()))),
+    );
+    const later = files.find((file) => file.number === 2)!;
+    const carried = (later.serverKey as { nodeKey: { name: string; secret: string } }).nodeKey;
+    expect(await readBreakGlassKeyName(suite.db, node.nodeId)).toBe(carried.name);
+    expect(
+      await verifySecretAsync(
+        carried.secret,
+        (await readBreakGlassVerifier(suite.db, node.nodeId))!,
+      ),
+    ).toBe(true);
+  });
+
+  it("takes the backup key from the box's settings file, never the key the backups loaded", async () => {
+    boxEnv = {};
+    const response = await fixture().make();
+    expect(response.status).toBe(200);
+    expect((await packs())[0]!.parts.map((p) => [p.part, p.state])).toEqual([
+      ["bucket", "failed"],
+      ["archives", "failed"],
+      ["server-key", "included"],
+    ]);
+  });
+
+  it("logs no session token", async () => {
+    expect((await fixture().make(true)).status).toBe(200);
+    expect(JSON.stringify(logs)).not.toContain(admin.token);
   });
 });
 
@@ -744,6 +893,22 @@ describe("the status route", () => {
     const response = await f.status(supervisor.token);
     expect(response.status).toBe(403);
     expect((await codeOf(response)).code).toBe("authorization.not_permitted");
+  });
+
+  it("names the venue's time zone, so the card dates a pack as the paper does", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Atlantic/Canary" })
+      .where(eq(locations.id, node.locationId));
+    expect(await read(fixture())).toMatchObject({ timeZone: "Atlantic/Canary" });
+  });
+
+  it("names UTC when the stored zone is one the runtime does not know, so the card can still format dates", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Mars/Olympus_Mons" })
+      .where(eq(locations.id, node.locationId));
+    expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
   });
 
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {

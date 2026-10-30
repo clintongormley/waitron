@@ -317,8 +317,10 @@ import {
   mountBackupRecoveryPackApi,
   mountBackupRecoveryPackMakeApi,
 } from "./backup-recovery-pack-api.js";
-import type { RecoveryDocumentEvidence } from "./recovery-document-api.js";
-import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
+import {
+  readRecoveryDocumentEvidence,
+  type RecoveryDocumentEvidence,
+} from "./recovery-document-evidence.js";
 import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
@@ -2624,7 +2626,6 @@ async function bootServer(
       venueId: tradingContext.locationId,
       modules: setsToMigrate,
       now,
-      documentEvidence,
     },
     log,
   );
@@ -2732,7 +2733,6 @@ async function bootServer(
       db,
       ring,
       stream: streamHost,
-      nodeId: tradingContext.nodeId,
       venueId: tradingContext.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,

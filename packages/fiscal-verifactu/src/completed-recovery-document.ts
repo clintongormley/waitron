@@ -5,7 +5,6 @@ import { AppError } from "@waitron/shared";
 import { currentSif } from "./registro-sif.js";
 import { readHourHistory } from "./hour-history-reader.js";
 import { projectHourHistory, type HourHistorySource, type HourScope } from "./hour-history.js";
-import { renderRecoveryPdf } from "./recovery-pdf-node.js";
 import {
   parseRecoveryDocument,
   parseRecoveryDocumentPublic,
@@ -62,19 +61,6 @@ async function recoveryScope(
     timeZone: venue.timeZone,
   };
 }
-
-export const FISCAL_RECOVERY_DOCUMENT: NonNullable<
-  ModuleBackupContribution["recoveryDocument"]
-> = async (tx, node, context) => {
-  const { document, timeZone } = await recoveryScope(
-    tx,
-    node,
-    context.nodeKey.nodeId,
-    context.createdAt,
-    context.evidence,
-  );
-  return renderRecoveryPdf({ ...document, nodeKey: context.nodeKey }, context.locale, timeZone);
-};
 
 export const FISCAL_RECOVERY_PACK_PAGE: NonNullable<
   ModuleBackupContribution["recoveryPackPage"]

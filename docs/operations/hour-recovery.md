@@ -112,7 +112,7 @@ spent-name record to retry. An uncertain outcome needs inspection rather than a 
 
 ## Keep the resulting evidence
 
-Ordinary reboot, exact completion and recovery-document reissue keep the current activation.
+Ordinary reboot and exact completion keep the current activation.
 They do not take another name. Keep the recovery sheet needed by each retained backup and check
 the restored server's outcome before using the till. The sheet carries the node recovery key and
 no installation code (`packages/fiscal-verifactu/src/recovery-pdf-node.test.ts`, "refuses a sheet

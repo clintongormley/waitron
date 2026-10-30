@@ -17,7 +17,6 @@ import { hashPassword, hashPin, persons } from "@waitron/identity";
 import { applyHistoricalTestVenue as applyVenue } from "@waitron/provisioning/testing/allocated-venue";
 import { planVenue } from "@waitron/provisioning";
 import type { StreamView } from "@waitron/stream";
-import { decodeArchiveRecoveryPack } from "./archive-recovery-pack.js";
 import { mountBackupApi, type BackupApiDeps } from "./backup-api.js";
 import { eq, sql } from "drizzle-orm";
 import { AppError } from "@waitron/shared";
@@ -1474,7 +1473,6 @@ describe("backup admin routes", () => {
         db: suite.db,
         ring: RING,
         stream: { reload: async () => {}, status: () => ({ state: "off" }) },
-        nodeId: "00000000-0000-0000-0000-000000000000",
         venueId: "c0000000-0000-4000-8000-000000000002",
         isPrimary: () => true,
         isManagedByEnvironment: () => false,
@@ -1657,7 +1655,6 @@ describe("backup admin routes", () => {
             db: suite.db,
             ring: RING,
             stream: { reload: async () => {}, status: () => ({ state: "off" }) },
-            nodeId: "00000000-0000-0000-0000-000000000000",
             venueId: VENUE,
             isPrimary: () => true,
             isManagedByEnvironment: () => false,
@@ -2248,27 +2245,6 @@ describe("backup admin routes", () => {
         { kind: "local-fs", id: "primary", dir },
         expect.objectContaining({ kind: "s3", id: "bucket" }),
       ]);
-    }, 60_000);
-
-    it("the archive recovery pack names the bucket when the folder is listed first", async () => {
-      const { app, cookie, post } = await primaryApp();
-      expect(
-        (
-          await post(
-            "/api/backup/apply",
-            applyList([
-              { kind: "local-fs", dir: makeDestDir() },
-              { ...CUSTOM, secretAccessKey: CUSTOM_SECRET },
-            ]),
-          )
-        ).status,
-      ).toBe(200);
-      const res = await app.request("/api/backup/archive-recovery-pack", { headers: { cookie } });
-      expect(res.status).toBe(200);
-      expect(decodeArchiveRecoveryPack((await res.json()).pack)).toMatchObject({
-        venueId: VENUE,
-        bucket: { bucket: "archive-bucket", secretAccessKey: CUSTOM_SECRET },
-      });
     }, 60_000);
 
     // Each refused Save beside a held folder record, and what it answers.

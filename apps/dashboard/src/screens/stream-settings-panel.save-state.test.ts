@@ -58,7 +58,6 @@ function stubApi(settings: StreamSettingsView, overrides: Partial<DashboardApi> 
       getStreamSettings.mockResolvedValue(OFF);
       return Promise.resolve(OFF);
     }),
-    getRecoveryKit: vi.fn().mockResolvedValue({ kit: "KIT", keyFingerprint: "ab12cd34" }),
     liveData: new LiveData(),
     ...overrides,
   } as unknown as DashboardApi;

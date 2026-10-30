@@ -89,26 +89,11 @@ const UNSAFE_FIELD_KEYS: Partial<Record<Field, StringKey>> = {
 /** Refusals whose wording elsewhere does not fit what this panel was doing. */
 const PANEL_CODE_KEYS: Readonly<Record<string, StringKey>> = {
   "backup.managed_by_environment": "stream.error.managed_by_environment",
-  "backup.recovery_key_missing": "stream.error.recovery_key_missing",
   "backup.recovery_key_too_short": "stream.error.recovery_key_too_short",
 };
 
 function isField(value: unknown): value is Field {
   return typeof value === "string" && Object.hasOwn(EMPTY, value);
-}
-
-/** The bucket fields a settings read carries. The secret access key is not one of them; only the
- * revision shows that it changed. */
-function bucketKey(bucket: StreamSettingsView["bucket"]): string {
-  return bucket === null
-    ? ""
-    : JSON.stringify([
-        bucket.endpoint,
-        bucket.region,
-        bucket.bucket,
-        bucket.prefix,
-        bucket.accessKeyId,
-      ]);
 }
 
 function stateKey(status: StreamStatusView): StringKey {
@@ -140,14 +125,7 @@ function failureOf(error: unknown): Failure {
   return { code: codeOf(error), reason: typeof reason === "string" ? reason : null };
 }
 
-/**
- * The bucket copy on the Backups screen: the bucket settings, Test, how current the copy is, and
- * the recovery kit. When a later read of the settings brings a different key fingerprint, the key
- * was changed, so the kit is fetched again with a banner, because copies made before the change
- * still need the old kit. A failed re-fetch is tried again on the next read. The kit describes the
- * bucket, secret access key included, so a read bringing different bucket fields or a different
- * revision takes the kit away.
- */
+/** The bucket copy on the Backups screen: the bucket settings, Test, and how current the copy is. */
 @customElement("dashboard-stream-settings")
 export class StreamSettingsPanel extends LitElement {
   static override styles = [
@@ -164,11 +142,6 @@ export class StreamSettingsPanel extends LitElement {
       }
       h2 {
         margin: var(--wt-space-6) 0 0;
-        font-size: var(--wt-font-size-md);
-        color: var(--wt-color-text);
-      }
-      h3 {
-        margin: var(--wt-space-3) 0 0;
         font-size: var(--wt-font-size-md);
         color: var(--wt-color-text);
       }
@@ -196,34 +169,11 @@ export class StreamSettingsPanel extends LitElement {
         margin: 0 0 var(--wt-space-2);
         color: var(--wt-color-text);
       }
-      .key {
-        font-family: var(--wt-font-family-mono);
-        font-size: var(--wt-font-size-sm);
-        word-break: break-all;
-        padding: var(--wt-space-2) var(--wt-space-3);
-        background: var(--wt-color-surface);
-        border: 1px solid var(--wt-color-border);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-text);
-      }
       .actions {
         display: flex;
         gap: var(--wt-space-2);
         align-items: center;
         flex-wrap: wrap;
-      }
-      /* Text-coloured: the primary accent fails contrast at this size, as on the Backups screen. */
-      a.download {
-        color: var(--wt-color-text);
-        font-size: var(--wt-font-size-sm);
-        text-decoration: underline;
-      }
-      .warning {
-        padding: var(--wt-space-3);
-        border: 1px solid var(--wt-color-danger);
-        border-radius: var(--wt-radius-md);
-        color: var(--wt-color-danger);
-        background: var(--wt-color-surface);
       }
       .error {
         color: var(--wt-color-danger);
@@ -265,31 +215,12 @@ export class StreamSettingsPanel extends LitElement {
   @state() private testPassed = false;
   /** A refusal of something the owner did; `#clearMessages` takes it away. */
   @state() private failure: Failure | null = null;
-  /** A failed read of the settings, or of the kit after a key change. The next successful read of
-   * the settings takes it away, unless that read retries a failed kit fetch: then the fetch
-   * succeeding takes it away, so the alert does not vanish and return on every retry. */
+  /** A failed read of the settings; the next successful read takes it away. */
   @state() private readFailure: Failure | null = null;
-  /** A failed kit fetch the owner caused (Save or Show recovery kit). Apart from `failure`, so a
-   * fetch failing after a successful Save does not read as a refused save. */
-  @state() private kitFailure: Failure | null = null;
-  @state() private kit: string | null = null;
-  @state() private kitFingerprint: string | null = null;
-  @state() private kitReissued = false;
   @state() private secretVisible = false;
   @state() private turnOffArmed = false;
   @state() private busy = false;
 
-  /** The key fingerprint the panel last accepted. While the copy is on, a read bringing a different
-   * key is accepted only once the kit has been fetched again, so the next read retries a failed
-   * fetch. */
-  #knownFingerprint: string | null | undefined = undefined;
-  /** The re-issue still running, if any. While it is the latest kit fetch, a read bringing the same
-   * key starts no second one. */
-  #reissue: { fingerprint: string; request: number } | null = null;
-  /** Every kit fetch takes the next number; only the latest may put its answer on screen. */
-  #kitRequest = 0;
-  #reissueFailed = false;
-  #blobUrls = new Map<string, string>();
   #scope?: DraftScope<StreamBucketBody>;
   #leave?: LeaveCoordinator;
   #generation = 0;
@@ -339,7 +270,6 @@ export class StreamSettingsPanel extends LitElement {
 
   override disconnectedCallback(): void {
     this.#generation++;
-    this.#kitRequest++;
     this.#releaseForm();
     this.settings = undefined;
     this.draft = { ...EMPTY };
@@ -347,17 +277,9 @@ export class StreamSettingsPanel extends LitElement {
     this.submitting = false;
     this.busy = false;
     this.secretVisible = false;
-    this.#knownFingerprint = undefined;
-    this.#reissue = null;
-    this.#reissueFailed = false;
     this.readFailure = null;
-    this.kit = null;
-    this.kitFingerprint = null;
-    this.kitReissued = false;
     this.#resetForm();
     this.#clearMessages();
-    for (const url of this.#blobUrls.values()) URL.revokeObjectURL(url);
-    this.#blobUrls.clear();
     super.disconnectedCallback();
   }
 
@@ -369,54 +291,11 @@ export class StreamSettingsPanel extends LitElement {
     }
   }
 
-  /** The first key the panel sees is no change; a later different one is. */
   #arrived(value: StreamSettingsView): void {
-    const before = this.settings;
     this.settings = value;
     this.#trackShownForm(value);
-    if (
-      before !== undefined &&
-      (bucketKey(before.bucket) !== bucketKey(value.bucket) || before.revision !== value.revision)
-    )
-      this.#dropKit();
     if (!value.configured) this.turnOffArmed = false;
-    const known = this.#knownFingerprint;
-    const after = value.keyFingerprint;
-    const reissue = value.bucket !== null && known != null && after !== null && after !== known;
-    if (!reissue || !this.#reissueFailed) this.readFailure = null;
-    if (reissue) {
-      void this.#reissueKit(after);
-    } else {
-      this.#knownFingerprint = after;
-      this.#reissueFailed = false;
-    }
-  }
-
-  /** Through the background client, so an unattended screen stays passive. */
-  async #reissueKit(fingerprint: string): Promise<void> {
-    if (this.#reissue?.fingerprint === fingerprint && this.#reissue.request === this.#kitRequest)
-      return;
-    const request = ++this.#kitRequest;
-    this.#reissue = { fingerprint, request };
-    const current = () => this.#current(request) && this.settings?.keyFingerprint === fingerprint;
-    try {
-      const { kit, keyFingerprint } = await (this.api.background ?? this.api).getRecoveryKit();
-      if (!current()) return;
-      this.kit = kit;
-      this.kitFingerprint = keyFingerprint;
-      this.kitReissued = true;
-      this.#knownFingerprint = fingerprint;
-      this.#reissueFailed = false;
-      this.readFailure = null;
-      this.kitFailure = null;
-    } catch (error) {
-      if (!current()) return;
-      this.readFailure = failureOf(error);
-      this.kitReissued = false;
-      this.#reissueFailed = true;
-    } finally {
-      if (this.#reissue?.request === request) this.#reissue = null;
-    }
+    this.readFailure = null;
   }
 
   #fail(error: unknown): void {
@@ -434,21 +313,8 @@ export class StreamSettingsPanel extends LitElement {
     this.failure = failureOf(error);
   }
 
-  #current(request: number): boolean {
-    return request === this.#kitRequest && this.settings?.bucket != null;
-  }
-
-  /** Also discards the answer of any kit fetch still running. */
-  #dropKit(): void {
-    this.#kitRequest++;
-    this.kit = null;
-    this.kitReissued = false;
-    this.kitFailure = null;
-  }
-
   #clearMessages(): void {
     this.failure = null;
-    this.kitFailure = null;
     this.testPassed = false;
     this.turnOffArmed = false;
   }
@@ -523,6 +389,7 @@ export class StreamSettingsPanel extends LitElement {
       this.#scope?.commit(submitted);
       // Save can give the box its first recovery key; the Backups screen must stop offering its own.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
+      this.#written();
       this.editing = (Object.keys(EMPTY) as Field[]).some(
         (field) => this.#body()[field] !== submitted[field],
       );
@@ -531,13 +398,18 @@ export class StreamSettingsPanel extends LitElement {
         this.#releaseForm();
       }
       this.#resetForm();
-      this.#dropKit();
-      await this.#loadKit();
     } catch (error) {
       if (current()) this.#fail(error);
     } finally {
       if (current()) this.submitting = false;
     }
+  }
+
+  /** Tells the Backups screen the box's bucket settings changed, so its recovery pack card reads again. */
+  #written(): void {
+    this.dispatchEvent(
+      new CustomEvent("stream-settings-written", { bubbles: true, composed: true }),
+    );
   }
 
   async #turnOff(): Promise<void> {
@@ -558,36 +430,11 @@ export class StreamSettingsPanel extends LitElement {
       this.#trackShownForm(settings);
       // The Backups screen offers this bucket as a destination, so it must see it go now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
-      this.#dropKit();
+      this.#written();
     } catch (error) {
       if (current()) this.#fail(error);
     } finally {
       if (current()) this.busy = false;
-    }
-  }
-
-  async #showKit(): Promise<void> {
-    if (this.busy) return;
-    this.#clearMessages();
-    this.busy = true;
-    const generation = this.#generation;
-    try {
-      await this.#loadKit();
-    } finally {
-      if (this.isConnected && generation === this.#generation) this.busy = false;
-    }
-  }
-
-  async #loadKit(): Promise<void> {
-    const request = ++this.#kitRequest;
-    try {
-      const { kit, keyFingerprint } = await this.api.getRecoveryKit();
-      if (!this.#current(request)) return;
-      this.kit = kit;
-      this.kitFingerprint = keyFingerprint;
-    } catch (error) {
-      if (!this.#current(request)) return;
-      this.kitFailure = failureOf(error);
     }
   }
 
@@ -607,16 +454,6 @@ export class StreamSettingsPanel extends LitElement {
     this.#clearMessages();
     this.editing = true;
     this.#trackForm();
-  }
-
-  #downloadHref(kit: string): string {
-    let url = this.#blobUrls.get(kit);
-    if (url === undefined) {
-      const body = `${t("stream.kit.file_heading")}\n${t("stream.kit.file_note")}\n\n${kit}\n`;
-      url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
-      this.#blobUrls.set(kit, url);
-    }
-    return url;
   }
 
   #failureText(failure: Failure): string {
@@ -649,13 +486,6 @@ export class StreamSettingsPanel extends LitElement {
               </p>`
         }
         ${
-          this.kitFailure === null
-            ? nothing
-            : html`<p class="error" role="alert" data-test="kit-failure">
-                ${this.#failureText(this.kitFailure)}
-              </p>`
-        }
-        ${
           this.readFailure === null
             ? nothing
             : html`<p class="error" role="alert" data-test="read-failure">
@@ -683,17 +513,6 @@ export class StreamSettingsPanel extends LitElement {
         !s.configured || this.editing
           ? this.#renderForm(s.configured)
           : html`<div class="actions">
-              ${
-                this.kit === null && s.bucket !== null
-                  ? html`<wt-button
-                      variant="secondary"
-                      data-test="show-kit"
-                      ?disabled=${this.busy}
-                      @click=${() => void this.#showKit()}
-                      >${t("stream.show_kit")}</wt-button
-                    >`
-                  : nothing
-              }
               <wt-button variant="secondary" data-test="change" @click=${() => this.#startEdit()}
                 >${t("stream.change")}</wt-button
               >
@@ -707,7 +526,6 @@ export class StreamSettingsPanel extends LitElement {
               >
             </div>`
       }
-      ${this.kit === null ? nothing : this.#renderKit(this.kit)}
     `;
   }
 
@@ -842,39 +660,6 @@ export class StreamSettingsPanel extends LitElement {
           : nothing
       }</wt-input
     >`;
-  }
-
-  #renderKit(kit: string): TemplateResult {
-    return html`
-      <h3>${t("stream.kit.title")}</h3>
-      ${
-        this.kitReissued
-          ? html`<p class="warning" role="note" data-test="kit-reissued">
-              ${t("stream.kit.reissued")}
-            </p>`
-          : nothing
-      }
-      <p class="warning" role="note" data-test="kit-warning">${t("stream.kit.warning")}</p>
-      <p class="key" data-test="kit">${kit}</p>
-      <div class="actions">
-        <wt-button
-          variant="secondary"
-          data-test="copy-kit"
-          @click=${() =>
-            void navigator.clipboard?.writeText(kit).catch(() => {
-              /* The kit on screen and the download stay available. */
-            })}
-          >${t("stream.kit.copy")}</wt-button
-        >
-        <a
-          class="download"
-          data-test="download-kit"
-          download=${`waitron-recovery-kit-${this.kitFingerprint}.txt`}
-          href=${this.#downloadHref(kit)}
-          >${t("stream.kit.download")}</a
-        >
-      </div>
-    `;
   }
 }
 

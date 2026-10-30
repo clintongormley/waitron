@@ -122,6 +122,14 @@ async function rendered(bytes: Uint8Array, scale = 0, scanned?: readonly number[
 
 const squash = (text: string) => text.replace(/\s+/g, "");
 
+it("starts %PDF- and ends %%EOF, the two marks the dashboard's makeRecoveryPack checks", async () => {
+  const bytes = await renderRecoveryPack(input());
+  const text = (from: number, to?: number) =>
+    new TextDecoder("latin1").decode(bytes.subarray(from, to));
+  expect(text(0, 5)).toBe("%PDF-");
+  expect(text(bytes.length - 16)).toMatch(/%%EOF\s*$/);
+});
+
 describe("the recovery pack's cover", () => {
   it("names the venue, who made it and when, its number, and what each page is for", async () => {
     const [cover] = await rendered(await renderRecoveryPack(input()));

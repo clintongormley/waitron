@@ -1100,13 +1100,15 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "The saved settings for scheduled backups can't be read. Save them again on the Backups screen to replace them.",
     es: "No se pueden leer los ajustes guardados de las copias programadas. Vuelve a guardarlos en la pantalla Copias de seguridad para sustituirlos.",
   },
-  "backup.archive_bucket_not_configured": {
-    en: "Scheduled backups don't go to a bucket, so there is no recovery pack to download.",
-    es: "Las copias programadas no van a un bucket, así que no hay paquete de recuperación que descargar.",
-  },
   "recovery.pack_connection_insecure": {
     en: "Open the dashboard at its secure address (https://…) to make a recovery pack.",
     es: "Abre el panel en su dirección segura (https://…) para hacer un paquete de recuperación.",
+  },
+  // A fault in Waitron: `makeRecoveryPack` sends the make route's exact JSON, and no screen shows
+  // the received route's answer.
+  "recovery.pack_invalid": {
+    en: "The box could not read the request to make a recovery pack. This is a fault in Waitron. Reload the page and make the pack again.",
+    es: "La caja no pudo leer la solicitud para hacer un paquete de recuperación. Es un fallo de Waitron. Recarga la página y vuelve a hacer el paquete.",
   },
   "recovery.pack_origin_refused": {
     en: "Make the pack from the dashboard's own page, not from another site.",
@@ -1117,8 +1119,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se pueden leer los ajustes guardados de la copia en el bucket.",
   },
   "backup.stream_signer_missing": {
-    en: "This server has no signing key, so it cannot issue a recovery kit.",
-    es: "Este servidor no tiene clave de firma, así que no puede emitir un kit de recuperación.",
+    en: "This server has no signing key, so it cannot put the bucket copy in a recovery pack.",
+    es: "Este servidor no tiene clave de firma, así que no puede incluir la copia en el bucket en un paquete de recuperación.",
   },
   "backup.stream_request_failed": {
     en: "The bucket did not answer. Check this server's internet connection and the bucket's address.",

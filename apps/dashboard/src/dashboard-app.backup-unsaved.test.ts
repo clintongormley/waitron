@@ -89,7 +89,7 @@ function backup(app: DashboardApp) {
 }
 
 it.each([false, true])(
-  "passes system.manage=%s from the authenticated session to recovery PDF controls",
+  "passes system.manage=%s from the authenticated session to the recovery pack card",
   async (allowed) => {
     const { app } = await mount(
       "/manage/backup",
@@ -98,7 +98,7 @@ it.each([false, true])(
     const screen = backup(app);
     expect(screen.canManage).toBe(allowed);
     await screen.updateComplete;
-    expect(screen.shadowRoot!.querySelector("dashboard-recovery-document") !== null).toBe(allowed);
+    expect(screen.shadowRoot!.querySelector("dashboard-recovery-pack-card") !== null).toBe(allowed);
   },
 );
 function field(app: DashboardApp, name: string) {

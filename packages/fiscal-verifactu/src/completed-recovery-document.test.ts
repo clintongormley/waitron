@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
 import {
   deployment,
   invoiceSeries,
@@ -10,10 +9,7 @@ import {
   withTransaction,
 } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import {
-  FISCAL_RECOVERY_DOCUMENT,
-  FISCAL_RECOVERY_PACK_PAGE,
-} from "./completed-recovery-document.js";
+import { FISCAL_RECOVERY_PACK_PAGE } from "./completed-recovery-document.js";
 import { recoveryDocumentBytes } from "./recovery-document.js";
 import { serverKeyPage } from "./server-key-page.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
@@ -84,139 +80,6 @@ async function snapshot() {
     allocations: await suite.db.select().from(fiscalAllocations),
   };
 }
-async function render(
-  locale: "en" | "es",
-  evidence: Record<string, unknown> = {
-    "hour-history": { reference: "prepared-hours", complete: true, records: [row] },
-  },
-) {
-  return withTransaction(suite.db, (tx) =>
-    FISCAL_RECOVERY_DOCUMENT(tx, node, {
-      nodeKey,
-      createdAt: "2026-10-18T12:00:00.000Z",
-      locale,
-      evidence,
-    }),
-  );
-}
-it.each(["en", "es"] as const)(
-  "the composed %s document carries the key and scope only despite retired and retained history without allocating or changing counters",
-  async (locale) => {
-    const before = await snapshot();
-    const bytes = await render(locale);
-    const task = getDocument({
-      data: bytes.slice(),
-      useSystemFonts: false,
-      disableFontFace: true,
-      useWorkerFetch: false,
-      useWasm: false,
-    });
-    try {
-      const pdf = await task.promise;
-      const text = (await (await pdf.getPage(1)).getTextContent()).items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ")
-        .replace(/\s+/g, " ");
-      expect(text).not.toContain("Installation code");
-      expect(text).not.toContain("Código de instalación");
-      const attachment = JSON.parse(
-        Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
-          "utf8",
-        ),
-      );
-      expect(attachment).toEqual({
-        kind: "waitron-recovery-document",
-        version: 1,
-        scope: { taxpayerNif: "89890001K", softwareId: "W1", environment: "preproduction" },
-        taxpayerName: "Waitron SL",
-        venueName: "Local principal",
-        createdAt: "2026-10-18T12:00:00.000Z",
-        nodeKey,
-      });
-      expect(text).not.toContain(nodeKey.secret);
-    } finally {
-      await task.destroy();
-    }
-    expect(await snapshot()).toEqual(before);
-  },
-);
-
-it.each([
-  { "hour-history": { reference: "prepared-hours", complete: false, records: [] } },
-  {
-    "hour-history": {
-      reference: "prepared-hours",
-      complete: true,
-      records: [{ ...row, identity: "wrong" }],
-    },
-  },
-  { "hour-history": null },
-])("refuses damaged history without changing fiscal state: %j", async (evidence) => {
-  const before = await snapshot();
-  await expect(render("en", evidence)).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "history_invalid" },
-  });
-  expect(await snapshot()).toEqual(before);
-});
-it("a missing environment stamp refuses before rendering a recovery sheet", async () => {
-  await suite.db.delete(deployment);
-  await expect(render("en")).rejects.toMatchObject({
-    code: "sif.allocation_invalid",
-    params: { reason: "history_invalid" },
-  });
-});
-it("the completed manager sheet uses the saved venue zone rather than the host zone", async () => {
-  await suite.db
-    .update(locations)
-    .set({ timeZone: "Atlantic/Canary" })
-    .where(eq(locations.id, node.locationId));
-  const task = getDocument({ data: await render("en"), useSystemFonts: false, useWasm: false });
-  try {
-    const pdf = await task.promise;
-    const text = (await (await pdf.getPage(1)).getTextContent()).items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
-      .replace(/\s+/g, " ");
-    expect(text).toContain("18 October 2026, 13:00");
-    expect(text).toContain("WEST");
-  } finally {
-    await task.destroy();
-  }
-});
-it("unrelated and duplicate history do not refuse the sheet", async () => {
-  const bytes = await render("en", {
-    "hour-history": {
-      reference: "prepared-hours",
-      complete: true,
-      records: [
-        row,
-        { ...row, reference: "duplicate" },
-        { ...row, reference: "other-taxpayer", taxpayerNif: "B12345674", identity: "ZZZZZ" },
-        { ...row, reference: "other-environment", environment: "production", identity: "ZZZZY" },
-      ],
-    },
-  });
-  const task = getDocument({
-    data: bytes.slice(),
-    useSystemFonts: false,
-    disableFontFace: true,
-    useWorkerFetch: false,
-    useWasm: false,
-  });
-  try {
-    const pdf = await task.promise;
-    const attached = JSON.parse(
-      Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(
-        "utf8",
-      ),
-    );
-    expect(attached).not.toHaveProperty("installationCodes");
-  } finally {
-    await task.destroy();
-  }
-});
-
 describe("the pack's server-key page seat", () => {
   const evidence = {
     "hour-history": { reference: "prepared-hours", complete: true, records: [row] },
@@ -323,7 +186,7 @@ describe("the pack's server-key page seat", () => {
   ];
   for (const withNewKey of [false, true])
     it.each(refusals)(
-      `refuses %s as the document seat does (new key: ${withNewKey}), with the seat's own code`,
+      `refuses %s (new key: ${withNewKey}), with the seat's own code`,
       async (_name, arrange) => {
         const options = (await arrange()) as Parameters<typeof page>[0];
         const before = await snapshot();

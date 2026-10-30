@@ -76,10 +76,10 @@ copy's named node recovery key to authenticate recovery. Keep production and pre
 
 ## Prove access to the selected backup {#proof}
 
-Enter the grouped recovery key from the sheet you kept for this backup, or choose its saved
-recovery PDF or a recovery pack that holds the server key. If the pack does not hold the server
-key, the page says so and, when the pack records it, names the pack or the key name to look for.
-A newer replacement sheet may not open an older backup.
+In **Recovery PDF**, choose your recovery pack, or an older recovery PDF, that holds the server key
+for this backup; or type the grouped key printed on it in **Recovery key**. If the pack does not
+hold the server key, the page says so and, when the pack records it, names the pack or the key name
+to look for. A pack or sheet with a newer server key may not open an older backup.
 
 Confirm that the old box stays offline and that you are the only person recovering this taxpayer.
 Choose **Open backup**. Only after the key is accepted does the page show the backup's taxpayer,

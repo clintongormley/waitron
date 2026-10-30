@@ -12,6 +12,7 @@ import type {
 } from "../api/client.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
+import type { RecoveryPackCard } from "./recovery-pack-card.js";
 
 afterEach(cleanupWidgets);
 
@@ -1425,44 +1426,6 @@ describe("another S3-compatible bucket", () => {
   });
 });
 
-const PACK_LINE = "WAITRON-ARCHIVE-PACK-1:eyJ2ZXJzaW9uIjoxfQ";
-
-const PACK_FILE_EN = [
-  "Waitron archive recovery pack",
-  "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-  "Keep the previous pack while you still want to restore archives made before it was replaced.",
-  "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
-  'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
-  "",
-  PACK_LINE,
-  "",
-].join("\n");
-
-const PACK_FILE_ES = [
-  "Paquete de recuperación de las copias de Waitron",
-  "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
-  "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
-  "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
-  "Para restaurar en una caja nueva una copia archivada, sigue «A restore takes one of three sources» en deploy/README.md.",
-  "",
-  PACK_LINE,
-  "",
-].join("\n");
-
-const PACK = {
-  pack: PACK_LINE,
-  keyFingerprint: "ab12cd34",
-  revision: TWO.revision!,
-};
-
-const displayedPack = (el: BackupScreen) => q(el, "[data-test=pack]")?.textContent ?? null;
-
-async function showPack(el: BackupScreen) {
-  q(el, "[data-test=show-pack]")!.click();
-  await vi.waitFor(() => expect(q(el, "[data-test=pack]")).not.toBeNull());
-  await el.updateComplete;
-}
-
 async function read(el: BackupScreen, api: DashboardApi, status: BackupStatusView) {
   const reads = vi.mocked(api.getBackupStatus).mock.calls.length;
   vi.mocked(api.getBackupStatus).mockResolvedValue(status);
@@ -1474,441 +1437,12 @@ async function read(el: BackupScreen, api: DashboardApi, status: BackupStatusVie
   await el.updateComplete;
 }
 
-describe("recovery pack", () => {
-  it("asks for the pack only when its action is pressed, then shows it behind a warning with Copy and a download", async () => {
-    const getArchiveRecoveryPack = vi.fn().mockResolvedValue(PACK);
-    const { el } = await mount(TWO, { getArchiveRecoveryPack });
-    await settle();
-    expect(getArchiveRecoveryPack).not.toHaveBeenCalled();
-    expect(displayedPack(el)).toBeNull();
-    await showPack(el);
-    expect(getArchiveRecoveryPack).toHaveBeenCalledTimes(1);
-    expect(displayedPack(el)).toBe(PACK_LINE);
-    expect(q(el, "[data-test=pack-warning]")!.getAttribute("role")).toBe("note");
-    expect(text(q(el, "[data-test=pack-warning]")!)).toContain(t("backup.pack.warning"));
-    expect(q(el, "[data-test=copy-pack]")).not.toBeNull();
-    const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement;
-    expect(link.getAttribute("download")).toContain("ab12cd34");
-    const body = await (await fetch(link.href)).text();
-    expect(body).toBe(
-      [
-        t("backup.pack.file_heading"),
-        t("backup.pack.file_secret"),
-        t("backup.pack.file_keep_previous"),
-        t("backup.pack.file_store"),
-        t("backup.pack.file_restore"),
-        "",
-        PACK_LINE,
-        "",
-      ].join("\n"),
-    );
-  });
-
-  it.each([
-    ["es", PACK_FILE_ES],
-    ["en", PACK_FILE_EN],
-  ] as const)(
-    "downloads a file in the dashboard's language (%s) around the pack's code line",
-    async (locale, file) => {
-      const before = currentLocale();
-      try {
-        setLocale(locale);
-        const { el } = await mount(TWO, {
-          getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK),
-        });
-        await showPack(el);
-        expect(displayedPack(el)).toBe(PACK_LINE);
-        const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement;
-        expect(await (await fetch(link.href)).text()).toBe(file);
-      } finally {
-        setLocale(before);
-      }
-    },
-  );
-
-  it("names its action for showing the pack, which the download link then saves", async () => {
-    const { el } = await mount(TWO);
-    expect(text(q(el, "[data-test=show-pack]")!).trim()).toBe(t("backup.pack.show"));
-    const before = currentLocale();
-    try {
-      setLocale("en");
-      expect(t("backup.pack.show")).toBe("Show archive recovery pack");
-      setLocale("es");
-      expect(t("backup.pack.show")).toBe("Mostrar el paquete de recuperación de las copias");
-    } finally {
-      setLocale(before);
-    }
-  });
-
-  it("sits below the settings actions, so they do not read as part of it", async () => {
-    const { el } = await mount(TWO);
-    const pack = q(el, "[data-test=show-pack]")!;
-    for (const action of ["edit-settings", "turn-off"]) {
-      const position = q(el, `[data-test=${action}]`)!.compareDocumentPosition(pack);
-      expect(position & Node.DOCUMENT_POSITION_FOLLOWING, action).toBeTruthy();
-    }
-  });
-
-  it("wraps the shown pack at spaces, breaking only a word longer than the line", async () => {
-    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
-    await showPack(el);
-    const style = getComputedStyle(q(el, "[data-test=pack]")!);
-    expect(style.wordBreak).toBe("normal");
-    expect(style.overflowWrap).toBe("break-word");
-    expect(style.whiteSpace).toBe("pre-wrap");
-  });
-
-  it("copies the pack's code line as the server handed it over", async () => {
-    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
-    await showPack(el);
-    const spy = vi.spyOn(navigator.clipboard, "writeText").mockResolvedValue(undefined);
-    try {
-      q(el, "[data-test=copy-pack]")!.click();
-      expect(spy).toHaveBeenCalledWith(PACK_LINE);
-    } finally {
-      spy.mockRestore();
-    }
-  });
-
-  it("offers no pack when no destination is a bucket", async () => {
-    const { el } = await mount(LOCAL_ONLY);
-    expect(q(el, "[data-test=show-pack]")).toBeNull();
-  });
-
-  it("offers the pack when the environment owns the backup settings", async () => {
-    const { el } = await mount(
-      { ...TWO, managedByEnvironment: true, source: "environment", revision: null },
-      { getArchiveRecoveryPack: vi.fn().mockResolvedValue({ ...PACK, revision: undefined }) },
-    );
-    await showPack(el);
-    expect(displayedPack(el)).toBe(PACK_LINE);
-  });
-
-  it.each([
-    ["a new settings revision", { revision: "99999999-2222-4333-8444-555555555555" }],
-    ["a new key fingerprint", { keyFingerprint: "ffee0011" }],
-    ["a new key rotation time", { keyRotatedAt: "2026-10-13T09:00:00Z" }],
-  ] as const)(
-    "drops the shown pack on a status read with %s, and leaves the staged edit alone",
-    async (_what, change) => {
-      const { el, api } = await openEdit(TWO, {
-        getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK),
-      });
-      await setRetainCount(el, "9");
-      const staged = (q(el, "[data-test=retain-count]") as Field).value;
-      await showPack(el);
-      const revoke = vi.spyOn(URL, "revokeObjectURL");
-      const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
-      try {
-        await read(el, api, { ...TWO, ...change });
-        expect(displayedPack(el)).toBeNull();
-        expect(revoke).toHaveBeenCalledWith(href);
-      } finally {
-        revoke.mockRestore();
-      }
-      expect((q(el, "[data-test=retain-count]") as Field).value).toBe(staged);
-      expect(staged).toBe("9");
-      expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
-    },
-  );
-
-  it("keeps the shown pack on a status read that changes none of them", async () => {
-    const { el, api } = await mount(TWO, {
-      getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK),
-    });
-    await showPack(el);
-    await read(el, api, withOutcomes({ storedUnderCurrentKey: true }, {}));
-    expect(displayedPack(el)).toBe(PACK_LINE);
-  });
-
-  it("under environment management, a status read with the same key keeps the pack it has no revision for", async () => {
-    const managed = { ...TWO, managedByEnvironment: true, source: "environment", revision: null };
-    const { el, api } = await mount(managed as BackupStatusView, {
-      getArchiveRecoveryPack: vi.fn().mockResolvedValue({ ...PACK, revision: undefined }),
-    });
-    await showPack(el);
-    await read(el, api, managed as BackupStatusView);
-    expect(displayedPack(el)).toBe(PACK_LINE);
-    await read(el, api, { ...(managed as BackupStatusView), keyFingerprint: "ffee0011" });
-    expect(displayedPack(el)).toBeNull();
-  });
-
-  it("an answer that arrives after a status read changed the key is not shown", async () => {
-    let answer!: (value: typeof PACK) => void;
-    const { el, api } = await mount(TWO, {
-      getArchiveRecoveryPack: vi.fn().mockReturnValue(new Promise((r) => (answer = r))),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await read(el, api, { ...TWO, keyFingerprint: "ffee0011" });
-    answer(PACK);
-    await settle();
-    await el.updateComplete;
-    expect(displayedPack(el)).toBeNull();
-  });
-
-  it("revokes the pack's download link when the screen is left", async () => {
-    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
-    await showPack(el);
-    const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
-    const revoke = vi.spyOn(URL, "revokeObjectURL");
-    try {
-      el.remove();
-      expect(revoke).toHaveBeenCalledWith(href);
-    } finally {
-      revoke.mockRestore();
-    }
-  });
-
-  it("says a box with no recovery key has no pack, not to enter a key", async () => {
-    const { el } = await mount(TWO, {
-      getArchiveRecoveryPack: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
-    const message = text(q(el, "[data-test=pack-failure]")!).trim();
-    expect(message).toBe(t("backup.pack.key_missing"));
-    expect(message).not.toContain("Enter a recovery key");
-  });
-
-  it.each([
-    ["archives on", TWO, "backup.pack.key_too_short"],
-    [
-      "archives off",
-      { ...TWO, enabled: false, storedDisabled: true },
-      "backup.pack.key_too_short_off",
-    ],
-    [
-      "the environment owning the settings",
-      { ...TWO, managedByEnvironment: true, source: "environment", revision: null },
-      "backup.pack.key_too_short_managed",
-    ],
-  ] as const)(
-    "with %s, a too-short key's refusal points at what replaces the key",
-    async (_what, status, key) => {
-      const { el } = await mount(status as BackupStatusView, {
-        getArchiveRecoveryPack: vi
-          .fn()
-          .mockRejectedValue({ code: "backup.recovery_key_too_short", params: { min: 12 } }),
-      });
-      q(el, "[data-test=show-pack]")!.click();
-      await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
-      expect(text(q(el, "[data-test=pack-failure]")!).trim()).toBe(t(key));
-    },
-  );
-
-  it("names the action that replaces a too-short key: Change the recovery key with archives on, Turn on backups with them off", () => {
-    expect(t("backup.pack.key_too_short")).toContain(t("backup.rotate.title"));
-    expect(t("backup.pack.key_too_short_off")).toContain(t("backup.apply"));
-    expect(t("backup.pack.key_too_short_managed")).not.toContain(t("backup.apply"));
-  });
-
-  it("says a box whose backups go to no bucket has no pack, as the code says it", async () => {
-    const { el } = await mount(TWO, {
-      getArchiveRecoveryPack: vi
-        .fn()
-        .mockRejectedValue({ code: "backup.archive_bucket_not_configured" }),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
-    expect(text(q(el, "[data-test=pack-failure]")!).trim()).toBe(
-      codeMessage("backup.archive_bucket_not_configured"),
-    );
-  });
-});
-
-describe("recovery pack after a key change", () => {
-  it("a key change whose settings record failed drops the shown pack", async () => {
-    const { el } = await mount(TWO, {
-      getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK),
-      rotateBackupKey: vi.fn().mockRejectedValue({
-        code: "backup.rotation_metadata_failed",
-        params: { effectiveKeyChanged: true, keyFingerprint: "ffee0011" },
-      }),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack]")).not.toBeNull());
-    q(el, "[data-test=show-old-key]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
-    const box = q(el, "[data-test=saved-it]") as HTMLInputElement;
-    box.checked = true;
-    box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-    await el.updateComplete;
-    q(el, "[data-test=rotate-confirm]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
-    expect(q(el, "[data-test=pack]")).toBeNull();
-  });
-});
-
 const NEW_REVISION = "99999999-2222-4333-8444-555555555555";
-
-/** A pack fetch that answers only when the test says so. */
-function heldPack() {
-  let answer!: (value: typeof PACK) => void;
-  const fetch = vi.fn().mockReturnValue(new Promise<typeof PACK>((r) => (answer = r)));
-  return { fetch, answer: (value: typeof PACK = PACK) => answer(value) };
-}
 
 async function arrive(el: BackupScreen) {
   await settle();
   await el.updateComplete;
 }
-
-describe("a pack fetch still running when a write answers", () => {
-  it("a settings save answering with a new revision discards it, and leaves the draft staged since", async () => {
-    const pack = heldPack();
-    let answerSave!: (value: BackupStatusView) => void;
-    const saved = { ...TWO, revision: NEW_REVISION, retention: { count: 9, days: 30 } };
-    const { el, api } = await openEdit(TWO, {
-      getArchiveRecoveryPack: pack.fetch,
-      applyBackup: vi.fn().mockReturnValue(new Promise((r) => (answerSave = r))),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await setRetainCount(el, "9");
-    q(el, "[data-test=save-settings]")!.click();
-    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    await setRetainCount(el, "10");
-    vi.mocked(api.getBackupStatus).mockResolvedValue(saved);
-    answerSave(saved);
-    await arrive(el);
-    pack.answer();
-    await arrive(el);
-    expect(displayedPack(el)).toBeNull();
-    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("10");
-    expect(await buttonState(el, "save-settings")).toEqual(["primary", false]);
-  });
-
-  it("a turn-on answering with a new revision discards it, and leaves the draft staged since", async () => {
-    const off = { ...TWO, enabled: false, storedDisabled: true };
-    const pack = heldPack();
-    let answerApply!: (value: BackupStatusView) => void;
-    const on = { ...TWO, revision: NEW_REVISION, retention: { count: 9, days: 30 } };
-    const { el, api } = await mount(off, {
-      getStreamSettings: vi.fn().mockResolvedValue(STREAM_ON),
-      getArchiveRecoveryPack: pack.fetch,
-      applyBackup: vi.fn().mockReturnValue(new Promise((r) => (answerApply = r))),
-    });
-    await vi.waitFor(() => expect(q(el, "[data-test=apply]")).not.toBeNull());
-    q(el, "[data-test=show-pack]")!.click();
-    await typeFolder(el, "/mnt/usb/waitron");
-    await setRetainCount(el, "9");
-    q(el, "[data-test=apply]")!.click();
-    await vi.waitFor(() => expect(api.applyBackup).toHaveBeenCalledOnce());
-    await setRetainCount(el, "10");
-    vi.mocked(api.getBackupStatus).mockResolvedValue(on);
-    answerApply(on);
-    await arrive(el);
-    pack.answer();
-    await arrive(el);
-    expect(displayedPack(el)).toBeNull();
-    expect((q(el, "[data-test=retain-count]") as Field).value).toBe("10");
-    expect(await buttonState(el, "apply")).toEqual(["primary", false]);
-  });
-
-  it("a key change answering with a new key discards it", async () => {
-    const pack = heldPack();
-    const rotated = {
-      ...TWO,
-      keyFingerprint: "ffee0011",
-      keyRotatedAt: "2026-10-13T09:00:00Z",
-      revision: NEW_REVISION,
-    };
-    const { el, api } = await mount(TWO, {
-      getArchiveRecoveryPack: pack.fetch,
-      rotateBackupKey: vi.fn().mockResolvedValue(rotated),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    q(el, "[data-test=show-old-key]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
-    const box = q(el, "[data-test=saved-it]") as HTMLInputElement;
-    box.checked = true;
-    box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-    await el.updateComplete;
-    vi.mocked(api.getBackupStatus).mockResolvedValue(rotated);
-    q(el, "[data-test=rotate-confirm]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
-    expect(api.rotateBackupKey).toHaveBeenCalledOnce();
-    await arrive(el);
-    pack.answer();
-    await arrive(el);
-    expect(displayedPack(el)).toBeNull();
-  });
-
-  it("a second press with a pack shown revokes the shown pack's download link", async () => {
-    const { el } = await mount(TWO, { getArchiveRecoveryPack: vi.fn().mockResolvedValue(PACK) });
-    await showPack(el);
-    const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
-    const revoke = vi.spyOn(URL, "revokeObjectURL");
-    try {
-      q(el, "[data-test=show-pack]")!.click();
-      await vi.waitFor(() => {
-        const link = q(el, "[data-test=download-pack]") as HTMLAnchorElement | null;
-        expect(link?.href ?? href).not.toBe(href);
-      });
-      expect(revoke).toHaveBeenCalledWith(href);
-    } finally {
-      revoke.mockRestore();
-    }
-  });
-});
-
-describe("a pack refusal or pack the status no longer supports", () => {
-  const refused = () => vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" });
-
-  async function refuse(el: BackupScreen) {
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
-  }
-
-  it("a status read with a new key and revision takes a refusal away", async () => {
-    const { el, api } = await mount(TWO, { getArchiveRecoveryPack: refused() });
-    await refuse(el);
-    await read(el, api, { ...TWO, keyFingerprint: "ffee0011", revision: NEW_REVISION });
-    expect(q(el, "[data-test=pack-failure]")).toBeNull();
-  });
-
-  it("a status read that changes neither key nor revision keeps the refusal", async () => {
-    const { el, api } = await mount(TWO, { getArchiveRecoveryPack: refused() });
-    await refuse(el);
-    await read(el, api, withOutcomes({ storedUnderCurrentKey: true }, {}));
-    expect(q(el, "[data-test=pack-failure]")).not.toBeNull();
-  });
-
-  const managed = {
-    ...TWO,
-    managedByEnvironment: true,
-    source: "environment",
-    revision: null,
-  } as BackupStatusView;
-  const managedLocal = { ...LOCAL_ONLY, ...managed, destinations: LOCAL_ONLY.destinations };
-
-  it("a status read listing no bucket drops the pack and revokes its link, so it does not come back with the bucket", async () => {
-    const { el, api } = await mount(managed, {
-      getArchiveRecoveryPack: vi.fn().mockResolvedValue({ ...PACK, revision: undefined }),
-    });
-    await showPack(el);
-    const href = (q(el, "[data-test=download-pack]") as HTMLAnchorElement).href;
-    const revoke = vi.spyOn(URL, "revokeObjectURL");
-    try {
-      await read(el, api, managedLocal);
-      expect(q(el, "[data-test=show-pack]")).toBeNull();
-      expect(revoke).toHaveBeenCalledWith(href);
-    } finally {
-      revoke.mockRestore();
-    }
-    await read(el, api, managed);
-    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
-    expect(displayedPack(el)).toBeNull();
-  });
-
-  it("a status read listing no bucket takes a refusal away, so it does not come back with the bucket", async () => {
-    const { el, api } = await mount(managed, { getArchiveRecoveryPack: refused() });
-    await refuse(el);
-    await read(el, api, managedLocal);
-    await read(el, api, managed);
-    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
-    expect(q(el, "[data-test=pack-failure]")).toBeNull();
-  });
-});
 
 const OFF_REVISION = "77777777-2222-4333-8444-555555555555";
 
@@ -1991,11 +1525,10 @@ describe("switching off", () => {
   it("keeps its own colour while its own request is sent, whatever else is pressed", async () => {
     const { el, api } = await mount(TWO, {
       disableBackup: vi.fn().mockReturnValue(new Promise(() => undefined)),
-      getArchiveRecoveryPack: vi.fn().mockReturnValue(new Promise(() => undefined)),
     });
     await press(el, "turn-off");
     await press(el, "turn-off");
-    for (const other of ["edit-settings", "show-old-key", "show-pack", "configuration-export"]) {
+    for (const other of ["edit-settings", "show-old-key", "configuration-export"]) {
       await press(el, other);
       expect(await buttonState(el, "turn-off"), other).toEqual(["danger", true]);
     }
@@ -2023,10 +1556,6 @@ describe("switching off", () => {
   });
 
   for (const [other, overrides] of [
-    [
-      "show-pack",
-      { getArchiveRecoveryPack: vi.fn().mockReturnValue(new Promise(() => undefined)) },
-    ],
     ["show-old-key", {}],
     ["configuration-export", {}],
   ] as const) {
@@ -2039,6 +1568,23 @@ describe("switching off", () => {
       expect(api.disableBackup).not.toHaveBeenCalled();
     });
   }
+
+  it("pressing make-recovery-pack disarms it", async () => {
+    const { el, api } = await mount(TWO, {
+      disableBackup: vi.fn(),
+      getRecoveryPackStatus: vi.fn(() => new Promise<never>(() => undefined)),
+      getProfile: vi.fn(() => new Promise<never>(() => undefined)),
+    });
+    el.canManage = true;
+    await el.updateComplete;
+    await press(el, "turn-off");
+    const card = q(el, "dashboard-recovery-pack-card") as RecoveryPackCard;
+    await card.updateComplete;
+    card.shadowRoot!.querySelector<HTMLElement>("[data-test=make-recovery-pack]")!.click();
+    expect(await buttonState(el, "turn-off")).toEqual(["ghost", false]);
+    expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
+    expect(api.disableBackup).not.toHaveBeenCalled();
+  });
 
   it("an answer whose reload failed says the box could not load the settings", async () => {
     const { el } = await mount(LOCAL_ONLY, {
@@ -2077,7 +1623,6 @@ describe("switching off", () => {
       source: "environment",
       revision: null,
     } as BackupStatusView);
-    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
     expect(q(el, "[data-test=turn-off]")).toBeNull();
     expect(q(el, "[data-test=edit-settings]")).toBeNull();
   });
@@ -2085,7 +1630,6 @@ describe("switching off", () => {
   it("is not offered on a node that is not the primary", async () => {
     const { el } = await mount({ ...TWO, isPrimary: false });
     expect(q(el, "[data-test=not-primary]")).not.toBeNull();
-    expect(q(el, "[data-test=show-pack]")).not.toBeNull();
     expect(q(el, "[data-test=turn-off]")).toBeNull();
     expect(q(el, "[data-test=edit-settings]")).toBeNull();
   });
@@ -2380,29 +1924,6 @@ describe("a folder typed and switched off, when the bucket copy's bucket changes
     await vi.waitFor(() => expect(choice(el)!.value).toBe("custom-s3"));
     await settle();
     expect(await buttonState(el, "save-settings")).toEqual(["secondary", true]);
-  });
-});
-
-describe("a key change whose settings record failed", () => {
-  it("takes a shown pack refusal away", async () => {
-    const { el } = await mount(TWO, {
-      getArchiveRecoveryPack: vi.fn().mockRejectedValue({ code: "backup.recovery_key_missing" }),
-      rotateBackupKey: vi.fn().mockRejectedValue({
-        code: "backup.rotation_metadata_failed",
-        params: { effectiveKeyChanged: true, keyFingerprint: "ffee0011" },
-      }),
-    });
-    q(el, "[data-test=show-pack]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=pack-failure]")).not.toBeNull());
-    q(el, "[data-test=show-old-key]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).not.toBeNull());
-    const box = q(el, "[data-test=saved-it]") as HTMLInputElement;
-    box.checked = true;
-    box.dispatchEvent(new Event("change", { bubbles: true, composed: true }));
-    await el.updateComplete;
-    q(el, "[data-test=rotate-confirm]")!.click();
-    await vi.waitFor(() => expect(q(el, "[data-test=old-key]")).toBeNull());
-    expect(q(el, "[data-test=pack-failure]")).toBeNull();
   });
 });
 

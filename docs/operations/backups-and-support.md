@@ -1,21 +1,23 @@
 # Keep backup keys and investigate a box
 
-## Keep the archive recovery pack
+## Keep the recovery pack
 
 In **Backups**, choose **A folder on this box**, a **Bucket**, or both, then save. Bucket
 archives copy the current bucket settings when you save. Later edits to the continuous
 bucket copy do not move those archives.
 
-For bucket archives, choose **Show archive recovery pack**, then **Download pack file**.
-Keep the pack secret and off the box, outside the bucket. Keep earlier packs and keys for
-archives made before a replacement: changing the recovery key does not re-encrypt older files.
-Download a new pack after changing the archive bucket settings or recovery key.
+The **Recovery pack** card at the top of **Backups** makes one PDF holding the restore codes for
+the bucket copy and bucket archives, the recovery key for archives in a folder, and the server key
+or where it is: see [Make a new recovery pack](recovery-document.md). Keep the pack secret and off
+the box, outside the bucket. Keep earlier packs and keys for archives made before a replacement:
+changing the recovery key does not re-encrypt older files. After changing the recovery key, or
+the bucket copy or archive settings on **Backups**, the card says the pack is out of date; make a new one.
 
 If rotation reports `backup.rotation_metadata_failed`, the new key is already in effect.
-Keep that key and obtain its current pack. Do not assume that the failed metadata step kept
+Keep that key and make a new recovery pack. Do not assume that the failed metadata step kept
 the former key active. See the [archive settings reference](../../apps/server/README.md)
 and [restore procedures](../developers/offline-fiscal-restore.md) for the separate archive
-and node recovery keys. The [recovery PDF](recovery-document.md) is a different document.
+and node recovery keys.
 
 ## Recover from an interrupted first setup
 

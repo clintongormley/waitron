@@ -1202,8 +1202,8 @@ declare module "@waitron/shared" {
     "backup.reload_in_progress": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is unset where one is needed: a backup destination is configured
      * (refused at load so an unattended backup can never write an unencrypted or box-key-encrypted
-     * artifact), or a recovery kit or archive recovery pack is asked for
-     * (`GET /api/backup/stream/kit`, `GET /api/backup/archive-recovery-pack`). */
+     * artifact), or a recovery pack's bucket or archives page is drawn
+     * (`backup-recovery-pack-parts.ts`), where it fails that page alone. */
     "backup.recovery_key_missing": Record<string, never>;
     /** WAITRON_BACKUP_RECOVERY_KEY is shorter than `min` characters. */
     "backup.recovery_key_too_short": { min: number };
@@ -1267,16 +1267,15 @@ declare module "@waitron/shared" {
     /** The stream settings' Test, or the same check Save runs first, refused the owner's bucket.
      * `reason` is `probeBucket`'s short reason (`@waitron/stream`), naming which check failed. */
     "backup.stream_test_failed": { reason: ProbeFailure };
-    /** A recovery kit, or archives in the stream's bucket, were asked for while no bucket is
-     * configured. */
+    /** Archives in the stream's bucket were asked for while no bucket is configured. */
     "backup.stream_not_configured": Record<string, never>;
     /** The stored archive settings (`backup.archive`) are not a record this server wrote.
      * `reason` names the part that failed, never its value, which could be a secret. */
     "backup.archive_settings_invalid": { reason: string };
     /** A stored archive record could not be read. `disable` has no settings to keep switched off,
      * the bucket copy's Save (`PUT /api/backup/stream`) cannot check its folder against the
-     * archive's, and the archive recovery pack (`GET /api/backup/archive-recovery-pack`) cannot be
-     * built; an archive Save replaces the record. `reason` is the read's error code, never the
+     * archive's, and a recovery pack's archives page (`backup-recovery-pack-parts.ts`) fails; an
+     * archive Save replaces the record. `reason` is the read's error code, never the
      * record. */
     "backup.archive_settings_unreadable": { reason: string };
     /** The bucket copy's stored settings (`backup.stream`) could not be read, so an archive Save
@@ -1293,16 +1292,12 @@ declare module "@waitron/shared" {
     "backup.archive_recovery_pack_invalid": {
       reason: "not_found" | "encoding" | "shape" | "several";
     };
-    /** An archive recovery pack was asked for while the archive settings name no bucket: no
-     * dashboard record is stored, the stored one names only a local folder, or the environment owns
-     * the settings and names no bucket. */
-    "backup.archive_bucket_not_configured": Record<string, never>;
     /** Save's test of an archive bucket — write, read back, list and delete one object — failed or
      * ran out of time. `reason` is a code, or `timed_out`, `read_mismatch` or `not_listed`; never
      * the provider's message. */
     "backup.archive_test_failed": { reason: string };
-    /** A recovery kit was asked for on a node with no membership public key (`nodes.public_key`),
-     * so a rebuild could not verify the pointer this node signs. */
+    /** A recovery pack's bucket page was drawn on a node with no membership public key
+     * (`nodes.public_key`), so a rebuild could not verify the pointer this node signs. */
     "backup.stream_signer_missing": Record<string, never>;
     /**
      * `apply` was given a recovery key different from the usable key this box already holds (a held

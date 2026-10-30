@@ -60,8 +60,9 @@ import type { Turns } from "./backup-turns.js";
 import { confirmFreshSignIn } from "./fresh-sign-in.js";
 import type { Logger } from "./logger.js";
 import { createPasswordThrottle } from "./password-throttle.js";
-import type { RecoveryDocumentEvidence } from "./recovery-document-api.js";
+import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
+import { knownZone } from "./venue-time-zone.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackApiDeps {
@@ -419,8 +420,14 @@ export function mountBackupRecoveryPackMakeApi(
                   .where(inArray(persons.id, makers))
               ).map((p) => [p.id, p.name] as const),
         );
+        const [venue] = await tx
+          .select({ timeZone: locations.timeZone })
+          .from(locations)
+          .where(eq(locations.id, deps.node.locationId));
+        if (venue === undefined)
+          throw new Error("the box has no venue to date its recovery packs in");
         const loaded = deps.backups();
-        return packStatus({
+        const status = packStatus({
           records: records.map((r) => ({
             ...r,
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
@@ -434,6 +441,7 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== fileKey,
           now: deps.now(),
         });
+        return { ...status, timeZone: knownZone(venue.timeZone) };
       });
       return c.json(status);
     });

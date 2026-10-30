@@ -4773,26 +4773,59 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   mock-ups in `backlog/mockups/a1187-recovery-pack/`. Part 1 (today's parts) is planned
   ([plan](superpowers/plans/2026-10-29-a1187-recovery-pack-part-1.md)); its first pull request, the
   pack format and every reader, landed as #2250; PR B, the fresh sign-in at the button, landed as
-  #2257 (nothing calls it yet). Its review also made every passkey challenge record the ceremony
+  #2257. Its review also made every passkey challenge record the ceremony
   that created it (`webauthn_challenges.purpose`, identity migrations 0008-0010), closing a way to
   finish adding a passkey with a challenge from a sign-in or the new check. PR C, the server's make,
   received and status routes and the `recovery_packs` record (core migration 0200), landed as
-  #2263; the dashboard does not call them yet. Its keep-until date works from the key's change
-  time, not the archive names' times (plan decision 9, a stated departure from design §4). The next
-  is PR D (plan Tasks 15-17, 18a-18c, 19).
+  #2263. Its keep-until date works from the key's change
+  time, not the archive names' times (plan decision 9, a stated departure from design §4). PR D, the
+  Backups screen's Recovery pack card and its Make recovery pack dialog, retired the recovery kit,
+  the archive recovery pack and the recovery PDF panel. The next is PR E (setup's first pack).
   Left open by #2263's review: a change of credentials alone in environment-managed archive
   settings does not make a pack out of date (its record holds a digest of the non-secret settings
   only); `promote-api.ts` still answers a plain-HTTP or cross-site request with
   `authorization.not_permitted`, the answer this plan calls untruthful; the same-origin TLS check
   is copied across several routes, and the archive code, the backup-key check, the bucket recovery
   kit, the server key's name and the created date are each built twice, once in an older route
-  (`backup-api.ts`, `stream-api.ts`, `recovery-document-api.ts`, `recovery-pdf-content.ts`) and
-  once for the pack.
-  Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
-  where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
-  field's help says "paste the kit"; the look images were taken before the review changed the
-  "not a pack" refusal and added the space mark, and nobody has looked at those two again. Part 2
-  waits for A1188 part 1, part 3 for B3's retained disk key.
+  and once for the pack. PR D removed the older routes in `backup-api.ts`, `stream-api.ts` and
+  `recovery-document-api.ts`; setup's recovery sheet still draws the key's name and created date in
+  `packages/fiscal-verifactu/src/recovery-pdf-content.ts`.
+  Left open by #2250's review: `waitron-restore`'s usage line still says `<pack-file>` for
+  `--from-archive`, which a test pins, and the restore command's refusals for a file holding no kit
+  or no archive pack still name the kit file and the archive recovery pack file, which tests pin
+  word for word, where both forms now take the pack PDF; setup's pack refusals say "paste the
+  code" where the field's help says "paste the kit"; the look images were taken before the review
+  changed the "not a pack" refusal and added the space mark, and nobody has looked at those two
+  again. Part 2 waits for A1188 part 1, part 3 for B3's retained disk key.
+  Left open by PR D:
+  - The pack's "which never reached a browser" sentences (`keyOnUnreceivedPack`,
+    `currentKeyOnUnreceivedPack` in `packages/recovery-pack/src/i18n/pack-words.ts`, English and
+    Spanish) claim more than the box knows: only that no receipt was confirmed. For PR E.
+  - A key a pack makes is named `YYYY-MM-DD · <uuid>`, where setup and the design use
+    `YYYY-MM-DD · XXXX`. For PR E.
+  - The pack PDF uses one regular-weight font: no bold, codes not in a fixed-width face, so l and I
+    look alike. For PR E.
+  - The pack's cover says "The dashboard's Backups screen shows the same checks" beside a check
+    value (`key of <day> · rev <8 characters>`) that no part of the Backups screen shows.
+  - There is no Backups guide page, so the Backups screen and the card link to none.
+  - One key has three names: "recovery key" (the key-change dialog), "backup key" (the card and
+    the PDF), and in Spanish "clave de las copias" beside "Clave de copia".
+  - The card's "ready" line dates a just-made pack from the browser's clock until the next status
+    read names it; it is wrong only when the browser's clock and the box's fall on different days
+    in the venue's zone.
+  - The card and the fresh sign-in widget read the pack status and the person's profile with
+    their own read counters, and the Backups screen pokes the card after each write, where the
+    dashboard's live queries (`DashboardQueries`, `apps/dashboard/src/api/live-queries.ts`) could
+    keep both current. The fresh sign-in widget asks only the recovery pack's passkey route, so the
+    next action that needs a fresh sign-in has to widen it.
+  - A pack whose receipt the box confirmed after the card left the page, or after the person lost
+    system.manage, is counted received though no link to it was offered. So is an older pack whose
+    receipt lands while a newer pack's link is on offer, unless it holds the newest server key
+    the card was handed.
+
+- **At 390 px wide, the configuration export's password label overlaps its Show password button.**
+  Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is
+  believed to predate that branch; nobody photographed it before.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -4921,11 +4954,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.
-
-- **Under environment management a shown archive recovery pack goes stale only when the key
-  changes.** The pack route answers no `revision` there, so a bucket changed in the environment
-  leaves the shown pack in place (`#dropStalePack`, `apps/dashboard/src/screens/backup-screen.ts`).
-  Left open by A538-5 and A538-6d.
 
 - **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
   there (#1695).** Neither was reproduced outside the reviewer's run.

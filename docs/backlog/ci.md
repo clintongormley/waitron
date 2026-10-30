@@ -177,7 +177,7 @@ port is drawn, then releases them. A different worker can take a released port b
 intended server binds. The normal `WAITRON_HTTP_PORT` parser refuses `"0"`.
 
 The remaining work includes in-process setup/recovery suites outside the migrated `boot*`
-siblings, such as `setup-tool-download.boot.test.ts` and `recovery-document.boot.test.ts`.
+siblings, such as `setup-tool-download.boot.test.ts`.
 Audit each case's origin and listener-release assertions before choosing the bind-time fixture.
 The recovery-backup preview suite uses that existing fixture with a competing configured-port
 listener; it needs no change to the shared helper.

@@ -714,7 +714,7 @@ describe("DashboardApi routes", () => {
     expect(callsOf(fetchImpl)).toEqual([["/api/backup/disable", "POST", undefined]]);
   });
 
-  it("drives the bucket copy's settings, test, switch-off and recovery kit routes", async () => {
+  it("drives the bucket copy's settings, test and switch-off routes", async () => {
     const view = { isPrimary: true, configured: false, bucket: null, status: { state: "off" } };
     const bucket = {
       endpoint: "",
@@ -724,40 +724,25 @@ describe("DashboardApi routes", () => {
       accessKeyId: "AKIAEXAMPLE",
       secretAccessKey: "not-a-real-secret",
     };
-    const kit = { kit: "WAITRON-RECOVERY-KIT-1:abc", keyFingerprint: "ab12cd34" };
-    const pack = {
-      pack: "WAITRON-ARCHIVE-PACK-1:abc",
-      keyFingerprint: "ab12cd34",
-      keyRotatedAt: "2026-10-01T10:00:00.000Z",
-      revision: "rev-1",
-    };
     const fetchImpl = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse(view))
       .mockResolvedValueOnce(jsonResponse({ ok: true }))
       .mockResolvedValueOnce(jsonResponse(view))
-      .mockResolvedValueOnce(jsonResponse(view))
-      .mockResolvedValueOnce(jsonResponse(kit))
-      .mockResolvedValueOnce(jsonResponse(pack));
+      .mockResolvedValueOnce(jsonResponse(view));
     const api = new DashboardApi("", fetchImpl);
 
     await expect(api.getStreamSettings()).resolves.toEqual(view);
     await expect(api.testStreamBucket(bucket)).resolves.toEqual({ ok: true });
     await expect(api.saveStreamSettings(bucket)).resolves.toEqual(view);
     await expect(api.turnOffStream()).resolves.toEqual(view);
-    await expect(api.getRecoveryKit()).resolves.toEqual(kit);
-    await expect(api.getArchiveRecoveryPack()).resolves.toEqual(pack);
 
     expect(callsOf(fetchImpl)).toEqual([
       ["/api/backup/stream", "GET", undefined],
       ["/api/backup/stream/test", "POST", bucket],
       ["/api/backup/stream", "PUT", bucket],
       ["/api/backup/stream", "DELETE", undefined],
-      ["/api/backup/stream/kit", "GET", undefined],
-      ["/api/backup/archive-recovery-pack", "GET", undefined],
     ]);
-    const [, packInit] = fetchImpl.mock.calls.at(-1) as [string, RequestInit];
-    expect(new Headers(packInit.headers).get("x-waitron-live")).toBeNull();
   });
 
   it("lists card providers and readers, disconnects a provider, and reads and sets a device's reader", async () => {
@@ -1912,5 +1897,173 @@ describe("DashboardApi.getDiskStop", () => {
       vi.fn().mockResolvedValue(jsonResponse({ stopped: true, deleted: { ...deleted, extra: 1 } })),
     );
     expect(await api.getDiskStop()).toEqual({ stopped: true, deleted });
+  });
+});
+
+describe("the recovery pack calls", () => {
+  const SIGN_IN = { method: "password", password: "hunter2-hunter2" } as const;
+
+  function packResponse(body: BodyInit, headers: Record<string, string>): Response {
+    return new Response(body, { status: 200, headers });
+  }
+
+  /** A tiny PDF: its header, one object, its trailer and end mark, with no cross-reference table. */
+  const MINIMAL_PDF =
+    "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n";
+
+  it("makes a pack, handing back the PDF, its number and what happened to the server key", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(MINIMAL_PDF, {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "4",
+        "X-Waitron-Recovery-Pack-Key": "replaced",
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    const made = await api.makeRecoveryPack({ locale: "es", newServerKey: true, signIn: SIGN_IN });
+
+    expect(made.number).toBe(4);
+    expect(made.key).toBe("replaced");
+    expect(await made.pdf.text()).toBe(MINIMAL_PDF);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true, signIn: SIGN_IN }],
+    ]);
+  });
+
+  it.each([
+    ["a body that is not a PDF", "<html></html>", "text/html", "4", "unchanged"],
+    ["an empty PDF", "", "application/pdf", "4", "unchanged"],
+    ["a missing pack number", MINIMAL_PDF, "application/pdf", null, "unchanged"],
+    ["a pack number that is not a whole number", MINIMAL_PDF, "application/pdf", "4a", "unchanged"],
+    ["an unknown key state", MINIMAL_PDF, "application/pdf", "4", "rotated"],
+    [
+      "a PDF-typed body that is not a PDF",
+      "this is not a PDF",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
+    [
+      "a PDF cut off before its end mark",
+      "%PDF-1.7\nTRUNCATED",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
+    [
+      "a body that ends like a PDF but does not start like one",
+      "trailer\n%%EOF\n",
+      "application/pdf",
+      "4",
+      "unchanged",
+    ],
+  ])("refuses %s as recovery.pack_invalid", async (_label, body, type, number, key) => {
+    const headers: Record<string, string> = { "Content-Type": type };
+    if (number !== null) headers["X-Waitron-Recovery-Pack"] = number;
+    headers["X-Waitron-Recovery-Pack-Key"] = key;
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(body, headers)));
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
+  it("refuses a pack over 8 MiB as recovery.pack_invalid", async () => {
+    const api = new DashboardApi(
+      "",
+      vi.fn().mockResolvedValue(
+        packResponse(new Uint8Array(8 * 1024 * 1024 + 1), {
+          "Content-Type": "application/pdf",
+          "X-Waitron-Recovery-Pack": "1",
+          "X-Waitron-Recovery-Pack-Key": "unchanged",
+        }),
+      ),
+    );
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
+  it.each([
+    ["with no line end", MINIMAL_PDF.trimEnd()],
+    ["with CR LF", `${MINIMAL_PDF.trimEnd()}\r\n`],
+  ])(
+    "accepts a PDF whose end mark is followed by nothing or by line ends (%s)",
+    async (_how, body) => {
+      const api = new DashboardApi(
+        "",
+        vi.fn().mockResolvedValue(
+          packResponse(body, {
+            "Content-Type": "application/pdf",
+            "X-Waitron-Recovery-Pack": "4",
+            "X-Waitron-Recovery-Pack-Key": "unchanged",
+          }),
+        ),
+      );
+
+      const made = await api.makeRecoveryPack({
+        locale: "en",
+        newServerKey: false,
+        signIn: SIGN_IN,
+      });
+
+      expect(made.number).toBe(4);
+    },
+  );
+
+  it("counts a gateway's own answer as no answer from the box: connection.failed, with no status", async () => {
+    const api = new DashboardApi(
+      "",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("Bad Gateway", { status: 502, headers: { "Content-Type": "text/plain" } }),
+        ),
+    );
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: true, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "connection.failed" });
+  });
+
+  it("passes a refusal through with its code", async () => {
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(refusal("password.invalid", 401)));
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "password.invalid", status: 401 });
+  });
+
+  it("reads the status passively, asks for passkey options and marks a pack received with an empty JSON body", async () => {
+    const status = { latest: null, upToDate: false, incomplete: false, unreceived: null };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(status))
+      .mockResolvedValueOnce(
+        jsonResponse({ challengeHandle: "h1", options: { challenge: "AQID" } }),
+      )
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    expect(await api.getRecoveryPackStatus()).toEqual(status);
+    expect(await api.recoveryPackPasskeyOptions()).toEqual({
+      challengeHandle: "h1",
+      options: { challenge: "AQID" },
+    });
+    await api.markRecoveryPackReceived(7);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/recovery-pack", "GET", undefined],
+      ["/api/backup/recovery-pack/passkey-options", "POST", undefined],
+      ["/api/backup/recovery-pack/7/received", "POST", {}],
+    ]);
+    expect(
+      fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
+    ).toEqual(["1", null, null]);
+    expect(new Headers(fetchImpl.mock.calls[2][1].headers).get("content-type")).toBe(
+      "application/json",
+    );
   });
 });

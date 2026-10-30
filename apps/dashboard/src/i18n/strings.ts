@@ -1122,6 +1122,103 @@ export const en = {
   "profile.confirm_identity": "Enter your current password to confirm this change.",
   "profile.password_recovery":
     "To set a password, sign out and choose “I’ve forgotten my password” when logging in.",
+  "fresh_sign_in.password": "Password",
+  "fresh_sign_in.code": "Authenticator or recovery code",
+  "fresh_sign_in.code_hint": "6-digit code from your app, or one of your recovery codes",
+  "fresh_sign_in.code_required": "Enter a code from your authenticator app or a recovery code",
+  "fresh_sign_in.code_no_longer_needed":
+    "Your account no longer uses an authenticator app, so no code is needed. Make the pack again.",
+  "fresh_sign_in.use_passkey": "Use your passkey",
+  "fresh_sign_in.use_passkey_instead": "Use a passkey instead of the password",
+  "fresh_sign_in.no_way_in":
+    "To make a recovery pack you need to sign in again with a password or a passkey.",
+  "fresh_sign_in.passkey_not_registered":
+    "You have no passkey on your account yet. To add one, open Account settings from the person icon at the top of the page and choose Add passkey; or sign in with your password here.",
+  "fresh_sign_in.profile_failed":
+    "Your sign-in details could not be read, so this form cannot ask you to sign in again yet. Try again reads them once more.",
+  "fresh_sign_in.retry": "Try again",
+  "recovery_pack_dialog.heading": "Make recovery pack",
+  "recovery_pack_dialog.intro":
+    "The pack holds every key this venue has. Sign in again to make it. It is made once, for this download; the box keeps no copy.",
+  "recovery_pack_dialog.new_key": "Also make a new server key",
+  "recovery_pack_dialog.new_key_held":
+    "Only if the pack or sheet holding the current key (recovery pack {number}, made on {date}) is lost.",
+  "recovery_pack_dialog.new_key_unknown":
+    "Only if the pack or sheet holding the current key is lost.",
+  "recovery_pack_dialog.new_key_effect":
+    "New backups will use the new key; older backups still need the old one.",
+  "recovery_pack_dialog.unreceived":
+    "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
+  "recovery_pack_dialog.make": "Make pack",
+  "recovery_pack_dialog.key_failed":
+    "The pack was made, but the server key was {not} replaced. The server key page in the pack says why.",
+  "recovery_pack_dialog.not": "not",
+  "recovery_pack_dialog.key_still_works":
+    "The current key, on recovery pack {number} made on {date}, still works.",
+  "recovery_pack_dialog.lost_new_key":
+    "The box may have made a recovery pack with a new server key that did not reach this browser. If it did, the only copy of your current server key is on a pack you do not have.",
+  "recovery_pack_dialog.lost_new_key_named": "That pack is recovery pack {number}, made on {date}.",
+  "recovery_pack_dialog.lost_new_key_choices":
+    "Make a new pack with a new server key replaces the key again and puts it on a pack you download now; you sign in again first. Stop closes this window and changes nothing.",
+  "recovery_pack_dialog.lost":
+    "The box may have made the recovery pack, but it did not reach this browser.",
+  "recovery_pack_dialog.lost_choices":
+    "Try again asks the box for a new pack. Stop closes this window and changes nothing.",
+  "recovery_pack_dialog.remake": "Make a new pack with a new server key",
+  "recovery_pack_dialog.try_again": "Try again",
+  "recovery_pack_dialog.stop": "Stop",
+  "recovery_pack.title": "Recovery pack",
+  "recovery_pack.intro":
+    "One printed document with what you need when the box fails: the restore codes for your bucket copy and archives, and the server key. Keep it locked away, off the box.",
+  "recovery_pack.none": "No recovery pack has been made on this box.",
+  "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
+  "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
+  "recovery_pack.out_of_date": "Recovery pack {number}, made on {date}, is out of date.",
+  "recovery_pack.incomplete":
+    "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
+  "recovery_pack.not_received":
+    "Recovery pack {number}, made on {date}, never reached a browser. If you do not have it, make a new pack.",
+  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
+  "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
+  "recovery_pack.reason.archives_settings": "The archive settings changed.",
+  "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
+  "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
+  "recovery_pack.reason.server_key_set_up": "The server key was made after this pack.",
+  "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
+  "recovery_pack.reason.archives_removed": "Archives were turned off.",
+  "recovery_pack.reason.server_key_removed": "The box no longer keeps a server key.",
+  "recovery_pack.reason.server_key_replaced": "The server key was replaced.",
+  "recovery_pack.make_new": "Make a new pack.",
+  "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the server key.",
+  "recovery_pack.keep_backup_key":
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+  "recovery_pack.keep_old_server_key":
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its server key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+  "recovery_pack.older_key":
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+  "recovery_pack.row.last": "Last pack",
+  "recovery_pack.row.backup_key": "Backup key",
+  "recovery_pack.row.server_key": "Server key",
+  "recovery_pack.last_none": "None yet",
+  "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
+  "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
+  "recovery_pack.backup_key_changed":
+    "Changed on {date}; pack {number}, made on {packDate}, has the older key",
+  "recovery_pack.backup_key_same": "Unchanged since pack {number}, made on {date}",
+  "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
+  "recovery_pack.server_key_on": "On pack {number}, made on {date}",
+  "recovery_pack.server_key_on_unreceived":
+    "On pack {number}, made on {date}, which never reached a browser",
+  "recovery_pack.server_key_none": "This venue keeps no server key",
+  "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
+  "recovery_pack.make": "Make recovery pack",
+  "recovery_pack.ready":
+    "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
+  "recovery_pack.download": "Download PDF",
+  "recovery_pack.print": "Open to print",
+  "recovery_pack.load_failed":
+    "The recovery pack's state could not be read. Try again reads it once more.",
+  "recovery_pack.retry": "Try again",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
   "profile.passkey_name": "Passkey name",
@@ -1688,20 +1785,6 @@ export const en = {
   "servers.clear_explanation":
     "Clearing frees the place it takes on the list of servers. If it tries to come back under its old identity, this primary refuses it, so to use that machine again it has to join from scratch. This cannot be undone.",
   "backup.title": "Backups",
-  "recovery_document.title": "Recovery PDF",
-  "recovery_document.intro": "Create a new recovery key and its PDF.",
-  "recovery_document.create": "Create recovery PDF",
-  "recovery_document.keep":
-    "Keep this PDF outside the server. Keep older sheets for older backups.",
-  "recovery_document.download": "Download PDF",
-  "recovery_document.print": "Open to print",
-  "recovery_document.clear": "Clear PDF",
-  "recovery_document.confirm_title": "Replace the recovery key?",
-  "recovery_document.warning":
-    "New backups will use the new key. Older backups still need their matching old key.",
-  "recovery_document.failed": "The recovery PDF could not be created. Try again.",
-  "recovery_document.cancel": "Cancel",
-  "recovery_document.replace": "Replace key",
   "node_pack.create": "Create pack",
   "node_pack.key_error": "The node recovery key is not valid.",
   "node_pack.title": "Node recovery pack",
@@ -1872,7 +1955,7 @@ export const en = {
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
   "backup.key.title": "Recovery key",
   "backup.key.existing":
-    "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
+    "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery pack. To change it, turn backups on, then use “Change the recovery key”.",
   "backup.key.too_short":
     "The recovery key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
@@ -1908,30 +1991,6 @@ export const en = {
   "backup.turn_off.explain":
     "Scheduled backups stop. The saved destination and recovery key are kept, and nothing already stored is deleted.",
   "backup.turn_off.cancel": "Cancel",
-  "backup.pack.title": "Archive recovery pack",
-  "backup.pack.explanation": "Restoring a backup from the bucket on a new box asks for this pack.",
-  "backup.pack.show": "Show archive recovery pack",
-  "backup.pack.warning":
-    "Anyone holding this pack can open this venue's backups made under the current recovery key. Keep it as safe as the recovery key: offline, and never in the bucket itself.",
-  "backup.pack.copy": "Copy",
-  "backup.pack.download": "Download pack file",
-  "backup.pack.file_heading": "Waitron archive recovery pack",
-  "backup.pack.file_secret":
-    "Keep this file secret: it opens this venue's archived backups made under its recovery key.",
-  "backup.pack.file_keep_previous":
-    "Keep the previous pack while you still want to restore archives made before it was replaced.",
-  "backup.pack.file_store":
-    "Save it somewhere off the box, such as a password manager or a USB stick kept safe.",
-  "backup.pack.file_restore":
-    'To restore an archive on a new box, follow "A restore takes one of three sources" in deploy/README.md.',
-  "backup.pack.key_missing":
-    "This box holds no recovery key, so there is no archive recovery pack.",
-  "backup.pack.key_too_short":
-    "The recovery key this box holds is too short to make a recovery pack. Use “Change the recovery key” on this page: the new key replaces the short one.",
-  "backup.pack.key_too_short_off":
-    "The recovery key this box holds is too short to make a recovery pack. Use “Turn on backups” on this page: the new key it saves replaces the short one.",
-  "backup.pack.key_too_short_managed":
-    "The recovery key this box holds is too short to make a recovery pack. This box's backup settings come from its environment, so a longer key has to be set there.",
   "backup.rotate.title": "Change the recovery key",
   "backup.rotate.warning":
     "Backups taken before now still need the OLD key — keep it safe too. Changing the key does not re-encrypt older backups.",
@@ -1948,7 +2007,7 @@ export const en = {
   "backup.weekday.sun": "Sun",
   "stream.title": "Continuous copy to your bucket",
   "stream.explanation":
-    "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery kit.",
+    "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery pack.",
   "stream.not_primary": "Only the main server sends the copy to the bucket.",
   "stream.settings_incomplete":
     "The saved bucket settings are incomplete. Change bucket to enter them again, or turn off the copy.",
@@ -1991,8 +2050,6 @@ export const en = {
   "stream.field.check": "Check this value.",
   "stream.error.managed_by_environment":
     "This box's backup settings come from its environment and it holds no recovery key, so the bucket copy cannot be turned on from this page.",
-  "stream.error.recovery_key_missing":
-    "This box holds no recovery key, so there is no recovery kit to show.",
   "stream.error.recovery_key_too_short":
     "The recovery key this box holds is too short, so the bucket copy cannot use it. Use “Turn on backups” above: the new key it saves replaces the short one.",
   "stream.error.recovery_key_too_short_archives_on":
@@ -2001,20 +2058,9 @@ export const en = {
     "The recovery key this box holds is too short, so the bucket copy cannot use it. This box's backup settings come from its environment, so a longer key has to be set there.",
   "stream.error.recovery_key_too_short_unknown":
     "The recovery key this box holds is too short, so the bucket copy cannot use it.",
-  "stream.show_kit": "Show recovery kit",
   "stream.change": "Change bucket",
   "stream.turn_off": "Turn off",
   "stream.turn_off_confirm": "Turn off this copy?",
-  "stream.kit.title": "Recovery kit",
-  "stream.kit.warning":
-    "Anyone holding this kit can read every sale and every stored credential in the bucket copy. Keep it as safe as the recovery key: offline, and never in the bucket itself. It is the only thing a rebuild asks for.",
-  "stream.kit.reissued":
-    "The recovery key changed, so this is a new recovery kit. Download it now. Keep the old kit for seven days: copies made before the change still need it.",
-  "stream.kit.copy": "Copy",
-  "stream.kit.download": "Download kit file",
-  "stream.kit.file_heading": "Waitron recovery kit",
-  "stream.kit.file_note":
-    "Keep this safe. It opens the bucket copy of this restaurant. A new server rebuilt from the bucket asks for this file and nothing else.",
   "stream.probe.access_denied": "The bucket refused this access key.",
   "stream.probe.conditional_write_unsupported":
     "This storage does not support the safe-write check Waitron needs.",
@@ -4779,6 +4825,111 @@ export const es: Record<StringKey, string> = {
   "profile.confirm_identity": "Introduce tu contraseña actual para confirmar este cambio.",
   "profile.password_recovery":
     "Para crear una contraseña, cierra la sesión y elige «¿Has olvidado tu contraseña?» al iniciar sesión.",
+  "fresh_sign_in.password": "Contraseña",
+  "fresh_sign_in.code": "Código del autenticador o de recuperación",
+  "fresh_sign_in.code_hint": "Código de 6 cifras de tu app, o uno de tus códigos de recuperación",
+  "fresh_sign_in.code_required":
+    "Introduce un código de tu app de autenticación o un código de recuperación",
+  "fresh_sign_in.code_no_longer_needed":
+    "Tu cuenta ya no usa una app de autenticación, así que no hace falta ningún código. Vuelve a hacer el paquete.",
+  "fresh_sign_in.use_passkey": "Usar tu passkey",
+  "fresh_sign_in.use_passkey_instead": "Usar una passkey en lugar de la contraseña",
+  "fresh_sign_in.no_way_in":
+    "Para hacer un paquete de recuperación tienes que volver a identificarte con una contraseña o una passkey.",
+  "fresh_sign_in.passkey_not_registered":
+    "Todavía no tienes ninguna passkey en tu cuenta. Para añadir una, abre Configuración de la cuenta desde el icono de persona en la parte superior de la página y elige Añadir passkey; o identifícate aquí con tu contraseña.",
+  "fresh_sign_in.profile_failed":
+    "No se han podido leer tus datos de acceso, así que este formulario aún no puede pedirte que vuelvas a identificarte. Volver a intentarlo los lee otra vez.",
+  "fresh_sign_in.retry": "Volver a intentarlo",
+  "recovery_pack_dialog.heading": "Hacer paquete de recuperación",
+  "recovery_pack_dialog.intro":
+    "El paquete contiene todas las claves de este local. Vuelve a iniciar sesión para hacerlo. Se hace una sola vez, para esta descarga; la caja no guarda ninguna copia.",
+  "recovery_pack_dialog.new_key": "También crear una clave del servidor nueva",
+  "recovery_pack_dialog.new_key_held":
+    "Solo si se ha perdido el paquete o la hoja con la clave actual (paquete de recuperación {number}, hecho el {date}).",
+  "recovery_pack_dialog.new_key_unknown":
+    "Solo si se ha perdido el paquete o la hoja con la clave actual.",
+  "recovery_pack_dialog.new_key_effect":
+    "Las copias nuevas usarán la clave nueva; las copias anteriores siguen necesitando la antigua.",
+  "recovery_pack_dialog.unreceived":
+    "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, que nunca llegó a un navegador. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
+  "recovery_pack_dialog.make": "Hacer paquete",
+  "recovery_pack_dialog.key_failed":
+    "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
+  "recovery_pack_dialog.not": "no",
+  "recovery_pack_dialog.key_still_works":
+    "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
+  "recovery_pack_dialog.lost_new_key":
+    "Puede que la caja haya hecho un paquete de recuperación con una nueva clave del servidor que no llegó a este navegador. Si fue así, la única copia de tu clave actual del servidor está en un paquete que no tienes.",
+  "recovery_pack_dialog.lost_new_key_named":
+    "Ese paquete es el paquete de recuperación {number}, hecho el {date}.",
+  "recovery_pack_dialog.lost_new_key_choices":
+    "Hacer un paquete nuevo con una nueva clave del servidor vuelve a sustituir la clave y la pone en un paquete que descargas ahora; antes vuelves a iniciar sesión. Parar cierra esta ventana y no cambia nada.",
+  "recovery_pack_dialog.lost":
+    "Puede que la caja haya hecho el paquete de recuperación, pero no llegó a este navegador.",
+  "recovery_pack_dialog.lost_choices":
+    "Volver a intentarlo pide a la caja un paquete nuevo. Parar cierra esta ventana y no cambia nada.",
+  "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
+  "recovery_pack_dialog.try_again": "Volver a intentarlo",
+  "recovery_pack_dialog.stop": "Parar",
+  "recovery_pack.title": "Paquete de recuperación",
+  "recovery_pack.intro":
+    "Un documento impreso con lo que necesitas si la caja falla: los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos de la caja.",
+  "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en esta caja.",
+  "recovery_pack.up_to_date":
+    "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
+  "recovery_pack.up_to_date_unnamed":
+    "El paquete de recuperación {number}, hecho el {date}, está al día.",
+  "recovery_pack.out_of_date":
+    "El paquete de recuperación {number}, hecho el {date}, está desactualizado.",
+  "recovery_pack.incomplete":
+    "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
+  "recovery_pack.not_received":
+    "El paquete de recuperación {number}, hecho el {date}, nunca llegó a un navegador. Si no lo tienes, haz un paquete nuevo.",
+  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
+  "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
+  "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
+  "recovery_pack.reason.bucket_set_up":
+    "La copia en el bucket se configuró después de este paquete.",
+  "recovery_pack.reason.archives_set_up": "Los archivos se configuraron después de este paquete.",
+  "recovery_pack.reason.server_key_set_up":
+    "La clave del servidor se creó después de este paquete.",
+  "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
+  "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
+  "recovery_pack.reason.server_key_removed": "La caja ya no guarda una clave del servidor.",
+  "recovery_pack.reason.server_key_replaced": "La clave del servidor se sustituyó.",
+  "recovery_pack.make_new": "Haz un paquete nuevo.",
+  "recovery_pack.keep_server_key":
+    "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
+  "recovery_pack.keep_backup_key":
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+  "recovery_pack.keep_old_server_key":
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+  "recovery_pack.older_key":
+    "Las copias de la caja siguen usando la clave de las copias anterior al último cambio, porque la caja no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+  "recovery_pack.row.last": "Último paquete",
+  "recovery_pack.row.backup_key": "Clave de las copias",
+  "recovery_pack.row.server_key": "Clave del servidor",
+  "recovery_pack.last_none": "Ninguno todavía",
+  "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
+  "recovery_pack.last_value_unnamed": "Paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_changed":
+    "Cambió el {date}; el paquete {number}, hecho el {packDate}, tiene la clave anterior",
+  "recovery_pack.backup_key_same": "Sin cambios desde el paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
+  "recovery_pack.server_key_on": "En el paquete {number}, hecho el {date}",
+  "recovery_pack.server_key_on_unreceived":
+    "En el paquete {number}, hecho el {date}, que nunca llegó a un navegador",
+  "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
+  "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
+  "recovery_pack.make": "Hacer paquete de recuperación",
+  "recovery_pack.ready":
+    "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos de la caja.",
+  "recovery_pack.download": "Descargar PDF",
+  "recovery_pack.print": "Abrir para imprimir",
+  "recovery_pack.load_failed":
+    "No se ha podido leer el estado del paquete de recuperación. Volver a intentarlo lo lee otra vez.",
+  "recovery_pack.retry": "Volver a intentarlo",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
   "profile.passkey_name": "Nombre de la llave de acceso",
@@ -5351,20 +5502,6 @@ export const es: Record<StringKey, string> = {
   "servers.clear_explanation":
     "Quitarla libera el sitio que ocupa en la lista de servidores. Si intenta volver con su identidad anterior, este servidor principal la rechaza, así que para volver a usarla tiene que unirse de nuevo desde el principio. No se puede deshacer.",
   "backup.title": "Copias de seguridad",
-  "recovery_document.title": "PDF de recuperación",
-  "recovery_document.intro": "Crea una nueva clave de recuperación y su PDF.",
-  "recovery_document.create": "Crear PDF de recuperación",
-  "recovery_document.keep":
-    "Guarda este PDF fuera del servidor. Conserva las hojas anteriores para las copias antiguas.",
-  "recovery_document.download": "Descargar PDF",
-  "recovery_document.print": "Abrir para imprimir",
-  "recovery_document.clear": "Borrar PDF",
-  "recovery_document.confirm_title": "¿Cambiar la clave de recuperación?",
-  "recovery_document.warning":
-    "Las nuevas copias usarán la nueva clave. Las copias antiguas siguen necesitando su clave anterior.",
-  "recovery_document.failed": "No se ha podido crear el PDF de recuperación. Inténtalo de nuevo.",
-  "recovery_document.cancel": "Cancelar",
-  "recovery_document.replace": "Cambiar clave",
   "node_pack.create": "Crear kit",
   "node_pack.key_error": "La clave de recuperación del nodo no es válida.",
   "node_pack.title": "Kit de recuperación del nodo",
@@ -5543,7 +5680,7 @@ export const es: Record<StringKey, string> = {
     "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
-    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
+    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu paquete de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
   "backup.key.too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
@@ -5580,31 +5717,6 @@ export const es: Record<StringKey, string> = {
   "backup.turn_off.explain":
     "Las copias programadas se detienen. Se conservan el destino guardado y la clave de recuperación, y no se borra nada de lo ya guardado.",
   "backup.turn_off.cancel": "Cancelar",
-  "backup.pack.title": "Paquete de recuperación de las copias",
-  "backup.pack.explanation":
-    "Para restaurar en una caja nueva una copia del bucket se pide este paquete.",
-  "backup.pack.show": "Mostrar el paquete de recuperación de las copias",
-  "backup.pack.warning":
-    "Quien tenga este paquete puede abrir las copias de este local hechas con la clave de recuperación actual. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket.",
-  "backup.pack.copy": "Copiar",
-  "backup.pack.download": "Descargar el archivo del paquete",
-  "backup.pack.file_heading": "Paquete de recuperación de las copias de Waitron",
-  "backup.pack.file_secret":
-    "Guarda este archivo en secreto: abre las copias archivadas de este local hechas con su clave de recuperación.",
-  "backup.pack.file_keep_previous":
-    "Conserva el paquete anterior mientras quieras restaurar copias archivadas hechas antes de que se sustituyera.",
-  "backup.pack.file_store":
-    "Guárdalo fuera de la caja, por ejemplo en un gestor de contraseñas o en una memoria USB guardada en un lugar seguro.",
-  "backup.pack.file_restore":
-    "Para restaurar en una caja nueva una copia archivada, sigue «A restore takes one of three sources» en deploy/README.md.",
-  "backup.pack.key_missing":
-    "Esta caja no tiene clave de recuperación, así que no hay paquete de recuperación de las copias.",
-  "backup.pack.key_too_short":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Cambiar la clave de recuperación» en esta página: la clave nueva sustituye a la corta.",
-  "backup.pack.key_too_short_off":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Usa «Activar las copias» en esta página: la clave nueva que guarda sustituye a la corta.",
-  "backup.pack.key_too_short_managed":
-    "La clave de recuperación que tiene esta caja es demasiado corta para hacer un paquete de recuperación. Los ajustes de copia de esta caja vienen de su entorno, así que hay que poner allí una clave más larga.",
   "backup.rotate.title": "Cambiar la clave de recuperación",
   "backup.rotate.warning":
     "Las copias hechas antes de ahora siguen necesitando la clave ANTIGUA; guárdala también. Cambiar la clave no vuelve a cifrar las copias anteriores.",
@@ -5621,7 +5733,7 @@ export const es: Record<StringKey, string> = {
   "backup.weekday.sun": "Dom",
   "stream.title": "Copia continua en tu bucket",
   "stream.explanation":
-    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el kit de recuperación.",
+    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el paquete de recuperación.",
   "stream.not_primary": "Solo el servidor principal envía la copia al bucket.",
   "stream.settings_incomplete":
     "Los ajustes guardados del bucket están incompletos. Cambia de bucket para introducirlos de nuevo o desactiva la copia.",
@@ -5664,8 +5776,6 @@ export const es: Record<StringKey, string> = {
   "stream.field.check": "Revisa este valor.",
   "stream.error.managed_by_environment":
     "Los ajustes de copia de este equipo vienen de su entorno y no tiene clave de recuperación, así que la copia en el bucket no se puede activar desde esta página.",
-  "stream.error.recovery_key_missing":
-    "Este equipo no tiene clave de recuperación, así que no hay kit de recuperación que mostrar.",
   "stream.error.recovery_key_too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Usa «Activar las copias» más arriba: la clave nueva que guarda sustituye a la corta.",
   "stream.error.recovery_key_too_short_archives_on":
@@ -5674,20 +5784,9 @@ export const es: Record<StringKey, string> = {
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla. Los ajustes de copia de este equipo vienen de su entorno, así que hay que poner allí una clave más larga.",
   "stream.error.recovery_key_too_short_unknown":
     "La clave de recuperación que tiene este equipo es demasiado corta, así que la copia en el bucket no puede usarla.",
-  "stream.show_kit": "Mostrar el kit de recuperación",
   "stream.change": "Cambiar de bucket",
   "stream.turn_off": "Desactivar",
   "stream.turn_off_confirm": "¿Desactivar esta copia?",
-  "stream.kit.title": "Kit de recuperación",
-  "stream.kit.warning":
-    "Quien tenga este kit puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Guárdalo con el mismo cuidado que la clave de recuperación: fuera de línea y nunca en el propio bucket. Es lo único que pide una reconstrucción.",
-  "stream.kit.reissued":
-    "La clave de recuperación ha cambiado, así que este es un kit de recuperación nuevo. Descárgalo ahora. Conserva el kit anterior siete días: las copias anteriores al cambio todavía lo necesitan.",
-  "stream.kit.copy": "Copiar",
-  "stream.kit.download": "Descargar el archivo del kit",
-  "stream.kit.file_heading": "Kit de recuperación de Waitron",
-  "stream.kit.file_note":
-    "Guárdalo en un lugar seguro. Abre la copia de este restaurante en el bucket. Un servidor nuevo reconstruido desde el bucket pide este archivo y nada más.",
   "stream.probe.access_denied": "El bucket ha rechazado esta clave de acceso.",
   "stream.probe.conditional_write_unsupported":
     "Este almacenamiento no admite la comprobación de escritura segura que Waitron necesita.",
