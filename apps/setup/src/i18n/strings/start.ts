@@ -23,7 +23,7 @@ export const startEn = {
   "role.restore.button": "Restore a backup",
   "role.bucket.heading": "Restore from my bucket",
   "role.bucket.copy":
-    "Rebuild onto this fresh server from the continuous copy in your own storage bucket, when the old server is gone. You need the recovery kit.",
+    "Rebuild onto this fresh server from the continuous copy in your own storage bucket, when the old server is gone. You need the recovery pack or kit file.",
   "role.bucket.button": "Restore from my bucket",
   "role.back": "Back",
 
@@ -146,7 +146,7 @@ export const startEs: Record<keyof typeof startEn, string> = {
   "role.restore.button": "Restaurar una copia de seguridad",
   "role.bucket.heading": "Restaurar desde mi bucket",
   "role.bucket.copy":
-    "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el kit de recuperación.",
+    "Reconstruye el restaurante en este servidor nuevo a partir de la copia continua de tu propio bucket de almacenamiento, cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit.",
   "role.bucket.button": "Restaurar desde mi bucket",
   "role.back": "Volver",
 

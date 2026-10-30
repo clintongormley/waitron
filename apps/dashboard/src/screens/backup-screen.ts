@@ -619,8 +619,8 @@ export class BackupScreen extends LitElement {
   }
 
   /** Archives are off but the box already holds a usable key (the bucket copy may have set it):
-   * turning archives on uses that key, so the recovery kit stays valid, and the form neither makes
-   * nor sends one. */
+   * turning archives on uses that key, so the recovery pack's key stays valid, and the form neither
+   * makes nor sends one. */
   get #reusesHeldKey(): boolean {
     return (
       (this.status?.enabled === false || this.#configureUsesHeldKey) &&

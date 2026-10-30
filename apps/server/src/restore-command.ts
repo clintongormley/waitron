@@ -95,11 +95,11 @@ const DECRYPT_PHASE_CODES: ReadonlySet<string> = new Set([
 
 /**
  * `waitron-restore restore <artifact-path>` restores one backup artifact; `restore --from-bucket
- * <kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive <pack-file>
- * --archive-key <name>` downloads one archive and restores it as the first form does; either file
- * may instead be the venue's recovery pack PDF. The recovery key comes from
- * `WAITRON_BACKUP_RECOVERY_KEY`, the kit file, the archive pack file or the recovery pack PDF, never
- * argv: an argv element leaks into `ps`.
+ * <pack-or-kit-file>` rebuilds from the venue's bucket copy instead, and `restore --from-archive
+ * <pack-file> --archive-key <name>` downloads one archive and restores it as the first form does;
+ * either file may instead be the venue's recovery pack PDF. The recovery key comes from
+ * `WAITRON_BACKUP_RECOVERY_KEY`, the kit file, the archive pack file or the recovery pack PDF,
+ * never argv: an argv element leaks into `ps`.
  *
  * Returns a process exit code: 0 on success, 1 on a failure, 2 on a usage error.
  */
@@ -107,7 +107,7 @@ export async function runRestore(deps: CommandDeps): Promise<number> {
   const args = parseArgs(deps.argv);
   if (args === null) {
     deps.out(
-      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
+      "usage: waitron-restore restore <artifact-path> [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-bucket <pack-or-kit-file> [--confirm-venue <tax-id>] [--confirm-old-box-gone] [--confirm-sole-recovery] | restore --from-archive <pack-file> --archive-key <name> [--confirm-old-box-gone] [--confirm-sole-recovery]",
     );
     return 2;
   }

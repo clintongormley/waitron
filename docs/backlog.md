@@ -4789,11 +4789,13 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   and once for the pack. PR D removed the older routes in `backup-api.ts`, `stream-api.ts` and
   `recovery-document-api.ts`; setup's recovery sheet still draws the key's name and created date in
   `packages/fiscal-verifactu/src/recovery-pdf-content.ts`.
-  Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
-  where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
-  field's help says "paste the kit"; the look images were taken before the review changed the
-  "not a pack" refusal and added the space mark, and nobody has looked at those two again. Part 2
-  waits for A1188 part 1, part 3 for B3's retained disk key.
+  Left open by #2250's review: `waitron-restore`'s usage line still says `<pack-file>` for
+  `--from-archive`, which a test pins, and the restore command's refusals for a file holding no kit
+  or no archive pack still name the kit file and the archive recovery pack file, which tests pin
+  word for word, where both forms now take the pack PDF; setup's pack refusals say "paste the
+  code" where the field's help says "paste the kit"; the look images were taken before the review
+  changed the "not a pack" refusal and added the space mark, and nobody has looked at those two
+  again. Part 2 waits for A1188 part 1, part 3 for B3's retained disk key.
 
 - **A1089: authenticated server-certificate recovery is missing from the public connection page.**
   [Detail](backlog/box.md#authenticated-server-certificate-recovery)
@@ -4922,11 +4924,6 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
 
 - **`backup.archive_settings_unusable` is worded only as an alert** (`alert-messages.ts`), not on
   the Backups screen. Left open by A538-4.
-
-- **Under environment management a shown archive recovery pack goes stale only when the key
-  changes.** The pack route answers no `revision` there, so a bucket changed in the environment
-  leaves the shown pack in place (`#dropStalePack`, `apps/dashboard/src/screens/backup-screen.ts`).
-  Left open by A538-5 and A538-6d.
 
 - **Two small leftovers in the Backups destination form, reported by A639's review and not fixed
   there (#1695).** Neither was reproduced outside the reviewer's run.

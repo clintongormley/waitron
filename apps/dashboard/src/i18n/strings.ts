@@ -1955,7 +1955,7 @@ export const en = {
   "backup.archive_test.not_listed": "The test file was written but the bucket did not list it.",
   "backup.key.title": "Recovery key",
   "backup.key.existing":
-    "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery kit. To change it, turn backups on, then use “Change the recovery key”.",
+    "Backups will use the recovery key this box already has. If you set up the bucket copy, it is the key inside your recovery pack. To change it, turn backups on, then use “Change the recovery key”.",
   "backup.key.too_short":
     "The recovery key this box holds is too short to protect backups. The new key below replaces it.",
   "backup.key.minted_note":
@@ -2007,7 +2007,7 @@ export const en = {
   "backup.weekday.sun": "Sun",
   "stream.title": "Continuous copy to your bucket",
   "stream.explanation":
-    "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery kit.",
+    "The box sends every change to an S3-compatible storage bucket you own, within seconds. If the box is lost, a new one can be rebuilt from the bucket with the recovery pack.",
   "stream.not_primary": "Only the main server sends the copy to the bucket.",
   "stream.settings_incomplete":
     "The saved bucket settings are incomplete. Change bucket to enter them again, or turn off the copy.",
@@ -5680,7 +5680,7 @@ export const es: Record<StringKey, string> = {
     "El archivo de prueba se escribió, pero el bucket no lo ha listado.",
   "backup.key.title": "Clave de recuperación",
   "backup.key.existing":
-    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu kit de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
+    "Las copias usarán la clave de recuperación que este equipo ya tiene. Si has configurado la copia en el bucket, es la clave que va dentro de tu paquete de recuperación. Para cambiarla, activa las copias y después usa «Cambiar la clave de recuperación».",
   "backup.key.too_short":
     "La clave de recuperación que tiene este equipo es demasiado corta para proteger las copias. La clave nueva de abajo la sustituye.",
   "backup.key.minted_note":
@@ -5733,7 +5733,7 @@ export const es: Record<StringKey, string> = {
   "backup.weekday.sun": "Dom",
   "stream.title": "Copia continua en tu bucket",
   "stream.explanation":
-    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el kit de recuperación.",
+    "El equipo envía cada cambio a un bucket de almacenamiento compatible con S3 que es tuyo, en segundos. Si el equipo se pierde, se puede reconstruir otro desde el bucket con el paquete de recuperación.",
   "stream.not_primary": "Solo el servidor principal envía la copia al bucket.",
   "stream.settings_incomplete":
     "Los ajustes guardados del bucket están incompletos. Cambia de bucket para introducirlos de nuevo o desactiva la copia.",

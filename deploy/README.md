@@ -516,12 +516,13 @@ command against it treat that entrypoint differently:
   `/app/bin-recovery.js unpack …`, and to any bare `docker run` against this image.
 
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
-  file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
-  rebuilds the box from the copy the old box kept in the owner's bucket. `<kit-file>` is the
-  venue's recovery pack PDF, made with **Make recovery pack** on the dashboard's Backups screen, or
-  a recovery kit file saved before the pack replaced it. Either holds the bucket's key and the
-  recovery key, so nothing secret goes on the command line. The file must be visible inside the
-  container and readable by the image's user, `waitron` (uid 10001):
+  file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`.
+  `restore --from-bucket <pack-or-kit-file>` rebuilds the box from the copy the old box kept in the
+  owner's bucket. `<pack-or-kit-file>` is the venue's recovery pack PDF, made with **Make recovery
+  pack** on the dashboard's Backups screen, or a recovery kit file saved before the pack replaced
+  it. Either holds the bucket's key and the recovery key, so nothing secret goes on the command
+  line. The file must be visible inside the container and readable by the image's user, `waitron`
+  (uid 10001):
   `sudo chown 10001 recovery-pack.pdf` keeps it private at mode 0600. Otherwise the command stops
   with `cannot read kit file: /recovery-pack.pdf`.
 

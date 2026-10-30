@@ -72,7 +72,7 @@ export const restoreEn = {
 
   "restore_bucket.heading": "Restore from my bucket",
   "restore_bucket.intro":
-    "Rebuild this server from the copy the old server kept in your storage bucket. Use this only when the old server is gone. You need the recovery kit, and nothing else.",
+    "Rebuild this server from the copy the old server kept in your storage bucket. Use this only when the old server is gone. You need the recovery pack or kit file, and nothing else.",
   "restore_bucket.sensitive":
     "The recovery kit is as sensitive as the recovery key: anyone holding it can read every sale and every stored credential in the bucket copy. Enter it only here.",
   "restore_bucket.kit_file": "Recovery pack or kit file",
@@ -257,7 +257,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
 
   "restore_bucket.heading": "Restaurar desde mi bucket",
   "restore_bucket.intro":
-    "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el kit de recuperación y nada más.",
+    "Reconstruye este servidor a partir de la copia que el servidor anterior guardaba en tu bucket de almacenamiento. Úsalo solo cuando el servidor anterior ya no esté. Necesitas el paquete de recuperación o el archivo del kit, y nada más.",
   "restore_bucket.sensitive":
     "El kit de recuperación es tan delicado como la clave de recuperación: quien lo tenga puede leer todas las ventas y todas las credenciales guardadas en la copia del bucket. Introdúcelo solo aquí.",
   "restore_bucket.kit_file": "Paquete de recuperación o archivo del kit",

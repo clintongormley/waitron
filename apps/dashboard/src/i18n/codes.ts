@@ -1119,8 +1119,8 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     es: "No se pueden leer los ajustes guardados de la copia en el bucket.",
   },
   "backup.stream_signer_missing": {
-    en: "This server has no signing key, so it cannot issue a recovery kit.",
-    es: "Este servidor no tiene clave de firma, así que no puede emitir un kit de recuperación.",
+    en: "This server has no signing key, so it cannot put the bucket copy in a recovery pack.",
+    es: "Este servidor no tiene clave de firma, así que no puede incluir la copia en el bucket en un paquete de recuperación.",
   },
   "backup.stream_request_failed": {
     en: "The bucket did not answer. Check this server's internet connection and the bucket's address.",
