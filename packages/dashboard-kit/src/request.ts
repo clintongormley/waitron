@@ -149,7 +149,8 @@ export function createRequest(
         // `text/plain`, on which `res.json()` throws; and the literal `null` is valid JSON, so a bare
         // try/catch is not enough — the parsed value is checked for being an object before `.error` is
         // read off it, and `code` is used only when it is a string. Any of these falls back to
-        // `server.internal` rather than surfacing a parse error as a fake network outage.
+        // `server.internal` rather than surfacing a parse error as a fake network outage, or to
+        // `connection.failed` with no status under `refusals: "envelope"`.
         const parsed: unknown = await within(res.json()).catch(() => undefined);
         if (stopped !== undefined) throw fail(stopped);
         const envelope = isRecord(parsed) && isRecord(parsed.error) ? parsed.error : undefined;

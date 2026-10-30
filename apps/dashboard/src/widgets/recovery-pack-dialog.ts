@@ -273,8 +273,9 @@ export class RecoveryPackDialog extends LitElement {
     }
     if (generation !== this.#generation) return;
     const received = await this.#markReceived(api, made.number);
-    // Sent even if the dialog closed meanwhile: the pack is marked received, so it must be handed
-    // over — but never to a card that has since moved to another api.
+    // Sent even if the dialog closed meanwhile, for a card still showing; a card that has gone or
+    // lost system.manage drops it, though the box already counts it received. Never sent to a card
+    // that has since moved to another api.
     if (api !== this.api) return;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackMade>("recovery-pack-made", {

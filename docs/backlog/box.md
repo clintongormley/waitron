@@ -985,7 +985,7 @@ refused under field `destination`, a name the request no longer has; the dashboa
 `parseRecoveryKit`
 (`packages/stream/src/kit.ts`) refuses a recovery key holding a C0 control character or DEL, which
 the box's key rules (`checkedRecoveryKey`) accept, so a box with such a key prints a bucket copy code
-in its recovery pack whose restore calls it damaged; the pack's archive code accepts such keys. Predates A538-5 (kit.ts
+in its recovery pack whose restore calls it damaged. Predates A538-5 (kit.ts
 last changed in #627). `bench/sqlite-failover/src/probes/restore-time.ts` still computes free
 space as `bavail * bsize`, where the server multiplies by `frsize` (`free-bytes.ts`).
 

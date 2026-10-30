@@ -11,7 +11,7 @@ the bucket copy and bucket archives, the recovery key for archives in a folder, 
 or where it is: see [Make a new recovery pack](recovery-document.md). Keep the pack secret and off
 the box, outside the bucket. Keep earlier packs and keys for archives made before a replacement:
 changing the recovery key does not re-encrypt older files. After changing the recovery key, or
-the archive settings on **Backups**, the card says the pack is out of date; make a new one.
+the bucket copy or archive settings on **Backups**, the card says the pack is out of date; make a new one.
 
 If rotation reports `backup.rotation_metadata_failed`, the new key is already in effect.
 Keep that key and make a new recovery pack. Do not assume that the failed metadata step kept

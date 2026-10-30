@@ -4811,12 +4811,15 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   - One key has three names: "recovery key" (the key-change dialog), "backup key" (the card and
     the PDF), and in Spanish "clave de las copias" beside "Clave de copia".
   - The card's "ready" line dates a just-made pack from the browser's clock until the next status
-    read names it; it is wrong only if the browser's clock crosses midnight in the venue's zone.
+    read names it; it is wrong only when the browser's clock and the box's fall on different days
+    in the venue's zone.
   - The card and the fresh sign-in widget read the pack status and the person's profile with
     their own read counters, and the Backups screen pokes the card after each write, where the
     dashboard's live queries (`DashboardQueries`, `apps/dashboard/src/api/live-queries.ts`) could
     keep both current. The fresh sign-in widget asks only the recovery pack's passkey route, so the
     next action that needs a fresh sign-in has to widen it.
+  - A pack whose receipt the box confirmed after the card left the page, or after the person lost
+    system.manage, is counted received though no link to it was offered.
 
 - **At 390 px wide, the configuration export's password label overlaps its Show password button.**
   Found while looking at the Backups screen for A1187 PR D. The markup came with #296 and is
