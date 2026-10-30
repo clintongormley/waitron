@@ -588,6 +588,8 @@ until A977).
   permissions, sources and dates stay.
   Native season route and season week suites use English venue, operation, zone and custom-season
   samples; Spanish starter-season names, locale keys, clock revisions and refusal checks stay.
+  Native kitchen-notice samples use English menu, dish, table, note and removed-extra text;
+  unit translations, unit identities, quantities and all six day-boundary readings stay.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
