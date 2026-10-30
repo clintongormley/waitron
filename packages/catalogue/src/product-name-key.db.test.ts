@@ -78,7 +78,7 @@ describe("the stored name key", () => {
 
   it("is written for the product and its variants by a product editor save", async () => {
     const input = {
-      name: "Tortilla",
+      name: "Omelette",
       customerName: null,
       ordering: "public",
       description: null,
@@ -97,7 +97,7 @@ describe("the stored name key", () => {
       color: null,
     } satisfies ProductEditorInput;
     const saved = await app((tx) => saveProductEditor(tx, null, menu, input, "en"));
-    expect(await keyOf(saved.id)).toBe("tortilla");
+    expect(await keyOf(saved.id)).toBe("omelette");
     expect(await keyOf(saved.variants[0]!.id)).toBe("media ración");
   });
 
@@ -116,7 +116,7 @@ describe("the stored name key", () => {
   });
 
   it("is re-folded by storeProductNameKeys on rows past the first batch", async () => {
-    const template = await make("Plantilla");
+    const template = await make("Template");
     const count = BATCH_SIZE + 1;
     const { rows: info } = await suite.db.execute<{ name: string }>(
       sql`pragma table_info(products)`,
@@ -144,8 +144,7 @@ describe("the stored name key", () => {
     );
     const wrong = stored.filter(
       (row) =>
-        row.nameKey !==
-        (row.name === "Plantilla" ? "plantilla" : row.name.replace("ÑOQUI", "ñoqui")),
+        row.nameKey !== (row.name === "Template" ? "template" : row.name.replace("ÑOQUI", "ñoqui")),
     );
     expect(stored).toHaveLength(count + 1);
     expect(wrong).toEqual([]);
