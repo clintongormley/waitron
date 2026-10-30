@@ -220,11 +220,15 @@ export class RecoveryPackCard extends LitElement {
 
   /**
    * The PDF may hold the server's secret key, so no link to it outlives the card or its permission;
-   * and a pack older than the one on offer, whose receipt was confirmed late, never replaces it.
+   * and a pack older than the one on offer, whose receipt was confirmed late, never replaces it,
+   * though its receipt still changes the status.
    */
   #madeOne(made: RecoveryPackMade): void {
     if (!this.isConnected || !this.canManage) return;
-    if (this.made !== null && made.number < this.made.number) return;
+    if (this.made !== null && made.number < this.made.number) {
+      if (!this.dialog?.isOpen) this.reload();
+      return;
+    }
     this.#dropMade();
     this.made = {
       url: URL.createObjectURL(made.pdf),

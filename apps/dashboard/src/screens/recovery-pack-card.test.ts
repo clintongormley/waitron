@@ -843,7 +843,7 @@ describe("making a pack", () => {
       expect(revoked).toEqual([]);
     });
 
-    it("never swaps a newer pack's link for an older one's", async () => {
+    it("never swaps a newer pack's link for an older one's, but still re-reads the status the older one's receipt changed", async () => {
       const api = stubApi(STATES.none);
       api.makeRecoveryPack
         .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced" })
@@ -866,8 +866,10 @@ describe("making a pack", () => {
           .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")
           ?.getAttribute("download") ?? null;
       await expect.poll(download).toBe("waitron-recovery-pack-2.pdf");
+      await settle(el);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
       first.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
       await settle(el);
       expect(download()).toBe("waitron-recovery-pack-2.pdf");
       expect(words(el.shadowRoot!.querySelector("[data-test=pack-ready]"))).toContain("2");
