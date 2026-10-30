@@ -141,9 +141,9 @@ describe("a device's delete dialog copy, in Spanish", () => {
   it("names the open orders a payment in progress holds, or says so alone", () => {
     setLocale("es");
     const copy = deviceDeleteCopy();
-    const order = [{ id: "wo-1", name: "Mesa 4" }];
+    const order = [{ id: "wo-1", name: "Table 4" }];
     expect(copy.refusal({ code: "device.payment_in_progress", params: {}, targets: order })).toBe(
-      "Pago en curso: Mesa 4",
+      "Pago en curso: Table 4",
     );
     expect(copy.refusal({ code: "device.payment_in_progress", params: {}, targets: [] })).toBe(
       "Pago en curso",

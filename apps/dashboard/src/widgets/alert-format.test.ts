@@ -23,7 +23,7 @@ it("reads the incident id only from an event key", () => {
 
 it("names a device alert by its device and a job alert by its source, in the chosen language", () => {
   setLocale("en-GB");
-  expect(sourceLabel({ source: "device", deviceId: "d1", deviceName: "Caja 1" })).toBe("Caja 1");
+  expect(sourceLabel({ source: "device", deviceId: "d1", deviceName: "Till 1" })).toBe("Till 1");
   expect(sourceLabel({ source: "device", deviceId: "d1", deviceName: null })).toBe("d1");
   expect(sourceLabel({ source: "device" })).toBe("");
   expect(sourceLabel({ source: "payment_check", deviceId: null, deviceName: null })).toBe(
