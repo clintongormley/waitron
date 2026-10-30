@@ -1,0 +1,214 @@
+import { LitElement, css, html, type PropertyValues } from "lit";
+import { live } from "lit/directives/live.js";
+import { customElement, property, state } from "lit/decorators.js";
+import { trackDialog } from "./track-dialog.js";
+import {
+  baseStyles,
+  focusFirstInvalid,
+  submitOnEnter,
+  draftScopeFor,
+  saveActionState,
+} from "@waitron/ui";
+import type { WtDialog, DraftScope, LeaveCoordinator, LeaveReason } from "@waitron/ui";
+import "@waitron/ui/src/components/wt-form-actions.js";
+import "@waitron/ui/src/components/wt-input.js";
+import { PARTY_NAME_MAX } from "@waitron/shared";
+import { t } from "../i18n/t.js";
+
+export interface BillNameDetail {
+  /** Trimmed; null clears the name. */
+  name: string | null;
+}
+
+const sameName = (a: string, b: string): boolean => a.trim() === b.trim();
+
+@customElement("till-bill-name-dialog")
+export class TillBillNameDialog extends LitElement {
+  static override styles = [
+    baseStyles,
+    css`
+      .fields {
+        display: flex;
+        flex-direction: column;
+        gap: var(--wt-space-4);
+        width: var(--wt-form-max-width);
+        max-width: 100%;
+      }
+    `,
+  ];
+
+  /** The bill's shown name, for the heading. */
+  @property() bill = "";
+  @property() value = "";
+  @property({ attribute: false }) savedValue: string | undefined;
+  @property() refusal = "";
+
+  @state() private attempted = false;
+
+  @state() private active = true;
+  #scope?: DraftScope<string>;
+  #leave?: LeaveCoordinator;
+  #baseline?: string;
+  #storedChanged = false;
+  readonly #beforeClose = async (reason: LeaveReason): Promise<boolean> =>
+    (await this.#leave!.request({ scopes: [this], reason, proceed() {} })) === "proceeded";
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.requestUpdate();
+  }
+
+  override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("savedValue")) this.#storedChanged = true;
+    if (!this.isConnected || !this.active) return;
+    if (!this.#scope) this.#track();
+    if (this.#storedChanged) this.#followStored();
+  }
+
+  #track(): void {
+    this.#baseline ??= this.savedValue ?? this.value;
+    const { coordinator, scope } = draftScopeFor<string>(this, {
+      id: this,
+      current: () => this.value,
+      snapshot: (value) => value,
+      equal: sameName,
+      restore: (value) => (this.value = value),
+    });
+    this.#leave = coordinator;
+    this.#scope = scope;
+    scope.commit(this.#baseline);
+  }
+
+  /** A name stored elsewhere while the window is open becomes what Save compares against, and
+   * replaces the field only while the field still reads the previous stored name. */
+  #followStored(): void {
+    this.#storedChanged = false;
+    const stored = this.savedValue;
+    if (stored === undefined || sameName(stored, this.#baseline!)) return;
+    if (sameName(this.value, this.#baseline!)) this.value = stored;
+    this.#baseline = stored;
+    this.#scope!.commit(stored);
+  }
+
+  override disconnectedCallback(): void {
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#leave = undefined;
+    super.disconnectedCallback();
+  }
+
+  override async firstUpdated(): Promise<void> {
+    await this.renderRoot.querySelector<WtDialog>("wt-dialog")!.updateComplete;
+    this.renderRoot.querySelector<HTMLElement>("wt-input")!.focus();
+  }
+
+  #tooLong(): boolean {
+    return this.value.trim().length > PARTY_NAME_MAX;
+  }
+
+  #fieldError(): string {
+    if (this.attempted && this.#tooLong()) return t("table.name_too_long");
+    return this.refusal;
+  }
+
+  #onInput(event: CustomEvent<{ value: string }>): void {
+    event.stopPropagation();
+    if (!this.isConnected || !this.active) return;
+    this.value = event.detail.value;
+    this.#scope?.changed();
+    this.refusal = "";
+  }
+
+  async #save(): Promise<void> {
+    if (!this.isConnected || !this.active) return;
+    if (saveActionState(this.#scope).unchanged) return;
+    this.attempted = true;
+    this.refusal = "";
+    if (this.#tooLong()) {
+      await focusFirstInvalid(this.shadowRoot!);
+      return;
+    }
+    this.#baseline = this.value;
+    this.#scope?.commit(this.value);
+    const trimmed = this.value.trim();
+    this.dispatchEvent(
+      new CustomEvent<BillNameDetail>("bill-name-confirm", {
+        detail: { name: trimmed === "" ? null : trimmed },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  #cancel(): void {
+    if (!this.isConnected || !this.active) return;
+    if (this.#leave) {
+      void this.shadowRoot!.querySelector<WtDialog>("wt-dialog")!.requestClose("cancel");
+      return;
+    }
+    this.#reportClose();
+  }
+
+  #closed(event: Event): void {
+    event.stopPropagation();
+    if (event.target !== event.currentTarget || !this.isConnected || !this.active) return;
+    this.active = false;
+    this.#scope?.dispose();
+    this.#scope = undefined;
+    this.#reportClose();
+  }
+
+  #reportClose(): void {
+    this.dispatchEvent(new CustomEvent("bill-name-cancel", { bubbles: true, composed: true }));
+  }
+
+  override render() {
+    const error = this.#fieldError();
+    const saveAction = saveActionState(this.#scope);
+    return html`<wt-dialog
+      ${trackDialog()}
+      .open=${this.active}
+      .beforeClose=${this.#leave ? this.#beforeClose : undefined}
+      .heading=${t("table.bill_name_title").replace("{bill}", () => this.bill)}
+      @wt-close=${(event: Event) => this.#closed(event)}
+    >
+      <div class="fields">
+        <wt-input
+          name="billName"
+          autocomplete="off"
+          .maxlength=${PARTY_NAME_MAX}
+          .label=${t("table.name_label")}
+          .value=${live(this.value)}
+          .error=${error}
+          @wt-change=${(event: CustomEvent<{ value: string }>) => this.#onInput(event)}
+          @keydown=${(event: KeyboardEvent) =>
+            submitOnEnter(event, this.shadowRoot!.querySelector<HTMLElement>("[data-name-save]"))}
+        ></wt-input>
+        <wt-form-actions .error=${error === "" ? "" : t("form.fix_fields")}>
+          <wt-button
+            slot="cancel"
+            data-name-cancel
+            variant="secondary"
+            @click=${() => this.#cancel()}
+          >
+            ${t("action.cancel")}
+          </wt-button>
+          <wt-button
+            data-name-save
+            variant=${saveAction.variant}
+            ?disabled=${saveAction.unchanged || (this.attempted && this.#tooLong())}
+            @click=${() => void this.#save()}
+          >
+            ${t("table.name_save")}
+          </wt-button>
+        </wt-form-actions>
+      </div>
+    </wt-dialog>`;
+  }
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "till-bill-name-dialog": TillBillNameDialog;
+  }
+}
