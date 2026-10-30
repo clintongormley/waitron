@@ -3230,11 +3230,11 @@ describe("TillApi", () => {
     );
   });
 
-  it("A803 bill names: renameBill PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
+  it("A803 bill names: setBillName PUTs the name, the party, its revision and the bill's editor expectation to the bill's /name route", async () => {
     const fetchStub = vi
       .fn()
       .mockResolvedValue(jsonResponse({ revision: 4, billNumber: 2, billName: "Clint" }));
-    const result = await new TillApi("", fetchStub).renameBill("wo-7", "Clint", {
+    const result = await new TillApi("", fetchStub).setBillName("wo-7", "Clint", {
       expectedPartyRevision: 3,
       partyId: "v1",
       expectedEdit: { billId: "wo-7", editorVersion: 0, draftId: null, draftRevision: null },

@@ -15454,7 +15454,7 @@ export class TillApp extends LitElement {
     const expectedEdit = this.#billChoiceEdit(billId);
     if (expectedEdit === null) return;
     try {
-      const named = await this.api.renameBill(billId, name, {
+      const named = await this.api.setBillName(billId, name, {
         expectedPartyRevision: party.revision,
         partyId: party.id,
         expectedEdit,

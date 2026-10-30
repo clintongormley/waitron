@@ -4703,7 +4703,7 @@ export class TillApi {
    * is editing on the bill as `draft.taken_over`, until this person takes the bill over; a stale
    * editor expectation as `draft.out_of_date`; and `party.out_of_date`.
    */
-  renameBill(
+  setBillName(
     billId: string,
     name: string | null,
     revisions: Required<BillRevisions> & { expectedEdit: BillEditExpected },

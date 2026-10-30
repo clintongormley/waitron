@@ -302,7 +302,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", mainBillId: "wo-check" }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
-    renameBill: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
+    setBillName: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -2653,7 +2653,7 @@ describe("A803 name bill", () => {
     emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
     await flush(el);
 
-    expect(api.renameBill).toHaveBeenCalledWith("wo-4", "Clint", {
+    expect(api.setBillName).toHaveBeenCalledWith("wo-4", "Clint", {
       expectedPartyRevision: 3,
       partyId: "v1",
       expectedEdit: editOf("wo-4"),
@@ -2667,7 +2667,7 @@ describe("A803 name bill", () => {
     emit(order, "name-bill", { billId: "wo-4", name: null });
     await flush(el);
 
-    expect(vi.mocked(api.renameBill).mock.calls[0]![1]).toBeNull();
+    expect(vi.mocked(api.setBillName).mock.calls[0]![1]).toBeNull();
   });
 
   it("sends a paid bill a merged party left behind with the surviving party's id, not the bill's own", async () => {
@@ -2688,7 +2688,7 @@ describe("A803 name bill", () => {
     emit(order, "name-bill", { billId: "wo-old", name: "Clint" });
     await flush(el);
 
-    expect(api.renameBill).toHaveBeenCalledWith("wo-old", "Clint", {
+    expect(api.setBillName).toHaveBeenCalledWith("wo-old", "Clint", {
       expectedPartyRevision: 3,
       partyId: "v1",
       expectedEdit: editOf("wo-old"),
@@ -2701,7 +2701,7 @@ describe("A803 name bill", () => {
       getPartyBills: vi.fn(async () =>
         named ? [{ ...tabBill, billName: "Clint" }, checkBill] : [tabBill, checkBill],
       ),
-      renameBill: vi.fn(async () => {
+      setBillName: vi.fn(async () => {
         named = true;
         return { revision: 4, billNumber: 1, billName: "Clint" };
       }),
@@ -2724,7 +2724,7 @@ describe("A803 name bill", () => {
 
   it("hands a refusal of the name back to the screen for that bill, beside the field, without a banner", async () => {
     const { el } = await mountApp({
-      renameBill: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),
+      setBillName: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),
     });
     const order = await openMesa(el);
 
@@ -2743,7 +2743,7 @@ describe("A803 name bill", () => {
   it("drops a refusal of the name that arrives after the waiter has left the table", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
-      renameBill: vi.fn(
+      setBillName: vi.fn(
         () =>
           new Promise<never>((_resolve, reject) => {
             refuse = reject;
@@ -2770,7 +2770,7 @@ describe("A803 name bill", () => {
   it("opens no window for a bill the waiter has since left when its late refusal arrives", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
-      renameBill: vi.fn(
+      setBillName: vi.fn(
         () =>
           new Promise<never>((_resolve, reject) => {
             refuse = reject;
@@ -2794,7 +2794,7 @@ describe("A803 name bill", () => {
   it("leaves another bill's window as it is when a late refusal arrives after the waiter opened it", async () => {
     let refuse!: (reason: unknown) => void;
     const { el } = await mountApp({
-      renameBill: vi.fn(
+      setBillName: vi.fn(
         () =>
           new Promise<never>((_resolve, reject) => {
             refuse = reject;
@@ -2829,7 +2829,7 @@ describe("A803 name bill", () => {
     ["party.not_open", codeMessage("party.not_open")],
     ["tab.not_open", t("table.bill_name_not_open")],
   ])("shows %s in its own words on the banner", async (code, message) => {
-    const { el } = await mountApp({ renameBill: vi.fn().mockRejectedValue({ code }) });
+    const { el } = await mountApp({ setBillName: vi.fn().mockRejectedValue({ code }) });
     const order = await openMesa(el);
     const reads = vi.mocked(api.getPartyBills).mock.calls.length;
 
@@ -2849,7 +2849,7 @@ describe("A803 name bill", () => {
     );
     const { el } = await mountApp({
       getTablesState: reads.getTablesState,
-      renameBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+      setBillName: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     const order = await openMesa(el);
     reads.other.acted = true;
@@ -2869,7 +2869,7 @@ describe("A803 name bill", () => {
     "when someone else's unsent dishes hold the bill (%s), says so, offers Take over and reads the drafts again",
     async (ownerName, message) => {
       const { el } = await mountApp({
-        renameBill: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName }),
+        setBillName: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName }),
       });
       const order = await openMesa(el);
       const reads = vi.mocked(drafts.listDrafts).mock.calls.length;
@@ -2880,7 +2880,7 @@ describe("A803 name bill", () => {
       expect(banner(el)!.textContent).toContain(message);
       expect(banner(el)!.textContent).not.toContain(codeMessage("draft.taken_over"));
       expect(vi.mocked(drafts.listDrafts).mock.calls.length).toBeGreaterThan(reads);
-      expect(api.renameBill).toHaveBeenCalledOnce();
+      expect(api.setBillName).toHaveBeenCalledOnce();
       expect(drafts.takeOverDraft).not.toHaveBeenCalled();
       expect(tableOrder(el)!.billNameRefusal).toBeNull();
     },
@@ -2927,7 +2927,7 @@ describe("A803 name bill", () => {
       await page.viewport(width, height);
       try {
         const { el } = await mountApp({
-          renameBill: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
+          setBillName: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
         });
         const order = await openMesa(el);
         // The screen measures its width after it is drawn; refuse only once it has.
@@ -2961,7 +2961,7 @@ describe("A803 name bill", () => {
     await page.viewport(400, 800);
     try {
       const { el } = await mountApp({
-        renameBill: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
+        setBillName: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
       });
       const order = await openMesa(el);
       emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
@@ -2984,7 +2984,7 @@ describe("A803 name bill", () => {
     async (code) => {
       let refuse!: (reason: unknown) => void;
       const { el } = await mountApp({
-        renameBill: vi.fn(
+        setBillName: vi.fn(
           () =>
             new Promise<never>((_resolve, reject) => {
               refuse = reject;
@@ -3011,7 +3011,7 @@ describe("A803 name bill", () => {
 
   it("does not hand a refused bill name to the next table opened", async () => {
     const { el } = await mountApp({
-      renameBill: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),
+      setBillName: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),
     });
     const order = await openMesa(el);
     emit(order, "name-bill", { billId: "wo-4", name: "x".repeat(41) });
@@ -3028,7 +3028,7 @@ describe("A803 name bill", () => {
 
   it("says the order changed and reads the drafts again when the bill's editor expectation is stale", async () => {
     const { el } = await mountApp({
-      renameBill: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
+      setBillName: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
     });
     const order = await openMesa(el);
     const reads = vi.mocked(drafts.listDrafts).mock.calls.length;
