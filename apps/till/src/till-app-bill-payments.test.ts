@@ -3349,6 +3349,8 @@ describe("till-app: a partly paid order at the counter", () => {
     outstanding: "70.00",
     hasPayments: true,
     partyId: null,
+    billNumber: null,
+    billName: null,
     openedAt: "2026-09-30T19:00:00.000Z",
     signals: [],
     ...over,

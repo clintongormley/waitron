@@ -1351,6 +1351,10 @@ export interface HeldOrderSummary {
   hasPayments: boolean;
   /** Null for a counter order; a party's own bill is listed too. */
   partyId: string | null;
+  /** The number the bill holds at its table; null for a counter order, or a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
+  billName: string | null;
   openedAt: string;
   /** The bill's own dishes ready at a station, and its long wait. */
   signals: KitchenSignal[];

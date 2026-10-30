@@ -2041,12 +2041,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   the page itself. Enter on "Table actions" also leaves focus on the page. Decide where focus goes
   (the "Table actions" button is the likely place) for both windows together.
 
-- **A1235. The counter's Parked orders labels a table bill by its place, not its bill number (seen
-  in A803 slice 2's LOOK).** Sam's bill, "4 · Bill 1 · Sam" at table 4, is listed as "4 · 2"
-  (`apps/till/src/widgets/held-orders.ts`, `order-label.ts`, which slice 2 did not change). The
-  slice made table bills keep stored numbers, so these labels now disagree with the table. Believed
-  to predate the slice; not run on main.
-
 - **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
   table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did
   not change; believed to predate it, not run on main.

@@ -130,6 +130,8 @@ const heldSummary: HeldOrderSummary = {
   outstanding: "3.00",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-08-05T10:00:00.000Z",
   signals: [],
 };
@@ -24209,6 +24211,8 @@ describe("A767 sign-in and held-order recovery", () => {
     outstanding: "3.00",
     hasPayments: false,
     partyId: null,
+    billNumber: null,
+    billName: null,
     openedAt: "2026-10-16T12:00:00.000Z",
     signals: [],
   });

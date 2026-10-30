@@ -18,6 +18,8 @@ const labeledOrder: HeldOrderSummary = {
   outstanding: "3.00",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-08-05T10:00:00.000Z",
   signals: [],
 };
@@ -32,6 +34,8 @@ const unlabeledOrder: HeldOrderSummary = {
   outstanding: "1.50",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-08-05T10:05:00.000Z",
   signals: [],
 };
@@ -278,6 +282,61 @@ describe("till-held-orders", () => {
     expect(discards[0]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #5 Mesa 4`);
     expect(retrieves[1]!.getAttribute("aria-label")).toBe(`${t("held.retrieve")} #6`);
     expect(discards[1]!.getAttribute("aria-label")).toBe(`${t("held.discard")} #6`);
+  });
+});
+
+describe("A803 a table bill's number and name in the parked list", () => {
+  const tableBill: HeldOrderSummary = {
+    ...labeledOrder,
+    id: "wo-3",
+    orderNumber: 7,
+    label: null,
+    tableLabel: "4",
+    partyId: "party-1",
+    billNumber: 3,
+    billName: "Sam",
+  };
+  const label = (el: TillHeldOrders) =>
+    [...el.shadowRoot!.querySelectorAll(".summary .label")].map((span) => span.textContent);
+
+  it.each([
+    ["en-GB", ["4 · Bill 3 · Sam", "4 · Bill 1", "Mesa 4"]],
+    ["es-ES", ["4 · Cuenta 3 · Sam", "4 · Cuenta 1", "Mesa 4"]],
+  ])(
+    "names a table bill as the table screen does, and a counter order by its label (%s)",
+    async (locale, labels) => {
+      const previousLocale = currentLocale();
+      setLocale(locale);
+      try {
+        const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+          orders: [
+            tableBill,
+            { ...tableBill, id: "wo-4", billNumber: 1, billName: null },
+            labeledOrder,
+          ],
+        });
+        expect(label(el)).toEqual(labels);
+      } finally {
+        setLocale(previousLocale);
+      }
+    },
+  );
+
+  it("names a table bill stored with no number as the table screen does", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", {
+      orders: [{ ...tableBill, billNumber: null }],
+    });
+    expect(label(el)).toEqual(["4 · Bill · Sam"]);
+  });
+
+  it("gives Retrieve and Discard the bill's number and name", async () => {
+    const { el } = await mountWidget<TillHeldOrders>("till-held-orders", { orders: [tableBill] });
+    expect(el.shadowRoot!.querySelector("wt-button.retrieve")!.getAttribute("aria-label")).toBe(
+      `${t("held.retrieve")} #7 4 · Bill 3 · Sam`,
+    );
+    expect(el.shadowRoot!.querySelector("wt-button.discard")!.getAttribute("aria-label")).toBe(
+      `${t("held.discard")} #7 4 · Bill 3 · Sam`,
+    );
   });
 });
 

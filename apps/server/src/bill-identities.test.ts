@@ -51,6 +51,7 @@ import { readBillsOfParties, readPartyBills } from "./parties.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
 import { setBillName } from "./bill-identities.js";
+import { listHeldOrders } from "./working-order.js";
 import {
   joinTables,
   moveGuests,
@@ -1134,5 +1135,41 @@ describe("A803 rename", () => {
     } finally {
       await inTx(v, (tx) => tx.insert(billIdentities).values(row!));
     }
+  });
+});
+
+describe("A803 parked orders list", () => {
+  it("lists a table bill with its stored number and name, and a counter order with neither", async () => {
+    const seated = await tableWithBills("P1", 3);
+    const command = await commandFor(v, seated.partyId);
+    await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
+    const sam = seated.bills[2]!;
+    const expectedPartyRevision = await revisionOf(v, seated.partyId);
+    await inTx(v, async (tx) =>
+      setBillName(tx, sam, "Sam", {
+        partyId: seated.partyId,
+        expectedPartyRevision,
+        operatorId: OPERATOR,
+        expectedEdit: await readBillEditState(tx, sam),
+      }),
+    );
+    const counter = await counterOrder(v, "Burger");
+    const leaving = await tableWithBills("P2", 2);
+    await nameBill(leaving.bills[1]!, "Clint");
+    await moveTo(leaving.bills[1]!, { counter: { zoneId: null } }, { partyId: leaving.partyId });
+
+    const parked = new Map(
+      (await listHeldOrders({ db: v.db }, v.cfg)).map((order) => [
+        order.id,
+        [order.billNumber, order.billName],
+      ]),
+    );
+
+    expect([seated.bills[0], sam, counter, leaving.bills[1]].map((id) => parked.get(id!))).toEqual([
+      [1, null],
+      [3, "Sam"],
+      [null, null],
+      [null, null],
+    ]);
   });
 });

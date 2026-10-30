@@ -65,6 +65,8 @@ const parked: HeldOrderSummary = {
   outstanding: "125.95",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-10-20T10:00:00Z",
   signals: [],
   items: previewItems,

@@ -5010,6 +5010,10 @@ export interface HeldOrderSummary {
   formerNumbers?: number[];
   /** Null for a counter order; a party's bill is listed here too. */
   partyId: string | null;
+  /** The number the bill holds at its table; null for a counter order, or a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
+  billName: string | null;
   openedAt: string;
 }
 
@@ -5124,13 +5128,20 @@ export async function listHeldOrders(
     const former = await readFormerNumbers(tx, ids);
     const items = await readOrderPreviewItems(tx, ids);
     const counts = await readOrderStateCounts(tx, ids);
+    const identities = await VENUE_SERVICE.readBillIdentities(
+      tx,
+      rows.flatMap((row) => (row.partyId === null ? [] : [row.id])),
+    );
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
+      const identity = identities.get(row.id);
       return {
         id: row.id,
         orderNumber: row.orderNumber,
         label: row.label,
         partyId: row.partyId,
+        billNumber: identity?.number ?? null,
+        billName: identity?.name ?? null,
         counts: counts.get(row.id)!,
         openedAt: row.openedAt,
         ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
