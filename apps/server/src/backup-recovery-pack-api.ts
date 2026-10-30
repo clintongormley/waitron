@@ -62,6 +62,7 @@ import type { Logger } from "./logger.js";
 import { createPasswordThrottle } from "./password-throttle.js";
 import type { RecoveryDocumentEvidence } from "./recovery-document-evidence.js";
 import { STREAM_PURPOSE } from "./stream-host.js";
+import { knownZone } from "./venue-time-zone.js";
 import "./errors.js";
 
 export interface BackupRecoveryPackApiDeps {
@@ -440,7 +441,7 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== fileKey,
           now: deps.now(),
         });
-        return { ...status, timeZone: venue.timeZone };
+        return { ...status, timeZone: knownZone(venue.timeZone) };
       });
       return c.json(status);
     });

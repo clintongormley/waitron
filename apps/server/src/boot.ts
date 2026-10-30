@@ -2733,7 +2733,6 @@ async function bootServer(
       db,
       ring,
       stream: streamHost,
-      nodeId: tradingContext.nodeId,
       venueId: tradingContext.locationId,
       isPrimary: () => holders.singletonRole.current === "primary",
       isManagedByEnvironment: isBackupManagedByEnvironment,

@@ -193,7 +193,6 @@ function harness(overrides: Partial<StreamApiDeps> = {}, startKey?: string): Har
     db: suite.db,
     ring: RING,
     stream,
-    nodeId,
     venueId: VENUE_ID,
     isPrimary: () => true,
     isManagedByEnvironment: () => false,

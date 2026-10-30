@@ -39,7 +39,6 @@ export interface StreamApiDeps {
   db: Database;
   ring: KeyRing;
   stream: Pick<StreamHost, "reload" | "status">;
-  nodeId: string;
   /** The venue the stream writes under; Save stores it with the settings. */
   venueId: string;
   isPrimary: () => boolean;

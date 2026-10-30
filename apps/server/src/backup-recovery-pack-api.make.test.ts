@@ -903,6 +903,14 @@ describe("the status route", () => {
     expect(await read(fixture())).toMatchObject({ timeZone: "Atlantic/Canary" });
   });
 
+  it("names UTC when the stored zone is one the runtime does not know, so the card can still format dates", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Mars/Olympus_Mons" })
+      .where(eq(locations.id, node.locationId));
+    expect(await read(fixture())).toMatchObject({ timeZone: "UTC" });
+  });
+
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });
