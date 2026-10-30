@@ -1,5 +1,26 @@
 # A1131b/c slice 2: one wipe, no password — Implementation Plan
 
+**Revision 6 (2026-10-30).** Folds the round-3 claim check of revision 5
+(`~/waitron-campaign/item-a1131bc-2-plan-review-5.md`, 0 critical, 4 important, 4 minor; probes in
+`~/waitron-campaign/a1131bc-2-rev5-review5/`) and the owner's words for OQ-B:
+- **I1:** the foreign-journal fixture is now the shape that really rolls back (the scratch database
+  holds committed pages, and the transaction changes them), checked by `nRec > 0` and an original
+  size above 0, not only the magic (Task 4a). Task 4d adds the other shape (original size 0) beside
+  an intact database holding an invoice, which must answer `setup.not_ready` (experiment 5).
+- **I2:** Task 4b's wipe-then-restore test now uses the one shape where a wipe runs beside a hot
+  journal: `venue.db` missing with a journal left where it was. A present database with any hot
+  journal beside it is labelled `unknown` and never offered (run by review 5). D15 says so.
+- **I3:** the approved spec's §1a refuses a finished setup with `setupFinished` whatever else the
+  box finds, so Task 2a adds the server step (database missing and status `complete` →
+  `setup-finished`) and D8 is corrected to what the page really draws.
+- **I4:** a damaged `node.db` stays a plain `setup.not_ready` in every case, as today; Task 4d no
+  longer touches it and pins the refusal for both shapes. N1 lists it.
+- **M1–M4:** the `node.db` check is cited at `:470-491` with both of its "node.db unreadable" sites;
+  experiment 2's re-run is "identical"; Task 6b-1's uncheckable case names its proof by deletion; N1
+  lists the journal refusals.
+- **OQ-B answered by the owner (2026-10-30 ~08:50):** EN "The previous setup process was
+  unsuccessful." Spanish proposed in the PR for approval (N6).
+
 **Revision 5 (2026-10-30).** Folds the fresh review of revision 4
 (`~/waitron-campaign/item-a1131bc-2-plan-review-4.md`, 0 critical, 5 important, 10 minor; its probes
 in `~/waitron-campaign/a1131bc-2-rev4-review4/`) with the lead's rulings:
@@ -29,7 +50,8 @@ were renumbered.
 Every file:line below was read on e8cfd38ed unless marked run.
 
 **Resume:** nothing built. Next: Task 1 (a further review of this revision only if the lead asks).
-OQ-B goes to the owner now; it does not block the build and must be answered before the PR lands.
+OQ-B is answered (owner, 2026-10-30); only its Spanish sentence needs the owner's approval, in the
+PR, before it lands (N6).
 
 > **For agentic workers:** built on the FULL review path (fiscal-adjacent: it decides what Start
 > again may delete). Implementers are `subagent_type: "implementer"`. A fresh per-task reviewer
@@ -65,27 +87,36 @@ Task 9 adds a dated amendment line to the spec saying so.
 `docs/handoffs/2026-10-29-a1131bc-slice2.md` (gitignored): each task's commit, the `Tests` counts
 read, and every test edited by design (old → new).
 
-## Owner question
+## Owner questions
 
-Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
+Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here); OQ-B (below).
 
-- **OQ-B — Words for a setup database the box cannot read.** Spec §9d's approved sentence ends "so
-  it cannot list the invoice series names that setup used"; since A1206 nothing lists those names.
-  Default, built unless you change it:
-  EN "This box cannot read all of the setup database."
-  ES «Este equipo no puede leer toda la base de datos de configuración.»
-  The page then shows "Start again deletes what was entered in the setup that stopped part way."
-  without "No invoice was sent to AEAT.". Example: Marta's setup stops in a power cut and part of
-  its database is damaged; pressing Start again shows these two sentences and the tick box.
-  The reason is not given on purpose: when the damage is outside the invoice table the box did read
-  that table, so "so it cannot check it for invoices" would be false (review 4, I2, run).
+- **OQ-B — Words for a setup database the box cannot read. Answered by the owner, 2026-10-30
+  ~08:50,** in the owner's own words: EN "The previous setup process was unsuccessful." (replacing
+  revision 5's default "This box cannot read all of the setup database."). The page then shows
+  "Start again deletes what was entered in the setup that stopped part way." without "No invoice
+  was sent to AEAT.". Spanish, proposed in the PR for the owner's approval (N6):
+  «El proceso de configuración anterior no tuvo éxito.» Spec §9d's approved sentence (ending "so it
+  cannot list the invoice series names that setup used") is replaced; since A1206 nothing lists
+  those names.
 
 ## Notes for the PR (decided, not asked)
 
-- **N1 — Not damage, still refused:** a `venue.db` the box is not allowed to open (code 14, run),
-  or one over 128 MiB (the inspection calls it unreadable without opening it as a database,
-  `packages/provisioning/src/first-setup-resolution-inspection.ts:56`). The box cannot look at it,
-  and neither is what a failed setup leaves; `wipeUnavailable`, as today.
+- **N1 — Not deleted, still refused** (`wipeUnavailable`, as today), limits the owner may widen
+  later:
+  - a `venue.db` the box is not allowed to open (code 14, run), or one over 128 MiB (the inspection
+    calls it unreadable without opening it as a database,
+    `packages/provisioning/src/first-setup-resolution-inspection.ts:56`). The box cannot look at it,
+    and neither is what a failed setup leaves.
+  - any read of a damaged `venue.db` while a `-journal` file sits beside it (D3's exception), even
+    when the damage is real: the box cannot tell the database's own damage from another database's
+    journal rolled into its copy.
+  - a present `venue.db` with a hot rollback journal beside it, damaged or not: the inspection
+    labels it `unknown` whoever's journal it is (run by review 5: P1, P2 and P3 all `unknown`), and
+    then D3 rows c and e refuse it (read: a clean read is "label and read disagree"; a failed one
+    meets the journal exception).
+  - a damaged `node.db`, whether `venue.db` is missing, readable or damaged: the disk check's
+    "node.db unreadable" refusal stays exactly as today (D3, Task 4d).
 - **N2 — Damage beside a visible sale, still refused:** when the readable part of a damaged database
   shows a record Waitron never deletes, the box refuses with `keptFault`, as for an undamaged one.
   That limit is about what the database holds, not damage, and the owner's reason ("If it fails
@@ -105,6 +136,10 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   the backlog, Task 9).
 - **N5 — Plain HTTP** (D13): the wipe flow draws `wipeUnavailable` for `setup.owner_required`; a
   sentence saying a secure connection is needed is a backlog line.
+- **N6 — The Spanish for OQ-B awaits the owner's approval.** The English sentence is the owner's
+  own ("The previous setup process was unsuccessful."); the Spanish «El proceso de configuración
+  anterior no tuvo éxito.» is proposed here and lands only once the owner approves it or gives
+  other words. The PR's description asks for that approval in its first lines.
 
 ## Global Constraints
 
@@ -125,7 +160,8 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   `docs/developers/conventions-data.md`, `apps/server/src/hour-recovery-host.test.ts`,
   anything in `packages/fiscal-verifactu`. Overlaps that remain are listed under "Overlap with #2251".
 - **Exact words** (keys in `apps/setup/src/screens/initial-owner-strings.ts`; spec §9c–§9e except
-  `setupDatabaseUnreadable`, which is OQ-B's default):
+  `setupDatabaseUnreadable`, whose English is the owner's answer to OQ-B and whose Spanish awaits
+  the owner's approval, N6):
   - `keptFault` EN `The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.`
     ES `La base de datos de configuración guarda registros que Waitron nunca borra. Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. No se ofrece borrar esta configuración. Reconectar lo deja todo como está.`
   - `tradingSaved` EN `This setup already saved the settings the box sells with, so deleting it is not offered.`
@@ -136,8 +172,8 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   - `wipeUnavailable` EN `This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is.`
     ES `Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.`
   - `heldChanged` EN `The setup changed after this page read it. Try again.` ES `La configuración cambió después de que esta página la leyera. Inténtalo otra vez.`
-  - `setupDatabaseUnreadable` (new; OQ-B) EN `This box cannot read all of the setup database.`
-    ES `Este equipo no puede leer toda la base de datos de configuración.`
+  - `setupDatabaseUnreadable` (new; OQ-B) EN `The previous setup process was unsuccessful.`
+    ES `El proceso de configuración anterior no tuvo éxito.` (proposed, N6)
   - `uncheckable` EN `This box cannot check the original setup password, so Continue is not offered.`
     ES `Este equipo no puede comprobar la contraseña original de configuración, así que no se ofrece Continuar.`
   - Removed keys (both locales): `heldRows`, `heldRowsOne`, `heldKept`, `heldKeptOne`, `heldInvoices`,
@@ -197,7 +233,7 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   into the copy first.
 - **The wipe's side files** are `-wal` and `-shm` only (`packages/provisioning/src/first-setup-start-again-deletion.ts:36`),
   so a leftover `venue.db-journal` stays after a wipe; the fresh-box restore moves aside only
-  `venue.db`, `-wal` and `-shm` (`apps/server/src/restore.ts:543-555`, `SIDE_FILE_SUFFIXES`
+  `venue.db`, `-wal` and `-shm` (`apps/server/src/restore.ts:546-557`, `SIDE_FILE_SUFFIXES`
   `packages/store/src/index.ts:55`). The "files found" survey already counts `-journal` as part of
   a database (`first-setup-start-again-leftovers.ts:51`).
 - **Which damage reaches what (run, `~/waitron-campaign/a1131bc-2-rev4-probe/output.txt`):** see
@@ -219,7 +255,13 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   `password_required` answer opens it too (`:1465-1479`); with the database missing the ask appears
   only after Continue's password, and only when the setup is not finished (`#resumeFirstSetup`
   `:1303-1365`, missing branch `:1339-1342`; a finished one goes to the first-owner screen,
-  `:1344-1349`, where nothing is offered but Reconnect). A summary or Start again refused
+  `:1344-1349`, where `authenticatedMissing` is false for a `complete` status (`:2502-2506`), so
+  the page draws `startUnavailable`, Recover from backup (`recoverBackup(unsettled)`, `:2823`),
+  Reconnect and the "Set up secure connection" link (`:2869-2884`)). Today Start again refuses a
+  missing database whose setup is `complete` with `unavailable()`, i.e. `setup.not_ready`
+  (`first-setup-resolution.ts:376-377`); the only `setup-finished` refusal is in
+  `assertHeldStartAgainOffered` (`:83`), which runs only for a present database (`:310`, `:374`).
+  A summary or Start again refused
   `setup.owner_required` draws `shell.first_setup.owner_required`, "Resume setup in its owner tab."
   (`apps/setup/src/i18n/strings/shell.ts:4`). With the password uncheckable the inspection also has
   no `revision` (both come from the same unreadable setup record,
@@ -258,7 +300,8 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
    indexes too and why Task 4a's fixtures must.
 2. **A leftover rollback journal from another database** (run by review 4,
    `~/waitron-campaign/a1131bc-2-rev4-review4/journal/`; re-run by the planner 2026-10-30 with
-   `node probe.mjs` → same printout but byte counts, `output-rerun-planner.txt`). A hot journal
+   `node probe.mjs` → an identical printout, `output-rerun-planner.txt`; `cmp` of the two files
+   finds no difference). A hot journal
    (pages spilled with `cache_size=10`, writer killed mid-transaction: header valid, `nRec` 7) beside
    an intact database holding 2000 `sales` rows and 1 `registros` row. Control without the journal:
    `sales` 2000, `registros` 1, integrity ok. With it: a read-only open (as the inspection opens)
@@ -284,6 +327,28 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
    `occupied`; the only other non-zero append-only table is `fiscal_allocations` (deletable,
    `FISCAL_START_AGAIN_DELETABLE`); the read fails with code 11 (the owner's own example — I5).
    C: the hot journal above.
+
+5. **Which journal shapes roll back, and what they do** (review 5's run on the real code,
+   `~/waitron-campaign/a1131bc-2-rev5-review5/output.txt`, "Tests 3 passed (3)"; and the planner's
+   plain-`node` re-run of the two shapes, `~/waitron-campaign/a1131bc-2-rev6-planner/probe.mjs` and
+   `output.txt`, header written before running). Each journal was copied mid-transaction from a
+   scratch database (`journal_mode = delete`, `cache_size = 2`) and put beside an intact,
+   checkpointed database holding an invoice.
+   - **P1, a scratch database with nothing committed** (the transaction creates `filler` and inserts
+     200 rows): journal header `nRec` 0, original size 0 pages, magic valid. Real reader: label
+     `unknown`, `"read failed: ERR_SQLITE_ERROR 1"`. Planner's re-run: the read-write copy shrinks
+     to 0 bytes, `sqlite_schema` counts 0, and every table read fails `errcode 1 no such table`.
+     Code 1 is not damage before Task 4d; from Task 4d "no such table" is, so only D3's journal
+     exception keeps this intact database (which holds an invoice) from being read as damaged
+     with nothing kept seen.
+   - **P2, a scratch database holding 50 committed rows that the transaction updates:** `nRec` 1,
+     original size 52 pages. Real reader: label `unknown`, `"read failed: ERR_SQLITE_ERROR 11"`.
+     Planner's re-run: the copy shrinks from 643072 to 212992 bytes and the schema read itself
+     fails `errcode 11`.
+   - **P3, the held database's own hot journal** (the recipe at
+     `first-setup-database-holdings.test.ts:219-237`): label `unknown`; the reader answers rows 105.
+   - For P1 and P2 the real run printed the original file unchanged, and its control without the
+     journal reads `occupied`, `{ rows: 112, kept: 6, records: 1, accepted: 0 }`.
 
 ## Decisions where the spec leaves a choice
 
@@ -312,7 +377,7 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
 
   | Row | When | What the box does |
   | --- | --- | --- |
-  | a | `L` missing | the missing-database path, as today (no password) |
+  | a | `L` missing | the missing-database path, as today (no password), except that a `complete` setup is refused `setup-finished` (D8, Task 2a) |
   | b | `L` no-venue-rows, `S` in PRESENT, empty | today's unused-setup proof (D2) |
   | c | `S` in PRESENT and either `L` no-venue-rows not empty, or `L` corrupt/unknown/partial | NEW: read; no damage → `setup.not_ready` (as today); `damaged` with kept seen → `kept-records`; `damaged` with nothing kept seen → trading.env refuses `trading-settings`, else the unused-setup proof with the database counted as empty → offered as "cannot be read" |
   | d | `L` occupied, or no-venue-rows with `S` not in PRESENT (today's held) | today's held checks (trading-settings, setup-finished) without the stopped-recovery condition; read; kept seen → `kept-records`; `damaged` → offered as "cannot be read"; read with 0 rows → `setup.not_ready`; else offered |
@@ -323,16 +388,20 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   (a public record or documents file, an outside record) because they are part of the unused-setup
   proof, not about damage. Every row keeps the later checks: outside evidence, the disk and layout
   check, `restore-request.json`, the marker's size, a pending deletion. "Kept seen" means
-  `seen.kept > 0 || seen.records > 0` (N2). **`node.db`** (Task 4d): the disk check's "node.db
-  unreadable" refusal (`packages/provisioning/src/first-setup-start-again-deletion.ts:470-483`) stops
-  refusing when the failure is damage (same codes, same journal exception); the summary then carries
-  `databaseUnreadable`, and the wipe deletes `node.db` as it already does (`itemsOnDisk`, `:296`).
-  "node.db holds a table" and "node.db-wal holds pages" keep refusing.
+  `seen.kept > 0 || seen.records > 0` (N2). **`node.db` is unchanged:** the disk check
+  (`packages/provisioning/src/first-setup-start-again-deletion.ts:470-491`) runs whenever `node.db`
+  exists, whatever `venue.db`'s state, and keeps refusing `setup.not_ready` for "node.db-wal holds
+  pages" (`:473`), "node.db unreadable" at either of its two sites — the open failing (`:474-479`)
+  or the schema query failing (`:485-486`; a `node.db` of junk bytes opens and fails there with
+  code 26, run by review 5, M1) — and "node.db holds a table" (`:490`). A damaged `node.db` never
+  sets `databaseUnreadable`, which describes `venue.db` alone; Task 4d pins the refusal (N1).
 - **D4 — Shown and confirmed.** A damaged database's summary carries `databaseUnreadable: true`.
   Start again then needs `confirmUnreadableDatabase: { shown }` (or, beside a stopped recovery,
   `confirmRecoveryDiscard: { shown }` whose `shown` carries it), compared deep-equal with the box's
   own summary; a damaged database without it, or the field without damage, is
   `setup.attempt_conflict`. It writes a record with `database: "unreadable"` (§4's fourth case).
+  `databaseUnreadable` is only ever about a present, damaged `venue.db` (D3 rows c, d, e), so it
+  never comes with a missing database, and the page's words for it describe that database.
 - **D5 — The saved-settings words.** `tradingSaved` and `tradingSavedPassword` are two keys (§9e
   keeps the second; its text becomes §9c's second sentence), drawn together, so the text is exactly
   §9c's. They are drawn only from the box's `trading-settings` refusal after pressing Start again
@@ -354,9 +423,17 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   refusal is slice 3.
 - **D8 — With the database missing the page no longer offers Continue.** For a setup that is not
   finished, Continue's password led only to the Start again ask (`#resumeFirstSetup` `:1339-1342`),
-  which now opens from Start again. For a finished one it led to the first-owner screen with nothing
-  offered but Reconnect (`:1344-1349`); now Start again's summary refuses `setup-finished` and the
-  page draws `setupFinished`, which says what happened and what Reconnect does.
+  which now opens from Start again. For a finished one it led to the first-owner screen
+  (`:1344-1349`), which draws `startUnavailable`, Recover from backup, Reconnect and the "Set up
+  secure connection" link (Current behaviour; `setup-app.ts:2502-2506`, `:2823`, `:2869-2884`).
+  Now pressing Start again reads the summary, which refuses `setup-finished` (the server step Task
+  2a adds: database missing and status `complete` → `refused("setup-finished")`, in place of today's
+  `unavailable()` at `first-setup-resolution.ts:376-377`), and the page draws `setupFinished` and
+  hides Start again; Recover from backup (as today, D7), Reconnect and the link stay drawn. **Why the
+  server step and not `wipeUnavailable`:** the approved spec's §1a table opens with "the setup
+  finished | refused | `setupFinished`; Reconnect" (spec line 191) with no condition on the
+  database, and §1 step 1 has the box answer with the refusal; without the step the page would
+  draw `wipeUnavailable` for a finished setup, which the spec does not allow.
 - **D9 — The kept-records log reason** is `rows=<n> kept=<n> records=<n> accepted=<n>` on the
   summary's refusal and on Start again's; when the read was `damaged` it adds `damaged=<code>`.
 - **D10 — The damaged-database line** (`setupDatabaseUnreadable`) goes where the recovery-key line
@@ -380,11 +457,17 @@ Answered: OQ1 (moot, A1206); OQ2 (A, then widened at ~11:00 — built here).
   database reads it (and may copy it), with no password throttle. Added to the spec's §3 cost list,
   the guide and the PR (Task 9).
 - **D15 — The wipe deletes `venue.db-journal` and `node.db-journal`** (review 4, I1): added to
-  `SIDE_FILES` (`first-setup-start-again-deletion.ts:36`), which are deleted without comparison
-  against the marker (`:516`). Always safe: the database each belongs to goes in the same pass. Why:
-  otherwise a hot journal stays beside the venue folder, and the fresh-box restore, which moves aside
-  only `-wal` and `-shm`, leaves it beside the restored database, whose first read-write open rolls
-  it in (experiment 2 shows that open corrupting an intact database).
+  `SIDE_FILES` (`first-setup-start-again-deletion.ts:36`), which are listed whenever present
+  (`:297-300`) and deleted without comparison against the marker (`:516`). The database each journal
+  belongs to is either deleted in the same pass or already missing. **The one path this covers:**
+  `venue.db` missing with a hot journal left where it was. The inspection labels a missing
+  `venue.db` `missing` without looking at side files
+  (`first-setup-resolution-inspection.ts:82`), so row a's wipe runs; today it leaves the journal,
+  and the fresh-box restore, which moves aside only `venue.db`, `-wal` and `-shm`
+  (`restore.ts:546-557`), places the restored database beside it, where the first read-write open
+  rolls it in (experiments 2 and 5: an intact database cut to 212992 bytes and failing code 11, or
+  to 0 bytes). A PRESENT database with a hot journal beside it never reaches the wipe: the
+  inspection labels it `unknown` (experiment 5, all three shapes) and D3 refuses it (N1).
 
 ## Changed test checks (the PR description names each)
 
@@ -421,6 +504,7 @@ Rows are by title at e8cfd38ed; line numbers drift.
 | start-again: "the password-required refusal answers 403 over HTTPS" | 403 | deleted with the code; Task 2a's "Start again over HTTPS with no owner headers starts again" replaces it | §3 |
 | start-again: "a damaged record with no owner still refuses for a marker over its limit, before asking for the password…" | same | same assertion; retitle without "before asking for the password" | §3 |
 | start-again: "the Start again route passes recoveryRecordDamagedShown on: with the owner and a damaged record…" | owner headers, password step | no headers; keep the password step only if the test needs its side effect, else drop it; retitle | §3 |
+| start-again: "a complete attempt is still refused" (`first-setup-start-again.test.ts:511`, database missing) | `setup.not_ready` | `setup.start_again_refused` `{ cause: "setup-finished" }`, no confirmations folder (unchanged); retitle "with the database missing, a finished setup is refused setup-finished" | D8, spec §1a |
 | start-again: "a corrupt venue database beside a damaged picks file is refused setup.not_ready…" | `not_ready` | without `confirmUnreadableDatabase` → `attempt_conflict`, nothing changes; with it → deleted, record `database: "unreadable"` | D3 row c, D4 |
 | inspection: "password-free Start again refuses a %s database" | three rows `not_ready` | `missing` unchanged; `corrupt` → `attempt_conflict` without the echo, nothing changes (Task 4c-1); `partial` (0 bytes) → the same from Task 4d | D3 row c |
 | hour-finish: "password-free hour restart refuses a %s database" | `corrupt` row `not_ready` | `attempt_conflict` without the echo, originals unchanged | D3 |
@@ -470,7 +554,8 @@ non-password assertions: enabled/disabled, order, request body, Cancel, Check ag
    an invoice, and a `venue.db` the box may not open, answer `setup.not_ready`, never "cannot be
    read". Tasks 4a, 4c-1.
 2. **Another database's journal never makes an intact database deletable** (D3's journal exception,
-   D15). Tasks 4a, 4b, 4c-1.
+   D15), whether the journal rolls pages back or empties the copy (experiment 5). Tasks 4a, 4b,
+   4c-1, 4d.
 3. **A readable database labelled corrupt/unknown is never deleted as unreadable**: with an invoice,
    `kept-records`; with none, `setup.not_ready` (D3 row e). Task 4c-1, by stubbing the label over a
    real held database.
@@ -556,6 +641,9 @@ plus the rows of the start-again, backup-discard and hour-finish files; the unus
   `missing`, `held`, `holdings`, `discarding`, `box`, `recoveryRecordDamaged`). The summary's
   `recoveryRecordDamaged` is the value Start again compares, so the page can echo it.
 - Without D3 rows c and e yet (Task 4c-1): a corrupt or unknown label is refused `setup.not_ready`, as today.
+- With the database missing and the status `complete`, both actions throw `refused("setup-finished")`
+  at the point where Start again throws `unavailable()` today (`first-setup-resolution.ts:376-377`),
+  so before the disk check, as the held path's `setup-finished` comes before it (D8).
 
 - [ ] **Step 1: Failing tests.**
   - start-again "the summary answers with no owner, for a missing database" (action level). Fails:
@@ -577,10 +665,17 @@ plus the rows of the start-again, backup-discard and hour-finish files; the unus
     it deletes the setup". Fails: summary `not_ready`.
   - provisioning "a record is version 2, names whose setup it was, and says it was confirmed on the
     repair page with nobody signed in" (`Object.keys` order pinned, as the file's key test is).
+  - start-again (D8), the changed check "a complete attempt is still refused" rewritten and
+    extended: "with the database missing, a finished setup is refused setup-finished by the
+    summary and by Start again, and nothing changes" (the existing fixture: `missingDatabase`, then
+    the `publication` and `complete` updates, `first-setup-start-again.test.ts:511-520`); both
+    actions `rejects.toMatchObject({ code: "setup.start_again_refused", params: { cause:
+    "setup-finished" } })`, the attempt files unchanged, no confirmations folder. Fails: Start again
+    answers `setup.not_ready` today, and the summary does not refuse `setup-finished`.
 - [ ] **Step 2:** run `… @waitron/server exec vitest run src/first-setup-start-again.test.ts src/first-setup-resolution-inspection.test.ts src/first-setup-start-again-damaged-recovery.test.ts src/first-setup-resolution.route.test.ts`
   and the provisioning confirmation file; the new cases fail as stated.
 - [ ] **Step 3: Implement.** Write `assessStartAgain`; delete `assertRecoveredOwner` and its calls;
-  apply D2; delete the `password_required` throw (`:433-434`); keep every other refusal, the two
+  apply D2; add D8's missing-and-`complete` step; delete the `password_required` throw (`:433-434`); keep every other refusal, the two
   "no await" invariants (`:465-467`, `:480-482`) and `markerFor`'s size check. The record:
   `setupAdministrator` from `state.frozen.request.admin`, `confirmedOn: "repair-page"`,
   `signedIn: false`, `version: 2`.
@@ -675,6 +770,7 @@ Work file by file, running each after editing it.
 
 **Files:** `apps/server/src/first-setup-database-holdings.ts` (`readSetupDatabaseHoldings` becomes
 `readSetupDatabase`, D3), `apps/server/src/first-setup-database-holdings.test.ts`,
+`apps/server/test/foreign-journal.ts` (new, below),
 `apps/server/src/first-setup-resolution.ts` (callers take `kind: "read"`; a `damaged` answer is
 refused `setup.not_ready` until Task 4c-1, so behaviour is unchanged here).
 
@@ -690,11 +786,23 @@ stage "open" with 11 or 26 is damage too. When a `-journal` was present at the s
 **Fixtures.** `heldSetup({ recovery: false })` databases, WAL checkpointed with
 `pragma wal_checkpoint(TRUNCATE)` and the `-wal` checked absent, damaged over the root pages of a
 table **and its indexes** (`select rootpage from sqlite_schema where tbl_name = ?`; experiment 1
-shows a table page alone goes unread). A hot journal from ANOTHER database: build a scratch
-database with the recipe of the existing case at `first-setup-database-holdings.test.ts:219-237`
-(`journal_mode = delete`, `cache_size = 2`, a big insert inside `begin`, copy the database and its
-`-journal` mid-transaction), then copy only that `-journal` beside the held `venue.db`; check its
-first 8 bytes are SQLite's journal magic (`d9 d5 05 f9 20 a1 63 d7`) before using it.
+shows a table page alone goes unread). A hot journal from ANOTHER database, built by a new test
+helper `apps/server/test/foreign-journal.ts` (outside the server's `coverage.include`, which is
+`src/**/*.ts`) used by Tasks 4a, 4b, 4c-1 and 4d: `foreignHotJournal(dest, shape)` builds a scratch
+database in its own `mkdtemp` folder, copies its `-journal` mid-transaction to `dest`, rolls back,
+closes and removes the scratch folder. Two shapes (experiment 5):
+- `"rolls-back"` (P2, the one every journal-exception test uses unless named): `journal_mode =
+  delete`; `create table filler (b blob)` and insert 50 rows of `randomblob(4000)`, committed; then
+  `pragma cache_size = 2; begin; update filler set b = randomblob(4000)`, and copy the journal.
+  Header check before use: magic `d9 d5 05 f9 20 a1 63 d7` (bytes 0-7), `nRec` above 0 (bytes 8-11,
+  big-endian) and the original size in pages above 0 (bytes 16-19). Run: `nRec` 1, 52 pages.
+- `"empty-original"` (P1, Task 4d only): the same with nothing committed first (`begin`, then create
+  `filler` and insert 200 rows inside the transaction). Header check: magic valid, `nRec` 0 and
+  original size 0 — the shape that empties the copy (experiment 5).
+The existing case at `first-setup-database-holdings.test.ts:219-237` makes the held database's OWN
+journal; following its recipe on a new, empty scratch database gives the `"empty-original"` shape,
+which fails the read with code 1, not 11 (review 5, I1, run), so the magic alone does not guard
+the fixture.
 
 - [ ] **Step 1: Failing tests:**
   - "damage in one table is reported with errcode 11, keeping every other table's counts"
@@ -711,10 +819,12 @@ first 8 bytes are SQLite's journal magic (`d9 d5 05 f9 20 a1 63 d7`) before usin
   - "a damaged first page is reported with errcode 26 and nothing counted". Fails: `not_ready`.
   - the changed check "answers setup.not_ready when the database file cannot be read" → damaged 26.
   - **Journal exception (Review Focus 2):** "an intact database with another database's hot journal
-    beside it is not ready, never damaged" (`invoices: 1` plus the foreign journal; `rejects`
-    `setup.not_ready` with the `journal beside a damaged read` reason; the original `venue.db` bytes
-    unchanged). It passes today (the old reader refuses everything); prove it by deletion: drop the
-    journal exception, see it answer `kind: "damaged"`, restore. **Control:** the same database
+    beside it is not ready, never damaged" (`invoices: 1` plus `foreignHotJournal(…,
+    "rolls-back")`; `rejects` `setup.not_ready` with the reason `journal beside a damaged read:
+    errcode 11`; the original `venue.db` bytes unchanged). It passes today in the code only (the old
+    reader refuses everything, with reason `read failed: ERR_SQLITE_ERROR 11`, review 5's P2), so it
+    fails today at the reason; after the change, prove it by deletion: drop the journal exception,
+    see it answer `kind: "damaged"`, `code: "errcode 11"`, restore. **Control:** the same database
     without the journal answers `kind: "read"` with `records: 1`.
   - other controls passing before and after: no read permission (`chmod 000`) → `not_ready` with an
     "open" reason, never `damaged`; the copy cannot be written (existing `mkdtemp` case); a 0-byte
@@ -738,15 +848,27 @@ first 8 bytes are SQLite's journal magic (`d9 d5 05 f9 20 a1 63 d7`) before usin
   - provisioning: "finishing an interrupted deletion removes a leftover journal too" (the marker
     written, deletion cut by a `remove` that throws once, then `finishStartAgainDeletion`). Fails the
     same way.
-  - held (review 4, I1 fix 4): "a held database with a leftover journal, wiped, then the fresh-box
-    restore: the restored database passes integrity_check and no journal is left" — Task 3's
-    wipe-then-restore shape with Task 4a's foreign hot journal beside `venue.db` before the wipe;
-    after the restore, `pragma integrity_check` on the restored `venue.db` answers `ok` and no
-    `venue.db-journal` exists. Fails today: the journal survives the wipe (written down before
-    running: if the restore's first open rolls it in, `integrity_check` fails; if not, the "no
-    journal left" assertion still fails).
+  - held (review 4, I1 fix 4; review 5, I2): "with the setup database missing and a hot journal
+    left where it was, the wipe and then the fresh-box restore leave no journal, and the restored
+    database passes integrity_check". The one shape where a wipe runs beside a hot journal (D15): a
+    present database with one is labelled `unknown` and refused, so a `heldSetup` with its journal
+    never reaches the wipe (review 5, run). Fixture, in the held file so it reuses Task 3's restore
+    scaffolding: `heldSetup({ recovery: false })`; delete `venue.db` and any `venue.db-wal` and
+    `venue.db-shm`; assert the inspection answers `database: "missing"`; then
+    `foreignHotJournal(<venueDir>/venue.db-journal, "rolls-back")` (header checked). Read the
+    summary, send Start again with `confirmMissingDatabase` and that summary, then stage and run the
+    fresh-box restore as Task 3 does. Assertions, in this order: `venue.db-journal` does not exist
+    (`access` rejects `ENOENT`); then open the restored `venue.db` read-write and
+    `pragma integrity_check` answers `ok`.
+    **Written down before running — what the failing run prints at the tip before this task:** the
+    first assertion fails, `access` resolving because the wipe left `venue.db-journal` (today's
+    `SIDE_FILES` has no journal, `first-setup-start-again-deletion.ts:36`, and the restore moves
+    only `""`, `-wal`, `-shm`, `restore.ts:546-557`). If instead the summary or Start again refuses,
+    or the restore rejects, record the code and STOP for the lead: the prediction was wrong.
+    **Control** (an ordinary test, green before and after): the same steps without the journal pass.
+    P1's `"empty-original"` journal is not used here (its effect on a restored database was not run).
 - [ ] **Step 2:** run `… @waitron/provisioning exec vitest run src/first-setup-start-again-marker.test.ts`
-  and the held file; the three cases fail.
+  and the held file; the three cases fail as written down, and the control passes.
 - [ ] **Step 3: Implement**; apply the deletion row of the changed checks.
 - [ ] **Step 4:** the provisioning start-again files (`… vitest run src/first-setup-start-again`),
   the held file; typecheck provisioning.
@@ -784,10 +906,11 @@ task's "deletes" checks are on the summary; 4c-2 adds the deleting send.
     Fails: `not_ready`. And N2's shape: "the same sale with only the invoice table and its indexes
     damaged refuses kept-records" (experiment 3); fails today too (`not_ready`).
   - Review Focus 2: "an intact held database with an invoice and another database's hot journal
-    beside it is refused setup.not_ready, and nothing changes" (Task 4a's foreign journal; the label
-    is `unknown`, review 4 case C). Passes before and after; prove it by deletion of 4a's journal
-    exception (it then answers `databaseUnreadable`). **Control:** without the journal the summary
-    refuses `kept-records`.
+    beside it is refused setup.not_ready, and nothing changes" (`foreignHotJournal(…,
+    "rolls-back")`, header checked; the label is `unknown`, review 4 case C and review 5 P2).
+    Passes before and after; prove it by deletion of 4a's journal exception (the read then answers
+    `damaged` with nothing kept seen, so the summary carries `databaseUnreadable`). **Control:**
+    without the journal the summary refuses `kept-records`.
   - Review Focus 1, controls passing before and after: "a damaged database whose private copy fails
     is refused setup.not_ready" (`heldSetup({ pendingWal: true, recovery: false })`, so the `-wal`
     holds committed pages and the read takes the copy path — not a `-journal`, which D3's exception
@@ -838,7 +961,8 @@ start-again and route files and the provisioning confirmation test.
   - route: `confirmUnreadableDatabase` with `shown.databaseUnreadable: true` passes the parser; without
     it, or with any other value, 400 `setup.request_invalid`.
   - provisioning: a record `"unreadable"` without `shown.databaseUnreadable` is refused
-    `setup.attempt_invalid`; `databaseUnreadable` with `"present"` or `"missing"` is refused.
+    `setup.attempt_invalid`; `databaseUnreadable` with `"present"` or `"missing"` is refused (the
+    box never builds either: only a present, damaged `venue.db` sets the flag, D4).
   - the remaining changed-checks rows marked 4c-1 now also check the "with it → deleted" half
     (start-again "a corrupt venue database beside a damaged picks file…").
 - [ ] **Step 2:** run the held, start-again and route files and the provisioning confirmation file;
@@ -849,20 +973,33 @@ start-again and route files and the provisioning confirmation test.
 - [ ] **Step 5:** commit. **Per-task reviewer** (what the page must have shown before a damaged
   database is deleted; the record).
 
-### Task 4d: Partly created tables and a damaged `node.db` count as damage
+### Task 4d: Partly created tables count as damage; a damaged `node.db` stays refused
 
 The owner's 11:00 answer ("whatever its damage — header, table list, identity page, the invoice
-table or anywhere else") covers both (review 4, I3).
+table or anywhere else") covers partly created tables in `venue.db` (review 4, I3). A damaged
+`node.db` is NOT widened here (review 5, I4; the lead's ruling): with `venue.db` missing the
+summary's words and record would not fit, and with `venue.db` readable they would overclaim. It
+stays today's plain `setup.not_ready` in every case (D3, N1).
 
 **Files:** `apps/server/src/first-setup-database-holdings.ts` ("no such table" is damage),
-`apps/server/src/first-setup-resolution.ts` (`partial` joins rows c and e),
-`packages/provisioning/src/first-setup-start-again-deletion.ts` (`assertStartAgainAllowedOnDisk`'s
-`node.db` check, `:470-483`, answers `nodeDatabaseDamaged` for damage instead of refusing; the
-journal exception applies to `node.db-journal`). Tests in the holdings, held, inspection and
-provisioning deletion files.
+`apps/server/src/first-setup-resolution.ts` (`partial` joins rows c and e). No change to
+`packages/provisioning/src/first-setup-start-again-deletion.ts` in this task. Tests in the
+holdings, held, inspection and start-again files.
 
 - [ ] **Step 1: Failing tests:**
   - holdings: "a 0-byte venue.db is reported damaged (no such table)". Fails: `not_ready`.
+  - **The empty-original journal (review 5, I1)**, holdings: "an intact database holding an invoice
+    with an empty-original journal from another database beside it is not ready, never damaged"
+    (`heldSetup({ invoices: 1, recovery: false })`, checkpointed, plus `foreignHotJournal(…,
+    "empty-original")` with its header checked: `nRec` 0, original size 0); `rejects`
+    `setup.not_ready` with the reason `journal beside a damaged read: no such table`; the original
+    `venue.db` bytes unchanged. Before this task it answers `not_ready` with `read failed:
+    ERR_SQLITE_ERROR 1` (review 5, P1, run), so it fails today at the reason. After the change,
+    prove it by deletion: drop the journal exception, see the read answer `kind: "damaged"` with
+    `seen.records` 0 (written down before running, from experiment 5: the copy is emptied, so the
+    fiscal module's reader fails "no such table"), restore. And held, through the summary: "the
+    same database and journal: the summary refuses setup.not_ready, and nothing changes" — the same
+    deletion makes the summary carry `databaseUnreadable` for a database holding an invoice.
   - held: "a database missing `registros_facturacion` (dropped) is deleted once confirmed"; "a
     database missing a table beside a readable sale refuses kept-records" (`invoices: 1`, drop
     `department_days`). The first fails with `not_ready`; the second passes before and after (a
@@ -870,17 +1007,30 @@ provisioning deletion files.
   - inspection: the changed check "password-free Start again refuses a %s database" `partial` row →
     `attempt_conflict` without the echo; plus "…with the confirmation, a 0-byte database is deleted".
   - held: the changed check "a database read as %s…" `partial {tradingSettings}` → `trading-settings`.
-  - provisioning: "a damaged node.db (junk bytes) no longer refuses the disk check, and is deleted
-    with the setup"; controls passing before and after: "node.db holds a table" and "node.db-wal
-    holds pages" still refuse `not_ready` (existing cases, unedited); "a damaged node.db with a
-    node.db-journal beside it still refuses" (prove by deletion of the journal exception).
-  - held: "a held database with a damaged node.db: the summary says it cannot be read, and Start
-    again with that confirmation deletes both". Fails: `not_ready`.
-- [ ] **Step 2:** run the holdings, held, inspection files and `… @waitron/provisioning exec vitest
-  run src/first-setup-start-again`; the new cases fail as stated.
+  - **A damaged `node.db` stays refused (review 5, I4)**, controls passing before and after, each
+    asserting the summary AND Start again reject `toMatchObject({ code: "setup.not_ready", reason:
+    "node.db unreadable" })` (as the held file's "a held summary the disk check refuses…" case
+    matches `reason: "node.db holds a table"`, `first-setup-start-again-held.test.ts:167-175`), the
+    attempt files unchanged and no confirmations folder.
+    `node.db` is overwritten with junk bytes (created if the fixture has none):
+    - start-again: "with venue.db missing, a damaged node.db refuses the summary and Start again
+      setup.not_ready, and nothing changes" (`missingDatabase`; Start again sends
+      `confirmMissingDatabase` with the summary it would have shown, `{ reached: … }` as the file's
+      other missing cases do, since the summary refuses).
+    - held: "with a readable held venue.db, a damaged node.db refuses the summary and Start again
+      setup.not_ready, and nothing changes" (`heldSetup({ recovery: false })`, no invoice).
+    - Proof by deletion for both: in `assertStartAgainAllowedOnDisk`, replace the schema query's
+      `catch { throw notReady("node.db unreadable"); }` (`first-setup-start-again-deletion.ts:485-486`,
+      the site a junk-bytes `node.db` reaches, review 5's M1 run) with `catch { tables = []; }`;
+      written down before running: the missing case's Start again then deletes the setup, and the
+      held case's summary answers; both fail. Restore; `git diff --exit-code` on that file.
+    - "node.db holds a table" and "node.db-wal holds pages" keep refusing (existing cases,
+      unedited).
+- [ ] **Step 2:** run the holdings, held, inspection and start-again files; the new failing cases
+  fail as stated and the `node.db` controls pass.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** the Step 2 files; typecheck both packages.
-- [ ] **Step 5:** commit. **Per-task reviewer.**
+- [ ] **Step 5:** commit. **Per-task reviewer** (Review Focus 2 for the empty-original journal; a damaged `node.db` still refused in both shapes).
 
 ### Task 5: Server checkpoint
 
@@ -913,6 +1063,8 @@ helpers `:639-783`; `heldStartAgainDatabase` `:105-112` goes in 6b-1 with its la
   shown }`; otherwise none (D11). **Plus**, with the database present and
   `shown.recoveryRecordDamaged`, `recoveryRecordDamagedShown: true` alongside whichever `confirm*`
   field is sent (the box compares that flag for a held database too, `first-setup-resolution.ts:436-439`).
+  A missing database never comes with `shown.databaseUnreadable` (D4: only a present, damaged
+  `venue.db` sets it), so the missing row needs no unreadable variant.
 - `wipeRefusal(error): "setup-finished" | "trading-settings" | "kept-records" | "unavailable" | undefined`
   (`setup.not_ready` and `setup.owner_required` → `"unavailable"`, D13).
 
@@ -962,7 +1114,11 @@ today's keys where they still exist; 6b-2 swaps in the §9c words.
   Continue is drawn; a summary refused `setup.owner_required` draws no "owner tab" text (D13); with
   the real uncheckable pairing (`password: "uncheckable"`, `revision: null`, `ownerGeneration:
   null`), Start again is disabled and no summary is requested. Fails: today's page opens a password
-  step.
+  step — except the uncheckable case, which passes today, because `canRestart` already needs
+  `inspection.password === "checkable"` and a non-null `revision` (`setup-app.ts:2541-2549`). Prove
+  that one by deletion after the change: enable Start again whenever the inspection is present
+  (drop the `revision` and `ownerGeneration` conditions from the new enabling rule), see it fail,
+  restore, `git diff --exit-code` on `setup-app.ts`.
 - [ ] **Step 2:** run it; the new cases fail.
 - [ ] **Step 3: Implement.**
 - [ ] **Step 4:** `setup-app-wipe.test.ts` green; `pnpm --filter @waitron/setup typecheck` and `lint`
@@ -1029,7 +1185,9 @@ new words; the removed keys go.
 - [ ] **Step 1:** tests first: "with the database missing, the page offers Start again and no
   Continue; pressing it draws what the setup reached and the missing-database tick, with no
   password" (EN, ES), and "with the database missing and the setup finished, pressing Start again
-  draws setupFinished and no Start again" (D8). If either fails, fix the code.
+  draws setupFinished and no Start again, with Reconnect still drawn" (D8; the mocked summary
+  refuses `setup.start_again_refused` `{ cause: "setup-finished" }`, as Task 2a's server step
+  answers). If either fails, fix the code.
 - [ ] **Step 2:** apply P1, P2, P4; keep the stopped-recovery, uncertain-journal, running and Check
   again assertions — their reads now happen on pressing Start again.
 - [ ] **Step 3:** run both files, then every `apps/setup` suite naming `start-again`, `held`,
@@ -1069,9 +1227,13 @@ After the edit each must say:
 - Pressing it shows what Start again deletes; the box refuses, in §9c's words, beside saved selling
   settings (and says Continue with the setup password finishes it), a finished setup, or a database
   holding an invoice or another record Waitron never deletes; with no stopped recovery beside it too.
-- If the box cannot read all of the setup database it says so (OQ-B's words) and Start again still
-  deletes it; the box may not have been able to check that database for invoices. No margin, floor
-  or wait is mentioned.
+- If the box cannot read all of the setup database, the page says "The previous setup process was
+  unsuccessful." (ES «El proceso de configuración anterior no tuvo éxito.», N6 — the Spanish guide
+  follows whatever Spanish the owner approves) and Start again still deletes it; the guide explains
+  that this is shown when part of the setup database cannot be read, and that the box may not have
+  been able to check that database for invoices. No margin, floor or wait is mentioned.
+- With the setup database missing and the setup finished, the box refuses Start again with
+  `setupFinished`'s words (D8).
 - The records say whose setup it was, that it was confirmed on the repair page with nobody signed
   in, when, and the summary the page confirmed — written when the database was missing, damaged, or
   a stopped recovery was discarded; not "who confirmed" and not "what the page showed".
@@ -1085,7 +1247,9 @@ Backlog (CLAUDE.md §6: delete what is finished, keep each open point short):
   when it last saved anything" (the owner widened it, A1206 retired the margin) and "until slice 2
   removes them"; slices 3–4 still to come.
 - A1159 (backlog.md and `self-service-refusals.md`): a present database the box finds damaged is now
-  deleted; what is left is N1 (a file the box may not open, or over 128 MiB). Rewrite to that.
+  deleted; what is left is N1 (a file the box may not open, or over 128 MiB; a damaged read beside
+  a `-journal`; a present database with a hot journal beside it; a damaged `node.db`). Rewrite to
+  that, one short line per limit.
   `self-service-refusals.md:460`'s list follows.
 - "The Start again summary's `setup.not_ready` carries no cause": the page now draws
   `wipeUnavailable`, with the cause in the log line (spec §9c); keep one short line only for the
@@ -1097,9 +1261,10 @@ Backlog (CLAUDE.md §6: delete what is finished, keep each open point short):
   route is now only Continue's" (N4).
 - `docs/backlog/setup.md` decisions: a dated line for the owner's 2026-10-29 ~11:00 answer
   ("Yes. Start again can delete the failed setup dB.") and how it is built here (D3, N1, N2).
-- The spec: one dated line under its header — "2026-10-30, slice 2 revision 5: no margin (A1206);
-  a damaged setup database is deleted whatever the damage (owner, 2026-10-29 ~11:00); §2's
-  `module-evidence/` check is moot; §9d's sentence is replaced (OQ-B); §9b's help line ("This box
+- The spec: one dated line under its header — "2026-10-30, slice 2 revision 6: no margin (A1206);
+  a damaged setup database is deleted whatever the damage (owner, 2026-10-29 ~11:00), except the
+  limits the plan's N1 lists; §2's `module-evidence/` check is moot; §9d's sentence is replaced by
+  the owner's "The previous setup process was unsuccessful." (OQ-B, 2026-10-30); §9b's help line ("This box
   will not use this setup's invoice series names again.") has nothing behind it since A1206 and is
   for slice 3 to drop".
 
@@ -1122,7 +1287,7 @@ Backlog (CLAUDE.md §6: delete what is finished, keep each open point short):
   to `~/waitron-campaign/a1131bc-2-shots/`. Open, for `refused-fault` and `unreadable`: EN and ES ×
   light and dark at 390 px, and EN light at 1280 px; plus one empty-unused confirmation. Passes when:
   `keptFault` shows with no count and no Start again (Recover from backup may still show — D7);
-  "This box cannot read all of the setup database." and `heldLost` show without `noInvoiceSent` and
+  "The previous setup process was unsuccessful." and `heldLost` show without `noInvoiceSent` and
   with no date or series line; nothing overflows the card at 390 px; dark text is legible; no
   password field anywhere on these screens. Compare with
   `docs/backlog/mockups/a1131bc-restore/3-refused-fault*.png` and `4-unreadable-setup*.png`
@@ -1141,8 +1306,9 @@ Backlog (CLAUDE.md §6: delete what is finished, keep each open point short):
   confirm), `scripts/claude-md-pointers.test.ts`.
 - [ ] Typecheck and lint `@waitron/provisioning`, `@waitron/server`, `@waitron/setup`; `pnpm format:check`.
 - [ ] Ledger `Status: done` for the build; tell the lead it is ready for `/finish-branch` with this
-  plan. The PR description carries D3's table, D4, D5, D11, D13, D14, D15, N1–N5, OQ-B's answer,
-  the changed-checks tables, the look-check list, and the #2251 overlap.
+  plan. The PR description opens with N6's request for the owner's approval of the Spanish
+  sentence, and carries D3's table, D4, D5, D8, D11, D13, D14, D15, N1–N6, OQ-B's answer, the
+  changed-checks tables, the look-check list, and the #2251 overlap.
 
 ## Self-review notes
 
@@ -1156,6 +1322,11 @@ Backlog (CLAUDE.md §6: delete what is finished, keep each open point short):
   I5 → Tasks 4a and 4c-1's invoice-table cases. M1 → Current behaviour `:80-84`; M2 → D8, Architecture,
   Task 8; M3 → D13, N5; M4 → Task 9's hit list; M5 → N4, Task 3, Task 9; M6 → Task 6a; M7 → Tasks
   4c-1/4c-2 and 6b-1/6b-2; M8 → the spec line in Task 9; M9 → Global Constraints, Task 11; M10 → N3.
+- Review 5: I1 → Task 4a's `foreignHotJournal` shapes and header check, Task 4d's empty-original
+  case, experiment 5; I2 → Task 4b's missing-database test, D15, N1; I3 → D8, Task 2a's step and
+  test, the changed-checks row, Current behaviour, Task 9; I4 → D3's `node.db` paragraph, D4, Task
+  4d's controls, N1 (Task 4d no longer edits the provisioning deletion file); M1 → D3's citation;
+  M2 → experiment 2; M3 → Task 6b-1; M4 → N1. OQ-B → the owner's words everywhere, N6.
 - Removed since revision 3: Task 0 (gate, moot), Task 1 (file-time floor; `attemptLastWriteMs`
   deleted by A1206), the floor decisions, the M1-twin class, every `namesFrom` and `floorMs` line,
   `confirmUnreadable` (A1206 removed it; D4's `confirmUnreadableDatabase` is new).
