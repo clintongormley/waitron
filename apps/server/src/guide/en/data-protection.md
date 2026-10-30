@@ -326,8 +326,8 @@ notes on an order or a dish for the kitchen.
 - Whose data: guests at a table, and anyone a note names.
 - What data: the name typed for the table, which prints on kitchen tickets and on the table's
   receipts and invoices, the emailed PDF included; the name typed for a bill, which only the till
-  shows; and the notes typed on orders and dishes, which print on kitchen tickets. A note is free text and can mention health, such as a diet, so ask your
-  adviser how to treat it.
+  shows; and the notes typed on orders and dishes, which print on kitchen tickets. A note is free
+  text and can mention health, such as a diet, so ask your adviser how to treat it.
 - Who receives it: your email provider, for each invoice you email; _anyone else you share it with_.
 - How long: _set with your adviser_. Waitron keeps every receipt and ticket it sends to a receipt or
   kitchen printer and deletes none of them, so the names and notes printed on them stay in the

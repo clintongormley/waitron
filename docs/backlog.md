@@ -1984,7 +1984,7 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-  landed; it leaves open A1232–A1234. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
+  landed; it leaves open A1232–A1235. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
   courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
   footer has totals and Pay, no Hold. This bill's unsent dishes make Pay quiet but tappable,
@@ -2040,6 +2040,17 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   gone when the window closes: Cancel, Escape and Discard leave focus on "Table details", Save on
   the page itself. Enter on "Table actions" also leaves focus on the page. Decide where focus goes
   (the "Table actions" button is the likely place) for both windows together.
+
+- **A1235. Parked orders, Waiting and department transfers can still name a table bill by an old
+  table (left open by A803 slice 2).** Parked orders now shows a table bill's stored number and
+  name, but builds it on `orderLabel` (`apps/till/src/widgets/held-orders.ts`), which joins the
+  table with the bill's own label. A split bill is labelled with its table when it is made
+  (`orderTableLabel`, `apps/server/src/bill-actions.ts`) and a move to another table does not
+  change that label, so by reading, Sam's split bill moved from table 2 to table 4 is listed as
+  "4 · 2 · Bill 1 · Sam" where the table screen says "Bill 1 · Sam" (not run). A765 keeps a party
+  bill's own label on purpose (`apps/till/src/widgets/order-table-names.test.ts`), so dropping it
+  is a decision. The counter's Waiting list and department transfers (`counter-waiting.ts`,
+  `department-transfers.ts`) show no bill number or name at all.
 
 - **A1236. After paying one bill of three, the table screen says "Table 3 paid" and offers Finish
   table first (seen in A803 slice 2's LOOK).** Two bills were still unpaid. In files slice 2 did

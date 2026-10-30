@@ -1409,8 +1409,9 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
-  /** Moved on by the app each time it refuses something that only taking over another person's
-   * order allows: on a narrow screen Review opens, and the Take over button is scrolled into view. */
+  /** Moved on by the app each time it refuses a bill's name because someone else's unsent dishes
+   * hold the bill (`draft.taken_over`): on a narrow screen Review opens, and the Take over button is
+   * scrolled into view. */
   @property({ attribute: false }) revealOtherDrafts = 0;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
