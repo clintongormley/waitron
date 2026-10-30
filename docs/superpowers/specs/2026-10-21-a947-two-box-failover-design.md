@@ -106,7 +106,7 @@ rewritten, and carries a dated pointer here.
 >    second clock". No test runs a browser in a container.
 > 10. **With no second clock, the page checks again every 15 seconds by itself**, and carries on
 >     once a second clock appears; a re-check that again finds none keeps the 15-second rhythm
->     (`setup/clock-wait.ts`, `createSecondClockPoll`). On the setup page this starts only once
+>     (`setup/clock-wait.ts`, `createSecondClockPoll`; renamed `createRecheckPoll` on 2026-10-30). On the setup page this starts only once
 >     **Make the series** is pressed (item 4).
 >     Tests: `first-hour.browser.test.ts` and `recovery-hour.browser.test.ts`, each "with no second
 >     clock it explains itself and carries on when the internet arrives" and "a missing second

@@ -680,6 +680,14 @@ sends a real `select` although Make the series was never pressed. This happens a
 preview read-only, as A1207 did for a taken minute (`#compare` in
 `packages/fiscal-verifactu/src/setup/recovery-hour.ts`).
 
+A related path (A1207's figure review, probe R1): when Compare clocks shows a wait the box has
+already recorded, the end of that countdown sends a real `select` although Make the series was not
+pressed on this page load (at A1207's base too, one `select`; since A1225's fix a lost one is
+repeated about every 15 seconds). The box records such a wait only after an earlier `select`, so
+this may be intended; decide it with the rest of this entry. The setup page has the same shape
+after a reload during the box's wait (read, not run: `#select(true)` in `first-hour.ts` skips
+`#canSelect`).
+
 ## Decisions and deliberate limits
 
 **DECIDED (owner, 2026-10-29 ~10:38; A1206): Start again keeps no record of the names it
@@ -723,11 +731,11 @@ for another minute before checking again. Explain that to the user and show a co
 box's refusal (reason `minute_in_use`) says how long until the next free minute and when to check
 again, and the setup and restore pages say the owner's own words (2026-10-30): "The auto-generated
 invoice series code (which is time-based) already exists in the database." and "Generating a new
-code in: 00:52", count down to it and check again by themselves; a promotion waits up to 150
+code in: 52 seconds", count down to it and check again by themselves; a promotion waits up to 150
 seconds and is otherwise refused with those values. The owner then chose (2026-10-30) the Spanish
-«Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("02:30") in
-both languages, and that a check the page makes by itself and loses on the network keeps the
-countdown going and checks again every 15 seconds. After a restore of a backup whose invoices are more than a minute later than the box's time,
+«Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("00:52", "02:30")
+in both languages, and that a check the page makes by itself and loses on the network keeps the
+countdown going and checks again about every 15 seconds. After a restore of a backup whose invoices are more than a minute later than the box's time,
 payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
 more than a minute behind the last sale (Q5); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind

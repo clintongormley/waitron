@@ -96,7 +96,7 @@ export function remainingAsClock(ms: number): string {
   return formatRemaining(ms).padStart(5, "0");
 }
 
-export const SECOND_CLOCK_POLL_MS = 15_000;
+export const RECHECK_POLL_MS = 15_000;
 
 export const record = (value: unknown): value is Record<string, unknown> =>
   value !== null && typeof value === "object" && !Array.isArray(value);
@@ -165,7 +165,7 @@ function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
       return timer !== undefined;
     },
     start() {
-      timer ??= setInterval(run, SECOND_CLOCK_POLL_MS);
+      timer ??= setInterval(run, RECHECK_POLL_MS);
     },
     stop,
   };
@@ -244,9 +244,9 @@ export class ClockWait<Selected extends { status: "selected" }> {
   }
 
   /**
-   * Shows what a failed request means. A check the page made by itself (`automatic`) that was
-   * lost on the way (no refusal code) leaves a countdown or second-clock wait up, and the page
-   * checks again every 15 seconds until an answer replaces it.
+   * Shows what a failed request means. A check the page made by itself (`automatic`) that never
+   * reached the box — `fetch`'s `TypeError`, which carries no code — leaves a countdown or
+   * second-clock wait up and starts the 15-second re-check; the next `show` stops it.
    */
   settle(error: unknown, automatic: boolean, fail: (error: unknown) => void): void {
     const problem = clockProblem(error);
@@ -255,7 +255,8 @@ export class ClockWait<Selected extends { status: "selected" }> {
     else if (
       automatic &&
       (this.#poll.running || this.counting) &&
-      (error as { code?: unknown } | null)?.code === undefined
+      error instanceof TypeError &&
+      (error as { code?: unknown }).code === undefined
     )
       this.#poll.start();
     else {

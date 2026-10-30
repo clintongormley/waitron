@@ -49,9 +49,10 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   code in: 03:00", counting down in minutes and seconds to the next free minute with no button
   to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
   "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
-  checks is lost on the network, the countdown carries on and the page checks again every 15 seconds
+  checks is lost on the network, the countdown carries on and the page checks again about every 15
+  seconds; once the countdown reaches 00:00 it stays there until a check gets through
   (`first-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
-  again"). A reload before
+  again"). An answer from the box the page cannot read still shows the page's failure message. A reload before
   the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
   time are correct." and press **Make the series** again (read, not run: the page's check on load
   ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt

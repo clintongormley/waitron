@@ -206,7 +206,7 @@ describe("a taken minute shows one countdown", () => {
     wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
     vi.advanceTimersByTime(30_000);
     expect(recheck).toHaveBeenCalledTimes(1);
-    wait.settle(new Error("network"), true, fail);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
     expect(fail).not.toHaveBeenCalled();
     expect(wait.counting).toBe(true);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
@@ -214,7 +214,7 @@ describe("a taken minute shows one countdown", () => {
     expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:29");
     vi.advanceTimersByTime(14_000);
     expect(recheck).toHaveBeenCalledTimes(2);
-    wait.settle(new Error("network"), true, fail);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
     vi.advanceTimersByTime(15_000);
     expect(recheck).toHaveBeenCalledTimes(3);
     wait.show(undefined, WAITING);
@@ -229,7 +229,7 @@ describe("a taken minute shows one countdown", () => {
     wait.show(undefined, { ...WAITING, remainingMs: 1_000 });
     vi.advanceTimersByTime(1_000);
     expect(recheck).toHaveBeenCalledTimes(1);
-    wait.settle(new Error("network"), true, fail);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
     expect(fail).not.toHaveBeenCalled();
     expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
       "Continues in 0:00",
@@ -238,9 +238,21 @@ describe("a taken minute shows one countdown", () => {
     expect(recheck).toHaveBeenCalledTimes(2);
   });
 
+  it("a person's action after a lost re-check stops the quiet checks", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.settle(new TypeError("Failed to fetch"), true, fail);
+    wait.show();
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    expect(drawn().textContent?.trim()).toBe("");
+  });
+
   it.each([
-    ["a request the person made is lost", new Error("network"), false],
+    ["a request the person made is lost", new TypeError("Failed to fetch"), false],
     ["the box refuses the re-check", { code: "setup.invalid" }, true],
+    ["the page cannot read the box's answer to a re-check", new Error("invalid wait"), true],
   ])("the wait goes when %s", (_case, error, automatic) => {
     const { wait, recheck, fail } = setup();
     wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);

@@ -611,6 +611,40 @@ it("a lost re-check during a taken minute keeps counting and checks again", asyn
     vi.useRealTimers();
   }
 });
+it("an answer it cannot read during a taken minute shows the failure", async () => {
+  const answers: (() => unknown)[] = [
+    () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+    () => ({ status: "waiting", targetMs: "soon", remainingMs: 150_000 }),
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift()!() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+        "true",
+      ),
+    );
+    expect(remaining(el)).toBeUndefined();
+    vi.advanceTimersByTime(60_000);
+    expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 it("ignores a late selection after the public context is replaced", async () => {
   let release!: (value: unknown) => void;
   const { el, calls, parent } = await mount({
