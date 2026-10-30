@@ -27,6 +27,7 @@ import { currentLocale, differentPeopleText, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import type { TillLockScreen } from "./screens/till-lock-screen.js";
 import type { TillTableOrderScreen } from "./screens/till-table-order-screen.js";
+import { DRAFT_SIDE_BY_SIDE_MIN_WIDTH } from "./screens/till-table-order-screen.js";
 import type { TillFloorScreen } from "./screens/till-floor-screen.js";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import type { TillUnpaidDepartureDialog } from "./widgets/unpaid-departure-dialog.js";
@@ -2916,9 +2917,10 @@ describe("A803 name bill", () => {
 
   it.each([
     { width: 400, height: 800 },
+    { width: 400, height: 420 },
     { width: 1280, height: 800 },
   ])(
-    "at $width px, after someone else's unsent dishes refuse the name, their order and its Take over button are on view",
+    "at $width × $height px, after someone else's unsent dishes refuse the name, their order and its Take over button are on view",
     async ({ width, height }) => {
       const oldWidth = innerWidth;
       const oldHeight = innerHeight;
@@ -2928,6 +2930,10 @@ describe("A803 name bill", () => {
           renameBill: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName: "Bea" }),
         });
         const order = await openMesa(el);
+        // The screen measures its width after it is drawn; refuse only once it has.
+        await expect
+          .poll(() => (order as unknown as { wide: boolean }).wide)
+          .toBe(width >= DRAFT_SIDE_BY_SIDE_MIN_WIDTH);
         beaDraftOnTab();
 
         emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
@@ -2936,6 +2942,13 @@ describe("A803 name bill", () => {
         const takeOver = tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-take-over]");
         expect(takeOver).not.toBeNull();
         await expect.poll(() => takeOver!.checkVisibility()).toBe(true);
+        await expect
+          .poll(() => {
+            const box = takeOver!.getBoundingClientRect();
+            // A scroll can leave a fraction of a pixel past the edge.
+            return box.top >= 0 && box.bottom <= innerHeight + 1;
+          })
+          .toBe(true);
       } finally {
         await page.viewport(oldWidth, oldHeight);
       }
