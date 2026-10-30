@@ -3537,7 +3537,7 @@ describe("restore from my bucket", () => {
       undefined,
       "This server has saved setup work for a different request. Resume the original setup or contact support.",
     ],
-    ["setup.request_invalid", { field: "kit" }, "Check the recovery kit."],
+    ["setup.request_invalid", { field: "kit" }, "Check the recovery pack or kit file."],
     [
       "restore.hook_failed",
       { module: "fiscal", code: "x.y" },

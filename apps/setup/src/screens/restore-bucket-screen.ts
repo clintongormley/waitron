@@ -35,7 +35,7 @@ export type BucketField =
   "kit" | "environment" | "oldBoxGone" | "venueConfirmed" | RecoveryEntryField;
 
 /**
- * Rebuild this server from the owner's bucket. It asks for the recovery kit and
+ * Rebuild this server from the owner's bucket. It asks for the recovery pack or kit and
  * the environment, which the restore's compatibility check compares with the copy's own. The shell
  * sets `liveSince`/`liveUnknown` and `venue` from the server's refusals, and hands back the request
  * it last sent as `request`, so answering a refusal never means pasting the kit again.

@@ -32,7 +32,7 @@ export const restoreEn = {
   "restore.preview_older_key": "An older backup reinstates its older node key.",
   "restore.preview_keep_keys": "Keep older paper keys until no older backup remains.",
   "restore.preview_key_separate": "The node key is separate from the backup file's encryption key.",
-  "restore.preview_kit_error": "Check the recovery kit.",
+  "restore.preview_kit_error": "Check the recovery pack or kit file.",
   "restore.preview_key_error": "Check the backup file's encryption key.",
   "restore.preview_environment_error": "Check the backup environment.",
   "restore.preview_file_error": "Check the backup file.",
@@ -86,7 +86,7 @@ export const restoreEn = {
   "restore_bucket.kit_help_label": "Help with the recovery kit",
   "restore_bucket.kit_help":
     "Choose your recovery pack or kit file above, or paste the kit here: one long line starting with WAITRON-RECOVERY-KIT-1.",
-  "restore_bucket.kit_missing": "Upload or paste the recovery kit.",
+  "restore_bucket.kit_missing": "Choose your recovery pack or kit file, or paste the kit.",
   "restore_bucket.environment": "Environment",
   "restore_bucket.environment_help_label": "Help with environment",
   "restore_bucket.environment_help":
@@ -100,7 +100,7 @@ export const restoreEn = {
   "restore_bucket.venue_confirm": "This is my business. Restore it onto this server.",
   "restore_bucket.venue_missing": "Confirm that this is your business.",
   "restore_bucket.fix_fields": "Correct the highlighted fields to continue.",
-  "restore_bucket.check.kit": "Check the recovery kit.",
+  "restore_bucket.check.kit": "Check the recovery pack or kit file.",
   "restore_bucket.check.environment": "Check the environment.",
   "restore_bucket.check.old_box": "Check your answer about the old server.",
   "restore_bucket.check.venue": "Check the confirmation that this is your business.",
@@ -214,7 +214,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
     "Conserva las claves en papel antiguas mientras queden copias que las necesiten.",
   "restore.preview_key_separate":
     "La clave del nodo es distinta de la clave de cifrado del archivo de copia.",
-  "restore.preview_kit_error": "Revisa el kit de recuperación.",
+  "restore.preview_kit_error": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore.preview_key_error": "Revisa la clave de cifrado del archivo de copia.",
   "restore.preview_environment_error": "Revisa el entorno de la copia.",
   "restore.preview_file_error": "Revisa el archivo de copia.",
@@ -271,7 +271,8 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.kit_help_label": "Ayuda sobre el kit de recuperación",
   "restore_bucket.kit_help":
     "Elige arriba tu paquete de recuperación o el archivo del kit, o pega aquí el kit: una sola línea larga que empieza por WAITRON-RECOVERY-KIT-1.",
-  "restore_bucket.kit_missing": "Sube o pega el kit de recuperación.",
+  "restore_bucket.kit_missing":
+    "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
   "restore_bucket.environment": "Entorno",
   "restore_bucket.environment_help_label": "Ayuda sobre el entorno",
   "restore_bucket.environment_help":
@@ -287,7 +288,7 @@ export const restoreEs: Record<keyof typeof restoreEn, string> = {
   "restore_bucket.venue_confirm": "Este es mi negocio. Restáuralo en este servidor.",
   "restore_bucket.venue_missing": "Confirma que este es tu negocio.",
   "restore_bucket.fix_fields": "Corrige los campos marcados para continuar.",
-  "restore_bucket.check.kit": "Revisa el kit de recuperación.",
+  "restore_bucket.check.kit": "Revisa el paquete de recuperación o el archivo del kit.",
   "restore_bucket.check.environment": "Revisa el entorno.",
   "restore_bucket.check.old_box": "Revisa tu respuesta sobre el servidor anterior.",
   "restore_bucket.check.venue": "Revisa la confirmación de que este es tu negocio.",

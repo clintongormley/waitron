@@ -180,7 +180,7 @@ it.each(["bucket", "cloud"])("discards the %s preview after leaving", async (kin
 });
 
 it.each([
-  ["backup.stream_kit_invalid", {}, "kit", "Check the recovery kit."],
+  ["backup.stream_kit_invalid", {}, "kit", "Check the recovery pack or kit file."],
   [
     "restore.environment_mismatch",
     { backup: "production", target: "preproduction" },

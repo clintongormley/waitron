@@ -92,11 +92,11 @@ describe("SetupRestoreBucketScreen", () => {
     expect(await bottomOf(el)).toBe(FIX_FIELDS);
     expect(el.shadowRoot!.querySelectorAll("[required]")).toHaveLength(3); // kit, environment, confirmation
     expect(fieldMessages(el)).toEqual([
-      "Upload or paste the recovery kit.",
+      "Choose your recovery pack or kit file, or paste the kit.",
       "Confirm that no other running server has newer data.",
     ]);
     expect((q(el, "[data-test=kit]") as unknown as { error: string }).error).toBe(
-      "Upload or paste the recovery kit.",
+      "Choose your recovery pack or kit file, or paste the kit.",
     );
     expect(q(el, "#acknowledge-error")!.textContent).toBe(
       "Confirm that no other running server has newer data.",
@@ -708,7 +708,7 @@ describe("SetupRestoreBucketScreen", () => {
       paste(el, " ");
       await el.updateComplete;
       expect(fieldMessages(el)).toEqual([
-        "Upload or paste the recovery kit.",
+        "Choose your recovery pack or kit file, or paste the kit.",
         "Confirm that no other running server has newer data.",
       ]);
       paste(el, "k");
@@ -746,7 +746,7 @@ describe("SetupRestoreBucketScreen in Spanish", () => {
     q(el, "[data-test=restore]")!.click();
     await el.updateComplete;
     expect(fieldMessages(el)).toEqual([
-      "Sube o pega el kit de recuperación.",
+      "Elige tu paquete de recuperación o el archivo del kit, o pega el kit.",
       "Confirma que ningún otro servidor en funcionamiento tiene datos más recientes.",
       "Confirma que este es tu negocio.",
     ]);
