@@ -1850,6 +1850,15 @@ describe("till-app: the party on a handheld", () => {
       cancel: "party-guests-cancel",
     },
     {
+      window: "Name this bill",
+      method: "setBillName",
+      field: "name",
+      event: "name-bill",
+      detail: { billId: "wo-4", name: "Ana" },
+      dialog: "till-bill-name-dialog",
+      cancel: "bill-name-cancel",
+    },
+    {
       window: "Split a table",
       method: "splitTable",
       field: "guestCounts.leaving",
