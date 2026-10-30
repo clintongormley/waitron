@@ -1390,6 +1390,8 @@ type CounterError =
   | { clockBehind: ClockBehind }
   | { unsentBill: BillUnsent }
   | { takenOver: string; unsent?: true }
+  /** Renaming a bill refused because another person's unsent dishes hold it: their name. */
+  | { billNameTakenOver: string }
   | { partyChanged: PartyChange }
   | { billChanged: BillChange }
   | { lateChange: LateChange; also?: StringKey };
@@ -1450,6 +1452,12 @@ function errorText(
     }
     return codeMessage(error.code);
   }
+  if ("billNameTakenOver" in error)
+    return named(
+      error.billNameTakenOver,
+      t("table.bill_name_taken_over"),
+      t("table.bill_name_taken_over_unnamed"),
+    );
   if ("takenOver" in error)
     return error.unsent === true
       ? named(
@@ -3073,6 +3081,8 @@ export class TillApp extends LitElement {
   @state() private finishRefused = false;
   /** A name the server refused for the party, and why, which the table screen shows beside its field. */
   @state() private nameRefusal: { name: string; message: string } | null = null;
+  @state() private billNameRefusal: { billId: string; name: string; message: string } | null = null;
+  @state() private revealOtherDrafts = 0;
   @state() private guestsRefusal: { value: string; message: string } | null = null;
   @state() private splitRefusal: SplitRefusal | null = null;
   /** The line a change refused as started offers to cancel; the table screen opens its Cancel. */
@@ -10983,6 +10993,7 @@ export class TillApp extends LitElement {
       this.#openClaimed = Math.max(this.#openClaimed, offerRequest);
       this.finishRefused = false;
       this.nameRefusal = null;
+      this.billNameRefusal = null;
       this.guestsRefusal = null;
       this.splitRefusal = null;
       this.reprintSent = [];
@@ -15430,6 +15441,64 @@ export class TillApp extends LitElement {
     await this.#reloadOrder();
   }
 
+  /** Sent with the party the screen shows, never the bill's own `partyId`: a paid bill a merged
+   * party left behind still names the closed party. */
+  async #onNameBill(event: Event): Promise<void> {
+    const { billId, name } = (event as CustomEvent<{ billId: string; name: string | null }>).detail;
+    const party = this.orderParty;
+    if (party === null) return;
+    const visit = this.#orderVisit;
+    const live = () => visit === this.#orderVisit && this.orderParty?.id === party.id;
+    this.errorKey = undefined;
+    this.billNameRefusal = null;
+    const expectedEdit = this.#billChoiceEdit(billId);
+    if (expectedEdit === null) return;
+    try {
+      const named = await this.api.setBillName(billId, name, {
+        expectedPartyRevision: party.revision,
+        partyId: party.id,
+        expectedEdit,
+      });
+      this.#notePartyRevision(party.id, named.revision);
+    } catch (error) {
+      if (!live()) return;
+      const refused = error as
+        { code?: string; field?: string; ownerName?: string | null } | undefined;
+      const code = refused?.code;
+      const billRefusal =
+        (code === "management.request_invalid" && refused?.field === "name") ||
+        code === "draft.taken_over" ||
+        code === "draft.out_of_date" ||
+        code === "tab.not_open";
+      if (!billRefusal) {
+        await this.#onTableRefusal(error, live);
+        return;
+      }
+      // Said only against the bill it was sent for: the waiter may have moved to another bill of
+      // the party while it was on its way. A bill that is gone leaves the party's list whichever
+      // bill is shown.
+      const onBill = () => live() && this.activeTabId === billId;
+      if (code === "tab.not_open") {
+        if (onBill()) this.errorKey = "table.bill_name_not_open";
+        await this.#loadPartyBills();
+        return;
+      }
+      if (!onBill()) return;
+      if (code === "management.request_invalid")
+        this.billNameRefusal = { billId, name: name ?? "", message: t("table.name_too_long") };
+      else {
+        this.errorKey =
+          code === "draft.taken_over"
+            ? { billNameTakenOver: refused?.ownerName ?? "" }
+            : { code: "draft.out_of_date" };
+        await this.#refreshBillDraft();
+        if (onBill() && code === "draft.taken_over") this.revealOtherDrafts += 1;
+      }
+      return;
+    }
+    if (live()) await this.#loadPartyBills();
+  }
+
   /** A refusal of the count itself goes back to the screen's field, unless the waiter has left the
    * party since; any other is said on the banner. */
   async #onGuestsParty(event: Event): Promise<void> {
@@ -16331,10 +16400,10 @@ export class TillApp extends LitElement {
    * amount due: its total plus its credit notes. */
   #departingBills(): DepartingBill[] {
     const party = this.orderParty?.displayName ?? "";
-    return shownBills(this.partyBills).flatMap((bill, index) => {
+    return shownBills(this.partyBills).flatMap((bill) => {
       const due = bill.amountDue ?? bill.outstanding;
       return owing(bill) && compareDecimal(decimal(due), decimal("0")) > 0
-        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, index), outstanding: due }]
+        ? [{ workingOrderId: bill.workingOrderId, name: billName(party, bill), outstanding: due }]
         : [];
     });
   }
@@ -16794,8 +16863,8 @@ export class TillApp extends LitElement {
   }
 
   #paymentBillLabel(billId: string): string | undefined {
-    const index = shownBills(this.partyBills).findIndex((bill) => bill.workingOrderId === billId);
-    return index < 0 ? undefined : billName(this.orderParty?.displayName ?? "", index);
+    const bill = shownBills(this.partyBills).find((row) => row.workingOrderId === billId);
+    return bill === undefined ? undefined : billName(this.orderParty?.displayName ?? "", bill);
   }
 
   async #onTakePayment(event: Event): Promise<void> {
@@ -18669,6 +18738,8 @@ export class TillApp extends LitElement {
       .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
       .finishRefused=${this.finishRefused}
       .nameRefusal=${this.nameRefusal}
+      .billNameRefusal=${this.billNameRefusal}
+      .revealOtherDrafts=${this.revealOtherDrafts}
       .guestsRefusal=${this.guestsRefusal}
       .splitRefusal=${this.splitRefusal}
       .busy=${this.submitting || this.invoiceRecipientReading}
@@ -18803,6 +18874,8 @@ export class TillApp extends LitElement {
           .paymentConfirmation=${this.activeTabId === undefined ? undefined : this.#unansweredWholePayments.get(this.activeTabId)}
           .finishRefused=${this.finishRefused}
           .nameRefusal=${this.nameRefusal}
+          .billNameRefusal=${this.billNameRefusal}
+          .revealOtherDrafts=${this.revealOtherDrafts}
           .guestsRefusal=${this.guestsRefusal}
           .splitRefusal=${this.splitRefusal}
           .busy=${this.submitting || this.invoiceRecipientReading}
@@ -19155,6 +19228,7 @@ export class TillApp extends LitElement {
         @split-table-open=${(event: Event) => this.#onSplitTableOpen(event)}
         @split-table=${(event: Event) => void this.#onSplitTable(event)}
         @name-party=${(event: Event) => void this.#onNameParty(event)}
+        @name-bill=${(event: Event) => void this.#onNameBill(event)}
         @guests-party=${(event: Event) => void this.#onGuestsParty(event)}
         @merge-bills=${(event: Event) => void this.#onMergeBills(event)}
         @transfer-lines=${(event: Event) => void this.#onTransferLines(event)}

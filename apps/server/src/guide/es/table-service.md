@@ -235,6 +235,24 @@ corto, aunque cambien las mayúsculas: si Guardar dice «Terraza 1 ya usa T1», 
 «Tb1». **Añadir mesas** muestra los nombres cortos que dará, y deja escribirlos cuando eliges
 nombres personalizados; **Añadir mesa unida** pide uno.
 
+## Poner nombre a una cuenta {#bill-names}
+
+Las cuentas de unos clientes van numeradas, y la caja muestra cada una con el nombre de los clientes,
+su número y el nombre que le pongas, como **4 · Cuenta 2 · Clint**. Para poner nombre a la cuenta en
+pantalla, por ejemplo el del cliente que la paga, abre **Acciones de mesa**, elige **Poner nombre a
+esta cuenta**, escribe hasta 40 caracteres y elige **Guardar**. Vacía el campo para quitar el
+nombre. **Poner nombre a los clientes**, justo encima, pone nombre a todo el grupo. Si otra persona
+tiene platos sin enviar en la cuenta, toma primero su pedido.
+
+Una cuenta conserva su número mientras sigue con esos clientes. Juntar una cuenta con otra deja un
+hueco: junta la Cuenta 2 con la Cuenta 1 y quedan las Cuentas 1 y 3. Una cuenta que llega de otra
+mesa o del mostrador toma el siguiente número de los clientes, y también las cuentas de una mesa que
+unes, salvo la que **Juntar las cuentas** suma a la cuenta principal de estos clientes. Una mesa que
+separas con una cuenta vuelve a empezar por la Cuenta 1, igual que una mesa que se vuelve a ocupar
+cuando sus clientes terminan. Una cuenta conserva su nombre cuando se mueve, también al mostrador,
+donde no tiene número. Solo puedes poner nombre a una cuenta en una mesa. El nombre no se imprime en
+los tickets de cocina ni en los recibos.
+
 ## Ver qué mesas tienen comida lista {#ready-bar}
 
 Cuando la cocina tiene platos listos, quieres saber a qué mesas llevarlos sin tener que ir a mirar.

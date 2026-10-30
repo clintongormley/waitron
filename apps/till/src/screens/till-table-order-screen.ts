@@ -56,7 +56,7 @@ import {
   sumDecimals,
   type Decimal,
 } from "@waitron/shared";
-import { clockTime, countText, currentLocale, named, t } from "../i18n/t.js";
+import { clockTime, countText, currentLocale, fill, named, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type { StringKey } from "../i18n/strings.js";
 import {
@@ -114,6 +114,8 @@ import "../widgets/split-guests-dialog.js";
 import "../widgets/table-status.js";
 import type { BillChoiceDetail } from "../widgets/bill-choice-dialog.js";
 import type { PartyNameDetail } from "../widgets/party-name-dialog.js";
+import "../widgets/bill-name-dialog.js";
+import type { BillNameDetail } from "../widgets/bill-name-dialog.js";
 import type { PartyGuestsDetail } from "../widgets/party-guests-dialog.js";
 import type { SplitGuestsDetail } from "../widgets/split-guests-dialog.js";
 import type {
@@ -1165,6 +1167,12 @@ export class TillTableOrderScreen extends LitElement {
   @property({ type: Boolean }) finishRefused = false;
   /** The app's answer to a name the server refused: the name sent, and why, shown beside the field. */
   @property({ attribute: false }) nameRefusal: { name: string; message: string } | null = null;
+  /** The app's answer to a bill name the server refused: the bill, the name sent, and why. */
+  @property({ attribute: false }) billNameRefusal: {
+    billId: string;
+    name: string;
+    message: string;
+  } | null = null;
   /** The app's answer to a guest count the server refused: the count sent, and why. */
   @property({ attribute: false }) guestsRefusal: { value: string; message: string } | null = null;
   @property({ attribute: false }) splitRefusal: SplitRefusal | null = null;
@@ -1300,6 +1308,8 @@ export class TillTableOrderScreen extends LitElement {
   #relocationPrompt: object | null = null;
   /** The party-name dialog, while open: the name it starts from and a refusal beside the field. */
   @state() private naming: { value: string; refusal: string } | null = null;
+  /** The Name this bill window, while open: the bill, the name it starts from and a refusal. */
+  @state() private billNaming: { billId: string; value: string; refusal: string } | null = null;
   @state() private counting: { value: string; refusal: string } | null = null;
   /** Split a table's choice, while its guests window is open. */
   @state() private splitGuests: {
@@ -1399,6 +1409,10 @@ export class TillTableOrderScreen extends LitElement {
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
+  /** Moved on by the app each time it refuses a bill's name because someone else's unsent dishes
+   * hold the bill (`draft.taken_over`): on a narrow screen Review opens, and the Take over button is
+   * scrolled into view. */
+  @property({ attribute: false }) revealOtherDrafts = 0;
   /** Moved on by the app each time a take-over it was asked for has answered, or failed. */
   @property({ attribute: false }) takeOversAnswered = 0;
   /** The draft whose take-over has just answered, until its dialog has closed. */
@@ -1977,8 +1991,24 @@ export class TillTableOrderScreen extends LitElement {
       this.#groupsInOrder = [...this.groups].sort((a, b) => a.position - b.position);
       this.#heldInOrder = this.#groupsInOrder.filter((group) => group.state === "held");
     }
+    if (
+      changed.get("revealOtherDrafts") !== undefined &&
+      this.revealOtherDrafts !== changed.get("revealOtherDrafts")
+    )
+      void this.#revealTakeOver();
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
+    }
+    const billRefusal = changed.has("billNameRefusal") ? this.billNameRefusal : null;
+    if (
+      billRefusal !== null &&
+      (this.billNaming === null || this.billNaming.billId === billRefusal.billId)
+    ) {
+      this.billNaming = {
+        billId: billRefusal.billId,
+        value: billRefusal.name,
+        refusal: billRefusal.message,
+      };
     }
     if (changed.has("guestsRefusal") && this.guestsRefusal !== null) {
       this.counting = { value: this.guestsRefusal.value, refusal: this.guestsRefusal.message };
@@ -1993,6 +2023,7 @@ export class TillTableOrderScreen extends LitElement {
     const partySwitched = changed.has("party") && changed.get("party")?.id !== this.party?.id;
     if (partySwitched) {
       this.naming = null;
+      this.billNaming = null;
       this.counting = null;
     }
     if (
@@ -2199,8 +2230,8 @@ export class TillTableOrderScreen extends LitElement {
   /** Discount on the bill on screen, named as the bills list names it. */
   #billAdjust(): TemplateResult | typeof nothing {
     if (!this.#adjustable() || this.lines.length === 0) return nothing;
-    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    const name = index === -1 ? t("adjust.whole_bill") : this.#billName(index);
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    const name = shown === undefined ? t("adjust.whole_bill") : this.#billName(shown);
     return html`<div class="bill-adjust">
       <wt-button
         variant="secondary"
@@ -2375,7 +2406,7 @@ export class TillTableOrderScreen extends LitElement {
         </div>
         ${this.#sentLineDialog()} ${this.#fireGroupDialog()} ${this.#serveDialog()}
         ${this.#takeOverDialog()} ${this.#billChoiceDialog()} ${this.#nameDialog()}
-        ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
+        ${this.#billNameDialog()} ${this.#guestsDialog()} ${this.#splitGuestsDialog()}
       </section>
     `;
   }
@@ -2484,7 +2515,7 @@ export class TillTableOrderScreen extends LitElement {
         .scope=${scope}
         .billId=${billId}
         .snapshot=${this.currentOrders === null ? null : { scope, billId, current: this.currentOrders }}
-        .billLabels=${new Map(bills.map((bill, index) => [bill.workingOrderId, billName(this.party?.displayName ?? "", index)]))}
+        .billLabels=${new Map(bills.map((bill) => [bill.workingOrderId, billName(this.party?.displayName ?? "", bill)]))}
         .busy=${this.busy || this.groupCommandBusy}
         .now=${this.now}
         @reorder-held=${(event: CustomEvent<SentReorderDetail>) => {
@@ -3200,6 +3231,14 @@ export class TillTableOrderScreen extends LitElement {
           ? nothing
           : html`<span class="line-note">${t("line.note.label")}: ${line.note}</span>`
       }`;
+  }
+
+  async #revealTakeOver(): Promise<void> {
+    if (!this.wide && !this.reviewing) await this.#openReview();
+    await this.updateComplete;
+    this.renderRoot
+      .querySelector<HTMLElement>("[data-take-over]")
+      ?.scrollIntoView({ block: "nearest" });
   }
 
   /** Focus follows the view: the control pressed is hidden by what it opens. */
@@ -4198,8 +4237,8 @@ export class TillTableOrderScreen extends LitElement {
     return shownBills(this.bills);
   }
 
-  #billName(index: number): string {
-    return billName(this.party?.displayName ?? "", index);
+  #billName(bill: PartyBill): string {
+    return billName(this.party?.displayName ?? "", bill);
   }
 
   #money(amount: string): string {
@@ -4215,7 +4254,7 @@ export class TillTableOrderScreen extends LitElement {
     return html`<section class="bills" data-bills>
       <h2>${t("table.bills_title")}</h2>
       <ul>
-        ${bills.map((bill, index) => this.#billRow(bill, index))}
+        ${bills.map((bill) => this.#billRow(bill))}
       </ul>
       <div class="total-row">
         <span class="label">${t("table.still_to_pay")}</span>
@@ -4292,7 +4331,7 @@ export class TillTableOrderScreen extends LitElement {
     </div>`;
   }
 
-  #billRow(bill: PartyBill, index: number): TemplateResult {
+  #billRow(bill: PartyBill): TemplateResult {
     const shown = bill.workingOrderId === this.orderId;
     const paid = bill.status === "settled";
     return html`<li
@@ -4301,7 +4340,7 @@ export class TillTableOrderScreen extends LitElement {
       aria-current=${shown ? "true" : nothing}
     >
       <span
-        ><span class="bill-name">${this.#billName(index)}</span> ${
+        ><span class="bill-name">${this.#billName(bill)}</span> ${
           bill.invoiceType === "F1" && bill.recipient !== null
             ? html`<span class="bill-invoice" data-invoice-choice
                 >${t("invoice.full")} · ${bill.recipient.legalName} · ${bill.recipient.taxId}</span
@@ -4714,8 +4753,8 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The bill on screen by {@link #billName}, or undefined when the party's bills do not list it. */
   #shownBillName(): string | undefined {
-    const index = this.#shownBills().findIndex((bill) => bill.workingOrderId === this.orderId);
-    return index < 0 ? undefined : this.#billName(index);
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    return shown === undefined ? undefined : this.#billName(shown);
   }
 
   #tableTargets(): TableState[] {
@@ -4759,12 +4798,12 @@ export class TillTableOrderScreen extends LitElement {
   #otherBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
-    return this.#shownBills().flatMap((bill, index) =>
+    return this.#shownBills().flatMap((bill) =>
       bill.workingOrderId !== this.orderId &&
       bill.partyId === party.id &&
       bill.status === "open" &&
       !bill.hasPayments
-        ? [{ bill, name: this.#billName(index) }]
+        ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
   }
@@ -4920,6 +4959,40 @@ export class TillTableOrderScreen extends LitElement {
     ></till-party-name-dialog>`;
   }
 
+  #openBillNaming(): void {
+    this.#closeActions();
+    const shown = this.#shownBills().find((bill) => bill.workingOrderId === this.orderId);
+    if (shown === undefined) return;
+    this.billNaming = { billId: shown.workingOrderId, value: shown.billName ?? "", refusal: "" };
+  }
+
+  #billNameDialog(): TemplateResult | typeof nothing {
+    const naming = this.billNaming;
+    const bill =
+      naming === null || this.party === null
+        ? undefined
+        : this.#shownBills().find((each) => each.workingOrderId === naming.billId);
+    if (naming === null || bill === undefined) return nothing;
+    return html`<till-bill-name-dialog
+      .bill=${this.#billName(bill)}
+      .value=${naming.value}
+      .savedValue=${bill.billName ?? ""}
+      .refusal=${naming.refusal}
+      @bill-name-confirm=${(event: Event) => {
+        event.stopPropagation();
+        this.billNaming = null;
+        this.#dispatch("name-bill", {
+          billId: bill.workingOrderId,
+          name: (event as CustomEvent<BillNameDetail>).detail.name,
+        });
+      }}
+      @bill-name-cancel=${(event: Event) => {
+        event.stopPropagation();
+        this.billNaming = null;
+      }}
+    ></till-bill-name-dialog>`;
+  }
+
   #openCounting(): void {
     this.#closeActions();
     this.counting = { value: this.#savedGuests(), refusal: "" };
@@ -4957,9 +5030,9 @@ export class TillTableOrderScreen extends LitElement {
   #splitTableBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
-    return this.#shownBills().flatMap((bill, index) =>
+    return this.#shownBills().flatMap((bill) =>
       bill.partyId === party.id && bill.workingOrderId !== party.mainBillId && owing(bill)
-        ? [{ bill, name: this.#billName(index) }]
+        ? [{ bill, name: this.#billName(bill) }]
         : [],
     );
   }
@@ -5391,6 +5464,11 @@ export class TillTableOrderScreen extends LitElement {
             : nothing
         }
         ${party === null ? nothing : action("name", "table.action_name", () => this.#openNaming())}
+        ${
+          party === null || this.#shownBill === undefined
+            ? nothing
+            : action("name-bill", "table.action_name_bill", () => this.#openBillNaming())
+        }
         ${party === null ? nothing : action("guests", "table.action_guests", () => this.#openCounting())}
         ${this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing}
         ${verb("merge", "table.action_merge_bills")} ${verb("transfer", "table.action_transfer")}
@@ -5505,13 +5583,13 @@ export class TillTableOrderScreen extends LitElement {
    * one of those bills is not among the party's shown bills. */
   #billsHeading(key: StringKey, bills: Record<string, string | null | undefined>): string {
     const shown = this.#shownBills();
-    let heading = t(key);
+    const names: Record<string, string> = {};
     for (const [slot, id] of Object.entries(bills)) {
-      const index = shown.findIndex((bill) => bill.workingOrderId === id);
-      if (index < 0) return t("table.actions_title");
-      heading = heading.replace(`{${slot}}`, () => this.#billName(index));
+      const bill = shown.find((row) => row.workingOrderId === id);
+      if (bill === undefined) return t("table.actions_title");
+      names[slot] = this.#billName(bill);
     }
-    return heading;
+    return fill(t(key), names);
   }
 
   #transferLinesStep(): TemplateResult {

@@ -66,6 +66,12 @@ and its [build plan](../superpowers/plans/2026-10-24-a980-data-protection-build.
 answered all ten questions on 2026-10-22 (design §8). The open slices, by the design's numbers (S5, S7 and S8 were dropped
 by the answers):
 
+- **Bill names, like party names (design §2.2 row c5).** Since A803 slice 2 a waiter can name a
+  bill: free text up to 40 characters, often a guest's name, kept in `bill_identities.name`
+  (`packages/venue-service/src/schema/bill-identities.ts`). The register names it (the
+  data-protection guide's "Table names and notes"); whatever the download or a deletion does with
+  `parties.name` applies to it too. The slice puts it in no error's details and no log line, and
+  the owner ruled it never goes on a kitchen ticket (2026-10-30).
 - **A manager's own copy of what they decided about others** — the absences and swaps they
   decided, the rotas they published and the attendance answers they authorised: the design's "who
   did what" row (§2.1 row s12). S2c's actions part, as scoped, covers only voids, refunds and drawer

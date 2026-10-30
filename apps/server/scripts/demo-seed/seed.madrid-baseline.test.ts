@@ -23,6 +23,8 @@ const RENAMED_COLUMNS: MadridColumnRenames = { sale_receipt_guests: { guests: "g
 /** Tables added after the capture; the seed writes no row to them. */
 const ADDED_TABLES = [
   "adjustment_lines",
+  "bill_identities",
+  "bill_number_allocations",
   "order_portion_events",
   "order_portions",
   "recovery_packs",

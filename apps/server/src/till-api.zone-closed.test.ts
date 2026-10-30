@@ -16,6 +16,7 @@ import {
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import {
+  billIdentities,
   configureZone,
   createServiceZone,
   orderServiceContexts,
@@ -324,8 +325,10 @@ describe("existing service in a closed zone", () => {
       const seated = await seat(v);
       await withTransaction(suite.db, async (tx) => {
         await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, seated.partyId));
-        if (kind === "first order")
+        if (kind === "first order") {
+          await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, seated.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, seated.tabId));
+        }
       });
       const before = await orderRows();
       let draft: { id: string; revision: number; lines: { id: string }[] } | undefined;
@@ -469,6 +472,7 @@ describe("moving into closed zones", () => {
       if (target === "no bill" || target === "held table without a bill")
         await withTransaction(suite.db, async (tx) => {
           await tx.update(parties).set({ mainBillId: null }).where(eq(parties.id, source.partyId));
+          await tx.delete(billIdentities).where(eq(billIdentities.workingOrderId, source.tabId));
           await tx.delete(workingOrders).where(eq(workingOrders.id, source.tabId));
         });
       const before = await moveRows();

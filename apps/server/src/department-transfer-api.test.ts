@@ -51,6 +51,8 @@ import { takeBillPayment } from "./testing/bill-payment-fixture.js";
 import { closeParty, openParty } from "./testing/party-close-fixture.js";
 import { mergeCheckedBills } from "./testing/bill-action-fixture.js";
 import { takeIntoParty } from "./testing/move-bill-fixture.js";
+import { numberBill } from "./testing/bill-identities.js";
+import { VENUE_SERVICE } from "./modules.js";
 import { LiveEvents, changeSubscriber } from "./live-api.js";
 import { AppError, decimal } from "@waitron/shared";
 import { insertCapturedPayment, SimulatorPaymentProvider } from "@waitron/payments";
@@ -1568,6 +1570,7 @@ describe("department transfer tab lifecycle", () => {
     const party = await withTransaction(suite.db, async (tx) => {
       const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
       await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+      await numberBill(tx, f.tab, party.partyId);
       return party.partyId;
     });
     const id = await pendingPartyFixture(f);
@@ -1590,6 +1593,7 @@ describe("department transfer tab lifecycle", () => {
         });
         await writePartyAllergy(tx, party.partyId, { answer: "none", guests: [] }, personId);
         await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+        await numberBill(tx, f.tab, party.partyId);
         const priced = await priceForIssuance(tx, v.clock, v.backend, v.cfg, f.tab);
         await issueUnpaidInvoice(tx, v.backend, v.cfg, priced, personId);
         await tx.update(workingOrders).set({ status: "placed" }).where(eq(workingOrders.id, f.tab));
@@ -1608,6 +1612,8 @@ describe("department transfer tab lifecycle", () => {
               mergedIntoPartyId: root.partyId,
             })
             .where(eq(parties.id, party.partyId));
+          // As combineParties does when it closes a party into another.
+          await VENUE_SERVICE.rescopeBillNumbers(tx, party.partyId, root.partyId);
           return root.partyId;
         }
         return party.partyId;
@@ -1646,7 +1652,9 @@ describe("department transfer tab lifecycle", () => {
     const party = await withTransaction(suite.db, async (tx) => {
       const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
       await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+      await numberBill(tx, f.tab, party.partyId);
       await takeIntoParty(tx, v.cfg, target.tab, party.partyId, f.az);
+      await numberBill(tx, target.tab, party.partyId);
       return party.partyId;
     });
     const id = await pendingPartyFixture(f);
@@ -1663,6 +1671,7 @@ describe("department transfer tab lifecycle", () => {
     await withTransaction(suite.db, async (tx) => {
       const party = await openParty(tx, { tableId: table, guestCount: null, operatorId: personId });
       await takeIntoParty(tx, v.cfg, f.tab, party.partyId, f.az);
+      await numberBill(tx, f.tab, party.partyId);
     });
     await withdrawn(f, id);
   });

@@ -149,6 +149,7 @@ import "./errors.js";
 export type { BusinessDayClockConflict } from "./module.js";
 
 export type * from "./party-allergy.js";
+export type * from "./bill-identity.js";
 
 export type {
   InitialSetupContext,

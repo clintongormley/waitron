@@ -10,6 +10,13 @@ import {
   splitPartyAllergies,
 } from "./party-allergy.js";
 import {
+  allocateBillNumber,
+  readBillIdentities,
+  releaseBillNumber,
+  rescopeBillNumbers,
+  setBillName,
+} from "./bill-identities.js";
+import {
   copyTicketAllergy,
   recordTicketAllergies,
   readTicketAllergies,
@@ -146,6 +153,11 @@ export const VENUE_SERVICE: VenueServiceContribution = {
   mergePartyAllergies,
   moveBillAllergies,
   splitPartyAllergies,
+  allocateBillNumber,
+  rescopeBillNumbers,
+  releaseBillNumber,
+  setBillName,
+  readBillIdentities,
   kitchenNoteKey,
   readKitchenNotes,
   writeKitchenNote,

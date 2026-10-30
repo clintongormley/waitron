@@ -340,14 +340,15 @@ el nombre y el NIF del proveedor son datos personales si el proveedor es autóno
 - Seguridad: como en todas las entradas. Las notas son texto libre, así que pide al personal que
   escriba solo lo que necesita el servicio.
 
-**Nombres de mesa y notas.** El personal puede dar un nombre a una mesa en la caja y escribir notas
-en un pedido o en un plato para la cocina.
+**Nombres de mesa y notas.** El personal puede dar un nombre a una mesa, o a una de sus cuentas, en
+la caja y escribir notas en un pedido o en un plato para la cocina.
 
 - Finalidad: encontrar la mesa correcta y decir a la cocina lo que necesita cada pedido.
 - Interesados: los clientes de una mesa, y cualquier persona que nombre una nota.
 - Datos: el nombre escrito para la mesa, que se imprime en las comandas de cocina y en los recibos y
-  facturas de la mesa, también en el PDF que se envía por correo, y las notas escritas en pedidos y
-  platos, que se imprimen en las comandas de cocina. Una nota es texto libre y puede mencionar la
+  facturas de la mesa, también en el PDF que se envía por correo; el nombre escrito para una cuenta,
+  que solo muestra la caja; y las notas escritas en pedidos y platos, que se imprimen en las comandas
+  de cocina. Una nota es texto libre y puede mencionar la
   salud, como una dieta, así que pregunta a tu asesor cómo tratarla.
 - Destinatarios: tu proveedor de correo, por cada factura que envías por correo; _cualquier otro con
   quien los compartas_.

@@ -72,6 +72,8 @@ const heldOrder = {
   outstanding: "1.50",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-10-16T10:00:00.000Z",
   signals: [],
 };
@@ -271,6 +273,8 @@ describe("till-counter-screen", () => {
         outstanding: "3.00",
         hasPayments: false,
         partyId: null,
+        billNumber: null,
+        billName: null,
         openedAt: "2026-08-05T10:00:00.000Z",
         signals: [],
       },

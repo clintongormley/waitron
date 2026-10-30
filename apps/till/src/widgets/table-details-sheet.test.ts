@@ -416,6 +416,28 @@ describe("till-table-details-sheet", () => {
     expect(text(el, "[data-unsent]")).toBe("Bill 1 · Luis has an unsent order: 2 items");
   });
 
+  it("A803 bill names: an unsent order on a bill stored with no number reads «Bill» and never null", async () => {
+    const el = await mount({
+      table: table({
+        ...seated,
+        party: party({
+          outstanding: "5.00",
+          unsentDrafts: [
+            {
+              billId: "bill-1",
+              billNumber: null,
+              ownerId: "p-luis",
+              ownerName: "Luis",
+              lineCount: 2,
+              savedAt: "2026-10-26T12:00:00.000Z",
+            },
+          ],
+        }),
+      }),
+    });
+    expect(text(el, "[data-unsent]")).toBe("Bill · Luis has an unsent order: 2 items");
+  });
+
   it("keeps every bill/editor pair visible in the expanded detail alongside independent service signals", async () => {
     const el = await mount({
       table: table({

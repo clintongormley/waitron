@@ -362,6 +362,8 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "14.00",
   outstanding: "14.00",
@@ -371,13 +373,28 @@ const bill = (over: Partial<PartyBill>): PartyBill => ({
 });
 /** The party's main bill, and a bill split off it, both untouched. */
 const tabBill = bill({});
-const checkBill = bill({ workingOrderId: "wo-check", total: "30.00", outstanding: "30.00" });
-const paidBill = bill({ workingOrderId: "wo-paid", status: "settled", outstanding: "0.00" });
-const placedBill = bill({ workingOrderId: "wo-placed", status: "placed" });
+const checkBill = bill({
+  workingOrderId: "wo-check",
+  billNumber: 2,
+  total: "30.00",
+  outstanding: "30.00",
+});
+const paidBill = bill({
+  workingOrderId: "wo-paid",
+  billNumber: 3,
+  status: "settled",
+  outstanding: "0.00",
+});
+const placedBill = bill({ workingOrderId: "wo-placed", billNumber: 4, status: "placed" });
 /** Open, with money already received against it. */
-const partlyPaidBill = bill({ workingOrderId: "wo-part", outstanding: "4.00", hasPayments: true });
+const partlyPaidBill = bill({
+  workingOrderId: "wo-part",
+  billNumber: 5,
+  outstanding: "4.00",
+  hasPayments: true,
+});
 /** Open, but recorded on a party merged into this one. */
-const mergedPartyBill = bill({ workingOrderId: "wo-merged", partyId: "v0" });
+const mergedPartyBill = bill({ workingOrderId: "wo-merged", billNumber: 6, partyId: "v0" });
 const partyBills = () => ({
   party: anaParty,
   bills: [tabBill, checkBill, paidBill, placedBill, partlyPaidBill, mergedPartyBill],
@@ -3985,7 +4002,12 @@ describe("till-table-order-screen", () => {
     it("keeps the current store when only one bill is open", async () => {
       const { el } = await mount({
         party: anaParty,
-        bills: [tabBill, paidBill, placedBill, mergedPartyBill],
+        bills: [
+          tabBill,
+          { ...paidBill, billNumber: 2 },
+          { ...placedBill, billNumber: 3 },
+          { ...mergedPartyBill, billNumber: 4 },
+        ],
         orderId: "wo-4",
         courses,
       });
@@ -3996,7 +4018,7 @@ describe("till-table-order-screen", () => {
     it("does not invent a new bill when the party has no main bill", async () => {
       const { el } = await mount({
         party: { ...anaParty, mainBillId: null },
-        bills: [paidBill, checkBill],
+        bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
@@ -4030,15 +4052,15 @@ describe("till-table-order-screen", () => {
       const { el } = await mount({ ...partyBills(), orderId: "wo-check", courses });
       await ringCafe(el);
       (grid(el).store as DraftStore).billStatus = "abandoned";
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }];
       await el.updateComplete;
       expect(await submitDraft(el, "send-all")).toBeUndefined();
       expect(grid(el).store.lines.map((line) => line.quantity)).toEqual(["1"]);
       expect(el.orderId).toBe("wo-check");
     });
 
-    it("keeps bill identity when a new sibling takes the abandoned bill's display number", async () => {
-      const thirdBill = bill({ workingOrderId: "wo-third" });
+    it("keeps bill identity when the bill on screen is abandoned beside an open sibling", async () => {
+      const thirdBill = bill({ workingOrderId: "wo-third", billNumber: 3 });
       const { el } = await mount({
         party: anaParty,
         bills: [tabBill, checkBill, thirdBill],
@@ -4048,7 +4070,7 @@ describe("till-table-order-screen", () => {
       await ringCafe(el);
       const own = grid(el).store;
       (own as DraftStore).billStatus = "abandoned";
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }, thirdBill];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }, thirdBill];
       await el.updateComplete;
       expect(await submitDraft(el, "send-all")).toBeUndefined();
       expect(grid(el).store).toBe(own);
@@ -4086,14 +4108,14 @@ describe("till-table-order-screen", () => {
     it("does not switch stores when another device creates the party's main bill", async () => {
       const { el } = await mount({
         party: { ...anaParty, mainBillId: null },
-        bills: [paidBill, checkBill],
+        bills: [{ ...paidBill, billNumber: 1 }, checkBill],
         orderId: "wo-check",
         courses,
       });
       await ringCafe(el);
       const own = grid(el).store;
       el.party = { ...anaParty, mainBillId: "wo-4" };
-      el.bills = [paidBill, checkBill, tabBill];
+      el.bills = [{ ...paidBill, billNumber: 1 }, checkBill, { ...tabBill, billNumber: 3 }];
       await el.updateComplete;
       await assertOwnSend(el, own);
       expect(el.orderId).toBe("wo-check");
@@ -4793,6 +4815,18 @@ describe("till-table-order-screen", () => {
           },
         ]);
         expect(billChoice(el)).toBeNull();
+      });
+
+      it("names a bill called after a slot as typed when asking where it goes", async () => {
+        const { el } = await mount({
+          ...onCheck(),
+          bills: [tabBill, { ...checkBill, billName: "{into}" }, paidBill],
+        });
+        await toMoveBill(el);
+        target(el, "t7")!.click();
+        await el.updateComplete;
+
+        expect(billChoice(el)!.scope).toBe("Ana · Bill 2 · {into} to Luis (Mesa 7)");
       });
 
       it("sends the party the bill choice names, though the floor read since seats another there", async () => {
@@ -5912,6 +5946,170 @@ describe("till-table-order-screen", () => {
       expect(named).toEqual([{ name: "Ana" }]);
     });
 
+    describe("A803 name bill", () => {
+      type BillDialog = HTMLElement & {
+        bill: string;
+        value: string;
+        savedValue: string | undefined;
+        refusal: string;
+      };
+      const billDialog = (el: TillTableOrderScreen) =>
+        el.shadowRoot!.querySelector<BillDialog>("till-bill-name-dialog");
+      /** Ana's second bill on screen, named "Desserts", with the floor around her. */
+      const onCheck = () => ({
+        lines: [pendingLine],
+        orderId: "wo-check",
+        ...partyTables(),
+        bills: [tabBill, { ...checkBill, billName: "Desserts" }, paidBill],
+      });
+      async function openBillNaming(el: TillTableOrderScreen): Promise<BillDialog> {
+        await toMenu(el);
+        click(el, '[data-action="name-bill"]');
+        await el.updateComplete;
+        return billDialog(el)!;
+      }
+      const confirm = (dialog: HTMLElement, name: string | null) =>
+        dialog.dispatchEvent(
+          new CustomEvent("bill-name-confirm", {
+            detail: { name },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+
+      it("offers Name this bill, right after Name the party, for the bill on screen at a table", async () => {
+        const { el } = await mount(onCheck());
+        await toMenu(el);
+
+        const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
+        expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
+        expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(
+          action,
+        );
+      });
+
+      it("does not offer Name this bill for a counter order", async () => {
+        const { el } = await mount({ ...onCheck(), party: null });
+        await toMenu(el);
+
+        expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
+      });
+
+      it("does not offer Name this bill while the bill on screen is not in the party's list", async () => {
+        const { el } = await mount({ ...onCheck(), bills: [tabBill, paidBill] });
+        await toMenu(el);
+
+        expect(el.shadowRoot!.querySelector('[data-action="name"]')).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
+      });
+
+      it("opens the window headed with the bill on screen and its stored name in the field", async () => {
+        const { el } = await mount(onCheck());
+
+        const dialog = await openBillNaming(el);
+
+        expect(dialog.bill).toBe(
+          t("table.bill_of_named")
+            .replace("{party}", "Ana")
+            .replace("{n}", "2")
+            .replace("{name}", "Desserts"),
+        );
+        expect(dialog.value).toBe("Desserts");
+        expect(dialog.savedValue).toBe("Desserts");
+        expect(dialog.refusal).toBe("");
+        expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      });
+
+      it("opens an unnamed bill's window empty", async () => {
+        const { el } = await mount({ ...onCheck(), bills: [tabBill, checkBill] });
+
+        const dialog = await openBillNaming(el);
+
+        expect(dialog.value).toBe("");
+        expect(dialog.savedValue).toBe("");
+      });
+
+      it("sends name-bill with the bill's id and the name, and closes the window", async () => {
+        const { el } = await mount(onCheck());
+        const named = heard(el, "name-bill");
+        const dialog = await openBillNaming(el);
+
+        confirm(dialog, "Clint");
+        await el.updateComplete;
+
+        expect(named).toEqual([{ billId: "wo-check", name: "Clint" }]);
+        expect(billDialog(el)).toBeNull();
+      });
+
+      it("closes the window on Cancel, sending nothing", async () => {
+        const { el } = await mount(onCheck());
+        const named = heard(el, "name-bill");
+        const dialog = await openBillNaming(el);
+
+        dialog.dispatchEvent(
+          new CustomEvent("bill-name-cancel", { bubbles: true, composed: true }),
+        );
+        await el.updateComplete;
+
+        expect(named).toEqual([]);
+        expect(billDialog(el)).toBeNull();
+      });
+
+      it("reopens the window with the name sent and the refusal when the app hands one back for that bill", async () => {
+        const { el } = await mount(onCheck());
+
+        el.billNameRefusal = {
+          billId: "wo-check",
+          name: "x".repeat(41),
+          message: t("table.name_too_long"),
+        };
+        await el.updateComplete;
+
+        const dialog = billDialog(el)!;
+        expect(dialog.value).toBe("x".repeat(41));
+        expect(dialog.refusal).toBe(t("table.name_too_long"));
+        expect(dialog.bill).toContain("Desserts");
+      });
+
+      it("leaves an open window for another bill as it is when a refusal for a different bill arrives", async () => {
+        const { el } = await mount(onCheck());
+        const dialog = await openBillNaming(el);
+
+        el.billNameRefusal = { billId: "wo-4", name: "Clint", message: t("table.name_too_long") };
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBe(dialog);
+        expect(dialog.value).toBe("Desserts");
+        expect(dialog.refusal).toBe("");
+        expect(dialog.bill).toContain("Desserts");
+      });
+
+      it("shows the bill's name stored elsewhere as the window's stored value", async () => {
+        const { el } = await mount(onCheck());
+        const dialog = await openBillNaming(el);
+
+        el.bills = [tabBill, { ...checkBill, billName: "Mains" }, paidBill];
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBe(dialog);
+        expect(dialog.savedValue).toBe("Mains");
+      });
+
+      it("closes the window, sending nothing, when the screen switches to another party", async () => {
+        const floor = onCheck();
+        const { el } = await mount(floor);
+        const named = heard(el, "name-bill");
+        await openBillNaming(el);
+
+        el.party = { ...floor.party, id: "v8", revision: 1 };
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBeNull();
+        expect(named).toEqual([]);
+      });
+    });
+
     it("offers Guests right after Name the party whenever a party is open", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
@@ -6069,6 +6267,7 @@ describe("till-table-order-screen", () => {
         total: "20.00",
         outstanding: "20.00",
         hasPayments: true,
+        billNumber: 3,
       });
       for (const verb of ["merge", "transfer"]) {
         const { el } = await mount({
@@ -6120,6 +6319,24 @@ describe("till-table-order-screen", () => {
       expect(itemsHeading).toBe("Choose items to transfer from Ana · Bill 1 to Ana · Bill 2");
     });
 
+    it("heads a transfer from a bill named after a slot with both bills' names as typed", async () => {
+      const { el } = await mount({
+        party: anaParty,
+        bills: [{ ...tabBill, billName: "{to}" }, { ...checkBill, billName: "{from}" }, paidBill],
+        lines: [pendingLine],
+        orderId: "wo-4",
+      });
+      await toMenu(el);
+      click(el, '[data-action="transfer"]');
+      await el.updateComplete;
+      click(el, '[data-target="wo-check"]');
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector("[data-transfer-lines] h2")!.textContent!.trim()).toBe(
+        "Choose items to transfer from Ana · Bill 1 · {to} to Ana · Bill 2 · {from}",
+      );
+    });
+
     it("heads the transfer's items plainly once the bill they go to leaves the party's bills", async () => {
       const { el } = await mount({ ...partyBills(), lines: [pendingLine], orderId: "wo-4" });
       await toMenu(el);
@@ -6128,7 +6345,7 @@ describe("till-table-order-screen", () => {
       click(el, '[data-target="wo-check"]');
       await el.updateComplete;
 
-      el.bills = [tabBill, { ...checkBill, status: "abandoned" }];
+      el.bills = [tabBill, { ...checkBill, billNumber: null, status: "abandoned" }];
       await el.updateComplete;
 
       expect(el.shadowRoot!.querySelector("[data-transfer-lines] h2")!.textContent!.trim()).toBe(
@@ -6474,7 +6691,7 @@ describe("till-table-order-screen", () => {
         lines: [pendingLine],
         orderId: "wo-4",
         party: anaParty,
-        bills: [tabBill, paidBill, placedBill],
+        bills: [tabBill, { ...paidBill, billNumber: 2 }, { ...placedBill, billNumber: 3 }],
       });
       await toMenu(el);
       click(el, '[data-action="merge"]');

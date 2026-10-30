@@ -31,6 +31,8 @@ const bill: PartyBill = {
   recipient: null,
   partyId: "v1",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "21.00",
   outstanding: "21.00",

@@ -7,7 +7,7 @@ import { VENUE_SERVICE_CLASSIFICATION } from "./classification.js";
 import * as schema from "./schema/index.js";
 
 const tables = VENUE_SERVICE_CLASSIFICATION.map((c) => c.table);
-const immutableTables = ["sale_receipt_headers"];
+const immutableTables = ["sale_receipt_headers", "bill_number_allocations"];
 export const VENUE_SERVICE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,

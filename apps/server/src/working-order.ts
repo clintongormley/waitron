@@ -1738,6 +1738,7 @@ export async function createOpenOrder(
     partyId: placement.partyId ?? null,
     receiptLocale: placement.receiptLocale ?? null,
   });
+  if (placement.partyId) await VENUE_SERVICE.allocateBillNumber(tx, id, placement.partyId);
 
   if (placement.kitchenNote !== undefined) {
     await VENUE_SERVICE.writeKitchenNote(tx, { workingOrderId: id }, 0, placement.kitchenNote);
@@ -5009,6 +5010,10 @@ export interface HeldOrderSummary {
   formerNumbers?: number[];
   /** Null for a counter order; a party's bill is listed here too. */
   partyId: string | null;
+  /** The number the bill holds at its table; null for a counter order, or a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
+  billName: string | null;
   openedAt: string;
 }
 
@@ -5123,13 +5128,20 @@ export async function listHeldOrders(
     const former = await readFormerNumbers(tx, ids);
     const items = await readOrderPreviewItems(tx, ids);
     const counts = await readOrderStateCounts(tx, ids);
+    const identities = await VENUE_SERVICE.readBillIdentities(
+      tx,
+      rows.flatMap((row) => (row.partyId === null ? [] : [row.id])),
+    );
     return rows.map((row) => {
       const total = rawCentsToDecimal(row.total);
+      const identity = identities.get(row.id);
       return {
         id: row.id,
         orderNumber: row.orderNumber,
         label: row.label,
         partyId: row.partyId,
+        billNumber: identity?.number ?? null,
+        billName: identity?.name ?? null,
         counts: counts.get(row.id)!,
         openedAt: row.openedAt,
         ...optional("tableLabel", tableLabels.get(row.id) ?? undefined),
@@ -8593,7 +8605,10 @@ export interface TableParty {
   billCount: number;
   /** Every table the party sits at, in the order they joined it. */
   tableIds: string[];
-  /** Each open draft on the party holding a line, oldest first. */
+  /**
+   * Each open draft on the party holding a line, in its bill's number order; a bill with no number
+   * comes last.
+   */
   unsentDrafts: UnsentDraft[];
   /**
    * The held group waiting to be released and when it is due; null with no held group, with
@@ -8690,6 +8705,7 @@ export async function listTablesWithState(
   annotators: readonly FloorAnnotator[] = [],
   locationId?: string,
   now: Date = new Date(),
+  log?: Logger,
 ): Promise<TableState[]> {
   const loc = locationId ?? cfg.locationId;
   const result = await tx.execute<{
@@ -8786,7 +8802,7 @@ export async function listTablesWithState(
   `);
 
   const today = await readTodayTables(tx, loc);
-  const { seated, facts } = await readSeatedParties(tx, loc);
+  const { seated, facts } = await readSeatedParties(tx, loc, log);
   const allergicParties = await VENUE_SERVICE.partiesWithAllergicGuests(tx, [
     ...new Set([...seated.values()].map((party) => party.id)),
   ]);
@@ -8988,6 +9004,7 @@ interface Labelled {
 async function readSeatedParties(
   tx: Transaction,
   locationId: string,
+  log: Logger | undefined,
 ): Promise<{ seated: Map<string, TableParty>; facts: Map<string, SeatedPartyFacts> }> {
   const members = await tx
     .select({
@@ -9013,7 +9030,7 @@ async function readSeatedParties(
   }
   const partyIds = [...firstZones.keys()];
   const labels = await partyTableLabels(tx, partyIds);
-  const bills = await readBillsOfParties(tx, partyIds);
+  const bills = await readBillsOfParties(tx, partyIds, log);
   const unsentDrafts = await readUnsentDrafts(tx, partyIds, bills);
   const reminders = await readReleaseReminders(tx, partyIds, firstZones);
   const notes = await VENUE_SERVICE.readKitchenNotes(

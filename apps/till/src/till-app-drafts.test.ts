@@ -9076,6 +9076,8 @@ describe("A773 Pay saves the bill's New order before payment", () => {
       outstanding: "3.00",
       hasPayments: false,
       receiptAvailable: false,
+      billNumber: 1,
+      billName: null,
     },
   ];
   const unsent = {
@@ -9378,6 +9380,8 @@ describe("A773 non-open bill draft restrictions", () => {
     outstanding: "3.00",
     hasPayments: false,
     receiptAvailable: status !== "open",
+    billNumber: status === "abandoned" ? null : 1,
+    billName: null,
   });
 
   it.each(["placed", "settled", "abandoned"] as const)(
@@ -9427,7 +9431,7 @@ describe("A773 non-open bill draft restrictions", () => {
 
 describe("A773 known bill draft switch restrictions", () => {
   it("switching to a known paid bill cannot open an editable draft", async () => {
-    const bills = ["wo-4", "wo-check"].map((id) => ({
+    const bills = ["wo-4", "wo-check"].map((id, index) => ({
       workingOrderId: id,
       revision: 0,
       invoiceType: "F2",
@@ -9439,6 +9443,8 @@ describe("A773 known bill draft switch restrictions", () => {
       outstanding: id === "wo-4" ? "3.00" : "0.00",
       hasPayments: false,
       receiptAvailable: id !== "wo-4",
+      billNumber: index + 1,
+      billName: null,
     }));
     const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue(bills) });
     const order = await openTable(el);
@@ -10368,7 +10374,7 @@ describe("held-line move editing authority", () => {
         }),
       ),
       getPartyBills: vi.fn().mockResolvedValue(
-        ["wo-4", "wo-7"].map((workingOrderId) => ({
+        ["wo-4", "wo-7"].map((workingOrderId, index) => ({
           workingOrderId,
           revision: 0,
           invoiceType: "F2",
@@ -10380,6 +10386,8 @@ describe("held-line move editing authority", () => {
           outstanding: "4.00",
           hasPayments: false,
           receiptAvailable: false,
+          billNumber: index + 1,
+          billName: null,
         })),
       ),
     });

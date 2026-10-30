@@ -130,6 +130,8 @@ const heldSummary: HeldOrderSummary = {
   outstanding: "3.00",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-08-05T10:00:00.000Z",
   signals: [],
 };
@@ -206,6 +208,8 @@ const smallPartyBill: PartyBill = {
   recipient: null,
   partyId: "v-2",
   label: null,
+  billNumber: 1,
+  billName: null,
   status: "open",
   total: "12.00",
   outstanding: "12.00",
@@ -23779,7 +23783,10 @@ describe("A737 Find a bill page", () => {
       getTablesState: vi.fn().mockResolvedValue([openTable]),
       getPartyBills: vi
         .fn()
-        .mockResolvedValue([smallPartyBill, { ...smallPartyBill, workingOrderId: "wo-other" }]),
+        .mockResolvedValue([
+          smallPartyBill,
+          { ...smallPartyBill, workingOrderId: "wo-other", billNumber: 2 },
+        ]),
       getTabLines,
     });
     counter.store.addProduct(cafe, "1");
@@ -24204,6 +24211,8 @@ describe("A767 sign-in and held-order recovery", () => {
     outstanding: "3.00",
     hasPayments: false,
     partyId: null,
+    billNumber: null,
+    billName: null,
     openedAt: "2026-10-16T12:00:00.000Z",
     signals: [],
   });

@@ -546,6 +546,8 @@ it("keeps a usable basket and payment controls when many orders are held", async
     outstanding: "7.80",
     hasPayments: false,
     partyId: null,
+    billNumber: null,
+    billName: null,
     openedAt: "2026-10-08T12:00:00.000Z",
     signals: [],
   }));

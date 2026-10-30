@@ -22,13 +22,15 @@ const party: TableParty = {
   unsentDrafts: [],
   reminder: null,
 };
-const bills: PartyBill[] = ["main", "other"].map((workingOrderId) => ({
+const bills: PartyBill[] = ["main", "other"].map((workingOrderId, index) => ({
   workingOrderId,
   revision: 0,
   invoiceType: "F2",
   recipient: null,
   partyId: "party",
   label: null,
+  billNumber: index + 1,
+  billName: null,
   status: "open",
   total: "6.00",
   outstanding: "6.00",

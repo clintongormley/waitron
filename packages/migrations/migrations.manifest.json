@@ -36,7 +36,7 @@
     "name": "venue-service",
     "table": "__drizzle_migrations_venue_service",
     "from": "../venue-service/drizzle",
-    "appendOnlyTables": ["sale_receipt_headers"]
+    "appendOnlyTables": ["sale_receipt_headers", "bill_number_allocations"]
   },
   {
     "name": "media",

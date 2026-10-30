@@ -21,6 +21,18 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { readPartyAllergy, savePartyAllergy, setAllergyLineTicks } from "./party-allergy.js";
 
+/** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */
+function removeMigrations(folder: string, entries: readonly { tag: string }[]): string[] {
+  const created = new Set<string>();
+  for (const { tag } of entries) {
+    const file = join(folder, `${tag}.sql`);
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/CREATE TABLE `(\w+)`/g))
+      created.add(name!);
+    rmSync(file);
+  }
+  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+}
+
 const predecessor = mkdtempSync(join(tmpdir(), "party-allergy-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
 cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
@@ -30,8 +42,7 @@ const introduced = journal.entries.findIndex(({ tag }) =>
   /CREATE TABLE `party_allergy`/.test(readFileSync(join(predecessor, `${tag}.sql`), "utf8")),
 );
 if (introduced < 0) throw new Error("Missing party allergy introduction");
-for (const entry of journal.entries.splice(introduced))
-  rmSync(join(predecessor, `${entry.tag}.sql`));
+const predecessorAppendOnly = removeMigrations(predecessor, journal.entries.splice(introduced));
 writeFileSync(journalPath, JSON.stringify(journal));
 // Stops at this migration: a later table rebuild drops that table's change-feed triggers, which
 // the server's start reinstalls (`installChangeFeed`, apps/server/src/boot.ts).
@@ -42,15 +53,21 @@ const upgradedJournalPath = join(upgraded, "meta", "_journal.json");
 const upgradedJournal = JSON.parse(readFileSync(upgradedJournalPath, "utf8")) as {
   entries: { tag: string }[];
 };
-for (const entry of upgradedJournal.entries.splice(introduced + 1))
-  rmSync(join(upgraded, `${entry.tag}.sql`));
+const upgradedAppendOnly = removeMigrations(
+  upgraded,
+  upgradedJournal.entries.splice(introduced + 1),
+);
 writeFileSync(upgradedJournalPath, JSON.stringify(upgradedJournal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
     CORE_MIGRATIONS,
     CATALOGUE_MIGRATIONS,
-    { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: predecessor },
+    {
+      ...VENUE_SERVICE_MIGRATIONS,
+      migrationsFolder: predecessor,
+      appendOnlyTables: predecessorAppendOnly,
+    },
   ],
 });
 
@@ -110,7 +127,11 @@ it("upgrades a populated predecessor with change-feed triggers, preserving every
   const triggers = suite.db.all(
     sql`select name, sql from sqlite_master where type = 'trigger' order by name`,
   );
-  await applyMigrationSet(suite.db, { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: upgraded });
+  await applyMigrationSet(suite.db, {
+    ...VENUE_SERVICE_MIGRATIONS,
+    migrationsFolder: upgraded,
+    appendOnlyTables: upgradedAppendOnly,
+  });
   expect(await suite.db.select().from(locations)).toEqual([location]);
   expect(await suite.db.select().from(parties)).toEqual([party]);
   expect(await suite.db.select().from(workingOrders)).toEqual([order]);

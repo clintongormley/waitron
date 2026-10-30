@@ -1533,6 +1533,23 @@ whether those reads should follow today's map once a group is left.
   half, `adjustment.free_not_allowed`). Plan:
   [A803 slice 1](../superpowers/plans/2026-10-27-a803-1-portions.md), Tasks 25a-7a and 25a-7b.
 
+- **A bill keeps its number while it stays with its seated party (owner, 2026-10-19; A803 slice
+  2).** Each new seating starts at Bill 1. A number is never given twice on one seated party, so a
+  bill that merges away leaves a gap, and a bill that arrives from another table takes the party's
+  next number. The numbers given are kept in `bill_number_allocations`
+  (`packages/venue-service/src/schema/bill-identities.ts`). Plan:
+  [A803 slice 2](../superpowers/plans/2026-10-30-a803-2-named-bills.md).
+
+- **A bill's name never prints on a kitchen ticket (owner, 2026-10-30; A803 slice 2, answer 1).**
+
+- **Renaming a bill that holds someone else's unsent dishes needs a take-over first (owner,
+  2026-10-30; A803 slice 2, answer 4)**, as editing those dishes would. The till's refusal offers
+  the take-over in place.
+
+- **A table bill stored with no number is shown unnumbered, not refused (owner, 2026-10-30; A803
+  slice 2, answer 5).** It is a fault in Waitron: the floor and the bill list carry on, and the
+  server logs `bill.number_missing` naming only the bill and its party.
+
 ### A paid bill may leave its party for the counter once (A758-7, 2026-10-22)
 
 The database's freeze on a paid (settled) bill has one exception, added by the core migration
@@ -2489,7 +2506,7 @@ Q42 answer is required. New copy still follows the plan's wording-review gate.
 The [A773-1 plan](../superpowers/plans/2026-10-16-a773-1-unsent-list.md) and
 [ownership design](../superpowers/specs/2026-10-17-a773-one-editor-design.md) govern the landed
 Sent/New order and bill ownership behavior. Physical dragging and partial-serving trials remain
-separate backlog entries. A803 owns its bill naming and pass/station presentation tail.
+separate backlog entries. A803 owns its pass/station presentation tail.
 
 ## A678. Two readers answer "where is this order"
 

@@ -1205,6 +1205,8 @@ describe("A768 the left draft saves in the background", () => {
         invoiceType: "F2",
         recipient: null,
         label: null,
+        billNumber: 1,
+        billName: null,
         total: "0.00",
         outstanding: "0.00",
         hasPayments: false,

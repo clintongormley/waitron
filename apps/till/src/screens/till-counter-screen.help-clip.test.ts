@@ -32,6 +32,8 @@ const heldOrder: HeldOrderSummary = {
   outstanding: "1.50",
   hasPayments: false,
   partyId: null,
+  billNumber: null,
+  billName: null,
   openedAt: "2026-10-16T10:00:00.000Z",
   signals: [],
 };

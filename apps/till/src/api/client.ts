@@ -897,7 +897,8 @@ export type SubmittedDraft = SubmittedGroups & BillDraftSnapshot;
 /** One bill’s saved unsent dishes; `lineCount` counts rows, not units. */
 export interface UnsentDraft {
   billId: string;
-  billNumber: number;
+  /** Null when the bill was stored with no number, a fault in Waitron. */
+  billNumber: number | null;
   ownerId: string;
   ownerName: string;
   lineCount: number;
@@ -1350,6 +1351,10 @@ export interface HeldOrderSummary {
   hasPayments: boolean;
   /** Null for a counter order; a party's own bill is listed too. */
   partyId: string | null;
+  /** The number the bill holds at its table; null for a counter order, or a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill at its table; null for a counter order or an unnamed bill. */
+  billName: string | null;
   openedAt: string;
   /** The bill's own dishes ready at a station, and its long wait. */
   signals: KitchenSignal[];
@@ -2132,6 +2137,11 @@ export interface PartyBill {
   } | null;
   partyId: string;
   label: string | null;
+  /** The number the bill holds at its table; null when the bill is abandoned, or when a bill at a
+   * table was stored with none, which is a fault in Waitron. */
+  billNumber: number | null;
+  /** The name staff gave the bill; null when it has none. */
+  billName: string | null;
   status: "open" | "placed" | "settled" | "abandoned";
   total: string;
   outstanding: string;
@@ -4688,6 +4698,21 @@ export class TillApi {
       guestCount,
       expectedPartyRevision,
     });
+  }
+
+  /**
+   * Name a bill, or clear its name with null or "" → `PUT /api/bills/:id/name`, answering the
+   * party's revision and the bill's number and name. Rejects, among others, a name over 40
+   * characters as `management.request_invalid` naming the field `name`; unsent dishes another person
+   * is editing on the bill as `draft.taken_over`, until this person takes the bill over; a stale
+   * editor expectation as `draft.out_of_date`; and `party.out_of_date`.
+   */
+  setBillName(
+    billId: string,
+    name: string | null,
+    revisions: Required<BillRevisions> & { expectedEdit: BillEditExpected },
+  ): Promise<{ revision: number; billNumber: number | null; billName: string | null }> {
+    return this.#request(`/api/bills/${billId}/name`, "PUT", { name, ...revisions });
   }
 
   /**

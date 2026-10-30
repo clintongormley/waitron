@@ -14,7 +14,7 @@ import {
   tableTargetStyles,
   type SeatedRead,
 } from "./table-targets.js";
-import { paidInPart } from "../state/bill-state.js";
+import { billName, paidInPart } from "../state/bill-state.js";
 import { outOfServiceJoined, seatsGuests, shownName } from "../state/floor-today.js";
 import { signalChipStyles, signalChips } from "./signal-chips.js";
 import "./bill-choice-dialog.js";
@@ -38,6 +38,12 @@ export interface HeldRelocationOpenDetail {
   table: TableState;
   prompt: object;
   ready: () => void;
+}
+
+/** A table bill is named by its place in the table screen's bill wording ({@link billName}). */
+function heldLabel(order: HeldOrderSummary): string | null {
+  const place = orderLabel(order);
+  return order.partyId === null || place === null ? place : billName(place, order);
 }
 
 @customElement("till-held-orders")
@@ -226,7 +232,7 @@ export class TillHeldOrders extends LitElement {
   }
 
   #scope(order: HeldOrderSummary): string {
-    const label = orderLabel(order);
+    const label = heldLabel(order);
     return `#${order.orderNumber}${label ? ` ${label}` : ""}`;
   }
 
@@ -250,7 +256,7 @@ export class TillHeldOrders extends LitElement {
 
   #row(order: HeldOrderSummary): TemplateResult {
     const scope = this.#scope(order);
-    const label = orderLabel(order);
+    const label = heldLabel(order);
     return html`
       <div class="order" @click=${(event: Event) => this.#togglePreview(event, order.id)}>
         <button

@@ -25,6 +25,8 @@ function bill(status: PartyBill["status"]): PartyBill {
     recipient: null,
     partyId: "v1",
     label: null,
+    billNumber: status === "abandoned" ? null : 1,
+    billName: null,
     status,
     total: "10.00",
     outstanding: status === "open" ? "10.00" : "0.00",

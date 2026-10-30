@@ -9,8 +9,8 @@ import "@waitron/ui/src/components/wt-dialog.js";
 import "@waitron/ui/src/components/wt-form-actions.js";
 import "./equipment-scanner.js";
 import { trackDialog } from "./track-dialog.js";
-import { fill, optionLabel } from "./equipment-labels.js";
-import { carriedText, t } from "../i18n/t.js";
+import { optionLabel } from "./equipment-labels.js";
+import { carriedText, fill, t } from "../i18n/t.js";
 import { codeMessage } from "../i18n/codes.js";
 import type {
   DeviceEquipment,

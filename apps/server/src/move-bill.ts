@@ -258,6 +258,7 @@ async function moveBillOnce(
         ...(open ? { label: await counterLabel(tx, source) } : {}),
       })
       .where(eq(workingOrders.id, billId));
+    await VENUE_SERVICE.releaseBillNumber(tx, billId);
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     await relocateBillEditor(tx, billId, expectedEdit);
     result = { partyId: null, billId, merged: false };
@@ -271,6 +272,7 @@ async function moveBillOnce(
     if (source !== null)
       await VENUE_SERVICE.moveBillAllergies(tx, source.id, partyId, billId, options.operatorId);
     await takeIntoParty(tx, cfg, billId, partyId, destination.zoneId, () => recordAllergy(partyId));
+    await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     ({ held } = await groupArrivingDishes(
       tx,
@@ -311,6 +313,8 @@ async function moveBillOnce(
       });
       result = { partyId, billId: main, merged: true };
     } else {
+      // Only a bill that stays a bill of its own takes a number here: one merged away takes none.
+      await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
       await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
       if (main === null && open) await setMainBill(tx, partyId, billId);
       result = { partyId, billId, merged: false };
@@ -351,6 +355,7 @@ export async function moveSettledBillToCounter(
   await inheritKitchenNote(tx, cfg, from, { workingOrderId: billId }, "copy");
   await leaveParty(tx, billId);
   await tx.update(workingOrders).set({ partyId: null }).where(eq(workingOrders.id, billId));
+  await VENUE_SERVICE.releaseBillNumber(tx, billId);
   await relocateBillEditor(tx, billId, expectedEdit);
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);
   await enqueueMovedSlips(tx, cfg, before, billId);

@@ -28,6 +28,18 @@ import { VENUE_SERVICE_MIGRATIONS } from "./migrations.js";
 import { VENUE_SERVICE_CHANGE_SOURCES } from "./classification.js";
 import { savePartyAllergy, setAllergyLineTicks } from "./party-allergy.js";
 
+/** Removes `entries`' SQL from `folder`; answers the append-only tables less those it created. */
+function removeMigrations(folder: string, entries: readonly { tag: string }[]): string[] {
+  const created = new Set<string>();
+  for (const { tag } of entries) {
+    const file = join(folder, `${tag}.sql`);
+    for (const [, name] of readFileSync(file, "utf8").matchAll(/CREATE TABLE `(\w+)`/g))
+      created.add(name!);
+    rmSync(file);
+  }
+  return (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []).filter((name) => !created.has(name));
+}
+
 const predecessor = mkdtempSync(join(tmpdir(), "kitchen-allergy-predecessor-"));
 afterAll(() => rmSync(predecessor, { recursive: true, force: true }));
 cpSync(VENUE_SERVICE_MIGRATIONS.migrationsFolder, predecessor, { recursive: true });
@@ -38,17 +50,21 @@ const introduced = journal.entries.findIndex(({ tag }) =>
     readFileSync(join(predecessor, `${tag}.sql`), "utf8"),
   ),
 );
-if (introduced >= 0) {
-  for (const entry of journal.entries.splice(introduced))
-    rmSync(join(predecessor, `${entry.tag}.sql`));
-  writeFileSync(journalPath, JSON.stringify(journal));
-}
+const predecessorAppendOnly =
+  introduced >= 0
+    ? removeMigrations(predecessor, journal.entries.splice(introduced))
+    : (VENUE_SERVICE_MIGRATIONS.appendOnlyTables ?? []);
+if (introduced >= 0) writeFileSync(journalPath, JSON.stringify(journal));
 const suite = useVenueDb({
   resetPerTest: false,
   migrations: [
     CORE_MIGRATIONS,
     CATALOGUE_MIGRATIONS,
-    { ...VENUE_SERVICE_MIGRATIONS, migrationsFolder: predecessor },
+    {
+      ...VENUE_SERVICE_MIGRATIONS,
+      migrationsFolder: predecessor,
+      appendOnlyTables: predecessorAppendOnly,
+    },
   ],
 });
 

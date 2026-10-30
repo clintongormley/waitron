@@ -970,6 +970,8 @@ export const en = {
   "floor.held_fire_in": "Held {n} · fire in {m} min",
   "floor.held_fire_in_one": "Held 1 · fire in {m} min",
   "floor.unsent_bill": "Bill {n}",
+  // A bill stored with no number, a fault in Waitron.
+  "floor.unsent_bill_unnumbered": "Bill",
   "floor.unsent": "An unsent order: {n} items",
   "floor.unsent_one": "An unsent order: 1 item",
   "floor.unsent_owner": "{name} has an unsent order: {n} items",
@@ -1240,6 +1242,7 @@ export const en = {
   "table.no_other_tables": "No other tables",
   "table.action_split_table": "Split a table",
   "table.action_name": "Name the party",
+  "table.action_name_bill": "Name this bill",
   "table.action_guests": "Guests",
   "table.party_scope": "{name} ({tables})",
   "table.move_guests_heading": "Move {party} to:",
@@ -1258,6 +1261,12 @@ export const en = {
   "table.split_table_bill_heading": "{table} leaves {party}. Which bill goes with it?",
   "table.split_no_bill": "No bill, start an empty one",
   "table.name_title": "Name the party at {tables}",
+  "table.bill_name_title": "Name this bill: {bill}",
+  "table.bill_name_taken_over":
+    "{name} has dishes on this bill that are not sent yet, so the bill's name was not saved. Choose Take over draft to name it now, or name it once those dishes are sent.",
+  "table.bill_name_taken_over_unnamed":
+    "Someone else has dishes on this bill that are not sent yet, so the bill's name was not saved. Choose Take over draft to name it now, or name it once those dishes are sent.",
+  "table.bill_name_not_open": "That bill is no longer open, so its name was not saved.",
   "table.name_label": "Name",
   "table.name_too_long": "Use at most 40 characters",
   "table.name_save": "Save",
@@ -1468,8 +1477,13 @@ export const en = {
   "station.collect_error": "Could not mark the order collected, try again",
   "table.error": "Could not update the table, try again",
   "table.bills_title": "Bills",
-  // `{party}` is the party's display name; `{n}` the bill's place in the list.
+  // `{party}` is the party's display name; `{n}` the number the bill holds at its table; `{name}`
+  // the name staff gave the bill.
   "table.bill_of": "{party} · Bill {n}",
+  "table.bill_of_named": "{party} · Bill {n} · {name}",
+  // A bill stored with no number, a fault in Waitron.
+  "table.bill_of_unnumbered": "{party} · Bill",
+  "table.bill_of_unnumbered_named": "{party} · Bill · {name}",
   "table.bill_paid": "Paid",
   "table.bill_to_pay": "{amount} to pay",
   "table.bill_receipt": "Receipt copy",
@@ -2744,6 +2758,7 @@ export const es: Record<StringKey, string> = {
   "floor.held_fire_in": "{n} en espera · marchar en {m} min",
   "floor.held_fire_in_one": "1 en espera · marchar en {m} min",
   "floor.unsent_bill": "Cuenta {n}",
+  "floor.unsent_bill_unnumbered": "Cuenta",
   "floor.unsent": "Un pedido sin enviar: {n} artículos",
   "floor.unsent_one": "Un pedido sin enviar: 1 artículo",
   "floor.unsent_owner": "{name} tiene un pedido sin enviar: {n} artículos",
@@ -3005,7 +3020,8 @@ export const es: Record<StringKey, string> = {
   "table.action_split": "Dividir por artículo",
   "table.no_other_tables": "No hay otras mesas",
   "table.action_split_table": "Separar una mesa",
-  "table.action_name": "Poner nombre",
+  "table.action_name": "Poner nombre a los clientes",
+  "table.action_name_bill": "Poner nombre a esta cuenta",
   "table.action_guests": "Comensales",
   "table.party_scope": "{name} ({tables})",
   "table.move_guests_heading": "Mover {party} a:",
@@ -3024,6 +3040,12 @@ export const es: Record<StringKey, string> = {
   "table.split_table_bill_heading": "{table} se separa de {party}. ¿Qué cuenta se lleva?",
   "table.split_no_bill": "Sin cuenta, empezar una vacía",
   "table.name_title": "Poner nombre a los clientes de {tables}",
+  "table.bill_name_title": "Poner nombre a esta cuenta: {bill}",
+  "table.bill_name_taken_over":
+    "{name} tiene platos sin enviar en esta cuenta, así que no se ha guardado el nombre de la cuenta. Elige Tomar el pedido para ponérselo ahora, o pónselo cuando se envíen esos platos.",
+  "table.bill_name_taken_over_unnamed":
+    "Otra persona tiene platos sin enviar en esta cuenta, así que no se ha guardado el nombre de la cuenta. Elige Tomar el pedido para ponérselo ahora, o pónselo cuando se envíen esos platos.",
+  "table.bill_name_not_open": "Esa cuenta ya no está abierta, así que no se ha guardado el nombre.",
   "table.name_label": "Nombre",
   "table.name_too_long": "Usa como máximo 40 caracteres",
   "table.name_save": "Guardar",
@@ -3232,6 +3254,9 @@ export const es: Record<StringKey, string> = {
   "table.error": "No se pudo actualizar la mesa, inténtalo de nuevo",
   "table.bills_title": "Cuentas",
   "table.bill_of": "{party} · Cuenta {n}",
+  "table.bill_of_named": "{party} · Cuenta {n} · {name}",
+  "table.bill_of_unnumbered": "{party} · Cuenta",
+  "table.bill_of_unnumbered_named": "{party} · Cuenta · {name}",
   "table.bill_paid": "Pagada",
   "table.bill_to_pay": "{amount} por pagar",
   "table.bill_receipt": "Copia del ticket",

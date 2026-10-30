@@ -150,6 +150,7 @@ import { finishPartyService } from "./finish-party-service.js";
 import { parseFinishCancellations } from "./finish-party-input.js";
 import { mergeBills, splitBill, transferItems } from "./bill-actions.js";
 import type { BillCommand } from "./bill-actions.js";
+import { billNameZoneSubject, setBillName } from "./bill-identities.js";
 import { moveBill, moveWouldSend, previewBillMoveAllergy } from "./move-bill.js";
 import type { MoveBillOptions, MoveTarget, OtherPartyRead } from "./move-bill.js";
 import { joinTables, moveGuests, splitTable, type SplitGuestCounts } from "./table-actions.js";
@@ -2772,9 +2773,16 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const state = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         const scope = await readZoneScope(tx, deps.cfg, device.deviceProfileId);
-        return (await listTablesWithState(tx, deps.cfg, deps.floorAnnotators ?? [])).filter(
-          (table) => inScope(scope, table.zoneId),
-        );
+        return (
+          await listTablesWithState(
+            tx,
+            deps.cfg,
+            deps.floorAnnotators ?? [],
+            undefined,
+            undefined,
+            log,
+          )
+        ).filter((table) => inScope(scope, table.zoneId));
       });
       return c.json(state);
     }),
@@ -3173,7 +3181,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const partyId = requirePartyParam(c.req.param("id"));
       const bills = await withTransaction(deps.db, async (tx) => {
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return readPartyBills(tx, partyId);
+        return readPartyBills(tx, partyId, log);
       });
       return c.json(bills);
     }),
@@ -4141,6 +4149,25 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
         log,
       );
       return c.json(result);
+    }),
+  );
+
+  app.put("/api/bills/:id/name", (c) =>
+    run(c, log, async () => {
+      const session = await requireSession(deps, c, { action: "take-orders" });
+      const billId = requireTabParam(c.req.param("id"));
+      const body = asObject(await readRawJsonBody<unknown>(c));
+      // The wire always carries a name; null or "" clears it.
+      if (body.name === undefined) throw invalid("name");
+      const command = {
+        ...billCommand(session.personId, body),
+        expectedEdit: parseBillEditExpected(body.expectedEdit),
+      };
+      const named = await withTransaction(deps.db, async (tx) => {
+        await checkZones(tx, deps.cfg, session, [await billNameZoneSubject(tx, billId)]);
+        return setBillName(tx, billId, body.name, command);
+      });
+      return c.json(named);
     }),
   );
 

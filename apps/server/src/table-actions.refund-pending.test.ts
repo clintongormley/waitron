@@ -106,8 +106,8 @@ async function pendingRefundOn(billId: string) {
 }
 
 /**
- * What the bill charges, read through the till's routes. Left out: the bill's `revision` and
- * `partyId`, which a bill moving to another party changes by design (`takeIntoParty`). Each line is
+ * What the bill charges, read through the till's routes. Left out: the bill's `revision`,
+ * `partyId` and `billNumber`, which a bill moving to another party changes by design. Each line is
  * read for its identity, quantity and price only; its kitchen fields, such as its group, are not
  * what the bill charges.
  */
@@ -121,6 +121,7 @@ async function charges(billId: string) {
   const bill = { ...entry };
   delete bill.revision;
   delete bill.partyId;
+  delete bill.billNumber;
   const payments = await get(`/api/working-orders/${billId}/payments`);
   expect(payments.status).toBe(200);
   const lines = await get(`/api/working-orders/${billId}/lines`);

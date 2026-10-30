@@ -327,6 +327,8 @@ export async function combineParties(
     }
   }
 
+  // After any merge, so a main bill merged away is already abandoned and takes no number.
+  await VENUE_SERVICE.rescopeBillNumbers(tx, from, into);
   await moveDraftsToParty(
     tx,
     from,
@@ -426,6 +428,7 @@ export async function splitTable(
       mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
     } else {
       const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
+      await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
       await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
       const { held } = await groupArrivingDishes(
         tx,
