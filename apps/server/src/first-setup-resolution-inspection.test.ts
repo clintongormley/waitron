@@ -114,6 +114,13 @@ it("Start again deletes a qualified unused attempt without a password, and first
   const { assertVenueFirstSetupAllowed } = await import("@waitron/provisioning");
   await expect(assertVenueFirstSetupAllowed(f.venueDir)).resolves.toBeUndefined();
 });
+it("with an empty unused setup, the summary answers, and Start again deletes it with no owner", async () => {
+  const f = await actionsFixture();
+  const { register, ...ids } = await f.startRequest();
+  await expect(f.actions.startAgainSummary(ids)).resolves.toEqual({ reached: "claimed" });
+  await f.actions.startAgainFirstSetup({ ...ids, register });
+  await expectStartAgainDeleted(f);
+});
 it.each(["module-operation-public.json", "first-setup-node-key.json", "modules.json"])(
   "absence of a paper signer does not make %s history eligible for password-free reset",
   async (name) => {
@@ -175,23 +182,17 @@ it.each(["file", "directory"] as const)(
     await unchanged();
   },
 );
-it("an authenticated missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
+it("a missing-database Start again, once confirmed, deletes first-setup.json and its documents", async () => {
   const f = await actionsFixture();
   await f.store.update(f.claim.state.attemptId, 1, { kind: "consumption-intent" });
   const inspection = await f.service.inspectFirstSetupResolution();
-  const recovered = await f.recovering.recoverFirstSetupOwner({
+  await f.recovering.recoverFirstSetupOwner({
     inspectionId: inspection.inspectionId,
     revision: inspection.revision!,
     ownerGeneration: inspection.ownerGeneration!,
     clientClaimNonce: randomBytes(32).toString("base64url"),
     password: PASSWORD,
   });
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.ownerGeneration,
-    capability: recovered.capability,
-  };
   await rm(join(f.venueDir, "venue.db"));
   await mkdir(join(f.stateDir, "first-fiscal-documents"));
   await writeFile(
@@ -205,7 +206,6 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
   }) =>
     f.actions.startAgainFirstSetup({
       ...(await f.startRequest()),
-      owner,
       register: {
         kind: "current-master",
         status: "Unknown",
@@ -225,7 +225,6 @@ it("an authenticated missing-database Start again, once confirmed, deletes first
     inspectionId,
     revision,
     ownerGeneration,
-    owner,
   });
   expect(shown).toEqual({ reached: "named" });
   await startAgain({ nothingFiledOrSold: true, shown });

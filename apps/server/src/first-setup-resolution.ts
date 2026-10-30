@@ -25,7 +25,6 @@ import {
   type FirstSetupState,
 } from "@waitron/provisioning";
 import { initialSetupFor, type WaitronModule } from "@waitron/module";
-import type { FirstSetupOwnerAttempt } from "./first-setup-owner.js";
 import type { FirstFiscalHost } from "./setup-first-fiscal-api.js";
 import type { FirstSetupRoots } from "./first-setup-resolution-inspection.js";
 import type { createFirstSetupBackupRecovery } from "./first-setup-backup-recovery.js";
@@ -42,7 +41,6 @@ export interface StartAgainFirstSetupRequest {
   inspectionId: string;
   revision: number;
   ownerGeneration: number;
-  owner?: FirstSetupOwnerAttempt;
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmRecoveryDiscard?: { shown: StartAgainSummary };
@@ -52,7 +50,6 @@ export interface StartAgainSummaryRequest {
   inspectionId: string;
   revision: number;
   ownerGeneration: number;
-  owner?: FirstSetupOwnerAttempt;
 }
 function unavailable(): never {
   throw new AppError("setup.not_ready", {});
@@ -75,10 +72,7 @@ function assertNoKeptRecords({ rows, kept, records, accepted }: SetupDatabaseHol
 function conflict(): never {
   throw new AppError("setup.attempt_conflict", {});
 }
-/**
- * The held state's refusals, in this order, all before the password: the page already sees
- * `trading.env`, and `recoverFirstSetupOwner` refuses a setup whose publication completed.
- */
+/** The held state's refusals, in this order. */
 function assertHeldStartAgainOffered(
   inspection: Pick<FirstSetupInspection, "database" | "emptyDatabase" | "artifacts">,
   found: FoundRecovery | undefined,
@@ -258,22 +252,6 @@ export function createFirstSetupResolutionActions(
       },
     };
   };
-  const assertRecoveredOwner = async (
-    owner: FirstSetupOwnerAttempt | undefined,
-    state: FirstSetupState,
-  ) => {
-    if (owner === undefined) throw new AppError("setup.owner_required", {});
-    const status = await host.owner.status(owner);
-    const latest = [...status.history]
-      .reverse()
-      .find((event) => ["claim", "resume", "recover"].includes(event.kind));
-    if (
-      status.revision !== state.revision ||
-      latest?.kind !== "recover" ||
-      latest.ownerGeneration !== status.ownerGeneration
-    )
-      throw new AppError("setup.owner_required", {});
-  };
   const exactKeys = (request: unknown, keys: readonly string[]) => {
     if (
       typeof request !== "object" ||
@@ -293,52 +271,111 @@ export function createFirstSetupResolutionActions(
     )
       conflict();
   };
+  const markerFor = async (
+    box: Awaited<ReturnType<typeof assertStartAgainAllowedOnDisk>>,
+    state: FirstSetupState,
+    markerOptions: { discarding?: string; held?: true },
+  ) => {
+    const marker = await startAgainMarkerFor(
+      box,
+      { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
+      markerOptions,
+    ).catch((error: unknown) => {
+      throw error instanceof AppError && error.code === "setup.start_again_incomplete"
+        ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
+        : error;
+    });
+    if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT)) unavailable();
+    return marker;
+  };
+  /**
+   * Every check Start again makes before it writes, in its order, so the summary refuses exactly
+   * what Start again would. No password: the repair page's wipe is offered to whoever can open it.
+   */
+  const assessStartAgain = async (
+    request: StartAgainFirstSetupRequest,
+    kind: "summary" | "start-again",
+  ) => {
+    await assertNoLegacyFirstSetupWorkspace(options);
+    const found = await stoppedRecovery();
+    const recovery = found?.kind === "stopped" ? found.shown : undefined;
+    const discarding = found === undefined ? {} : { discarding: found.id };
+    const inspection = await host.resolution.inspectFirstSetupResolution();
+    matchesInspection(inspection, request);
+    const retained = await host.store.readForRepair();
+    if (retained === null) unavailable();
+    const { state } = retained;
+    const missing = inspection.database === "missing";
+    if (!missing && request.confirmMissingDatabase !== undefined) conflict();
+    if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
+    const discardsStopped = !missing && found?.kind === "stopped";
+    if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
+    const held =
+      !missing &&
+      (inspection.database !== "no-venue-rows" ||
+        !PRESENT_START_AGAIN_STATUSES.includes(state.status));
+    if (held) assertHeldStartAgainOffered(inspection, found, state.status);
+    else if (missing) {
+      if (state.status === "complete") refused("setup-finished");
+      if (kind === "start-again" && request.confirmMissingDatabase === undefined) unavailable();
+    } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
+    const snapshot = await host.resolution.captureFirstSetupOriginals();
+    if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
+    const { emptyWorkspace, assignment, eligible } = await presentAttemptEligibility(
+      inspection,
+      state,
+      snapshot.originals,
+      host.modules,
+      request.register,
+    );
+    if (held) {
+      if (request.register?.kind === "no-current-master") unavailable();
+    } else {
+      if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
+      if (!missing && !eligible) unavailable();
+    }
+    if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
+      unavailable();
+    const heldOption = held ? { held: true as const } : {};
+    // Before the read, which may copy the whole database: a refusal here costs nothing.
+    const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
+    if (held) {
+      // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
+      const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
+      // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
+      if (holdings.rows === 0) unavailable();
+      assertNoKeptRecords(holdings);
+    }
+    const marker = await markerFor(box, state, { ...discarding, ...heldOption });
+    const recordDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
+    // With the database present and not held, Start again compares the assignment's own reading.
+    const recoveryRecordDamaged =
+      missing || held
+        ? recordDamaged
+        : typeof assignment === "object" && assignment.recoveryRecordDamaged;
+    return {
+      state,
+      found,
+      recovery,
+      discarding,
+      missing,
+      discardsStopped,
+      heldOption,
+      box,
+      marker,
+      recoveryRecordDamaged,
+    };
+  };
   return {
     startAgainSummary(request: StartAgainSummaryRequest): Promise<StartAgainSummary> {
       return host.resolution.withVenueExclusion(() =>
         host.coordinator.run(async () => {
-          exactKeys(request, ["inspectionId", "revision", "ownerGeneration", "owner"]);
-          await assertNoLegacyFirstSetupWorkspace(options);
-          const found = await stoppedRecovery();
-          const recovery = found?.kind === "stopped" ? found.shown : undefined;
-          const inspection = await host.resolution.inspectFirstSetupResolution();
-          matchesInspection(inspection, request);
-          if (inspection.database !== "missing" && found?.kind === "unemptied") unavailable();
-          if (inspection.database !== "missing" && found === undefined) unavailable();
-          const retained = await host.store.readForRepair();
-          if (retained === null) unavailable();
-          const held =
-            inspection.database !== "missing" &&
-            (inspection.database !== "no-venue-rows" ||
-              !PRESENT_START_AGAIN_STATUSES.includes(retained.state.status));
-          if (held) assertHeldStartAgainOffered(inspection, found, retained.state.status);
-          await assertRecoveredOwner(request.owner, retained.state);
-          const snapshot = await host.resolution.captureFirstSetupOriginals();
-          if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const discarding = found === undefined ? {} : { discarding: found.id };
-          if (held) {
-            // Before the read, which may copy the whole database: a refusal here costs nothing.
-            await assertStartAgainAllowedOnDisk(roots, { ...discarding, held: true });
-            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
-            const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
-            // Not empty yet no rows (a view, a part-applied setup): not what the held state names.
-            if (holdings.rows === 0) unavailable();
-            assertNoKeptRecords(holdings);
-          } else if (inspection.database !== "missing") {
-            const { eligible } = await presentAttemptEligibility(
-              inspection,
-              retained.state,
-              snapshot.originals,
-              host.modules,
-              undefined,
-            );
-            if (!eligible) unavailable();
-          }
-          return summaryOf(
-            retained.state,
-            recoveryRecordDamagedOf(retained.state, snapshot.originals, host.modules),
-            recovery,
+          exactKeys(request, ["inspectionId", "revision", "ownerGeneration"]);
+          const { state, recoveryRecordDamaged, recovery } = await assessStartAgain(
+            request,
+            "summary",
           );
+          return summaryOf(state, recoveryRecordDamaged, recovery);
         }),
       );
     },
@@ -349,101 +386,25 @@ export function createFirstSetupResolutionActions(
             "inspectionId",
             "revision",
             "ownerGeneration",
-            "owner",
             "register",
             "confirmMissingDatabase",
             "confirmRecoveryDiscard",
             "recoveryRecordDamagedShown",
           ]);
-          await assertNoLegacyFirstSetupWorkspace(options);
-          const found = await stoppedRecovery();
-          const recovery = found?.kind === "stopped" ? found.shown : undefined;
-          const discarding = found === undefined ? {} : { discarding: found.id };
-          const inspection = await host.resolution.inspectFirstSetupResolution();
-          matchesInspection(inspection, request);
-          const retained = await host.store.readForRepair();
-          if (retained === null) unavailable();
-          const { state } = retained;
-          const missing = inspection.database === "missing";
-          if (!missing && request.confirmMissingDatabase !== undefined) conflict();
-          if (missing && request.recoveryRecordDamagedShown !== undefined) conflict();
-          const discardsStopped = !missing && found?.kind === "stopped";
-          if (!discardsStopped && request.confirmRecoveryDiscard !== undefined) conflict();
-          const held =
-            !missing &&
-            (inspection.database !== "no-venue-rows" ||
-              !PRESENT_START_AGAIN_STATUSES.includes(state.status));
-          if (held) assertHeldStartAgainOffered(inspection, found, state.status);
-          else if (missing) {
-            if (state.status === "complete" || request.confirmMissingDatabase === undefined)
-              unavailable();
-          } else if (!PRESENT_START_AGAIN_STATUSES.includes(state.status)) unavailable();
-          const snapshot = await host.resolution.captureFirstSetupOriginals();
-          if (snapshot.inspection.inspectionId !== request.inspectionId) conflict();
-          const { emptyWorkspace, assignment, eligible } = await presentAttemptEligibility(
-            inspection,
-            state,
-            snapshot.originals,
-            host.modules,
-            request.register,
-          );
-          const unusedAssignment = Boolean(assignment);
-          // The held state has no assignment (it needs an empty database), so its damaged record is
-          // the one the summary showed, checked below.
-          const recoveryRecordDamaged =
-            !missing && !held && typeof assignment === "object" && assignment.recoveryRecordDamaged;
-          if (held) {
-            await assertRecoveredOwner(request.owner, state);
-            if (request.register?.kind === "no-current-master") unavailable();
-            // `stoppedRecovery` answers "stopped" only once it has found `host.modules`.
-            const holdings = await readSetupDatabaseHoldings(roots, host.modules!);
-            if (holdings.rows === 0) unavailable();
-            assertNoKeptRecords(holdings);
-          } else if (request.owner === undefined) {
-            if (
-              !unusedAssignment &&
-              (!emptyWorkspace ||
-                request.register?.kind !== "no-current-master" ||
-                request.register?.confirmed !== true)
-            )
-              unavailable();
-          } else {
-            await assertRecoveredOwner(request.owner, state);
-            if (request.register?.kind === "no-current-master" && !emptyWorkspace) unavailable();
-            if (inspection.database !== "missing" && !eligible) unavailable();
-          }
-          if (inspection.artifacts.some((artifact) => artifact.name.startsWith("outside-")))
-            unavailable();
-          const heldOption = held ? { held: true as const } : {};
-          const box = await assertStartAgainAllowedOnDisk(roots, { ...discarding, ...heldOption });
-          const markerFor = async (markerOptions: { discarding?: string; held?: true }) => {
-            const marker = await startAgainMarkerFor(
-              box,
-              { attemptId: state.frozen.attemptId, frozenDigest: firstSetupFrozenDigest(state) },
-              markerOptions,
-            ).catch((error: unknown) => {
-              throw error instanceof AppError && error.code === "setup.start_again_incomplete"
-                ? new AppError("setup.not_ready", {}, { reason: error.reason ?? error.code })
-                : error;
-            });
-            if (markerSize(marker) > (options.markerLimit ?? START_AGAIN_MARKER_LIMIT))
-              unavailable();
-            return marker;
-          };
-          let marker = await markerFor({ ...discarding, ...heldOption });
-          if ((recoveryRecordDamaged || discardsStopped) && request.owner === undefined)
-            throw new AppError("setup.start_again_password_required", {});
+          const assessed = await assessStartAgain(request, "start-again");
+          const { state, found, recovery, missing, discardsStopped, heldOption, box } = assessed;
+          let { marker } = assessed;
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           const damagedShown = request.recoveryRecordDamagedShown === true;
-          if (!held && recoveryRecordDamaged !== damagedShown) conflict();
-          const shownDamaged = recoveryRecordDamagedOf(state, snapshot.originals, host.modules);
-          if (held && shownDamaged !== damagedShown) conflict();
+          if (!missing && assessed.recoveryRecordDamaged !== damagedShown) conflict();
           // An unemptied journal's confirmation record was written by the Start again that
           // abandoned it.
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped ? summaryOf(state, shownDamaged, recovery) : undefined;
+            missing || discardsStopped
+              ? summaryOf(state, assessed.recoveryRecordDamaged, recovery)
+              : undefined;
           if (
             missing &&
             (confirmation?.nothingFiledOrSold !== true ||
@@ -467,7 +428,7 @@ export function createFirstSetupResolutionActions(
               at: new Date().toISOString(),
               attemptId: state.frozen.attemptId,
               database: missing ? "missing" : "present",
-              administrator: { displayName, email },
+              setupAdministrator: { displayName, email },
               ownerGeneration: state.ownerGeneration,
               shown: shown!,
             });
@@ -505,7 +466,7 @@ export function createFirstSetupResolutionActions(
               },
             );
             await assertStartAgainAllowedOnDisk(box, heldOption);
-            marker = await markerFor(heldOption);
+            marker = await markerFor(box, state, heldOption);
           }
           await writeStartAgainMarker(box, marker);
           try {

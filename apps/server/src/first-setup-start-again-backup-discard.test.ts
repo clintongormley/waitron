@@ -23,6 +23,7 @@ import {
   SPARE_SPACE_FILE,
   START_AGAIN_CONFIRMATIONS_DIR,
   emptyAbandonedBackupRecovery,
+  isEmptiedTombstone,
   readStartAgainMarker,
   type StartAgainSummary,
 } from "@waitron/provisioning";
@@ -218,7 +219,6 @@ async function signedIn(host: Host, recovered?: Response) {
     state: { attemptId: string; revision: number; ownerGeneration: number };
     capability: string;
   };
-  const current = await host.resolution.inspectFirstSetupResolution();
   return {
     owner: {
       attemptId: answer.state.attemptId,
@@ -226,11 +226,16 @@ async function signedIn(host: Host, recovered?: Response) {
       ownerGeneration: answer.state.ownerGeneration,
       capability: answer.capability,
     },
-    ids: {
-      inspectionId: current.inspectionId,
-      revision: current.revision!,
-      ownerGeneration: current.ownerGeneration!,
-    },
+    ids: await currentIds(host),
+  };
+}
+
+async function currentIds(host: Host) {
+  const current = await host.resolution.inspectFirstSetupResolution();
+  return {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
   };
 }
 
@@ -305,12 +310,12 @@ it("after a discard, the summary names no recovery", async () => {
   const { recordedAt } = await f.workspace.abandon(f.session.recoveryId);
   await f.host.coordinator.run(() => f.service.discardInTurn(f.session.recoveryId, recordedAt));
   await emptyAbandonedBackupRecovery(f.roots, f.session.recoveryId);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
   const attemptOnly = createFirstSetupResolutionActions({ ...f.roots, host: f.host });
-  const summary = await actions.startAgainSummary({ ...ids, owner });
+  const summary = await actions.startAgainSummary(ids);
   expect(summary).not.toHaveProperty("recovery");
-  expect(summary).toEqual(await attemptOnly.startAgainSummary({ ...ids, owner }));
+  expect(summary).toEqual(await attemptOnly.startAgainSummary(ids));
 });
 
 it("a recovery already selected refuses the summary setup.not_ready", async () => {
@@ -318,9 +323,9 @@ it("a recovery already selected refuses the summary setup.not_ready", async () =
   await f.service.commit(f.session.sessionId, f.selected.input, client);
   expect((await f.workspace.read()).at(-1)!.phase).toBe("selected");
   clock.advance(LEASE + 1);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });
@@ -331,9 +336,9 @@ it("a recovery whose journal cannot be read refuses the summary setup.not_ready"
   const journal = dirname(dirname(f.record.target.target.stateDir));
   for (const name of await readdir(journal))
     if (/^\d{6}\.json$/.test(name)) await writeFile(join(journal, name), "unreadable");
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const { actions } = repairApp(f);
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({
     code: "setup.not_ready",
   });
 });
@@ -349,17 +354,13 @@ it("the box's repair app fences its writes and names a stopped recovery in its s
   clock.advance(LEASE + 1);
   const recovered = await passwordStep(entry.app, f.host);
   expect(recovered.status, await recovered.clone().text()).toBe(200);
-  const { owner, ids } = await signedIn(f.host, recovered);
+  const { ids } = await signedIn(f.host, recovered);
   const summary = await entry.app.request(
     "https://box.test/setup-api/first-setup/resolution/start-again/summary",
     {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Waitron-Setup-Owner": owner.capability,
-        "X-Waitron-Setup-Attempt": owner.attemptId,
-        "X-Waitron-Setup-Revision": String(owner.revision),
-        "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
       },
       body: JSON.stringify(ids),
     },
@@ -374,18 +375,16 @@ async function startAgainOver(
   backupRecovery: Service,
   recovered?: Response,
 ) {
-  const { owner, ids } = await signedIn(f.host, recovered);
+  const { ids } = await signedIn(f.host, recovered);
   const actions = createFirstSetupResolutionActions({ ...f.roots, host: f.host, backupRecovery });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary(ids);
   return {
     shown,
-    owner,
     ids,
     actions,
     run: (confirmed: StartAgainSummary = shown) =>
       actions.startAgainFirstSetup({
         ...ids,
-        owner,
         confirmMissingDatabase: { nothingFiledOrSold: true, shown: confirmed },
       }),
   };
@@ -428,14 +427,28 @@ it("A's late step after B's Start again is refused setup.recovery_discarded, in 
   ).rejects.toMatchObject(discarded);
 });
 
-it("a stopped recovery beside trading.env: Start again refuses setup.not_ready, and nothing changes", async () => {
+it("a stopped recovery beside trading.env: the summary and Start again refuse setup.not_ready, and nothing changes", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
+  // The summary refuses beside trading.env, so the shown summary is read before it is written.
+  const { shown } = await startAgainOver(f, f.service);
   await writeFile(join(f.roots.stateDir, "trading.env"), "WAITRON_ENV=production\n");
-  const startAgain = await startAgainOver(f, f.service);
+  const startAgain = await startAgainOver(f, f.service).catch((error: unknown) => error);
+  expect(startAgain).toMatchObject({ code: "setup.not_ready" });
+  const ids = await currentIds(f.host);
+  const actions = createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    backupRecovery: f.service,
+  });
   const last = (await f.workspace.readChain()).at(-1)!;
   const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-  await expect(startAgain.run()).rejects.toMatchObject({ code: "setup.not_ready" });
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+    }),
+  ).rejects.toMatchObject({ code: "setup.not_ready" });
   await expectNothingWritten(f, before);
   expect((await f.workspace.readChain()).at(-1)).toEqual(last);
 });
@@ -482,54 +495,54 @@ async function presentOver(
   f: Pick<Repair, "host" | "roots">,
   backupRecovery: Service,
   stamp?: () => Promise<void>,
+  { passwordStep = true }: { passwordStep?: boolean } = {},
 ) {
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = passwordStep ? await signedIn(f.host) : { ids: await currentIds(f.host) };
   await stamp?.();
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: databasePresent(f.host),
     backupRecovery,
   });
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary(ids);
   return {
     shown,
-    owner,
     ids,
     actions,
     run: (confirmed: StartAgainSummary = shown) =>
-      actions.startAgainFirstSetup({ ...ids, owner, confirmRecoveryDiscard: { shown: confirmed } }),
+      actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown: confirmed } }),
   };
 }
 
-it("with the database present, the password and the confirmed summary discard a stopped recovery, with a record of who chose it", async () => {
+it("with the database present, the confirmed summary discards a stopped recovery with no password, with a record of whose setup it was", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
   const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
-  const startAgain = await presentOver(f, f.service);
+  const startAgain = await presentOver(f, f.service, undefined, { passwordStep: false });
   await expect(startAgain.run()).resolves.toBeUndefined();
   await expectDiscarded(f, { shown: startAgain.shown, lock });
   const records = await confirmations(f.roots.stateDir);
   expect(records).toHaveLength(1);
   expect(records[0]).toMatchObject({
     database: "present",
-    administrator: { displayName: "Elena", email: "elena@example.test" },
+    setupAdministrator: { displayName: "Elena", email: "elena@example.test" },
+    confirmedOn: "repair-page",
+    signedIn: false,
   });
 });
 
-it("with the database present, a stopped recovery's Start again without the setup password is refused setup.start_again_password_required, and nothing changes", async () => {
+it("with the database present, a stopped recovery's Start again with no password step goes ahead, and the recovery is discarded", async () => {
   const f = await selectedRepair();
   await f.service.close(f.session.sessionId);
-  const startAgain = await presentOver(f, f.service);
-  const last = (await f.workspace.readChain()).at(-1)!;
-  const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
+  const lock = await lstat(join(f.record.target.target.venueDir, "venue.lock"));
+  const startAgain = await presentOver(f, f.service, undefined, { passwordStep: false });
   await expect(
     startAgain.actions.startAgainFirstSetup({
       ...startAgain.ids,
       confirmRecoveryDiscard: { shown: startAgain.shown },
     }),
-  ).rejects.toMatchObject({ code: "setup.start_again_password_required" });
-  await expectNothingWritten(f, before);
-  expect((await f.workspace.readChain()).at(-1)).toEqual(last);
+  ).resolves.toBeUndefined();
+  await expectDiscarded(f, { shown: startAgain.shown, lock });
 });
 
 it.each([
@@ -564,7 +577,6 @@ it.each([
     await expect(
       startAgain.actions.startAgainFirstSetup({
         ...startAgain.ids,
-        owner: startAgain.owner,
         ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
       }),
     ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -581,7 +593,6 @@ it("with the database missing, confirmRecoveryDiscard is refused setup.attempt_c
   await expect(
     startAgain.actions.startAgainFirstSetup({
       ...startAgain.ids,
-      owner: startAgain.owner,
       confirmMissingDatabase: { nothingFiledOrSold: true, shown: startAgain.shown },
       confirmRecoveryDiscard: { shown: startAgain.shown },
     }),
@@ -589,23 +600,20 @@ it("with the database missing, confirmRecoveryDiscard is refused setup.attempt_c
   await expectNothingWritten(f, before);
 });
 
-it("with the database present and no recovery, the summary refuses setup.not_ready and confirmRecoveryDiscard is refused setup.attempt_conflict", async () => {
+it("with the database present and no recovery, the summary answers with no recovery and confirmRecoveryDiscard is refused setup.attempt_conflict", async () => {
   const f = await fixture(true);
   const service = recovery(f.options);
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const actions = createFirstSetupResolutionActions({
     ...f.roots,
     host: databasePresent(f.host),
     backupRecovery: service,
   });
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
-    code: "setup.not_ready",
-  });
+  expect(await actions.startAgainSummary(ids)).not.toHaveProperty("recovery");
   const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
   await expect(
     actions.startAgainFirstSetup({
       ...ids,
-      owner,
       confirmRecoveryDiscard: { shown: { reached: "claimed" } },
     }),
   ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
@@ -616,7 +624,7 @@ it.each([
   ["damaged", true],
   ["intact", false],
 ] as const)(
-  "with the database present, an abandoned recovery not yet emptied beside a %s picks file refuses the summary setup.not_ready",
+  "with the database present, an abandoned recovery not yet emptied beside a %s picks file: the summary answers with no recovery, and Start again finishes emptying it",
   async (_label, damaged) => {
     const f = await selectedRepair();
     await f.service.close(f.session.sessionId);
@@ -629,15 +637,16 @@ it.each([
     await unlink(planted);
     if (damaged)
       await writeFile(join(f.roots.stateDir, "module-preparation-state.json"), "{damaged");
-    const { owner, ids } = await signedIn(f.host);
+    const { ids } = await signedIn(f.host);
     const actions = createFirstSetupResolutionActions({
       ...f.roots,
       host: databasePresent(f.host),
       backupRecovery: f.service,
     });
-    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
-      code: "setup.not_ready",
-    });
+    expect(await actions.startAgainSummary(ids)).not.toHaveProperty("recovery");
+    expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(false);
+    await expect(actions.startAgainFirstSetup(ids)).resolves.toBeUndefined();
+    expect(await isEmptiedTombstone(f.roots, f.session.recoveryId)).toBe(true);
   },
 );
 
@@ -652,13 +661,13 @@ it.each([
   async (_label, present) => {
     const f = await selectedRepair();
     await f.service.close(f.session.sessionId);
-    const { owner, ids } = await signedIn(f.host);
+    const { ids } = await signedIn(f.host);
     const actions = createFirstSetupResolutionActions({
       ...f.roots,
       host: present(f.host),
       backupRecovery: f.service,
     });
-    await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject({
+    await expect(actions.startAgainSummary(ids)).rejects.toMatchObject({
       code: "setup.not_ready",
     });
   },
@@ -683,13 +692,12 @@ it.each([
     };
     const last = (await f.workspace.readChain()).at(-1)!;
     const before = { venue: await tree(f.roots.venueDir), state: await tree(f.roots.stateDir) };
-    await expect(
-      startAgain.actions.startAgainSummary({ ...ids, owner: startAgain.owner }),
-    ).rejects.toMatchObject({ code: "setup.not_ready" });
+    await expect(startAgain.actions.startAgainSummary(ids)).rejects.toMatchObject({
+      code: "setup.not_ready",
+    });
     await expect(
       startAgain.actions.startAgainFirstSetup({
         ...ids,
-        owner: startAgain.owner,
         confirmRecoveryDiscard: { shown: startAgain.shown },
       }),
     ).rejects.toMatchObject({ code: "setup.not_ready" });
@@ -713,7 +721,7 @@ it("with the database present, the fence refuses a well-formed discard while the
     mountFirstSetupResolutionApi(app, host, () => {}, { startAgain });
     return app;
   };
-  const { owner, ids } = await signedIn(f.host);
+  const { ids } = await signedIn(f.host);
   const activity = (await f.service.liveness())!;
   expect(activity.state).toBe("running");
   const shown: StartAgainSummary = {
@@ -731,13 +739,7 @@ it("with the database present, the fence refuses a well-formed discard while the
       "https://box.test/setup-api/first-setup/resolution/start-again",
       {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Waitron-Setup-Owner": owner.capability,
-          "X-Waitron-Setup-Attempt": owner.attemptId,
-          "X-Waitron-Setup-Revision": String(owner.revision),
-          "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...ids, confirmRecoveryDiscard: { shown } }),
       },
       tls(),

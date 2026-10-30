@@ -34,7 +34,6 @@ const boundary = createErrorBoundary(
     "setup.not_ready": 503,
     "setup.certificate_refused": 422,
     "setup.owner_required": 403,
-    "setup.start_again_password_required": 403,
     "password.throttled": 429,
     "setup.attempt_conflict": 409,
     "setup.attempt_invalid": 409,
@@ -980,17 +979,22 @@ export function mountFirstSetupResolutionApi(
           )
         )
           invalid();
-        const owner = firstFiscalOwner(c);
-        return c.json(
-          await diskFullOr(() =>
-            options.summary!({
-              inspectionId: text(body.inspectionId),
-              revision: body.revision as number,
-              ownerGeneration: body.ownerGeneration as number,
-              owner,
-            }),
-          ),
-        );
+        try {
+          return c.json(
+            await diskFullOr(() =>
+              options.summary!({
+                inspectionId: text(body.inspectionId),
+                revision: body.revision as number,
+                ownerGeneration: body.ownerGeneration as number,
+              }),
+            ),
+          );
+        } catch (error) {
+          // The next start tries to finish what an earlier Start again left.
+          if (error instanceof AppError && error.code === "setup.start_again_incomplete")
+            setTimeout(() => options.requestRestart?.(), 0);
+          throw error;
+        }
       }),
     );
   if (options.startAgain !== undefined)
@@ -1042,9 +1046,6 @@ export function mountFirstSetupResolutionApi(
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
                 ? { recoveryRecordDamagedShown: true as const }
                 : {}),
-              ...(c.req.header("X-Waitron-Setup-Owner") === undefined
-                ? {}
-                : { owner: firstFiscalOwner(c) }),
             }),
           );
         } catch (error) {

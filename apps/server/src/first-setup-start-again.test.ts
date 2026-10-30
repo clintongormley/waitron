@@ -332,7 +332,7 @@ async function missingDatabase(
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  return { ...base, owner, ids, request: { ...ids, owner, register: base.startRequest.register } };
+  return { ...base, owner, ids, request: { ...ids, register: base.startRequest.register } };
 }
 
 function tls() {
@@ -351,15 +351,6 @@ function routes(
     summary: actions.startAgainSummary,
   });
   return app;
-}
-
-function ownerHeaders(owner: Awaited<ReturnType<typeof missingDatabase>>["owner"]) {
-  return {
-    "X-Waitron-Setup-Owner": owner.capability,
-    "X-Waitron-Setup-Attempt": owner.attemptId,
-    "X-Waitron-Setup-Revision": String(owner.revision),
-    "X-Waitron-Setup-Generation": String(owner.ownerGeneration),
-  };
 }
 
 async function postSummary(
@@ -389,13 +380,6 @@ async function attemptFiles(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"]
   );
 }
 
-it("the summary refuses an owner who has not recovered the attempt", async () => {
-  const { f, actions, ids } = await missingDatabase();
-  await expect(actions.startAgainSummary({ ...ids, owner: f.ownerAttempt })).rejects.toMatchObject({
-    code: "setup.owner_required",
-  });
-});
-
 it("a missing database: Start again without the confirmation is refused, and nothing changes", async () => {
   const { f, actions, request } = await missingDatabase();
   const before = await attemptFiles(f);
@@ -424,7 +408,7 @@ it("a confirmation whose summary differs from the box's own is refused, and noth
 it("a confirmed Start again writes the confirmation record with who, when and what the record showed", async () => {
   const { f, actions, owner, ids, request } = await missingDatabase();
   const app = routes(f, actions);
-  const answered = await postSummary(app, ids, ownerHeaders(owner));
+  const answered = await postSummary(app, ids, {});
   expect(answered.status, await answered.clone().text()).toBe(200);
   const shown = await answered.json();
   expect(shown).toEqual({ reached: "named" });
@@ -437,25 +421,27 @@ it("a confirmed Start again writes the confirmation record with who, when and wh
   const files = await readdir(join(f.stateDir, CONFIRMATIONS));
   expect(files).toEqual([`${Date.parse(at)}-${state.frozen.attemptId}.json`]);
   expect(JSON.parse(await readFile(join(f.stateDir, CONFIRMATIONS, files[0]!), "utf8"))).toEqual({
-    version: 1,
+    version: 2,
     at,
     attemptId: state.frozen.attemptId,
     database: "missing",
-    administrator: {
+    setupAdministrator: {
       displayName: state.frozen.request.admin.displayName,
       email: state.frozen.request.admin.email,
     },
+    confirmedOn: "repair-page",
+    signedIn: false,
     ownerGeneration: owner.ownerGeneration,
     shown,
   });
 });
 
 it("an attempt that finished activation shows it and can be started again on confirmation", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase([
+  const { f, actions, ids, request } = await missingDatabase([
     { kind: "activation-started" },
     { kind: "committed", result: {} },
   ]);
-  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  const answered = await postSummary(routes(f, actions), ids, {});
   expect(answered.status, await answered.clone().text()).toBe(200);
   const shown = await answered.json();
   expect(shown).toEqual({ reached: "fiscal-finished" });
@@ -466,30 +452,108 @@ it("an attempt that finished activation shows it and can be started again on con
   await expectStartAgainDeleted(f);
 });
 
-it("the summary route refuses when the database is present", async () => {
+it("the summary route answers when the database is present", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   const { inspectionId, revision, ownerGeneration } = startRequest;
   const response = await postSummary(
     routes(f, actions),
     { inspectionId, revision, ownerGeneration },
-    ownerHeaders(f.ownerAttempt),
+    {},
   );
-  expect(response.status).toBe(503);
-  expect(await response.json()).toEqual({ error: { code: "setup.not_ready", params: {} } });
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(await response.json()).toEqual({ reached: "named" });
 });
 
-it("the summary route refuses without the owner headers", async () => {
+it("the summary route answers without the owner headers", async () => {
   const { f, actions, ids } = await missingDatabase();
   const response = await postSummary(routes(f, actions), ids, {});
-  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(await response.json()).toEqual({ reached: "named" });
 });
 
 it("the summary route refuses over plain HTTP", async () => {
-  const { f, actions, owner, ids } = await missingDatabase();
-  const response = await postSummary(routes(f, actions), ids, ownerHeaders(owner), {
-    incoming: { socket: new Socket() },
-  });
+  const { f, actions, ids } = await missingDatabase();
+  const response = await postSummary(
+    routes(f, actions),
+    ids,
+    {},
+    {
+      incoming: { socket: new Socket() },
+    },
+  );
   expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+});
+
+it("the summary answers with no owner, for a missing database", async () => {
+  const { actions, ids } = await missingDatabase();
+  await expect(actions.startAgainSummary(ids)).resolves.toEqual({ reached: "named" });
+});
+
+it("Start again over HTTPS with no owner headers starts again", async () => {
+  const { f, actions, ids, startRequest } = await missingDatabase();
+  const response = await routes(f, actions).request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...ids,
+        register: startRequest.register,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named" } },
+      }),
+    },
+    tls(),
+  );
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(await response.json()).toEqual({ restarting: true });
+  await expectStartAgainDeleted(f);
+});
+
+it("a plain-HTTP request to the Start again route is refused, and nothing changes", async () => {
+  const { f, actions, ids, startRequest } = await missingDatabase();
+  const before = await attemptFiles(f);
+  const response = await routes(f, actions).request(
+    "https://box.test/setup-api/first-setup/resolution/start-again",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...ids,
+        register: startRequest.register,
+        confirmMissingDatabase: { nothingFiledOrSold: true, shown: { reached: "named" } },
+      }),
+    },
+    { incoming: { socket: new Socket() } },
+  );
+  expect(await response.json()).toEqual({ error: { code: "setup.owner_required", params: {} } });
+  expect(await attemptFiles(f)).toEqual(before);
+  await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("a summary with a deletion already marked answers setup.start_again_incomplete and asks for a restart", async () => {
+  const { f, actions, startRequest } = await abandonedAttempt();
+  const state = (await f.store.read())!;
+  await writeStartAgainMarker(
+    f,
+    await startAgainMarkerFor(f, {
+      attemptId: state.frozen.attemptId,
+      frozenDigest: firstSetupFrozenDigest(state),
+    }),
+  );
+  const restarts: number[] = [];
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    summary: actions.startAgainSummary,
+    requestRestart: () => restarts.push(1),
+  });
+  const { inspectionId, revision, ownerGeneration } = startRequest;
+  const response = await postSummary(app, { inspectionId, revision, ownerGeneration }, {});
+  expect(response.status, await response.clone().text()).toBe(409);
+  expect(await response.json()).toEqual({
+    error: { code: "setup.start_again_incomplete", params: {} },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(restarts).toHaveLength(1);
 });
 
 it("a confirmation sent while the database is present is refused", async () => {
@@ -508,7 +572,7 @@ it("a confirmation sent while the database is present is refused", async () => {
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-it("a complete attempt is still refused", async () => {
+it("with the database missing, a finished setup is refused setup-finished by the summary and by Start again, and nothing changes", async () => {
   const { f, actions, request } = await missingDatabase([
     { kind: "activation-started" },
     { kind: "committed", result: {} },
@@ -518,18 +582,25 @@ it("a complete attempt is still refused", async () => {
   for (const change of [{ kind: "publication" }, { kind: "complete" }] as const)
     state = await f.store.update(state.frozen.attemptId, state.revision, change);
   const current = await f.host.resolution.inspectFirstSetupResolution();
+  const ids = {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+  const before = await attemptFiles(f);
+  const finished = { code: "setup.start_again_refused", params: { cause: "setup-finished" } };
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(finished);
   await expect(
     actions.startAgainFirstSetup({
-      ...request,
-      inspectionId: current.inspectionId,
-      revision: current.revision!,
-      ownerGeneration: current.ownerGeneration!,
+      ...ids,
+      register: request.register,
       confirmMissingDatabase: {
         nothingFiledOrSold: true,
         shown: { reached: "fiscal-finished" },
       },
     }),
-  ).rejects.toMatchObject({ code: "setup.not_ready" });
+  ).rejects.toMatchObject(finished);
+  expect(await attemptFiles(f)).toEqual(before);
   await expect(access(join(f.stateDir, CONFIRMATIONS))).rejects.toMatchObject({ code: "ENOENT" });
 });
 
@@ -576,14 +647,14 @@ it("on a missing database, the confirmation record is on disk before the marker,
 });
 
 it("the Start again route takes the confirmation only in its exact shape", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const { f, name, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   const send = (confirmMissingDatabase: unknown) =>
     app.request(
       "https://box.test/setup-api/first-setup/resolution/start-again",
       {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...ownerHeaders(owner) },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...ids, register: request.register, confirmMissingDatabase }),
       },
       tls(),
@@ -610,7 +681,7 @@ it("the Start again route takes the confirmation only in its exact shape", async
 });
 
 it("the Start again route takes a shown backup recovery only in its exact shape", async () => {
-  const { f, name, actions, owner, ids, request } = await missingDatabase();
+  const { f, name, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   const recovery = {
     startedAt: "2026-10-16T11:40:00.000Z",
@@ -620,7 +691,7 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
     cloud: false,
   };
   const send = (value: unknown) =>
-    sendStartAgain(app, owner, {
+    sendStartAgain(app, {
       ...ids,
       register: request.register,
       confirmMissingDatabase: {
@@ -654,7 +725,7 @@ it("the Start again route takes a shown backup recovery only in its exact shape"
 });
 
 it("the Start again route takes confirmRecoveryDiscard only in its exact shape, with a shown recovery", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, ids, request } = await missingDatabase();
   const reached: unknown[] = [];
   const app = routes(f, {
     ...actions,
@@ -671,7 +742,7 @@ it("the Start again route takes confirmRecoveryDiscard only in its exact shape, 
   };
   const shown = { reached: "named", recovery };
   const send = (confirmRecoveryDiscard: unknown) =>
-    sendStartAgain(app, owner, { ...ids, register: request.register, confirmRecoveryDiscard });
+    sendStartAgain(app, { ...ids, register: request.register, confirmRecoveryDiscard });
   for (const malformed of [
     null,
     {},
@@ -707,16 +778,12 @@ async function damageRecoveryRecord(f: Awaited<ReturnType<typeof abandonedAttemp
   await writeFile(recoveryRecord(f), "{damaged");
 }
 
-function sendStartAgain(
-  app: Hono,
-  owner: Awaited<ReturnType<typeof missingDatabase>>["owner"],
-  body: unknown,
-) {
+function sendStartAgain(app: Hono, body: unknown) {
   return app.request(
     "https://box.test/setup-api/first-setup/resolution/start-again",
     {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...ownerHeaders(owner) },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     },
     tls(),
@@ -724,8 +791,8 @@ function sendStartAgain(
 }
 
 it("with the database missing, a damaged recovery record reaches the confirmation: the summary route answers it, never setup.not_ready", async () => {
-  const { f, actions, owner, ids } = await missingDatabase([], damageRecoveryRecord);
-  const answered = await postSummary(routes(f, actions), ids, ownerHeaders(owner));
+  const { f, actions, ids } = await missingDatabase([], damageRecoveryRecord);
+  const answered = await postSummary(routes(f, actions), ids, {});
   expect(answered.status, await answered.clone().text()).toBe(200);
   expect(await answered.json()).toEqual({
     reached: "named",
@@ -734,10 +801,10 @@ it("with the database missing, a damaged recovery record reaches the confirmatio
 });
 
 it("Start again past a damaged recovery record goes ahead once the summary showing it is confirmed", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase([], damageRecoveryRecord);
+  const { f, actions, ids, request } = await missingDatabase([], damageRecoveryRecord);
   const app = routes(f, actions);
-  const shown = await (await postSummary(app, ids, ownerHeaders(owner))).json();
-  const accepted = await sendStartAgain(app, owner, {
+  const shown = await (await postSummary(app, ids, {})).json();
+  const accepted = await sendStartAgain(app, {
     ...ids,
     register: request.register,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
@@ -784,7 +851,7 @@ it("a confirmation that shows a damaged recovery record the box does not find is
 });
 
 it("with the database missing, a setup naming a module the box's software does not include is refused module.operation_invalid by the summary and by Start again, and nothing is written", async () => {
-  const { f, owner, ids, request } = await missingDatabase();
+  const { f, ids, request } = await missingDatabase();
   await expect(lstat(recoveryRecord(f))).resolves.toMatchObject({ size: expect.any(Number) });
   const actions = createFirstSetupResolutionActions({ ...f, host: { ...f.host, modules: [] } });
   const refusal = {
@@ -792,7 +859,7 @@ it("with the database missing, a setup naming a module the box's software does n
     params: { module: (await f.store.read())!.frozen.modules[0]!.module },
   };
   const before = await attemptFiles(f);
-  await expect(actions.startAgainSummary({ ...ids, owner })).rejects.toMatchObject(refusal);
+  await expect(actions.startAgainSummary(ids)).rejects.toMatchObject(refusal);
   for (const shown of [
     { reached: "named" as const },
     { reached: "named" as const, recoveryRecordDamaged: true as const },
@@ -808,10 +875,10 @@ it("with the database missing, a setup naming a module the box's software does n
 });
 
 it("the Start again route takes recoveryRecordDamaged only as true", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   for (const recoveryRecordDamaged of [false, "true", 1]) {
-    const refused = await sendStartAgain(app, owner, {
+    const refused = await sendStartAgain(app, {
       ...ids,
       register: request.register,
       confirmMissingDatabase: {
@@ -827,10 +894,10 @@ it("the Start again route takes recoveryRecordDamaged only as true", async () =>
 });
 
 it("the Start again route takes recoveryRecordDamagedShown only as true", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase();
+  const { f, actions, ids, request } = await missingDatabase();
   const app = routes(f, actions);
   for (const recoveryRecordDamagedShown of [false, "true", 1]) {
-    const refused = await sendStartAgain(app, owner, {
+    const refused = await sendStartAgain(app, {
       ...ids,
       register: request.register,
       recoveryRecordDamagedShown,
@@ -852,8 +919,8 @@ async function damagePicks(f: Awaited<ReturnType<typeof abandonedAttempt>>["f"])
 }
 
 it("with the database missing, a damaged picks file adds nothing to the summary, and Start again with that summary goes ahead", async () => {
-  const { f, actions, owner, ids, request } = await missingDatabase([], damagePicks);
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const { f, actions, ids, request } = await missingDatabase([], damagePicks);
+  const shown = await actions.startAgainSummary(ids);
   expect(shown).toEqual({ reached: "named" });
   await actions.startAgainFirstSetup({
     ...request,
@@ -1001,7 +1068,7 @@ it.each(["module-operation-public.json", "first-fiscal-documents/stray.json"])(
 
 it("with the database missing, an outside evidence file configured beside a damaged picks file is refused setup.not_ready, and nothing changes", async () => {
   const base = await missingDatabase([], damagePicks, stampAfterName);
-  const { f, owner, request: startAgain } = base;
+  const { f, request: startAgain } = base;
   const outsidePath = join(f.root, "outside-history.json");
   await writeFile(outsidePath, "{}");
   const resolution = createFirstSetupResolutionInspection({
@@ -1018,7 +1085,8 @@ it("with the database missing, an outside evidence file configured beside a dama
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  await expectRefusedUnchanged(f, () => actions.startAgainSummary(ids), "setup.not_ready");
+  const shown = { reached: "named" as const };
   await expectRefusedUnchanged(
     f,
     () =>
@@ -1031,32 +1099,33 @@ it("with the database missing, an outside evidence file configured beside a dama
   );
 });
 
-it("the password-required refusal answers 403 over HTTPS", async () => {
+it("with an empty database and a damaged recovery-key record, the summary carries recoveryRecordDamaged; Start again without the flag is refused setup.attempt_conflict, and with it deletes the setup", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damageRecoveryRecord(f);
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const refused = await routes(f, actions).request(
-    "https://box.test/setup-api/first-setup/resolution/start-again",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        inspectionId: inspected.inspectionId,
-        revision: inspected.revision,
-        ownerGeneration: inspected.ownerGeneration,
-        register: startRequest.register,
-      }),
-    },
-    tls(),
-  );
-  expect(refused.status, await refused.clone().text()).toBe(403);
-  expect(await refused.json()).toEqual({
-    error: { code: "setup.start_again_password_required", params: {} },
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
+  expect(await actions.startAgainSummary(ids)).toEqual({
+    reached: "named",
+    recoveryRecordDamaged: true,
   });
-  expect(await readStartAgainMarker(f.venueDir)).toBeNull();
+  const before = await folderTrees(f);
+  await expect(
+    actions.startAgainFirstSetup({ ...ids, register: startRequest.register }),
+  ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+  expect(await folderTrees(f)).toEqual(before);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    register: startRequest.register,
+    recoveryRecordDamagedShown: true,
+  });
+  await expectStartAgainDeleted(f);
 });
 
-it("a damaged record with no owner still refuses for a marker over its limit, before asking for the password, and nothing changes", async () => {
+it("a damaged record with no owner still refuses for a marker over its limit, and nothing changes", async () => {
   const { f, startRequest } = await abandonedAttempt();
   await damageRecoveryRecord(f);
   const actions = createFirstSetupResolutionActions({ ...f, host: f.host, markerLimit: 1 });
@@ -1074,34 +1143,17 @@ it("a damaged record with no owner still refuses for a marker over its limit, be
   expect(await readStartAgainMarker(f.venueDir)).toBeNull();
 });
 
-it("the Start again route passes recoveryRecordDamagedShown on: with the owner and a damaged record it starts again over HTTPS", async () => {
+it("the Start again route passes recoveryRecordDamagedShown on: with a damaged record it starts again over HTTPS", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damageRecoveryRecord(f);
-  const inspected = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
-    inspectionId: inspected.inspectionId,
-    revision: inspected.revision!,
-    ownerGeneration: inspected.ownerGeneration!,
-    clientClaimNonce: randomBytes(32).toString("base64url"),
-    password: PASSWORD,
-  });
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const accepted = await sendStartAgain(
-    routes(f, actions),
-    {
-      attemptId: recovered.state.attemptId,
-      revision: recovered.state.revision,
-      ownerGeneration: recovered.state.ownerGeneration,
-      capability: recovered.capability,
-    },
-    {
-      inspectionId: current.inspectionId,
-      revision: current.revision,
-      ownerGeneration: current.ownerGeneration,
-      register: startRequest.register,
-      recoveryRecordDamagedShown: true,
-    },
-  );
+  const accepted = await sendStartAgain(routes(f, actions), {
+    inspectionId: current.inspectionId,
+    revision: current.revision,
+    ownerGeneration: current.ownerGeneration,
+    register: startRequest.register,
+    recoveryRecordDamagedShown: true,
+  });
   expect(accepted.status, await accepted.clone().text()).toBe(200);
   expect(await accepted.json()).toEqual({ restarting: true });
   await expectStartAgainDeleted(f);
@@ -1111,7 +1163,7 @@ it("an attempt that never chose a name is summarised as claimed, with no name", 
   const { folders, host } = await claimedWithoutName();
   await rm(join(folders.venueDir, "venue.db"));
   const inspected = await host.resolution.inspectFirstSetupResolution();
-  const recovered = await host.owner.recoverFirstSetupOwner({
+  await host.owner.recoverFirstSetupOwner({
     inspectionId: inspected.inspectionId,
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
@@ -1124,12 +1176,6 @@ it("an attempt that never chose a name is summarised as claimed, with no name", 
       inspectionId: current.inspectionId,
       revision: current.revision!,
       ownerGeneration: current.ownerGeneration!,
-      owner: {
-        attemptId: recovered.state.attemptId,
-        revision: recovered.state.revision,
-        ownerGeneration: recovered.state.ownerGeneration,
-        capability: recovered.capability,
-      },
     }),
   ).resolves.toEqual({ reached: "claimed" });
 });
@@ -1284,7 +1330,7 @@ it("start again is refused while a deletion marker exists, and the marker is unc
 it("an attempt whose owner recovered the password twice can start again, and the next start finds nothing left", async () => {
   const { f, actions } = await missingDatabase();
   const again = await f.host.resolution.inspectFirstSetupResolution();
-  const recovered = await f.host.owner.recoverFirstSetupOwner({
+  await f.host.owner.recoverFirstSetupOwner({
     inspectionId: again.inspectionId,
     revision: again.revision!,
     ownerGeneration: again.ownerGeneration!,
@@ -1296,21 +1342,14 @@ it("an attempt whose owner recovered the password twice can start again, and the
   });
   expect(steps.some((entry) => entry.endsWith("step-000003"))).toBe(true);
   const current = await f.host.resolution.inspectFirstSetupResolution();
-  const owner = {
-    attemptId: recovered.state.attemptId,
-    revision: recovered.state.revision,
-    ownerGeneration: recovered.state.ownerGeneration,
-    capability: recovered.capability,
-  };
   const ids = {
     inspectionId: current.inspectionId,
     revision: current.revision!,
     ownerGeneration: current.ownerGeneration!,
   };
-  const shown = await actions.startAgainSummary({ ...ids, owner });
+  const shown = await actions.startAgainSummary(ids);
   await actions.startAgainFirstSetup({
     ...ids,
-    owner,
     confirmMissingDatabase: { nothingFiledOrSold: true, shown },
   });
   await expectAttemptGone(f);
@@ -1725,7 +1764,7 @@ async function seedKept(stateDir: string) {
     at: "2026-10-01T00:00:00.000Z",
     attemptId: KEPT_ATTEMPT,
     database: "missing",
-    administrator: { displayName: "Elena", email: "elena@example.test" },
+    setupAdministrator: { displayName: "Elena", email: "elena@example.test" },
     ownerGeneration: 1,
     shown: { reached: "named" },
   });

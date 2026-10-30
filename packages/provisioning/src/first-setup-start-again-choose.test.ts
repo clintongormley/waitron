@@ -605,7 +605,7 @@ it("Move then finishes Start again: the marker and the marked files are gone, th
     at: new Date(T0 - 2 * MINUTE).toISOString(),
     attemptId: f.attemptId,
     database: "missing",
-    administrator: { ...START_AGAIN_ADMIN },
+    setupAdministrator: { ...START_AGAIN_ADMIN },
     ownerGeneration: 1,
     shown: { reached: "claimed" },
   });

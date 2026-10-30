@@ -142,14 +142,16 @@ it.each(["Consumed", "Not consumed", "Unknown"])(
       const written = await readdir(confirmations);
       expect(written).toEqual([`${Date.parse(at)}-${before.frozen.attemptId}.json`]);
       expect(JSON.parse(await readFile(join(confirmations, written[0]!), "utf8"))).toEqual({
-        version: 1,
+        version: 2,
         at,
         attemptId: before.frozen.attemptId,
         database: "missing",
-        administrator: {
+        setupAdministrator: {
           displayName: before.frozen.request.admin.displayName,
           email: before.frozen.request.admin.email,
         },
+        confirmedOn: "repair-page",
+        signedIn: false,
         ownerGeneration: recovered.state.ownerGeneration,
         shown,
       });

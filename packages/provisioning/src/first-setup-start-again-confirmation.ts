@@ -24,15 +24,22 @@ export type StartAgainRecoveryShown = {
   readonly cloud: boolean;
 };
 
+/** Written on the repair page, where nobody signs in: the administrator is the setup's own. */
 export interface StartAgainConfirmation {
-  version: 1;
+  version: 2;
   at: string;
   attemptId: string;
   database: "missing" | "present";
-  administrator: { displayName: string; email: string };
+  setupAdministrator: { displayName: string; email: string };
+  confirmedOn: "repair-page";
+  signedIn: false;
   ownerGeneration: number;
   shown: StartAgainSummary;
 }
+type StartAgainConfirmationInput = Omit<
+  StartAgainConfirmation,
+  "version" | "confirmedOn" | "signedIn"
+>;
 
 const FINISHED = new Set(["committed", "publication", "complete"]);
 const STARTED = new Set(["activation-started", "uncertain"]);
@@ -82,8 +89,8 @@ function recoveryShown(value: unknown): StartAgainRecoveryShown {
   };
 }
 
-function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgainConfirmation {
-  const { at, attemptId, database, administrator, ownerGeneration, shown } = value as Record<
+function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmation {
+  const { at, attemptId, database, setupAdministrator, ownerGeneration, shown } = value as Record<
     string,
     unknown
   >;
@@ -92,9 +99,9 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
     (database !== "missing" && database !== "present") ||
-    !object(administrator) ||
-    !text(administrator.displayName) ||
-    !text(administrator.email) ||
+    !object(setupAdministrator) ||
+    !text(setupAdministrator.displayName) ||
+    !text(setupAdministrator.email) ||
     !Number.isSafeInteger(ownerGeneration) ||
     (ownerGeneration as number) < 0 ||
     !object(shown) ||
@@ -105,11 +112,16 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
   )
     throw invalid();
   return {
-    version: 1,
+    version: 2,
     at,
     attemptId,
     database: database as StartAgainConfirmation["database"],
-    administrator: { displayName: administrator.displayName, email: administrator.email },
+    setupAdministrator: {
+      displayName: setupAdministrator.displayName,
+      email: setupAdministrator.email,
+    },
+    confirmedOn: "repair-page",
+    signedIn: false,
     ownerGeneration: ownerGeneration as number,
     shown: {
       reached: shown.reached as StartAgainSummary["reached"],
@@ -122,7 +134,7 @@ function confirmation(value: Omit<StartAgainConfirmation, "version">): StartAgai
 /** Each confirmation is a new file; an existing one is never replaced. This module exports no delete. */
 export async function writeStartAgainConfirmation(
   stateDir: string,
-  record: Omit<StartAgainConfirmation, "version">,
+  record: StartAgainConfirmationInput,
 ): Promise<string> {
   const value = confirmation(record);
   const name = `${Date.parse(value.at)}-${value.attemptId}.json`;
