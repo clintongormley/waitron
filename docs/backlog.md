@@ -6596,6 +6596,14 @@ _Formerly entries spread across the old sections._
   ten answers; its small slices are planned. S9 and S11 wait for the specialists.
   [Detail](backlog/data-protection.md#a980--data-protection-waitrons-side)
 
+- **Qualify the personal-data export's forbidden-value check against session timestamps.**
+  [PR #2295's server shard 6](https://github.com/clintongormley/waitron/actions/runs/41103592952/job/124227073022)
+  failed at `apps/server/src/personal-data-export-api.workforce.test.ts:873` after finding
+  `19.99` in `sign-in.json`. The check searches for the colleague's pay as a substring;
+  a session timestamp collision is an unverified hypothesis because the log holds no export payload.
+  Capture the failing payload and reproduce before changing the check; retain the colleague-data
+  and secret-exclusion assertions.
+
 - **A privacy-notice page hosted by Waitron Cloud.** For a Cloud-connected venue, a page Cloud
   serves from the venue's own notice text, instead of a page on the venue's own website. The owner
   chose the venue's own page for now (A980 O3, 2026-10-22), so this is not in A980's plan.
