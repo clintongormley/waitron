@@ -82,7 +82,9 @@ export async function sendWipe(
           }),
         };
   const result = await api.startAgainFirstSetup(snapshot, confirm);
-  if (result?.restarting !== true) throw { code: "setup.attempt_conflict" };
+  // Not a conflict: the box may already have deleted the setup, so the page says to reconnect.
+  if (result?.restarting !== true)
+    throw new Error("Start again's answer did not confirm a restart");
   return result;
 }
 

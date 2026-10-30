@@ -40,6 +40,25 @@ const formErrors = (app: SetupApp) =>
     (f) => f.error,
   );
 const OWNER_HEADER = "X-Waitron-Setup-Owner";
+/** The confirmation's own elements: its first line through the actions holding its Confirm. */
+const confirmation = (app: SetupApp) => {
+  const confirm = q(app, "confirm-start-again")!.closest("wt-form-actions")!;
+  const first =
+    q(app, "recovery-record-damaged") ??
+    q(app, "setup-database-unreadable") ??
+    q(app, "start-again-deletes")!;
+  const elements: Element[] = [];
+  for (let el: Element | null = first; el; el = el.nextElementSibling) {
+    elements.push(el);
+    if (el === confirm) return elements;
+  }
+  throw new Error("the confirmation's Confirm does not follow its first line");
+};
+const fieldsIn = (elements: Element[]) =>
+  elements.flatMap((el) => [
+    ...(el.matches("wt-input, input:not([type=checkbox])") ? [el] : []),
+    ...el.querySelectorAll("wt-input, input:not([type=checkbox])"),
+  ]);
 
 async function wipeFixture(
   options: {
@@ -161,11 +180,9 @@ for (const c of cases)
       activity: c.activity,
       summary: () => Response.json(c.summary),
     });
-    const inputs = () => app.shadowRoot!.querySelectorAll("wt-input").length;
-    const inputsBefore = inputs();
     await click(app, "start-again");
     await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    expect(inputs()).toBe(inputsBefore);
+    expect(fieldsIn(confirmation(app))).toEqual([]);
     expect(q(app, "start-again")).toBeNull();
     expect(summaryReads(requests).length).toBe(1);
     for (const read of summaryReads(requests)) expect(read.headers.has(OWNER_HEADER)).toBe(false);
@@ -436,6 +453,7 @@ it("a summary that changed after the confirmation was drawn closes it, says the 
   expect(formErrors(app)).toContain(t.heldChanged);
   expect(sends(requests)).toEqual([]);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again"));
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
   expect(q(app, "recovery-stopped")).not.toBeNull();
@@ -465,6 +483,7 @@ for (const [name, refusal, words] of [
     expect(q(app, "retire-confirmed")).toBeNull();
     expect(q(app, "start-again")).toBeNull();
     if (name === "trading-settings") expect(q(app, "resume")).not.toBeNull();
+    await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again-refused"));
   });
 
 it("Start again reads and sends with the setup as read on pressing, not as first drawn", async () => {
@@ -515,4 +534,38 @@ it("a refusal drawn on pressing Start again takes the focus in the button's plac
   await click(app, "start-again");
   await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
   await expect.poll(() => app.shadowRoot!.activeElement).toBe(q(app, "start-again-refused"));
+});
+
+it("focus the person moved elsewhere while the summary loads stays there", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const { app } = await wipeFixture({
+    summary: async () => {
+      await gate;
+      return Response.json(namedSummary);
+    },
+  });
+  await click(app, "start-again");
+  await expect.poll(() => text(app)).toContain(t.waiting);
+  const chooser = app.shadowRoot!.querySelector<HTMLElement>("wt-language-chooser")!;
+  chooser
+    .shadowRoot!.querySelector("[data-test=lang-trigger]")!
+    .shadowRoot!.querySelector("button")!
+    .focus();
+  expect(app.shadowRoot!.activeElement).toBe(chooser);
+  release();
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await app.updateComplete;
+  expect(app.shadowRoot!.activeElement).toBe(chooser);
+});
+
+it("an answer to Start again that does not confirm the restart says to reconnect and check, never that the setup changed", async () => {
+  const { app } = await wipeFixture({ startAgain: () => Response.json({}) });
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await click(app, "confirm-start-again");
+  await expect.poll(() => formErrors(app)).toContain(t.error);
+  expect(formErrors(app)).not.toContain(t.heldChanged);
+  expect(text(app)).not.toContain(t.restarting);
 });

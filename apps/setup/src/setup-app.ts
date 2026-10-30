@@ -1430,10 +1430,17 @@ export class SetupApp extends LitElement {
       if (current()) this.firstOwnerBusy = false;
     }
   }
-  /** Start again's button is not drawn beside its confirmation or a refusal, so focus moves there. */
+  /**
+   * Start again's button is not drawn beside its confirmation or a refusal, so focus moves there —
+   * unless the person has moved it out of this screen while the box answered.
+   */
   async #focusAfterUpdate(name: string): Promise<void> {
     await this.updateComplete;
-    this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${name}"]`)?.focus();
+    const active = this.shadowRoot?.activeElement;
+    const screen = this.shadowRoot?.querySelector('[data-test="screen-first-owner"]');
+    if (active && !screen?.contains(active)) return;
+    const el = this.shadowRoot?.querySelector<HTMLElement>(`[data-test="${name}"]`);
+    (el?.shadowRoot?.querySelector<HTMLElement>("button") ?? el)?.focus();
   }
   async #startAgainFirstSetup(): Promise<void> {
     const shown = this.firstWipeSummary;
@@ -1463,9 +1470,11 @@ export class SetupApp extends LitElement {
       ) {
         this.#closeWipe();
         this.firstWipeError = () => initialOwnerStrings[setupLocale()].heldChanged;
+        void this.#focusAfterUpdate("start-again");
       } else if (refusal !== undefined) {
         this.#closeWipe();
         this.firstStartAgainRefused = refusal;
+        void this.#focusAfterUpdate("start-again-refused");
       } else this.firstWipeError = this.#describeRepairError(error);
     } finally {
       if (current()) this.firstOwnerBusy = false;

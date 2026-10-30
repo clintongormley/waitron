@@ -270,9 +270,11 @@ it.each([{ restarting: false }, {}])(
   "sendWipe does not accept an incomplete restart answer %j",
   async (result) => {
     const { api } = fixture({ result });
-    await expect(sendWipe(api, snapshot, "missing", shown)).rejects.toMatchObject({
-      code: "setup.attempt_conflict",
-    });
+    const failure = await sendWipe(api, snapshot, "missing", shown).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as { code?: unknown }).code).toBeUndefined();
   },
 );
 
