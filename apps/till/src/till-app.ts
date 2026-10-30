@@ -7336,6 +7336,8 @@ export class TillApp extends LitElement {
     if (!(await this.#flushCounterKitchenNote())) return false;
     if (!(this.#store.persisted && this.#store.dirty)) return true;
     const session = this.#operatorSession;
+    const visit = this.#store.loadGeneration;
+    const movedOn = () => session !== this.#operatorSession || visit !== this.#store.loadGeneration;
     const payload = this.#basketPayload();
     const sent = lines.flatMap((wire, index) => portionWireLines(rows[index]!, wire));
     try {
@@ -7346,11 +7348,11 @@ export class TillApp extends LitElement {
         revision: this.#store.revision,
         ...(lateSend === undefined ? {} : { lateSend }),
       });
-      if (session !== this.#operatorSession) return false;
+      if (movedOn()) return false;
       this.#store.markSaved(saved.revision);
       this.#commitBasket(payload);
     } catch (error) {
-      if (session !== this.#operatorSession) return false;
+      if (movedOn()) return false;
       const code = (error as { code?: string }).code;
       if (code === "working_order.out_of_date") {
         await this.#reloadChangedOrder(id);
@@ -7375,7 +7377,7 @@ export class TillApp extends LitElement {
           wire.workingOrderLineId === undefined ||
           (Number(wire.quantity) !== 1 && !risesInPlace(wire.workingOrderLineId)),
       );
-    return !movesIds || (await this.#readBackSaved(id, session));
+    return !movesIds || (await this.#readBackSaved(id, session, visit));
   }
 
   /** The basket takes the order `id` as stored after its own save, so a later save names every
@@ -7383,8 +7385,7 @@ export class TillApp extends LitElement {
    * it reads. When the order cannot be read the lock stays until the basket is cleared or loaded
    * again, and nothing more is saved from it: the answer is false and the basket is no longer
    * unsaved. */
-  async #readBackSaved(id: string, session: number): Promise<boolean> {
-    const visit = this.#store.loadGeneration;
+  async #readBackSaved(id: string, session: number, visit: number): Promise<boolean> {
     const unlock = this.#store.lockEdits();
     const [order, listed] = await Promise.all([
       this.api.retrieveWorkingOrder(id).catch(() => undefined),
