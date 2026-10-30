@@ -23,6 +23,7 @@ import { VENUE_SERVICE } from "./modules.js";
 import { finishTable, readPartyBills, setPartyName } from "./testing/party-close-fixture.js";
 import { switchOff } from "./testing/live-table.js";
 import { listExpoQueue } from "./working-order.js";
+import { withMovedSlips } from "./moved-slips.js";
 import {
   combineParties,
   joinTables,
@@ -1757,6 +1758,27 @@ describe("A803 no main bill (join)", () => {
     expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
       ...before,
       { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Aviso 7" },
+    ]);
+  });
+
+  it("a move onto a seated table inside an outer slip window tells the kitchen once", async () => {
+    const [m4, m7] = await tables("A803 Outer", 4, 7);
+    const ana = await seat(v, m4);
+    const luis = await seat(v, m7);
+    await order(v, ana.tabId, "Burger");
+    await order(v, luis.tabId, "Tarta");
+    const before = noticesOn([ana.tabId, luis.tabId]);
+
+    const moving = await opts(ana.partyId, luis.partyId);
+    await act((tx) =>
+      withMovedSlips(tx, v.cfg, { parties: [ana.partyId, luis.partyId] }, (slips) =>
+        moveGuests(tx, v.cfg, ana.partyId, m7, { ...moving, slipsLater: slips }),
+      ),
+    );
+
+    expect(noticesOn([ana.tabId, luis.tabId])).toEqual([
+      ...before,
+      { working_order_id: ana.tabId, kind: "moved", line_name: "BURG", moved_to: "A803 Outer 7" },
     ]);
   });
 });

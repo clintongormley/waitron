@@ -23,7 +23,7 @@ Trace the writer/snapshot and every reader before choosing the replacement contr
 readers at the slice 6 audited base `87b46b024fcac68a6240949964768b9fbc7d4972`:
 `apps/server/src/till-sale.ts:1548` (payment dispatch), `apps/server/src/receipt-print.ts:216`
 (collection ticket at payment), `apps/server/src/working-order.ts:3111-3128`
-(`serviceModesMatch`) and `apps/server/src/move-bill.ts:245` (table-mode check). Also trace
+(`serviceModesMatch`) (2026-10-30: deleted in A803 slice 3 Task 3b; the comparison now lives only in `assertServiceModesMatch` and `modesMatch` in `working-order.ts`) and `apps/server/src/move-bill.ts:245` (table-mode check). Also trace
 venue-service's record/retarget/read context functions and the till API/client/order-flow
 readers listed in slice 6 decision 4. These are source pointers, not a runtime receipt or
 an exhaustive future implementation plan. Preserve payment, money/VAT, hashes, drawer and
