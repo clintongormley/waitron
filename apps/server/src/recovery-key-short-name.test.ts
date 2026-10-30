@@ -2,7 +2,7 @@ import { randomInt } from "node:crypto";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, readBreakGlassKeyName, stampDeployment } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
-import { mintBreakGlassKey, verifyBreakGlass } from "./break-glass.js";
+import { mintBreakGlassKey, newBreakGlassKeyName, verifyBreakGlass } from "./break-glass.js";
 
 vi.mock("node:crypto", async (original) => {
   const actual = await original<typeof import("node:crypto")>();
@@ -60,4 +60,22 @@ it("draws another code when a replacement would reuse the current paper name", a
   expect(await readBreakGlassKeyName(suite.db, NODE)).toBe(replacement.name);
   expect(await verifyBreakGlass(suite.db, NODE, original.secret)).toBe(false);
   expect(await verifyBreakGlass(suite.db, NODE, replacement.secret)).toBe(true);
+});
+
+it("draws a new name until it matches none of the names it is told are taken", () => {
+  drawCodeIndex
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(0)
+    .mockReturnValueOnce(1)
+    .mockReturnValueOnce(1)
+    .mockReturnValueOnce(1)
+    .mockReturnValueOnce(1)
+    .mockReturnValueOnce(2)
+    .mockReturnValueOnce(2)
+    .mockReturnValueOnce(2)
+    .mockReturnValueOnce(2);
+  const taken = new Set(["2026-10-15 · 3333", "2026-10-15 · 4444"]);
+  expect(newBreakGlassKeyName("2026-10-15", taken)).toBe("2026-10-15 · 6666");
 });

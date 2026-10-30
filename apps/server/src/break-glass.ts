@@ -17,6 +17,17 @@ export async function mintBreakGlassSecret(ownerDb: Database, nodeId: string): P
   return (await mintBreakGlassKey(ownerDb, nodeId)).secret;
 }
 
+/** A key name for the UTC `day`: the day and four characters, drawn again while the name is `taken`. */
+export function newBreakGlassKeyName(day: string, taken: ReadonlySet<string>): string {
+  const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
+  let next: string;
+  do {
+    const code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
+    next = `${day} · ${code}`;
+  } while (taken.has(next));
+  return next;
+}
+
 export async function mintBreakGlassKey(
   ownerDb: Database,
   nodeId: string,
@@ -25,13 +36,10 @@ export async function mintBreakGlassKey(
   const verifier = hashSecret(secret);
   const name = await withTransaction(ownerDb, async (tx) => {
     const previous = await readBreakGlassKeyName(tx, nodeId);
-    const day = new Date().toISOString().slice(0, 10);
-    const alphabet = "34679ACDEFHJKMNPQRTUVWXY";
-    let next: string;
-    do {
-      const code = Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join("");
-      next = `${day} · ${code}`;
-    } while (next === previous);
+    const next = newBreakGlassKeyName(
+      new Date().toISOString().slice(0, 10),
+      new Set(previous === null ? [] : [previous]),
+    );
     await setBreakGlassVerifierTx(tx, nodeId, verifier, next);
     return next;
   });

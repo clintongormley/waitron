@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { TLSSocket } from "node:tls";
 import { eq, inArray } from "drizzle-orm";
 import type { Context, Hono } from "hono";
@@ -15,6 +14,7 @@ import {
   setBreakGlassVerifierTx,
   withTransaction,
   type Database,
+  type RecoveryPackRecord,
   type Transaction,
 } from "@waitron/db";
 import {
@@ -35,6 +35,7 @@ import {
 import { AppError } from "@waitron/shared";
 import { readHeldArchiveSettingsIn, type ArchiveSettings } from "./archive-settings.js";
 import { inTurn } from "./attempt-turns.js";
+import { newBreakGlassKeyName } from "./break-glass.js";
 import {
   archiveDestinations,
   loadKeyRotatedAt,
@@ -183,18 +184,15 @@ function makeRequest(body: unknown): MakeRequest {
 
 /**
  * The key in force and where it is printed: the pack that made it, else the sheet it was first
- * printed on. One pack at most: every key a pack makes gets a fresh name.
+ * printed on. One pack at most: every key a pack makes gets a name no earlier key had.
  */
-async function readKeyInForce(
-  tx: Transaction,
-  nodeId: string,
+function keyInForceOf(
+  name: string | null,
+  records: readonly RecoveryPackRecord[],
   timeZone: string,
-): Promise<KeyInForce | null> {
-  const name = await readBreakGlassKeyName(tx, nodeId);
+): KeyInForce | null {
   if (name === null) return null;
-  const pack = (await readRecoveryPacks(tx, nodeId)).find((record) =>
-    carriesServerKey(record, name),
-  );
+  const pack = records.find((record) => carriesServerKey(record, name));
   if (pack === undefined) {
     return { name, holder: { kind: "sheet", keyName: name, madeOn: name.slice(0, 10) } };
   }
@@ -207,6 +205,17 @@ async function readKeyInForce(
       received: pack.receivedAt !== null,
     },
   };
+}
+
+/** Every server key name this node's packs recorded, and the key in force. */
+function takenKeyNames(name: string | null, records: readonly RecoveryPackRecord[]): Set<string> {
+  const taken = new Set<string>(name === null ? [] : [name]);
+  for (const record of records) {
+    for (const part of record.parts) {
+      if (part.part === "server-key" && part.keyName !== undefined) taken.add(part.keyName);
+    }
+  }
+  return taken;
 }
 
 async function currentArchives(
@@ -252,7 +261,7 @@ type MakeInput = {
   env: Readonly<Record<string, string | undefined>>;
   seat: ServerKeySeat;
   madeAt: string;
-  newKey: { name: string; secret: string } | undefined;
+  newSecret: string | undefined;
   verifier: string | undefined;
 };
 
@@ -267,7 +276,7 @@ async function makePack(
   key: "failed" | "replaced" | "unchanged";
   parts: BuiltPart[];
 }> {
-  const { request, madeAt, newKey } = input;
+  const { request, madeAt, newSecret } = input;
   const nodeId = deps.node.nodeId;
   await authorizeManager(tx, { managementSessionId: input.token, permission: "system.manage" });
   const tenant = await readTenant(tx);
@@ -283,7 +292,16 @@ async function makePack(
     .from(persons)
     .where(eq(persons.id, input.personId));
   const number = await nextRecoveryPackNumber(tx, nodeId);
-  const keyInForce = await readKeyInForce(tx, nodeId, venue.timeZone);
+  const keyName = await readBreakGlassKeyName(tx, nodeId);
+  const records = await readRecoveryPacks(tx, nodeId);
+  const keyInForce = keyInForceOf(keyName, records, venue.timeZone);
+  const newKey =
+    newSecret === undefined
+      ? undefined
+      : {
+          name: newBreakGlassKeyName(madeAt.slice(0, 10), takenKeyNames(keyName, records)),
+          secret: newSecret,
+        };
   const context: PartsContext = {
     locale: request.locale,
     timeZone: venue.timeZone,
@@ -373,12 +391,19 @@ export function mountBackupRecoveryPackMakeApi(
           const env = await deps.readBoxEnv();
           const seat = await serverKeySeat(deps.modules, deps.documentEvidence);
           const madeAt = deps.now().toISOString();
-          const newKey = request.newServerKey
-            ? { name: `${madeAt.slice(0, 10)} · ${randomUUID()}`, secret: generatePassword() }
-            : undefined;
-          const verifier = newKey === undefined ? undefined : hashSecret(newKey.secret);
+          const newSecret = request.newServerKey ? generatePassword() : undefined;
+          const verifier = newSecret === undefined ? undefined : hashSecret(newSecret);
           return withTransaction(deps.db, (tx) =>
-            makePack(tx, deps, { token, personId, request, env, seat, madeAt, newKey, verifier }),
+            makePack(tx, deps, {
+              token,
+              personId,
+              request,
+              env,
+              seat,
+              madeAt,
+              newSecret,
+              verifier,
+            }),
           );
         }),
       );
