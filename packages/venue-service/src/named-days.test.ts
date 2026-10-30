@@ -136,16 +136,16 @@ const named = async (f: Fixture, from: string, to = from) =>
 describe("special-day occurrences in the Calendar", () => {
   it("shows a repeating special day on each occurrence, and never before its first year", async () => {
     const f = await fixture();
-    const id = await special(f, "Navidad", [{ date: "2026-12-25", closedAllDay: true }], true);
+    const id = await special(f, "Christmas", [{ date: "2026-12-25", closedAllDay: true }], true);
     expect(await named(f, "2025-12-25")).toEqual([]);
     expect(await named(f, "2027-12-25", "2027-12-26")).toEqual([
-      { date: "2027-12-25", id, name: "Navidad" },
+      { date: "2027-12-25", id, name: "Christmas" },
     ]);
   });
   it("includes both ends, respects one-offs and leap days, and sorts a range across years", async () => {
     const f = await fixture();
     const leap = await special(f, "Leap", ["2024-02-29"], true);
-    const christmas = await special(f, "Navidad", ["2026-12-25"], true);
+    const christmas = await special(f, "Christmas", ["2026-12-25"], true);
     const one = await special(f, "New Year", ["2028-01-01"]);
     expect(
       (await named(f, "2027-12-25", "2028-02-29")).map(({ id, date }) => ({ id, date })),
@@ -158,7 +158,7 @@ describe("special-day occurrences in the Calendar", () => {
   it("ignores another venue's special days", async () => {
     const f = await fixture();
     const other = await fixture();
-    await special(other, "Navidad", [{ date: "2020-12-25", closedAllDay: true }], true);
+    await special(other, "Christmas", [{ date: "2020-12-25", closedAllDay: true }], true);
     expect(await read(f, "2027-12-25")).toMatchObject({
       days: [{ date: "2027-12-25", specialDay: null, tone: "standard", closed: false }],
     });
@@ -171,7 +171,7 @@ describe("departments and calendar follow special days", () => {
     await run(async (tx) => {
       const [special] = await tx
         .insert(specialDays)
-        .values({ locationId: f.cfg.locationId, name: "Navidad", repeatsYearly: true })
+        .values({ locationId: f.cfg.locationId, name: "Christmas", repeatsYearly: true })
         .returning({ id: specialDays.id });
       const [date] = await tx
         .insert(specialDayDates)
@@ -228,11 +228,11 @@ describe("special-days Calendar model", () => {
   });
   it("draws a special day as a special day, in a later year too, and a local holiday does not change that", async () => {
     const f = await fixture();
-    const id = await special(f, "Navidad", ["2026-12-25"], true);
+    const id = await special(f, "Christmas", ["2026-12-25"], true);
     expect((await read(f, "2027-12-25")).days).toEqual([
       {
         date: "2027-12-25",
-        specialDay: { id, name: "Navidad" },
+        specialDay: { id, name: "Christmas" },
         holidays: [],
         tone: "special_day",
         closed: false,
@@ -244,14 +244,14 @@ describe("special-days Calendar model", () => {
   });
   it("keeps a closed public holiday red independently of its closure", async () => {
     const f = await fixture();
-    await special(f, "Navidad", [{ date: "2026-12-25", closedAllDay: true }]);
+    await special(f, "Christmas", [{ date: "2026-12-25", closedAllDay: true }]);
     expect(
       (await read(f, "2026-12-25", "2026-12-25", [christmas("regional")])).days[0],
     ).toMatchObject({ tone: "public_holiday", closed: true });
   });
   it("marks closure from a special day's Closed paint and ignores inactive departments", async () => {
     const f = await fixture();
-    await special(f, "Navidad", ["2026-12-25"], false, [
+    await special(f, "Christmas", ["2026-12-25"], false, [
       { periodId: null, startsAt: "12:00", endsAt: "16:00" },
     ]);
     expect((await read(f, "2026-12-25")).days[0]).toMatchObject({
@@ -276,7 +276,7 @@ describe("special-days Calendar model", () => {
   });
   it("reads the same number of statements whatever the number of active departments", async () => {
     const f = await fixture();
-    await special(f, "Navidad", ["2026-12-25"], false, [
+    await special(f, "Christmas", ["2026-12-25"], false, [
       { periodId: null, startsAt: "12:00", endsAt: "13:00" },
     ]);
     const statements = () =>
