@@ -467,7 +467,14 @@ until A977).
 - **A976 — remaining test-venue defaults.** The bill, party, adjustment, boot, stream and clock
   fixtures listed in the [historical audit](english-only-audit.md#test-support-files-outside-testts)
   still need English defaults, as do the split-extras venue's operation description and
-  pass-printer name. Screen tests take translated expectations from their strings file.
+  pass-printer name, and the "Pase" pass names in the kitchen-print, zone-offer and fiscal
+  sale-path suites (left while #2265 changes those files), and the fiscal sale-path suite's
+  "Pantalla" screen names. The device, join and join-request suites still name kitchen screens
+  "Uno", "Dos", "Todo", "Cocina 1", "Plancha 1", "Cocina" and "Horno". Those suites and the
+  device-session, station-alert, party and configuration-transfer suites still hold other Spanish
+  samples, among them station, till, table, zone, location and device-profile names such as
+  "Plancha", "Fría", "Caja", "Mesa 7", "Terraza" and "Perfil KDS". Screen tests take translated
+  expectations from their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language
   marker and form message from
@@ -510,6 +517,8 @@ until A977).
   The server's split-extras test venue and its suites use English customer, kitchen and location
   names; staff names, language keys and the venue's locale stay, and its operation description and
   pass-printer name remain.
+  The server's device, device-session, join, station-alert, party and configuration-transfer
+  suites no longer use "Pase" or "Pantalla" in sample names.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
