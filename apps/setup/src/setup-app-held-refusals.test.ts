@@ -8,13 +8,7 @@ import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial } from "../test/first-setup-browser.js";
 import { click, q, stoppedSummary } from "../test/missing-database-browser.js";
-import {
-  heldFixture,
-  heldPasswordAccepted,
-  refusedCause,
-  settled,
-  tradingEnv,
-} from "../test/held-database-browser.js";
+import { heldFixture, refusedCause, settled, tradingEnv } from "../test/held-database-browser.js";
 import { cleanupWidgets } from "./widgets/test-helpers.js";
 
 afterEach(async () => {
@@ -35,8 +29,6 @@ const formErrors = (app: SetupApp) =>
 const shown = (app: SetupApp) => [text(app), ...formErrors(app)].join("\n");
 const startAgainSends = (requests: { path: string }[]) =>
   requests.filter((r) => r.path.endsWith("/resolution/start-again"));
-const refusedLines = (app: SetupApp) =>
-  [...q(app, "held-refused")!.querySelectorAll("p")].map((p) => p.textContent!.trim());
 const refusedStoppedParts = (t: ReturnType<typeof stringsFor>) =>
   t.recoveryStoppedRefused.split("{started}");
 const startAgainDeletesIt = (t: ReturnType<typeof stringsFor>) => {
@@ -50,124 +42,90 @@ function expectStoppedRefused(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   for (const part of refusedStoppedParts(t)) expect(stopped).toContain(part);
   expect(text(app)).not.toContain(startAgainDeletesIt(t));
 }
-function expectNoHeldConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
+function expectNoConfirmation(app: SetupApp, t: ReturnType<typeof stringsFor>) {
   expect(q(app, "start-again-deletes")).toBeNull();
   expect(text(app)).not.toContain(startAgainDeletesIt(t));
   for (const words of [t.heldLost, t.noInvoiceSent]) expect(text(app)).not.toContain(words);
   expect(q(app, "retire-confirmed")).toBeNull();
   expect(q(app, "confirm-start-again")).toBeNull();
 }
-function expectInOrder(app: SetupApp, lines: string[]) {
-  const shown = [...q(app, "held-refused")!.querySelectorAll("p")];
-  const order = lines.map((line) => shown.find((p) => p.textContent!.trim() === line)!);
-  for (const [index, element] of order.slice(1).entries())
-    expect(
-      order[index]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING,
-      String(index),
-    ).toBeTruthy();
+const refusalWords = (app: SetupApp) => q(app, "start-again-refused")?.textContent!.trim();
+async function confirmAndSend(app: SetupApp, requests: { path: string }[]) {
+  await click(app, "start-again");
+  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
+  await app.updateComplete;
+  await click(app, "confirm-start-again");
+  await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
 }
 
 for (const locale of locales) {
-  it(`${locale}: kept rows and an invoice record after the password: says what is kept, that it is a fault, and offers no confirmation`, async () => {
+  it(`${locale}: a send refused kept-records after the confirmation closes it, says the setup changed, and Start again then draws the fault`, async () => {
+    const t = stringsFor(locale);
+    let summaries = 0;
+    const { app, requests } = await heldFixture({
+      locale,
+      // The first read draws the confirmation and the second is the send's own check.
+      summary: () =>
+        summaries++ < 2 ? Response.json(stoppedSummary) : refusedCause("kept-records"),
+      startAgain: () => refusedCause("kept-records"),
+    });
+    await confirmAndSend(app, requests);
+    await expect.poll(() => q(app, "retire-confirmed")).toBeNull();
+    await settled(app);
+    expect(formErrors(app)).toContain(t.heldChanged);
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    await click(app, "start-again");
+    await expect.poll(() => refusalWords(app)).toBe(t.keptFault);
+    await settled(app);
+    expect(formErrors(app)).not.toContain(t.heldChanged);
+    expect(q(app, "start-again")).toBeNull();
+    expectNoConfirmation(app, t);
+    expectStoppedRefused(app, t);
+    expect(startAgainSends(requests)).toHaveLength(1);
+  });
+}
+
+for (const locale of locales) {
+  it(`${locale}: a summary refused kept-records beside a stopped recovery: draws the fault and offers no confirmation`, async () => {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
-      summary: () => Response.json(stoppedSummary),
+      summary: () => refusedCause("kept-records"),
     });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "held-refused")).not.toBeNull();
-    await app.updateComplete;
-    const lines = [
-      t.heldRows.replace("{rows}", "105"),
-      t.heldKept.replace("{kept}", "2"),
-      t.heldInvoiceOne.replace("{accepted}", "0"),
-      t.heldFault,
-    ];
-    expect(refusedLines(app)).toEqual(lines);
-    expectInOrder(app, lines);
-    expectNoHeldConfirmation(app, t);
+    await click(app, "start-again");
+    await expect.poll(() => refusalWords(app)).toBe(t.keptFault);
+    await settled(app);
+    expectNoConfirmation(app, t);
     expectStoppedRefused(app, t);
-    expect(q<WtButton>(app, "cancel-start-again")!.disabled).toBe(false);
+    expect(q(app, "start-again")).toBeNull();
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
-    await click(app, "cancel-start-again");
-    await expect.poll(() => q(app, "held-refused")).toBeNull();
   });
 
-  it(`${locale}: an invoice record and no other kept row after the password: the saved items, the invoice line with no kept-items line, then the fault`, async () => {
-    const t = stringsFor(locale);
-    const { app } = await heldFixture({
-      locale,
-      summary: () => Response.json(stoppedSummary),
-    });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "held-refused")).not.toBeNull();
-    await app.updateComplete;
-    const lines = [
-      t.heldRows.replace("{rows}", "105"),
-      t.heldInvoiceOne.replace("{accepted}", "1"),
-      t.heldFault,
-    ];
-    expect(refusedLines(app)).toEqual(lines);
-    expectInOrder(app, lines);
-    expectNoHeldConfirmation(app, t);
-    expectStoppedRefused(app, t);
-  });
-
-  it(`${locale}: kept rows and no invoice record after the password: the saved items, the kept-items line with no invoice line, then the fault`, async () => {
-    const t = stringsFor(locale);
-    const { app } = await heldFixture({
-      locale,
-      summary: () => Response.json(stoppedSummary),
-    });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "held-refused")).not.toBeNull();
-    await app.updateComplete;
-    const lines = [
-      t.heldRows.replace("{rows}", "105"),
-      t.heldKept.replace("{kept}", "2"),
-      t.heldFault,
-    ];
-    expect(refusedLines(app)).toEqual(lines);
-    expectInOrder(app, lines);
-    expectNoHeldConfirmation(app, t);
-    expectStoppedRefused(app, t);
-  });
-
-  it(`${locale}: one kept row and several invoices use the singular and the plural`, async () => {
-    const t = stringsFor(locale);
-    const { app } = await heldFixture({
-      locale,
-      summary: () => Response.json(stoppedSummary),
-    });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "held-refused")).not.toBeNull();
-    await app.updateComplete;
-    expect(refusedLines(app)).toEqual([
-      t.heldRows.replace("{rows}", "105"),
-      t.heldKeptOne,
-      t.heldInvoices.replace("{records}", "3").replace("{accepted}", "2"),
-      t.heldFault,
-    ]);
-  });
-
-  it(`${locale}: saved trading settings beside a stopped recovery keep Start again disabled and say so, pointing at the password`, async () => {
+  it(`${locale}: saved trading settings beside a stopped recovery draw nothing on load; pressing Start again draws the box's words beside the password`, async () => {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
       inspection: () => ({ artifacts: [tradingEnv] }),
+      summary: () => refusedCause("trading-settings"),
     });
-    expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-    expect(text(app)).toContain(`${t.tradingSaved} ${t.tradingSavedPassword}`);
-    expect(text(app)).not.toContain(t.startUnavailableOccupied);
-    expect(text(app)).not.toContain(t.startUnavailable);
+    await settled(app);
+    expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+    expect(text(app)).not.toContain(t.tradingSaved);
+    expect(q(app, "start-again-refused")).toBeNull();
+    await click(app, "start-again");
+    await expect.poll(() => refusalWords(app)).toBe(`${t.tradingSaved} ${t.tradingSavedPassword}`);
+    await settled(app);
+    expect(text(app)).not.toContain(t.wipeUnavailable);
+    expect(q(app, "start-again")).toBeNull();
     expect(q(app, "resume-password")).not.toBeNull();
     expectStoppedRefused(app, t);
     expect(startAgainSends(requests)).toEqual([]);
   });
 }
 
-it("saved trading settings beside a stopped recovery and a database with rows but no venue's say the same", async () => {
+it("saved trading settings beside a stopped recovery and a database with rows but no venue's say the same once Start again is pressed", async () => {
   const t = stringsFor("en-GB");
   const { app } = await heldFixture({
     inspection: () => ({
@@ -175,37 +133,49 @@ it("saved trading settings beside a stopped recovery and a database with rows bu
       emptyDatabase: false,
       artifacts: [tradingEnv],
     }),
+    summary: () => refusedCause("trading-settings"),
   });
-  expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  expect(text(app)).toContain(t.tradingSaved);
-  expect(text(app)).not.toContain(t.startUnavailable);
+  await settled(app);
+  expect(q<WtButton>(app, "start-again")!.disabled).toBe(false);
+  expect(text(app)).not.toContain(t.tradingSaved);
+  await click(app, "start-again");
+  await expect.poll(() => refusalWords(app)).toBe(`${t.tradingSaved} ${t.tradingSavedPassword}`);
+  expect(text(app)).not.toContain(t.wipeUnavailable);
 });
 
-it("saved trading settings where the password cannot be checked leave off the sentence about the password", async () => {
+it("saved trading settings where the setup record cannot be read: no Start again, and the page says the password cannot be checked and deleting is not offered", async () => {
   const t = stringsFor("en-GB");
-  const { app } = await heldFixture({
-    inspection: () => ({ artifacts: [tradingEnv], password: "uncheckable" }),
+  const { app, requests } = await heldFixture({
+    inspection: () => ({
+      artifacts: [tradingEnv],
+      password: "uncheckable",
+      revision: null,
+      ownerGeneration: null,
+    }),
   });
+  await settled(app);
   expect(q<WtButton>(app, "start-again")!.disabled).toBe(true);
-  expect(text(app)).toContain(t.tradingSaved);
-  expect(text(app)).not.toContain(t.tradingSavedPassword);
+  expect(text(app)).toContain(t.uncheckable);
+  expect(refusalWords(app)).toBe(t.wipeUnavailable);
+  expect(text(app)).not.toContain(t.tradingSaved);
   expect(q(app, "resume-password")).toBeNull();
+  expect(requests.filter((r) => r.path.endsWith("/start-again/summary"))).toEqual([]);
 });
 
 for (const locale of locales) {
-  it(`${locale}: the summary refused because the setup finished: says so, and Start again stays disabled`, async () => {
+  it(`${locale}: the summary refused because the setup finished: says so, and Start again is no longer offered`, async () => {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
       summary: () => refusedCause("setup-finished"),
     });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => text(app)).toContain(t.setupFinished);
-    await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
+    await click(app, "start-again");
+    await expect.poll(() => refusalWords(app)).toBe(t.setupFinished);
     await settled(app);
+    expect(q(app, "start-again")).toBeNull();
     expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
     expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
-    expect(text(app)).not.toContain(t.startUnavailableOccupied);
+    expect(text(app)).not.toContain(t.wipeUnavailable);
     expectStoppedRefused(app, t);
     expect(q(app, "reconnect-first")).not.toBeNull();
     expect(startAgainSends(requests)).toEqual([]);
@@ -217,10 +187,10 @@ for (const locale of locales) {
       locale,
       summary: () => refusedCause("trading-settings"),
     });
-    await heldPasswordAccepted(app);
+    await click(app, "start-again");
     await expect.poll(() => text(app)).toContain(`${t.tradingSaved} ${t.tradingSavedPassword}`);
-    await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
     await settled(app);
+    expect(q(app, "start-again")).toBeNull();
     expect(q(app, "resume-password")).not.toBeNull();
     expect(shown(app)).not.toContain(shellFor(locale)["shell.not_ready"]);
     expect(shown(app)).not.toContain(t.recoveryDetailsUnread);
@@ -228,67 +198,38 @@ for (const locale of locales) {
 }
 
 it.each(["setup-finished", "trading-settings"] as const)(
-  "Start again refused at the send with %s: the page says why, and Start again stays disabled",
+  "Start again refused at the send with %s: the page says why, and Start again is no longer offered",
   async (cause) => {
     const t = stringsFor("en-GB");
     const { app, requests } = await heldFixture({ startAgain: () => refusedCause(cause) });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-    await app.updateComplete;
-    await click(app, "confirm-start-again");
-    await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
+    await confirmAndSend(app, requests);
     await expect
       .poll(() => text(app))
       .toContain(cause === "setup-finished" ? t.setupFinished : t.tradingSaved);
-    await expect.poll(() => q<WtButton>(app, "start-again")?.disabled).toBe(true);
     await settled(app);
+    expect(q(app, "start-again")).toBeNull();
+    expect(q(app, "retire-confirmed")).toBeNull();
     expect(shown(app)).not.toContain(t.error);
     expect(shown(app)).not.toContain(shellEn["shell.not_ready"]);
   },
 );
 
-for (const locale of locales) {
-  it(`${locale}: Start again refused at the send with kept-records: says the setup database changed and asks for the password again`, async () => {
-    const t = stringsFor(locale);
-    const { app, requests } = await heldFixture({
-      locale,
-      startAgain: () => refusedCause("kept-records"),
-    });
-    await heldPasswordAccepted(app);
-    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-    await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-    await app.updateComplete;
-    await click(app, "confirm-start-again");
-    await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
-    await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
-    await app.updateComplete;
-    expect(formErrors(app)).toEqual([t.heldChanged]);
-    expect(formErrors(app)).not.toContain(t.error);
-    expect(q(app, "resume-password")).not.toBeNull();
-  });
-}
-
-it("Start again refused at the send with a cause the page has no words for keeps the generic refusal", async () => {
+it("Start again refused at the send with a cause the page has no words for keeps the confirmation and the generic refusal", async () => {
   const t = stringsFor("en-GB");
   const { app, requests } = await heldFixture({ startAgain: () => refusedCause("other-cause") });
-  await heldPasswordAccepted(app);
-  await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
-  await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
-  await app.updateComplete;
-  await click(app, "confirm-start-again");
-  await expect.poll(() => startAgainSends(requests)).toHaveLength(1);
-  await expect.poll(() => q(app, "damaged-record-password")).not.toBeNull();
-  await app.updateComplete;
-  expect(formErrors(app)).toEqual([t.error]);
+  await confirmAndSend(app, requests);
+  await settled(app);
+  expect(q(app, "retire-confirmed")).not.toBeNull();
+  expect(formErrors(app)).toContain(t.error);
   expect(text(app)).not.toContain(t.setupFinished);
   expect(text(app)).not.toContain(t.tradingSaved);
+  expect(q(app, "start-again-refused")).toBeNull();
 });
 
 it("Reconnect after a refusal reads the box again and forgets it", async () => {
   const t = stringsFor("en-GB");
   const { app } = await heldFixture({ summary: () => refusedCause("setup-finished") });
-  await heldPasswordAccepted(app);
+  await click(app, "start-again");
   await expect.poll(() => text(app)).toContain(t.setupFinished);
   await settled(app);
   await click(app, "reconnect-first");
