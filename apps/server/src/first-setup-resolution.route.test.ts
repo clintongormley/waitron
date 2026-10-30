@@ -350,6 +350,68 @@ it("a shown summary carrying held counts is refused setup.request_invalid", asyn
   }
 });
 
+it("confirmUnreadableDatabase is parsed only with a shown summary that said the database cannot be read", async () => {
+  const f = await firstFiscalFixture();
+  let server: { close(): Promise<void> } | undefined;
+  let agent: Agent | undefined;
+  try {
+    await ensureBoxSecrets({
+      stateDir: f.stateDir,
+      hostnames: ["localhost", "waitron.local"],
+      now: () => new Date(),
+      listIpv4: () => ["127.0.0.1"],
+    });
+    const [port] = await freePorts(1);
+    server = await startServerOrFirstSetupResolution({
+      WAITRON_STATE_DIR: f.stateDir,
+      WAITRON_VENUE_DIR: f.venueDir,
+      WAITRON_HTTP_PORT: String(port),
+    });
+    agent = new Agent({ connect: { ca: await readFile(join(f.stateDir, "tls/ca.crt")) } });
+    const origin = `https://127.0.0.1:${port}`;
+    const inspection = await (
+      await fetch(`${origin}/setup-api/first-setup/resolution`, {
+        dispatcher: agent,
+      } as RequestInit)
+    ).json();
+    const before = await readFile(join(f.stateDir, "first-setup.json"));
+    const send = (confirmUnreadableDatabase: unknown) =>
+      fetch(`${origin}/setup-api/first-setup/resolution/start-again`, {
+        dispatcher: agent,
+        method: "POST",
+        headers: { "Content-Type": "application/json", Origin: origin },
+        body: JSON.stringify({
+          inspectionId: inspection.inspectionId,
+          revision: inspection.revision,
+          ownerGeneration: inspection.ownerGeneration,
+          confirmUnreadableDatabase,
+        }),
+      } as RequestInit);
+    for (const value of [
+      { shown: { reached: "named" } },
+      { shown: { reached: "named", databaseUnreadable: false } },
+      { shown: { reached: "named", databaseUnreadable: "yes" } },
+      { shown: { reached: "named", databaseUnreadable: true }, extra: 1 },
+      null,
+    ]) {
+      const response = await send(value);
+      expect(response.status, JSON.stringify(value)).toBe(400);
+      expect(await response.json()).toMatchObject({
+        error: { code: "setup.request_invalid", params: { field: "body" } },
+      });
+    }
+    // Past the parser, the action answers for this fixture with its own refusal.
+    const accepted = await send({ shown: { reached: "named", databaseUnreadable: true } });
+    expect(await accepted.json()).toMatchObject({ error: { code: "setup.not_ready" } });
+    expect(accepted.status).toBe(503);
+    expect(await readFile(join(f.stateDir, "first-setup.json"))).toEqual(before);
+  } finally {
+    await server?.close();
+    await agent?.close();
+    await f.dispose();
+  }
+});
+
 it("the loopback resolution listener keeps certificate guidance on the local address", async () => {
   const f = await firstFiscalFixture();
   let server: { close(): Promise<void> } | undefined;

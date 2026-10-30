@@ -45,6 +45,7 @@ export interface StartAgainFirstSetupRequest {
   register?: RegisterAnswer;
   confirmMissingDatabase?: { nothingFiledOrSold: true; shown: StartAgainSummary };
   confirmRecoveryDiscard?: { shown: StartAgainSummary };
+  confirmUnreadableDatabase?: { shown: StartAgainSummary };
   recoveryRecordDamagedShown?: true;
 }
 export interface StartAgainSummaryRequest {
@@ -409,13 +410,24 @@ export function createFirstSetupResolutionActions(
             "register",
             "confirmMissingDatabase",
             "confirmRecoveryDiscard",
+            "confirmUnreadableDatabase",
             "recoveryRecordDamagedShown",
           ]);
           const assessed = await assessStartAgain(request, "start-again");
-          // The page has no way yet to confirm a database that cannot be read.
-          if (assessed.databaseUnreadable) conflict();
-          const { state, found, recovery, discarding, missing, discardsStopped, heldOption, box } =
-            assessed;
+          const {
+            state,
+            found,
+            recovery,
+            discarding,
+            missing,
+            discardsStopped,
+            heldOption,
+            box,
+            databaseUnreadable,
+          } = assessed;
+          // Beside a stopped recovery, confirmRecoveryDiscard's summary carries the damage.
+          const confirmsUnreadable = databaseUnreadable && !discardsStopped;
+          if (confirmsUnreadable !== (request.confirmUnreadableDatabase !== undefined)) conflict();
           let marker = await markerFor(box, state, { ...discarding, ...heldOption });
           if (discardsStopped && request.confirmRecoveryDiscard === undefined) conflict();
           const damagedShown = request.recoveryRecordDamagedShown === true;
@@ -425,8 +437,8 @@ export function createFirstSetupResolutionActions(
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
           const shown =
-            missing || discardsStopped
-              ? summaryOf(state, assessed.recoveryRecordDamaged, recovery)
+            missing || discardsStopped || databaseUnreadable
+              ? summaryOf(state, assessed.recoveryRecordDamaged, recovery, databaseUnreadable)
               : undefined;
           if (
             missing &&
@@ -435,6 +447,11 @@ export function createFirstSetupResolutionActions(
           )
             conflict();
           if (discardsStopped && !isDeepStrictEqual(request.confirmRecoveryDiscard?.shown, shown))
+            conflict();
+          if (
+            confirmsUnreadable &&
+            !isDeepStrictEqual(request.confirmUnreadableDatabase?.shown, shown)
+          )
             conflict();
           const backup = options.backupRecovery;
           const refuseRunning = async (): Promise<never> => {
@@ -445,12 +462,12 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record changes the recovery's
           // originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if ((missing || discardsStopped) && !finishing) {
+          if ((missing || discardsStopped || databaseUnreadable) && !finishing) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),
               attemptId: state.frozen.attemptId,
-              database: missing ? "missing" : "present",
+              database: missing ? "missing" : databaseUnreadable ? "unreadable" : "present",
               setupAdministrator: { displayName, email },
               ownerGeneration: state.ownerGeneration,
               shown: shown!,

@@ -31,7 +31,7 @@ export interface StartAgainConfirmation {
   version: 2;
   at: string;
   attemptId: string;
-  database: "missing" | "present";
+  database: "missing" | "present" | "unreadable";
   setupAdministrator: { displayName: string; email: string };
   confirmedOn: "repair-page";
   signedIn: false;
@@ -100,7 +100,7 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     !isCanonicalInstant(at) ||
     typeof attemptId !== "string" ||
     !isUuid(attemptId) ||
-    (database !== "missing" && database !== "present") ||
+    (database !== "missing" && database !== "present" && database !== "unreadable") ||
     !object(setupAdministrator) ||
     !text(setupAdministrator.displayName) ||
     !text(setupAdministrator.email) ||
@@ -109,6 +109,9 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     !object(shown) ||
     !(REACHED as readonly unknown[]).includes(shown.reached) ||
     (Object.hasOwn(shown, "recoveryRecordDamaged") && shown.recoveryRecordDamaged !== true) ||
+    // Only a present, damaged database is shown as one that cannot be read.
+    (database === "unreadable") !== (shown.databaseUnreadable === true) ||
+    (Object.hasOwn(shown, "databaseUnreadable") && shown.databaseUnreadable !== true) ||
     // With the database present, a Start again writes a record only when it discards a recovery.
     (database === "present" && !Object.hasOwn(shown, "recovery"))
   )
@@ -128,6 +131,7 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     shown: {
       reached: shown.reached as StartAgainSummary["reached"],
       ...(shown.recoveryRecordDamaged === true && { recoveryRecordDamaged: true as const }),
+      ...(shown.databaseUnreadable === true && { databaseUnreadable: true as const }),
       ...(Object.hasOwn(shown, "recovery") && { recovery: recoveryShown(shown.recovery) }),
     },
   };

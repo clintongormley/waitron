@@ -85,18 +85,30 @@ function recoveryDiscardConfirmation(value: unknown) {
   if (shown.recovery === undefined) invalid();
   return { shown };
 }
+function unreadableDatabaseConfirmation(value: unknown) {
+  const shown = shownSummary(exact(value, ["shown"]).shown);
+  if (shown.databaseUnreadable !== true) invalid();
+  return { shown };
+}
 function shownSummary(value: unknown): StartAgainSummary {
-  const shown = exact(value, ["reached"], ["recoveryRecordDamaged", "recovery"]);
+  const shown = exact(
+    value,
+    ["reached"],
+    ["recoveryRecordDamaged", "databaseUnreadable", "recovery"],
+  );
   const damaged = Object.hasOwn(shown, "recoveryRecordDamaged");
+  const unreadable = Object.hasOwn(shown, "databaseUnreadable");
   const recovery = Object.hasOwn(shown, "recovery") ? shownRecovery(shown.recovery) : undefined;
   if (
     (damaged && shown.recoveryRecordDamaged !== true) ||
+    (unreadable && shown.databaseUnreadable !== true) ||
     !["claimed", "named", "fiscal-started", "fiscal-finished"].includes(shown.reached as string)
   )
     invalid();
   return {
     reached: shown.reached as StartAgainSummary["reached"],
     ...(damaged && { recoveryRecordDamaged: true as const }),
+    ...(unreadable && { databaseUnreadable: true as const }),
     ...(recovery !== undefined && { recovery }),
   };
 }
@@ -1010,6 +1022,9 @@ export function mountFirstSetupResolutionApi(
           ...(Object.hasOwn(rawBody, "register") ? ["register"] : []),
           ...(Object.hasOwn(rawBody, "confirmMissingDatabase") ? ["confirmMissingDatabase"] : []),
           ...(Object.hasOwn(rawBody, "confirmRecoveryDiscard") ? ["confirmRecoveryDiscard"] : []),
+          ...(Object.hasOwn(rawBody, "confirmUnreadableDatabase")
+            ? ["confirmUnreadableDatabase"]
+            : []),
           ...(Object.hasOwn(rawBody, "recoveryRecordDamagedShown")
             ? ["recoveryRecordDamagedShown"]
             : []),
@@ -1034,6 +1049,9 @@ export function mountFirstSetupResolutionApi(
         const confirmRecoveryDiscard = Object.hasOwn(body, "confirmRecoveryDiscard")
           ? recoveryDiscardConfirmation(body.confirmRecoveryDiscard)
           : undefined;
+        const confirmUnreadableDatabase = Object.hasOwn(body, "confirmUnreadableDatabase")
+          ? unreadableDatabaseConfirmation(body.confirmUnreadableDatabase)
+          : undefined;
         try {
           await diskFullOr(() =>
             options.startAgain!({
@@ -1043,6 +1061,7 @@ export function mountFirstSetupResolutionApi(
               register,
               ...(confirmMissingDatabase === undefined ? {} : { confirmMissingDatabase }),
               ...(confirmRecoveryDiscard === undefined ? {} : { confirmRecoveryDiscard }),
+              ...(confirmUnreadableDatabase === undefined ? {} : { confirmUnreadableDatabase }),
               ...(Object.hasOwn(body, "recoveryRecordDamagedShown")
                 ? { recoveryRecordDamagedShown: true as const }
                 : {}),

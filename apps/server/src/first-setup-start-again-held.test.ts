@@ -791,7 +791,7 @@ it("a deletion already marked: Start again answers setup.start_again_incomplete 
 const venueDb = (f: Pick<Held, "roots">) => join(f.roots.venueDir, "venue.db");
 const invoiceTable = getTableName(registrosFacturacion);
 const labelOf = async (f: Held) => (await f.host.resolution.inspectFirstSetupResolution()).database;
-/** The summary with nobody signed in; Start again then refuses until the page can confirm it. */
+/** The summary with nobody signed in; Start again without the page's confirmation refuses. */
 async function unreadableSummary(f: Held, host: Held["host"] = f.host) {
   const { ids, actions } = await withoutSignIn(f, host);
   const shown = await actions.startAgainSummary(ids);
@@ -800,6 +800,22 @@ async function unreadableSummary(f: Held, host: Held["host"] = f.host) {
   });
   return shown;
 }
+/** Start again sent as the page sends it after showing "cannot be read": the setup is deleted. */
+async function expectUnreadableDeleted(
+  f: Held,
+  shown: StartAgainSummary,
+  host: Held["host"] = f.host,
+) {
+  const { ids, actions } = await withoutSignIn(f, host);
+  await expect(
+    actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]!.database).toBe("unreadable");
+  expect(records[0]!.shown).toEqual(shown);
+}
 async function expectHeldRefused(f: Held, refusal: object, host: Held["host"] = f.host) {
   const { ids, actions } = await withoutSignIn(f, host);
   await expectStartAgainRefused(f, () => actions.startAgainSummary(ids).then(() => {}), refusal);
@@ -807,14 +823,77 @@ async function expectHeldRefused(f: Held, refusal: object, host: Held["host"] = 
 }
 const keptRecords = { code: "setup.start_again_refused", params: { cause: "kept-records" } };
 
-it("a held database with a damaged table (no recovery): the summary says it cannot be read", async () => {
+it("a held database with a damaged table (no recovery): the summary says it cannot be read, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup({ recovery: false });
   damagePages(venueDb(f), "department_days");
   expect(await labelOf(f)).toBe("occupied");
-  expect(await unreadableSummary(f)).toEqual({
+  const shown = await unreadableSummary(f);
+  expect(shown).toEqual({
     reached: "fiscal-finished",
     databaseUnreadable: true,
   });
+  await expectUnreadableDeleted(f, shown);
+});
+
+it("a damaged database whose confirmation shows another summary is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  const shown = await unreadableSummary(f);
+  const { ids, actions } = await withoutSignIn(f);
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmUnreadableDatabase: { shown: { ...shown, reached: "named" } },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+});
+
+it("confirmUnreadableDatabase beside a readable database is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup({ recovery: false });
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toEqual({ reached: "fiscal-finished" });
+  await expectStartAgainRefused(
+    f,
+    () =>
+      actions.startAgainFirstSetup({
+        ...ids,
+        confirmUnreadableDatabase: { shown: { ...shown, databaseUnreadable: true } },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+});
+
+it("a damaged database beside a stopped recovery: the summary names both, and confirmRecoveryDiscard with that summary deletes both", async () => {
+  const f = await heldSetup();
+  damagePages(venueDb(f), "department_days");
+  const startAgain = await askStartAgain(f);
+  expect(startAgain.shown).toMatchObject({
+    reached: "fiscal-finished",
+    databaseUnreadable: true,
+    recovery: expect.any(Object),
+  });
+  await expectStartAgainRefused(
+    f,
+    () =>
+      startAgain.run({
+        confirmRecoveryDiscard: { shown: startAgain.shown },
+        confirmUnreadableDatabase: { shown: startAgain.shown },
+      }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expect(startAgain.run()).resolves.toBeUndefined();
+  const left = await snapshot(f);
+  expect(Object.keys(left.venue).filter((name) => !LEFT_VENUE.test(name))).toEqual([]);
+  expect(Object.keys(left.state).filter((name) => !LEFT_STATE.test(name))).toEqual([]);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records).toHaveLength(1);
+  expect(records[0]).toMatchObject({ database: "unreadable" });
+  expect(records[0]!.shown).toEqual(startAgain.shown);
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
 });
 
 /** The modules, with the fiscal module's holdings seat recording what it answered. */
@@ -848,16 +927,18 @@ function recordingFiscalSeat(f: Held) {
   return { host: { ...f.host, modules } as Held["host"], answers };
 }
 
-it("a held database whose invoice table is damaged, with no sale: the summary says it cannot be read, and the fiscal module's own reader failed with code 11", async () => {
+it("a held database whose invoice table is damaged, with no sale: the summary says it cannot be read, the fiscal module's own reader failed with code 11, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup({ recovery: false });
   damagePages(venueDb(f), invoiceTable);
   expect(await labelOf(f)).toBe("occupied");
   const { host, answers } = recordingFiscalSeat(f);
-  expect(await unreadableSummary(f, host)).toEqual({
+  const shown = await unreadableSummary(f, host);
+  expect(shown).toEqual({
     reached: "fiscal-finished",
     databaseUnreadable: true,
   });
   expect(answers[0]).toEqual({ rejected: true, errcode: 11 });
+  await expectUnreadableDeleted(f, shown, host);
 });
 
 it("control: the same held database undamaged: the summary does not say it cannot be read, and the fiscal module's reader counted nothing", async () => {
@@ -872,15 +953,17 @@ it.each([
   ["its first page damaged", (f: Held) => damagePages(venueDb(f), null)],
   ["junk bytes for a database", (f: Held) => writeFile(venueDb(f), "not a database")],
 ])(
-  "a held setup database with %s (attempt committed): the summary says it cannot be read",
+  "a held setup database with %s (attempt committed): the summary says it cannot be read, and Start again with that confirmation deletes it",
   async (_label, damage) => {
     const f = await heldSetup({ recovery: false });
     await damage(f);
     expect(await labelOf(f)).toBe("corrupt");
-    expect(await unreadableSummary(f)).toEqual({
+    const shown = await unreadableSummary(f);
+    expect(shown).toEqual({
       reached: "fiscal-finished",
       databaseUnreadable: true,
     });
+    await expectUnreadableDeleted(f, shown);
   },
 );
 

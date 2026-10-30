@@ -192,7 +192,7 @@ it.each([
   ["an unparseable time", { at: "yesterday" }],
   ["a time not in canonical form", { at: "2026-10-24T13:50:12Z" }],
   ["an attempt id that is not a UUID", { attemptId: "../escape" }],
-  ["a database other than missing or present", { database: "gone" }],
+  ["a database other than missing, present or unreadable", { database: "gone" }],
   ["a negative owner generation", { ownerGeneration: -1 }],
   ["a fractional owner generation", { ownerGeneration: 1.5 }],
   ["an unknown reached", { shown: { reached: "sold" } }],
@@ -324,3 +324,57 @@ it("a shown.held key is not stored in the record", async () => {
     JSON.parse(await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8")),
   ).toEqual({ ...V2, ...present });
 });
+
+it.each([
+  ["with no recovery", {}],
+  ["beside a stopped recovery", { recovery }],
+])(
+  "a record with the database unreadable keeps what the page showed, %s",
+  async (_label, extra) => {
+    const dir = await stateDir();
+    const unreadable = {
+      ...record,
+      database: "unreadable" as const,
+      shown: { ...record.shown, databaseUnreadable: true as const, ...extra },
+    };
+    await writeStartAgainConfirmation(dir, unreadable);
+    const stored = JSON.parse(
+      await readFile(join(dir, START_AGAIN_CONFIRMATIONS_DIR, name), "utf8"),
+    ) as { shown: object };
+    expect(stored).toEqual({ ...V2, ...unreadable });
+    expect(Object.keys(stored.shown)).toEqual([
+      "reached",
+      "databaseUnreadable",
+      ...Object.keys(extra),
+    ]);
+  },
+);
+
+it.each([
+  ["unreadable without databaseUnreadable", "unreadable", {}],
+  [
+    "unreadable with a databaseUnreadable other than true",
+    "unreadable",
+    { databaseUnreadable: "yes" },
+  ],
+  ["present with databaseUnreadable", "present", { databaseUnreadable: true, recovery }],
+  [
+    "present with a databaseUnreadable other than true",
+    "present",
+    { databaseUnreadable: false, recovery },
+  ],
+  ["missing with databaseUnreadable", "missing", { databaseUnreadable: true }],
+])(
+  "a record with the database %s is refused setup.attempt_invalid and writes nothing",
+  async (_label, database, extra) => {
+    const dir = await stateDir();
+    await expect(
+      writeStartAgainConfirmation(dir, {
+        ...record,
+        database,
+        shown: { ...record.shown, ...extra },
+      } as unknown as typeof record),
+    ).rejects.toMatchObject({ code: "setup.attempt_invalid", params: {} });
+    expect(await readdir(join(dir, START_AGAIN_CONFIRMATIONS_DIR)).catch(() => [])).toEqual([]);
+  },
+);

@@ -33,6 +33,7 @@ import {
   assertOtherFirstSetupAllowed,
   createFirstSetupBackupWorkspace,
   type FirstSetupChange,
+  type StartAgainSummary,
 } from "@waitron/provisioning";
 import {
   EPOCH_MS,
@@ -1032,26 +1033,56 @@ it.each(["first-setup.json", "first-setup-claim.json"])(
   },
 );
 
-it("a corrupt venue database beside a damaged picks file is refused setup.attempt_conflict without the page's confirmation, and nothing changes", async () => {
+/** Start again sent with the page's confirmation of the summary: deleted, one record. */
+async function expectUnreadableDeleted(
+  f: Awaited<ReturnType<typeof abandonedAttempt>>["f"],
+  send: (shown: StartAgainSummary) => Promise<void>,
+  shown: StartAgainSummary,
+) {
+  await send(shown);
+  await expectStartAgainDeleted(f);
+  const folder = join(f.stateDir, CONFIRMATIONS);
+  const records = await readdir(folder);
+  expect(records).toHaveLength(1);
+  const record = JSON.parse(await readFile(join(folder, records[0]!), "utf8")) as {
+    database: string;
+    shown: unknown;
+  };
+  expect(record.database).toBe("unreadable");
+  expect(record.shown).toEqual(shown);
+}
+
+it("a corrupt venue database beside a damaged picks file is refused setup.attempt_conflict without the page's confirmation, and nothing changes; with it, it is deleted", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await damagePicks(f);
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
   expect(inspected.database).not.toBe("missing");
+  const ids = {
+    inspectionId: inspected.inspectionId,
+    revision: inspected.revision!,
+    ownerGeneration: inspected.ownerGeneration!,
+  };
   await expectRefusedUnchanged(
     f,
-    () =>
+    () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
+    "setup.attempt_conflict",
+  );
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toMatchObject({ databaseUnreadable: true });
+  await expectUnreadableDeleted(
+    f,
+    (confirmed) =>
       actions.startAgainFirstSetup({
         ...startRequest,
-        inspectionId: inspected.inspectionId,
-        revision: inspected.revision!,
-        ownerGeneration: inspected.ownerGeneration!,
+        ...ids,
+        confirmUnreadableDatabase: { shown: confirmed },
       }),
-    "setup.attempt_conflict",
+    shown,
   );
 });
 
-it("an unused attempt whose database cannot be read: the summary says so, and Start again refuses until the page confirms it", async () => {
+it("an unused attempt whose database cannot be read: the summary says so, Start again refuses until the page confirms it, and with that confirmation deletes it", async () => {
   const { f, actions, startRequest } = await abandonedAttempt();
   await writeFile(join(f.venueDir, "venue.db"), "not a database");
   const inspected = await f.host.resolution.inspectFirstSetupResolution();
@@ -1061,13 +1092,22 @@ it("an unused attempt whose database cannot be read: the summary says so, and St
     revision: inspected.revision!,
     ownerGeneration: inspected.ownerGeneration!,
   };
-  await expect(actions.startAgainSummary(ids)).resolves.toMatchObject({
-    databaseUnreadable: true,
-  });
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toMatchObject({ databaseUnreadable: true });
   await expectRefusedUnchanged(
     f,
     () => actions.startAgainFirstSetup({ ...startRequest, ...ids }),
     "setup.attempt_conflict",
+  );
+  await expectUnreadableDeleted(
+    f,
+    (confirmed) =>
+      actions.startAgainFirstSetup({
+        ...startRequest,
+        ...ids,
+        confirmUnreadableDatabase: { shown: confirmed },
+      }),
+    shown,
   );
 });
 
