@@ -412,7 +412,7 @@ export class RecoveryHourEntry extends LitElement {
             </section>`
           : nothing
       }
-      ${renderClockProblem(this.#wait.problem, words, clock, this.locale, this.context.selection.timeZone)}
+      ${renderClockProblem(this.#wait.problem, words, clock)}
       ${
         result?.status === "waiting"
           ? this.#wait.renderWait(words)

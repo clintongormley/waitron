@@ -493,7 +493,7 @@ it("a later minute allowed from beyond the date range is explained without a tim
     ),
   );
 });
-it("a later minute in use names its time and does not count down", async () => {
+it("a later minute in use is explained and does not count down", async () => {
   const allowedFromMs = Date.parse("2026-10-18T20:04:00Z");
   const { el, calls } = await mount({
     select: async () => {
@@ -509,7 +509,7 @@ it("a later minute in use names its time and does not count down", async () => {
     await userEvent.click(button(el, "select"));
     await vi.waitFor(() =>
       expect(text(el)).toContain(
-        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+        "The series cannot be made yet: a later minute is already in use.",
       ),
     );
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
@@ -1209,7 +1209,7 @@ it("says in Spanish that the series cannot be made yet, with the plural verb", a
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     ),
   );
 });

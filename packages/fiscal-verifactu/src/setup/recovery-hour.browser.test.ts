@@ -825,7 +825,7 @@ it("a missing second clock reported by the server starts the 15-second check", a
     vi.useRealTimers();
   }
 });
-it("a later minute in use names its time and does not count down", async () => {
+it("a later minute in use is explained and does not count down", async () => {
   const { prepare } = scripted([
     {
       code: "sif.allocation_invalid",
@@ -840,7 +840,7 @@ it("a later minute in use names its time and does not count down", async () => {
     await userEvent.click(button(el, "select"));
     await vi.waitFor(() =>
       expect(text(el)).toContain(
-        "The series cannot be made yet: a later minute is already in use. You can carry on from 22:04.",
+        "The series cannot be made yet: a later minute is already in use.",
       ),
     );
     expect(el.shadowRoot!.querySelector("[data-test=remaining]")).toBeNull();
@@ -1101,7 +1101,7 @@ it("says in Spanish that the series cannot be made yet", async () => {
   await userEvent.click(button(el, "select"));
   await vi.waitFor(() =>
     expect(text(el)).toContain(
-      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo. Podrás seguir a partir de las 22:04.",
+      "Todavía no se pueden crear las series: ya se usó un minuto posterior a la hora de este equipo.",
     ),
   );
 });
