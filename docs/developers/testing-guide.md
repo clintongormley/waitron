@@ -558,7 +558,8 @@ from the writer alone and from the reader alone. It is weaker than the rule: it 
 connections refuse, not that every growing insert is chunked, and other openers (the read-only
 copies in `packages/provisioning/src/`, `packages/store/src/backup-query.ts`,
 `apps/server/src/backup-verification.ts` and `apps/server/src/first-setup-database-holdings.ts`, the
-lock files, and the inline Node script in `deploy/waitron.sh`) keep their runtime's own limit.
+lock files, the inline Node script in `deploy/waitron.sh`, and script and bench fixtures such as
+`apps/server/scripts/cloud-backup-fixture.ts`) keep their runtime's own limit.
 
 ## On Vitest 4 a project's own `maxWorkers` wins; the outer config's is the fallback.
 
