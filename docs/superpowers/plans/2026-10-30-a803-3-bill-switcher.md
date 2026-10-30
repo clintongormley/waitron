@@ -654,6 +654,10 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `table-actions.refund-pending.test.ts:211`, `:239`, `:270` (join answers `{partyId, mainBillId, merged: false}`) | W (found at Task 4a's red run) | `{partyId, billIds}` with every bill the party keeps, in number order, in `toEqual`; every `charges`, `expectPendingFigures` and payment check byte-identical | master plan interfaces | 4a |
 | `till-api.today-joins.test.ts` helper `mainBill(p)` (`:689`; used at `:716`, `:922`, `:944`, `:972`) | W (found at Task 4a's red run) | `onlyBill(p)`: the party's one bill that is not abandoned, asserting there is exactly one (was `parties.mainBillId`, which could be null); answers `{partyId, billIds: [onlyBill(p)]}`, split `{partyId, billId: onlyBill(...)}` | master plan interfaces | 4a |
 | `party-table-actions.test.ts` Move and Join answers (`:270`, `:333`, `:365`, `:383`, `:401`, `:434`, `:658`, `:678`, `:964`, `:1005`, `:1036`, `:1361`, `:1688`; the combine answer `:1589`) | W (found at Task 4a's red run) | `{partyId, mainBillId, merged: false}` → `{partyId, billIds}` in `toEqual`, in number order; the combine answer → `toBeUndefined()` plus `partyRow(luis).mainBillId` carrying the value the answer held; where a title promises something about the main bill, its `partyRow(...).mainBillId` check stays | master plan interfaces | 4a |
+| `merged: false` in 39 `toEqual` answers in 9 files: `bill-editing.bill-moves.test.ts` (1), `order-drafts.db.test.ts` (1), `order-kitchen-note.moves.test.ts` (1), `party-arriving-dishes.test.ts` (2), `party-move-bill.test.ts` (18), `print-problems.test.ts` (1), `sent-order-number.test.ts` (1), `till-api.allergy-move.test.ts` (2), `till-api.move-bill.test.ts` (12) | W (found at Task 4b's red run) | the `merged: false` entry goes; every other value of each `toEqual` unchanged | D13 | 4b |
+| `till-api.move-bill.test.ts:411`, `bill-identities.test.ts:321`, `:346` (`toMatchObject` with `merged: false`) | W, stricter (found at Task 4b's red run) | `:411` `toMatchObject({partyId, billId, merged: false})` → `toEqual({partyId, billId})`; `:321`, `:346` `toMatchObject({merged: false, billId})` → `toEqual({partyId: to.partyId, billId})` | D13 | 4b |
+| `party-move-bill.test.ts:831`, `:957` (`expect(result.merged).toBe(false)`) | B (found at Task 4b's red run) | `expect(Object.keys(result).sort()).toEqual(["billId", "partyId"])` | D13 | 4b |
+| `till-api.allergy-move.test.ts:213` (the answer's type cast) | F (found at Task 4b's red run) | the cast loses `merged: boolean`; no other change | D13 | 4b |
 | `apps/server/src/order-portions.filing.test.ts:1159` (`bills: "separate"` passed to `moveBill`) | **F, Q5 item 2** | the property line goes; no other line; no `expect` changes ("separate" is now the only behaviour) | D13 | 4b |
 | `apps/server/src/split-bill.test.ts:539` (`bills: "separate"`), `:1019` (`bills: "merge"`) | F | the property lines go, no other change — provided both files' cases are green at Task 3a's run (where `bills: "merge"` stops merging); if `:1019`'s case goes red there, it is a stop (this file was meant to stay unchanged) | D13 | 4b |
 | every other `bills: "merge" \| "separate"` property in the 61 server files | F | property deletion only; a file whose behaviour changed was handled, with its own row, in Tasks 2–3a | D13 | 4b |
@@ -1083,20 +1087,21 @@ cases, `table-actions.refund-pending.test.ts` shapes, `till-api.zone-closed.test
 - [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.table-actions.test.ts src/till-api.move-bill.test.ts -t 'A803 no merge flag|bills key'`.
       (Run: 12 failed, 5 passed, 192 skipped: the three move answers carried `merged`; the
       invalid values answered 400; the table routes' `"merge"`/`"separate"` rows already passed.)
-- [ ] Implement the product deletions. Then the sweep, a script kept outside the repository that,
+- [x] Implement the product deletions. Then the sweep, a script kept outside the repository that,
       for each file in `rg -l 'bills: "(merge|separate)"' apps/server/src`, deletes every line that
       is exactly `\s*bills: "(merge|separate)"( as const)?,\s*$` and nothing else. Then fix the
       leftovers by hand from `rg -n 'bills: "(merge|separate)"|bills = "merge"|\bbills,|bills\?:' apps/server/src`
       (inline objects, helper parameters, `{ ...opts, bills }`). Each hand edit is a property or
       parameter deletion; anything else is a stop.
-- [x] (Done: product deletions in `move-bill.ts`, `table-actions.ts` (also `combineParties`'
+      (Done: product deletions in `move-bill.ts`, `table-actions.ts` (also `combineParties`'
       `bills` argument), `till-api.ts`, `floor-today-merges.ts`, `testing/party-venue.ts`. Sweep:
       122 lines in 61 files. Hand fixes: 70 lines in 14 files by a second outside script (a
       `bills: "…"` property inside a one-line object, or a whole `{ bills: "…" }` argument to a
       helper whose options default to `{}`); helper parameters and their call-site arguments in
       `bill-editing.bill-moves`, `bill-editing.table-actions`, `bill-identities`, `receipt-guests`,
       `party-table-actions`, `order-kitchen-note.moves` and `floor-today-flatten-api`; the
-      `it.each` callback parameter in `order-kitchen-note.moves.test.ts:194`, left unused. Left
+      `it.each` callback parameter in `order-kitchen-note.moves.test.ts`, removed (`async (bills) =>`
+      → `async () =>`, now at `:193`). Left
       alone: the `bills,` shorthand that `it.each` rows send in HTTP bodies in
       `till-api.allergy-move.test.ts:558` and `table-actions.refund-pending.test.ts:204`, `:232`.
       An HTTP body has no type, and deleting the key would leave each row's parameter unused.
