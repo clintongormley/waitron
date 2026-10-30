@@ -32,11 +32,16 @@ export interface RecoveryPackMade {
   received: boolean;
 }
 
-/** A pack's day as the screen language writes it: "12 October", "12 de octubre". */
-export function packDate(iso: string): string {
-  return new Intl.DateTimeFormat(currentLocale(), { day: "numeric", month: "long" }).format(
-    new Date(iso),
-  );
+/**
+ * A pack's day as the screen language writes it, in the venue's zone as the pack's own pages are
+ * dated: "12 October", "12 de octubre".
+ */
+export function packDate(iso: string, timeZone: string | undefined): string {
+  return new Intl.DateTimeFormat(currentLocale(), {
+    day: "numeric",
+    month: "long",
+    timeZone,
+  }).format(new Date(iso));
 }
 
 /** The pack the status names as holding the current server key, and whether it reached a browser. */
@@ -62,10 +67,14 @@ function withStrong(
   return html`${before}<strong>${strong}</strong>${after ?? ""}`;
 }
 
-function unreceivedWords(holder: { number: number; madeAt: string }): TemplateResult {
+/** Decision 10's words for a pack holding the current server key that never reached a browser. */
+export function unreceivedWords(
+  holder: { number: number; madeAt: string },
+  timeZone: string | undefined,
+): TemplateResult {
   return withStrong(
     "recovery_pack_dialog.unreceived",
-    { number: String(holder.number), date: packDate(holder.madeAt) },
+    { number: String(holder.number), date: packDate(holder.madeAt, timeZone) },
     "option",
     t("recovery_pack_dialog.new_key"),
   );
@@ -93,8 +102,8 @@ type Draft = { typed: boolean; ticked: boolean };
 
 /**
  * Makes a recovery pack after a fresh sign-in. Sends `recovery-pack-made` once the PDF has arrived
- * whole, and `recovery-pack-status` with the status it read again after a lost answer or an
- * unreplaced key.
+ * whole, `recovery-pack-status` with the status it read again after a lost answer or an unreplaced
+ * key, and `recovery-pack-closed` when it closes, since a make it dropped may still have happened.
  */
 @customElement("dashboard-recovery-pack-dialog")
 export class RecoveryPackDialog extends LitElement {
@@ -202,12 +211,18 @@ export class RecoveryPackDialog extends LitElement {
     super.disconnectedCallback();
   }
 
+  /** The venue's zone, which the pack's pages are dated in; the browser's until a status names it. */
+  get #zone(): string | undefined {
+    return (this.reread ?? this.status)?.timeZone;
+  }
+
   #draft(): Draft {
     if (this.step !== "form") return { typed: false, ticked: false };
     return { typed: this.#signIn()?.typed ?? false, ticked: this.ticked };
   }
 
   #close(): void {
+    const wasOpen = this.opened;
     this.#generation++;
     this.#signIn()?.clear();
     this.#scope?.dispose();
@@ -220,6 +235,10 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
     this.reread = null;
     this.ways = null;
+    if (wasOpen && this.isConnected)
+      this.dispatchEvent(
+        new CustomEvent("recovery-pack-closed", { bubbles: true, composed: true }),
+      );
   }
 
   #dialog(): WtDialog | null {
@@ -398,9 +417,9 @@ export class RecoveryPackDialog extends LitElement {
         : holder.received
           ? fill("recovery_pack_dialog.new_key_held", {
               number: String(holder.number),
-              date: packDate(holder.madeAt),
+              date: packDate(holder.madeAt, this.#zone),
             })
-          : unreceivedWords(holder);
+          : unreceivedWords(holder, this.#zone);
     return html`<div class="option">
       <input
         type="checkbox"
@@ -435,7 +454,7 @@ export class RecoveryPackDialog extends LitElement {
           unreceived?.holdsCurrentServerKey
             ? fill("recovery_pack_dialog.lost_new_key_named", {
                 number: String(unreceived.number),
-                date: packDate(unreceived.madeAt),
+                date: packDate(unreceived.madeAt, this.#zone),
               })
             : nothing
         }
@@ -452,9 +471,9 @@ export class RecoveryPackDialog extends LitElement {
         : holder.received
           ? fill("recovery_pack_dialog.key_still_works", {
               number: String(holder.number),
-              date: packDate(holder.madeAt),
+              date: packDate(holder.madeAt, this.#zone),
             })
-          : unreceivedWords(holder);
+          : unreceivedWords(holder, this.#zone);
     return html`<p data-test="key-failed" role="alert">
       ${withStrong("recovery_pack_dialog.key_failed", {}, "not", t("recovery_pack_dialog.not"))}
       ${where}

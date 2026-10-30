@@ -43,6 +43,7 @@ function status(overrides: Partial<RecoveryPackStatus> = {}): RecoveryPackStatus
     reasons: [],
     keep: [],
     backupsUseOlderKey: false,
+    timeZone: "Europe/Madrid",
     ...overrides,
   };
 }
@@ -184,6 +185,24 @@ describe("the form", () => {
       `${fill("recovery_pack_dialog.new_key_held", { number: "3", date: "12 October" })} ${t("recovery_pack_dialog.new_key_effect")}`,
     );
   });
+
+  it.each([
+    // 01:30 on 13 October at the venue; 12 October in any zone from UTC-11 to UTC+12.
+    ["Pacific/Kiritimati", "2026-10-12T11:30:00.000Z", "13 October"],
+    // 22:30 on 12 October at the venue; 13 October in any zone from UTC to UTC+14.
+    ["Pacific/Pago_Pago", "2026-10-13T09:30:00.000Z", "12 October"],
+  ])(
+    "dates the pack in the venue's zone (%s), not the browser's",
+    async (timeZone, madeAt, day) => {
+      setLocale("en-GB");
+      const { el } = await open({
+        at: status({ timeZone, keep: [{ number: 3, madeAt, until: null, why: "server_key" }] }),
+      });
+      expect(words(el.shadowRoot!.querySelector("[data-test=new-key-why]"))).toContain(
+        fill("recovery_pack_dialog.new_key_held", { number: "3", date: day }),
+      );
+    },
+  );
 
   it("says the pack holding the current key never reached a browser, when the status says so", async () => {
     const { el } = await open({ at: UNRECEIVED });

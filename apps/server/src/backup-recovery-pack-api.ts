@@ -419,8 +419,14 @@ export function mountBackupRecoveryPackMakeApi(
                   .where(inArray(persons.id, makers))
               ).map((p) => [p.id, p.name] as const),
         );
+        const [venue] = await tx
+          .select({ timeZone: locations.timeZone })
+          .from(locations)
+          .where(eq(locations.id, deps.node.locationId));
+        if (venue === undefined)
+          throw new Error("the box has no venue to date its recovery packs in");
         const loaded = deps.backups();
-        return packStatus({
+        const status = packStatus({
           records: records.map((r) => ({
             ...r,
             madeByName: r.madeBy === null ? null : (names.get(r.madeBy) ?? null),
@@ -434,6 +440,7 @@ export function mountBackupRecoveryPackMakeApi(
             loaded.recoveryKey !== fileKey,
           now: deps.now(),
         });
+        return { ...status, timeZone: venue.timeZone };
       });
       return c.json(status);
     });

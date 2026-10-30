@@ -746,6 +746,14 @@ describe("the status route", () => {
     expect((await codeOf(response)).code).toBe("authorization.not_permitted");
   });
 
+  it("names the venue's time zone, so the card dates a pack as the paper does", async () => {
+    await suite.db
+      .update(locations)
+      .set({ timeZone: "Atlantic/Canary" })
+      .where(eq(locations.id, node.locationId));
+    expect(await read(fixture())).toMatchObject({ timeZone: "Atlantic/Canary" });
+  });
+
   it("says no pack has been made, then up to date once one is received, then out of date when the key changes", async () => {
     const f = fixture();
     expect(await read(f)).toMatchObject({ latest: null, upToDate: false });

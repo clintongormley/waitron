@@ -523,6 +523,7 @@ export class StreamSettingsPanel extends LitElement {
       this.#scope?.commit(submitted);
       // Save can give the box its first recovery key; the Backups screen must stop offering its own.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
+      this.#written();
       this.editing = (Object.keys(EMPTY) as Field[]).some(
         (field) => this.#body()[field] !== submitted[field],
       );
@@ -538,6 +539,13 @@ export class StreamSettingsPanel extends LitElement {
     } finally {
       if (current()) this.submitting = false;
     }
+  }
+
+  /** Tells the Backups screen the box's bucket settings changed, so its recovery pack card reads again. */
+  #written(): void {
+    this.dispatchEvent(
+      new CustomEvent("stream-settings-written", { bubbles: true, composed: true }),
+    );
   }
 
   async #turnOff(): Promise<void> {
@@ -558,6 +566,7 @@ export class StreamSettingsPanel extends LitElement {
       this.#trackShownForm(settings);
       // The Backups screen offers this bucket as a destination, so it must see it go now.
       this.api.liveData.invalidate([{ type: "backup_status" }]);
+      this.#written();
       this.#dropKit();
     } catch (error) {
       if (current()) this.#fail(error);

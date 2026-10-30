@@ -23,7 +23,7 @@ import "@waitron/ui/src/components/wt-number-stepper.js";
 import { currentLocale, fill, t } from "../i18n/t.js";
 import { codeMessage, codeOf } from "../i18n/codes.js";
 import "./stream-settings-panel.js";
-import "./recovery-document-panel.js";
+import "./recovery-pack-card.js";
 import "../widgets/backup-settings-evidence.js";
 import type {
   ArchiveRecoveryPackAnswer,
@@ -872,6 +872,7 @@ export class BackupScreen extends LitElement {
       const params = (error as { params?: { reloadErrorCode?: unknown } }).params;
       reloadErrorCode = typeof params?.reloadErrorCode === "string" ? params.reloadErrorCode : null;
       this.#dropPack();
+      this.#packSettingsChanged();
     }
     try {
       this.reloadErrorCode = reloadErrorCode;
@@ -966,8 +967,14 @@ export class BackupScreen extends LitElement {
    * older, so it is dropped. */
   #takeWriteAnswer(status: BackupStatusView): void {
     this.#writeAnswers++;
+    this.#packSettingsChanged();
     this.#dropStalePack(status);
     this.status = status;
+  }
+
+  /** A write here can put the recovery pack out of date, so its card reads its status again. */
+  #packSettingsChanged(): void {
+    this.renderRoot.querySelector("dashboard-recovery-pack-card")?.reload();
   }
 
   /** A pack, or its refusal, is for one key and one stored record, and only while a bucket is
@@ -1305,7 +1312,7 @@ export class BackupScreen extends LitElement {
     const alertKey = this.errorKey ?? this.refreshErrorKey;
     return html`
       <h1 class="title">${t("backup.title")}</h1>
-      ${this.canManage ? html`<div class="card"><dashboard-recovery-document .api=${this.api} .canManage=${this.canManage}></dashboard-recovery-document></div>` : nothing}
+      ${this.canManage ? html`<div class="card"><dashboard-recovery-pack-card .api=${this.api} .canManage=${this.canManage}></dashboard-recovery-pack-card></div>` : nothing}
       ${this.#renderConfigurationExport()} ${s === undefined ? nothing : this.#renderBody(s)}
       ${alertKey ? html`<p class="error" role="alert">${codeMessage(alertKey)}</p>` : nothing}
       <dashboard-backup-settings-evidence
@@ -1316,6 +1323,7 @@ export class BackupScreen extends LitElement {
       <div class="card">
         <dashboard-stream-settings
           .api=${this.api}
+          @stream-settings-written=${() => this.#packSettingsChanged()}
           .managedByEnvironment=${s?.managedByEnvironment}
           .archivesEnabled=${s?.enabled}
         ></dashboard-stream-settings>

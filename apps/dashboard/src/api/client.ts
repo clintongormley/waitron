@@ -2092,6 +2092,8 @@ export interface RecoveryPackStatus {
     why: "server_key" | "backup_key" | "replaced_server_key";
   }[];
   backupsUseOlderKey: boolean;
+  /** The venue's time zone, which the pack's pages are dated in. */
+  timeZone: string;
 }
 
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.

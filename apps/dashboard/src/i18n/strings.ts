@@ -1167,6 +1167,58 @@ export const en = {
   "recovery_pack_dialog.remake": "Make a new pack with a new server key",
   "recovery_pack_dialog.try_again": "Try again",
   "recovery_pack_dialog.stop": "Stop",
+  "recovery_pack.title": "Recovery pack",
+  "recovery_pack.intro":
+    "One printed document with what you need when the box fails: the restore codes for your bucket copy and archives, and the server key. Keep it locked away, off the box.",
+  "recovery_pack.none": "No recovery pack has been made on this box.",
+  "recovery_pack.up_to_date": "Recovery pack {number}, made on {date} by {name}, is up to date.",
+  "recovery_pack.up_to_date_unnamed": "Recovery pack {number}, made on {date}, is up to date.",
+  "recovery_pack.out_of_date": "Recovery pack {number}, made on {date}, is out of date.",
+  "recovery_pack.incomplete":
+    "Recovery pack {number}, made on {date}, is incomplete: a page could not be drawn, and that page says why. Make a new pack once the cause is fixed.",
+  "recovery_pack.not_received":
+    "Recovery pack {number}, made on {date}, never reached a browser. If you do not have it, make a new pack.",
+  "recovery_pack.reason.key_changed": "The backup key changed on {date}.",
+  "recovery_pack.reason.bucket_settings": "The bucket copy's settings changed.",
+  "recovery_pack.reason.archives_settings": "The archive settings changed.",
+  "recovery_pack.reason.bucket_set_up": "The bucket copy was set up after this pack.",
+  "recovery_pack.reason.archives_set_up": "Archives were set up after this pack.",
+  "recovery_pack.reason.server_key_set_up": "The server key was made after this pack.",
+  "recovery_pack.reason.bucket_removed": "The bucket copy was turned off.",
+  "recovery_pack.reason.archives_removed": "Archives were turned off.",
+  "recovery_pack.reason.server_key_removed": "The box no longer keeps a server key.",
+  "recovery_pack.reason.server_key_replaced": "The server key was replaced.",
+  "recovery_pack.make_new": "Make a new pack.",
+  "recovery_pack.keep_server_key": "Keep pack {number}, made on {date}: it holds the server key.",
+  "recovery_pack.keep_backup_key":
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its backup key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+  "recovery_pack.keep_old_server_key":
+    "Keep pack {number}, made on {date}, until about {until}, when the last archive made with its server key should be deleted if backups keep running, and for as long as you keep any copies yourself.",
+  "recovery_pack.older_key":
+    "The box's backups still use the backup key from before the last change, because the box could not load the new settings. A pack made now prints the new key; keep the older pack too until Backups shows the settings loaded.",
+  "recovery_pack.row.last": "Last pack",
+  "recovery_pack.row.backup_key": "Backup key",
+  "recovery_pack.row.server_key": "Server key",
+  "recovery_pack.last_none": "None yet",
+  "recovery_pack.last_value": "Pack {number}, made on {date} by {name}",
+  "recovery_pack.last_value_unnamed": "Pack {number}, made on {date}",
+  "recovery_pack.backup_key_changed":
+    "Changed on {date}; pack {number}, made on {packDate}, has the older key",
+  "recovery_pack.backup_key_same": "Unchanged since pack {number}, made on {date}",
+  "recovery_pack.backup_key_absent": "Not in pack {number}, made on {date}",
+  "recovery_pack.server_key_on": "On pack {number}, made on {date}",
+  "recovery_pack.server_key_on_unreceived":
+    "On pack {number}, made on {date}, which never reached a browser",
+  "recovery_pack.server_key_none": "This venue keeps no server key",
+  "recovery_pack.server_key_elsewhere": "Not on a recovery pack",
+  "recovery_pack.make": "Make recovery pack",
+  "recovery_pack.ready":
+    "Recovery pack {number}, made on {date}, is ready. Print it or save it, and keep it locked away, off the box.",
+  "recovery_pack.download": "Download PDF",
+  "recovery_pack.print": "Open to print",
+  "recovery_pack.load_failed":
+    "The recovery pack's state could not be read. Try again reads it once more.",
+  "recovery_pack.retry": "Try again",
   "profile.totp": "Authentication code",
   "profile.code_required": "Enter your authentication code",
   "profile.passkey_name": "Passkey name",
@@ -4871,6 +4923,64 @@ export const es: Record<StringKey, string> = {
   "recovery_pack_dialog.remake": "Hacer un paquete nuevo con una nueva clave del servidor",
   "recovery_pack_dialog.try_again": "Volver a intentarlo",
   "recovery_pack_dialog.stop": "Parar",
+  "recovery_pack.title": "Paquete de recuperación",
+  "recovery_pack.intro":
+    "Un documento impreso con lo que necesitas si la caja falla: los códigos de restauración de tu copia en el bucket y de los archivos, y la clave del servidor. Guárdalo bajo llave, lejos de la caja.",
+  "recovery_pack.none": "Aún no se ha hecho ningún paquete de recuperación en esta caja.",
+  "recovery_pack.up_to_date":
+    "El paquete de recuperación {number}, hecho el {date} por {name}, está al día.",
+  "recovery_pack.up_to_date_unnamed":
+    "El paquete de recuperación {number}, hecho el {date}, está al día.",
+  "recovery_pack.out_of_date":
+    "El paquete de recuperación {number}, hecho el {date}, está desactualizado.",
+  "recovery_pack.incomplete":
+    "El paquete de recuperación {number}, hecho el {date}, está incompleto: no se pudo dibujar una página, y esa página explica por qué. Haz un paquete nuevo cuando se haya resuelto la causa.",
+  "recovery_pack.not_received":
+    "El paquete de recuperación {number}, hecho el {date}, nunca llegó a un navegador. Si no lo tienes, haz un paquete nuevo.",
+  "recovery_pack.reason.key_changed": "La clave de las copias cambió el {date}.",
+  "recovery_pack.reason.bucket_settings": "Los ajustes de la copia en el bucket cambiaron.",
+  "recovery_pack.reason.archives_settings": "Los ajustes de los archivos cambiaron.",
+  "recovery_pack.reason.bucket_set_up":
+    "La copia en el bucket se configuró después de este paquete.",
+  "recovery_pack.reason.archives_set_up": "Los archivos se configuraron después de este paquete.",
+  "recovery_pack.reason.server_key_set_up":
+    "La clave del servidor se creó después de este paquete.",
+  "recovery_pack.reason.bucket_removed": "La copia en el bucket se desactivó.",
+  "recovery_pack.reason.archives_removed": "Los archivos se desactivaron.",
+  "recovery_pack.reason.server_key_removed": "La caja ya no guarda una clave del servidor.",
+  "recovery_pack.reason.server_key_replaced": "La clave del servidor se sustituyó.",
+  "recovery_pack.make_new": "Haz un paquete nuevo.",
+  "recovery_pack.keep_server_key":
+    "Guarda el paquete {number}, hecho el {date}: contiene la clave del servidor.",
+  "recovery_pack.keep_backup_key":
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave de las copias si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+  "recovery_pack.keep_old_server_key":
+    "Guarda el paquete {number}, hecho el {date}, hasta aproximadamente el {until}, cuando debería borrarse el último archivo hecho con su clave del servidor si las copias siguen funcionando, y mientras guardes copias por tu cuenta.",
+  "recovery_pack.older_key":
+    "Las copias de la caja siguen usando la clave de las copias anterior al último cambio, porque la caja no pudo cargar los ajustes nuevos. Un paquete hecho ahora imprime la clave nueva; guarda también el paquete anterior hasta que Copias de seguridad muestre los ajustes cargados.",
+  "recovery_pack.row.last": "Último paquete",
+  "recovery_pack.row.backup_key": "Clave de las copias",
+  "recovery_pack.row.server_key": "Clave del servidor",
+  "recovery_pack.last_none": "Ninguno todavía",
+  "recovery_pack.last_value": "Paquete {number}, hecho el {date} por {name}",
+  "recovery_pack.last_value_unnamed": "Paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_changed":
+    "Cambió el {date}; el paquete {number}, hecho el {packDate}, tiene la clave anterior",
+  "recovery_pack.backup_key_same": "Sin cambios desde el paquete {number}, hecho el {date}",
+  "recovery_pack.backup_key_absent": "No está en el paquete {number}, hecho el {date}",
+  "recovery_pack.server_key_on": "En el paquete {number}, hecho el {date}",
+  "recovery_pack.server_key_on_unreceived":
+    "En el paquete {number}, hecho el {date}, que nunca llegó a un navegador",
+  "recovery_pack.server_key_none": "Este local no guarda clave del servidor",
+  "recovery_pack.server_key_elsewhere": "No está en ningún paquete de recuperación",
+  "recovery_pack.make": "Hacer paquete de recuperación",
+  "recovery_pack.ready":
+    "El paquete de recuperación {number}, hecho el {date}, está listo. Imprímelo o guárdalo, y guárdalo bajo llave, lejos de la caja.",
+  "recovery_pack.download": "Descargar PDF",
+  "recovery_pack.print": "Abrir para imprimir",
+  "recovery_pack.load_failed":
+    "No se ha podido leer el estado del paquete de recuperación. Volver a intentarlo lo lee otra vez.",
+  "recovery_pack.retry": "Volver a intentarlo",
   "profile.totp": "Código de autenticación",
   "profile.code_required": "Introduce tu código de autenticación",
   "profile.passkey_name": "Nombre de la llave de acceso",

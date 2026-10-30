@@ -46,6 +46,7 @@ const STATUS: RecoveryPackStatus = {
   reasons: [],
   keep: [],
   backupsUseOlderKey: false,
+  timeZone: "Europe/Madrid",
 };
 
 async function fixture() {
