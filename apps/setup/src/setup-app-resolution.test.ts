@@ -128,8 +128,61 @@ it("Start again's confirmation words are the design's, in English and Spanish", 
   expect(en.noInvoiceSent).toBe("No invoice was sent to AEAT.");
   expect(es.noInvoiceSent).toBe("No se envió ninguna factura a la AEAT.");
   for (const strings of [en, es])
-    for (const key of ["heldNoInvoices", "heldNoInvoicesOne"])
+    for (const key of [
+      "heldNoInvoices",
+      "heldNoInvoicesOne",
+      "heldRows",
+      "heldRowsOne",
+      "heldKept",
+      "heldKeptOne",
+      "heldInvoices",
+      "heldInvoiceOne",
+      "heldFault",
+      "startUnavailable",
+      "startUnavailableOccupied",
+      "damagedRecordPassword",
+    ])
       expect(Object.hasOwn(strings, key)).toBe(false);
+  expect(en.keptFault).toBe(
+    "The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.",
+  );
+  expect(es.keptFault).toBe(
+    "La base de datos de configuración guarda registros que Waitron nunca borra. Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. No se ofrece borrar esta configuración. Reconectar lo deja todo como está.",
+  );
+  expect(en.tradingSaved).toBe(
+    "This setup already saved the settings the box sells with, so deleting it is not offered.",
+  );
+  expect(es.tradingSaved).toBe(
+    "Esta configuración ya guardó los ajustes con los que vende el equipo, así que no se ofrece borrarla.",
+  );
+  expect(en.tradingSavedPassword).toBe("To finish it, continue with your setup password.");
+  expect(es.tradingSavedPassword).toBe(
+    "Para terminarla, continúa con tu contraseña de configuración.",
+  );
+  expect(en.setupFinished).toBe(
+    "This setup already finished, so deleting it is not offered. Reconnect to check the saved result.",
+  );
+  expect(es.setupFinished).toBe(
+    "Esta configuración ya terminó, así que no se ofrece borrarla. Reconecta para comprobar el resultado guardado.",
+  );
+  expect(en.wipeUnavailable).toBe(
+    "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is.",
+  );
+  expect(es.wipeUnavailable).toBe(
+    "Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
+  );
+  expect(en.heldChanged).toBe("The setup changed after this page read it. Try again.");
+  expect(es.heldChanged).toBe(
+    "La configuración cambió después de que esta página la leyera. Inténtalo otra vez.",
+  );
+  expect(en.setupDatabaseUnreadable).toBe("The previous setup process was unsuccessful.");
+  expect(es.setupDatabaseUnreadable).toBe("El proceso de configuración anterior no tuvo éxito.");
+  expect(en.uncheckable).toBe(
+    "This box cannot check the original setup password, so Continue is not offered.",
+  );
+  expect(es.uncheckable).toBe(
+    "Este equipo no puede comprobar la contraseña original de configuración, así que no se ofrece Continuar.",
+  );
   expect(initialOwnerStrings.en.retireConfirmed).toBe("Delete the old attempt and start again.");
   expect(initialOwnerStrings.en.restarting).toBe(
     "The old attempt is deleted. Reconnect to continue.",

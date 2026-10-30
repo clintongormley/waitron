@@ -335,3 +335,82 @@ it("with no stopped recovery, a summary read that fails draws the error beside S
   await click(app, "start-again");
   await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
 });
+
+const locales = [
+  ["en-GB", "en"],
+  ["es-ES", "es"],
+] as const;
+const refusals: { name: string; summary: () => Response; words: (lang: "en" | "es") => string }[] =
+  [
+    {
+      name: "the setup finished",
+      summary: () => refusedCause("setup-finished"),
+      words: (lang) => initialOwnerStrings[lang].setupFinished,
+    },
+    {
+      name: "the setup saved the settings the box sells with",
+      summary: () => refusedCause("trading-settings"),
+      words: (lang) =>
+        `${initialOwnerStrings[lang].tradingSaved} ${initialOwnerStrings[lang].tradingSavedPassword}`,
+    },
+    {
+      name: "the setup database holds records Waitron never deletes",
+      summary: () => refusedCause("kept-records"),
+      words: (lang) => initialOwnerStrings[lang].keptFault,
+    },
+    {
+      name: "the box answers setup.owner_required",
+      summary: () =>
+        Response.json({ error: { code: "setup.owner_required", params: {} } }, { status: 403 }),
+      words: (lang) => initialOwnerStrings[lang].wipeUnavailable,
+    },
+    {
+      name: "the box answers setup.not_ready",
+      summary: () =>
+        Response.json({ error: { code: "setup.not_ready", params: {} } }, { status: 409 }),
+      words: (lang) => initialOwnerStrings[lang].wipeUnavailable,
+    },
+  ];
+
+for (const [locale, lang] of locales)
+  for (const r of refusals)
+    it(`in ${locale}, where ${r.name}, Start again draws the box's words and is no longer offered`, async () => {
+      const { app } = await wipeFixture({ summary: r.summary });
+      setLocale(locale);
+      await app.updateComplete;
+      await click(app, "start-again");
+      await expect.poll(() => q(app, "start-again-refused")).not.toBeNull();
+      await settled(app);
+      expect(q(app, "start-again-refused")!.textContent).toBe(r.words(lang));
+      expect(q(app, "start-again")).toBeNull();
+      expect(q(app, "retire-confirmed")).toBeNull();
+    });
+
+for (const [locale, lang] of locales)
+  it(`in ${locale}, a setup database the box cannot read all of is named above what Start again deletes, with no line about invoices`, async () => {
+    const strings = initialOwnerStrings[lang];
+    const { app } = await wipeFixture({
+      summary: () => Response.json({ ...namedSummary, databaseUnreadable: true }),
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    await click(app, "start-again");
+    await expect.poll(() => q(app, "retire-confirmed")).not.toBeNull();
+    const line = q(app, "setup-database-unreadable");
+    expect(line!.textContent).toBe(strings.setupDatabaseUnreadable);
+    const deletes = q(app, "start-again-deletes")!;
+    expect(deletes.textContent!.trim()).toBe(strings.heldLost);
+    expect(line!.compareDocumentPosition(deletes) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+for (const [locale, lang] of locales)
+  it(`in ${locale}, where the setup password cannot be checked, the page says so and that deleting is not offered`, async () => {
+    const strings = initialOwnerStrings[lang];
+    const { app } = await wipeFixture({
+      inspection: { password: "uncheckable", revision: null, ownerGeneration: null },
+    });
+    setLocale(locale);
+    await app.updateComplete;
+    expect(text(app)).toContain(strings.uncheckable);
+    expect(q(app, "start-again-refused")!.textContent).toBe(strings.wipeUnavailable);
+  });

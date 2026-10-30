@@ -2324,8 +2324,8 @@ export class SetupApp extends LitElement {
         : refused === "trading-settings"
           ? `${t.tradingSaved} ${t.tradingSavedPassword}`
           : refused === "kept-records"
-            ? t.heldFault
-            : t.startUnavailable;
+            ? t.keptFault
+            : t.wipeUnavailable;
     const lastActive = (at: string, source?: "memory" | "saved-step") =>
       (source === "saved-step" ? t.recoveryLastSaved : t.recoveryLastActive).replace(
         "{at}",
@@ -2415,6 +2415,10 @@ export class SetupApp extends LitElement {
       : html`${
             summary.recoveryRecordDamaged === true
               ? html`<p data-test="recovery-record-damaged">${t.recoveryRecordDamaged}</p>`
+              : nothing
+          }${
+            summary.databaseUnreadable === true
+              ? html`<p data-test="setup-database-unreadable">${t.setupDatabaseUnreadable}</p>`
               : nothing
           }
           <p data-test="start-again-deletes">

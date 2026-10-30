@@ -29,39 +29,29 @@ export const initialOwnerStrings = {
     recoveryDetailsUnread:
       "This box could not read the details of the recovery from backup. Check again.",
     missingConfirm: "Nothing was filed to AEAT and nothing was sold.",
-    uncheckable: "This box cannot check the original setup password. Keep its files for recovery.",
+    uncheckable: "This box cannot check the original setup password, so Continue is not offered.",
     finish: "Finish setup",
     finishReview: "Check the saved details.",
     finishEmail: "Re-enter the email settings used for this setup.",
     finishHelp: "Re-enter the certificate and email settings used for this setup.",
     startAgain: "Start again",
     recoveryRecordDamaged: "This setup's recovery-key record is damaged and cannot be read.",
-    damagedRecordPassword:
-      "To start again, enter the administrator password you chose during setup.",
     retireConfirmed: "Delete the old attempt and start again.",
     cancel: "Cancel",
     restarting: "The old attempt is deleted. Reconnect to continue.",
-    startUnavailable:
-      "Start again without a password is available only when the box can verify an unused, empty setup.",
-    startUnavailableOccupied:
-      "Start again is not available: this setup's database already holds records.",
-    heldRows: "The setup database already holds {rows} saved items.",
-    heldRowsOne: "The setup database already holds 1 saved item.",
     heldLost: "Start again deletes what was entered in the setup that stopped part way.",
     noInvoiceSent: "No invoice was sent to AEAT.",
-    heldKept: "It holds {kept} items that Waitron never deletes.",
-    heldKeptOne: "It holds 1 item that Waitron never deletes.",
-    heldInvoices: "{records} of them are invoices; AEAT accepted {accepted}.",
-    heldInvoiceOne: "1 of them is an invoice; AEAT accepted {accepted}.",
-    heldChanged:
-      "The setup database changed after this page read it. Enter the password again to see what it holds now.",
-    heldFault:
-      "An unfinished setup should hold none of these, so this is a fault in Waitron. Start again would delete them, so it is not offered. Reconnect keeps everything as it is.",
+    heldChanged: "The setup changed after this page read it. Try again.",
+    keptFault:
+      "The setup database holds records that Waitron never deletes. An unfinished setup should hold none, so this is a fault in Waitron. Deleting this setup is not offered. Reconnect keeps everything as it is.",
+    wipeUnavailable:
+      "This box cannot confirm that deleting this setup is safe, so it is not offered. Reconnect keeps everything as it is.",
+    setupDatabaseUnreadable: "The previous setup process was unsuccessful.",
     tradingSaved:
-      "This setup already saved the settings the box trades with. Start again would delete a setup that is ready to trade, so it is not offered here.",
-    tradingSavedPassword: "Enter your setup password to see what is left to do.",
+      "This setup already saved the settings the box sells with, so deleting it is not offered.",
+    tradingSavedPassword: "To finish it, continue with your setup password.",
     setupFinished:
-      "This setup already finished. Start again would delete a finished setup, so it is not offered. Reconnect to check the saved result.",
+      "This setup already finished, so deleting it is not offered. Reconnect to check the saved result.",
     abandon: "Abandon this attempt",
     replace: "Enter new setup details",
     retired: "This attempt is abandoned. Its history is retained.",
@@ -107,7 +97,7 @@ export const initialOwnerStrings = {
       "Este equipo no pudo leer los datos de la recuperación desde una copia. Comprueba otra vez.",
     missingConfirm: "No se envió nada a la AEAT ni se vendió nada.",
     uncheckable:
-      "Este equipo no puede comprobar la contraseña original. Conserva sus archivos para recuperarlo.",
+      "Este equipo no puede comprobar la contraseña original de configuración, así que no se ofrece Continuar.",
     finish: "Finalizar configuración",
     finishReview: "Comprueba los datos guardados.",
     finishEmail: "Vuelve a introducir los ajustes de correo usados en esta configuración.",
@@ -116,33 +106,24 @@ export const initialOwnerStrings = {
     startAgain: "Empezar de nuevo",
     recoveryRecordDamaged:
       "El registro de la clave de recuperación de esta configuración está dañado y no se puede leer.",
-    damagedRecordPassword:
-      "Para empezar de nuevo, introduce la contraseña de administrador que elegiste al configurar.",
     retireConfirmed: "Borrar el intento anterior y empezar de nuevo.",
     cancel: "Cancelar",
     restarting: "El intento anterior se ha borrado. Reconecta para continuar.",
-    startUnavailable:
-      "Solo puedes empezar sin contraseña si el equipo verifica que la configuración está vacía y sin usar.",
-    startUnavailableOccupied:
-      "Empezar de nuevo no está disponible: la base de datos de esta configuración ya tiene registros.",
-    heldRows: "La base de datos de configuración ya guarda {rows} elementos.",
-    heldRowsOne: "La base de datos de configuración ya guarda 1 elemento.",
     heldLost:
       "Empezar de nuevo borra lo que se introdujo en la configuración que se detuvo a medias.",
     noInvoiceSent: "No se envió ninguna factura a la AEAT.",
-    heldKept: "Tiene {kept} elementos que Waitron nunca borra.",
-    heldKeptOne: "Tiene 1 elemento que Waitron nunca borra.",
-    heldInvoices: "{records} son facturas; la AEAT aceptó {accepted}.",
-    heldInvoiceOne: "1 es una factura; la AEAT aceptó {accepted}.",
     heldChanged:
-      "La base de datos de configuración cambió después de que esta página la leyera. Vuelve a introducir la contraseña para ver qué guarda ahora.",
-    heldFault:
-      "Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. Empezar de nuevo los borraría, así que no se ofrece. Reconectar lo deja todo como está.",
+      "La configuración cambió después de que esta página la leyera. Inténtalo otra vez.",
+    keptFault:
+      "La base de datos de configuración guarda registros que Waitron nunca borra. Una configuración sin terminar no debería tener ninguno, así que es un fallo de Waitron. No se ofrece borrar esta configuración. Reconectar lo deja todo como está.",
+    wipeUnavailable:
+      "Este equipo no puede confirmar que borrar esta configuración sea seguro, así que no se ofrece. Reconectar lo deja todo como está.",
+    setupDatabaseUnreadable: "El proceso de configuración anterior no tuvo éxito.",
     tradingSaved:
-      "Esta configuración ya guardó los ajustes con los que vende el equipo. Empezar de nuevo borraría una configuración lista para vender, así que no se ofrece aquí.",
-    tradingSavedPassword: "Introduce tu contraseña de configuración para ver qué falta.",
+      "Esta configuración ya guardó los ajustes con los que vende el equipo, así que no se ofrece borrarla.",
+    tradingSavedPassword: "Para terminarla, continúa con tu contraseña de configuración.",
     setupFinished:
-      "Esta configuración ya terminó. Empezar de nuevo borraría una configuración terminada, así que no se ofrece. Reconecta para comprobar el resultado guardado.",
+      "Esta configuración ya terminó, así que no se ofrece borrarla. Reconecta para comprobar el resultado guardado.",
     abandon: "Abandonar este intento",
     replace: "Introducir nuevos datos",
     retired: "Intento abandonado. Su historial se conserva.",
