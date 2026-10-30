@@ -550,8 +550,8 @@ it("a minute in use shows one countdown, checks again quietly and keeps saying w
         "The auto-generated invoice series code (which is time-based) already exists in the database.",
       ),
     );
-    expect(remaining(el)).toBe("3 minutes");
-    expect(text(el)).toContain("Generating a new code in: 3 minutes");
+    expect(remaining(el)).toBe("03:00");
+    expect(text(el)).toContain("Generating a new code in: 03:00");
     expect(quiet(el)).toEqual({ disabled: true, variant: "secondary" });
     vi.advanceTimersByTime(30_000);
     await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
@@ -559,8 +559,54 @@ it("a minute in use shows one countdown, checks again quietly and keeps saying w
     expect(taken()).toBe(
       "The auto-generated invoice series code (which is time-based) already exists in the database.",
     );
-    expect(remaining(el)).toBe("2 minutes 30 seconds");
+    expect(remaining(el)).toBe("02:30");
     expect(el.shadowRoot!.querySelector("[data-test=minute-in-use]")).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+it("a lost re-check during a taken minute keeps counting and checks again", async () => {
+  const answers: (() => unknown)[] = [
+    () => {
+      throw {
+        code: "sif.allocation_invalid",
+        params: {
+          reason: "minute_in_use",
+          allowedFromMs: instant + 180_000,
+          remainingMs: 180_000,
+          recheckInMs: 30_000,
+        },
+      };
+    },
+    () => {
+      throw new TypeError("Failed to fetch");
+    },
+    () => ({ status: "waiting", targetMs: instant + 180_000, remainingMs: 135_000 }),
+  ];
+  const { el, calls } = await mount({ select: async () => answers.shift()!() });
+  await ready(el);
+  fakeClock();
+  try {
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() => expect(remaining(el)).toBe("03:00"));
+    vi.advanceTimersByTime(30_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(2));
+    vi.advanceTimersByTime(1_000);
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:29");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
+    expect(el.shadowRoot!.querySelector("wt-form-actions")?.getAttribute("data-failed")).toBe(
+      "false",
+    );
+    vi.advanceTimersByTime(14_000);
+    await vi.waitFor(() => expect(calls.filter((c) => c.action === "candidates")).toHaveLength(3));
+    await el.updateComplete;
+    expect(remaining(el)).toBe("02:15");
+    expect(text(el)).toContain(
+      "The auto-generated invoice series code (which is time-based) already exists in the database.",
+    );
   } finally {
     vi.useRealTimers();
   }
@@ -1212,7 +1258,7 @@ it("says in Spanish that the series code already exists, with the countdown", as
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     ),
   );
-  expect(text(el)).toContain("Generando un código nuevo en: 3 minutos");
+  expect(text(el)).toContain("Se generará un código nuevo en 03:00");
 });
 it("says in Spanish that the series cannot be made yet, with the plural verb", async () => {
   const { el } = await mount({

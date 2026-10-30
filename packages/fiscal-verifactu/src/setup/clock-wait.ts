@@ -24,10 +24,6 @@ export interface ClockWords {
   inUse: string;
   minuteTaken: string;
   newCodeIn: string;
-  second: string;
-  seconds: string;
-  minute: string;
-  minutes: string;
 }
 
 export interface ClockComparison {
@@ -58,10 +54,6 @@ export const clockWaitStrings = {
     minuteTaken:
       "The auto-generated invoice series code (which is time-based) already exists in the database.",
     newCodeIn: "Generating a new code in:",
-    second: "second",
-    seconds: "seconds",
-    minute: "minute",
-    minutes: "minutes",
   },
   es: {
     whyWait: "Esperamos a confirmar la hora para que ninguna serie de facturas se repita.",
@@ -78,11 +70,7 @@ export const clockWaitStrings = {
       "Todavía no se pueden crear las series: los registros de este equipo ya tienen una serie para el minuto que usaría este equipo.",
     minuteTaken:
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
-    newCodeIn: "Generando un código nuevo en:",
-    second: "segundo",
-    seconds: "segundos",
-    minute: "minuto",
-    minutes: "minutos",
+    newCodeIn: "Se generará un código nuevo en",
   },
 } satisfies Record<"en" | "es", Omit<ClockWords, "secondClockDo" | "secondClockEnds" | "differDo">>;
 
@@ -103,19 +91,9 @@ export function dateTimeFormat(
   return format;
 }
 
-/** "2 minutes 30 seconds": the taken-minute wait's figure, in whole seconds as `formatRemaining`. */
-export function remainingInWords(
-  ms: number,
-  words: Pick<ClockWords, "second" | "seconds" | "minute" | "minutes">,
-): string {
-  const total = Math.ceil(Math.max(0, ms) / 1000);
-  const minutes = Math.floor(total / 60);
-  const seconds = total % 60;
-  const parts: string[] = [];
-  if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? words.minute : words.minutes}`);
-  if (seconds > 0 || minutes === 0)
-    parts.push(`${seconds} ${seconds === 1 ? words.second : words.seconds}`);
-  return parts.join(" ");
+/** "02:30": the taken-minute wait's figure, `formatRemaining` with two-digit minutes. */
+export function remainingAsClock(ms: number): string {
+  return formatRemaining(ms).padStart(5, "0");
 }
 
 export const SECOND_CLOCK_POLL_MS = 15_000;
@@ -175,7 +153,7 @@ export async function readClocks(
 }
 
 /** Checks again every 15 seconds; starting it again while it runs keeps its rhythm. */
-function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
+function createRecheckPoll(host: ReactiveControllerHost, run: () => void) {
   let timer: ReturnType<typeof setInterval> | undefined;
   const stop = () => {
     if (timer !== undefined) clearInterval(timer);
@@ -200,7 +178,7 @@ function createSecondClockPoll(host: ReactiveControllerHost, run: () => void) {
 export class ClockWait<Selected extends { status: "selected" }> {
   readonly #host: ReactiveControllerHost;
   readonly #countdown: WaitCountdown;
-  readonly #poll: ReturnType<typeof createSecondClockPoll>;
+  readonly #poll: ReturnType<typeof createRecheckPoll>;
   #problem: ClockProblem | undefined;
   #result: Selected | ClockWaitAnswer | undefined;
   /** Reached this wait through a taken minute: kept by the box's wait that follows. */
@@ -209,7 +187,7 @@ export class ClockWait<Selected extends { status: "selected" }> {
   constructor(host: ReactiveControllerHost, recheck: () => void) {
     this.#host = host;
     this.#countdown = createWaitCountdown(host, recheck);
-    this.#poll = createSecondClockPoll(host, recheck);
+    this.#poll = createRecheckPoll(host, recheck);
   }
 
   get problem(): ClockProblem | undefined {
@@ -266,18 +244,21 @@ export class ClockWait<Selected extends { status: "selected" }> {
   }
 
   /**
-   * Shows what a failed request means. While the page checks for a second clock by itself
-   * (`automatic`), a request lost on the way (no refusal code) is left to the next check.
+   * Shows what a failed request means. A check the page made by itself (`automatic`) that was
+   * lost on the way (no refusal code) leaves a countdown or second-clock wait up, and the page
+   * checks again every 15 seconds until an answer replaces it.
    */
   settle(error: unknown, automatic: boolean, fail: (error: unknown) => void): void {
     const problem = clockProblem(error);
     if (problem?.kind === "second-clock") this.waitForSecondClock();
     else if (problem) this.show(problem);
-    else if (!(
+    else if (
       automatic &&
-      this.#poll.running &&
+      (this.#poll.running || this.counting) &&
       (error as { code?: unknown } | null)?.code === undefined
-    )) {
+    )
+      this.#poll.start();
+    else {
       this.show();
       fail(error);
     }
@@ -336,7 +317,7 @@ function renderWait(words: ClockWords, countdown: WaitCountdown, minuteTaken: bo
             <span role="timer" data-test="remaining"
               >${
                 minuteTaken
-                  ? remainingInWords(countdown.remainingMs, words)
+                  ? remainingAsClock(countdown.remainingMs)
                   : formatRemaining(countdown.remainingMs)
               }</span
             >

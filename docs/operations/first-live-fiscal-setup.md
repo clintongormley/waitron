@@ -46,9 +46,12 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   refusal shows both readings and no countdown, and waits for Check again").
 - **The minute this box would use is already taken**: the page says "The auto-generated
   invoice series code (which is time-based) already exists in the database." and "Generating a new
-  code in: 3 minutes", counting down in minutes and seconds to the next free minute with no button
+  code in: 03:00", counting down in minutes and seconds to the next free minute with no button
   to press; it checks with the box again by itself and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
-  "a minute in use shows one countdown, checks again quietly and keeps saying why"). A reload before
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If one of those
+  checks is lost on the network, the countdown carries on and the page checks again every 15 seconds
+  (`first-hour.browser.test.ts`, "a lost re-check during a taken minute keeps counting and checks
+  again"). A reload before
   the box's own wait begins shows no countdown; tick "The country, place, time zone and displayed
   time are correct." and press **Make the series** again (read, not run: the page's check on load
   ignores a refusal for a taken minute, `#compare` in `packages/fiscal-verifactu/src/setup/first-hour.ts`). If this attempt

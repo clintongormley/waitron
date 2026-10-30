@@ -671,16 +671,6 @@ From A1207. `recordedTimeFloorMs`, the backup's `backup-created` floor and
 backup's record keeps accepting `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`)
 until a check of shipped backups says it may stop.
 
-## A1225. A lost automatic clock re-check drops the setup and restore pages' wait
-
-From the A1207 review. When the page's own re-check fails with no refusal code (for example the
-network drops), the sentence and countdown go, the form shows its general error, Make the series is
-enabled again, and nothing checks again by itself (`ClockWait.settle`,
-`packages/fiscal-verifactu/src/setup/clock-wait.ts`, is quiet about such a failure only while it
-waits for a second clock). It happens at the end of the box's ordinary wait too, which I believe
-predates A1207 (#1990, `3ba85c7a6`); A1207's taken-minute re-check can now meet it with up to 2:30
-still showing. Keep the wait up and check again on the next tick instead.
-
 ## A1226. Compare clocks on the restore page can choose a series name by itself
 
 From the A1207 finish-branch review. When the page's preview is refused because there is no second
@@ -733,9 +723,11 @@ for another minute before checking again. Explain that to the user and show a co
 box's refusal (reason `minute_in_use`) says how long until the next free minute and when to check
 again, and the setup and restore pages say the owner's own words (2026-10-30): "The auto-generated
 invoice series code (which is time-based) already exists in the database." and "Generating a new
-code in: 52 seconds", count down to it and check again by themselves; a promotion waits up to 150
-seconds and is otherwise refused with those values. The Spanish and the figure past a minute ("2
-minutes 30 seconds") wait for the owner's approval. After a restore of a backup whose invoices are more than a minute later than the box's time,
+code in: 00:52", count down to it and check again by themselves; a promotion waits up to 150
+seconds and is otherwise refused with those values. The owner then chose (2026-10-30) the Spanish
+«Se generará un código nuevo en 00:52», the figure as two-digit minutes and seconds ("02:30") in
+both languages, and that a check the page makes by itself and loses on the network keeps the
+countdown going and checks again every 15 seconds. After a restore of a backup whose invoices are more than a minute later than the box's time,
 payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
 more than a minute behind the last sale (Q5); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind

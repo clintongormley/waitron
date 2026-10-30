@@ -492,11 +492,6 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
   worked out but nothing in the choice reads them.
   [Detail](backlog/setup.md#a1224-delete-the-time-floors-the-series-choice-no-longer-reads)
 
-- **A1225. A lost automatic clock re-check drops the setup and restore pages' wait** (from A1207
-  review): when the page's own re-check fails with no refusal code, the sentence and countdown go
-  and nothing checks again by itself. Keep the wait up and check again on the next tick instead.
-  [Detail](backlog/setup.md#a1225-a-lost-automatic-clock-re-check-drops-the-setup-and-restore-pages-wait)
-
 - **A1226. Compare clocks on the restore page can choose a series name by itself** (from the A1207
   finish-branch review): once a second clock answers, the page's 15-second second-clock check sends
   a real `select` although Make the series was never pressed. Make those re-checks read-only.

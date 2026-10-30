@@ -5,7 +5,7 @@ import {
   clockProblem,
   clockWaitStrings,
   dateTimeFormat,
-  remainingInWords,
+  remainingAsClock,
   renderClockProblem,
   validWait,
   type ClockWords,
@@ -153,17 +153,17 @@ describe("a taken minute shows one countdown", () => {
     expect(wait.counting).toBe(true);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
     expect(drawn().querySelector("[data-test=minute-taken]")?.getAttribute("role")).toBe("status");
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("3 minutes");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("03:00");
     expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
-      "Generating a new code in: 3 minutes",
+      "Generating a new code in: 03:00",
     );
     expect(text(drawn())).toContain("Nothing to do; keep this page open.");
     vi.advanceTimersByTime(30_000);
     expect(recheck).toHaveBeenCalledTimes(1);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes 30 seconds");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:30");
     wait.show(undefined, WAITING);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes 30 seconds");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:30");
     expect(fail).not.toHaveBeenCalled();
   });
 
@@ -173,7 +173,7 @@ describe("a taken minute shows one countdown", () => {
     vi.advanceTimersByTime(30_000);
     wait.show(undefined, { ...WAITING, remainingMs: 90_001 });
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("1 minute 31 seconds");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("01:31");
   });
 
   it("a re-check refused again starts the same display again", () => {
@@ -182,7 +182,7 @@ describe("a taken minute shows one countdown", () => {
     vi.advanceTimersByTime(30_000);
     wait.settle(NEXT_MINUTE(120_000, 60_000), true, fail);
     expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
-    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("2 minutes");
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:00");
     expect(fail).not.toHaveBeenCalled();
   });
 
@@ -199,6 +199,57 @@ describe("a taken minute shows one countdown", () => {
     expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
       "Continues in 2:30",
     );
+  });
+
+  it("a lost re-check keeps the countdown going and checks again", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new Error("network"), true, fail);
+    expect(fail).not.toHaveBeenCalled();
+    expect(wait.counting).toBe(true);
+    expect(text(drawn().querySelector("[data-test=minute-taken]"))).toBe(TAKEN);
+    vi.advanceTimersByTime(1_000);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("02:29");
+    vi.advanceTimersByTime(14_000);
+    expect(recheck).toHaveBeenCalledTimes(2);
+    wait.settle(new Error("network"), true, fail);
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(3);
+    wait.show(undefined, WAITING);
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(3);
+    expect(text(drawn().querySelector("[data-test=remaining]"))).toBe("01:30");
+    expect(fail).not.toHaveBeenCalled();
+  });
+
+  it("a lost check at the end of the box's wait checks again", () => {
+    const { wait, recheck, fail, drawn } = setup();
+    wait.show(undefined, { ...WAITING, remainingMs: 1_000 });
+    vi.advanceTimersByTime(1_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
+    wait.settle(new Error("network"), true, fail);
+    expect(fail).not.toHaveBeenCalled();
+    expect(text(drawn().querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Continues in 0:00",
+    );
+    vi.advanceTimersByTime(15_000);
+    expect(recheck).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ["a request the person made is lost", new Error("network"), false],
+    ["the box refuses the re-check", { code: "setup.invalid" }, true],
+  ])("the wait goes when %s", (_case, error, automatic) => {
+    const { wait, recheck, fail } = setup();
+    wait.settle(NEXT_MINUTE(180_000, 30_000), false, fail);
+    vi.advanceTimersByTime(30_000);
+    wait.settle(error, automatic, fail);
+    expect(fail).toHaveBeenCalledWith(error);
+    expect(wait.counting).toBe(false);
+    vi.advanceTimersByTime(60_000);
+    expect(recheck).toHaveBeenCalledTimes(1);
   });
 
   it.each([
@@ -224,16 +275,16 @@ describe("a taken minute shows one countdown", () => {
 });
 
 it.each([
-  [0, "0 seconds", "0 segundos"],
-  [1_000, "1 second", "1 segundo"],
-  [51_001, "52 seconds", "52 segundos"],
-  [60_000, "1 minute", "1 minuto"],
-  [61_000, "1 minute 1 second", "1 minuto 1 segundo"],
-  [150_000, "2 minutes 30 seconds", "2 minutos 30 segundos"],
-  [180_000, "3 minutes", "3 minutos"],
-])("a taken minute's %i ms left reads %s / %s", (ms, en, es) => {
-  expect(remainingInWords(ms, clockWaitStrings.en)).toBe(en);
-  expect(remainingInWords(ms, clockWaitStrings.es)).toBe(es);
+  [0, "00:00"],
+  [1_000, "00:01"],
+  [51_001, "00:52"],
+  [60_000, "01:00"],
+  [61_000, "01:01"],
+  [150_000, "02:30"],
+  [180_000, "03:00"],
+  [600_000, "10:00"],
+])("a taken minute's %i ms left reads %s", (ms, shown) => {
+  expect(remainingAsClock(ms)).toBe(shown);
 });
 
 it("says in Spanish that the code exists and when a new one is made", () => {
@@ -261,7 +312,7 @@ it("says in Spanish that the code exists and when a new one is made", () => {
       "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
     );
     expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
-      "Generando un código nuevo en: 52 segundos",
+      "Se generará un código nuevo en 00:52",
     );
   } finally {
     vi.useRealTimers();
