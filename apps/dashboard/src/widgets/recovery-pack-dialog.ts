@@ -306,7 +306,7 @@ export class RecoveryPackDialog extends LitElement {
         return;
       }
       if (newServerKey) signIn.clear();
-      this.reread = await this.#readStatus(api);
+      this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
       this.lostTicked = newServerKey;
       this.step = "lost";
@@ -328,7 +328,7 @@ export class RecoveryPackDialog extends LitElement {
     if (generation !== this.#generation) return;
     if (made.key === "failed" && newServerKey) {
       signIn.clear();
-      this.reread = await this.#readStatus(api);
+      this.reread = await this.#readStatus(api, generation);
       if (generation !== this.#generation) return;
       this.step = "key-failed";
       this.busy = false;
@@ -350,14 +350,15 @@ export class RecoveryPackDialog extends LitElement {
     return false;
   }
 
-  async #readStatus(api: this["api"]): Promise<RecoveryPackStatus | null> {
+  /** Hands the card the status only while this dialog session is still open: the card re-reads on close. */
+  async #readStatus(api: this["api"], generation: number): Promise<RecoveryPackStatus | null> {
     let status: RecoveryPackStatus;
     try {
       status = await api.getRecoveryPackStatus();
     } catch {
       return null;
     }
-    if (api !== this.api) return null;
+    if (api !== this.api || generation !== this.#generation) return null;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackStatus>("recovery-pack-status", {
         detail: status,

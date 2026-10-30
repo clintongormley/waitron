@@ -707,6 +707,38 @@ describe("making a pack", () => {
     },
   );
 
+  it.each(["before", "after"] as const)(
+    "keeps its own read when a closed dialog's status read after a lost answer arrives %s it",
+    async (order) => {
+      const api = stubApi(STATES.none);
+      const el = await mount(api);
+      api.makeRecoveryPack.mockRejectedValue({ code: "connection.failed" });
+      const oldRead = deferred<RecoveryPackStatus>();
+      const newRead = deferred<RecoveryPackStatus>();
+      api.getRecoveryPackStatus
+        .mockReturnValueOnce(oldRead.promise)
+        .mockReturnValueOnce(newRead.promise);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
+      const { make } = await openDialog(el);
+      make();
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
+      dialogOf(el).dismiss();
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 2);
+      if (order === "before") oldRead.resolve(STATES.unreceived);
+      else newRead.resolve(STATES["up to date"]);
+      await settle(el);
+      if (order === "before") newRead.resolve(STATES["up to date"]);
+      else oldRead.resolve(STATES.unreceived);
+      await settle(el);
+      expect(line(el)).toBe(
+        `${fill("recovery_pack.up_to_date", { number: "3", date: "12 October", name: "Marta Puig" })} ${fill(
+          "recovery_pack.keep_server_key",
+          { number: "1", date: "2 September" },
+        )}`,
+      );
+    },
+  );
+
   it("tells the screen when Make is pressed", async () => {
     const el = await mount(stubApi(STATES.none));
     const pressed = vi.fn();
