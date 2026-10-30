@@ -257,6 +257,26 @@ it("a side file recreated by a read after its main file was deleted is removed",
   await expectOnlyKept(roots);
 });
 
+const JOURNALS = { "venue.db-journal": "venue journal", "node.db-journal": "node journal" };
+
+it("Start again's deletion removes a venue.db-journal and a node.db-journal beside the databases", async () => {
+  const roots = await attemptFolders({ ...VENUE_FILES, ...JOURNALS });
+  const marker = await marked(roots);
+  await deleteMarkedAttempt(roots, marker);
+  for (const name of Object.keys(JOURNALS))
+    await expect(fs.lstat(join(roots.venueDir, name)), name).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+});
+
+it("finishing an interrupted deletion removes a leftover journal too", async () => {
+  const roots = await attemptFolders({ ...VENUE_FILES, ...JOURNALS });
+  const marker = await marked(roots);
+  await expect(deleteMarkedAttempt(roots, marker, cutAt(1))).rejects.toMatchObject(incomplete);
+  await finishStartAgainDeletion(roots);
+  await expectOnlyKept(roots);
+});
+
 it("a zero-length -wal is accepted", async () => {
   const roots = await attemptFolders();
   await marked(roots);

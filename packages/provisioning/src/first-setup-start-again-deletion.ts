@@ -33,7 +33,15 @@ const LEGACY = [
 const DOCUMENTS = "first-fiscal-documents";
 const STEP = /^step-\d{6}$/;
 const WAL_FILES = ["venue.db-wal", "node.db-wal"] as const;
-const SIDE_FILES = ["venue.db-wal", "venue.db-shm", "node.db-wal", "node.db-shm"] as const;
+// A journal left beside a later database would be rolled into it on its first open.
+const SIDE_FILES = [
+  "venue.db-wal",
+  "venue.db-shm",
+  "node.db-wal",
+  "node.db-shm",
+  "venue.db-journal",
+  "node.db-journal",
+] as const;
 const REFUSED = {
   state: [
     "trading.env",

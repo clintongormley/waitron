@@ -15,6 +15,8 @@ const DELETED = {
     "venue.db-shm",
     "node.db-wal",
     "node.db-shm",
+    "venue.db-journal",
+    "node.db-journal",
     "first-setup-claim.json",
   ],
   state: [

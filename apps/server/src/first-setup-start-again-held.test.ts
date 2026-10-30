@@ -29,6 +29,7 @@ import {
 } from "./first-setup-resolution.js";
 import { mountFirstSetupResolutionApi } from "./setup-first-fiscal-api.js";
 import { diskSnapshot, expectStartAgainDeleted } from "../test/start-again-deleted.js";
+import { foreignHotJournal } from "../test/foreign-journal.js";
 import { agreeInternet, archiveForm, clock, restoreApp } from "../test/hour-recovery-host.js";
 import { createSelectedRecoveryPreparation } from "./recovery-preparation.js";
 import { recoverySelectPastWaits } from "./testing/hour-test-clock.js";
@@ -604,6 +605,39 @@ it("a held setup database with no recovery, its venue.db missing and trading set
       }),
     refusal,
   );
+});
+
+/** A held setup with its venue.db gone, and the modules.json activation wrote, which the missing path refuses. */
+async function missingHeldDatabase() {
+  const f = await heldSetup({ recovery: false });
+  for (const name of ["venue.db", "venue.db-wal", "venue.db-shm"])
+    await rm(join(f.roots.venueDir, name), { force: true });
+  await rm(join(f.roots.stateDir, "modules.json"));
+  expect((await f.host.resolution.inspectFirstSetupResolution()).database).toBe("missing");
+  return f;
+}
+async function startAgainMissing(f: Held) {
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  await actions.startAgainFirstSetup({
+    ...ids,
+    confirmMissingDatabase: { nothingFiledOrSold: true, shown },
+  });
+  await expect(access(join(f.roots.stateDir, "first-setup.json"))).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+}
+
+it("with the setup database missing and a hot journal left where it was, Start again's wipe leaves no journal", async () => {
+  const f = await missingHeldDatabase();
+  const journal = join(f.roots.venueDir, "venue.db-journal");
+  foreignHotJournal(journal, "rolls-back");
+  await startAgainMissing(f);
+  await expect(access(journal)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("with the setup database missing and no journal, Start again's wipe deletes the setup", async () => {
+  await startAgainMissing(await missingHeldDatabase());
 });
 
 async function stageFreshRestore(f: Held, archive: Held["archive"] = f.archive) {
