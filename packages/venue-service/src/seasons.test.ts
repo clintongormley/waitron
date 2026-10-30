@@ -216,9 +216,9 @@ async function autumnVenue() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     })
@@ -226,7 +226,7 @@ async function autumnVenue() {
   const cfg: VenueScope = { locationId: brandLocationId(location!.id) };
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Terraza", displayOrder: 0 })
+    .values({ locationId: cfg.locationId, name: "Terrace", displayOrder: 0 })
     .returning({ id: floorZones.id });
   const stored = await db
     .insert(seasons)
@@ -543,11 +543,11 @@ describe("saveSeasons", () => {
     const locationId = await newLocation("No seasons yet, saveSeasons");
     const saved = await change(
       { cfg: { locationId } },
-      { save: [entry(undefined, "Feria", "04-10")] },
+      { save: [entry(undefined, "Fair", "04-10")] },
     );
     expect(shape(saved)).toEqual([
       { name: "Spring", startsOn: "03-01" },
-      { name: "Feria", startsOn: "04-10" },
+      { name: "Fair", startsOn: "04-10" },
       { name: "Summer", startsOn: "06-01" },
       { name: "Autumn", startsOn: "09-01" },
       { name: "Winter", startsOn: "12-01" },
@@ -676,8 +676,6 @@ describe("saveSeasons", () => {
 
   it("adds, moves, recolours and deletes in one call, answering the venue's seasons by start", async () => {
     const v = await autumnVenue();
-    // Early splits Winter, which the Bar never painted; Mid autumn splits Autumn, which it did;
-    // Advent splits Late autumn, which the Terraza never painted.
     const saved = await change(v, {
       save: [
         entry(undefined, "Mid autumn", "10-01", "pink"),
@@ -719,14 +717,14 @@ describe("saveSeasons", () => {
     expect(
       await refusal(
         change(v, {
-          save: [entry(undefined, "Feria", "04-10"), entry(undefined, "Feria", "05-10")],
+          save: [entry(undefined, "Fair", "04-10"), entry(undefined, "Fair", "05-10")],
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.1.name", reason: "taken" } });
     expect(
       await refusal(
         change(v, {
-          save: [entry(undefined, "Feria", "04-10"), entry(undefined, "Fiesta", "04-10")],
+          save: [entry(undefined, "Fair", "04-10"), entry(undefined, "Festival", "04-10")],
         }),
       ),
     ).toEqual({ code: "season.invalid", params: { field: "save.1.startsOn", reason: "taken" } });
@@ -765,7 +763,7 @@ describe("saveSeasons", () => {
         change(
           v,
           {
-            save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Feria", "04-10")],
+            save: [entry(v.autumn, "Fall", "09-05", "red"), entry(undefined, "Fair", "04-10")],
             delete: [v.lateAutumn],
           },
           1,

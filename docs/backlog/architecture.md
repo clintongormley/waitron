@@ -482,7 +482,9 @@ until A977).
   Bookings’ native booking, route, clock, floor, table-removal and schema suites use English
   sample location, operation, contact and note text. Venue-service period-deletion and zone-closure
   suites use English venue, station, zone, menu, period and special-day samples, keeping
-  locale keys, dates and behavior checks. Remaining helper and screen fixtures stay
+  locale keys, dates and behavior checks. Season and day-resolver suites use English venue,
+  zone and custom-season samples, keeping staff-language cases, dates and clock settings.
+  Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
   from A977's list. UI switch behavior and accessibility

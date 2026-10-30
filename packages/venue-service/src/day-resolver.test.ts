@@ -70,9 +70,9 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `House ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
       dayCutover: "06:00",
     })
@@ -81,8 +81,8 @@ async function venue(options: { oneSeason?: boolean } = {}) {
   const zones = await db
     .insert(floorZones)
     .values([
-      { locationId: cfg.locationId, name: "Sala", displayOrder: 0 },
-      { locationId: cfg.locationId, name: "Terraza", displayOrder: 1 },
+      { locationId: cfg.locationId, name: "Dining room", displayOrder: 0 },
+      { locationId: cfg.locationId, name: "Terrace", displayOrder: 1 },
     ])
     .returning({ id: floorZones.id });
   if (options.oneSeason === true)
@@ -207,9 +207,9 @@ describe("resolveDepartmentDays", () => {
     const [location] = await db
       .insert(locations)
       .values({
-        name: `Casa ${randomUUID()}`,
+        name: `House ${randomUUID()}`,
         invoiceLocales: ["es-ES"],
-        operationDescription: "Hostelería",
+        operationDescription: "Hospitality",
         timeZone: "Europe/Madrid",
       })
       .returning({ id: locations.id });
@@ -739,7 +739,7 @@ describe("special-day paint over the season", () => {
     const third = await scoped(async (tx) => {
       const [zone] = await tx
         .insert(floorZones)
-        .values({ locationId: v.cfg.locationId, name: "Barra", displayOrder: 2 })
+        .values({ locationId: v.cfg.locationId, name: "Bar", displayOrder: 2 })
         .returning({ id: floorZones.id });
       await configureZone(tx, v.cfg, { zoneId: zone!.id, departmentId: v.departmentId });
       return zone!.id;
