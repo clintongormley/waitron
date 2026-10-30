@@ -8,6 +8,7 @@ import { FISCAL_INITIAL_SETUP } from "./index.js";
 import { FISCAL_OPERATIONS } from "./index.js";
 import { readHourSetupInput } from "./initial-hour-setup.js";
 import { getDocument } from "pdfjs-dist/legacy/build/pdf.mjs";
+import { PACK_ATTACHMENT, PACK_WORDS } from "@waitron/recovery-pack";
 
 const context: InitialSetupContext = {
   attemptId: "attempt",
@@ -59,6 +60,16 @@ const input = {
     incidentEvidence: "hour/event",
   },
 };
+async function pageTexts(pdf: Awaited<ReturnType<typeof getDocument>["promise"]>) {
+  const pages: string[] = [];
+  for (let n = 1; n <= pdf.numPages; n++)
+    pages.push(
+      (await (await pdf.getPage(n)).getTextContent()).items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" "),
+    );
+  return pages;
+}
 function fixture() {
   return structuredClone({
     ...context,
@@ -102,20 +113,16 @@ it.each(["en", "es"] as const)(
     });
     try {
       const pdf = await task.promise;
-      const page = await pdf.getPage(1);
-      const text = (await page.getTextContent()).items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ");
-      expect(text).toContain(
-        locale === "en" ? "Waitron recovery key" : "Clave de recuperación de Waitron",
-      );
+      const text = (await pageTexts(pdf)).join(" ");
+      expect(text).toContain(PACK_WORDS[locale].title);
+      expect(text).toContain(locale === "en" ? "Server key" : "Clave del servidor");
       expect(text).toContain("Olivo Restauración SL");
       expect(text).toContain("Olivo Centro");
       expect(text).toContain("89890001K");
       expect(text).toContain("2026-10-16 · ACRY");
       const attached = JSON.parse(
-        Buffer.from((await pdf.getAttachmentContent("waitron-recovery-key-v1.json"))!).toString(),
-      );
+        Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString(),
+      ).serverKey;
       expect(attached).toEqual({
         ...(document.statement as object),
         nodeKey: {
@@ -140,16 +147,75 @@ it("the command recovery sheet uses the frozen venue zone", async () => {
   });
   const task = getDocument({ data: document.bytes.slice(), useSystemFonts: false, useWasm: false });
   try {
-    const pdf = await task.promise;
-    const text = (await (await pdf.getPage(1)).getTextContent()).items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ");
+    const text = (await pageTexts(await task.promise)).join(" ");
     expect(text).toContain("16 October 2026, 12:40");
     expect(text).toContain("WEST");
   } finally {
     await task.destroy();
   }
 });
+
+it.each(["en", "es"] as const)(
+  "the command path writes recovery pack 1 holding only the staged key, in %s",
+  async (locale) => {
+    const f = configured();
+    const saved = fixture();
+    const key = {
+      nodeId: "node",
+      name: "2026-10-16 · ACRY",
+      secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345",
+    };
+    const document = await f.seat.commandRecoveryDocument!(saved, f.seat.inspect(saved, input), {
+      key,
+      identity: {
+        taxpayerName: "Olivo Restauración SL",
+        venueName: "Olivo Centro",
+        timeZone: "Europe/Madrid",
+      },
+      locale,
+    });
+    const task = getDocument({
+      data: document.bytes.slice(),
+      useSystemFonts: false,
+      disableFontFace: true,
+      useWorkerFetch: false,
+      useWasm: false,
+    });
+    try {
+      const pdf = await task.promise;
+      const pages = await pageTexts(pdf);
+      const words = PACK_WORDS[locale];
+      expect(pages).toHaveLength(2);
+      expect(pages[0]).toContain(words.title);
+      expect(pages[0]).toContain(
+        words.madeDuringSetup(
+          locale === "en" ? "16 October 2026" : "16 de octubre de 2026",
+          "13:40",
+        ),
+      );
+      expect(pages[0]).toContain(words.notSetUp.bucket);
+      expect(pages[0]).toContain(words.notSetUp.archives);
+      expect(pages[1]).toContain("Olivo Restauración SL");
+      expect(pages[1]).toContain("2026-10-16 · ACRY");
+      expect(
+        JSON.parse(Buffer.from((await pdf.getAttachmentContent(PACK_ATTACHMENT))!).toString()),
+      ).toEqual({
+        kind: "waitron-recovery-pack",
+        version: 1,
+        number: 1,
+        madeAt: "2026-10-16T11:40:00.000Z",
+        bucketCode: null,
+        archiveCode: null,
+        backupKey: null,
+        serverKey: { ...(document.statement as object), nodeKey: key },
+        serverKeyName: "2026-10-16 · ACRY",
+        serverKeyHeldBy: null,
+      });
+    } finally {
+      await task.destroy();
+    }
+  },
+);
 
 it("the command document seat refuses a foreign staged node and changed hour input", async () => {
   const f = configured();

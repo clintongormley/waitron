@@ -5,7 +5,7 @@ export const initialSetupStrings = {
     proof: "Confirm your administrator password",
     password: "Administrator password",
     required: "Enter your password.",
-    block: "Confirm before selecting an hour or preparing your recovery PDF.",
+    block: "Confirm before selecting an hour or making your recovery pack.",
     activation: "Confirm before activation.",
     reissue: "Replace the recovery key. Older backups still need their matching key.",
     confirm: "Confirm",
@@ -24,7 +24,7 @@ export const initialSetupStrings = {
     proof: "Confirma tu contraseña de administrador",
     password: "Contraseña de administrador",
     required: "Introduce tu contraseña.",
-    block: "Confirma antes de seleccionar una hora o preparar el PDF de recuperación.",
+    block: "Confirma antes de seleccionar una hora o hacer el paquete de recuperación.",
     activation: "Confirma antes de activar.",
     reissue:
       "Sustituye la clave de recuperación. Las copias anteriores siguen necesitando su clave correspondiente.",

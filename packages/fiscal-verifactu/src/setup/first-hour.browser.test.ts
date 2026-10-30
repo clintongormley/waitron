@@ -784,9 +784,11 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     const task = openRecoveryPdf(new Uint8Array(await (await fetch(download.href)).arrayBuffer()));
     try {
       const pdf = await task.promise;
-      const text = (await (await pdf.getPage(1)).getTextContent()).items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join(" ");
+      let text = "";
+      for (let n = 1; n <= pdf.numPages; n++)
+        text += (await (await pdf.getPage(n)).getTextContent()).items
+          .map((item) => ("str" in item ? item.str : ""))
+          .join(" ");
       expect(text).toContain("18 October 2026, 13:30");
       expect(text).toContain("WEST");
     } finally {
@@ -796,6 +798,59 @@ it("the wizard PDF uses the reviewed Canary venue zone", async () => {
     vi.useRealTimers();
   }
 });
+
+it.each([
+  [
+    "en",
+    "Keep your recovery pack.",
+    "Make recovery pack",
+    "I kept the recovery pack.",
+    "Make the pack again with a new server key",
+    "Recovery pack confirmed.",
+  ],
+  [
+    "es",
+    "Guarda el paquete de recuperación.",
+    "Hacer paquete de recuperación",
+    "He guardado el paquete de recuperación.",
+    "Hacer el paquete otra vez con una nueva clave del servidor",
+    "Paquete de recuperación confirmado.",
+  ],
+] as const)(
+  "names the %s step's download a recovery pack and never the server key a recovery key",
+  async (locale, next, make, keptLabel, replace, complete) => {
+    const { el, api } = await mount({ locale });
+    api.stageNodeKey = async () => ({
+      stage: { stageId: "stage", nodeId: "node", name: "Olivo key" },
+      key: { nodeId: "node", name: "Olivo key", secret: "AbCdEfGhIjKlMnOpQrStUvWxYz012345" },
+    });
+    api.reissueNodeKey = api.stageNodeKey;
+    api.registerRecoveryDocument = async () => {};
+    api.confirmRecoveryDocument = async () => {};
+    await ready(el);
+    await userEvent.click(button(el, "select"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=selected-hour]")).not.toBeNull(),
+    );
+    expect(el.shadowRoot!.textContent).toContain(next);
+    expect(button(el, "prepare-pdf").textContent!.trim()).toBe(make);
+    await userEvent.click(button(el, "prepare-pdf"));
+    await vi.waitFor(() =>
+      expect(el.shadowRoot!.querySelector("[data-test=download-pdf]")).not.toBeNull(),
+    );
+    expect(
+      el.shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pdf]")!.download,
+    ).toBe("waitron-recovery-pack-1.pdf");
+    expect(el.shadowRoot!.textContent).toContain(keptLabel);
+    expect(button(el, "replace-key").textContent!.trim()).toBe(replace);
+    await userEvent.click(
+      el.shadowRoot!.querySelector<HTMLInputElement>('input[name="setup-pdf-kept"]')!,
+    );
+    await userEvent.click(button(el, "kept"));
+    await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain(complete));
+    expect(el.shadowRoot!.textContent).not.toMatch(/recovery key|clave de recuperación/i);
+  },
+);
 
 it("continues a frozen hour through its public request without selecting another", async () => {
   const { el, calls, api } = await mount({ request: { ...context, status: "consumption-intent" } });
@@ -1105,10 +1160,10 @@ it("keeps a failed kept confirmation retryable without granting completion", asy
     expect(el.shadowRoot!.querySelector("wt-form-actions[data-failed=true]")).not.toBeNull(),
   );
   expect(button(el, "kept").disabled).toBe(false);
-  expect(el.shadowRoot!.textContent).not.toContain("Recovery PDF confirmed.");
+  expect(el.shadowRoot!.textContent).not.toContain("Recovery pack confirmed.");
   refuse = false;
   await userEvent.click(button(el, "kept"));
-  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Recovery PDF confirmed."));
+  await vi.waitFor(() => expect(el.shadowRoot!.textContent).toContain("Recovery pack confirmed."));
 });
 
 const quiet = (el: LitElement) => {
