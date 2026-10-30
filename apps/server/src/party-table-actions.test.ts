@@ -709,10 +709,12 @@ describe("a paid bill stays on its original party", () => {
     ]);
     expect(await billRow(v, second)).toMatchObject({ status: "open", partyId: luis.partyId });
     const bills = await act((tx) => readPartyBills(tx, luis.partyId));
-    expect(bills.map((bill) => [bill.workingOrderId, bill.partyId, bill.status])).toEqual([
-      [ana.tabId, ana.partyId, "settled"],
-      [luis.tabId, luis.partyId, "open"],
-      [second, luis.partyId, "open"],
+    expect(
+      bills.map((bill) => [bill.workingOrderId, bill.partyId, bill.status, bill.billNumber]),
+    ).toEqual([
+      [luis.tabId, luis.partyId, "open", 1],
+      [ana.tabId, ana.partyId, "settled", 2],
+      [second, luis.partyId, "open", 3],
     ]);
 
     const finishing = await cmd(luis.partyId);

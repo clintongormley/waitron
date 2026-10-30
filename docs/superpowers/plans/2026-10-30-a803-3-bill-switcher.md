@@ -1138,15 +1138,38 @@ cases, `table-actions.refund-pending.test.ts` shapes, `till-api.zone-closed.test
 last, then `workingOrderId`, after reading identities `:689-`); tests `parties.test.ts`,
 `party-table-actions.test.ts:709-713`.
 
-- [ ] Case `A803 bill order:` "a party whose Bill 2 was opened before its Bill 1 arrived lists Bill
+- [x] Case `A803 bill order:` "a party whose Bill 2 was opened before its Bill 1 arrived lists Bill
       1 first" (join a seated party whose own bill is older than the joining party's: numbers and
-      opening order disagree).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/parties.test.ts -t 'A803 bill order'`.
-- [ ] Implement; run `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts src/parties.test.ts src/till-api.parties.test.ts src/order-drafts.db.test.ts src/unpaid-departure.test.ts src/table-signals.test.ts`.
+      opening order disagree). (Built at `parties.test.ts:1799`: the earlier-seated party's guests
+      move to the later party's table; a precondition reads the two bills in the old order
+      (opened, order number, id) and asserts it is `[early, late]`; the list must be
+      `[[late, 1], [early, 2]]`.)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/parties.test.ts -t 'A803 bill order'`.
+      (Run: 1 failed, 77 skipped: the list came back `[[early, 2], [late, 1]]`, opening order.)
+- [x] Implement; run `pnpm --filter @waitron/server exec vitest run src/party-table-actions.test.ts src/parties.test.ts src/till-api.parties.test.ts src/order-drafts.db.test.ts src/unpaid-departure.test.ts src/table-signals.test.ts`.
       Only the A1232 pin (and pins of the same list whose bills' numbers and opening order differ)
       may change; anything else is a stop, and then this task is reverted and A1232 stays a residual.
-- [ ] GREEN: those files; server typecheck.
-- [ ] Commit: "List a party's bills in number order on the server".
+      (Done: `readBillsOfParties` sorts by `billNumber`, null last, then `workingOrderId`
+      (`parties.ts:753`); `readPartyBills`' comment says so. That run: 2 failed, 647 passed in 6
+      files. The whole server suite then: 2 more failed, 26863 passed, 25 skipped in 1129 files.
+      All four are pins of this list whose numbers and opening order differ, changed to number
+      order (kind B, A1232, D15): `party-table-actions.test.ts:712` (the A1232 pin, numbers 1, 2, 3)
+      `[ana, luis, second]` → `[luis, ana, second]`, each tuple gaining its `billNumber`;
+      `parties.test.ts:1127` (merged parties, numbers 1, 3, 4, none) abandoned tab first → last,
+      each tuple gaining its `billNumber`; `bill-identities.test.ts:781` `[anaSecond 2, luis 1]` →
+      `[luis 1, anaSecond 2]`, retitled from "… while the list keeps its opening order" to "… and
+      is listed after the party's own Bill 1"; `bill-identities.test.ts:833` the abandoned bill
+      moves from second to last. Nothing else red.)
+- [x] GREEN: those files; server typecheck. (Run: the six files 649 passed in 6;
+      `bill-identities.test.ts` 54 passed; server typecheck clean; `pnpm format:check` clean; the
+      F/H2 diff from `a90f4f87b` empty. Controls: the sort deleted → 3 fail (the new case and the
+      two pins in `parties.test.ts` and `party-table-actions.test.ts`); nulls sorted first → the
+      merged-parties pin and `bill-identities.test.ts:820` fail, with `:838` (a bill with no
+      identity row) as well. The id tie-break was not given a control: none of the four changed
+      pins or the new case lists two bills with one number. `unpaid-departure.ts` issues a departing party's invoices in this list's order, so
+      they now follow bill number; its suite passed unchanged. A1232 deleted from the backlog;
+      the till's `shownBills` still sorts the same way, now redundantly.)
+- [x] Commit: "List a party's bills in number order on the server".
 
 ## Task 6a: the test helpers stop relying on the main bill (≈50 calls)
 

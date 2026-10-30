@@ -768,7 +768,7 @@ describe("A803 bill list", () => {
     ]);
   });
 
-  it("a bill that arrived shows its new number while the list keeps its opening order", async () => {
+  it("a bill that arrived shows its new number and is listed after the party's own Bill 1", async () => {
     const ana = await seat(v, await v.table("L3 ana"));
     await order(v, ana.tabId, "Agua", "Flan");
     const anaSecond = await split(v, ana.partyId, ana.tabId, [1]);
@@ -779,8 +779,8 @@ describe("A803 bill list", () => {
     await moveTo(anaSecond, { tableId: luisTable });
 
     expect(await listOf(luis.partyId)).toEqual([
-      [anaSecond, 2, null, "open"],
       [luis.tabId, 1, null, "open"],
+      [anaSecond, 2, null, "open"],
     ]);
   });
 
@@ -830,8 +830,8 @@ describe("A803 bill list", () => {
 
     expect(await listOf(seated.partyId)).toEqual([
       [seated.bills[0], 1, null, "open"],
-      [seated.bills[1], null, null, "abandoned"],
       [counter, 3, null, "open"],
+      [seated.bills[1], null, null, "abandoned"],
     ]);
   });
 

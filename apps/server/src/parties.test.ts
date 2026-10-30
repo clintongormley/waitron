@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -1124,13 +1124,20 @@ describe("merged parties keep their bills", () => {
     const bills = await inTx(suite, (tx) => readPartyBills(tx, t.partyId));
 
     expect(
-      bills.map((b) => [b.workingOrderId, b.partyId, b.status, b.total, b.outstanding]),
+      bills.map((b) => [
+        b.workingOrderId,
+        b.partyId,
+        b.status,
+        b.total,
+        b.outstanding,
+        b.billNumber,
+      ]),
     ).toEqual([
       // The open tab and the presented bill moved to T when the parties combined (P13).
-      [s.tabId, t.partyId, "abandoned", "0.00", "0.00"],
-      [settledId, s.partyId, "settled", "20.00", "0.00"],
-      [placedId, t.partyId, "placed", "15.00", "15.00"],
-      [t.tabId, t.partyId, "open", "30.00", "30.00"],
+      [t.tabId, t.partyId, "open", "30.00", "30.00", 1],
+      [settledId, s.partyId, "settled", "20.00", "0.00", 3],
+      [placedId, t.partyId, "placed", "15.00", "15.00", 4],
+      [s.tabId, t.partyId, "abandoned", "0.00", "0.00", null],
     ]);
     expect(bills.find((b) => b.workingOrderId === settledId)!.receiptAvailable).toBe(true);
   });
@@ -1786,5 +1793,37 @@ describe("money received against a bill before its invoice", () => {
       finishTable(tx, { partyId, expectedPartyRevision: revision, operatorId: OPERATOR }),
     );
     expect(await statusOf(suite, tabId)).toBe("abandoned");
+  });
+});
+
+describe("A803 bill order:", () => {
+  it("a party whose Bill 2 was opened before its Bill 1 arrived lists Bill 1 first", async () => {
+    const venue = await setupPartyVenue(suite.db);
+    const mesa4 = await venue.table("Mesa 4");
+    const mesa5 = await venue.table("Mesa 5");
+    const early = await seat(venue, mesa4);
+    await order(venue, early.tabId, "Vino");
+    const late = await seat(venue, mesa5);
+    await order(venue, late.tabId, "Agua");
+    const moving = {
+      expectedPartyRevision: await revisionOf(suite, early.partyId),
+      otherPartyId: late.partyId,
+      expectedOtherPartyRevision: await revisionOf(suite, late.partyId),
+      operatorId: OPERATOR,
+    };
+    await inTx(suite, (tx) => moveGuests(tx, venue.cfg, early.partyId, mesa5, moving));
+    const opened = await suite.db
+      .select({ id: workingOrders.id })
+      .from(workingOrders)
+      .where(inArray(workingOrders.id, [early.tabId, late.tabId]))
+      .orderBy(workingOrders.openedAt, workingOrders.orderNumber, workingOrders.id);
+    expect(opened.map((row) => row.id)).toEqual([early.tabId, late.tabId]);
+
+    const bills = await inTx(suite, (tx) => readPartyBills(tx, late.partyId));
+
+    expect(bills.map((b) => [b.workingOrderId, b.partyId, b.billNumber])).toEqual([
+      [late.tabId, late.partyId, 1],
+      [early.tabId, late.partyId, 2],
+    ]);
   });
 });

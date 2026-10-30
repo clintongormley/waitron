@@ -567,7 +567,7 @@ export async function requireOpenParty(tx: Transaction, partyId: string): Promis
   }
 }
 
-/** Every bill of the party's family, in the order they were opened. */
+/** Every bill of the party's family, by bill number (unnumbered last), then id. */
 export async function readPartyBills(
   tx: Transaction,
   partyId: string,
@@ -750,6 +750,11 @@ export async function readBillsOfParties(
       lines: row.lines,
     };
   });
+  bills.sort(
+    (a, b) =>
+      (a.billNumber ?? Infinity) - (b.billNumber ?? Infinity) ||
+      (a.workingOrderId < b.workingOrderId ? -1 : a.workingOrderId > b.workingOrderId ? 1 : 0),
+  );
   return new Map(
     [...families].map(([root, family]) => {
       const inFamily = new Set(family);
