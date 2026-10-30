@@ -3495,9 +3495,9 @@ describe("A803 portions: a whole-bill discount that prices a row two ways record
     };
     const today = await outcome(await groupedBill(lines));
     expect(today.map((one) => [one.descriptions["es-ES"], one.dishFamily])).toEqual([
-      ["Hamburguesa", undefined],
-      ["Croquetas de jamón", 1],
-      ["Croquetas de jamón", 1],
+      ["Beef burger", undefined],
+      ["Ham croquettes", 1],
+      ["Ham croquettes", 1],
     ]);
 
     expect(invoiceRows(await outcome(await portionsBill(lines)))).toEqual(invoiceRows(today));

@@ -383,11 +383,11 @@ describe("cancelling an extra of a dish the kitchen has fired (B11g)", () => {
       const order = queue.find((group) => group.orderId === billId)!;
       return order.items[0]!.modifiers.map((modifier) => modifier.descriptions[venue.cfg.locale]);
     };
-    expect(await dishRow()).toEqual(["Patatas fritas", "Ensalada de la casa", "Pepinillos"]);
+    expect(await dishRow()).toEqual(["Patatas fritas", "House salad", "Pepinillos"]);
 
     await cancelGherkins(billId);
 
-    expect(await dishRow()).toEqual(["Patatas fritas", "Ensalada de la casa"]);
+    expect(await dishRow()).toEqual(["Patatas fritas", "House salad"]);
   });
 
   it("prints one slip and records one notice when the same cancel arrives twice", async () => {

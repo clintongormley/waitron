@@ -6243,6 +6243,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   only English names. The fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
+  The server's adjustment venue gives English customer-facing and kitchen dish names and English
+  category, printer, device, location and administrator names; its locale, street address,
+  reasons' Spanish translations and setup's default station "Cocina" stay, and its Spanish staff
+  dish names, legal name and operation description remain.
   The server's station-alert and party suites still hold Spanish sample names. The
   configuration-transfer suite gives English names to what it creates; it still reads setup's
   Spanish default station "Cocina", and keeps Spanish translation-map values, its accented

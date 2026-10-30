@@ -458,9 +458,9 @@ describe("the receipt (ruling R13)", () => {
   }
 
   const ADJUSTED_LINES = [
-    ["Hamburguesa", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
-    ["Rioja crianza", "27.00", "30.00", [{ kind: "discount", percentBp: 1000, amount: "3.00" }]],
-    ["Pan de pueblo", "2.50", undefined, undefined],
+    ["Beef burger", "0.00", "12.00", [{ kind: "comp", amount: "12.00" }]],
+    ["Bottle of Rioja", "27.00", "30.00", [{ kind: "discount", percentBp: 1000, amount: "3.00" }]],
+    ["Country bread", "2.50", undefined, undefined],
   ];
 
   it("prints the Burger at €12.00 with a Descuento 100% line beneath it, when the bill is paid and when it is printed again", async () => {
@@ -489,7 +489,7 @@ describe("the receipt (ruling R13)", () => {
         },
       }),
     );
-    const burger = printed.findIndex((line) => /^1 {2}Hamburguesa +12,00$/u.test(line));
+    const burger = printed.findIndex((line) => /^1 {2}Beef burger +12,00$/u.test(line));
     expect(burger).toBeGreaterThanOrEqual(0);
     expect(printed[burger + 1]).toMatch(/^ {2}Descuento 100% +-12,00$/u);
   });
@@ -2596,7 +2596,7 @@ describe("a cancel (menus §11.5)", () => {
 
     expect(await priced(billId)).toEqual([["Bread", "1.000", "2.50", null, "2.50"]]);
     expect((await noticesAtStation()).slice(-1)).toEqual([
-      { kind: "void", lineName: "CHULETA", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "RIBEYE", quantity: "1.000", wasStarted: false },
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect((await recordedOn(billId))[0]).toMatchObject({
@@ -3861,11 +3861,11 @@ describe("a counter order (B11c)", () => {
 
     expect(await priced(billId)).toEqual([["Bread", "1.000", "2.50", null, "2.50"]]);
     expect((await noticesAtStation()).slice(-1)).toEqual([
-      { kind: "void", lineName: "CHULETA", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "RIBEYE", quantity: "1.000", wasStarted: false },
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x CHULETA"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x RIBEYE"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       {
@@ -3890,11 +3890,11 @@ describe("a counter order (B11c)", () => {
 
     expect(await priced(billId)).toEqual([["Steak", "1.000", "25.00", null, "25.00"]]);
     expect((await noticesAtStation()).slice(-1)).toEqual([
-      { kind: "void", lineName: "CHULETA", quantity: "1.000", wasStarted: false },
+      { kind: "void", lineName: "RIBEYE", quantity: "1.000", wasStarted: false },
     ]);
     expect(await printJobCount()).toBe(jobs + 1);
     expect(await lastKitchenSlip()).toEqual(
-      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x CHULETA"]),
+      expect.arrayContaining([`*** ${kitchenTicketWords("es").void} ***`, "1.000 x RIBEYE"]),
     );
     expect(await recordedOn(billId)).toMatchObject([
       { action: "cancel", quantity: 1000, reduction: 2500 },
