@@ -1,4 +1,4 @@
-import { LitElement, css, html, nothing, type TemplateResult } from "lit";
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import {
   baseStyles,
@@ -206,6 +206,15 @@ export class RecoveryPackDialog extends LitElement {
     if (this.opened) this.#close();
   }
 
+  get isOpen(): boolean {
+    return this.opened;
+  }
+
+  /** Handed another api, it closes without a word: a make still out belongs to the old one. */
+  override willUpdate(changes: PropertyValues<this>): void {
+    if (changes.has("api") && changes.get("api") !== undefined && this.opened) this.#close(false);
+  }
+
   override disconnectedCallback(): void {
     this.#close();
     super.disconnectedCallback();
@@ -221,7 +230,7 @@ export class RecoveryPackDialog extends LitElement {
     return { typed: this.#signIn()?.typed ?? false, ticked: this.ticked };
   }
 
-  #close(): void {
+  #close(announce = true): void {
     const wasOpen = this.opened;
     this.#generation++;
     this.#signIn()?.clear();
@@ -235,7 +244,7 @@ export class RecoveryPackDialog extends LitElement {
     this.refusal = "";
     this.reread = null;
     this.ways = null;
-    if (wasOpen && this.isConnected)
+    if (announce && wasOpen && this.isConnected)
       this.dispatchEvent(
         new CustomEvent("recovery-pack-closed", { bubbles: true, composed: true }),
       );
@@ -310,7 +319,9 @@ export class RecoveryPackDialog extends LitElement {
     }
     if (generation !== this.#generation) return;
     const received = await this.#markReceived(api, made.number);
-    // Sent even if the dialog closed meanwhile: the pack is marked received, so it must be handed over.
+    // Sent even if the dialog closed meanwhile: the pack is marked received, so it must be handed
+    // over — but never to a card that has since moved to another api.
+    if (api !== this.api) return;
     this.dispatchEvent(
       new CustomEvent<RecoveryPackMade>("recovery-pack-made", {
         detail: { pdf: made.pdf, number: made.number, key: made.key, received },

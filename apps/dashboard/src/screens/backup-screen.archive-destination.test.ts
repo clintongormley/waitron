@@ -12,6 +12,7 @@ import type {
 } from "../api/client.js";
 import "./backup-screen.js";
 import type { BackupScreen } from "./backup-screen.js";
+import type { RecoveryPackCard } from "./recovery-pack-card.js";
 
 afterEach(cleanupWidgets);
 
@@ -1567,6 +1568,23 @@ describe("switching off", () => {
       expect(api.disableBackup).not.toHaveBeenCalled();
     });
   }
+
+  it("pressing make-recovery-pack disarms it", async () => {
+    const { el, api } = await mount(TWO, {
+      disableBackup: vi.fn(),
+      getRecoveryPackStatus: vi.fn(() => new Promise(() => undefined)),
+      getProfile: vi.fn(() => new Promise(() => undefined)),
+    });
+    el.canManage = true;
+    await el.updateComplete;
+    await press(el, "turn-off");
+    const card = q(el, "dashboard-recovery-pack-card") as RecoveryPackCard;
+    await card.updateComplete;
+    card.shadowRoot!.querySelector<HTMLElement>("[data-test=make-recovery-pack]")!.click();
+    expect(await buttonState(el, "turn-off")).toEqual(["ghost", false]);
+    expect(q(el, "[data-test=turn-off-explain]")).toBeNull();
+    expect(api.disableBackup).not.toHaveBeenCalled();
+  });
 
   it("an answer whose reload failed says the box could not load the settings", async () => {
     const { el } = await mount(LOCAL_ONLY, {

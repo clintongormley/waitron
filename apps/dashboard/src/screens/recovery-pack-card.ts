@@ -2,7 +2,7 @@ import { LitElement, css, html, nothing, type PropertyValues, type TemplateResul
 import { customElement, property, query, state } from "lit/decorators.js";
 import { baseStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-button.js";
-import type { DashboardApi, RecoveryPackStatus } from "../api/client.js";
+import type { DashboardApi, RecoveryPackReason, RecoveryPackStatus } from "../api/client.js";
 import { fill, t } from "../i18n/t.js";
 import type { StringKey } from "../i18n/strings.js";
 import { LocaleChangeController } from "../state/locale-controller.js";
@@ -15,12 +15,11 @@ import {
 import "../widgets/recovery-pack-dialog.js";
 
 type Status = RecoveryPackStatus;
-type Reason = Status["reasons"][number];
+type Worded = Exclude<RecoveryPackReason, { kind: "key_changed" }>;
 
-const REASON_WORDS: Record<
-  Exclude<Reason["kind"], "key_changed">,
-  Partial<Record<Reason["part"], StringKey>>
-> = {
+const REASON_WORDS: {
+  [K in Worded["kind"]]: Record<Extract<Worded, { kind: K }>["part"], StringKey>;
+} = {
   settings_changed: {
     bucket: "recovery_pack.reason.bucket_settings",
     archives: "recovery_pack.reason.archives_settings",
@@ -38,12 +37,25 @@ const REASON_WORDS: Record<
   key_replaced: { "server-key": "recovery_pack.reason.server_key_replaced" },
 };
 
+function reasonWords(reason: Worded): StringKey {
+  switch (reason.kind) {
+    case "settings_changed":
+      return REASON_WORDS.settings_changed[reason.part];
+    case "set_up_after":
+      return REASON_WORDS.set_up_after[reason.part];
+    case "removed":
+      return REASON_WORDS.removed[reason.part];
+    case "key_replaced":
+      return REASON_WORDS.key_replaced[reason.part];
+  }
+}
+
 /** Each reason's sentence once: the bucket copy and the archives share one backup key. */
 function reasonSentences(reasons: Status["reasons"], date: (iso: string) => string): string[] {
   const sentences = reasons.map((reason) =>
     reason.kind === "key_changed"
-      ? fill("recovery_pack.reason.key_changed", { date: reason.at ? date(reason.at) : "" })
-      : t(REASON_WORDS[reason.kind][reason.part] ?? "recovery_pack.make_new"),
+      ? fill("recovery_pack.reason.key_changed", { date: date(reason.at) })
+      : t(reasonWords(reason)),
   );
   return [...new Set(sentences)];
 }
@@ -145,7 +157,8 @@ export class RecoveryPackCard extends LitElement {
 
   @state() private status: Status | null = null;
   @state() private failed = false;
-  @state() private made: { url: string; number: number; madeAt: string } | null = null;
+  /** `arrivedAt` is the browser's time, used only until a status names the pack's own time. */
+  @state() private made: { url: string; number: number; arrivedAt: string } | null = null;
   @query("dashboard-recovery-pack-dialog") private dialog!: RecoveryPackDialog | null;
 
   #generation = 0;
@@ -214,9 +227,23 @@ export class RecoveryPackCard extends LitElement {
     this.made = {
       url: URL.createObjectURL(made.pdf),
       number: made.number,
-      madeAt: new Date().toISOString(),
+      arrivedAt: new Date().toISOString(),
     };
-    this.reload();
+    // An open dialog closes after handing the pack over, and its close reads the status.
+    if (!this.dialog?.isOpen) this.reload();
+  }
+
+  #make(): void {
+    this.dispatchEvent(new CustomEvent("recovery-pack-make", { bubbles: true, composed: true }));
+    this.dialog?.show(this.failed ? null : this.status);
+  }
+
+  /** The box's own time for pack `number`, as the status names it. */
+  #madeAt(number: number): string | undefined {
+    const status = this.status;
+    return [status?.latest, status?.unreceived, ...(status?.keep ?? [])].find(
+      (pack) => pack?.number === number,
+    )?.madeAt;
   }
 
   #date(iso: string): string {
@@ -238,7 +265,7 @@ export class RecoveryPackCard extends LitElement {
           : nothing
       }
       ${this.status && !this.failed ? this.#line(this.status) : nothing}
-      ${this.status ? this.#rows(this.status) : nothing}
+      ${this.status && !this.failed ? this.#rows(this.status) : nothing}
       <div class="actions">
         ${
           this.failed
@@ -250,10 +277,7 @@ export class RecoveryPackCard extends LitElement {
               >`
             : nothing
         }
-        <wt-button
-          data-test="make-recovery-pack"
-          variant="primary"
-          @click=${() => this.dialog?.show(this.status)}
+        <wt-button data-test="make-recovery-pack" variant="primary" @click=${() => this.#make()}
           >${t("recovery_pack.make")}</wt-button
         >
       </div>
@@ -400,7 +424,7 @@ export class RecoveryPackCard extends LitElement {
       <p data-test="pack-ready">
         ${fill("recovery_pack.ready", {
           number: String(made.number),
-          date: this.#date(made.madeAt),
+          date: this.#date(this.#madeAt(made.number) ?? made.arrivedAt),
         })}
       </p>
       <div class="actions">

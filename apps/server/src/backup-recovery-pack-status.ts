@@ -30,11 +30,13 @@ export type PackStatusInput = {
   now: Date;
 };
 
-type Reason = {
-  part: RecoveryPackPartRecord["part"];
-  kind: "key_changed" | "settings_changed" | "set_up_after" | "removed" | "key_replaced";
-  at?: string;
-};
+/** Each reason names only the parts it is given for. */
+type Reason =
+  | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
+  | { part: "bucket" | "archives"; kind: "settings_changed" }
+  | { part: RecoveryPackPartRecord["part"]; kind: "set_up_after" }
+  | { part: RecoveryPackPartRecord["part"]; kind: "removed" }
+  | { part: "server-key"; kind: "key_replaced" };
 
 type Keep = {
   number: number;

@@ -2056,6 +2056,14 @@ export interface MadeRecoveryPack {
 
 type RecoveryPackPart = "bucket" | "archives" | "server-key";
 
+/** Each reason names only the parts the box can give it for. */
+export type RecoveryPackReason =
+  | { part: "bucket" | "archives"; kind: "key_changed"; at: string }
+  | { part: "bucket" | "archives"; kind: "settings_changed" }
+  | { part: RecoveryPackPart; kind: "set_up_after" }
+  | { part: RecoveryPackPart; kind: "removed" }
+  | { part: "server-key"; kind: "key_replaced" };
+
 /** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
  * `PackStatus`. */
 export interface RecoveryPackStatus {
@@ -2072,11 +2080,7 @@ export interface RecoveryPackStatus {
   upToDate: boolean;
   incomplete: boolean;
   unreceived: null | { number: number; madeAt: string; holdsCurrentServerKey: boolean };
-  reasons: {
-    part: RecoveryPackPart;
-    kind: "key_changed" | "settings_changed" | "set_up_after" | "removed" | "key_replaced";
-    at?: string;
-  }[];
+  reasons: RecoveryPackReason[];
   keep: {
     number: number;
     madeAt: string;

@@ -396,6 +396,24 @@ describe("reading the status", () => {
     );
   });
 
+  it("hides the last answer's rows after a read fails, and Make then hands the dialog no status", async () => {
+    const api = stubApi(STATES["up to date"]);
+    const el = await mount(api);
+    expect(row(el, "last")).not.toBe("");
+    api.getRecoveryPackStatus.mockRejectedValueOnce({ code: "connection.failed" });
+    el.reload();
+    await settle(el);
+    expect(el.shadowRoot!.querySelector("[data-test=pack-load-failed]")).not.toBeNull();
+    expect(el.shadowRoot!.querySelector("dl")).toBeNull();
+    const make = el.shadowRoot!.querySelector<HTMLElementTagNameMap["wt-button"]>(
+      "wt-button[data-test=make-recovery-pack]",
+    )!;
+    expect(make.disabled).toBe(false);
+    const show = vi.spyOn(dialogOf(el), "show");
+    make.click();
+    expect(show).toHaveBeenCalledWith(null);
+  });
+
   it("re-reads when asked, keeping only the newest answer", async () => {
     const api = stubApi(STATES.none);
     const el = await mount(api);
@@ -580,6 +598,87 @@ describe("making a pack", () => {
         option: option(),
       }),
     );
+  });
+
+  it("reads the status once after a make that succeeds", async () => {
+    const api = stubApi(STATES.none);
+    const el = await mount(api);
+    const { wt, make } = await openDialog(el);
+    const reads = api.getRecoveryPackStatus.mock.calls.length;
+    make();
+    await expect
+      .poll(() => el.shadowRoot!.querySelector("[data-test=download-pack]"))
+      .not.toBeNull();
+    await expect.poll(() => wt.open).toBe(false);
+    await settle(el);
+    expect(api.getRecoveryPackStatus.mock.calls.length).toBe(reads + 1);
+  });
+
+  it.each([
+    ["Pacific/Kiritimati", "2024-02-28T23:30:00.000Z", "29 February"],
+    ["Pacific/Pago_Pago", "2024-03-01T09:30:00.000Z", "29 February"],
+  ])(
+    "dates the ready line from the box's own time for the pack, in the venue's zone (%s)",
+    async (timeZone, madeAt, day) => {
+      const api = stubApi(status({ timeZone }));
+      const el = await mount(api);
+      api.getRecoveryPackStatus.mockResolvedValue(
+        status({
+          timeZone,
+          latest: latest({ number: 4, madeAt, received: true }),
+          upToDate: true,
+        }),
+      );
+      const { make } = await openDialog(el);
+      make();
+      await expect
+        .poll(() => el.shadowRoot!.querySelector("[data-test=download-pack]"))
+        .not.toBeNull();
+      await expect
+        .poll(() => words(el.shadowRoot!.querySelector("[data-test=pack-ready]")))
+        .toBe(fill("recovery_pack.ready", { number: "4", date: day }));
+    },
+  );
+
+  it.each([
+    ["the make's answer", "make"],
+    ["the mark-received answer", "mark"],
+  ] as const)(
+    "drops %s when the screen hands it another api while it is out",
+    async (_what, waitOn) => {
+      const api = stubApi(STATES.none);
+      const el = await mount(api);
+      const answer = deferred<MadeRecoveryPack>();
+      const marked = deferred<void>();
+      if (waitOn === "make") api.makeRecoveryPack.mockReturnValue(answer.promise);
+      else api.markRecoveryPackReceived.mockReturnValue(marked.promise);
+      const { wt, make } = await openDialog(el);
+      make();
+      if (waitOn === "make")
+        await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
+      else await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+      const next = stubApi(STATES.none);
+      el.api = next as unknown as DashboardApi;
+      await settle(el);
+      answer.resolve({ pdf: pdf(), number: 4, key: "unchanged" });
+      marked.resolve();
+      await settle(el);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      await settle(el);
+      expect(el.shadowRoot!.querySelector("[data-test=download-pack]")).toBeNull();
+      expect(el.shadowRoot!.querySelector("[data-test=pack-ready]")).toBeNull();
+      expect(wt.open).toBe(false);
+      if (waitOn === "make") expect(api.markRecoveryPackReceived).not.toHaveBeenCalled();
+      expect(next.markRecoveryPackReceived).not.toHaveBeenCalled();
+    },
+  );
+
+  it("tells the screen when Make is pressed", async () => {
+    const el = await mount(stubApi(STATES.none));
+    const pressed = vi.fn();
+    el.addEventListener("recovery-pack-make", pressed);
+    el.shadowRoot!.querySelector<HTMLElement>("wt-button[data-test=make-recovery-pack]")!.click();
+    expect(pressed).toHaveBeenCalledOnce();
   });
 
   it("keeps the made pack's links when the status cannot be read afterwards, saying so as a read failure", async () => {
