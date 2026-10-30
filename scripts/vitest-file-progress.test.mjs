@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import FileProgressReporter from "./vitest-file-progress.mjs";
 
 function fakeModule(relativeModuleId, { project = "", state = "passed" } = {}) {
@@ -214,5 +214,154 @@ describe("vitest file progress reporter", () => {
     }
     expect(written[0]).toBe("[file-progress] start src/real.test.ts\n");
     expect(written[1]).toMatch(/^\[file-progress\] end src\/real\.test\.ts passed \d+\.\ds\n$/);
+  });
+});
+
+describe("selected-file progress details", () => {
+  const path = "src/blocked.test.ts";
+  const module = () => fakeModule(path, { project: "browser" });
+  const testCase = () => ({
+    module: module(),
+    fullName: "dialog > opens\nthen waits",
+    result: () => ({ state: "passed" }),
+  });
+  const details = (lines) =>
+    lines
+      .filter((line) => line.startsWith("[file-progress] detail "))
+      .map((line) => JSON.parse(line.slice("[file-progress] detail ".length)));
+
+  it("records completed collection before any case begins", () => {
+    const { reporter, lines, clock } = harness({ traceFiles: [path] });
+    clock.now = 1234;
+    reporter.onTestModuleCollected?.(module());
+    expect(details(lines)).toEqual([
+      { file: "src/blocked.test.ts [browser]", phase: "collected", atMs: 1234 },
+    ]);
+  });
+
+  it("records the exact active case and its completion as separate single lines", () => {
+    const { reporter, lines } = harness({ traceFiles: [path] });
+    reporter.onTestCaseReady?.(testCase());
+    reporter.onTestCaseResult?.(testCase());
+    expect(lines).toHaveLength(2);
+    expect(lines.every((line) => !line.includes("\n"))).toBe(true);
+    expect(details(lines)).toEqual([
+      {
+        file: "src/blocked.test.ts [browser]",
+        phase: "case-start",
+        name: "dialog > opens\nthen waits",
+        atMs: 0,
+      },
+      {
+        file: "src/blocked.test.ts [browser]",
+        phase: "case-end",
+        name: "dialog > opens\nthen waits",
+        state: "passed",
+        atMs: 0,
+      },
+    ]);
+  });
+
+  it.each(["beforeEach", "afterEach"])(
+    "records a case's %s hook separately from its body",
+    (name) => {
+      const { reporter, lines } = harness({ traceFiles: [path] });
+      reporter.onHookStart?.({ name, entity: testCase() });
+      reporter.onHookEnd?.({ name, entity: testCase() });
+      expect(details(lines)).toEqual([
+        {
+          file: "src/blocked.test.ts [browser]",
+          phase: "hook-start",
+          hook: name,
+          name: "dialog > opens\nthen waits",
+          atMs: 0,
+        },
+        {
+          file: "src/blocked.test.ts [browser]",
+          phase: "hook-end",
+          hook: name,
+          name: "dialog > opens\nthen waits",
+          atMs: 0,
+        },
+      ]);
+    },
+  );
+
+  it.each(["beforeAll", "afterAll"])("records a module's %s hook", (name) => {
+    const { reporter, lines } = harness({ traceFiles: [path] });
+    reporter.onHookStart?.({ name, entity: { ...module(), type: "module" } });
+    reporter.onHookEnd?.({ name, entity: { ...module(), type: "module" } });
+    expect(details(lines)).toEqual([
+      { file: "src/blocked.test.ts [browser]", phase: "hook-start", hook: name, atMs: 0 },
+      { file: "src/blocked.test.ts [browser]", phase: "hook-end", hook: name, atMs: 0 },
+    ]);
+  });
+
+  it("keeps suite hook names and distinguishes projects sharing the same path", () => {
+    const { reporter, lines } = harness({ traceFiles: [path] });
+    reporter.onHookStart?.({
+      name: "beforeAll",
+      entity: { module: fakeModule(path, { project: "node" }), fullName: "nested suite" },
+    });
+    reporter.onTestCaseReady?.(testCase());
+    expect(details(lines)).toEqual([
+      {
+        file: "src/blocked.test.ts [node]",
+        phase: "hook-start",
+        hook: "beforeAll",
+        name: "nested suite",
+        atMs: 0,
+      },
+      {
+        file: "src/blocked.test.ts [browser]",
+        phase: "case-start",
+        name: "dialog > opens\nthen waits",
+        atMs: 0,
+      },
+    ]);
+  });
+
+  it("leaves unselected files' normal start and end output unchanged", () => {
+    const { reporter, lines } = harness({ traceFiles: ["src/other.test.ts"] });
+    reporter.onTestModuleQueued(module());
+    reporter.onTestModuleCollected?.(module());
+    reporter.onTestCaseReady?.(testCase());
+    reporter.onHookStart?.({ name: "beforeEach", entity: testCase() });
+    reporter.onHookEnd?.({ name: "beforeEach", entity: testCase() });
+    reporter.onTestCaseResult?.(testCase());
+    reporter.onTestModuleEnd(module());
+    expect(lines).toEqual([
+      "[file-progress] start src/blocked.test.ts [browser]",
+      "[file-progress] end src/blocked.test.ts [browser] passed 0.0s",
+    ]);
+  });
+
+  it.each([undefined, "", "   "])(
+    "emits no details for an unset or empty selector (%s)",
+    (value) => {
+      vi.stubEnv("WAITRON_TEST_TRACE_FILES", value);
+      try {
+        const { reporter, lines } = harness();
+        reporter.onTestModuleCollected?.(module());
+        reporter.onTestCaseReady?.(testCase());
+        expect(lines).toEqual([]);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
+  it("reads exact comma-separated file selectors from the environment", () => {
+    vi.stubEnv("WAITRON_TEST_TRACE_FILES", " src/other.test.ts, , src/blocked.test.ts ");
+    try {
+      const { reporter, lines } = harness();
+      reporter.onTestModuleCollected?.(module());
+      reporter.onTestModuleCollected?.(fakeModule("prefix/src/blocked.test.ts"));
+      expect(details(lines)).toEqual([
+        { file: "src/blocked.test.ts [browser]", phase: "collected", atMs: 0 },
+      ]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

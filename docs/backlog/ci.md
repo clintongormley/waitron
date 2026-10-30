@@ -973,3 +973,25 @@ In `apps/server/src/first-fiscal-setup.e2e.test.ts`, a failure inside a row's su
 the Vitest worker exit ("Worker exited unexpectedly"), so the later rows never run and the run
 reports one failure (it still exits 1). Reproduced on `27ae35c09` by breaking the existing
 tax-number check, during A980 S1a2. Cause not found.
+
+
+## A1230: dashboard shard 1's blocked operation is unknown
+
+Main CI run `41046955691`, job `124036233860`, ended at its 360-second
+command deadline on 30 October 2026. Its unfinished files were
+`content-languages-screen.a11y.test.ts`, `content-translations-dialog.a11y.test.ts`
+and `extra-list-form.save-state.test.ts`. The retained log identifies assigned
+files, not the pending case, hook or browser command.
+
+On macOS, the three files passed all 138 cases in 62.92 seconds. The original
+shard-1 command with coverage passed 130 files and 3,327 cases in 104.55 seconds.
+Neither run reproduced the CI stall; neither establishes its cause or a repair.
+
+The dashboard shard now selects those three files for detailed reporter events
+and enables Playwright API logging. On recurrence, preserve the whole failing log,
+read each selected file's last collected/case/hook event and any unfinished
+Playwright API call, then reproduce that wait. A completed collection event
+separates a loaded module from an assigned file; a case-start event precedes its
+beforeEach hooks. These events do not provide a browser JavaScript stack or name
+a pending application promise. Product behavior, test assertions, test deadlines
+and shard counts have not changed in this diagnostic slice.

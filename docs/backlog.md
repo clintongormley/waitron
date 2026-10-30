@@ -5822,6 +5822,11 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 - **The step-watch case's A544 pre-push failure is fixed at a likely cause, not a confirmed one.**
   [Detail](backlog/ci.md#the-step-watch-cases-a544-pre-push-failure-is-fixed-at-a-likely-cause-not-a-confirmed-one).
 
+- **A1230 residual: dashboard shard 1's blocked operation is unknown.**
+  Retain the next failing log's selected-file case/hook events and Playwright API log;
+  use them to locate the pending operation before changing test or product behavior.
+  [Detail](backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
+
 - **A1027 residual: the till shard's blocked operation is unknown.**
   [Detail](backlog/ci.md#the-till-shards-blocked-operation-is-unknown-a1027).
 

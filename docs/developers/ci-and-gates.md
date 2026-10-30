@@ -700,6 +700,38 @@ warning annotation (`::warning title=Slow test file::`), because one file that l
 shard (see "Every CI test job should finish in about 4 minutes" below). In browser mode that time can
 include waiting to be loaded (above). It warns and never fails the job.
 
+### Trace selected cases and browser calls when a file list cannot locate a stall
+
+Set `WAITRON_TEST_TRACE_FILES` to comma-separated paths relative to the package,
+matching the reporter's file names exactly. Selected files emit `[file-progress]
+detail` JSON lines at collection completion, case start/end and hook start/end.
+Each line includes the project, phase and monotonic timestamp; case and hook
+lines also name their test or suite. Names are JSON-escaped so an embedded newline
+cannot masquerade as another file-progress line. An unset or empty selector emits
+no detail lines. Existing file start/end lines still feed the outer deadline's
+unfinished-file report.
+
+The dashboard shard selects A1230's three unfinished files and sets `DEBUG=pw:api`
+for Playwright's API log. This records reported phases and browser API calls; it
+does not sample a blocked renderer's JavaScript stack. Read the last event for
+each file alongside the last browser call before assigning a cause. A1230's
+historical CI wait remains unknown; see the [open investigation](../backlog/ci.md#a1230-dashboard-shard-1s-blocked-operation-is-unknown).
+
+Run `pnpm exec vitest run scripts/vitest-file-progress.test.mjs` for selector,
+collection, case and hook output checks. Existing reporter checks retain the
+ordinary file lines, timer behavior and slow-file annotations.
+
+On 30 October 2026, the dashboard's shard-1 coverage command passed 130 files and
+3,327 cases locally before these diagnostics (104.55 seconds) and with them
+(72.80 seconds). The detailed log was 3.24 MB and contained 138 case starts,
+138 case completions and matching hook starts/ends for the three selected files.
+This sequential pair does not isolate diagnostic overhead. A separate real Vitest
+fixture blocked in beforeEach; its log named that hook and case before the
+five-second outer deadline returned 124. Disposable-copy controls removing
+collection output, hook-start output and selector enforcement failed two, five
+and five reporter checks respectively; the restored reporter passed all 27.
+
+
 ### A browser shard reports before its job limit
 
 A job killed at its outer limit can lose its log. On 23 October 2026, main run

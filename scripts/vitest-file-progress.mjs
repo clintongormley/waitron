@@ -1,6 +1,5 @@
 // A Vitest reporter that prints which test FILE is running, so a CI job that hangs shows the file
 // it hung in. Vitest's default reporter, off a terminal, names a file only once it finishes.
-// Added to every CI test shard with `--reporter=<this file>`; see docs/developers/ci-and-gates.md.
 
 const PREFIX = "[file-progress]";
 
@@ -21,6 +20,10 @@ export default class FileProgressReporter {
     clearInterval: stopInterval = globalThis.clearInterval,
     intervalMs = 60_000,
     slowFileMs = 90_000,
+    traceFiles = (process.env.WAITRON_TEST_TRACE_FILES ?? "")
+      .split(",")
+      .map((path) => path.trim())
+      .filter(Boolean),
   } = {}) {
     this.now = now;
     this.write = write;
@@ -28,6 +31,7 @@ export default class FileProgressReporter {
     this.stopInterval = stopInterval;
     this.intervalMs = intervalMs;
     this.slowFileMs = slowFileMs;
+    this.traceFiles = new Set(traceFiles);
     this.running = new Map();
     this.timer = undefined;
   }
@@ -45,6 +49,41 @@ export default class FileProgressReporter {
 
   onTestModuleStart(testModule) {
     this.started(testModule);
+  }
+
+  onTestModuleCollected(testModule) {
+    this.trace(testModule, "collected");
+  }
+
+  onTestCaseReady(testCase) {
+    this.trace(testCase.module, "case-start", { name: testCase.fullName });
+  }
+
+  onTestCaseResult(testCase) {
+    this.trace(testCase.module, "case-end", {
+      name: testCase.fullName,
+      state: testCase.result().state,
+    });
+  }
+
+  onHookStart(hook) {
+    this.hook("hook-start", hook);
+  }
+
+  onHookEnd(hook) {
+    this.hook("hook-end", hook);
+  }
+
+  hook(phase, { name, entity }) {
+    const testModule = entity.type === "module" ? entity : entity.module;
+    this.trace(testModule, phase, { hook: name, name: entity.fullName });
+  }
+
+  trace(testModule, phase, details = {}) {
+    if (!this.traceFiles.has(testModule.relativeModuleId)) return;
+    this.write(
+      `${PREFIX} detail ${JSON.stringify({ file: label(testModule), phase, ...details, atMs: Math.round(this.now()) })}`,
+    );
   }
 
   onTestModuleEnd(testModule) {
