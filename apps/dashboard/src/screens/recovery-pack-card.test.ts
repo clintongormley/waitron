@@ -903,10 +903,42 @@ describe("making a pack", () => {
       return { api, el, first, download };
     };
 
-    it("offers an older pack's link when only that pack holds the new server key", async () => {
-      const { first, download } = await twoMakes("replaced", "unchanged");
+    it("offers an older pack's link when only that pack holds the new server key, and re-reads the status", async () => {
+      const { api, el, first, download } = await twoMakes("replaced", "unchanged");
+      await openDialog(el);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
       first.resolve();
       await expect.poll(download).toBe("waitron-recovery-pack-1.pdf");
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
+    });
+
+    it("never offers an older pack whose new server key a later pack has replaced", async () => {
+      const api = stubApi(STATES.none);
+      api.makeRecoveryPack
+        .mockResolvedValueOnce({ pdf: pdf(), number: 1, key: "replaced" })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 2, key: "replaced" })
+        .mockResolvedValueOnce({ pdf: pdf(), number: 3, key: "unchanged" });
+      const first = deferred<void>();
+      api.markRecoveryPackReceived.mockReturnValueOnce(first.promise).mockResolvedValue(undefined);
+      const el = await mount(api);
+      const download = () =>
+        el
+          .shadowRoot!.querySelector<HTMLAnchorElement>("[data-test=download-pack]")
+          ?.getAttribute("download") ?? null;
+      (await openDialog(el)).make();
+      await expect.poll(() => api.markRecoveryPackReceived.mock.calls.length).toBe(1);
+      dialogOf(el).dismiss();
+      await settle(el);
+      (await openDialog(el)).make();
+      await expect.poll(download).toBe("waitron-recovery-pack-2.pdf");
+      await settle(el);
+      (await openDialog(el)).make();
+      await expect.poll(download).toBe("waitron-recovery-pack-3.pdf");
+      await settle(el);
+      const reads = api.getRecoveryPackStatus.mock.calls.length;
+      first.resolve();
+      await expect.poll(() => api.getRecoveryPackStatus.mock.calls.length).toBeGreaterThan(reads);
+      expect(download()).toBe("waitron-recovery-pack-3.pdf");
     });
 
     it("re-reads the status an older pack's late receipt changed, even with an unused dialog open", async () => {
