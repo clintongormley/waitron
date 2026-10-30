@@ -54,11 +54,16 @@ import { publishWorkingMenu } from "./testing/publish-menu.js";
 import {
   OPERATOR,
   inTx,
+  order,
   partyRow,
+  pay,
+  revisionOf,
   seatWithNoAllergies as seat,
   setupPartyVenue,
+  split,
   type PartyVenue,
 } from "./testing/party-venue.js";
+import { moveGuests } from "./testing/table-action-fixture.js";
 import { offerProducts } from "./testing/zone-offers.js";
 
 /*
@@ -186,7 +191,7 @@ import { offerProducts } from "./testing/zone-offers.js";
  * | POST /api/department-transfers/:id/decline                | designated desk's department | department-transfer-api.test.ts: refuses decline from an undesignated profile in the destination |
  * | POST /api/bills/:id/split                               | order                  | refuses POST /api/bills/:id/split                    |
  * | POST /api/bills/:id/merge                               | order; body order      | refuses POST /api/bills/:id/merge (into), (from)     |
- * | PUT  /api/bills/:id/name                                | order                  | refuses PUT /api/bills/:id/name                      |
+ * | PUT  /api/bills/:id/name | numbering party; order when it has none | refuses PUT /api/bills/:id/name, (no number); "naming a paid bill a merged party kept" |
  * | POST /api/bills/:id/transfer                            | order; body order      | refuses POST /api/bills/:id/transfer (from), (to)    |
  * | POST /api/bills/:id/move                                | order; body table/zone | refuses POST /api/bills/:id/move (bill), (table), (counter) |
  * | GET  /api/working-orders/:id/payments                   | order                  | refuses GET /api/working-orders/:id/payments         |
@@ -944,6 +949,17 @@ const ROUTES: readonly Row[] = [
     deliTableZone,
   ],
   [
+    "PUT /api/bills/:id/name (no number)",
+    "PUT",
+    (x) => `/api/bills/${x.deliOrder}/name`,
+    (x) => ({
+      name: "Ana",
+      expectedPartyRevision: 0,
+      expectedEdit: { billId: x.deliOrder, editorVersion: 0, draftId: null, draftRevision: null },
+    }),
+    deliOrderZone,
+  ],
+  [
     "PUT /api/parties/:id/guests",
     "PUT",
     (x) => `/api/parties/${x.deliParty}/guests`,
@@ -1447,6 +1463,39 @@ describe("a Restaurant profile on another department's zone", () => {
     );
     expect(order!.status).toBe("open");
     expect((await partyRow(v, f.deliParty)).name).toBeNull();
+  });
+});
+
+describe("naming a paid bill a merged party kept", () => {
+  it("reads the zone of the party now numbering it, not the bill's own", async () => {
+    const source = await seat(v, await v.table("Merged source", f.restTables));
+    await order(v, source.tabId, "Agua", "Flan");
+    await split(v, source.partyId, source.tabId, [2]);
+    await pay(v, source.tabId, "2.00");
+    const deliTable = await v.table("Merged destination", f.deliTables);
+    const survivor = await seat(v, deliTable);
+    const sourceRevision = await revisionOf(v, source.partyId);
+    const survivorRevision = await revisionOf(v, survivor.partyId);
+    await inTx(v, (tx) =>
+      moveGuests(tx, v.cfg, source.partyId, deliTable, {
+        bills: "separate",
+        operatorId: OPERATOR,
+        expectedPartyRevision: sourceRevision,
+        otherPartyId: survivor.partyId,
+        expectedOtherPartyRevision: survivorRevision,
+      }),
+    );
+    const naming = async (name: string) => ({
+      name,
+      partyId: survivor.partyId,
+      expectedPartyRevision: await revisionOf(v, survivor.partyId),
+      expectedEdit: await inTx(v, (tx) => readBillEditState(tx, source.tabId)),
+    });
+    expect(
+      await send(restaurant, "PUT", `/api/bills/${source.tabId}/name`, await naming("Old zone")),
+    ).toEqual(notAllowed(f.deliTables));
+    const named = await send(deli, "PUT", `/api/bills/${source.tabId}/name`, await naming("Ana"));
+    expect(named).toMatchObject({ status: 200, body: { billName: "Ana" } });
   });
 });
 

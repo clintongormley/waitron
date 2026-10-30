@@ -7,7 +7,17 @@ import { requireBillEditor } from "./bill-editing.js";
 import { VENUE_SERVICE } from "./modules.js";
 import type { BillEditExpected } from "./order-drafts.js";
 import { guardParty, partyRevision, refuseMovedParty } from "./parties.js";
+import type { ZoneSubject } from "./zone-access.js";
 import "./errors.js";
+
+/**
+ * Where naming a bill is authorised: its numbering party (see {@link setBillName}), or the bill's
+ * own order when it has none, which {@link setBillName} then refuses.
+ */
+export async function billNameZoneSubject(tx: Transaction, billId: string): Promise<ZoneSubject> {
+  const partyId = (await VENUE_SERVICE.readBillIdentities(tx, [billId])).get(billId)?.partyId;
+  return partyId === null || partyId === undefined ? { orderId: billId } : { partyId };
+}
 
 /**
  * Name a bill, or clear its name. Guarded by the revision of its numbering party — the party
@@ -15,7 +25,7 @@ import "./errors.js";
  * bill's own party — and by the bill's editor, as a split is: someone else's unsent dishes on the
  * bill need a take-over first.
  */
-export async function renameBill(
+export async function setBillName(
   tx: Transaction,
   billId: string,
   name: unknown,

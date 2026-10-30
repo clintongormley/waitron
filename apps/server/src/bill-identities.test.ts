@@ -50,7 +50,7 @@ import { readUnsentDrafts, splitDraft } from "./order-drafts.js";
 import { readBillsOfParties, readPartyBills } from "./parties.js";
 import { saveDraftForTest } from "./testing/draft-command-fixture.js";
 import { readBillEditState } from "./bill-editing.js";
-import { renameBill } from "./bill-identities.js";
+import { setBillName } from "./bill-identities.js";
 import {
   joinTables,
   moveGuests,
@@ -943,7 +943,7 @@ describe("A803 rename", () => {
     const expectedEdit = await inTx(v, (tx) => readBillEditState(tx, billId));
     const expectedPartyRevision = sent.expectedPartyRevision ?? (await revisionOf(v, partyId));
     return inTx(v, (tx) =>
-      renameBill(tx, billId, name, {
+      setBillName(tx, billId, name, {
         partyId,
         expectedPartyRevision,
         operatorId: OPERATOR,
@@ -1041,7 +1041,7 @@ describe("A803 rename", () => {
     await refusedRename(
       () =>
         inTx(v, async (tx) =>
-          renameBill(tx, orderId, "Ana", {
+          setBillName(tx, orderId, "Ana", {
             operatorId: OPERATOR,
             expectedEdit: await readBillEditState(tx, orderId),
           }),
