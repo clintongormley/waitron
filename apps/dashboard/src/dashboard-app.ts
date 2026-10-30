@@ -1359,6 +1359,8 @@ export class DashboardApp extends LitElement {
   }
 
   #startLiveUpdates(): void {
+    // The screen is drawn only once this read answers; a stream started sooner lacks its watches.
+    if (!this.contentLanguagesReady && this.contentLanguageError === null) return;
     if (this.#liveAccountEpoch === this.sessionGeneration) return;
     this.#liveAccountEpoch = this.sessionGeneration;
     this.liveUpdates?.start();
@@ -1469,6 +1471,11 @@ export class DashboardApp extends LitElement {
       else document.addEventListener("pointerdown", this.#onPointerDownOutsidePanel, true);
     }
     this.#placeStripPanel();
+    if (
+      (changed.has("contentLanguagesReady") || changed.has("contentLanguageError")) &&
+      this.sessionRole !== undefined
+    )
+      this.#startLiveUpdates();
     // An open pop-up whose new text equals the old changes no toast property, so its countdown
     // would not restart on its own.
     if (changed.has("alertToast") && this.alertToast !== null)
