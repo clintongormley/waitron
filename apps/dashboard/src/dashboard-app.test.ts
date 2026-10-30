@@ -60,7 +60,7 @@ function stubDrawerMatchMedia(): { set: (narrow: boolean) => void; restore: () =
 import { currentLocale, setLocale, t } from "./i18n/t.js";
 import { codeMessage } from "./i18n/codes.js";
 import { es } from "./i18n/strings.js";
-import { LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
+import { LiveConnection, LiveData, type DashboardRequest } from "@waitron/dashboard-kit";
 import type { WtToast } from "@waitron/ui";
 import type { AlertsBell } from "./widgets/alerts-bell.js";
 import { DashboardApi, type AlertView, type PersonSummary } from "./api/client.js";
@@ -5623,6 +5623,56 @@ it("starts live updates after authentication and stops them on logout and discon
   el.remove();
   expect(liveUpdates.stop).toHaveBeenCalledTimes(2);
 });
+
+describe("the first live stream", () => {
+  const streamsOver = (liveData: LiveData) => {
+    const streams: { url: string; close: ReturnType<typeof vi.fn> }[] = [];
+    const liveUpdates = new LiveConnection(liveData, {
+      open: (url) => {
+        const stream = Object.assign(new EventTarget(), { readyState: 0, close: vi.fn() });
+        streams.push({ url, close: stream.close });
+        return stream;
+      },
+    });
+    return { streams, liveUpdates };
+  };
+  const resourcesOf = (url: string) => new URL(url, location.origin).searchParams.get("resources")!;
+
+  it("opens once the screen is drawn, carrying the screen's resources", async () => {
+    let resolveLanguages!: (value: unknown) => void;
+    const liveData = new LiveData();
+    const { streams, liveUpdates } = streamsOver(liveData);
+    const api = stubApi({
+      liveData,
+      getContentLanguages: vi.fn(() => new Promise((resolve) => (resolveLanguages = resolve))),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    await flush(el);
+    expect(streams).toHaveLength(0);
+    resolveLanguages({ defaultLanguage: "es", languages: ["es"] });
+    await flush(el);
+    await flush(el);
+    expect(overview(el)).not.toBeNull();
+    expect(streams).toHaveLength(1);
+    // The overview screen watches sale voids; the shell does not.
+    expect(resourcesOf(streams[0]!.url)).toContain('"sale_voids"');
+    expect(streams[0]!.close).not.toHaveBeenCalled();
+  });
+
+  it("starts live updates even when the content languages cannot be read", async () => {
+    const liveUpdates = { start: vi.fn(), stop: vi.fn() };
+    const api = stubApi({
+      liveData: new LiveData(),
+      getContentLanguages: vi.fn().mockRejectedValue(new Error("offline")),
+    });
+    const { el } = await mountWidget<DashboardApp>("dashboard-app", { api, liveUpdates });
+    await flush(el);
+    await flush(el);
+    expect(liveUpdates.start).toHaveBeenCalledOnce();
+  });
+});
+
 it("opens the reusable modifiers library from its own management destination", async () => {
   const { el } = await mountWidget<DashboardApp>("dashboard-app", {
     api: stubApi({

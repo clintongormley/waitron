@@ -1347,3 +1347,14 @@ Left as they were, from #827's review: unlike the two staff
   column that does not opt out; tree mode still draws it at `ci === 0`
   (`packages/ui/src/components/wt-data-table.ts`). No tree table sets the option on its first
   column today; what a click on that cell's blank space then does was not tested.
+
+
+## A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left open by A1222)
+
+- **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
+  open by A1222).** Since A1222 the dashboard opens its first live stream after the screen is
+  drawn. The Catalogue still opens a second when at least one catalogue exists:
+  `catalogue-screen.ts` `#load` watches `ingredients` and `recipe_lines` only from
+  `#reloadProducts`, after awaited reads, so the stream that opened with the screen's other types
+  is replaced once those reads answer. Decide whether the screen should watch those types from the
+  start, and check other screens that watch after an awaited read the same way.

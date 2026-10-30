@@ -4097,6 +4097,12 @@ _Formerly A6, and the old Track C's payments items; part of A9._ Detail: [backlo
   explains its effect before changing access.
   [Correction](backlog/self-service-refusals.md#sign-in).
 
+- **A1227. The Catalogue screen replaces its live stream once per load when catalogues exist (left
+  open by A1222).** It watches `ingredients` and `recipe_lines` only after awaited reads, so its
+  first stream is replaced once those reads answer. Decide whether it should watch them from the
+  start.
+  [Detail](backlog/dashboard.md#a1227-the-catalogue-screen-replaces-its-live-stream-once-per-load-when-catalogues-exist-left-open-by-a1222)
+
 - **A1214. A second sign-in factor for people with no authenticator app (owner's idea,
   2026-10-29).** "When we have mobile notifications then we could use those for 2fa instead. Or we
   could use email now as well." An emailed one-time code now, a push to the Android app (A1175)
