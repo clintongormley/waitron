@@ -1242,6 +1242,7 @@ export const en = {
   "table.no_other_tables": "No other tables",
   "table.action_split_table": "Split a table",
   "table.action_name": "Name the party",
+  "table.action_name_bill": "Name this bill",
   "table.action_guests": "Guests",
   "table.party_scope": "{name} ({tables})",
   "table.move_guests_heading": "Move {party} to:",
@@ -1261,6 +1262,10 @@ export const en = {
   "table.split_no_bill": "No bill, start an empty one",
   "table.name_title": "Name the party at {tables}",
   "table.bill_name_title": "Name this bill: {bill}",
+  "table.bill_name_taken_over":
+    "{name} has dishes on this bill that are not sent yet, so its name was not saved. Take over their order to name it.",
+  "table.bill_name_taken_over_unnamed":
+    "Someone else has dishes on this bill that are not sent yet, so its name was not saved. Take over their order to name it.",
   "table.name_label": "Name",
   "table.name_too_long": "Use at most 40 characters",
   "table.name_save": "Save",
@@ -3014,7 +3019,8 @@ export const es: Record<StringKey, string> = {
   "table.action_split": "Dividir por artículo",
   "table.no_other_tables": "No hay otras mesas",
   "table.action_split_table": "Separar una mesa",
-  "table.action_name": "Poner nombre",
+  "table.action_name": "Poner nombre a los clientes",
+  "table.action_name_bill": "Poner nombre a esta cuenta",
   "table.action_guests": "Comensales",
   "table.party_scope": "{name} ({tables})",
   "table.move_guests_heading": "Mover {party} a:",
@@ -3034,6 +3040,10 @@ export const es: Record<StringKey, string> = {
   "table.split_no_bill": "Sin cuenta, empezar una vacía",
   "table.name_title": "Poner nombre a los clientes de {tables}",
   "table.bill_name_title": "Poner nombre a esta cuenta: {bill}",
+  "table.bill_name_taken_over":
+    "{name} tiene platos sin enviar en esta cuenta, así que no se ha guardado su nombre. Toma su pedido para ponerle nombre.",
+  "table.bill_name_taken_over_unnamed":
+    "Otra persona tiene platos sin enviar en esta cuenta, así que no se ha guardado su nombre. Toma su pedido para ponerle nombre.",
   "table.name_label": "Nombre",
   "table.name_too_long": "Usa como máximo 40 caracteres",
   "table.name_save": "Guardar",

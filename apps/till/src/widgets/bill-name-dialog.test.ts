@@ -95,8 +95,9 @@ describe("A803 bill name draft", () => {
       setLocale("es");
       const el = await mountDialog({ bill: "Ana · Cuenta 2" });
 
-      expect(heading(el)).toBe("Poner nombre a esta cuenta: Ana · Cuenta 2");
-      expect(save(el).textContent!.trim()).toBe("Guardar");
+      expect(heading(el)).toBe(t("table.bill_name_title").replace("{bill}", "Ana · Cuenta 2"));
+      expect(heading(el)).not.toBe(`Name this bill: Ana · Cuenta 2`);
+      expect(save(el).textContent!.trim()).toBe(t("table.name_save"));
     } finally {
       setLocale(previousLocale);
     }
@@ -199,6 +200,22 @@ describe("A803 bill name draft", () => {
 
     await type(el, "Desserts 2");
 
+    expect(field(el).error).toBe("");
+    expect(bottom(el).error).toBe("");
+  });
+
+  it("clears a server refusal when Save is pressed again", async () => {
+    const el = await mountDialog({
+      value: "Desserts",
+      savedValue: "Mains",
+      refusal: t("table.name_too_long"),
+    });
+    const seen = captured(el);
+
+    save(el).click();
+    await el.updateComplete;
+
+    expect(seen.named).toEqual([{ name: "Desserts" }]);
     expect(field(el).error).toBe("");
     expect(bottom(el).error).toBe("");
   });

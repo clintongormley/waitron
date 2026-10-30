@@ -301,6 +301,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
     splitTable: vi.fn().mockResolvedValue({ partyId: "v-split", mainBillId: "wo-check" }),
     setPartyName: vi.fn().mockResolvedValue({ revision: 4, name: "Ana" }),
     setPartyGuests: vi.fn().mockResolvedValue({ revision: 4, guestCount: 4 }),
+    renameBill: vi.fn().mockResolvedValue({ revision: 4, billNumber: 1, billName: "Clint" }),
     mergeBills: vi.fn().mockResolvedValue(undefined),
     transferItems: vi.fn().mockResolvedValue(undefined),
     splitBill: vi.fn().mockResolvedValue({ billId: "wo-check" }),
@@ -2625,6 +2626,277 @@ describe("till-app: table actions on the party", () => {
     expect(banner(el)!.textContent).toContain(
       t("party.changed_tables").replace("{tables}", "4, 9"),
     );
+  });
+});
+
+describe("A803 name bill", () => {
+  const editOf = (billId: string) => ({
+    billId,
+    editorVersion: 0,
+    draftId: null,
+    draftRevision: null,
+  });
+  const billNameShown = (el: TillApp, billId: string) =>
+    tableOrder(el)!
+      .shadowRoot!.querySelector(`[data-bill="${billId}"] .bill-name`)
+      ?.textContent?.trim();
+  const billWindow = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement & { value: string; bill: string }>(
+      "till-bill-name-dialog",
+    );
+
+  it("names the bill with the party the screen shows, at the revision it read, and the bill's editor", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+
+    expect(api.renameBill).toHaveBeenCalledWith("wo-4", "Clint", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      expectedEdit: editOf("wo-4"),
+    });
+  });
+
+  it("clears the name with null", async () => {
+    const { el } = await mountApp();
+    const order = await openMesa(el);
+
+    emit(order, "name-bill", { billId: "wo-4", name: null });
+    await flush(el);
+
+    expect(vi.mocked(api.renameBill).mock.calls[0]![1]).toBeNull();
+  });
+
+  it("sends a paid bill a merged party left behind with the surviving party's id, not the bill's own", async () => {
+    drafts.bills.add("wo-old");
+    const leftBehind: PartyBill = {
+      ...checkBill,
+      workingOrderId: "wo-old",
+      partyId: "v0",
+      billNumber: 3,
+      status: "settled",
+      outstanding: "0.00",
+    };
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([tabBill, checkBill, leftBehind]),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "name-bill", { billId: "wo-old", name: "Clint" });
+    await flush(el);
+
+    expect(api.renameBill).toHaveBeenCalledWith("wo-old", "Clint", {
+      expectedPartyRevision: 3,
+      partyId: "v1",
+      expectedEdit: editOf("wo-old"),
+    });
+  });
+
+  it("notes the party's new revision and reads the bills again, which then show the name", async () => {
+    let named = false;
+    const { el } = await mountApp({
+      getPartyBills: vi.fn(async () =>
+        named ? [{ ...tabBill, billName: "Clint" }, checkBill] : [tabBill, checkBill],
+      ),
+      renameBill: vi.fn(async () => {
+        named = true;
+        return { revision: 4, billNumber: 1, billName: "Clint" };
+      }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    order.shadowRoot!.querySelector<HTMLElement>("[data-open-drawer]")!.click();
+    await flush(el);
+
+    expect(api.getPartyBills).toHaveBeenCalledTimes(reads + 1);
+    expect(billNameShown(el, "wo-4")).toBe("4 · Bill 1 · Clint");
+    expect(banner(el)).toBeNull();
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+    expect(api.setPartyName).toHaveBeenCalledWith("v1", "Ana", 4);
+  });
+
+  it("hands a refusal of the name back to the screen for that bill, beside the field, without a banner", async () => {
+    const { el } = await mountApp({
+      renameBill: vi.fn().mockRejectedValue({ code: "management.request_invalid", field: "name" }),
+    });
+    const order = await openMesa(el);
+
+    emit(order, "name-bill", { billId: "wo-4", name: "x".repeat(41) });
+    await flush(el);
+
+    expect(tableOrder(el)!.billNameRefusal).toEqual({
+      billId: "wo-4",
+      name: "x".repeat(41),
+      message: t("table.name_too_long"),
+    });
+    expect(billWindow(el)!.value).toBe("x".repeat(41));
+    expect(banner(el)).toBeNull();
+  });
+
+  it("drops a refusal of the name that arrives after the waiter has left the table", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      renameBill: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    emit(tableOrder(el)!, "back-to-floor");
+    await flush(el);
+    emit(floor(el)!, "open-table", { tableId: "t7", seated: true });
+    await flush(el);
+
+    refuse({ code: "management.request_invalid", field: "name" });
+    await flush(el);
+
+    expect(tableOrder(el)!.party?.id).toBe("v7");
+    expect(tableOrder(el)!.billNameRefusal).toBeNull();
+    expect(billWindow(el)).toBeNull();
+    expect(banner(el)).toBeNull();
+  });
+
+  it("opens no window for a bill the waiter has since left when its late refusal arrives", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      renameBill: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+    refuse({ code: "management.request_invalid", field: "name" });
+    await flush(el);
+
+    expect(tableOrder(el)!.billNameRefusal).toBeNull();
+    expect(billWindow(el)).toBeNull();
+  });
+
+  it("leaves another bill's window as it is when a late refusal arrives after the waiter opened it", async () => {
+    let refuse!: (reason: unknown) => void;
+    const { el } = await mountApp({
+      renameBill: vi.fn(
+        () =>
+          new Promise<never>((_resolve, reject) => {
+            refuse = reject;
+          }),
+      ),
+    });
+    const order = await openMesa(el);
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    const screen = tableOrder(el)!.shadowRoot!;
+    screen.querySelector<HTMLElement>("[data-open-drawer]")?.click();
+    await flush(el);
+    screen.querySelector<HTMLElement>("[data-move-split]")!.click();
+    await flush(el);
+    screen.querySelector<HTMLElement>('[data-action="name-bill"]')!.click();
+    await flush(el);
+    const opened = billWindow(el)!;
+    expect(opened.bill).toBe("4 · Bill 2");
+
+    refuse({ code: "management.request_invalid", field: "name" });
+    await flush(el);
+
+    expect(billWindow(el)).toBe(opened);
+    expect(opened.value).toBe("");
+    expect(opened.bill).toBe("4 · Bill 2");
+  });
+
+  it.each(["party.not_open", "tab.not_open"])(
+    "shows %s in its own words on the banner",
+    async (code) => {
+      const { el } = await mountApp({ renameBill: vi.fn().mockRejectedValue({ code }) });
+      const order = await openMesa(el);
+      const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+      emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+      await flush(el);
+
+      expect(banner(el)!.textContent).toContain(codeMessage(code));
+      expect(tableOrder(el)!.billNameRefusal).toBeNull();
+      if (code === "tab.not_open")
+        expect(vi.mocked(api.getPartyBills).mock.calls.length).toBeGreaterThan(reads);
+    },
+  );
+
+  it("reloads and says what changed when another device changed the party before the name arrived", async () => {
+    const reads = floorThat(
+      [table4],
+      [seated({}, { revision: 5, tableIds: ["t4", "t9"] }), table9],
+    );
+    const { el } = await mountApp({
+      getTablesState: reads.getTablesState,
+      renameBill: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
+    });
+    const order = await openMesa(el);
+    reads.other.acted = true;
+
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el);
+
+    expect(banner(el)!.textContent).toContain(
+      t("party.changed_tables").replace("{tables}", "4, 9"),
+    );
+  });
+
+  it.each([
+    ["Bea", t("table.bill_name_taken_over").replace("{name}", "Bea")],
+    [null, t("table.bill_name_taken_over_unnamed")],
+  ])(
+    "when someone else's unsent dishes hold the bill (%s), says so, offers Take over and reads the drafts again",
+    async (ownerName, message) => {
+      const { el } = await mountApp({
+        renameBill: vi.fn().mockRejectedValue({ code: "draft.taken_over", ownerName }),
+      });
+      const order = await openMesa(el);
+      const reads = vi.mocked(drafts.listDrafts).mock.calls.length;
+
+      emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+      await flush(el, 6);
+
+      expect(banner(el)!.textContent).toContain(message);
+      expect(banner(el)!.textContent).not.toContain(codeMessage("draft.taken_over"));
+      expect(vi.mocked(drafts.listDrafts).mock.calls.length).toBeGreaterThan(reads);
+      expect(api.renameBill).toHaveBeenCalledOnce();
+      expect(drafts.takeOverDraft).not.toHaveBeenCalled();
+      expect(tableOrder(el)!.billNameRefusal).toBeNull();
+    },
+  );
+
+  it("says the order changed and reads the drafts again when the bill's editor expectation is stale", async () => {
+    const { el } = await mountApp({
+      renameBill: vi.fn().mockRejectedValue({ code: "draft.out_of_date" }),
+    });
+    const order = await openMesa(el);
+    const reads = vi.mocked(drafts.listDrafts).mock.calls.length;
+
+    emit(order, "name-bill", { billId: "wo-4", name: "Clint" });
+    await flush(el, 6);
+
+    expect(banner(el)!.textContent).toContain(codeMessage("draft.out_of_date"));
+    expect(vi.mocked(drafts.listDrafts).mock.calls.length).toBeGreaterThan(reads);
   });
 });
 

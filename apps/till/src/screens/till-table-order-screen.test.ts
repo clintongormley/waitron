@@ -5934,6 +5934,162 @@ describe("till-table-order-screen", () => {
       expect(named).toEqual([{ name: "Ana" }]);
     });
 
+    describe("A803 name bill", () => {
+      type BillDialog = HTMLElement & {
+        bill: string;
+        value: string;
+        savedValue: string | undefined;
+        refusal: string;
+      };
+      const billDialog = (el: TillTableOrderScreen) =>
+        el.shadowRoot!.querySelector<BillDialog>("till-bill-name-dialog");
+      /** Ana's second bill on screen, named "Desserts", with the floor around her. */
+      const onCheck = () => ({
+        lines: [pendingLine],
+        orderId: "wo-check",
+        ...partyTables(),
+        bills: [tabBill, { ...checkBill, billName: "Desserts" }, paidBill],
+      });
+      async function openBillNaming(el: TillTableOrderScreen): Promise<BillDialog> {
+        await toMenu(el);
+        click(el, '[data-action="name-bill"]');
+        await el.updateComplete;
+        return billDialog(el)!;
+      }
+      const confirm = (dialog: HTMLElement, name: string | null) =>
+        dialog.dispatchEvent(
+          new CustomEvent("bill-name-confirm", {
+            detail: { name },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+
+      it("offers Name this bill, right after Name the party, for the bill on screen at a table", async () => {
+        const { el } = await mount(onCheck());
+        await toMenu(el);
+
+        const action = el.shadowRoot!.querySelector('[data-action="name-bill"]')!;
+        expect(action.textContent!.trim()).toBe(t("table.action_name_bill"));
+        expect(el.shadowRoot!.querySelector('[data-action="name"]')!.nextElementSibling).toBe(
+          action,
+        );
+      });
+
+      it("does not offer Name this bill for a counter order", async () => {
+        const { el } = await mount({ ...onCheck(), party: null });
+        await toMenu(el);
+
+        expect(el.shadowRoot!.querySelector("[data-action-menu]")).not.toBeNull();
+        expect(el.shadowRoot!.querySelector('[data-action="name-bill"]')).toBeNull();
+      });
+
+      it("opens the window headed with the bill on screen and its stored name in the field", async () => {
+        const { el } = await mount(onCheck());
+
+        const dialog = await openBillNaming(el);
+
+        expect(dialog.bill).toBe(
+          t("table.bill_of_named")
+            .replace("{party}", "Ana")
+            .replace("{n}", "2")
+            .replace("{name}", "Desserts"),
+        );
+        expect(dialog.value).toBe("Desserts");
+        expect(dialog.savedValue).toBe("Desserts");
+        expect(dialog.refusal).toBe("");
+        expect(el.shadowRoot!.querySelector("[data-action-menu]")).toBeNull();
+      });
+
+      it("opens an unnamed bill's window empty", async () => {
+        const { el } = await mount({ ...onCheck(), bills: [tabBill, checkBill] });
+
+        const dialog = await openBillNaming(el);
+
+        expect(dialog.value).toBe("");
+        expect(dialog.savedValue).toBe("");
+      });
+
+      it("sends name-bill with the bill's id and the name, and closes the window", async () => {
+        const { el } = await mount(onCheck());
+        const named = heard(el, "name-bill");
+        const dialog = await openBillNaming(el);
+
+        confirm(dialog, "Clint");
+        await el.updateComplete;
+
+        expect(named).toEqual([{ billId: "wo-check", name: "Clint" }]);
+        expect(billDialog(el)).toBeNull();
+      });
+
+      it("closes the window on Cancel, sending nothing", async () => {
+        const { el } = await mount(onCheck());
+        const named = heard(el, "name-bill");
+        const dialog = await openBillNaming(el);
+
+        dialog.dispatchEvent(
+          new CustomEvent("bill-name-cancel", { bubbles: true, composed: true }),
+        );
+        await el.updateComplete;
+
+        expect(named).toEqual([]);
+        expect(billDialog(el)).toBeNull();
+      });
+
+      it("reopens the window with the name sent and the refusal when the app hands one back for that bill", async () => {
+        const { el } = await mount(onCheck());
+
+        el.billNameRefusal = {
+          billId: "wo-check",
+          name: "x".repeat(41),
+          message: t("table.name_too_long"),
+        };
+        await el.updateComplete;
+
+        const dialog = billDialog(el)!;
+        expect(dialog.value).toBe("x".repeat(41));
+        expect(dialog.refusal).toBe(t("table.name_too_long"));
+        expect(dialog.bill).toContain("Desserts");
+      });
+
+      it("leaves an open window for another bill as it is when a refusal for a different bill arrives", async () => {
+        const { el } = await mount(onCheck());
+        const dialog = await openBillNaming(el);
+
+        el.billNameRefusal = { billId: "wo-4", name: "Clint", message: t("table.name_too_long") };
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBe(dialog);
+        expect(dialog.value).toBe("Desserts");
+        expect(dialog.refusal).toBe("");
+        expect(dialog.bill).toContain("Desserts");
+      });
+
+      it("shows the bill's name stored elsewhere as the window's stored value", async () => {
+        const { el } = await mount(onCheck());
+        const dialog = await openBillNaming(el);
+
+        el.bills = [tabBill, { ...checkBill, billName: "Mains" }, paidBill];
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBe(dialog);
+        expect(dialog.savedValue).toBe("Mains");
+      });
+
+      it("closes the window, sending nothing, when the screen switches to another party", async () => {
+        const floor = onCheck();
+        const { el } = await mount(floor);
+        const named = heard(el, "name-bill");
+        await openBillNaming(el);
+
+        el.party = { ...floor.party, id: "v8", revision: 1 };
+        await el.updateComplete;
+
+        expect(billDialog(el)).toBeNull();
+        expect(named).toEqual([]);
+      });
+    });
+
     it("offers Guests right after Name the party whenever a party is open", async () => {
       const { el } = await mount({ lines: [pendingLine], orderId: "wo-4", ...partyTables() });
       await toMenu(el);
