@@ -412,8 +412,8 @@ configuración para poner en marcha otro local.
   recuperación, que guarda el equipo. Mientras la hace, el equipo escribe una copia sin cifrar de la
   base de datos en su propio disco y la borra al terminar la copia, o en el siguiente arranque si se
   detuvo durante la copia. La exportación de la configuración va cifrada con una frase de paso de al
-  menos 12 caracteres, así que es tan segura como esa frase. El kit de recuperación abre la copia
-  del bucket, así que guárdalo sin conexión.
+  menos 12 caracteres, así que es tan segura como esa frase. El paquete de recuperación abre la copia
+  del bucket y las copias programadas, así que guárdalo bajo llave, fuera del equipo.
 
 ## Si se pierden o se exponen datos personales {#breach}
 
@@ -535,8 +535,8 @@ dos pasos. Waitron no permite **Restablecer acceso** para el único administrado
 lugar abre **Configuración de la cuenta**, elige **Desactivar** junto a **Aplicación de
 autenticación** y lo vuelve a configurar.
 
-**Un kit de recuperación perdido.** El kit contiene la clave de acceso y el secreto de tu bucket y
-la clave de recuperación, así que quien lo tenga puede leer toda la copia de la base de datos de tu
+**Un paquete de recuperación perdido.** El paquete contiene la clave de acceso y el secreto de tu
+bucket y la clave de recuperación (el paquete la llama clave de copia), así que quien lo tenga puede leer toda la copia de la base de datos de tu
 bucket y desbloquear las contraseñas y claves guardadas en ella, incluida la clave que protege los
 secretos de la verificación en dos pasos, así que elige también **Restablecer acceso** para cada
 persona que la use. Waitron no permite **Restablecer acceso** para el único administrador activo,
@@ -550,10 +550,13 @@ elige también **Cambiar el destino o la programación**, vuelve a elegir **El b
 continua** y guarda, porque conservan las claves con las que se guardaron. Una clave de recuperación
 nueva no cambia las contraseñas y claves de tus otros proveedores, así que cámbialas también en cada
 proveedor. Mientras las copias programadas están activadas, **Copias de seguridad** también ofrece
-**Cambiar la clave de recuperación**; después descarga el kit de recuperación nuevo. Las copias
-programadas hechas antes del cambio se siguen abriendo con la clave antigua, igual que la parte
-sellada con las contraseñas y claves en el historial de la copia del bucket anterior al cambio, que
-se guarda una semana.
+**Cambiar la clave de recuperación**; después elige **Hacer paquete de recuperación** en **Copias de
+seguridad** y guarda el paquete nuevo. Las copias programadas hechas antes del cambio se siguen
+abriendo con la clave antigua, igual que la parte sellada con las contraseñas y claves en el
+historial de la copia del bucket anterior al cambio, que se guarda una semana. Un paquete también
+puede contener la clave del servidor. Para sustituirla, haz un paquete nuevo con **Hacer también una
+nueva clave del servidor** marcado: las copias nuevas usan la clave nueva, y las anteriores siguen
+necesitando la antigua.
 
 **Una exportación de la configuración filtrada.** El archivo contiene a cada persona de tu lista del
 personal, también a quien ya no trabaja en el local, con su nombre, correo, teléfono, rol y estado,

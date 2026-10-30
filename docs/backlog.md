@@ -4786,8 +4786,9 @@ _Formerly A10; part of A9._ Detail: [backlog/workforce.md](backlog/workforce.md)
   `authorization.not_permitted`, the answer this plan calls untruthful; the same-origin TLS check
   is copied across several routes, and the archive code, the backup-key check, the bucket recovery
   kit, the server key's name and the created date are each built twice, once in an older route
-  (`backup-api.ts`, `stream-api.ts`, `recovery-document-api.ts`, `recovery-pdf-content.ts`) and
-  once for the pack.
+  and once for the pack. PR D removed the older routes in `backup-api.ts`, `stream-api.ts` and
+  `recovery-document-api.ts`; setup's recovery sheet still draws the key's name and created date in
+  `packages/fiscal-verifactu/src/recovery-pdf-content.ts`.
   Left open by #2250's review: `waitron-restore`'s usage line still says `<kit-file>`/`<pack-file>`
   where both forms now take the pack PDF; setup's pack refusals say "paste the code" where the
   field's help says "paste the kit"; the look images were taken before the review changed the

@@ -517,19 +517,19 @@ command against it treat that entrypoint differently:
 
 - **A restore takes one of three sources.** `restore <backup-file>` restores an encrypted backup
   file, with its recovery key in `WAITRON_BACKUP_RECOVERY_KEY`. `restore --from-bucket <kit-file>`
-  rebuilds the box from the copy the old box kept in the owner's bucket; the recovery kit file
-  holds the bucket's key and the recovery key, so nothing secret goes on the command line. The file
-  must be visible inside the container and readable by the image's user, `waitron` (uid 10001):
-  `sudo chown 10001 kit.txt` keeps it private at mode 0600. Otherwise the command stops with
-  `cannot read kit file: /kit.txt`.
+  rebuilds the box from the copy the old box kept in the owner's bucket. `<kit-file>` is the
+  venue's recovery pack PDF, made with **Make recovery pack** on the dashboard's Backups screen, or
+  a recovery kit file saved before the pack replaced it. Either holds the bucket's key and the
+  recovery key, so nothing secret goes on the command line. The file must be visible inside the
+  container and readable by the image's user, `waitron` (uid 10001):
+  `sudo chown 10001 recovery-pack.pdf` keeps it private at mode 0600. Otherwise the command stops
+  with `cannot read kit file: /recovery-pack.pdf`.
 
-  `--from-bucket` also takes the venue's recovery pack PDF in place of the kit file, under the same
-  rules for where the file sits. The command reads the bucket copy code from the file attached
-  inside the PDF, never from its printed text, where a long code wraps. It restores nothing and
-  prints one line when the pack holds no bucket copy code (the box had no bucket copy when the pack
-  was made), when the PDF is not a Waitron recovery pack, or when the file attached inside the pack
-  is damaged or was changed after it was made. Like the kit file, the PDF can hold the bucket's key and
-  the recovery key, and it may also hold the server key: keep it as private as the kit file.
+  The command reads the bucket copy code from the file attached inside the PDF, never from its
+  printed text, where a long code wraps. It restores nothing and prints one line when the pack
+  holds no bucket copy code (the box had no bucket copy when the pack was made), when the PDF is not
+  a Waitron recovery pack, or when the file attached inside the pack is damaged or was changed after
+  it was made. The pack may also hold the server key: keep it locked away, off the box.
 
   **A filing node also needs its fiscal recovery operation.** Follow
   [Recover a filing box](../docs/developers/offline-fiscal-restore.md) to supply the selected
@@ -538,8 +538,8 @@ command against it treat that entrypoint differently:
   when restoring Veri*Factu. The archive encryption key alone does not authorise activation.
 
   ```bash
-  docker compose run --rm -v "$PWD/kit.txt:/kit.txt:ro" --entrypoint node app \
-    /app/bin-restore.js restore --from-bucket /kit.txt --confirm-venue <tax-id>
+  docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-bucket /recovery-pack.pdf --confirm-venue <tax-id>
   ```
 
   It prints the business name, tax id and location of the copy it found, and restores nothing
@@ -551,10 +551,11 @@ command against it treat that entrypoint differently:
   else prints the usage line and exits 2.
 
   `restore --from-archive <pack-file> --archive-key <name>` downloads one archive from the bucket
-  named in an archive recovery pack file, and restores it as `restore <backup-file>` does, with
-  the same check on the old box. The pack holds the bucket's key and the recovery key, so it is as
-  secret as the recovery kit: keep it off the box, and make it visible and readable inside the
-  container as the kit is above, or the command stops with `cannot read pack file: <path>`.
+  named in the venue's recovery pack PDF, or in an archive recovery pack file saved before the
+  recovery pack replaced it, and restores it as `restore <backup-file>` does, with the same check
+  on the old box. Either holds the bucket's key and the recovery key: keep it off the box, and
+  make it visible and readable inside the container as above, or the command stops with
+  `cannot read pack file: <path>`.
   `<name>` is the archive's file name as the bucket lists it. This form takes neither a backup
   file, `--from-bucket` nor `--confirm-venue`, and uses the pack's recovery key even when
   `WAITRON_BACKUP_RECOVERY_KEY` is set. An archive file downloaded from the bucket by hand
@@ -562,17 +563,14 @@ command against it treat that entrypoint differently:
   `WAITRON_BACKUP_RECOVERY_KEY`. A filing node still needs the separate fiscal recovery inputs.
 
   ```bash
-  docker compose run --rm -v "$PWD/pack.txt:/pack.txt:ro" --entrypoint node app \
-    /app/bin-restore.js restore --from-archive /pack.txt --archive-key <name>
+  docker compose run --rm -v "$PWD/recovery-pack.pdf:/recovery-pack.pdf:ro" --entrypoint node app \
+    /app/bin-restore.js restore --from-archive /recovery-pack.pdf --archive-key <name>
   ```
 
-  `--from-archive` also takes the venue's recovery pack PDF in place of the pack file, and reads
-  its archive code the same way. It refuses in the same three cases, the first being a pack made
-  while the box kept no backup archive in a bucket.
-
-  The Backups screen's Show archive recovery pack button, offered once a destination is a bucket,
-  shows the pack's code line, and the Download pack file link shown with it downloads a file that
-  holds that line under a few lines of explanation in the dashboard's language.
+  It reads the PDF's archive code the same way as `--from-bucket` reads its bucket copy code, and
+  refuses in the same three cases, the first being a pack made while the box kept no backup archive
+  in a bucket. The dashboard no longer shows either restore code on screen; both are in the
+  recovery pack.
 
   **Keep older paper recovery keys.** Restoring an older backup also restores the node key
   from that time. A replaced key can work again on the restored box, while its replacement

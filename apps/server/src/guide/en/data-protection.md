@@ -381,7 +381,8 @@ own, can also make scheduled backups, and can export your setup to start another
   the box keeps. While it makes one, the box writes an unencrypted copy of the database on its own
   disk and deletes it when the backup ends, or at its next start if it stopped during a backup. The
   configuration export is encrypted under a passphrase of at least 12 characters, so it is as safe
-  as that passphrase. The recovery kit opens the bucket copy, so keep it offline.
+  as that passphrase. The recovery pack opens the bucket copy and the scheduled backups, so keep
+  it locked away, off the box.
 
 ## If personal data is lost or exposed {#breach}
 
@@ -490,8 +491,8 @@ secrets is on the box too, so choose **Reset login** for each person who uses tw
 Waitron refuses **Reset login** for the venue's only active admin, who instead opens **Account
 settings**, chooses **Disable** beside **Authenticator app**, and sets it up again.
 
-**A lost recovery kit.** The kit holds your bucket's access key and secret and the recovery key, so
-whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
+**A lost recovery pack.** The pack holds your bucket's access key and secret and the recovery key
+(the pack calls it the backup key), so whoever has it can read the whole database copy in your bucket and unlock the passwords and keys
 stored in it, including the key that protects two-factor secrets, so also choose **Reset login** for
 each person who uses two-factor sign-in. Waitron refuses **Reset login** for the venue's only
 active admin, who instead opens **Account settings**, chooses **Disable** beside **Authenticator
@@ -502,9 +503,11 @@ your scheduled backups go to **The bucket copy's bucket**, also choose **Change 
 schedule**, choose **The bucket copy's bucket** again, and save, because they keep the keys they
 were saved with. A new recovery key does not change the passwords and keys for your other providers,
 so change those at each provider too. While scheduled backups are on, **Backups** also offers
-**Change the recovery key**; download the new recovery kit afterwards. Scheduled backups made before
-the change still open with the old key, and so does the sealed part holding the passwords and keys
-in the bucket copy's history from before the change, which is kept for a week.
+**Change the recovery key**; afterwards choose **Make recovery pack** on **Backups** and keep the new
+pack. Scheduled backups made before the change still open with the old key, and so does the sealed
+part holding the passwords and keys in the bucket copy's history from before the change, which is
+kept for a week. A pack can also hold the server key. To replace it, make a new pack with **Also make
+a new server key** ticked: new backups use the new key, and older backups still need the old one.
 
 **A leaked configuration export.** The file holds every person on your staff list, former staff
 included, with their name, email, telephone, role and status, and their employment records with

@@ -83,10 +83,11 @@ y preproducción.
 
 ## Identifícate ante la copia elegida {#proof}
 
-Introduce la clave agrupada de la hoja que conservaste para esta copia, o elige su PDF de
-recuperación guardado o un paquete de recuperación que tenga la clave del servidor. Si el paquete no
-tiene la clave del servidor, la página lo dice y, cuando el paquete lo registra, indica el paquete o
-el nombre de la clave que hay que buscar. Una hoja nueva con una clave de sustitución puede no abrir una copia anterior.
+En **PDF de recuperación**, elige tu paquete de recuperación, o un PDF de recuperación anterior, que
+tenga la clave del servidor de esta copia; o escribe la clave agrupada impresa en él en **Clave de
+recuperación**. Si el paquete no tiene la clave del servidor, la página lo dice y, cuando el paquete
+lo registra, indica el paquete o el nombre de la clave que hay que buscar. Un paquete o una hoja con
+una clave del servidor más nueva puede no abrir una copia anterior.
 
 Confirma que la caja anterior seguirá desconectada y que eres la única persona recuperando este
 contribuyente. Elige **Abrir copia**. Solo después de aceptar la clave, la página muestra el
