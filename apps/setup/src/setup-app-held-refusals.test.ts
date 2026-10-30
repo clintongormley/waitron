@@ -7,11 +7,10 @@ import { setLocale } from "./i18n/t.js";
 import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import { shellEn, shellEs } from "./i18n/strings/shell.js";
 import { initial } from "../test/first-setup-browser.js";
-import { click, q } from "../test/missing-database-browser.js";
+import { click, q, stoppedSummary } from "../test/missing-database-browser.js";
 import {
   heldFixture,
   heldPasswordAccepted,
-  heldSummary,
   refusedCause,
   settled,
   tradingEnv,
@@ -73,7 +72,7 @@ for (const locale of locales) {
     const t = stringsFor(locale);
     const { app, requests } = await heldFixture({
       locale,
-      summary: () => Response.json(heldSummary({ rows: 105, kept: 2, records: 1, accepted: 0 })),
+      summary: () => Response.json(stoppedSummary),
     });
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
@@ -99,7 +98,7 @@ for (const locale of locales) {
     const t = stringsFor(locale);
     const { app } = await heldFixture({
       locale,
-      summary: () => Response.json(heldSummary({ rows: 105, kept: 0, records: 1, accepted: 1 })),
+      summary: () => Response.json(stoppedSummary),
     });
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
@@ -119,7 +118,7 @@ for (const locale of locales) {
     const t = stringsFor(locale);
     const { app } = await heldFixture({
       locale,
-      summary: () => Response.json(heldSummary({ rows: 105, kept: 2, records: 0, accepted: 0 })),
+      summary: () => Response.json(stoppedSummary),
     });
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();
@@ -139,7 +138,7 @@ for (const locale of locales) {
     const t = stringsFor(locale);
     const { app } = await heldFixture({
       locale,
-      summary: () => Response.json(heldSummary({ rows: 105, kept: 1, records: 3, accepted: 2 })),
+      summary: () => Response.json(stoppedSummary),
     });
     await heldPasswordAccepted(app);
     await expect.poll(() => q(app, "held-refused")).not.toBeNull();

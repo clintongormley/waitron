@@ -3,7 +3,7 @@ import { userEvent } from "vitest/browser";
 import type { WtButton, WtInput } from "@waitron/ui";
 import "../src/setup-app.js";
 import type { SetupApp } from "../src/setup-app.js";
-import type { FirstSetupInspection, StartAgainSummary } from "../src/api/first-setup-types.js";
+import type { FirstSetupInspection } from "../src/api/first-setup-types.js";
 import { initial, venue, wizardApi } from "./first-setup-browser.js";
 import { click, q, stoppedActivity, stoppedSummary } from "./missing-database-browser.js";
 import { mountWidget } from "../src/widgets/test-helpers.js";
@@ -13,10 +13,6 @@ export const tradingEnv = {
   status: "present",
   digest: "c".repeat(64),
 } as const;
-export const heldSummary = (held: NonNullable<StartAgainSummary["held"]>): StartAgainSummary => ({
-  ...stoppedSummary,
-  held,
-});
 export const refusedCause = (cause: string) =>
   Response.json(
     { error: { code: "setup.start_again_refused", params: { cause } } },
@@ -40,10 +36,7 @@ export async function heldFixture(
     intercept(path, body) {
       if (path.endsWith("/backup/activity")) return Response.json({ activity: stoppedActivity });
       if (path.endsWith("/start-again/summary"))
-        return (
-          options.summary?.() ??
-          Response.json(heldSummary({ rows: 105, kept: 0, records: 0, accepted: 0 }))
-        );
+        return options.summary?.() ?? Response.json(stoppedSummary);
       if (path.endsWith("/resolution/start-again"))
         return options.startAgain?.() ?? Response.json({ restarting: true });
       if (path.endsWith("/resolution/recover")) {

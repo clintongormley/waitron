@@ -1,6 +1,5 @@
 import type { ProvisionBody, SetupApi, EmailSettingsDraft } from "./api/client.js";
 import type {
-  FirstSetupInspection,
   FirstSetupOwner,
   FirstSetupOwnership,
   FirstSetupProvisionBody,
@@ -66,17 +65,6 @@ const REFUSAL_CAUSES: readonly string[] = [
   "setup-finished",
   "kept-records",
 ] satisfies StartAgainRefusalCause[];
-/**
- * The setup database holds records and no trading settings may have been saved: beside a stopped
- * recovery, Start again may discard it (A1131's held state).
- */
-export function heldStartAgainDatabase(inspection: FirstSetupInspection): boolean {
-  return (
-    (inspection.database === "occupied" ||
-      (inspection.database === "no-venue-rows" && !inspection.emptyDatabase)) &&
-    !inspection.artifacts.some((file) => file.name === "trading.env" && file.status !== "missing")
-  );
-}
 /**
  * The cause a `setup.start_again_refused` answer names, or `undefined` for any other error and for
  * a cause this page has no words for, which it shows as a generic refusal.

@@ -11,7 +11,6 @@ import { initialOwnerStrings } from "./screens/initial-owner-strings.js";
 import {
   heldFixture,
   heldPasswordAccepted,
-  heldSummary,
   refusedCause,
   settled,
   tradingEnv,
@@ -118,7 +117,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
           summary:
             view === "setup-finished"
               ? () => refusedCause("setup-finished")
-              : () => Response.json(heldSummary({ rows: 105, kept: 2, records: 1, accepted: 0 })),
+              : () => Response.json(stoppedSummary),
         });
         const t = initialOwnerStrings[locale === "es-ES" ? "es" : "en"];
         if (view !== "trading-saved") await heldPasswordAccepted(app);
