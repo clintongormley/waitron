@@ -499,6 +499,8 @@ until A977).
   trigger labels and accented-search examples remain.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
   their existing amounts, quantities, dates and language keys.
+  Catalogue menu-removal and availability suites use English dish samples; removal,
+  sibling-price, archived-product and availability checks remain.
   Dashboard hardware save-state, equipment-label and page-printer panel suites use English
   sample names; IDs, permissions, saved choices and save-state checks stay in place.
   Dashboard overview behavior and accessibility suites use English dish and variant samples;

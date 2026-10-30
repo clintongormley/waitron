@@ -41,7 +41,7 @@ beforeEach(async () => {
       "en",
     );
     body = {
-      name: "Tortilla",
+      name: "Omelette",
       customerName: null,
       ordering: "public",
       description: null,
@@ -143,7 +143,7 @@ describe("Active and Available", () => {
         tx,
         null,
         catalogueId,
-        { ...body, name: "Croqueta", available: false },
+        { ...body, name: "Croquette", available: false },
         "en",
       ),
     );
