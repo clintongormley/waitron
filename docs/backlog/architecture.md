@@ -444,7 +444,7 @@ until A977).
   The audit is historical; its other listed Bucket E comments have been removed or put in English.
   Keep the service-period suite's menu keys with its fixture names under A976. Other private
   naming sites remain in the till's boot and counter-payment suites
-  and the server's till-API and configuration-transfer fixtures.
+  and the server's till-API fixtures.
   Keep accented search fixtures unchanged. String-selected product keys stay with their fixture text
   under A976, as do the service-period menu keys.
   Catalogue display names, recipe ingredient text, seasonal venue and zone names and printer-screen display labels
@@ -473,13 +473,17 @@ until A977).
   "Venta en establecimiento".
   The device-api suite (`apps/server/src/device-api.test.ts`) gives English names to what it
   creates; two of its comments still name the shared helper's default station "Cocina" and one its
-  products (café, agua), names no check in it reads. The device-api pass suite and the
-  station-alert, party and configuration-transfer suites still hold other Spanish samples, among
-  them "Mesa 7" and "Terraza" in the party suites and "Barra" and "Cocina" in the
-  configuration-transfer suite. The
-  device, device-delete, join-request, join-api, join-api database and device-session suites keep
-  only the Spanish names the shared test helpers create, and the device and device-session suites'
-  operation description "Venta en establecimiento". Screen tests take translated expectations from
+  products (café, agua), names no check in it reads. The station-alert and party suites still
+  hold other Spanish samples, among them "Mesa 7" and "Terraza" in the party suites. The
+  configuration-transfer suite (`apps/server/src/configuration-transfer.test.ts`) gives English
+  names to what it creates; it still reads the default kitchen station setup names "Cocina" for a
+  Spanish venue (`packages/provisioning/src/starter-content.ts`), and keeps Spanish values inside
+  its translation maps, its accented name-key case, official holiday and place names, its street
+  lines, and "Fiesta" (also an English word). The device-api pass suite
+  (`apps/server/src/device-api.pass.test.ts`) and the device, device-delete, join-request,
+  join-api, join-api database and device-session suites keep only the Spanish names the shared
+  test helpers create, and the device and device-session suites' operation description "Venta en
+  establecimiento". Screen tests take translated expectations from
   their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language

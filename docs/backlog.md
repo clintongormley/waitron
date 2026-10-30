@@ -6140,7 +6140,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only).
 
 - **A974. Finish the remaining English names in general code.** Remaining: boot and counter-payment
-  suites, server till-API and configuration-transfer fixtures, and file names.
+  suites, server till-API fixtures, and file names.
   Keep accented search fixtures unchanged. Other fixture text stays with A976, including catalogue
   display names, recipe ingredient names and seasonal venue and zone names, printer-screen display
   labels, counter-screen display text and station-screen display names, plus kitchen-ticket grouping,
@@ -6192,11 +6192,13 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   ("Cocina", "Entrantes", "Sopa"), some read back from printed tickets; the fiscal sale-path
   suite's venue keeps "Sala principal", "Administradora", "Delicatessen", "Comida", "Bebidas" and
   "Venta en establecimiento".
-  The server's device-api pass, station-alert, party and configuration-transfer suites still hold
-  Spanish sample names. The device, device-api, device-delete, join-request, join-api,
-  join-api database and device-session suites give English names to what they create; the names
-  the shared test helpers create stay Spanish, as does the device and device-session suites'
-  operation description.
+  The server's station-alert and party suites still hold Spanish sample names. The
+  configuration-transfer suite gives English names to what it creates; it still reads setup's
+  Spanish default station "Cocina", and keeps Spanish translation-map values, its accented
+  name-key case, official holiday and place names, its street lines and "Fiesta". The device,
+  device-api, device-api pass, device-delete, join-request, join-api, join-api database and
+  device-session suites give English names to what they create; the names the shared test helpers
+  create stay Spanish, as does the device and device-session suites' operation description.
   Venue-service period-deletion and zone-closure suites use English venue, station,
   zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
   Season and day-resolver suites use English venue, zone and custom-season samples;

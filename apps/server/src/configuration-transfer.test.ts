@@ -430,7 +430,7 @@ const bundle: ConfigurationBundle = {
   },
   privacyContact: { privacyNoticeUrl: null, privacyEmail: null },
   modules: { core: 1 },
-  tables: { products: [{ id: "p1", name: "Café" }] },
+  tables: { products: [{ id: "p1", name: "Coffee" }] },
   reconnect: ["printers"],
 };
 
@@ -728,7 +728,7 @@ describe("configuration transfer database path", () => {
       await tx.insert(products).values({
         id: "22222222-aaaa-aaaa-aaaa-222222222222",
         catalogueId: "11111111-aaaa-aaaa-aaaa-111111111111",
-        name: "Café",
+        name: "Coffee",
         pricingUnit: "each",
         unitPrice: 150,
         vatClass: "general",
@@ -739,7 +739,7 @@ describe("configuration transfer database path", () => {
         .where(eq(products.id, "22222222-aaaa-aaaa-aaaa-222222222222"));
       await tx
         .insert(categories)
-        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Panadería" });
+        .values({ id: "23232323-aaaa-aaaa-aaaa-232323232323", name: "Bakery" });
       await tx
         .insert(categoryDetails)
         .values({ categoryId: "23232323-aaaa-aaaa-aaaa-232323232323" });
@@ -919,7 +919,7 @@ describe("configuration transfer database path", () => {
       const attached = await tx.execute<{ image: string }>(sql`select image from products `);
       expect(attached.rows[0]!.image).toBe(metadata!.filename);
       const named = await tx.select({ name: categories.name }).from(categories);
-      expect(named).toEqual([{ name: "Panadería" }]);
+      expect(named).toEqual([{ name: "Bakery" }]);
       const category = await tx.execute<{ primary: number }>(sql`
         select
           -- The alias is quoted: primary is a keyword to this parser, so a bare "as primary" is
@@ -930,7 +930,7 @@ describe("configuration transfer database path", () => {
         from categories c
         join category_details d on d.category_id = c.id
         cross join products p
-        where p.name = 'Café'
+        where p.name = 'Coffee'
       `);
       // 1, not `true`: an SQL expression, which the `flag` helper's boolean mapping never
       // reaches. A category that is not the product's main one would answer 0.
@@ -1128,7 +1128,7 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const category = await createCategory(tx, { name: "Postres", color: "#b12525" });
+      const category = await createCategory(tx, { name: "Sweets", color: "#b12525" });
       const menu = await createCatalogue(tx, { name: "Colour menu" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
@@ -1169,12 +1169,12 @@ describe("configuration transfer database path", () => {
       modules: ALL_MODULES,
     });
     await withTransaction(suite.db, async (tx) => {
-      const category = await createCategory(tx, { name: "Tartas", color: "#b12525" });
+      const category = await createCategory(tx, { name: "Cakes", color: "#b12525" });
       const menu = await createCatalogue(tx, { name: "Painted menu", color: "#aabbcc" });
       const product = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: category.id,
-        name: "Tarta",
+        name: "Cake",
         pricingUnit: "each",
         unitPrice: "4",
         vatClass: "general",
@@ -1328,7 +1328,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Café",
+      name: "Coffee",
       pricingUnit: "each",
       unitPrice: "2.00",
       vatClass: "reduced",
@@ -1337,7 +1337,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const shot = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Café extra",
+      name: "Coffee extra",
       pricingUnit: "each",
       unitPrice: "1.50",
       vatClass: "general",
@@ -1346,14 +1346,14 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const optionList = await createOptionList(
       tx,
       {
-        name: "Leche",
+        name: "Milk",
         customerName: null,
         kitchenName: null,
         defaultLabelId: null,
         active: true,
         labels: [
-          { name: "Entera", customerName: null, kitchenName: null, available: true },
-          { name: "Avena", customerName: null, kitchenName: null, available: true },
+          { name: "Whole", customerName: null, kitchenName: null, available: true },
+          { name: "Oat", customerName: null, kitchenName: null, available: true },
         ],
       },
       "es",
@@ -1364,7 +1364,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       tx,
       optionList.id,
       {
-        name: "Leche",
+        name: "Milk",
         customerName: null,
         kitchenName: null,
         defaultLabelId: optionList.labels[1]!.id,
@@ -1408,7 +1408,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     const tea = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Té",
+      name: "Tea",
       pricingUnit: "each",
       unitPrice: "1.80",
       vatClass: "reduced",
@@ -1448,9 +1448,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     expect(imported.labels.map((label) => label.id)).not.toContain(
       original.optionList.labels[1]!.id,
     );
-    expect(imported.defaultLabelId).toBe(
-      imported.labels.find((label) => label.name === "Avena")!.id,
-    );
+    expect(imported.defaultLabelId).toBe(imported.labels.find((label) => label.name === "Oat")!.id);
 
     const extraLists = await listExtraLists(tx);
     expect(extraLists).toHaveLength(1);
@@ -1463,7 +1461,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     });
     expect(extraLists[0]!.items[0]!.productId).not.toBe(original.shotId);
     const shot = await tx.execute<{ ordering: string }>(
-      sql`select ordering from products where name = 'Café extra'`,
+      sql`select ordering from products where name = 'Coffee extra'`,
     );
     expect(shot.rows).toEqual([{ ordering: "not_sold_separately" }]);
 
@@ -1471,16 +1469,16 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
       sql`select id from catalogues where name = 'Modifier menu'`,
     );
     const offers = await listMenuOffers(tx, [menus.rows[0]!.id]);
-    const coffee = offers.find((offer) => offer.name === "Café")!;
+    const coffee = offers.find((offer) => offer.name === "Coffee")!;
     expect(coffee.grossPrice).toBe("2.75");
-    expect(offers.find((offer) => offer.name === "Té")).toMatchObject({
+    expect(offers.find((offer) => offer.name === "Tea")).toMatchObject({
       grossPrice: null,
       unitPrice: "1.80",
     });
     // The product's own attachment ORDER, and the offer's republished price on the extra.
     expect(coffee.offeredModifiers.map((entry) => [entry.kind, entry.name])).toEqual([
       ["extras", "Extras"],
-      ["options", "Leche"],
+      ["options", "Milk"],
     ]);
     const extras = coffee.offeredModifiers[0]!;
     if (extras.kind !== "extras") throw new Error("expected the extras list first");
@@ -1500,13 +1498,13 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const water = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Agua",
+      name: "Still water",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
     });
     const drinksMenu = await createCatalogue(tx, {
-      name: "Bebidas (interno)",
+      name: "Drinks (internal)",
       names: { es: "Bebidas" },
       image: image.filename,
       color: "#aabbcc",
@@ -1515,7 +1513,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
       tx,
       (await readMenuStructure(tx, drinksMenu.id)).rootSectionId,
     );
-    await createSectionIn(tx, drinks.id, { internalName: "Cervezas" });
+    await createSectionIn(tx, drinks.id, { internalName: "Beers" });
     await addMember(tx, drinks.id, { kind: "product", productId: water.id }, 0);
     const { rootSectionId } = await readMenuStructure(tx, menu.id);
     await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
@@ -1543,12 +1541,12 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const [importedDrinks] = await tx
       .select({ id: catalogues.id })
       .from(catalogues)
-      .where(eq(catalogues.name, "Bebidas (interno)"));
+      .where(eq(catalogues.name, "Drinks (internal)"));
     const drinks = await readSection(
       tx,
       (await readMenuStructure(tx, importedDrinks!.id)).rootSectionId,
     );
-    const [beer] = await tx.select().from(sections).where(eq(sections.internalName, "Cervezas"));
+    const [beer] = await tx.select().from(sections).where(eq(sections.internalName, "Beers"));
     expect(drinks.id).not.toBe(original.drinks);
     expect(drinks).toMatchObject({
       names: { es: "Bebidas" },
@@ -1559,7 +1557,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
     const [product] = await tx
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.name, "Agua"));
+      .where(eq(products.name, "Still water"));
     expect(drinks!.members.map((member) => member.ref)).toEqual([
       { kind: "product", productId: product!.id },
       { kind: "section", sectionId: beer!.id },
@@ -1687,7 +1685,7 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
   });
   const invented = {
     ...transferred,
-    tables: { ...transferred.tables, media_images: [{ ...row, caption: "Pan" }] },
+    tables: { ...transferred.tables, media_images: [{ ...row, caption: "Bread" }] },
   };
   await expect(
     applyVenue(planVenue(venue("B77665544"), ALL_MODULES), {
@@ -1716,7 +1714,7 @@ it.each([3, 2])(
       const lemonade = await createProduct(tx, {
         catalogueId: menu.id,
         categoryId: null,
-        name: "Limonada",
+        name: "Lemonade",
         pricingUnit: "each",
         unitPrice: "3.00",
         vatClass: "reduced",
@@ -2041,7 +2039,7 @@ it("transfers a station's painted season day and a special day's painted date un
       insert into staff_roles (id, location_id, name, colour, position)
       values (${cook}, ${scope.locationId}, 'Cook', 'red', 0)`);
     await tx.execute(sql`
-      insert into special_days (id, location_id, name) values (${specialDay}, ${scope.locationId}, 'Festa')`);
+      insert into special_days (id, location_id, name) values (${specialDay}, ${scope.locationId}, 'Feast day')`);
     await tx.execute(sql`
       insert into special_day_dates (id, special_day_id, location_id, date)
       values (${date}, ${specialDay}, ${scope.locationId}, '2027-08-03')`);
@@ -2120,7 +2118,7 @@ it("transfers a station's painted season day and a special day's painted date un
       season_location: null,
       weekday: null,
       date: "2027-08-03",
-      special_day: "Festa",
+      special_day: "Feast day",
       date_location: target.locationId,
       role: "Cook",
       headcount: 4,
@@ -2308,7 +2306,7 @@ it("transfers a station's colour", async () => {
   await withTransaction(suite.db, (tx) =>
     tx.insert(kitchenStations).values({
       locationId: source.locationId,
-      name: "Barra",
+      name: "Cocktail bar",
       colour: "teal",
     }),
   );
@@ -2321,7 +2319,7 @@ it("transfers a station's colour", async () => {
     versions,
   );
   expect(transferred.tables.kitchen_stations).toContainEqual(
-    expect.objectContaining({ name: "Barra", colour: "teal" }),
+    expect.objectContaining({ name: "Cocktail bar", colour: "teal" }),
   );
   await applyVenue(planVenue(venue("B97531864"), ALL_MODULES), {
     db: targetSuite.db,
@@ -2332,7 +2330,7 @@ it("transfers a station's colour", async () => {
   const imported = await targetSuite.db
     .select({ colour: kitchenStations.colour })
     .from(kitchenStations)
-    .where(eq(kitchenStations.name, "Barra"));
+    .where(eq(kitchenStations.name, "Cocktail bar"));
   expect(imported).toEqual([{ colour: "teal" }]);
 });
 
@@ -4000,11 +3998,11 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
   });
   await withTransaction(suite.db, async (tx) => {
     const menu = await createCatalogue(tx, { name: "Duplicates" });
-    const category = await createCategory(tx, { name: "Bebidas" });
+    const category = await createCategory(tx, { name: "Drinks" });
     await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: category.id,
-      name: "Agua",
+      name: "Water",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
@@ -4018,33 +4016,33 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
     new Date("2026-10-05T12:00:00Z"),
     versions,
   );
-  const category = clean.tables.categories!.find((row) => row.name === "Bebidas")!;
-  const product = clean.tables.products!.find((row) => row.name === "Agua")!;
+  const category = clean.tables.categories!.find((row) => row.name === "Drinks")!;
+  const product = clean.tables.products!.find((row) => row.name === "Water")!;
   const withCategory: ConfigurationBundle = {
     ...clean,
     tables: {
       ...clean.tables,
-      categories: [...clean.tables.categories!, { ...category, id: "copy", name: " bebidas" }],
+      categories: [...clean.tables.categories!, { ...category, id: "copy", name: " drinks" }],
     },
   };
   const withProduct: ConfigurationBundle = {
     ...clean,
     tables: {
       ...clean.tables,
-      products: [...clean.tables.products!, { ...product, id: "copy", name: "AGUA " }],
+      products: [...clean.tables.products!, { ...product, id: "copy", name: "WATER " }],
     },
   };
 
   expect(() => validateConfigurationBundle(withCategory, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({
       code: "category.name_taken",
-      params: { field: "name", name: "bebidas" },
+      params: { field: "name", name: "drinks" },
     }),
   );
   expect(() => validateConfigurationBundle(withProduct, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({
       code: "product.name_taken",
-      params: { field: "name", name: "AGUA" },
+      params: { field: "name", name: "WATER" },
     }),
   );
 
@@ -4155,7 +4153,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
     await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: null,
-      name: "Agua",
+      name: "Water",
       pricingUnit: "each",
       unitPrice: "1.00",
       vatClass: "general",
@@ -4169,7 +4167,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
     new Date("2026-10-05T12:00:00Z"),
     versions,
   );
-  const exported = clean.tables.products!.find((row) => row.name === "Agua")!;
+  const exported = clean.tables.products!.find((row) => row.name === "Water")!;
   expect(exported.active).toBe(1);
   const flagless = { ...exported };
   delete flagless.active;
@@ -4180,7 +4178,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
       products: [
         ...clean.tables.products!.filter((row) => row !== exported),
         flagless,
-        { ...flagless, id: "copy", name: "AGUA " },
+        { ...flagless, id: "copy", name: "WATER " },
       ],
     },
   };
@@ -4198,7 +4196,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
   expect(() => validateConfigurationBundle(withProduct, ALL_MODULES, versions)).toThrowError(
     expect.objectContaining({
       code: "product.name_taken",
-      params: { field: "name", name: "AGUA" },
+      params: { field: "name", name: "WATER" },
     }),
   );
   expect(() => validateConfigurationBundle(withTextFlag, ALL_MODULES, versions)).toThrowError(
@@ -5464,22 +5462,22 @@ it("transfers a department's customer and staff period menus to its zone under n
   const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
-      name: "Restaurante de cartas",
+      name: "Menus restaurant",
       orderStart: "table",
     });
-    const barra = await createServiceZone(tx, scope, {
-      name: "Barra de cartas",
+    const bar = await createServiceZone(tx, scope, {
+      name: "Menus bar",
       departmentId: department.id,
     });
-    const bebidas = await createCatalogue(tx, { name: "Bebidas transferidas" });
-    const desayunos = await createCatalogue(tx, { name: "Desayunos transferidos" });
+    const drinks = await createCatalogue(tx, { name: "Transferred drinks" });
+    const breakfasts = await createCatalogue(tx, { name: "Transferred breakfasts" });
     const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Servicio de cartas",
+      name: "Menus service",
       colour: "red",
-      menuId: bebidas.id,
-      staffMenuIds: [desayunos.id],
+      menuId: drinks.id,
+      staffMenuIds: [breakfasts.id],
     });
-    return [department.id, barra.id, bebidas.id, desayunos.id, period.id];
+    return [department.id, bar.id, drinks.id, breakfasts.id, period.id];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
@@ -5518,19 +5516,19 @@ it("transfers a department's customer and staff period menus to its zone under n
     select o.zone_id, o.department_id, p.menu_id, z.name as zone, d.name as department,
       c.name as menu
     from zone_service_policies o
-    join menu_periods p on p.department_id=o.department_id and p.name='Servicio de cartas'
+    join menu_periods p on p.department_id=o.department_id and p.name='Menus service'
     join floor_zones z on z.id = o.zone_id
     join departments d on d.id = o.department_id
     join catalogues c on c.id = p.menu_id
-    where z.name = 'Barra de cartas'`);
+    where z.name = 'Menus bar'`);
   expect(zone.rows).toEqual([
     {
       zone_id: expect.any(String),
       department_id: expect.any(String),
       menu_id: expect.any(String),
-      zone: "Barra de cartas",
-      department: "Restaurante de cartas",
-      menu: "Bebidas transferidas",
+      zone: "Menus bar",
+      department: "Menus restaurant",
+      menu: "Transferred drinks",
     },
   ]);
   const periodMenus = await targetSuite.db.execute<{
@@ -5544,11 +5542,11 @@ it("transfers a department's customer and staff period menus to its zone under n
     from menu_periods p join departments d on d.id=p.department_id
     join catalogues c on c.id=p.menu_id join menu_period_staff_menus x on x.period_id=p.id
     join catalogues s on s.id=x.menu_id
-    where d.name='Restaurante de cartas' and p.name='Servicio de cartas' order by x.display_order`);
+    where d.name='Menus restaurant' and p.name='Menus service' order by x.display_order`);
   expect(periodMenus.rows).toEqual([
     {
-      customer: "Bebidas transferidas",
-      staff: "Desayunos transferidos",
+      customer: "Transferred drinks",
+      staff: "Transferred breakfasts",
       colour: "red",
       period_id: expect.any(String),
       staff_id: expect.any(String),
@@ -5569,30 +5567,30 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
-      name: "Comedor de rutas",
+      name: "Routes dining room",
       orderStart: "table",
     });
-    const terraza = await createServiceZone(tx, scope, {
-      name: "Terraza de rutas",
+    const terrace = await createServiceZone(tx, scope, {
+      name: "Routes terrace",
       departmentId: department.id,
     });
-    const salon = await createServiceZone(tx, scope, {
-      name: "Salón de rutas",
+    const lounge = await createServiceZone(tx, scope, {
+      name: "Routes lounge",
       departmentId: department.id,
     });
-    const [barra, plancha] = await tx
+    const [bar, griddle] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: scope.locationId, name: "Barra de rutas" },
-        { locationId: scope.locationId, name: "Plancha de rutas" },
+        { locationId: scope.locationId, name: "Routes bar" },
+        { locationId: scope.locationId, name: "Routes griddle" },
       ])
       .returning();
-    const category = await createCategory(tx, { name: "Bebidas de rutas" });
-    const menu = await createCatalogue(tx, { name: "Carta de rutas" });
+    const category = await createCategory(tx, { name: "Routes drinks" });
+    const menu = await createCatalogue(tx, { name: "Routes menu" });
     const product = await createProduct(tx, {
       catalogueId: menu.id,
       categoryId: category.id,
-      name: "Mojito de rutas",
+      name: "Routes mojito",
       pricingUnit: "each",
       unitPrice: "7",
       vatClass: "general",
@@ -5600,22 +5598,22 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     const atStation = (id: string) => ({ kind: "station" as const, stationId: id });
     const categoryRow = { kind: "category" as const, categoryId: category.id };
     const productRow = { kind: "product" as const, productId: product.id };
-    await setRoutingCell(tx, scope, { row: categoryRow, zoneId: null }, atStation(barra!.id));
+    await setRoutingCell(tx, scope, { row: categoryRow, zoneId: null }, atStation(bar!.id));
     await setRoutingCell(
       tx,
       scope,
-      { row: categoryRow, zoneId: terraza.id },
+      { row: categoryRow, zoneId: terrace.id },
       {
         kind: "no_preparation",
       },
     );
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: null }, atStation(plancha!.id));
-    await setRoutingCell(tx, scope, { row: productRow, zoneId: salon.id }, atStation(barra!.id));
+    await setRoutingCell(tx, scope, { row: productRow, zoneId: null }, atStation(griddle!.id));
+    await setRoutingCell(tx, scope, { row: productRow, zoneId: lounge.id }, atStation(bar!.id));
     await setRoutingCell(
       tx,
       scope,
-      { row: { kind: "all" }, zoneId: terraza.id },
-      atStation(plancha!.id),
+      { row: { kind: "all" }, zoneId: terrace.id },
+      atStation(griddle!.id),
     );
     const noCategoryRow = { kind: "no_category" as const };
     await setRoutingCell(
@@ -5624,19 +5622,14 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       { row: noCategoryRow, zoneId: null },
       { kind: "no_preparation" },
     );
-    await setRoutingCell(
-      tx,
-      scope,
-      { row: noCategoryRow, zoneId: terraza.id },
-      atStation(barra!.id),
-    );
+    await setRoutingCell(tx, scope, { row: noCategoryRow, zoneId: terrace.id }, atStation(bar!.id));
     return [
       source.locationId,
       department.id,
-      terraza.id,
-      salon.id,
-      barra!.id,
-      plancha!.id,
+      terrace.id,
+      lounge.id,
+      bar!.id,
+      griddle!.id,
       category.id,
       product.id,
     ];
@@ -5675,13 +5668,13 @@ it("exports and imports all seven cell classes into another venue, remapping eve
     expect(result.rows).toHaveLength(1);
     return result.rows[0]!.id;
   };
-  const terraza = await idOf("floor_zones", "Terraza de rutas");
-  const salon = await idOf("floor_zones", "Salón de rutas");
-  const barra = await idOf("kitchen_stations", "Barra de rutas");
-  const plancha = await idOf("kitchen_stations", "Plancha de rutas");
-  const category = await idOf("categories", "Bebidas de rutas");
-  const product = await idOf("products", "Mojito de rutas");
-  for (const id of [terraza, salon, barra, plancha, category, product])
+  const terrace = await idOf("floor_zones", "Routes terrace");
+  const lounge = await idOf("floor_zones", "Routes lounge");
+  const bar = await idOf("kitchen_stations", "Routes bar");
+  const griddle = await idOf("kitchen_stations", "Routes griddle");
+  const category = await idOf("categories", "Routes drinks");
+  const product = await idOf("products", "Routes mojito");
+  for (const id of [terrace, lounge, bar, griddle, category, product])
     expect(sourceIds).not.toContain(id);
   expect(sourceIds).not.toContain(target.locationId);
   const cells = await targetSuite.db.execute<Record<string, unknown>>(sql`
@@ -5699,13 +5692,13 @@ it("exports and imports all seven cell classes into another venue, remapping eve
   });
   expect(cells.rows).toEqual(
     expect.arrayContaining([
-      cell({ category_id: category, station_id: barra }),
-      cell({ category_id: category, zone_id: terraza, no_preparation: 1 }),
-      cell({ product_id: product, station_id: plancha }),
-      cell({ product_id: product, zone_id: salon, station_id: barra }),
-      cell({ zone_id: terraza, station_id: plancha }),
+      cell({ category_id: category, station_id: bar }),
+      cell({ category_id: category, zone_id: terrace, no_preparation: 1 }),
+      cell({ product_id: product, station_id: griddle }),
+      cell({ product_id: product, zone_id: lounge, station_id: bar }),
+      cell({ zone_id: terrace, station_id: griddle }),
       cell({ no_category: 1, no_preparation: 1 }),
-      cell({ no_category: 1, zone_id: terraza, station_id: barra }),
+      cell({ no_category: 1, zone_id: terrace, station_id: bar }),
     ]),
   );
   expect(cells.rows).toHaveLength(7);
@@ -5719,49 +5712,49 @@ it("carries a cell's period choices with their cell, including a period whose me
   const scope = { locationId: brandLocationId(source.locationId) };
   const sourceIds = await withTransaction(suite.db, async (tx) => {
     const department = await createDepartment(tx, scope, {
-      name: "Comedor de periodos",
+      name: "Periods dining room",
       orderStart: "table",
     });
-    const terraza = await createServiceZone(tx, scope, {
-      name: "Terraza de periodos",
+    const terrace = await createServiceZone(tx, scope, {
+      name: "Periods terrace",
       departmentId: department.id,
     });
-    const [barra, plancha] = await tx
+    const [bar, griddle] = await tx
       .insert(kitchenStations)
       .values([
-        { locationId: scope.locationId, name: "Barra de periodos" },
-        { locationId: scope.locationId, name: "Plancha de periodos" },
+        { locationId: scope.locationId, name: "Periods bar" },
+        { locationId: scope.locationId, name: "Periods griddle" },
       ])
       .returning();
-    const category = await createCategory(tx, { name: "Bebidas de periodos" });
-    const carta = await createCatalogue(tx, { name: "Carta de periodos" });
+    const category = await createCategory(tx, { name: "Periods drinks" });
+    const menu = await createCatalogue(tx, { name: "Periods menu" });
     const product = await createProduct(tx, {
-      catalogueId: carta.id,
+      catalogueId: menu.id,
       categoryId: category.id,
-      name: "Mojito de periodos",
+      name: "Periods mojito",
       pricingUnit: "each",
       unitPrice: "7",
       vatClass: "general",
     });
-    const vacia = await createCatalogue(tx, { name: "Carta vacía de periodos" });
+    const emptyMenu = await createCatalogue(tx, { name: "Periods empty menu" });
     const period = await saveMenuPeriod(tx, scope, department.id, {
-      name: "Comidas de periodos",
+      name: "Periods lunches",
       colour: "red",
-      menuId: vacia.id,
+      menuId: emptyMenu.id,
       staffMenuIds: [],
     });
-    const atBarra = { kind: "station" as const, stationId: barra!.id };
+    const atBar = { kind: "station" as const, stationId: bar!.id };
     await setRoutingCell(
       tx,
       scope,
       { row: { kind: "product", productId: product.id }, zoneId: null },
-      atBarra,
+      atBar,
     );
     await setRoutingCell(
       tx,
       scope,
-      { row: { kind: "category", categoryId: category.id }, zoneId: terraza.id },
-      atBarra,
+      { row: { kind: "category", categoryId: category.id }, zoneId: terrace.id },
+      atBar,
     );
     const cellIds = await tx.execute<{ id: string; product_id: string | null }>(
       sql`select id, product_id from routing_cells`,
@@ -5770,17 +5763,9 @@ it("carries a cell's period choices with their cell, including a period whose me
     const categoryCell = cellIds.rows.find((row) => row.product_id === null)!.id;
     await tx.execute(sql`insert into routing_cell_periods
       (id, cell_id, period_id, department_id, station_id, no_preparation)
-      values (${randomUUID()}, ${productCell}, ${period.id}, ${department.id}, ${plancha!.id}, 0),
+      values (${randomUUID()}, ${productCell}, ${period.id}, ${department.id}, ${griddle!.id}, 0),
         (${randomUUID()}, ${categoryCell}, ${period.id}, ${department.id}, null, 1)`);
-    return [
-      department.id,
-      terraza.id,
-      barra!.id,
-      plancha!.id,
-      period.id,
-      productCell,
-      categoryCell,
-    ];
+    return [department.id, terrace.id, bar!.id, griddle!.id, period.id, productCell, categoryCell];
   });
   const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
@@ -5833,16 +5818,16 @@ it("carries a cell's period choices with their cell, including a period whose me
     {
       product_cell: 1,
       zone: null,
-      period: "Comidas de periodos",
-      department: "Comedor de periodos",
-      station: "Plancha de periodos",
+      period: "Periods lunches",
+      department: "Periods dining room",
+      station: "Periods griddle",
       no_preparation: 0,
     },
     {
       product_cell: 0,
-      zone: "Terraza de periodos",
-      period: "Comidas de periodos",
-      department: "Comedor de periodos",
+      zone: "Periods terrace",
+      period: "Periods lunches",
+      department: "Periods dining room",
       station: null,
       no_preparation: 1,
     },
@@ -6220,7 +6205,11 @@ describe("public holidays in a configuration transfer", () => {
       await tx.execute(
         sql`insert into holiday_geographies (id, location_id, country, province_code, city, city_key) values (${randomUUID()}, ${cfg.locationId}, 'ES', '28', 'Madrid', 'madrid')`,
       );
-      await insertSpecialDay(tx, cfg, { date: "2026-01-06", name: "Reyes", closedAllDay: true });
+      await insertSpecialDay(tx, cfg, {
+        date: "2026-01-06",
+        name: "Three Kings",
+        closedAllDay: true,
+      });
     });
     await moveTo(suite.db, source, "Lleida", "Vielha e Mijaran");
     await withTransaction(suite.db, async (tx) => {
@@ -6276,7 +6265,7 @@ describe("public holidays in a configuration transfer", () => {
         area_key: "aran",
       },
     ]);
-    expect(expected.entries).toEqual([{ city: "madrid", date: "2026-01-06", name: "Reyes" }]);
+    expect(expected.entries).toEqual([{ city: "madrid", date: "2026-01-06", name: "Three Kings" }]);
     expect(await holidaysByCity(targetSuite.db)).toEqual(expected);
 
     const sourceIds = new Set(transferred.tables.holiday_geographies!.map((row) => row.id));
@@ -6325,7 +6314,7 @@ describe("public holidays in a configuration transfer", () => {
       {
         id: expect.any(String),
         location_id: target.locationId,
-        name: "Reyes",
+        name: "Three Kings",
         close_whole_venue: 1,
       },
     ]);
@@ -8149,7 +8138,7 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
   });
   await suite.db
     .update(units)
-    .set({ staffName: "Masa", staffAbbreviation: "M", name: { de: "Gewicht" }, abbreviation: {} })
+    .set({ staffName: "Mass", staffAbbreviation: "M", name: { de: "Gewicht" }, abbreviation: {} })
     .where(eq(units.seedKey, "kg"));
   const original = await suite.db.select().from(units).orderBy(units.seedKey);
   const marker = await suite.db.select().from(unitSeedStates);
@@ -8162,7 +8151,7 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
     versions,
   );
   expect(bundle.tables.units?.find((row) => row.seed_key === "kg")).toMatchObject({
-    staff_name: "Masa",
+    staff_name: "Mass",
     staff_abbreviation: "M",
     name: '{"de":"Gewicht"}',
     abbreviation: "{}",
