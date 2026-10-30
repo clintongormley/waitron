@@ -28,6 +28,12 @@ export function t(key: StringKey, l: string = locale): string {
   return catalogues[l]?.[key] ?? en[key];
 }
 
+/** `text` with each `{slot}` named in `values` filled in, in one pass: a value holding a slot's
+ * spelling is printed as it is, never filled in itself. A slot `values` does not name is left. */
+export function fill(text: string, values: Record<string, string>): string {
+  return text.replace(/\{(\w+)\}/g, (whole, key: string) => values[key] ?? whole);
+}
+
 /** `one` for a count of one, else `many` with its `{n}` filled in: the catalogues keep a singular as
  * a key of its own. */
 export function countText(n: number, many: StringKey, one: StringKey): string {

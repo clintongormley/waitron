@@ -46,6 +46,22 @@ describe("A803 bill names", () => {
   });
 
   it.each([
+    ["en", "Bill"],
+    ["es", "Cuenta"],
+  ])("in %s, a slot's spelling inside a party or bill name is printed as typed", (locale, word) => {
+    setLocale(locale);
+    expect(billName("Team {name}", bill({ billNumber: 2, billName: "Clint" }))).toBe(
+      `Team {name} · ${word} 2 · Clint`,
+    );
+    expect(billName("Ana", bill({ billNumber: 2, billName: "{party} {n} {name}" }))).toBe(
+      `Ana · ${word} 2 · {party} {n} {name}`,
+    );
+    expect(billName("{n}", bill({ billNumber: null, billName: "{party}" }))).toBe(
+      `{n} · ${word} · {party}`,
+    );
+  });
+
+  it.each([
     "table.bill_of",
     "table.bill_of_named",
     "table.bill_of_unnumbered",

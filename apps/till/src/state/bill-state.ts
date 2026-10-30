@@ -1,5 +1,5 @@
 import type { PartyBill } from "../api/client.js";
-import { t } from "../i18n/t.js";
+import { fill, t } from "../i18n/t.js";
 
 /** A bill still to pay: open, or placed and not yet collected. */
 export function owing(bill: Pick<PartyBill, "status">): boolean {
@@ -43,8 +43,9 @@ export function billName(
       : bill.billName === null
         ? "table.bill_of"
         : "table.bill_of_named";
-  return t(key)
-    .replace("{party}", () => partyName)
-    .replace("{n}", String(bill.billNumber))
-    .replace("{name}", () => bill.billName ?? "");
+  return fill(t(key), {
+    party: partyName,
+    n: String(bill.billNumber),
+    name: bill.billName ?? "",
+  });
 }

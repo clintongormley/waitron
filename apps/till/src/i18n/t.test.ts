@@ -6,6 +6,7 @@ import {
   countText,
   currentLocale,
   differentPeopleText,
+  fill,
   pickLocale,
   setLocale,
   subscribeLocale,
@@ -65,6 +66,10 @@ it("selects an entry's text using the active locale when no locale is passed", (
 afterEach(() => {
   // t.ts's locale is module-level, so a setLocale in one test would leak into the next.
   setLocale("en-GB");
+});
+
+it("fills every named slot in one pass, printing a value's own slot spelling as it is and leaving unnamed slots", () => {
+  expect(fill("{a} and {b}, {c}", { a: "{b}", b: "two" })).toBe("{b} and two, {c}");
 });
 
 it("says a count of one with its singular key and any other count with the plural, in the active locale", () => {
