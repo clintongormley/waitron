@@ -1983,8 +1983,8 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A803. Bills and tables: one portion per order line, one bill switcher, one picker (owner,
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
-  _Modules, data and code health_. Remaining slices: named, stable-numbered bills;
-  always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
+  _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
+  landed; it leaves open A1232. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
   then Whole table headings; one picker for Move dishes and Split a table, including waiting
   courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
   footer has totals and Pay, no Hold. This bill's unsent dishes make Pay quiet but tappable,
@@ -2021,6 +2021,13 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 - **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
   one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
+
+- **A1232. The server, not the till, puts a party's bills in number order (left open by A803
+  slice 2, D8).** `readBillsOfParties` still lists a party's bills in opening order; the till's
+  `shownBills` sorts them by stored number, then id. Move the sort to the server when slice 3
+  rewrites the result order, and change the pin in `apps/server/src/party-table-actions.test.ts`
+  (under "a paid bill stays on its original party", which lists `[ana, luis, second]`) in the same
+  change.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
