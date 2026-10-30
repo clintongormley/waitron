@@ -46,7 +46,7 @@ describe("split extra queues", () => {
       expect(grill.flatMap((g) => g.items)).toHaveLength(1);
       expect(grill[0]!.items[0]!.name).toBe("BURG");
       expect(grill[0]!.items[0]!.modifiers).toHaveLength(1);
-      expect(grill[0]!.items[0]!.modifiers[0]!.descriptions).toEqual({ "es-ES": "Queso extra" });
+      expect(grill[0]!.items[0]!.modifiers[0]!.descriptions).toEqual({ "es-ES": "Extra cheddar" });
       expect(grill[0]!.items[0]!.crossRefs).toEqual([
         {
           kind: "with",
@@ -108,7 +108,7 @@ describe("split extra queues", () => {
       ]);
       const fryer = await listStationQueue(tx, venue.stations.fryer);
       expect(fryer[0]!.items[0]!.crossRefs).toEqual([
-        { kind: "for", name: "AGUA", stationName: null },
+        { kind: "for", name: "H2O", stationName: null },
       ]);
     });
   });

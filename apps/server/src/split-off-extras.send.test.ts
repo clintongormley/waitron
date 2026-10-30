@@ -125,7 +125,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -186,12 +186,12 @@ describe("sending split-off extras", () => {
       counter: { zoneId: expect.any(String) },
     });
     const names = [
-      ["burger", "Burger", "Hamburguesa clásica", "BURG"],
-      ["chips", "Chips", "Patatas fritas", "CHIPS"],
-      ["cheese", "Cheese", "Queso extra", "QUESO"],
-      ["sauce", "Sauce", "Salsa brava", "SALSA"],
-      ["water", "Water", "Agua mineral", "AGUA"],
-      ["onionRings", "Onion rings", "Aros de cebolla", "AROS"],
+      ["burger", "Burger", "Classic beef burger", "BURG"],
+      ["chips", "Chips", "Hand-cut fries", "CHIPS"],
+      ["cheese", "Cheese", "Extra cheddar", "CHED"],
+      ["sauce", "Sauce", "Smoky barbecue sauce", "BBQ"],
+      ["water", "Water", "Still mineral water", "H2O"],
+      ["onionRings", "Onion rings", "Battered onion rings", "RINGS"],
     ] as const;
     await withTransaction(db, async (tx) => {
       for (const [key, staff, customer, kitchen] of names) {
@@ -362,7 +362,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -372,7 +372,7 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [cheese],
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
-        { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO" },
+        { name: "Cheese", customerName: "Extra cheddar", kitchenName: "CHED" },
       ]);
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -415,8 +415,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
-        customerName: { "es-ES": "Agua mineral" },
-        kitchenName: "AGUA",
+        customerName: { "es-ES": "Still mineral water" },
+        kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -427,7 +427,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, water.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -466,8 +466,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
-        customerName: { "es-ES": "Agua mineral" },
-        kitchenName: "AGUA",
+        customerName: { "es-ES": "Still mineral water" },
+        kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -476,7 +476,7 @@ describe("sending split-off extras", () => {
         listId,
         productIds: [cheese],
       } = await addExtras(tx, cfg, catalogueId, water.id, [
-        { name: "Cheese", customerName: "Queso extra", kitchenName: "QUESO" },
+        { name: "Cheese", customerName: "Extra cheddar", kitchenName: "CHED" },
       ]);
       const orderId = await fireNewOrder(tx, cfg, [
         {
@@ -538,8 +538,8 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: drinks.id,
         name: "Water",
-        customerName: { "es-ES": "Agua mineral" },
-        kitchenName: "AGUA",
+        customerName: { "es-ES": "Still mineral water" },
+        kitchenName: "H2O",
         pricingUnit: "each",
         unitPrice: "2.00",
         vatClass: "general",
@@ -552,7 +552,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, water.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -608,7 +608,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -620,7 +620,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -659,7 +659,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: burgers.id,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -671,7 +671,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -707,7 +707,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -719,7 +719,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -763,7 +763,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -775,7 +775,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -813,7 +813,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: burgers.id,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -825,7 +825,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -868,7 +868,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, venue.cfg, burger!.catalogueId, venue.productId("Burger"), [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
@@ -964,7 +964,7 @@ describe("sending split-off extras", () => {
         catalogueId,
         categoryId: null,
         name: "Burger",
-        customerName: { "es-ES": "Hamburguesa clásica" },
+        customerName: { "es-ES": "Classic beef burger" },
         kitchenName: "BURG",
         pricingUnit: "each",
         unitPrice: "10.00",
@@ -976,7 +976,7 @@ describe("sending split-off extras", () => {
       } = await addExtras(tx, cfg, catalogueId, burger.id, [
         {
           name: "Chips",
-          customerName: "Patatas fritas",
+          customerName: "Hand-cut fries",
           kitchenName: "CHIPS",
           categoryId: sides.id,
         },
