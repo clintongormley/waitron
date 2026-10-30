@@ -4,7 +4,8 @@ import { locationId as brandLocationId } from "@waitron/shared";
 import type { NodeId } from "@waitron/shared";
 import type { Database } from "./client.js";
 import { CORE_MIGRATIONS } from "./migrations.js";
-import { readMembershipTrustSet, setNodePublicKey } from "./node-identity.js";
+import { readMembershipTrustSet, readNodePublicKeyTx, setNodePublicKey } from "./node-identity.js";
+import { withTransaction } from "./tenancy.js";
 import { locations } from "./schema/tenants.js";
 import { seedNode, seedTenant } from "./testing/seed.js";
 import { useVenueDb } from "./testing/venue-db.js";
@@ -52,5 +53,16 @@ describe("membership trust-set accessors", () => {
       [nodeId]: "KEY_A",
       [nodeId2]: "KEY_B",
     });
+  });
+
+  it("readNodePublicKeyTx reads the named node's key alone, and null for a keyless or unknown node", async () => {
+    const nodeId2 = await seedNode(suite.db, await seedLocation(suite.db));
+    const read = (id: string) => withTransaction(suite.db, (tx) => readNodePublicKeyTx(tx, id));
+    await setNodePublicKey(suite.db, nodeId2, "KEY_B");
+    expect(await read(nodeId)).toBeNull();
+    await setNodePublicKey(suite.db, nodeId, "KEY_A");
+    expect(await read(nodeId)).toBe("KEY_A");
+    expect(await read(nodeId2)).toBe("KEY_B");
+    expect(await read("no-such-node")).toBeNull();
   });
 });

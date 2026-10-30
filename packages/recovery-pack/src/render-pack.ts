@@ -45,7 +45,16 @@ const GREY = "#555555";
 const LINE = "#bbbbbb";
 const FILL = "#eeeeee";
 
-function dates(locale: PackLocale, timeZone: string) {
+/** The page each printed part is on: the cover is page 1, then one page per included or failed part. */
+export function packPageNumbers(parts: readonly PackPart[]): Map<PackPart, number> {
+  const pageOf = new Map<PackPart, number>();
+  for (const part of parts)
+    if (part.state === "included" || part.state === "failed") pageOf.set(part, pageOf.size + 2);
+  return pageOf;
+}
+
+/** How the pack prints instants (in `timeZone`) and `YYYY-MM-DD` days. */
+export function packDates(locale: PackLocale, timeZone: string) {
   const language = locale === "en" ? "en-GB" : "es-ES";
   let long: Intl.DateTimeFormat;
   let short: Intl.DateTimeFormat;
@@ -98,7 +107,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
   const { locale, cover, parts } = input;
   if (locale !== "en" && locale !== "es") refuse("locale");
   const words = PACK_WORDS[locale];
-  const when = dates(locale, input.timeZone);
+  const when = packDates(locale, input.timeZone);
   for (const part of parts) {
     if (part.state === "included" && !part.page) refuse("parts");
     if (part.state === "failed" && !part.failure) refuse("parts");
@@ -111,9 +120,7 @@ export async function renderRecoveryPack(input: RenderPackInput): Promise<Uint8A
       "",
     );
 
-  const pageOf = new Map<PackPart, number>();
-  for (const part of parts)
-    if (part.state === "included" || part.state === "failed") pageOf.set(part, pageOf.size + 2);
+  const pageOf = packPageNumbers(parts);
   const pageCount = pageOf.size + 1;
   const serverKeyPage = [...pageOf].find(([part]) => part.kind === "server-key")?.[1];
 

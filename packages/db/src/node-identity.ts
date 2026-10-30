@@ -33,3 +33,12 @@ export function readMembershipTrustSet(db: Database): Promise<TrustSet> {
     return trust;
   });
 }
+
+/** One node's membership identity public key; `null` when the node has none or no row. */
+export async function readNodePublicKeyTx(tx: Transaction, nodeId: string): Promise<string | null> {
+  const [row] = await tx
+    .select({ publicKey: nodes.publicKey })
+    .from(nodes)
+    .where(eq(nodes.id, nodeId));
+  return row?.publicKey ?? null;
+}

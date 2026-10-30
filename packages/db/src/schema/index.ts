@@ -58,6 +58,7 @@ export * from "./node-membership.js";
 export * from "./membership-removals.js";
 export * from "./membership-clearances.js";
 export * from "./node-sealed-state.js";
+export * from "./recovery-packs.js";
 export * from "./invoice-deliveries.js";
 export * from "./page-printers.js";
 

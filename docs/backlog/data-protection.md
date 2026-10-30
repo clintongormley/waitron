@@ -83,7 +83,8 @@ by the answers):
     `order_groups` (`fired_by`, `submitted_by`); `working_order_lines.credited_to`, whose sale a
     line counts as; `bill_edit_states.editor_id`, who is editing a bill; `parties` (`opened_by`,
     `closed_by`); `daily_closes.closed_by`; `incidents.acknowledged_by`; `membership_clearances` and
-    `membership_removals` (`person_id`); and `pass_item_marks.done_by_person_id`. Core's
+    `membership_removals` (`person_id`); `recovery_packs.made_by`, who made a recovery pack; and
+    `pass_item_marks.done_by_person_id`. Core's
     `line_service_cancellations.actor_id` is covered by `adjustments.json`: every value of it is
     also an adjustment's requester (S2d decision 3). The guard knows a column by its name;
     `credited_to`, `owner_id` and `editor_id` are named in it because the name pattern would miss

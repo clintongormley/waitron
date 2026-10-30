@@ -809,3 +809,11 @@ it("words a short name another table already uses, in English and Spanish", () =
   expect(spanish).not.toBe(codeMessage("unknown.code", "es"));
   expect(spanish).not.toBe(codeMessage(code, "en"));
 });
+
+it("has English and Spanish copy for a recovery pack asked for insecurely or from another site", () => {
+  for (const code of ["recovery.pack_connection_insecure", "recovery.pack_origin_refused"]) {
+    expect(codeMessage(code, "en"), code).not.toBe(codeMessage("test.unmapped_code", "en"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage("test.unmapped_code", "es"));
+    expect(codeMessage(code, "es"), code).not.toBe(codeMessage(code, "en"));
+  }
+});

@@ -313,8 +313,13 @@ import { createStaffNoticeLog, readStaffNoticesInTurns } from "./staff-notices.j
 import { mountBoxRetireApi } from "./box-retire.js";
 import { mountRecoveryBundleApi } from "./recovery-bundle-api.js";
 import { mountRecoveryPackApi } from "./recovery-pack-api.js";
-import { mountBackupRecoveryPackApi } from "./backup-recovery-pack-api.js";
+import {
+  mountBackupRecoveryPackApi,
+  mountBackupRecoveryPackMakeApi,
+} from "./backup-recovery-pack-api.js";
+import type { RecoveryDocumentEvidence } from "./recovery-document-api.js";
 import { readRecoveryDocumentEvidence } from "./recovery-document-evidence.js";
+import { invoiceFontBytes } from "./invoice-font.js";
 import { withRecoveryLock } from "./recovery-lock.js";
 import { readRecoveryState, writeRecoveryState } from "./recovery-state.js";
 import { mountBackupApi } from "./backup-api.js";
@@ -2608,6 +2613,8 @@ async function bootServer(
   mountMembershipRemovalApi(app, { db, ring, nodeId: tradingContext.nodeId }, log);
 
   mountRecoveryBundleApi(app, { db, stateDir: config.stateDir, now }, log);
+  const documentEvidence: RecoveryDocumentEvidence = (module) =>
+    readRecoveryDocumentEvidence({ stateDir: config.stateDir, venueDir: config.venueDir }, module);
   mountBackupRecoveryPackApi(app, { db, rpId: config.managementRpId }, log);
   mountRecoveryPackApi(
     app,
@@ -2617,11 +2624,7 @@ async function bootServer(
       venueId: tradingContext.locationId,
       modules: setsToMigrate,
       now,
-      documentEvidence: (module) =>
-        readRecoveryDocumentEvidence(
-          { stateDir: config.stateDir, venueDir: config.venueDir },
-          module,
-        ),
+      documentEvidence,
     },
     log,
   );
@@ -2700,6 +2703,26 @@ async function bootServer(
       sealedState,
       readStream: () => streamHost.status(),
       turns: backupTurns,
+    },
+    log,
+  );
+  mountBackupRecoveryPackMakeApi(
+    app,
+    {
+      db,
+      rpId: config.managementRpId,
+      origin: config.managementOrigin,
+      keyRing: totpKeyRing,
+      ring,
+      node: tradingContext,
+      venueId: tradingContext.locationId,
+      modules: setsToMigrate,
+      turns: backupTurns,
+      readBoxEnv: () => loadBoxEnv(base, config.stateDir),
+      backups: () => backupSupervisor.current(),
+      documentEvidence,
+      loadFont: async () => invoiceFontBytes,
+      now,
     },
     log,
   );

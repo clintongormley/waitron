@@ -277,6 +277,11 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
     "local",
     "this node's own state files, locked with the recovery key; one row per node, keyed by its node id",
   ),
+  classify(
+    "recovery_packs",
+    "local",
+    "one node's recovery packs, keyed by its node id; a node holding another node's copy reads its own or none",
+  ),
 ];
 
 /**
@@ -286,7 +291,7 @@ export const CORE_CLASSIFICATION: readonly ClassifiedTable[] = [
  * it would insert a row for every row it writes, and that row would trigger another.
  * Guard: `classification.test.ts`.
  */
-const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state"]);
+const NOT_CHANGE_SOURCES = new Set(["change_log", "node_sealed_state", "recovery_packs"]);
 
 export const CORE_CHANGE_SOURCES: readonly ChangeSource[] = CORE_CLASSIFICATION.filter(
   ({ table }) => !NOT_CHANGE_SOURCES.has(table),

@@ -25,6 +25,7 @@ const ADDED_TABLES = [
   "adjustment_lines",
   "order_portion_events",
   "order_portions",
+  "recovery_packs",
   "sale_line_portions",
   "working_line_portions",
 ];

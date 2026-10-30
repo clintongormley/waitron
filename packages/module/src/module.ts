@@ -25,6 +25,7 @@ import type {
 import type { ChangeSource } from "@waitron/shared";
 import type { AllergenMap, Database, SQL, Transaction } from "@waitron/db";
 import type { Logger } from "@waitron/server-kit";
+import type { RecoveryPackPage } from "@waitron/recovery-pack";
 import type { MigrationSet, MigrationSetSource } from "@waitron/migrations";
 import { appendOnlyTablesIn, type ClassifiedTable } from "@waitron/sync-enrolment";
 import type { FiscalContribution } from "@waitron/fiscal";
@@ -1559,6 +1560,26 @@ export interface ModuleBackupContribution {
       readonly evidence: Readonly<Record<string, unknown>>;
     },
   ) => Promise<Uint8Array<ArrayBuffer>>;
+  /** Describe the recovery pack's server-key page; the host draws it and commits `newKey` only after. */
+  readonly recoveryPackPage?: (
+    tx: Transaction,
+    node: import("./provisioning.js").ProvisionedNode,
+    context: {
+      /** The key the box holds now. */
+      readonly keyInForce: { readonly nodeId: string; readonly name: string };
+      /** The key this pack would make, named by the host. */
+      readonly newKey?: { readonly name: string; readonly secret: string };
+      readonly createdAt: string;
+      readonly locale: "en" | "es";
+      readonly evidence: Readonly<Record<string, unknown>>;
+    },
+  ) => Promise<RecoveryPackPageResult>;
+}
+
+/** What `recoveryPackPage` answers: the page, and the key file when it was asked for a new key. */
+export interface RecoveryPackPageResult {
+  readonly page: RecoveryPackPage;
+  readonly keyFile?: Readonly<Record<string, unknown>>;
 }
 
 /** One table whose rows may cross from preparation into a fresh production database. */

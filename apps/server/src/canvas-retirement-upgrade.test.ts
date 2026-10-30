@@ -528,6 +528,7 @@ it("records the no-holder admission-rule loss and retains every other surviving 
       working_line_portions: [],
       sale_line_portions: [],
       order_portion_events: [],
+      recovery_packs: [],
     };
     delete retained.canvases;
     delete retained.table_service_statuses;
