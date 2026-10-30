@@ -433,7 +433,8 @@ export function createFirstSetupResolutionActions(
           const damagedShown = request.recoveryRecordDamagedShown === true;
           if (!missing && assessed.recoveryRecordDamaged !== damagedShown) conflict();
           // An unemptied journal's confirmation record was written by the Start again that
-          // abandoned it.
+          // abandoned it. A damaged database's confirmation is recorded every time: the
+          // earlier record may describe the database before it was damaged.
           const finishing = found?.kind === "unemptied";
           const confirmation = request.confirmMissingDatabase;
           const shown =
@@ -462,7 +463,7 @@ export function createFirstSetupResolutionActions(
           // No await between this check and the first write: the record changes the recovery's
           // originals, so an open that began during the checks could never resume it.
           if (found !== undefined && backup!.runningInMemory()) await refuseRunning();
-          if ((missing || discardsStopped || databaseUnreadable) && !finishing) {
+          if (((missing || discardsStopped) && !finishing) || databaseUnreadable) {
             const { displayName, email } = state.frozen.request.admin;
             await writeStartAgainConfirmation(box.stateDir, {
               at: new Date().toISOString(),

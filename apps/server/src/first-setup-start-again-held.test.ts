@@ -297,6 +297,7 @@ async function confirmations(stateDir: string) {
     (await readdir(folder)).map(
       async (name) =>
         JSON.parse(await readFile(join(folder, name), "utf8")) as {
+          at: string;
           database: string;
           shown: unknown;
         },
@@ -926,6 +927,151 @@ function recordingFiscalSeat(f: Held) {
   expect(answers).toEqual([]);
   return { host: { ...f.host, modules } as Held["host"], answers };
 }
+
+it("a damaged database beside a stopped recovery: confirmRecoveryDiscard whose summary leaves out that it cannot be read is refused setup.attempt_conflict, and nothing changes", async () => {
+  const f = await heldSetup();
+  damagePages(venueDb(f), "department_days");
+  const startAgain = await askStartAgain(f);
+  const { databaseUnreadable, ...without } = startAgain.shown;
+  expect(databaseUnreadable).toBe(true);
+  await expectStartAgainRefused(
+    f,
+    () => startAgain.run({ confirmRecoveryDiscard: { shown: without } }),
+    {
+      code: "setup.attempt_conflict",
+    },
+  );
+});
+
+/** The actions with the backup service, and a lock that refuses when `lockRefused` is set. */
+function heldActions(f: Held, lockRefused = false) {
+  return createFirstSetupResolutionActions({
+    ...f.roots,
+    host: f.host,
+    ...(f.service === undefined ? {} : { backupRecovery: f.service }),
+    ...(lockRefused && {
+      lock: async () => {
+        throw new Error("lock refused");
+      },
+    }),
+  });
+}
+async function currentIds(f: Held) {
+  const current = await f.host.resolution.inspectFirstSetupResolution();
+  return {
+    inspectionId: current.inspectionId,
+    revision: current.revision!,
+    ownerGeneration: current.ownerGeneration!,
+  };
+}
+/** Start again discards the stopped recovery, then fails to empty it. */
+async function abandonUnemptied(f: Held) {
+  const ids = await currentIds(f);
+  const failing = heldActions(f, true);
+  const shown = await failing.startAgainSummary(ids);
+  await expect(
+    failing.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+  ).rejects.toMatchObject({ code: "setup.start_again_incomplete" });
+  expect((await f.workspace.readChain()).at(-1)!.phase).toBe("abandoned");
+  return shown;
+}
+
+it.each([
+  ["a readable", false, ["present", "unreadable"]],
+  ["an already damaged", true, ["unreadable", "unreadable"]],
+] as const)(
+  "finishing a recovery abandoned over %s database: the damaged database is deleted only with the page's confirmation, which writes its own record",
+  async (_label, damagedFirst, databases) => {
+    const f = await heldSetup();
+    if (damagedFirst) damagePages(venueDb(f), "department_days");
+    const first = await abandonUnemptied(f);
+    expect(first.databaseUnreadable).toBe(damagedFirst ? true : undefined);
+    if (!damagedFirst) damagePages(venueDb(f), "department_days");
+    // A record is named by its millisecond; the suite's clock stands still.
+    vi.setSystemTime(Date.now() + 1000);
+    const ids = await currentIds(f);
+    const actions = heldActions(f);
+    const shown = await actions.startAgainSummary(ids);
+    expect(shown).toEqual({ reached: "fiscal-finished", databaseUnreadable: true });
+    await expect(actions.startAgainFirstSetup(ids)).rejects.toMatchObject({
+      code: "setup.attempt_conflict",
+    });
+    await expect(
+      actions.startAgainFirstSetup({ ...ids, confirmRecoveryDiscard: { shown } }),
+    ).rejects.toMatchObject({ code: "setup.attempt_conflict" });
+    await expect(
+      actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+    ).resolves.toBeUndefined();
+    await expect(access(venueDb(f))).rejects.toMatchObject({ code: "ENOENT" });
+    const records = (await confirmations(f.roots.stateDir)).sort((a, b) =>
+      a.at.localeCompare(b.at),
+    );
+    expect(records.map((record) => record.database)).toEqual(databases);
+    expect(records.at(-1)!.shown).toEqual(shown);
+  },
+);
+
+it("a damaged recovery-key record beside a damaged database: Start again needs both acknowledgements, and the record carries both", async () => {
+  const f = await heldSetup({ recovery: false });
+  await damageRecoveryRecord(f);
+  damagePages(venueDb(f), "department_days");
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toEqual({
+    reached: "fiscal-finished",
+    recoveryRecordDamaged: true,
+    databaseUnreadable: true,
+  });
+  await expectStartAgainRefused(
+    f,
+    () => actions.startAgainFirstSetup({ ...ids, confirmUnreadableDatabase: { shown } }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expectStartAgainRefused(
+    f,
+    () => actions.startAgainFirstSetup({ ...ids, recoveryRecordDamagedShown: true }),
+    { code: "setup.attempt_conflict" },
+  );
+  await expect(
+    actions.startAgainFirstSetup({
+      ...ids,
+      recoveryRecordDamagedShown: true,
+      confirmUnreadableDatabase: { shown },
+    }),
+  ).resolves.toBeUndefined();
+  await expectStartAgainDeleted(f.roots);
+  const records = await confirmations(f.roots.stateDir);
+  expect(records.map((record) => [record.database, record.shown])).toEqual([["unreadable", shown]]);
+});
+
+it("the Start again route passes confirmUnreadableDatabase on: confirming a damaged database over HTTPS starts again", async () => {
+  const f = await heldSetup({ recovery: false });
+  damagePages(venueDb(f), "department_days");
+  const { ids, actions } = await withoutSignIn(f);
+  const shown = await actions.startAgainSummary(ids);
+  expect(shown).toMatchObject({ databaseUnreadable: true });
+  const app = new Hono();
+  mountFirstSetupResolutionApi(app, f.host, () => {}, {
+    startAgain: actions.startAgainFirstSetup,
+  });
+  const socket = new TLSSocket(new Socket());
+  try {
+    const response = await app.request(
+      "https://box.test/setup-api/first-setup/resolution/start-again",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...ids, confirmUnreadableDatabase: { shown } }),
+      },
+      { incoming: { socket } },
+    );
+    expect(await response.json()).toEqual({ restarting: true });
+    expect(response.status).toBe(200);
+  } finally {
+    socket.destroy();
+  }
+  await expectStartAgainDeleted(f.roots);
+});
 
 it("a held database whose invoice table is damaged, with no sale: the summary says it cannot be read, the fiscal module's own reader failed with code 11, and Start again with that confirmation deletes it", async () => {
   const f = await heldSetup({ recovery: false });
