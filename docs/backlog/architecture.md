@@ -493,6 +493,8 @@ until A977).
   suites use English venue, station, zone, menu, period and special-day samples, keeping
   locale keys, dates and behavior checks. Season and day-resolver suites use English venue,
   zone and custom-season samples, keeping staff-language cases, dates and clock settings.
+  The native special-day save/delete suite uses English venue, operation, zone and custom-day
+  samples, keeping official holiday names, dates, locale settings and behavior checks.
   Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
