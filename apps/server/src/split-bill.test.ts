@@ -536,7 +536,6 @@ async function splitToT2(
       billId,
       { tableId: tableId2 },
       {
-        bills: "separate",
         partyId: party.id,
         expectedPartyRevision: party.revision,
         otherPartyId: null,
@@ -1016,7 +1015,6 @@ describe("moving sent work to another table tells the kitchen", () => {
     await asApp(cfg, async (tx) => {
       const party = (await partyRevisionOfOrder(tx, tabId))!;
       await moveGuests(tx, cfg, party.id, tableId2, {
-        bills: "merge",
         expectedPartyRevision: party.revision,
         otherPartyId: null,
         operatorId: randomUUID(),

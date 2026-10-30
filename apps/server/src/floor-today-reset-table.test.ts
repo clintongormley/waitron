@@ -277,7 +277,6 @@ async function guestsAtBarAlone(table: Record<string, string | undefined>): Prom
       order,
       { tableId: table.bar! },
       {
-        bills: "separate",
         partyId: null,
         otherPartyId: null,
         operatorId: OPERATOR,

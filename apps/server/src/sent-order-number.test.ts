@@ -430,7 +430,6 @@ describe("the order number a moved dish was sent under", () => {
         counter,
         { tableId: movedTable },
         {
-          bills: "merge",
           operatorId: OPERATOR,
           otherPartyId: partyId,
           expectedOtherPartyRevision,
@@ -448,7 +447,7 @@ describe("the order number a moved dish was sent under", () => {
       return moved;
     });
 
-    expect(result).toEqual({ partyId, billId: counter, merged: false });
+    expect(result).toEqual({ partyId, billId: counter });
     expect(kitchenItems(tabId)).toEqual([
       { name: "Paella", quantity: 1000, sent: null },
       { name: "Burger", quantity: 1000, sent: nCounter },

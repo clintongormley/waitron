@@ -257,7 +257,6 @@ async function moveTo(
   const own = (await billRow(v, billId)).partyId;
   const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
   const options: MoveBillOptions = {
-    bills: "separate",
     operatorId: OPERATOR,
     ...(own === null ? {} : { expectedPartyRevision: await revisionOf(v, own) }),
     ...(target === null || target === own
@@ -317,9 +316,9 @@ describe("A803 bill numbers: move bill", () => {
     await order(v, to.tabId, "Agua");
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
-    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable });
 
-    expect(moved).toMatchObject({ merged: false, billId: from.bills[1] });
+    expect(moved).toEqual({ partyId: to.partyId, billId: from.bills[1] });
     expect(await allocationsOf(v, to.partyId)).toEqual([
       [1, to.tabId],
       [2, from.bills[1]],
@@ -342,9 +341,9 @@ describe("A803 bill numbers: move bill", () => {
     await placeByHand(v, to.tabId);
     const toTable = (await activeTablesOf(v, to.partyId))[0]!;
 
-    const moved = await moveTo(from.bills[1]!, { tableId: toTable }, { bills: "merge" });
+    const moved = await moveTo(from.bills[1]!, { tableId: toTable });
 
-    expect(moved).toMatchObject({ merged: false, billId: from.bills[1] });
+    expect(moved).toEqual({ partyId: to.partyId, billId: from.bills[1] });
     expect(await numbersOf(v, to.partyId)).toEqual([
       [to.tabId, 1, null],
       [from.bills[1], 2, null],
@@ -438,7 +437,6 @@ describe("A803 bill numbers: move bill", () => {
     };
 
     const options: MoveBillOptions = {
-      bills: "separate",
       operatorId: OPERATOR,
       otherPartyId: to.partyId,
       expectedOtherPartyRevision: await revisionOf(v, to.partyId),
@@ -477,13 +475,8 @@ describe("A803 bill numbers: move bill", () => {
   });
 });
 
-async function tableOptions(
-  partyId: string,
-  other?: string,
-  bills: "merge" | "separate" = "separate",
-) {
+async function tableOptions(partyId: string, other?: string) {
   return {
-    bills,
     expectedPartyRevision: await revisionOf(v, partyId),
     ...(other === undefined
       ? {}
@@ -601,7 +594,7 @@ describe("A803 bill numbers: tables", () => {
     await order(v, ours.tabId, "Agua");
     const theirs = await tableWithBills("S6 theirs", 2);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
-    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+    const options = await tableOptions(ours.partyId, theirs.partyId);
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
@@ -812,7 +805,7 @@ describe("A803 bill list", () => {
     const ours = await tableWithBills("L5 ours", 2);
     const theirs = await tableWithBills("L5 theirs", 3);
     const theirTable = (await activeTablesOf(v, theirs.partyId))[0]!;
-    const options = await tableOptions(ours.partyId, theirs.partyId, "merge");
+    const options = await tableOptions(ours.partyId, theirs.partyId);
 
     await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
@@ -830,7 +823,7 @@ describe("A803 bill list", () => {
     await inTx(v, (tx) => mergeBills(tx, v.cfg, seated.bills[0]!, seated.bills[1]!, command));
     const counter = await counterOrder(v, "Burger");
     const table = (await activeTablesOf(v, seated.partyId))[0]!;
-    await moveTo(counter, { tableId: table }, { bills: "merge" });
+    await moveTo(counter, { tableId: table });
     expect((await billNumberTables(v)).identities.map((row) => row.workingOrderId)).toContain(
       counter,
     );

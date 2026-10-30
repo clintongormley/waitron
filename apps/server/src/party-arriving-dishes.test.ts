@@ -99,7 +99,6 @@ async function move(billId: string, to: MoveTarget, opts: Partial<MoveBillOption
   const own = (await billRow(v, billId)).partyId;
   const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
   const options: MoveBillOptions = {
-    bills: "merge",
     operatorId: OPERATOR,
     ...(own === null ? {} : { expectedPartyRevision: await revisionOf(v, own) }),
     ...(target === null || target === own
@@ -207,7 +206,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await orderForParty(v, luis.partyId, ["Agua"]);
     const groupsBefore = await groupsOf(luis.partyId);
 
-    await move(b2, { tableId: m7 }, { bills: "separate" });
+    await move(b2, { tableId: m7 });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.slice(0, -1)).toEqual(groupsBefore);
@@ -258,7 +257,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
         .where(eq(orderGroups.id, paella!.groupId!));
     });
 
-    await move(b2, { tableId: m7 }, { bills: "separate", operatorId: MOVER });
+    await move(b2, { tableId: m7 }, { operatorId: MOVER });
 
     const made = (await groupsOf(luis.partyId)).at(-1)!;
     expect(made).toMatchObject({
@@ -318,7 +317,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
 
-    await move(b2, { tableId: m7 }, { bills: "separate" });
+    await move(b2, { tableId: m7 });
 
     const made = (await groupsOf(luis.partyId)).at(-1)!.id;
     const board = await inTx(v, (tx) => listExpoQueue(tx, v.cfg));
@@ -336,7 +335,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [burger, flan] = await lineRows(ana.tabId);
     expect(await firedTicketsOf(ana.tabId)).toEqual([{ lineId: burger!.id, state: "queued" }]);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const [fired, held] = await groupsOf(luis.partyId);
     expect(fired).toMatchObject({ state: "fired", position: 1 });
@@ -375,7 +374,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [burger, flan, tarta] = await lineRows(ana.tabId);
     expect(await firedTicketsOf(ana.tabId)).toEqual([{ lineId: burger!.id, state: "queued" }]);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
@@ -423,7 +422,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [burger, flan, loose, tarta] = await lineRows(ana.tabId);
     expect([loose!.courseId, loose!.sentAt]).toEqual([null, null]);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
@@ -467,7 +466,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const luis = await seat(v, mesa);
     const [burger, loose, flan] = await lineRows(ana.tabId);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([["fired", 1]]);
@@ -501,7 +500,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const luis = await seat(v, mesa);
     const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([
@@ -550,7 +549,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const luis = await seat(v, mesa);
     const [burger, tarta, flan, loose] = await lineRows(ana.tabId);
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => [g.state, g.position])).toEqual([["fired", 1]]);
@@ -569,7 +568,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const counter = await counterOrder(v, "Caña", "Tarta");
     expect(await firedTicketsOf(counter)).toEqual([]);
 
-    await move(counter, { tableId: mesa }, { bills: "separate" });
+    await move(counter, { tableId: mesa });
 
     const groups = await groupsOf(ana.partyId);
     expect(groups).toHaveLength(1);
@@ -593,7 +592,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const before = await lineRows(id);
     expect(before.every((l) => l.sentAt !== null && l.groupId === null)).toBe(true);
 
-    await move(id, { tableId: mesa }, { bills: "separate" });
+    await move(id, { tableId: mesa });
 
     const [group] = await groupsOf(ana.partyId);
     expect(group).toMatchObject({ state: "fired", position: 1 });
@@ -669,7 +668,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [m4, m5] = [await v.table("Separar 6"), await v.table("Separar 7")];
     const ana = await seat(v, m4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)), bills: "merge" as const };
+    const joining = { ...(await commandFor(v, ana.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);
@@ -698,7 +697,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
     const [m4, m5] = [await v.table("Separar 4"), await v.table("Separar 5")];
     const ana = await seat(v, m4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)), bills: "merge" as const };
+    const joining = { ...(await commandFor(v, ana.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
     await orderForParty(v, ana.partyId, ["Burger", "Vino", "Flan"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2, 3]);
@@ -725,7 +724,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
 
     const result = await move(counter, { tableId: mesa });
 
-    expect(result).toEqual({ partyId: ana.partyId, billId: counter, merged: false });
+    expect(result).toEqual({ partyId: ana.partyId, billId: counter });
     const groups = await groupsOf(ana.partyId);
     expect(groups.map((g) => [g.id === own!.id, g.state, g.position])).toEqual([
       [true, "fired", 1],
@@ -801,7 +800,7 @@ describe("dishes arriving in a party (A96, P16)", () => {
       }),
     );
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const groups = await groupsOf(luis.partyId);
     expect(groups.map((g) => g.state)).toEqual(["fired"]);
@@ -935,7 +934,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const luis = await seat(v, mesa);
     const before = (await jobs()).length;
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const held = await heldGroupOf(luis.partyId);
     const header = await head("Aviso 2", ana.tabId);
@@ -979,9 +978,9 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const luis = await seat(v, mesa);
     const before = (await jobs()).length;
 
-    const result = await move(ana.tabId, { tableId: mesa }, { bills: "merge" });
+    const result = await move(ana.tabId, { tableId: mesa });
 
-    expect(result).toEqual({ partyId: luis.partyId, billId: ana.tabId, merged: false });
+    expect(result).toEqual({ partyId: luis.partyId, billId: ana.tabId });
     const holds = (await jobs())
       .slice(before)
       .filter((job) => job.lines[0] === `*** ${kitchenTicketWords("es").hold} ***`);
@@ -1004,7 +1003,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const luis = await seat(v, mesa);
     const before = (await jobs()).length;
 
-    await move(ana.tabId, { tableId: mesa }, { bills: "separate" });
+    await move(ana.tabId, { tableId: mesa });
 
     const held = await heldGroupOf(luis.partyId);
     expect(
@@ -1026,7 +1025,7 @@ describe("an arriving held group's advance HOLD ticket", () => {
     const [m4, m5] = [await v.table("Aviso 5"), await v.table("Aviso 6")];
     const ana = await seat(v, m4);
     await nextMillisecond();
-    const joining = { ...(await commandFor(v, ana.partyId)), bills: "merge" as const };
+    const joining = { ...(await commandFor(v, ana.partyId)) };
     await inTx(v, (tx) => joinTables(tx, v.cfg, ana.partyId, m5, joining));
     await orderForParty(v, ana.partyId, ["Burger", "Vino"]);
     const b2 = await splitOff(ana.partyId, ana.tabId, [2]);

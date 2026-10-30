@@ -765,7 +765,6 @@ describe("A803 portion lifecycle: end to end through a submitted draft", () => {
               .sort()
               .map((billId) => readBillEditState(tx, billId)),
           ),
-          bills: "separate",
           partyId: null,
           otherPartyId: p.partyId,
           expectedOtherPartyRevision: await partyRevision(tx, p.partyId),

@@ -1067,23 +1067,64 @@ cases, `table-actions.refund-pending.test.ts` shapes, `till-api.zone-closed.test
 `apps/server/src` (61 files, 196 literal sites, plus `bills,` shorthand and helper parameters);
 `order-portions.filing.test.ts:1159` (Q5 item 2) and `split-bill.test.ts:539`, `:1019` (F rows).
 
-- [ ] New cases first: `A803 no merge flag` in `party-move-bill.test.ts`: "the answer is
+- [x] New cases first: `A803 no merge flag` in `party-move-bill.test.ts`: "the answer is
       `{ partyId, billId }` with no `merged` key" (`toEqual`); in `till-api.table-actions.test.ts`
       and `till-api.move-bill.test.ts`: "a `bills` key of any value, including an invalid one, is
-      ignored" (D13; replaces the two 400 rows).
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.table-actions.test.ts src/till-api.move-bill.test.ts -t 'A803 no merge flag|bills key'`.
+      ignored" (D13; replaces the two 400 rows). (Built: one party-move-bill case covering a
+      party, a free table and the counter; the move route's row and the table routes' move and
+      join rows each run `"merge"`, `"separate"`, `"together"`, `null`, `1` and answer 200 with the
+      exact `toEqual` answer, both bills open.)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/party-move-bill.test.ts src/till-api.table-actions.test.ts src/till-api.move-bill.test.ts -t 'A803 no merge flag|bills key'`.
+      (Run: 12 failed, 5 passed, 192 skipped: the three move answers carried `merged`; the
+      invalid values answered 400; the table routes' `"merge"`/`"separate"` rows already passed.)
 - [ ] Implement the product deletions. Then the sweep, a script kept outside the repository that,
       for each file in `rg -l 'bills: "(merge|separate)"' apps/server/src`, deletes every line that
       is exactly `\s*bills: "(merge|separate)"( as const)?,\s*$` and nothing else. Then fix the
       leftovers by hand from `rg -n 'bills: "(merge|separate)"|bills = "merge"|\bbills,|bills\?:' apps/server/src`
       (inline objects, helper parameters, `{ ...opts, bills }`). Each hand edit is a property or
       parameter deletion; anything else is a stop.
-- [ ] GREEN: server typecheck (the type no longer has the field, so any missed site fails here);
+- [x] (Done: product deletions in `move-bill.ts`, `table-actions.ts` (also `combineParties`'
+      `bills` argument), `till-api.ts`, `floor-today-merges.ts`, `testing/party-venue.ts`. Sweep:
+      122 lines in 61 files. Hand fixes: 70 lines in 14 files by a second outside script (a
+      `bills: "…"` property inside a one-line object, or a whole `{ bills: "…" }` argument to a
+      helper whose options default to `{}`); helper parameters and their call-site arguments in
+      `bill-editing.bill-moves`, `bill-editing.table-actions`, `bill-identities`, `receipt-guests`,
+      `party-table-actions`, `order-kitchen-note.moves` and `floor-today-flatten-api`; the
+      `it.each` callback parameter in `order-kitchen-note.moves.test.ts:194`, left unused. Left
+      alone: the `bills,` shorthand that `it.each` rows send in HTTP bodies in
+      `till-api.allergy-move.test.ts:558` and `table-actions.refund-pending.test.ts:204`, `:232`.
+      An HTTP body has no type, and deleting the key would leave each row's parameter unused.
+      Changed checks: `merged: false` dropped from 39 `toEqual` answers in 9 files (W); `till-api.move-bill.test.ts:411`
+      `toMatchObject({partyId, billId, merged: false})` → `toEqual({partyId, billId})` (W);
+      `bill-identities.test.ts:321`, `:346` `toMatchObject({merged: false, billId})` →
+      `toEqual({partyId: to.partyId, billId})` (W); `party-move-bill.test.ts:831`, `:957`
+      `expect(result.merged).toBe(false)` → `expect(Object.keys(result).sort()).toEqual(["billId", "partyId"])`
+      (B, D13); `till-api.allergy-move.test.ts:213`'s answer cast loses `merged: boolean` (F); the
+      two 400 rows → the D13 cases above (B). Each check is as strict as before or stricter.
+      Titles left stale by the deletions, not retitled (a retitle is not a deletion):
+      `till-api.table-actions.test.ts:112` ("… or with one"), `till-api.move-bill.test.ts:1171`
+      (now the same as the D13 `"merge"` row), `till-api.today-joins.test.ts:201`,
+      `floor-today-flatten-api.test.ts:371`, `:463`, `:491`, `:543`, `bill-identities.test.ts:313`,
+      `:337`, `:592`, `:820`, `bill-editing.bill-moves.test.ts:238`,
+      `bill-editing.table-actions.test.ts:223`, `:247`, `:269`, `party-arriving-dishes.test.ts:974`,
+      `party-move-bill.test.ts:342`, `:908`, `party-table-actions.test.ts:351`, `:1022`, `:1597`,
+      `:1612`, `order-kitchen-note.moves.test.ts:192`.)
+- [x] GREEN: server typecheck (the type no longer has the field, so any missed site fails here);
       `git diff --name-only HEAD -- apps/server | /usr/bin/grep 'test.ts$' | sed 's#apps/server/##' | xargs pnpm --filter @waitron/server exec vitest run`;
       F; H2; Filing (and `git diff a90f4f87b -- apps/server/src/order-portions.filing.test.ts` shows
       exactly the one deleted line); `rg -n 'bills: "(merge|separate)"|requireBillChoice|\bmerged\b' apps/server/src packages`
       prints nothing but unrelated `merged` words (list them in the ledger).
-- [ ] Commit: "Retire the bills option and the merged flag".
+      (Run: server typecheck clean; the changed files, 60, 2709 passed in 60; F 267 in 5; H2 20 in
+      2; Filing 67 in 2, and `order-portions.filing.test.ts`'s diff from `a90f4f87b` is the one
+      `bills: "separate",` line; the F/H2 diff is empty; till typecheck clean; `pnpm format:check`
+      clean; eslint on the changed files clean. The `rg` prints 383 lines: words about parties
+      merged into others, the `table.merged` code and its tests, and local variables named
+      `merged`, plus two lines that mention the retired things: Task 4a's
+      `not.toHaveProperty("merged")` (`till-api.table-actions.test.ts:790`) and the stale title at
+      `till-api.move-bill.test.ts:1171`. Deletion controls: refusing an invalid `bills` again in
+      both commands → 9 of the D13 rows fail; putting `merged: false` back in the move answer →
+      6 fail.)
+- [x] Commit: "Retire the bills option and the merged flag".
 
 ## Task 5: the server lists a party's bills in number order (A1232) (≈25 calls)
 

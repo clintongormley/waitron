@@ -203,7 +203,6 @@ function moveBill(billId: string, tableId: string) {
     ...(holder === undefined
       ? { otherPartyId: null }
       : { otherPartyId: holder, expectedOtherPartyRevision: revisionOf(holder) }),
-    bills: "separate",
   });
 }
 

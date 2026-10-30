@@ -1486,7 +1486,6 @@ describe("naming a paid bill a merged party kept", () => {
     const survivorRevision = await revisionOf(v, survivor.partyId);
     await inTx(v, (tx) =>
       moveGuests(tx, v.cfg, source.partyId, deliTable, {
-        bills: "separate",
         operatorId: OPERATOR,
         expectedPartyRevision: sourceRevision,
         otherPartyId: survivor.partyId,

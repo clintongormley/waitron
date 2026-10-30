@@ -506,7 +506,6 @@ describe("permanent group numbers on kitchen work", () => {
       .groups[0]!;
     await inTx(async (tx) => {
       await joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "merge",
         expectedPartyRevision: 1,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 1,
@@ -572,7 +571,6 @@ describe("permanent group numbers on kitchen work", () => {
       .groups[0]!;
     await inTx((tx) =>
       joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "merge",
         expectedPartyRevision: 0,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 1,
@@ -2250,7 +2248,7 @@ async function billOfNoParty(
       v.cfg,
       tabId,
       { counter: { zoneId: null } },
-      { ...(await billCommand(partyId)), bills: "separate", partyId },
+      { ...(await billCommand(partyId)), partyId },
     ),
   );
   return tabId;
@@ -2326,7 +2324,7 @@ describe("a line leaving its party", () => {
         v.cfg,
         billId,
         { counter: { zoneId: null } },
-        { ...(await billCommand(s.partyId)), bills: "separate", partyId: s.partyId },
+        { ...(await billCommand(s.partyId)), partyId: s.partyId },
       ),
     );
 
@@ -2383,7 +2381,6 @@ describe("merging two bills (D2)", () => {
     // The source's held groups no longer sit in the order they were made.
     await reorder(from.partyId, [from.desserts, from.warm, from.mains]);
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(into.partyId),
       otherPartyId: from.partyId,
       expectedOtherPartyRevision: await revisionOf(from.partyId),

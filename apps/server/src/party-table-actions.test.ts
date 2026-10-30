@@ -86,13 +86,8 @@ async function act<T>(fn: (tx: Transaction) => Promise<T>): Promise<T> {
   return inTx(v, fn);
 }
 
-async function opts(
-  partyId: string,
-  other?: string,
-  bills: "merge" | "separate" = "merge",
-): Promise<TableActionOptions> {
+async function opts(partyId: string, other?: string): Promise<TableActionOptions> {
   return {
-    bills,
     expectedPartyRevision: await revisionOf(v, partyId),
     ...(other === undefined
       ? {}
@@ -360,7 +355,7 @@ describe("move guests", () => {
     await order(v, ana.tabId, "Burger");
     await order(v, luis.tabId, "Agua");
 
-    const moving = await opts(ana.partyId, luis.partyId, "separate");
+    const moving = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     expect(result).toEqual({ partyId: luis.partyId, billIds: [luis.tabId, ana.tabId] });
@@ -412,7 +407,7 @@ describe("move guests", () => {
     const presented = await splitOff(ana.partyId, ana.tabId, [2]);
     await placeByHand(v, presented);
 
-    const moving = await opts(ana.partyId, luis.partyId, "separate");
+    const moving = await opts(ana.partyId, luis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, terrace, moving));
 
     expect(await zoneOf(v, ana.tabId)).toBe(terraceZone);
@@ -897,7 +892,7 @@ describe("kitchen groups when parties combine", () => {
     const anaLines = await linesOf(v, ana.tabId);
     expect(anaGroups.map((group) => group.state)).toEqual(["fired", "held"]);
 
-    const moving = await opts(ana.partyId, luis.partyId, "separate");
+    const moving = await opts(ana.partyId, luis.partyId);
     await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
     const last = luisGroups.at(-1)!.position;
@@ -1031,7 +1026,7 @@ describe("join tables", () => {
     await order(v, ana.tabId, "Burger");
     await order(v, luis.tabId, "Agua");
 
-    const joining = await opts(ana.partyId, luis.partyId, "separate");
+    const joining = await opts(ana.partyId, luis.partyId);
     const result = await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
 
     expect(result).toEqual({ partyId: ana.partyId, billIds: [ana.tabId, luis.tabId] });
@@ -1581,7 +1576,6 @@ describe("combineParties", () => {
       combineParties(tx, v.cfg, {
         from: ana.partyId,
         into: luis.partyId,
-        bills: "merge",
         tables: "join",
         operatorId: OPERATOR,
       }),
@@ -1606,7 +1600,7 @@ describe("guest counts when parties combine", () => {
       const ana = await seat(v, m4, 3);
       const luis = await seat(v, m7, 2);
 
-      const joining = await opts(ana.partyId, luis.partyId, bills);
+      const joining = await opts(ana.partyId, luis.partyId);
       await act((tx) => joinTables(tx, v.cfg, ana.partyId, m7, joining));
 
       expect((await partyRow(v, ana.partyId)).guestCount).toBe(5);
@@ -1621,7 +1615,7 @@ describe("guest counts when parties combine", () => {
       const ana = await seat(v, m4, 2);
       const luis = await seat(v, m7, 3);
 
-      const moving = await opts(ana.partyId, luis.partyId, bills);
+      const moving = await opts(ana.partyId, luis.partyId);
       await act((tx) => moveGuests(tx, v.cfg, ana.partyId, m7, moving));
 
       expect((await partyRow(v, luis.partyId)).guestCount).toBe(5);
@@ -1644,7 +1638,6 @@ describe("guest counts when parties combine", () => {
       combineParties(tx, v.cfg, {
         from: from.partyId,
         into: into.partyId,
-        bills: "merge",
         tables: "join",
         operatorId: OPERATOR,
       }),
@@ -1663,7 +1656,6 @@ describe("guest counts when parties combine", () => {
       combineParties(tx, v.cfg, {
         from: from.partyId,
         into: into.partyId,
-        bills: "merge",
         tables: "leave",
         operatorId: OPERATOR,
       }),

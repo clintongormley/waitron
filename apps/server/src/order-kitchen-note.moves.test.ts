@@ -57,7 +57,7 @@ function effective(billId: string) {
   return inTx(v, async (tx) => (await readOrderKitchenNotes(tx, [billId])).get(billId)!);
 }
 
-async function move(billId: string, to: MoveTarget, bills: "merge" | "separate" = "separate") {
+async function move(billId: string, to: MoveTarget) {
   const source = (await billRow(v, billId)).partyId;
   const target = "tableId" in to ? await partyAt(v, to.tableId) : null;
   const expectedPartyRevision = source === null ? undefined : await revisionOf(v, source);
@@ -70,7 +70,6 @@ async function move(billId: string, to: MoveTarget, bills: "merge" | "separate" 
             allergy: { party: { answer: "none" as const, guests: [] }, ticks: [] },
           }
         : {}),
-      bills,
       operatorId: OPERATOR,
       partyId: source,
       expectedPartyRevision,
@@ -86,7 +85,6 @@ async function combine(from: string, into: string, tableId: string) {
   return inTx(v, (tx) =>
     joinTables(tx, v.cfg, into, tableId, {
       ...command,
-      bills: "separate",
       otherPartyId: from,
       expectedOtherPartyRevision,
     }),
@@ -192,15 +190,15 @@ describe("kitchen notes when bills and parties move", () => {
 
   it.each(["merge", "separate"] as const)(
     "combines a counter bill, kept as its own bill, with the destination note when the move asks for bills: %s",
-    async (bills) => {
+    async () => {
       const targetTable = await freshTable("Existing destination");
       const target = await seat(v, targetTable);
       await order(v, target.tabId, "Flan");
       const incoming = await counterOrder(v, "Burger");
       await save({ partyId: target.partyId }, "Destination first");
       await save({ workingOrderId: incoming }, "Incoming second");
-      const result = await move(incoming, { tableId: targetTable }, bills);
-      expect(result).toEqual({ partyId: target.partyId, billId: incoming, merged: false });
+      const result = await move(incoming, { tableId: targetTable });
+      expect(result).toEqual({ partyId: target.partyId, billId: incoming });
       expect(await effective(result.billId)).toMatchObject({
         note: "Destination first; Incoming second",
         scope: { partyId: target.partyId },

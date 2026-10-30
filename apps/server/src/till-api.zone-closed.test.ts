@@ -456,7 +456,6 @@ describe("moving into closed zones", () => {
           expectedPartyRevision: source.revision,
           otherPartyId: holder?.partyId ?? null,
           ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-          bills: "separate",
         }),
       ).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);
@@ -483,7 +482,6 @@ describe("moving into closed zones", () => {
           expectedPartyRevision: source.revision,
           otherPartyId: holder?.partyId ?? null,
           ...(holder ? { expectedOtherPartyRevision: holder.revision } : {}),
-          bills: "separate",
         }),
       ).toEqual(refused(v));
       expect(await moveRows()).toEqual(before);

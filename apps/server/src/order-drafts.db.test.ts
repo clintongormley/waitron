@@ -3421,7 +3421,6 @@ describe("pricing (D9)", () => {
  */
 async function merge(v: Venue, into: Seated, from: Seated, operatorId: string): Promise<void> {
   const command = {
-    bills: "merge" as const,
     expectedPartyRevision: await partyRevision(into.partyId),
     otherPartyId: from.partyId,
     expectedOtherPartyRevision: await partyRevision(from.partyId),
@@ -3458,7 +3457,6 @@ describe("merging parties (D2)", () => {
     const incoming = await save(v, from.partyId, ALEX, null, 0, [item(v, "fish", { slot: 1 })]);
     await inTx((tx) =>
       joinTables(tx, v.cfg, into.partyId, from.tableId, {
-        bills: "separate",
         expectedPartyRevision: 0,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: 0,
@@ -3870,7 +3868,6 @@ it("A669 keeps separately assigned identical dishes when joining two drafts of t
     joinTables(tx, v.cfg, a.partyId, b.tableId, {
       expectedPartyRevision: await partyRevision(a.partyId),
       operatorId: ALEX,
-      bills: "separate",
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await partyRevision(b.partyId),
     }),
@@ -4603,7 +4600,6 @@ describe("source-backed draft foundations", () => {
         if (destination === "split table")
           await inTx(async (tx) =>
             joinTables(tx, v.cfg, from.partyId, tableId, {
-              bills: "separate",
               operatorId: SAM,
               expectedPartyRevision: await partyRevision(from.partyId),
               otherPartyId: null,
@@ -4628,7 +4624,6 @@ describe("source-backed draft foundations", () => {
                 billId,
                 { tableId },
                 {
-                  bills: "separate",
                   operatorId: SAM,
                   partyId: from.partyId,
                   expectedPartyRevision: await partyRevision(from.partyId),
@@ -4727,7 +4722,6 @@ describe("source-backed draft foundations", () => {
     const ticksBefore = (await inTx((tx) => readPartyAllergy(tx, moving.from.partyId))).ticks;
     await inTx(async (tx) =>
       joinTables(tx, v.cfg, target.partyId, moving.from.tableId, {
-        bills: "separate",
         operatorId: SAM,
         expectedPartyRevision: await partyRevision(target.partyId),
         otherPartyId: moving.from.partyId,
@@ -4776,7 +4770,6 @@ describe("source-backed draft foundations", () => {
       if (destination === "split table")
         await inTx(async (tx) =>
           joinTables(tx, v.cfg, moving.from.partyId, tableId, {
-            bills: "separate",
             operatorId: SAM,
             expectedPartyRevision: await partyRevision(moving.from.partyId),
             otherPartyId: null,
@@ -4796,7 +4789,6 @@ describe("source-backed draft foundations", () => {
                   moving.billId,
                   { tableId },
                   {
-                    bills: "separate",
                     operatorId: SAM,
                     partyId: moving.from.partyId,
                     expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4827,7 +4819,6 @@ describe("source-backed draft foundations", () => {
       if (destination === "split table")
         await inTx(async (tx) =>
           joinTables(tx, v.cfg, moving.from.partyId, tableId, {
-            bills: "separate",
             operatorId: SAM,
             expectedPartyRevision: await partyRevision(moving.from.partyId),
             otherPartyId: null,
@@ -4855,7 +4846,6 @@ describe("source-backed draft foundations", () => {
                     moving.billId,
                     { tableId },
                     {
-                      bills: "separate",
                       operatorId: SAM,
                       partyId: moving.from.partyId,
                       expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4888,7 +4878,6 @@ describe("source-backed draft foundations", () => {
         moving.billId,
         { tableId: target.tableId },
         {
-          bills: "merge",
           operatorId: ALEX,
           partyId: moving.from.partyId,
           expectedPartyRevision: await partyRevision(moving.from.partyId),
@@ -4897,7 +4886,7 @@ describe("source-backed draft foundations", () => {
         },
       ),
     );
-    expect(result).toEqual({ partyId: target.partyId, billId: moving.billId, merged: false });
+    expect(result).toEqual({ partyId: target.partyId, billId: moving.billId });
     expect(await draftRow(moving.draft.id)).toMatchObject({
       state: "open",
       revision: 1,

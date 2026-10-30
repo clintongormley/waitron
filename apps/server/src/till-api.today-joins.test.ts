@@ -206,7 +206,6 @@ describe("a join that merges", () => {
     const answer = (await ok(
       join(q, {
         tableId: a,
-        bills: "separate",
         expectedPartyRevision: await revision(q),
         otherPartyId: p,
         expectedOtherPartyRevision: await revision(p),

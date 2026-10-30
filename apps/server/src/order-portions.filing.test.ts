@@ -1156,7 +1156,6 @@ describe("A803 portions: raising a dish", () => {
         { counter: { zoneId: null } },
         {
           expectedEdits: [await readBillEditState(tx, billId)],
-          bills: "separate",
           expectedPartyRevision: await partyRevision(tx, partyId),
           partyId,
           operatorId: venue.adminId,

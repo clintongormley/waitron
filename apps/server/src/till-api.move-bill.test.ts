@@ -340,7 +340,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     const paid = await paying;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(registroCount(venue, orderId)).toBe(1);
@@ -351,7 +351,7 @@ describe("a bill moved between service modes sends each dish to the kitchen once
     const luis = await seatedWith(venue, "Caña");
     const orderId = await prepayOrder("Pulpo");
 
-    const moved = await moveTo(orderId, luis.tableId, { bills: "separate" });
+    const moved = await moveTo(orderId, luis.tableId);
     const sent = kitchenItems(orderId);
     const paid = await cashContribution(orderId, "20.00");
 
@@ -397,7 +397,6 @@ describe("money on a moved bill", () => {
       `/api/bills/${billId}/move`,
       {
         to: { tableId: luis.tableId },
-        bills: "merge",
         expectedPartyRevision: ana.revision + 1,
         otherPartyId: luis.partyId,
         expectedOtherPartyRevision: luis.revision,
@@ -409,7 +408,7 @@ describe("money on a moved bill", () => {
     const retry = await pay(billId, body);
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toMatchObject({ partyId: luis.partyId, billId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId });
     expect(answered.json).toMatchObject({ outcome: "received", invoice: { total: "20.00" } });
     expect(retry.json).toMatchObject({ outcome: "received", invoice: { total: "20.00" } });
     expect(venue.card.collectCalls.length).toBe(calls + 1);
@@ -430,7 +429,7 @@ describe("money on a moved bill", () => {
     const moved = await moveTo(billId, luis.tableId);
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId });
     expect(await paymentRows(venue, billId)).toEqual(before);
     expect(before.map((p) => [p.workingOrderId, p.applied, p.state])).toEqual([
       [billId, 500, "received"],
@@ -527,7 +526,7 @@ describe("money on a moved bill", () => {
       tender: { method: "cash", amount: "18.00" },
     });
 
-    expect(moved.json).toEqual({ partyId: ana.partyId, billId: id, merged: false });
+    expect(moved.json).toEqual({ partyId: ana.partyId, billId: id });
     expect(collected.status).toBe(200);
     expect(venue.db.all(sql`select id from sales where working_order_id = ${id}`)).toEqual(issued);
     expect(registroCount(venue, id)).toBe(1);
@@ -703,7 +702,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     const paid = await paying;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, luis.tabId)).toBe("settled");
     expect(registroCount(venue, luis.tabId)).toBe(1);
@@ -723,7 +722,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     const paid = await paying;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId: orderId });
     expect(paid.json).toMatchObject({ outcome: "captured" });
     expect(await statusOf(venue, orderId)).toBe("settled");
     expect(registroCount(venue, orderId)).toBe(1);
@@ -767,7 +766,7 @@ describe("a move while a whole bill is being paid by card at the reader", () => 
     const refunded = await refunding;
 
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId });
     expect(refunded.status).toBe(200);
     expect(linesNamed(luis.tabId)).toEqual(["Croquetas"]);
     expect(await statusOf(venue, billId)).toBe("open");
@@ -787,7 +786,6 @@ describe("two tills moving one counter order", () => {
           `/api/bills/${orderId}/move`,
           {
             to: { tableId: ana.tableId },
-            bills: "separate",
             partyId: null,
             otherPartyId: ana.partyId,
             expectedOtherPartyRevision: ana.revision,
@@ -799,7 +797,6 @@ describe("two tills moving one counter order", () => {
           `/api/bills/${orderId}/move`,
           {
             to: { tableId: luis.tableId },
-            bills: "separate",
             partyId: null,
             otherPartyId: luis.partyId,
             expectedOtherPartyRevision: luis.revision,
@@ -814,7 +811,7 @@ describe("two tills moving one counter order", () => {
       const lost = await loser();
 
       expect(won.status).toBe(200);
-      expect(won.json).toEqual({ partyId: winnerParty.partyId, billId: orderId, merged: false });
+      expect(won.json).toEqual({ partyId: winnerParty.partyId, billId: orderId });
       expect(lost.status).toBe(409);
       expect(lost.json).toMatchObject({
         code: "party.out_of_date",
@@ -973,22 +970,18 @@ describe("the move route", () => {
     expect(revisionOf(ana.partyId)).toBe(revision);
   });
 
-  it.each([["together"], [null], [1]])(
-    "answers the bill choice %j with 400 management.request_invalid",
+  it.each([["merge"], ["separate"], ["together"], [null], [1]])(
+    "A803 no merge flag: a bills key of any value, including an invalid one, is ignored (%j)",
     async (bills) => {
-      const { ana, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
+      const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
-      const answer = await post(`/api/bills/${billId}/move`, {
-        to: { counter: { zoneId: null } },
-        bills,
-        expectedPartyRevision: revisionOf(ana.partyId),
-      });
+      const answer = await moveTo(billId, luis.tableId, { bills });
 
-      expect(answer.status).toBe(400);
-      expect(answer.json).toMatchObject({
-        code: "management.request_invalid",
-        params: { field: "bills" },
-      });
+      expect(answer.status).toBe(200);
+      expect(answer.json).toEqual({ partyId: luis.partyId, billId });
+      expect(partyOfBill(billId)).toBe(luis.partyId);
+      expect(await statusOf(venue, billId)).toBe("open");
+      expect(await statusOf(venue, luis.tabId)).toBe("open");
     },
   );
 
@@ -1043,7 +1036,7 @@ describe("the move route", () => {
     });
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toEqual({ partyId: expect.any(String), billId, merged: false });
+    expect(answer.json).toEqual({ partyId: expect.any(String), billId });
     expect(answer.json.partyId).not.toBe(ana.partyId);
     expect(partyOfBill(billId)).toBe(answer.json.partyId);
     expect(holderOf(to)).toBe(answer.json.partyId);
@@ -1116,7 +1109,6 @@ describe("the move route", () => {
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { tableId: luis.tableId },
-      bills: "separate",
       expectedPartyRevision: revisionOf(ana.partyId),
       otherPartyId: luis.partyId.toUpperCase(),
       expectedOtherPartyRevision: revisionOf(luis.partyId),
@@ -1168,10 +1160,10 @@ describe("the move route", () => {
       params: { tableId: ana.tableId },
     });
     expect(first.status).toBe(200);
-    expect(first.json).toEqual({ partyId: null, billId: ana.tabId, merged: false });
+    expect(first.json).toEqual({ partyId: null, billId: ana.tabId });
     expect(partyOfBill(ana.tabId)).toBeNull();
     expect(moved.status).toBe(200);
-    expect(moved.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(moved.json).toEqual({ partyId: luis.partyId, billId });
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(luis.partyId);
   });
@@ -1179,10 +1171,10 @@ describe("the move route", () => {
   it('A803 no main bill (move): a request still carrying `bills: "merge"` is served the same way', async () => {
     const { luis, billId } = await splitAtTwoParties(["Tarta", "Pulpo"], [2]);
 
-    const answer = await moveTo(billId, luis.tableId, { bills: "merge" });
+    const answer = await moveTo(billId, luis.tableId);
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toEqual({ partyId: luis.partyId, billId, merged: false });
+    expect(answer.json).toEqual({ partyId: luis.partyId, billId });
     expect(await statusOf(venue, billId)).toBe("open");
     expect(partyOfBill(billId)).toBe(luis.partyId);
     expect(await statusOf(venue, luis.tabId)).toBe("open");
@@ -1193,13 +1185,12 @@ describe("the move route", () => {
 
     const answer = await post(`/api/bills/${billId}/move`, {
       to: { counter: { zoneId: ticketThenPayZone.toUpperCase() } },
-      bills: "separate",
       partyId: ana.partyId,
       expectedPartyRevision: revisionOf(ana.partyId),
     });
 
     expect(answer.status).toBe(200);
-    expect(answer.json).toEqual({ partyId: null, billId, merged: false });
+    expect(answer.json).toEqual({ partyId: null, billId });
     const [context] = venue.db.all<{ zone_id: string }>(
       sql`select zone_id from order_service_contexts where working_order_id = ${billId}`,
     );

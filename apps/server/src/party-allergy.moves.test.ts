@@ -90,7 +90,6 @@ it("combining seated parties retains both guest lists and working-line assignmen
   await inTx(v, (tx) =>
     joinTables(tx, v.cfg, a.partyId, b.tableId, {
       ...command,
-      bills: "separate",
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: otherRevision,
     }),
@@ -181,7 +180,6 @@ it.each([
   await inTx(v, async (tx) =>
     joinTables(tx, v.cfg, a.partyId, b.tableId, {
       ...command,
-      bills: "separate",
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: (await readPartyAllergy(tx, b.partyId)).revision,
     }),

@@ -605,7 +605,6 @@ describe("the reminder on the floor and in Current orders (D11)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),
@@ -1059,7 +1058,6 @@ describe("unsnoozeReminder (D8, D11, D19)", () => {
     const bHeld = await group(v, b.partyId, "hold", [line(v, "water")]);
     await at(T(15), () => snooze(v, b.partyId, bHeld.id, 5));
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),
@@ -1550,7 +1548,6 @@ describe("a party another was merged into", () => {
     const bNext = (await linesByName(b.partyId)).find((l) => l.name === "water")!.workingOrderId;
     expect(bNext).not.toBe(b.tabId);
     const command = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(a.partyId),
       otherPartyId: b.partyId,
       expectedOtherPartyRevision: await revisionOf(b.partyId),

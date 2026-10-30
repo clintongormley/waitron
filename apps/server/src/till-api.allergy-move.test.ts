@@ -98,7 +98,6 @@ async function fixture(existing = false) {
   });
   const body: Record<string, unknown> = {
     to: { tableId },
-    bills: "separate",
     partyId: null,
     otherPartyId: destination?.partyId ?? null,
     ...(destination === null ? {} : { expectedOtherPartyRevision: destination.revision }),
@@ -211,8 +210,8 @@ it("transports answer and ticks through the move route and replays the original 
   const packet = adoption(f);
   const response = await f.request("", packet);
   expect(response.status).toBe(200);
-  const result = (await response.json()) as { partyId: string; billId: string; merged: boolean };
-  expect(result).toEqual({ partyId: expect.any(String), billId: f.billId, merged: false });
+  const result = (await response.json()) as { partyId: string; billId: string };
+  expect(result).toEqual({ partyId: expect.any(String), billId: f.billId });
   const state = await inTx(v, (tx) => readPartyAllergy(tx, result.partyId));
   expect(state).toMatchObject({
     answer: "allergies",
@@ -565,7 +564,6 @@ it.each(["merge", "separate"] as const)(
     expect(await response.json()).toEqual({
       partyId: f.destination!.partyId,
       billId: f.billId,
-      merged: false,
     });
     const after = await inTx(v, (tx) => readPartyAllergy(tx, f.destination!.partyId));
     expect(after.guests).toEqual(before.guests);

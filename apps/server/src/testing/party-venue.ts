@@ -309,9 +309,7 @@ export async function nextMillisecond(): Promise<void> {
 export async function join(v: PartyVenue, partyId: string, tableId: string): Promise<void> {
   await nextMillisecond();
   const sent = await commandFor(v, partyId);
-  await inTx(v, (tx) =>
-    joinTables(tx, v.cfg, partyId, tableId, { ...sent, bills: "merge", otherPartyId: null }),
-  );
+  await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, tableId, { ...sent, otherPartyId: null }));
 }
 
 /** Names the party, as the till's rename does. */

@@ -66,7 +66,6 @@ async function fixture(existing: boolean | "answered" = false) {
     partyId: null,
     otherPartyId: destination?.partyId ?? null,
     ...(destination === null ? {} : { expectedOtherPartyRevision: destination.revision }),
-    bills: "separate" as const,
     expectedEdits,
     submissionId: randomUUID(),
     allergy,

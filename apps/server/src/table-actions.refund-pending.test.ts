@@ -260,7 +260,6 @@ describe("a pending card refund and the table actions", () => {
 
     const joined = await post(`/api/parties/${luis.partyId}/join`, {
       tableId: ana.tableId,
-      bills: "merge",
       expectedPartyRevision: revisionOf(luis.partyId),
       otherPartyId: ana.partyId,
       expectedOtherPartyRevision: revisionOf(ana.partyId),

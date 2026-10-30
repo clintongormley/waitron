@@ -51,8 +51,6 @@ import "./errors.js";
 
 export interface TableActionOptions extends OtherPartyRead {
   expectedEdits: BillEditExpected[];
-  /** Ignored: joining and moving guests keep every bill. Removed in A803 slice 3 Task 4b. */
-  bills?: "merge" | "separate";
   /** The party in the path. */
   expectedPartyRevision: number;
   operatorId: string;
@@ -186,7 +184,6 @@ async function combineAt(
     await combineParties(tx, cfg, {
       from,
       into,
-      bills: options.bills,
       tables,
       operatorId: options.operatorId,
       expectedEdits: options.expectedEdits,
@@ -217,8 +214,6 @@ export async function combineParties(
     from: string;
     into: string;
     expectedEdits: BillEditExpected[];
-    /** Ignored, as {@link TableActionOptions.bills} is. */
-    bills?: "merge" | "separate";
     tables: "leave" | "join";
     operatorId: string;
     /** `into`'s zone, when the caller has just read it. */

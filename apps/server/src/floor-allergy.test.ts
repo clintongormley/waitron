@@ -47,7 +47,6 @@ it("A669 marks only tables whose seated party has an allergic guest and clears t
   await inTx(venue, (tx) =>
     joinTables(tx, venue.cfg, party.partyId, joining, {
       ...command,
-      bills: "merge",
       otherPartyId: null,
     }),
   );
@@ -57,7 +56,6 @@ it("A669 marks only tables whose seated party has an allergic guest and clears t
   await inTx(venue, (tx) =>
     moveGuests(tx, venue.cfg, party.partyId, free, {
       ...moving,
-      bills: "merge",
       otherPartyId: null,
     }),
   );

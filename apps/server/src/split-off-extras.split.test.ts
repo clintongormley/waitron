@@ -210,7 +210,6 @@ describe("splitting a dish with split-off extras", () => {
       await moveGuests(tx, venue.cfg, venue.party.partyId, otherTable.id, {
         expectedPartyRevision: party!.revision,
         operatorId: randomUUID(),
-        bills: "separate",
         otherPartyId: null,
       });
     });

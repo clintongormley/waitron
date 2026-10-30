@@ -89,7 +89,6 @@ function command(app: Hono, action: "join" | "move", p: Awaited<ReturnType<typeo
     expectedPartyRevision: p.source.revision,
     otherPartyId: p.target.partyId,
     expectedOtherPartyRevision: p.target.revision,
-    bills: "merge",
     operatorId: v.adminId,
     at: "2026-01-06T20:00:00Z",
   });
@@ -289,7 +288,6 @@ describe("draft-event attendance in table combines", () => {
           expectedPartyRevision: p.source.revision,
           otherPartyId: p.target.partyId,
           expectedOtherPartyRevision: p.target.revision,
-          bills: "separate",
         }),
       ).toMatchObject({ status: 200 });
       const before = await state();

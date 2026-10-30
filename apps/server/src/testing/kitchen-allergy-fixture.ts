@@ -140,7 +140,6 @@ export async function kitchenCommand(
         partyId: null,
         otherPartyId: party.partyId,
         expectedOtherPartyRevision: await revisionOf(v, party.partyId),
-        bills: "separate",
         to: { tableId: f.tableId },
         allergy,
         expectedEdits: await inTx(v, async (tx) =>

@@ -115,7 +115,6 @@ async function move(
   into: Awaited<ReturnType<typeof party>>,
   billId: string,
   expectedEdits: BillEditExpected[],
-  bills: "merge" | "separate" = "separate",
 ) {
   const rows = await venue.db
     .select()
@@ -133,7 +132,6 @@ async function move(
         otherPartyId: into.partyId,
         expectedOtherPartyRevision: rows.find((p) => p.id === into.partyId)!.revision,
         operatorId: venue.operatorId,
-        bills,
         expectedEdits,
       },
     ),
@@ -244,10 +242,9 @@ describe("moving one bill compares only that bill and the complete destination",
     await save(into.partyId, into.tabId, venue.adminId);
     const expected = await billEdits(from.tabId, into.tabId);
     const staying = expected.find((e) => e.billId === into.tabId)!;
-    expect(await move(from, into, from.tabId, expected, "merge")).toEqual({
+    expect(await move(from, into, from.tabId, expected)).toEqual({
       partyId: into.partyId,
       billId: from.tabId,
-      merged: false,
     });
     expect((await billEdits(from.tabId))[0]).toEqual({
       ...moving.edit,
@@ -292,7 +289,6 @@ describe("split a table carries only its moved bill editor", () => {
     const own = await venue.db.select().from(parties).where(eq(parties.id, from.partyId));
     await inTx(venue, (tx) =>
       joinTables(tx, venue.cfg, from.partyId, free.id, {
-        bills: "separate",
         operatorId: venue.operatorId,
         otherPartyId: null,
         expectedPartyRevision: own[0]!.revision,
@@ -642,7 +638,6 @@ describe("bill move HTTP boundaries require observed edits and use the authentic
           ? `/api/parties/${from.partyId}/split-table`
           : `/api/bills/${from.tabId}/${action}`;
       const body = {
-        bills: "separate",
         partyId: from.partyId,
         expectedPartyRevision: from.revision,
         to: { tableId: into.tableId },
@@ -670,7 +665,6 @@ describe("bill move HTTP boundaries require observed edits and use the authentic
     const before = await allRows();
     expect(
       await send(venue.app, venue.cookie, "POST", `/api/bills/${from.tabId}/move`, {
-        bills: "separate",
         partyId: from.partyId,
         expectedPartyRevision: from.revision,
         to: { tableId: into.tableId },

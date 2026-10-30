@@ -3756,7 +3756,7 @@ describe("a counter order (B11c)", () => {
         venue.cfg,
         billId,
         { counter: { zoneId: counterZone } },
-        { bills: "merge", partyId, expectedPartyRevision, operatorId: venue.staffId },
+        { partyId, expectedPartyRevision, operatorId: venue.staffId },
       ),
     );
     return billId;
@@ -4016,7 +4016,7 @@ describe("a counter order (B11c)", () => {
         venue.cfg,
         billId,
         { counter: { zoneId: counterZone } },
-        { bills: "merge", partyId, expectedPartyRevision, operatorId: venue.staffId },
+        { partyId, expectedPartyRevision, operatorId: venue.staffId },
       ),
     );
     const before = await counterStateOf(billId);

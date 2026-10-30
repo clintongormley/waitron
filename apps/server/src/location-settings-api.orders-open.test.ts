@@ -321,7 +321,6 @@ describe("a receipt-language change while orders are open", () => {
     )[0]!.table_id;
     const joined = await till("POST", `/api/parties/${survivor.partyId}/join`, {
       tableId: table,
-      bills: "merge",
       expectedPartyRevision: revisionOf(survivor.partyId),
       otherPartyId: merged.partyId,
       expectedOtherPartyRevision: revisionOf(merged.partyId),

@@ -123,7 +123,6 @@ describe("the table action routes", () => {
     });
     const separate = await post(`/api/parties/${bea.partyId}/move`, {
       toTableId: cris.tableId,
-      bills: "separate",
       expectedPartyRevision: bea.revision,
       otherPartyId: cris.partyId,
       expectedOtherPartyRevision: cris.revision,
@@ -144,7 +143,6 @@ describe("the table action routes", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
-      bills: "separate",
       expectedPartyRevision: ana.revision,
       otherPartyId: luis.partyId,
       expectedOtherPartyRevision: luis.revision,
@@ -242,23 +240,29 @@ describe("the table action routes", () => {
     ["move", "toTableId"],
     ["join", "tableId"],
   ] as const) {
-    it.each([["together"], [null], [1]])(
-      `answers ${path} with the bill choice %j with 400 management.request_invalid`,
+    it.each([["merge"], ["separate"], ["together"], [null], [1]])(
+      `A803 no merge flag: ${path} with a bills key of any value, including an invalid one, ignores it (%j)`,
       async (bills) => {
-        const ana = await seatedWith(venue);
+        const ana = await seatedWith(venue, "Tarta");
+        const luis = await seatedWith(venue, "Caña");
 
         const answer = await post(`/api/parties/${ana.partyId}/${path}`, {
-          [field]: await freeTable(),
+          [field]: luis.tableId,
           bills,
           expectedPartyRevision: ana.revision,
+          otherPartyId: luis.partyId,
+          expectedOtherPartyRevision: luis.revision,
         });
 
-        expect(answer.status).toBe(400);
-        expect(answer.json).toMatchObject({
-          code: "management.request_invalid",
-          params: { field: "bills" },
+        const holder = path === "move" ? luis : ana;
+        const other = path === "move" ? ana : luis;
+        expect(answer.status).toBe(200);
+        expect(answer.json).toEqual({
+          partyId: holder.partyId,
+          billIds: [holder.tabId, other.tabId],
         });
-        expect(revisionOf(ana.partyId)).toBe(ana.revision);
+        expect(await statusOf(venue, ana.tabId)).toBe("open");
+        expect(await statusOf(venue, luis.tabId)).toBe("open");
       },
     );
 
@@ -962,7 +966,6 @@ describe("Join tables' guest counts", () => {
 
     const answer = await post(`/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
-      bills: "separate",
       expectedPartyRevision: revisionOf(ana.partyId),
       otherPartyId: luis.partyId,
       expectedOtherPartyRevision: revisionOf(luis.partyId),

@@ -905,7 +905,6 @@ describe("a bill that owes nothing", () => {
     const luis = await seatedWith(venue, "Botella tinto");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
-      bills: "separate",
       expectedEdits: await inTx(venue, (tx) =>
         partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
       ),
@@ -1573,7 +1572,6 @@ describe("a merged party", () => {
     const luis = await seatedWith(venue, "Pulpo");
     const joined = await send(venue.app, venue.cookie, "POST", `/api/parties/${ana.partyId}/join`, {
       tableId: luis.tableId,
-      bills: "separate",
       expectedEdits: await inTx(venue, (tx) =>
         partyBillEditsForTest(tx, [ana.partyId, luis.partyId]),
       ),

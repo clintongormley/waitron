@@ -572,7 +572,6 @@ describe("A669 notices", () => {
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, into.partyId, p.tableId, {
         ...command,
-        bills: "separate",
         otherPartyId: p.partyId,
         expectedOtherPartyRevision: oldRevision,
       }),
@@ -632,7 +631,6 @@ describe("A669 notices", () => {
           partyId: null,
           otherPartyId: p.partyId,
           expectedOtherPartyRevision: await revisionOf(v, p.partyId),
-          bills: "separate",
           to: { tableId: p.tableId },
           allergy,
           expectedEdits: await inTx(v, async (tx) =>

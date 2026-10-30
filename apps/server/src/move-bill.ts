@@ -67,8 +67,6 @@ export interface MoveBillOptions extends OtherPartyRead {
   submissionId?: string;
   allergy?: AllergyPatch;
   expectedEdits: BillEditExpected[];
-  /** Ignored: a bill always arrives as a bill of its own. Removed in A803 slice 3 Task 4b. */
-  bills?: "merge" | "separate";
   /** The bill's own party's, required when it has one. */
   expectedPartyRevision?: number;
   /** The party the till read the bill under; null when it read the bill with no party. */
@@ -79,8 +77,6 @@ export interface MoveBillOptions extends OtherPartyRead {
 export interface MoveBillResult {
   partyId: string | null;
   billId: string;
-  /** Always false: a move never merges. Removed in A803 slice 3 Task 4b. */
-  merged: boolean;
 }
 
 /** Where the bill goes: the counter, a free table, or a table another party holds. */
@@ -242,7 +238,7 @@ async function moveBillOnce(
     await VENUE_SERVICE.releaseBillNumber(tx, billId);
     if (open && destination.zoneId !== null) await adoptZone(tx, cfg, billId, destination.zoneId);
     await relocateBillEditor(tx, billId, expectedEdit);
-    result = { partyId: null, billId, merged: false };
+    result = { partyId: null, billId };
   } else if (destination.kind === "free") {
     const { partyId } = await openParty(tx, {
       guestCount: null,
@@ -265,7 +261,7 @@ async function moveBillOnce(
       activity,
     ));
     if (open) await setMainBill(tx, partyId, billId);
-    result = { partyId, billId, merged: false };
+    result = { partyId, billId };
   } else {
     const partyId = destination.partyId;
     await inheritKitchenNote(tx, cfg, noteScope, { partyId }, "combine", [billId]);
@@ -284,7 +280,7 @@ async function moveBillOnce(
     await VENUE_SERVICE.allocateBillNumber(tx, billId, partyId);
     await moveBillDraftsToParty(tx, billId, partyId, expectedEdit);
     if (main === null && open) await setMainBill(tx, partyId, billId);
-    result = { partyId, billId, merged: false };
+    result = { partyId, billId };
   }
 
   await VENUE_SERVICE.withdrawPendingDepartmentTransfers(tx, [billId]);

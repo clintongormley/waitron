@@ -287,7 +287,6 @@ describe("A669 candidate sets", () => {
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, a.partyId, b.tableId, {
         ...command,
-        bills: "separate",
         otherPartyId: b.partyId,
         expectedOtherPartyRevision: other,
       }),

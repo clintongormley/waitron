@@ -235,7 +235,6 @@ describe("A773 lifetime", () => {
         combineParties(tx, v.cfg, {
           from: from!,
           into: into!,
-          bills: "separate",
           tables: "join",
           operatorId: OPERATOR,
         }),

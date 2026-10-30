@@ -1081,14 +1081,10 @@ describe("sent work moved between a party's bills at two of its tables", () => {
     const printerId = await printerFor(watched === "main" ? main : second);
     const patio = await v.table(`Patio ${label}`);
     const moving = await commandFor(v, partyId);
-    await inTx(v, (tx) =>
-      moveGuests(tx, v.cfg, partyId, patio, { ...moving, bills: "merge", otherPartyId: null }),
-    );
+    await inTx(v, (tx) => moveGuests(tx, v.cfg, partyId, patio, { ...moving, otherPartyId: null }));
     const terraza = await v.table(`Terraza ${label}`);
     const sent = await commandFor(v, partyId);
-    await inTx(v, (tx) =>
-      joinTables(tx, v.cfg, partyId, terraza, { ...sent, bills: "merge", otherPartyId: null }),
-    );
+    await inTx(v, (tx) => joinTables(tx, v.cfg, partyId, terraza, { ...sent, otherPartyId: null }));
     // The control: this printer does print the MOVED slips the move makes.
     const control = await printedBy(printerId);
     expect(control.length).toBeGreaterThan(0);
@@ -1213,7 +1209,6 @@ describe("two tills at once", () => {
     await order(v, other.tabId, "Paella");
     // Joining party one's table combines it into the other, taking its open second bill with it.
     const sent = {
-      bills: "merge" as const,
       expectedPartyRevision: await revisionOf(v, other.partyId),
       otherPartyId: one.partyId,
       expectedOtherPartyRevision: await revisionOf(v, one.partyId),

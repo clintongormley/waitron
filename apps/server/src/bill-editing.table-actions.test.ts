@@ -123,7 +123,6 @@ async function request(
   from: Awaited<ReturnType<typeof party>>,
   into: Awaited<ReturnType<typeof party>>,
   expectedEdits: BillEditExpected[],
-  bills: "merge" | "separate" = "separate",
   operatorId = venue.operatorId,
 ) {
   const revisions = await venue.db
@@ -137,12 +136,10 @@ async function request(
         from: from.partyId,
         into: into.partyId,
         tables: "join",
-        bills,
         operatorId,
         expectedEdits,
       });
     const options = {
-      bills,
       operatorId,
       expectedEdits,
       expectedPartyRevision: revision(action === "join" ? into.partyId : from.partyId),
@@ -230,9 +227,7 @@ describe("table composition compares every affected bill before moving anything"
       const left = await save(from.partyId, from.tabId, venue.adminId);
       const right = await save(into.partyId, into.tabId, venue.adminId);
       const expected = await edits(from.partyId, into.partyId);
-      expect(await request(action, from, into, expected, "merge")).toEqual(
-        keptApart(action, from, into),
-      );
+      expect(await request(action, from, into, expected)).toEqual(keptApart(action, from, into));
       const after = await edits(into.partyId);
       expect(after.map((e) => [e.billId, e.editorId, e.draftId])).toEqual(
         [
@@ -260,9 +255,7 @@ describe("table composition compares every affected bill before moving anything"
         await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
       });
       const expected = await edits(from.partyId, into.partyId);
-      expect(await request(action, from, into, expected, "merge")).toEqual(
-        keptApart(action, from, into),
-      );
+      expect(await request(action, from, into, expected)).toEqual(keptApart(action, from, into));
       const after = await edits(into.partyId);
       expect(after.map((e) => e.billId)).toEqual([from.tabId, into.tabId].sort());
       await refused(
@@ -283,9 +276,9 @@ describe("table composition compares every affected bill before moving anything"
         const counter = await offerProducts(tx, venue.cfg, { zone: "counter" });
         await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
       });
-      expect(
-        await request(action, from, into, await edits(from.partyId, into.partyId), "merge"),
-      ).toEqual(keptApart(action, from, into));
+      expect(await request(action, from, into, await edits(from.partyId, into.partyId))).toEqual(
+        keptApart(action, from, into),
+      );
       const [kept] = await venue.db
         .select({ status: workingOrders.status })
         .from(workingOrders)
@@ -434,7 +427,6 @@ describe("table composition compares every affected bill before moving anything"
     await inTx(venue, (tx) =>
       moveGuests(tx, venue.cfg, from.partyId, free.id, {
         expectedEdits,
-        bills: "separate",
         operatorId: venue.operatorId,
         expectedPartyRevision: from.revision,
         otherPartyId: null,
@@ -465,7 +457,6 @@ describe("table composition compares every affected bill before moving anything"
           inTx(venue, (tx) =>
             (action === "join" ? joinTables : moveGuests)(tx, venue.cfg, from.partyId, free.id, {
               expectedEdits: [blank(from.tabId)],
-              bills: "separate",
               operatorId: venue.operatorId,
               expectedPartyRevision: from.revision,
               otherPartyId: null,
@@ -483,7 +474,6 @@ describe("table composition compares every affected bill before moving anything"
           inTx(venue, (tx) =>
             (action === "join" ? joinTables : moveGuests)(tx, venue.cfg, from.partyId, free.id, {
               expectedEdits: old,
-              bills: "separate",
               operatorId: venue.operatorId,
               expectedPartyRevision: from.revision,
               otherPartyId: null,
@@ -602,7 +592,6 @@ describe("table composition compares every affected bill before moving anything"
       const body = {
         expectedEdits,
         operatorId: venue.adminId,
-        bills: "separate",
         expectedPartyRevision: into.revision,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: from.revision,
@@ -622,7 +611,6 @@ describe("table composition compares every affected bill before moving anything"
       const from = await party(),
         into = await party();
       const body = {
-        bills: "separate",
         expectedPartyRevision: into.revision,
         otherPartyId: from.partyId,
         expectedOtherPartyRevision: from.revision,

@@ -878,13 +878,6 @@ function requireMoveTarget(value: unknown): MoveTarget {
   throw invalid("to");
 }
 
-/** A bill choice as a body carries it: merge by default, else `"separate"`. */
-function requireBillChoice(bills: unknown): "merge" | "separate" {
-  if (bills === undefined) return "merge";
-  if (bills !== "merge" && bills !== "separate") throw invalid("bills");
-  return bills;
-}
-
 /** The party the till read at the target table, and its revision, as a body carries them. */
 function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
   const read: OtherPartyRead = {};
@@ -903,12 +896,10 @@ function otherPartyRead(body: Record<string, unknown>): OtherPartyRead {
 
 /**
  * A move's command: {@link billCommand}'s, with `partyId: null` for a bill read with no party, and
- * the party read at the target table. A well-formed `bills` key is ignored.
+ * the party read at the target table.
  */
 function moveCommand(personId: string, body: Record<string, unknown>): MoveBillOptions {
   const { partyId, ...rest } = body;
-  // Still refused when malformed, though never used, until A803 slice 3 Task 4b retires the key.
-  requireBillChoice(body.bills);
   const command: MoveBillOptions = {
     ...billCommand(personId, partyId === null ? rest : body),
     expectedEdits: parseBillEditExpecteds(body.expectedEdits),
@@ -923,13 +914,10 @@ function moveCommand(personId: string, body: Record<string, unknown>): MoveBillO
 }
 
 /**
- * A table action's command: the path party's revision, the bill choice and the party read at the
- * target table.
+ * A table action's command: the path party's revision and the party read at the target table.
  */
 function tableActionCommand(personId: string, body: Record<string, unknown>): TableActionOptions {
-  const bills = requireBillChoice(body.bills);
   return {
-    bills,
     expectedPartyRevision: requireRevision(body.expectedPartyRevision, "expectedPartyRevision"),
     operatorId: personId,
     ...otherPartyRead(body),
@@ -2859,7 +2847,6 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
             expectedEdits: [
               { billId: seated.tabId, editorVersion: 0, draftId: null, draftRevision: null },
             ],
-            bills: "merge",
             expectedPartyRevision: await partyRevision(tx, seated.partyId),
             operatorId: personId,
             otherPartyId: null,

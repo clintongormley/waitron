@@ -124,7 +124,6 @@ async function joinMerging(
     moving: string;
     target: string;
     side: "left" | "right";
-    bills?: "merge" | "separate";
     otherPartyId?: string;
   },
 ): Promise<Response> {
@@ -138,7 +137,6 @@ async function joinMerging(
   const body = {
     zoneRevision: await readRevision(args.tableId),
     tableId: args.tableId,
-    bills: args.bills ?? "merge",
     expectedPartyRevision: await revisionOf(v, partyId),
     ...other,
     merge: { moving: args.moving, target: args.target, side: args.side, seats: 12 },
@@ -383,7 +381,6 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "separate",
         otherPartyId: atBar.partyId,
       }),
     );
@@ -476,7 +473,6 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "merge",
         otherPartyId: atBar.partyId,
       }),
     );
@@ -504,7 +500,6 @@ describe("guests pass to a joined table's tables when it is pushed into a group"
         moving: table.bar!,
         target: table.long!,
         side: "left",
-        bills: "merge",
         otherPartyId: atLong.partyId,
       }),
     );
@@ -560,7 +555,6 @@ describe("a till join without a merge", () => {
           body: JSON.stringify(
             await observedTableActionBody(v.db, `/api/parties/${atLong.partyId}/join`, {
               tableId: table.bar!,
-              bills: "merge",
               expectedPartyRevision: await revisionOf(v, atLong.partyId),
               otherPartyId: atBar.partyId,
               expectedOtherPartyRevision: await revisionOf(v, atBar.partyId),

@@ -1334,7 +1334,6 @@ describe("a printing problem whose dishes move to another bill", () => {
         billId,
         { tableId: to.tableId },
         {
-          bills: "merge",
           partyId: from.partyId,
           expectedPartyRevision: (await command(from.partyId)).expectedPartyRevision,
           otherPartyId: to.partyId,
@@ -1353,7 +1352,7 @@ describe("a printing problem whose dishes move to another bill", () => {
       });
       return result;
     });
-    expect(moved).toEqual({ partyId: to.partyId, billId, merged: false });
+    expect(moved).toEqual({ partyId: to.partyId, billId });
   }
 
   it("shows a failed ticket on the check its dish was split off to, and clears it by the check's Reprint", async () => {
@@ -1806,7 +1805,6 @@ async function reprintPrinted(v: Venue, orderId: string): Promise<void> {
  */
 async function mergeBills(v: Venue, source: Seated, destination: Seated): Promise<void> {
   const merge = {
-    bills: "merge" as const,
     expectedPartyRevision: (await command(destination.partyId)).expectedPartyRevision,
     otherPartyId: source.partyId,
     expectedOtherPartyRevision: (await command(source.partyId)).expectedPartyRevision,

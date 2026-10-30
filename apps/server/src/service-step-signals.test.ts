@@ -525,7 +525,6 @@ describe("readTableSteps", () => {
     await inTx(v, (tx) =>
       joinTables(tx, v.cfg, a.partyId, secondTable, {
         ...into,
-        bills: "merge",
         otherPartyId: b.partyId,
         expectedOtherPartyRevision: from.expectedPartyRevision,
       }),
