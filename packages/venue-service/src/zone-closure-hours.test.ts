@@ -34,25 +34,23 @@ const at = new Date("2026-03-02T12:00:00Z");
 const closedMonday = (ranges: { startsAt: string; endsAt: string }[]) =>
   [0, 1, 2, 3, 4, 5, 6].map((weekday) => ({ weekday, ranges: weekday === 1 ? ranges : [] }));
 
-/** A venue whose Restaurant opens Monday 09:00–12:00 and Deli Monday 14:00–18:00 in one season,
- *  with Barra serving Restaurant. */
 async function venue() {
   const [location] = await db
     .insert(locations)
     .values({
-      name: `Casa ${randomUUID()}`,
+      name: `Venue ${randomUUID()}`,
       invoiceLocales: ["es-ES"],
-      operationDescription: "Hostelería",
+      operationDescription: "Hospitality",
       timeZone: "Europe/Madrid",
     })
     .returning({ id: locations.id });
   const cfg = { locationId: brandLocationId(location!.id) };
   await db
     .insert(kitchenStations)
-    .values({ locationId: cfg.locationId, name: "Cocina", isDefault: true });
+    .values({ locationId: cfg.locationId, name: "Kitchen", isDefault: true });
   const [zone] = await db
     .insert(floorZones)
-    .values({ locationId: cfg.locationId, name: "Barra" })
+    .values({ locationId: cfg.locationId, name: "Bar" })
     .returning({ id: floorZones.id });
   const barZone = zone!.id;
   return withTransaction(db, async (tx) => {
@@ -62,13 +60,13 @@ async function venue() {
     ).id;
     const deli = (await createDepartment(tx, cfg, { name: "Deli", orderStart: "counter" })).id;
     await configureZone(tx, cfg, { zoneId: barZone, departmentId: restaurant });
-    const menuId = (await createCatalogue(tx, { name: "Carta" })).id;
+    const menuId = (await createCatalogue(tx, { name: "Menu" })).id;
     for (const [departmentId, startsAt, endsAt] of [
       [restaurant, "09:00", "12:00"],
       [deli, "14:00", "18:00"],
     ] as const) {
       const periodId = (
-        await saveMenuPeriod(tx, cfg, departmentId, { name: "Día", menuId, staffMenuIds: [] })
+        await saveMenuPeriod(tx, cfg, departmentId, { name: "Day", menuId, staffMenuIds: [] })
       ).id;
       await replaceMenuWeek(
         tx,
@@ -258,7 +256,7 @@ describe("assertSeasonClosuresInHours", () => {
       });
       const periodId = (
         await saveMenuPeriod(tx, v.cfg, v.restaurant, {
-          name: "Madrugada",
+          name: "Early morning",
           menuId: v.menuId,
           staffMenuIds: [],
         })

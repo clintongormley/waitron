@@ -480,7 +480,9 @@ until A977).
   use English sample names; form and picker labels read the catalogue. Keep printing’s accented
   glyph cases and preserve text lengths when translating its remaining samples.
   Bookings’ native booking, route, clock, floor, table-removal and schema suites use English
-  sample location, operation, contact and note text. Remaining helper and screen fixtures stay
+  sample location, operation, contact and note text. Venue-service period-deletion and zone-closure
+  suites use English venue, station, zone, menu, period and special-day samples, keeping
+  locale keys, dates and behavior checks. Remaining helper and screen fixtures stay
   with this item. Catalogue import-validation samples use English menu, dessert and drink names;
   accented-name collision and multilingual unit examples remain. Continue package by package
   from A977's list. UI switch behavior and accessibility
