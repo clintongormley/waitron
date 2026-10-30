@@ -3284,3 +3284,38 @@ Measured on A963, 2026-10-28: after formatting the new recipient label expressio
 string interpolation restored all 211 ticket cases without changing their assertions. Receipt
 logs: `~/waitron-campaign-e/receipts/a963-task8-20261028/till-dialog-final.log` and
 `ticket-final.log`. No change to stored identity was involved.
+
+
+## Root receipts moved on 2026-10-31
+
+These excerpts retain the root instruction receipts from `CLAUDE.md` at
+`a8ce834d69f298f7e062aaf1cd8b587e62be0171`. They are not new measurements.
+
+### Bound values and growing inserts
+
+- **Official Node's SQLite binds at most 32,766 values in one statement; Homebrew's binds 250,000.**
+  `openVenueStore`'s connections set the lower limit, so local runs refuse what CI refuses. An
+  insert whose rows grow with an order must go through `insertInChunks` or `statementChunks`; the table round's
+  `insertTabRound` does not yet, and no sweep has read every insert (see the backlog). Cost: a
+  2,001-dish order passed locally and failed CI. Guard: the bound-value case in
+  `packages/store/src/index.test.ts`, weaker than the rule: it proves the store's connections, not
+  that growing inserts are chunked. Receipt:
+  [testing-guide.md](testing-guide.md#the-store-caps-the-values-one-statement-binds-at-official-nodes-limit).
+
+### Separate full-disk filesystems
+
+- **Full-disk tests use a small real filesystem:** macOS makes one with `hdiutil`; Linux
+  needs `WAITRON_FULL_DISK_DIR` (and `WAITRON_FULL_DISK_DIR_START_AGAIN`,
+  `WAITRON_FULL_DISK_DIR_FROM_SPARE` and `WAITRON_FULL_DISK_DIR_BACKUP_ROOM` for the second to fourth
+  files: two files filling one filesystem could fail each other, as the server's `maxWorkers: 4` can
+  run them at once), otherwise skips locally and fails CI. Interrupted
+  macOS images can remain attached; `pnpm reap` does not detach them. Guard:
+  `scripts/ci-workflow.test.mjs`, weaker than its name: reads workflow text.
+
+### Child process clock guard scope
+
+- **A test child process that freezes `Date` freezes `performance.now` with it**, or the hour clock
+  refuses it only on a slow runner. Guard: the one-time 1.1-second holds in the children of
+  `apps/server/src/hour-recovery-placement-1.test.ts`, `apps/server/src/hour-recovery-placement-2.test.ts`
+  and `apps/server/src/hour-promotion.test.ts`, weaker than the rule: those children only. Receipt:
+  [testing-guide.md](testing-guide.md#a-child-process-that-freezes-date-freezes-performancenow-with-it).
