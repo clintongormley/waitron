@@ -469,11 +469,12 @@ until A977).
   still need English defaults, as do the split-extras venue's operation description and
   pass-printer name, and the "Pase" pass names in the kitchen-print, zone-offer and fiscal
   sale-path suites (left while #2265 changes those files), and the fiscal sale-path suite's
-  "Pantalla" screen names. The device, join and join-request suites still name kitchen screens
-  "Uno", "Dos", "Todo", "Cocina 1", "Plancha 1", "Cocina" and "Horno". Those suites and the
-  device-session, station-alert, party and configuration-transfer suites still hold other Spanish
-  samples, among them station, till, table, zone, location and device-profile names such as
-  "Plancha", "Fría", "Caja", "Mesa 7", "Terraza" and "Perfil KDS". Screen tests take translated
+  "Pantalla" screen names. The device-api suite still names kitchen screens and stations
+  "Uno", "Dos", "Todo", "Cocina" and "Horno". It and the station-alert, party and
+  configuration-transfer suites still hold other Spanish samples, among them station, till, table,
+  zone and location names such as "Plancha", "Fría", "Caja", "Mesa 7" and "Terraza". The device,
+  device-delete, join, join-request and device-session suites keep only the Spanish names the
+  shared test helpers create. Screen tests take translated
   expectations from their strings file.
   Keep accent tests, including combobox searches, AEAT names and official text. Media's main
   library suite takes its Spanish Save label, card actions, usage labels, preview, default-language

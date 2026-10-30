@@ -6122,6 +6122,10 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   among them kitchen-screen, station, till, table, zone, location and device-profile names, as do
   the kitchen-print, zone-offer and fiscal sale-path suites' "Pase" pass names and the fiscal
   sale-path suite's "Pantalla" screen names.
+  Since then the device, device-delete, join-request, join-api, join-api database and
+  device-session suites give English names to the devices, device profiles, stations, zones,
+  locations, print agents and order labels they create; names the shared test helpers create
+  stay Spanish.
   Venue-service period-deletion and zone-closure suites use English venue, station,
   zone, menu, period and special-day samples; locale keys, dates and behavior checks stay.
   Season and day-resolver suites use English venue, zone and custom-season samples;
