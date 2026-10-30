@@ -482,6 +482,19 @@ _Formerly A1 (with A1a–A1e, A231, A231d, A275 and W41s), and the old Track C's
 - **A1215. Correcting invoices issued under a wrong clock** (from A1207): a box can hold invoices
   dated after the real time (a restored backup from a box whose clock was fast). Nothing in Waitron
   corrects them, and what to do about them with AEAT is undesigned. Design first.
+- **A1223. A stored series pick that turns out taken** (from A1207): an attempt whose chosen name
+  is found taken before it finishes is refused (`minute_in_use`), and the person is not offered a
+  way on. Start a new attempt by itself, and word the refusal where it shows at activation (the
+  setup app's general message with the code, `apps/setup/src/setup-app.ts:2001-2008`). The
+  setup-from-backup restore reuses its stored attempt when reopened
+  (`apps/server/src/first-setup-backup-recovery.ts:893-899`), so a reload does not start one;
+  `docs/operations/hour-recovery.md` said it did, which I believe predates A1207 (#1990,
+  `3ba85c7a6`).
+- **A1224. Delete the time floors the series choice no longer reads** (from A1207):
+  `recordedTimeFloorMs`, the backup's `backup-created` floor and `readHourHistoryWithRecordFloor`
+  are still worked out but nothing in the choice reads them. A backup's record keeps accepting
+  `timeFloorMs` (`packages/fiscal-verifactu/src/hour-backup-state.ts:20-21`) until a check of
+  shipped backups says it may stop.
 
 - **A1089: setup and backup recovery must distinguish waiting from missing capability.** Separate absent callbacks/services and incompatible or refused retained artifacts from temporary work; offer a supported source, image or recovery choice and any required sign-in there.
   [Audit](backlog/self-service-refusals.md#setup-readiness).

@@ -67,7 +67,7 @@ name needs a second clock within 30 seconds of the box").
 
 The new series are named from the box's clock: five symbols for the UTC minute. The box also reads
 the selected backup and any database still on the disk. If a name there already holds the minute
-the box would take, the page says so and names the time you can carry on from (see the list below;
+the box would take, the page says so, counts down to the next free minute and checks again by itself (see the list below;
 `packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at the settle
 target in the surviving database"). A later name, or invoices dated after the box's time, no
 longer stop the restore (the same file's "selected although a later name is known" cases;
@@ -92,10 +92,14 @@ After the clocks pass, the box waits 90 to 150 seconds before it takes the name,
 counts down (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "restore waits until a minute
 start 90 to 150 seconds after its check"; `recovery-hour.browser.test.ts`, "explains a waiting
 restore with a countdown that goes back to the server at zero"). Keep the page open. A reloaded
-page is a new restore and starts a new 90 to 150 seconds: the page makes a new restore event each
-time it opens (`apps/setup/src/screens/recovery-allocation.ts`, `eventId: crypto.randomUUID()`),
-and the box keeps each event's wait apart (`packages/fiscal-verifactu/src/hour-selection.ts`,
-`sameEvent`); no test reloads a restore page end to end. What the page shows when it cannot go
+Cloud restore page is a new restore and starts a new 90 to 150 seconds: it makes a new restore
+event each time it opens (`apps/setup/src/screens/recovery-copy.ts` mounts the page with no
+binding, and `apps/setup/src/screens/recovery-allocation.ts` then uses
+`eventId: crypto.randomUUID()`), and the box keeps each event's wait apart
+(`packages/fiscal-verifactu/src/hour-selection.ts`, `sameEvent`). A restore from a backup during
+setup returns to the same restore when reopened: the server reuses the binding it stored
+(`apps/server/src/first-setup-backup-recovery.ts`, `before.record?.binding ?? …`; read, not run). No test reloads a
+restore page end to end. What the page shows when it cannot go
 ahead, and what it asks for:
 
 - **No second clock** (no internet, and the page is on the box itself): connect the box to the
@@ -108,9 +112,15 @@ ahead, and what it asks for:
   wrong, so ask for help. It does not retry by itself; press **Check again**
   (`recovery-hour.browser.test.ts`, "a clock refusal shows both readings and no countdown, and waits
   for Check again").
-- **This box's records already hold a series for the minute this box would use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
-  with no countdown (`recovery-hour.browser.test.ts`, "a minute in use names its time and does not
-  count down").
+- **The minute this box would use already has a series here**: the page says "The minute this box
+  would use already has a series here, so it will use the next free minute." and counts down to that
+  minute with no button to press; it checks with the box again by itself, without changing what is on
+  screen, and keeps the sentence up through the box's ordinary wait that follows (`recovery-hour.browser.test.ts`,
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If this attempt
+  has already chosen its name and that name then turns up in the box's records, the page says "The
+  series cannot be made yet: this box's records already hold a series for the minute this box would
+  use." with no time and no countdown (`clock-wait.browser.test.ts`, "a minute in use with %j names no
+  time and does not count down").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name

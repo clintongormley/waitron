@@ -44,9 +44,15 @@ left"). What the page shows when it cannot go ahead, and what it asks for:
   from another phone or till; if they still differ, the box's time may be wrong, so ask for help.
   It does not retry by itself; press **Check again** (`first-hour.browser.test.ts`, "a clock
   refusal shows both readings and no countdown, and waits for Check again").
-- **This box's records already hold a series for the minute this box would use**: the page names the time (and the date, when it is on a later day (`clock-wait.browser.test.ts`, "the wait line names the day only when the floor falls on a later day in the venue's zone")) from which the series can be made,
-  with no countdown (`first-hour.browser.test.ts`, "a minute in use names its time and does not
-  count down").
+- **The minute this box would use already has a series here**: the page says "The minute this box
+  would use already has a series here, so it will use the next free minute." and counts down to that
+  minute with no button to press; it checks with the box again by itself, without changing what is on
+  screen, and keeps the sentence up through the box's ordinary wait that follows (`first-hour.browser.test.ts`,
+  "a minute in use shows one countdown, checks again quietly and keeps saying why"). If this attempt
+  has already chosen its name and that name then turns up in the box's records, the page says "The
+  series cannot be made yet: this box's records already hold a series for the minute this box would
+  use." with no time and no countdown (`clock-wait.browser.test.ts`, "a minute in use with %j names no
+  time and does not count down").
 - **A later minute is already in use** (no time given): the box's clock has gone back behind the
   name this attempt already chose; it can finish once the box's clock reaches the moment this attempt chose
   its name

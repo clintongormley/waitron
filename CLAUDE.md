@@ -818,8 +818,8 @@ Mechanisms and full guard limits: [data](docs/developers/conventions-data.md#roo
   differing only in it must leave hashes identical.
 - **Restore and promotion start a new chain under a new installation name.** Setup/restore/promotion use five symbols for the box's UTC minute,
   after another machine's clock agrees within 30 seconds (no confirmation); a minute whose name is
-  already in a history the box reads is not taken (a promotion waits for the next free one if it starts within 150 seconds, and is otherwise
-  refused with the time it can carry on from), and no
+  already in a history the box reads is not taken (the box waits for the next free one if it starts within 150 seconds, and otherwise
+  refuses with when it can; the setup and restore pages count that down and check again by themselves; owner, 2026-10-30, A1207), and no
   other name or record refuses or moves it (owner, 2026-10-29, A1207), except that an attempt whose
   own pick is ahead of the box's clock is refused until the clock reaches it. Start again keeps no record of the names it deletes (owner, 2026-10-29,
   A1206): a box and the machine confirming its clock, wrong by the same amount, can repeat a name. Setup/restore wait

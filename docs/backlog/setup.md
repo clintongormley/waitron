@@ -692,16 +692,23 @@ time no longer refuse or move it. Built with these defaults, open to the owner (
 "in use" counts every history the choice read before (the database in hand, the module's own record
 of its picks, earlier abandoned attempts of the same setup, the database a restore replaces, the
 backup's record of names), exact names only (Q2); a minute in use is skipped as an equal name was
-before, so a promotion waits up to 150 seconds and a setup or restore's first choice is refused
-with "You can carry on from …" (Q3); the refusal has its own reason, `minute_in_use`, and words
-not yet approved (Q4); after a restore of a backup whose invoices are more than a minute later than the box's time,
+before (Q3). The owner on Q4 (2026-10-30): "If the existing minute is taken then we should just wait
+for another minute before checking again. Explain that to the user and show a countdown." So the
+box's refusal (reason `minute_in_use`) says how long until the next free minute and when to check
+again, and the setup and restore pages say "The minute this box would use already has a series
+here, so it will use the next free minute.", count down to it and check again by themselves; a
+promotion waits up to 150 seconds and is otherwise refused with those values. Those words wait for
+the owner's approval. After a restore of a backup whose invoices are more than a minute later than the box's time,
 payments stop until the box's clock catches up or a clock confirmation covers it, as for any clock
 more than a minute behind the last sale (Q5); a later name held only in a database a restore
 replaces is not in the database the restore places (Q6); a box whose clock went back behind
 its own attempt's pick is still refused (Q7). What the owner accepts: later names and invoices no
 longer stop anything; a box and the machine confirming its clock, behind by the same amount, name a
-minute in the past; and, until the flag (A1207 Part 2, the owner's Q1) is built, no alert names a
-later name with no invoices under it or the series names (A1207 plan, review experiment #7, a promotion only), while later invoices are listed
+minute in the past; and no alert names a later name with no invoices under it or the series names
+(A1207 plan, review experiment #7, a promotion only). The owner on Q1 (2026-10-30): "A later series
+with no invoices is not a problem. It's only a problem when an invoice is issued. Also, if the box is
+running fast and tries to file an invoice 3 days ahead, aeat will return an error code so we will
+discover the problem quickly." (the owner's statement; not tested). Later invoices are listed
 by `clock.records_misdated` once a clock confirmation lifts the stop
 (`apps/server/src/hour-recovery-host.test.ts`, "a restore below the backup's newest invoice names its
 minute, a sale is then refused by the clock-behind stop, and a confirmation lists the later sale").

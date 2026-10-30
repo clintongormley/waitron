@@ -3776,9 +3776,13 @@ field"). The module names the new series from the box's clock, five symbols for 
 after a second clock on another machine agrees within 30 seconds
 (`packages/fiscal-verifactu/src/hour-clock.test.ts`, "a name needs a second clock within 30
 seconds of the box"). A minute a name in the history it can read already holds is not taken: a
-restore's first choice is then refused with the time it can carry on from
-(`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at the settle
-target in the surviving database"), and one that already recorded a wait moves to the next free
+restore's first choice is then refused with how long until the next free minute is taken and when
+to check again (`packages/fiscal-verifactu/src/minute-selection-unknown-name.test.ts`, "D1: a name at
+the settle target in the surviving database"; `packages/fiscal-verifactu/src/hour-selection.test.ts`,
+"a $base.action refused for a minute in use says when the name will be taken and when to check
+again"), and the restore page waits that out with one countdown and checks again by itself
+(`packages/fiscal-verifactu/src/setup/recovery-hour.browser.test.ts`, "a minute in use shows one
+countdown, checks again quietly and keeps saying why"; owner, 2026-10-30, A1207); one that already recorded a wait moves to the next free
 minute when that starts within 150 seconds, and is otherwise refused with that time (`packages/fiscal-verifactu/src/hour-selection.test.ts`, "a restore's recorded wait meeting
 %s, in use, at %s waits for the next free minute"; a refusal past 150 seconds is tested for a promotion and for a restore's first choice, D1 above, but not after a recorded wait: the same file's "waits for a next minute exactly 150 000 ms ahead and refuses one 150 001 ms ahead"). A later name, the backup's newest record and its creation
 time no longer refuse or move the minute (the same file's "selected although a later name is
@@ -5114,7 +5118,11 @@ newest record and creation time are later" and `apps/server/src/hour-recovery-pl
 compared with abandoned ones by exact name only (`apps/server/src/first-setup-retired-assignments.test.ts`,
 "an attempt after an abandoned one may take a minute earlier than the abandoned attempt's name" and "an abandoned
 attempt that chose the same minute still refuses the new one"). The module's choice refuses a minute
-in use with the reason `minute_in_use` (`packages/fiscal-verifactu/src/setup/clock-wait.ts` words it); the setup's comparison with abandoned attempts refuses an identical name as `setup.attempt_conflict` (the second case above). The name is
+in use with the reason `minute_in_use`; the setup and restore pages wait it out with one countdown
+and check again by themselves (`packages/fiscal-verifactu/src/setup/clock-wait.browser.test.ts`, "a
+taken minute shows one countdown and checks again quietly"), while an attempt whose own pick has
+turned up in use is still refused, with no time (`packages/fiscal-verifactu/src/hour-selection.test.ts`,
+"a pick is refused when a record naming its own minute appears after it"); the setup's comparison with abandoned attempts refuses an identical name as `setup.attempt_conflict` (the second case above). The name is
 refused once more when it is written: activation refuses `installation_used` and `series_collision`
 against the database being written (`packages/fiscal-verifactu/src/allocation.ts`,
 `validateForActivation`; `packages/fiscal-verifactu/src/hour-standby-activation.test.ts`, "also
