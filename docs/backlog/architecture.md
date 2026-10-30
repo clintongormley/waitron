@@ -481,7 +481,9 @@ until A977).
   glyph cases and preserve text lengths when translating its remaining samples.
   Bookings’ native booking, route, clock, floor, table-removal and schema suites use English
   sample location, operation, contact and note text. Remaining helper and screen fixtures stay
-  with this item; continue package by package from A977's list. UI switch behavior and accessibility
+  with this item. Catalogue import-validation samples use English menu, dessert and drink names;
+  accented-name collision and multilingual unit examples remain. Continue package by package
+  from A977's list. UI switch behavior and accessibility
   suites use English sample labels and descriptions. Disclosure accessibility samples use English
   headings, summaries and body text; deliberate EN/ES summary examples remain. Printing layout
   and printer samples use English; layout samples keep their character counts and word boundaries.

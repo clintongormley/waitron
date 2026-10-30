@@ -22,16 +22,16 @@ describe("validateCatalogueConfiguration: category names", () => {
     expect(() =>
       validateCatalogueConfiguration({
         categories: [
-          { id: "top", name: "Carta" },
-          { id: "c1", name: "Postres" },
-          { id: "c2", name: "POSTRES" },
+          { id: "top", name: "Menu" },
+          { id: "c1", name: "Desserts" },
+          { id: "c2", name: "DESSERTS" },
         ],
         category_details: [
           { category_id: "c1", parent_id: "top" },
           { category_id: "c2", parent_id: "top" },
         ],
       }),
-    ).toThrowError(refusal("category.name_taken", "POSTRES"));
+    ).toThrowError(refusal("category.name_taken", "DESSERTS"));
   });
 
   it("accepts one name under different parents, and a parent sharing its child's name", () => {
@@ -98,11 +98,11 @@ describe("validateCatalogueConfiguration: product names", () => {
     expect(() =>
       validateCatalogueConfiguration({
         products: [
-          { id: "p1", name: "Agua", parent_id: null },
-          { id: "p2", name: "agua", parent_id: null },
+          { id: "p1", name: "Water", parent_id: null },
+          { id: "p2", name: "water", parent_id: null },
         ],
       }),
-    ).toThrowError(refusal("product.name_taken", "agua"));
+    ).toThrowError(refusal("product.name_taken", "water"));
     expect(() =>
       validateCatalogueConfiguration({
         products: [
@@ -119,7 +119,7 @@ describe("validateCatalogueConfiguration: product names", () => {
     (active) => {
       expect(() =>
         validateCatalogueConfiguration({
-          products: [{ id: "p1", name: "Agua", active, parent_id: null }],
+          products: [{ id: "p1", name: "Water", active, parent_id: null }],
         }),
       ).toThrowError(
         expect.objectContaining({
@@ -134,12 +134,12 @@ describe("validateCatalogueConfiguration: product names", () => {
     expect(() =>
       validateCatalogueConfiguration({
         products: [
-          { id: "p1", name: "Agua", active: 1, parent_id: null },
-          { id: "p2", name: "Agua", active: 0, parent_id: null },
-          { id: "p3", name: "Zumo", active: 0, parent_id: null },
-          { id: "v1", name: "Agua", active: 1, parent_id: "p3" },
-          { id: "p4", name: "Vino", active: 1, parent_id: null },
-          { id: "v2", name: "Agua", active: 0, parent_id: "p4" },
+          { id: "p1", name: "Water", active: 1, parent_id: null },
+          { id: "p2", name: "Water", active: 0, parent_id: null },
+          { id: "p3", name: "Juice", active: 0, parent_id: null },
+          { id: "v1", name: "Water", active: 1, parent_id: "p3" },
+          { id: "p4", name: "Wine", active: 1, parent_id: null },
+          { id: "v2", name: "Water", active: 0, parent_id: "p4" },
         ],
       }),
     ).not.toThrow();
@@ -148,8 +148,8 @@ describe("validateCatalogueConfiguration: product names", () => {
   it("does not compare a category's name with a product's", () => {
     expect(() =>
       validateCatalogueConfiguration({
-        categories: [{ id: "c1", name: "Agua" }],
-        products: [{ id: "p1", name: "Agua", active: 1, parent_id: null }],
+        categories: [{ id: "c1", name: "Water" }],
+        products: [{ id: "p1", name: "Water", active: 1, parent_id: null }],
       }),
     ).not.toThrow();
   });
@@ -184,7 +184,7 @@ describe("validateCatalogueConfiguration: product names", () => {
 describe("validateCatalogueConfiguration: colours", () => {
   const coloured = (table: string, color: unknown) =>
     table === "products"
-      ? { products: [{ id: "p1", name: "Agua", active: 1, parent_id: null, color }] }
+      ? { products: [{ id: "p1", name: "Water", active: 1, parent_id: null, color }] }
       : { [table]: [{ color }] };
 
   it.each(["products", "category_details", "sections"])(
