@@ -222,8 +222,10 @@ Every other word the new controls show is an approved string (D10).
 ## Decisions
 
 - **D1 The server makes a bill only when asked, with one exception.** New
-  `createPartyBill(tx, cfg, partyId, command: { expectedPartyRevision: number; operatorId: string }):
-  Promise<{ billId: string; revision: number }>` in `parties.ts` replaces `partyMainBill`: it checks
+  `createPartyBill(tx, cfg, partyId, command: { expectedPartyRevision: number }):
+  Promise<{ billId: string; revision: number }>` in `parties.ts` replaces `partyMainBill`. It takes
+  no operator: nothing on a bill records who opened it (`working_orders` has no such column, and an
+  empty bill has no lines to credit), as `guardParty` takes none (`parties.ts:453-457`). It checks
   and moves the party's revision (`checkAndBumpParty`, `parties.ts:447`), refuses a closed party
   (`party.not_open`), and inserts an empty open bill on the party in its zone exactly as
   `partyMainBill` does today (`createOpenOrder(..., { zoneId, partyId, existingService: true })`,
@@ -608,13 +610,13 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 
 | Test | Kind | Before → after | Source | Task |
 | --- | --- | --- | --- | --- |
-| `apps/server/src/party-move-bill.test.ts` cases at `:321`, `:356`, `:374`, `:894`, `:1065`, `:1306` (merge into the main bill by default / with conditions / kitchen told once) | B | merged into the destination's main bill → arrives as its own bill with the destination's next number; kitchen told of the move only | spec §6 bullet 2, §3.4 | 2 |
+| `apps/server/src/party-move-bill.test.ts` cases at `:321`, `:356`, `:374`, `:894`, `:1065`, `:1306` (merge into the main bill by default / with conditions / kitchen told once) | B | merged into the destination's main bill → arrives as its own bill with the destination's next number; kitchen told of the move only. `:356` and `:374` (paid-towards and other-service-mode destination) were already green: retitled to "arrives as its own bill with the next number when …", the "merges only bills of one service mode" comment deleted, and each gains `numbersOf(v, luis.partyId)` → `[[luis.tabId, 1, null], [checkId, 2, null]]`; their `mainBillId` lines stay for 6b | spec §6 bullet 2, §3.4 | 2 |
 | `party-move-bill.test.ts:458` (`party.main_bill_stays`), `:765` (only an unpaid main bill moves last) | B | refused → the bill moves; the source keeps its other bills | spec §3.4 ("all equal") | 2 |
 | `party-move-bill.test.ts` `:827`, `:941`, `:1203`, `:292` (main bill of the new/receiving party) | B | `mainBillId` checks → the moved bill is in the destination's bills with its number | §3.4 | 2 (answers), 6b (checks of `parties.mainBillId`) |
 | `apps/server/src/till-api.move-bill.test.ts:1155` (merges by default, `party.main_bill_stays`), `:368` | B | as above | §6 | 2 |
 | `till-api.move-bill.test.ts:976` (bad `bills` → 400) | B | "a `bills` key, of any value, is ignored": the same request answers 200 and the bill arrives separate | D13 | 4b |
 | `apps/server/src/bill-identities.test.ts:314`, `:334`, `:821` (move with Merge the bills) | B | the arriving bill takes the next number instead of merging | §6 | 2 |
-| `apps/server/src/order-drafts.db.test.ts:4863` (moveBill merge) | B | the arriving bill and its draft stay separate | §6 | 2 |
+| `apps/server/src/order-drafts.db.test.ts:4863` (moveBill merge) | B | the arriving bill and its draft stay separate; the recalled line's `slot: 3` (renumbered by the merge) → `slot: 2`, the slot it was given before the move | §6 | 2 |
 | `apps/server/src/bill-editing.bill-moves.test.ts:240` ("refuses a merge even with a common foreign editor": a move asked to merge refused `draft.taken_over`, no row changed) | B (found at Task 2's red run) | the same move succeeds as `{partyId, billId: moved, merged: false}`; the moved bill's editor state, its draft row (now under the destination party, owner kept) and the destination bill's editor state are each pinned with `toEqual`/`toMatchObject`; then explicit `mergeBills` of the two still refuses `draft.taken_over` with the full conflict, no row changed | spec §6 bullet 2, §3.4 bullet 2 | 2 |
 | `apps/server/src/order-kitchen-note.moves.test.ts:194` (`it.each` merge/separate: `result.merged` was `bills === "merge"`) | B (found at Task 2's red run) | both rows `expect(result).toEqual({ partyId: target, billId: incoming, merged: false })`; the two note assertions unchanged | spec §6 bullet 2; D13 | 2 |
 | `apps/server/src/party-arriving-dishes.test.ts:716` (counter order merged into the main bill: answer `billId: main, merged: true`, Tarta's line on the main bill) | B (found at Task 2's red run) | answer `{partyId, billId: counter, merged: false}`; the groups assertion unchanged; the first bill's lines are exactly Burger/Vino as before; Tarta's line, in group 2, is on the counter bill, which is now the party's | spec §6 bullet 2 | 2 |

@@ -360,7 +360,7 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect((await partyRow(v, luis.partyId)).mainBillId).toBe(luis.tabId);
   });
 
-  it("keeps it separate when the receiving main bill has been paid towards", async () => {
+  it("arrives as its own bill with the next number when the receiving main bill has been paid towards", async () => {
     const mesa = await v.table("Mesa 10");
     const ana = await seat(v, await v.table("Mesa 11"));
     const luis = await seat(v, mesa);
@@ -374,11 +374,13 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect(result).toEqual({ partyId: luis.partyId, billId: checkId, merged: false });
     expect((await billRow(v, checkId)).status).toBe("open");
     expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Paella"]);
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [checkId, 2, null],
+    ]);
   });
 
-  // Two service modes send a dish at different times, so a move merges only bills of one service
-  // mode, and never refuses because two bills' modes differ.
-  it("keeps both bills when the receiving main bill is in another service mode, though both are untouched", async () => {
+  it("arrives as its own bill with the next number when the receiving main bill is in another service mode", async () => {
     const mesa = await v.table("Mesa modos 2");
     const ana = await seat(v, await v.table("Mesa modos 1"));
     const luis = await seat(v, mesa);
@@ -397,6 +399,10 @@ describe("move a bill to another party (after Split a table, or guests joining)"
     expect((await billRow(v, checkId)).partyId).toBe(luis.partyId);
     expect((await linesOf(v, luis.tabId)).map((l) => l.name)).toEqual(["Agua"]);
     expect((await linesOf(v, checkId)).map((l) => l.name)).toEqual(["Vino"]);
+    expect(await numbersOf(v, luis.partyId)).toEqual([
+      [luis.tabId, 1, null],
+      [checkId, 2, null],
+    ]);
     expect((await partyRow(v, luis.partyId)).mainBillId).toBe(luis.tabId);
     expect(await zoneOf(v, checkId)).toBe(v.tables.zoneId);
     expect(await zoneOf(v, luis.tabId)).toBe(v.counter.zoneId);

@@ -3189,10 +3189,7 @@ export function mountTillApi(root: Hono, deps: TillApiDeps, log: Logger): void {
       const created = await withTransaction(deps.db, async (tx) => {
         await catchUpFloor(tx);
         await checkZones(tx, deps.cfg, session, [{ partyId }]);
-        return createPartyBill(tx, cfg, partyId, {
-          expectedPartyRevision,
-          operatorId: session.personId,
-        });
+        return createPartyBill(tx, cfg, partyId, { expectedPartyRevision });
       });
       return c.json(created);
     }),

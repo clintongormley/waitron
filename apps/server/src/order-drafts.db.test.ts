@@ -4907,6 +4907,7 @@ describe("source-backed draft foundations", () => {
     expect(reads.find((row) => row.id === moving.draft.id)!.lines[2]).toMatchObject({
       sourceLineId: moving.parentId,
       source: { netAmount: "12.50" },
+      slot: 2,
       afterGroupId: moving.groupId,
     });
     expect(await draftsOf(v, moving.from.partyId)).toEqual([]);

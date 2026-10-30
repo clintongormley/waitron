@@ -217,7 +217,7 @@ export async function createPartyBill(
   tx: Transaction,
   cfg: OriginConfig,
   partyId: string,
-  command: { expectedPartyRevision: number; operatorId: string },
+  command: { expectedPartyRevision: number },
 ): Promise<{ billId: string; revision: number }> {
   const revision = await checkAndBumpParty(tx, partyId, command.expectedPartyRevision, "open");
   const billId = await insertPartyBill(tx, cfg, partyId);

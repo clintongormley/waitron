@@ -35,9 +35,7 @@ const suite = useVenueDb({
 });
 
 async function create(partyId: string, expectedPartyRevision: number) {
-  return inTx(v, (tx) =>
-    createPartyBill(tx, v.cfg, partyId, { expectedPartyRevision, operatorId: OPERATOR }),
-  );
+  return inTx(v, (tx) => createPartyBill(tx, v.cfg, partyId, { expectedPartyRevision }));
 }
 
 async function storedRows(partyId: string) {
