@@ -181,7 +181,7 @@ repetición: **Hecho** quita la que se ve, y otro pedido vuelve a empezar la cue
 ## Cada plato es su propia línea {#portions}
 
 Cuando tomas un pedido de 2 × Hamburguesa con queso, en una mesa o en el mostrador, la cuenta tiene
-dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes servir, mover o cancelar una hamburguesa y su queso
+dos hamburguesas, cada una con su queso, en lugar de una línea de dos. Así puedes cancelar una hamburguesa, o en una mesa servirla o moverla, y su queso
 va con ella, y la cuenta y la cocina saben siempre qué hamburguesa es cuál.
 
 Mientras los platos son iguales sigues viendo una sola fila, **2 × Hamburguesa**, en la cuenta y en

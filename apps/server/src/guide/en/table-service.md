@@ -174,7 +174,7 @@ repeat: **Done** clears the one on show, and another order starts the count agai
 ## Each dish is its own line {#portions}
 
 When you take an order of 2 × Burger with cheese, at a table or at the counter, the bill holds two
-burgers, each with its own cheese, rather than one line of two. That way you can serve, move or void one burger and its cheese goes
+burgers, each with its own cheese, rather than one line of two. That way you can void one burger, or at a table serve or move it, and its cheese goes
 with it, and the bill and the kitchen agree on which burger is which.
 
 While the dishes are the same you still see one row, **2 × Burger**, on the bill and in **Sent**. A

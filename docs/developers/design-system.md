@@ -5663,9 +5663,10 @@ On the till, Mark served and Undo served on a grouped row ask how many and act o
 many members; Recall and Move station take every member; Transfer items ticks the whole row; Split
 by item's stepper picks its first members whole; Comp, discounts and Void act on the row, all of it
 or a count of it; Fire now fires the first member only, because its request names one line. On the
-kitchen screen a tap or a move takes every member, and the pass only draws the rows. Two lists keep
-one row per portion: Pay items, until the A739 payment window releases its files, and MOVED slips,
-which lay out each line alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
+kitchen screen a tap or a move takes every member, and the pass only draws the rows. These lists keep
+one row per portion: Pay items, until the A739 payment window releases its files; the counter basket
+once any of its order is paid (`foldRetrievedPortions`); and MOVED slips, which lay out each line
+alone (`printMovedSlips`, `apps/server/src/kitchen-print.ts`).
 
 ### The kitchen screen's cards
 

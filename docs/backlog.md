@@ -1644,6 +1644,10 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
 
 _Formerly the kitchen entries in the opening part of the old Track A (before A1), and kitchen entries elsewhere; part of A9._ Detail: [backlog/kitchen.md](backlog/kitchen.md).
 
+- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
+  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
+  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
+
 - **A1006. A dish or station name holding `$&` or `$'` is garbled in the kitchen's cross-references.**
   [Detail](backlog/kitchen.md#a1006-a-dish-or-station-name-holding--or--is-garbled-in-the-kitchens-cross-references)
 
@@ -2003,14 +2007,11 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   is refused "Clear the basket before changing service area" (`#onCounterZoneSelected`,
   `apps/till/src/till-app.ts`), so no dish can be added to the retrieved order. With one counter zone
   the plain Counter tab brings the menu back. I believe this predates A1208 (the refusal is from
-  c90856059; A1208 changes no zone or Parked orders code); not run on main.
+  c90856059; A1208 changes how a retrieved order's lines load into the basket, `#loadIntoBasket`,
+  but not `#onCounterZoneSelected` or the Parked orders list); not run on main.
 
 - **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
   one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
-
-- **A1220. The kitchen screen names an extra by its Spanish name in English mode** («Pimientos de
-  Padrón» beside the kitchen name "CHICKEN + CHIPS", where the paper ticket says "+ Peppers"). Seen
-  in A1208's LOOK on the demo venue; check which of the extra's three names the screen reads.
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen

@@ -754,8 +754,7 @@ Left open:
   in the way.
 - **Only give-aways and discounts split part of a dish with its extras.** Splitting a bill,
   transferring items and moving part of a dish to another group still refuse a partial move
-  of a line with extras (`tab.transfer_modifier_line`): a counter order's line of several
-  dishes, or part of a weighed dish.
+  of a line with extras (`tab.transfer_modifier_line`): part of a weighed dish.
   **Next action:** decide whether those partial moves should split extras too.
 - **`pressEscape` in `packages/ui/src/components/wt-dialog.test.ts` waits a fixed 50 ms after
   each Escape.** That is deliberate, as its comment says: with `closeReportsDelivered` between
