@@ -244,25 +244,28 @@ it("says in Spanish that the code exists and when a new one is made", () => {
     requestUpdate: () => undefined,
     updateComplete: Promise.resolve(true),
   };
-  const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
-  wait.show({ kind: "next-minute", remainingMs: 52_000, recheckInMs: 1_000 });
-  const target = document.createElement("div");
-  render(
-    wait.renderWait({
-      ...clockWaitStrings.es,
-      secondClockDo: "",
-      secondClockEnds: "",
-      differDo: "",
-    }),
-    target,
-  );
-  expect(text(target.querySelector("[data-test=minute-taken]"))).toBe(
-    "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
-  );
-  expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
-    "Generando un código nuevo en: 52 segundos",
-  );
-  vi.useRealTimers();
+  try {
+    const wait = new ClockWait<{ status: "selected" }>(host, () => undefined);
+    wait.show({ kind: "next-minute", remainingMs: 52_000, recheckInMs: 1_000 });
+    const target = document.createElement("div");
+    render(
+      wait.renderWait({
+        ...clockWaitStrings.es,
+        secondClockDo: "",
+        secondClockEnds: "",
+        differDo: "",
+      }),
+      target,
+    );
+    expect(text(target.querySelector("[data-test=minute-taken]"))).toBe(
+      "El código de serie de facturas generado automáticamente (basado en la hora) ya existe en la base de datos.",
+    );
+    expect(text(target.querySelector("[data-test=remaining]")?.parentElement)).toBe(
+      "Generando un código nuevo en: 52 segundos",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("builds each language, zone and style's formatter once", () => {
