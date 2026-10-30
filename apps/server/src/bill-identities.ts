@@ -10,8 +10,8 @@ import { guardParty, partyRevision, refuseMovedParty } from "./parties.js";
 import "./errors.js";
 
 /**
- * Name a bill, or clear its name. Guarded by the revision of its numbering party — the seated
- * party that shows it, which for a paid bill left on a party merged into another is not the
+ * Name a bill, or clear its name. Guarded by the revision of its numbering party — the party
+ * whose bill list shows it, which for a paid bill left on a party merged into another is not the
  * bill's own party — and by the bill's editor, as a split is: someone else's unsent dishes on the
  * bill need a take-over first.
  */

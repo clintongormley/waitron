@@ -31,6 +31,7 @@ import {
   commandFor,
   join,
   counterOrder,
+  nameParty,
   inTx,
   order,
   orderForParty,
@@ -1071,7 +1072,10 @@ describe("A803 rename", () => {
     const options = await tableOptions(ana.partyId, luis.partyId);
     await inTx(v, (tx) => moveGuests(tx, v.cfg, ana.partyId, luisTable, options));
     expect(await billRow(v, ana.tabId)).toMatchObject({ partyId: ana.partyId });
+    await nameParty(v, luis.partyId, "Luis");
+    await nameParty(v, luis.partyId, "Luis y Ana");
     const revision = await revisionOf(v, luis.partyId);
+    expect(revision).not.toBe(await revisionOf(v, ana.partyId));
 
     const answer = await rename(ana.tabId, "Ana", luis.partyId);
 

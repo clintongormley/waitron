@@ -1,5 +1,5 @@
 /**
- * A bill's numbering party (the seated party that shows it; null at the counter), its number
+ * A bill's numbering party (the party whose bill list shows it; null at the counter), its number
  * there, and its name.
  */
 export interface BillIdentity {
