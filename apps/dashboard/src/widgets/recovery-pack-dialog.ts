@@ -71,6 +71,14 @@ function unreceivedWords(holder: { number: number; madeAt: string }): TemplateRe
   );
 }
 
+/** The last pack had no server-key part: the box has no module that keeps one. */
+function noServerKey(status: RecoveryPackStatus | null): boolean {
+  return (
+    status?.latest?.parts.some((part) => part.part === "server-key" && part.state === "absent") ??
+    false
+  );
+}
+
 /** A refusal envelope carries the status the box answered with; a lost answer has none. */
 function answeredByBox(error: unknown): boolean {
   return (
@@ -381,7 +389,8 @@ export class RecoveryPackDialog extends LitElement {
       ${this.step === "key-failed" ? this.#keyFailed() : nothing}`;
   }
 
-  #option(): TemplateResult {
+  #option(): TemplateResult | typeof nothing {
+    if (noServerKey(this.status)) return nothing;
     const holder = keyHolder(this.status);
     const why =
       holder === null

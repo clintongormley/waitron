@@ -158,3 +158,18 @@ it("the dialog being dismissed releases its draft", async () => {
   expect(app.leave.coordinator.isDirty()).toBe(false);
   expect((await question(app)).open).toBe(false);
 });
+
+it("a typed password makes the browser ask before the page is left, and closing stops it", async () => {
+  const { dialog, password } = await fixture();
+  const leaving = () => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+  expect(leaving()).toBe(false);
+  password.shadowRoot!.querySelector("input")!.focus();
+  await userEvent.keyboard("hunter2");
+  await expect.poll(leaving).toBe(true);
+  dialog.closeAfter("security");
+  await expect.poll(leaving).toBe(false);
+});

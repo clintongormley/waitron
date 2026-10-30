@@ -201,6 +201,48 @@ describe("the form", () => {
     );
   });
 
+  it("offers no new server key on a box whose last pack had no server-key part", async () => {
+    const at = status({
+      latest: {
+        number: 2,
+        madeAt: MADE_AT,
+        madeByName: "Marta",
+        received: true,
+        parts: [
+          { part: "bucket", state: "included" },
+          { part: "server-key", state: "absent" },
+        ],
+      },
+    });
+    const { el, api, signIn } = await open({ at });
+    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).toBeNull();
+    expect(el.shadowRoot!.querySelector("[data-test=new-key-why]")).toBeNull();
+    expect(button(el, "make-pack")!.variant).toBe("primary");
+    type(signIn, "current-password", "hunter2-hunter2");
+    button(el, "make-pack")!.click();
+    await expect.poll(() => api.makeRecoveryPack.mock.calls.length).toBe(1);
+    expect(api.makeRecoveryPack.mock.calls[0]![0]).toMatchObject({ newServerKey: false });
+  });
+
+  it("offers the new server key while no pack has been made, since nothing is known yet", async () => {
+    const { el } = await open({ at: status({ latest: null }) });
+    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
+  });
+
+  it("offers the new server key when the last pack had a server-key part", async () => {
+    const at = status({
+      latest: {
+        number: 2,
+        madeAt: MADE_AT,
+        madeByName: "Marta",
+        received: true,
+        parts: [{ part: "server-key", state: "failed" }],
+      },
+    });
+    const { el } = await open({ at });
+    expect(el.shadowRoot!.querySelector("input[name=new-server-key]")).not.toBeNull();
+  });
+
   it("offers no Make action to a person with no way to sign in again", async () => {
     const { el } = await open({ api: stubApi(profile({ hasPassword: false, passkeys: [] })) });
     expect(button(el, "make-pack")).toBeNull();
@@ -652,6 +694,15 @@ describe("the words", () => {
   it("uses the plan's unreceived wording", () => {
     expect(en["recovery_pack_dialog.unreceived"]).toBe(
       "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
+    );
+  });
+
+  it("says the key was not replaced without claiming its page was not drawn", () => {
+    expect(en["recovery_pack_dialog.key_failed"]).toBe(
+      "The pack was made, but the server key was {not} replaced. The server key page in the pack says why.",
+    );
+    expect(es["recovery_pack_dialog.key_failed"]).toBe(
+      "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
     );
   });
 

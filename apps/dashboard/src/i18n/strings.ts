@@ -1151,7 +1151,7 @@ export const en = {
     "The current server key is on recovery pack {number}, made on {date}, which never reached a browser. If you do not have pack {number}, make a new pack with {option} ticked.",
   "recovery_pack_dialog.make": "Make pack",
   "recovery_pack_dialog.key_failed":
-    "The pack was made, but the server key was {not} replaced: its page could not be drawn. The server key page in the pack says why.",
+    "The pack was made, but the server key was {not} replaced. The server key page in the pack says why.",
   "recovery_pack_dialog.not": "not",
   "recovery_pack_dialog.key_still_works":
     "The current key, on recovery pack {number} made on {date}, still works.",
@@ -4854,7 +4854,7 @@ export const es: Record<StringKey, string> = {
     "La clave actual del servidor está en el paquete de recuperación {number}, hecho el {date}, que nunca llegó a un navegador. Si no tienes el paquete {number}, haz un paquete nuevo marcando {option}.",
   "recovery_pack_dialog.make": "Hacer paquete",
   "recovery_pack_dialog.key_failed":
-    "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido: no se pudo dibujar su página. La página de la clave del servidor del paquete explica por qué.",
+    "El paquete se ha hecho, pero la clave del servidor {not} se ha sustituido. La página de la clave del servidor del paquete explica por qué.",
   "recovery_pack_dialog.not": "no",
   "recovery_pack_dialog.key_still_works":
     "La clave actual, en el paquete de recuperación {number} hecho el {date}, sigue funcionando.",
