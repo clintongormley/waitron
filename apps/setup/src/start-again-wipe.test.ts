@@ -77,6 +77,18 @@ it.each([
     name: "a recovery missing a field",
     summary: { reached: "named", recovery: { ...recovery, cloud: undefined } },
   },
+  {
+    name: "an unknown recovery activity source",
+    summary: { reached: "named", recovery: { ...recovery, lastActiveSource: "guess" } },
+  },
+  {
+    name: "a recovery start that is not text",
+    summary: { reached: "named", recovery: { ...recovery, startedAt: 1 } },
+  },
+  {
+    name: "a recovery with an extra key",
+    summary: { reached: "named", recovery: { ...recovery, extra: true } },
+  },
   { name: "null", summary: null },
 ])("readWipeSummary refuses an unreadable summary ($name)", async ({ summary }) => {
   const { api } = fixture({ summary });
@@ -216,6 +228,21 @@ it.each<{ name: string; summary: StartAgainSummary; shown: StartAgainSummary }>(
   {
     name: "the stopped recovery now failed",
     summary: { ...stopped, recovery: { ...recovery, failed: true } },
+    shown: stopped,
+  },
+  {
+    name: "the stopped recovery's start",
+    summary: { ...stopped, recovery: { ...recovery, startedAt: "2026-10-16T12:00:00.000Z" } },
+    shown: stopped,
+  },
+  {
+    name: "where the stopped recovery's last activity was read from",
+    summary: { ...stopped, recovery: { ...recovery, lastActiveSource: "saved-step" } },
+    shown: stopped,
+  },
+  {
+    name: "the stopped recovery now from the cloud",
+    summary: { ...stopped, recovery: { ...recovery, cloud: true } },
     shown: stopped,
   },
   { name: "the database turned unreadable", summary: unreadable, shown },

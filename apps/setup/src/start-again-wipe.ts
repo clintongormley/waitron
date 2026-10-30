@@ -88,8 +88,8 @@ export async function sendWipe(
 
 /**
  * The refusal the page draws for a Start again error, or `undefined` for one it describes as any
- * other error. Plain HTTP's `setup.owner_required` is drawn as unavailable: the owner-tab words are
- * false for a Start again that needs no owner tab.
+ * other error. `setup.owner_required` is drawn as unavailable: the owner-tab words are false for a
+ * Start again that needs no owner tab.
  */
 export function wipeRefusal(error: unknown): StartAgainRefusalCause | "unavailable" | undefined {
   const cause = startAgainRefusalCause(error);
