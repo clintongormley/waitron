@@ -531,7 +531,7 @@ describe("A803 bill numbers: tables", () => {
       [tabId, 1, null],
       [second, 2, null],
     ]);
-    expect(await numbersOf(v, leaving.partyId)).toEqual([[leaving.mainBillId, 1, null]]);
+    expect(await numbersOf(v, leaving.partyId)).toEqual([[leaving.billId, 1, null]]);
     await everyPartyBillNumbered();
   });
 
@@ -605,7 +605,10 @@ describe("A803 bill numbers: tables", () => {
 
     const result = await inTx(v, (tx) => joinTables(tx, v.cfg, ours.partyId, theirTable, options));
 
-    expect(result.merged).toBe(false);
+    expect(result).toEqual({
+      partyId: ours.partyId,
+      billIds: [ours.tabId, theirs.bills[0], theirs.bills[1]],
+    });
     expect(await statusOf(v, theirs.tabId)).toBe("open");
     expect(await numbersOf(v, ours.partyId)).toEqual([
       [ours.tabId, 1, null],
@@ -642,7 +645,7 @@ describe("A803 bill numbers: tables", () => {
 
     const leaving = await inTx(v, (tx) => splitTable(tx, v.cfg, partyId, t1, third, command));
 
-    expect(leaving.mainBillId).toBeNull();
+    expect(leaving).toEqual({ partyId: leaving.partyId, billId: third });
     expect(await numbersOf(v, leaving.partyId)).toEqual([[third, 1, null]]);
     expect(await numbersOf(v, partyId)).toEqual([
       [tabId, 1, null],

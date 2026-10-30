@@ -604,7 +604,6 @@ export const STATUS: Record<string, ContentfulStatusCode> = {
   "unpaid_departure.nothing_outstanding": 409,
   "unpaid_departure.unfired_dishes": 409,
   "unpaid_departure.bill_holds_payment": 409,
-  "party.main_bill_stays": 409,
   "submission.id_reused": 409,
   "draft.taken_over": 409,
   "draft.already_submitted": 409,

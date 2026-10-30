@@ -1017,7 +1017,7 @@ cases, `table-actions.refund-pending.test.ts` shapes, `till-api.zone-closed.test
 `order-kitchen-note.moves.test.ts:234`, `print-problems.test.ts:1808` if its red run is here.
 `bills` stays optional and unread (4b).
 
-- [ ] New cases `A803 action results:` in `till-api.table-actions.test.ts`: exact `toEqual` answers
+- [x] New cases `A803 action results:` in `till-api.table-actions.test.ts`: exact `toEqual` answers
       for Move guests to a free table, Join a free table, Move guests onto a seated table, Join a
       seated table (each `{ partyId, billIds }` in number order, plus `zoneRevisions` exactly where
       today's answer has them); "split a table giving away the party's first bill answers that
@@ -1026,14 +1026,37 @@ cases, `table-actions.refund-pending.test.ts` shapes, `till-api.zone-closed.test
       staying party's only unpaid bill, with no other bill left, leaves the staying party one new
       empty bill" (D1); "a party with no bill that joins a free table answers one new empty bill,
       not two" (seed by moving its only bill to the counter); "the party's revision moves once per
-      action, also when a bill was inserted" (I5); "no answer carries `mainBillId`".
-- [ ] RED: `pnpm --filter @waitron/server exec vitest run src/till-api.table-actions.test.ts -t 'A803 action results'`
-      — fails on the answer shape (`mainBillId` present) and on `party.main_bill_stays`.
-- [ ] Implement; then the trace's files (Task 3a's list plus `rg -l 'splitTable\(|split-table' apps/server/src -g '*.test.ts'`).
-- [ ] GREEN: those files; `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
+      action, also when a bill was inserted" (I5); "no answer carries `mainBillId`". (Built: 10
+      cases, the last also checking no `merged` key.)
+- [x] RED: `pnpm --filter @waitron/server exec vitest run src/till-api.table-actions.test.ts -t 'A803 action results'`
+      — fails on the answer shape (`mainBillId` present) and on `party.main_bill_stays`. (Run: 10
+      failed, 70 skipped: the four answers carried `mainBillId`/`merged`; the two splits of the
+      first bill answered 409; no bill was inserted for a party with none.)
+- [x] Implement; then the trace's files (Task 3a's list plus `rg -l 'splitTable\(|split-table' apps/server/src -g '*.test.ts'`).
+      (Built: `partyBillIds` is private to `table-actions.ts`, not beside `readPartyBillIds`, since
+      it reads numbers through `VENUE_SERVICE`; an inserted bill is still recorded as the party's
+      main bill (`insertMainBill`) until Task 6b, as `partyMainBill` did; `moveGuests`/`joinTables`
+      take `OriginConfig`, which `insertPartyBill` needs. First trace run, 62 files: 49 red, every one
+      an answer-shape pin (W) or the `party.main_bill_stays` rows (B): `till-api.table-actions` 8
+      (`:97`, `:111`, `:156`, `:172`, `:186`, `:469`, the refusal list and the guest-count refusal
+      list: each main-bill row now a success after the other refusals, answering the first bill,
+      the revision +1, or the counts 1/1); `party-table-actions` 21 (13 answers → `billIds`; the
+      combine answer → `undefined` plus a `partyRow(...).mainBillId` check carrying the value the
+      answer held; split `:1123` → `{partyId, billId: b2}` plus `numbersOf` `[[b2, 1, null]]`;
+      `:1145`, `:1174` → `billId`; "refuses the main bill" → "takes the party's first bill … Bill 1
+      at the new party", which pins both parties' numbers and tables); `bill-editing.table-actions`
+      9 (`merged: false` → `toEqual` of `{partyId: into, billIds: [into, from]}`, `undefined` for
+      combine); `print-problems` 7 (its `mergeBills` helper's join answer); `table-actions.refund-pending`
+      7; `till-api.today-joins` 4 (`mainBill()` → `onlyBill()`, which also checks the party has one
+      bill); `till-api.zone-closed` 1; and the typecheck-only `bill-identities.test.ts:534`, `:608`,
+      `:645`, `floor-today-flatten.test.ts:430-431`, `order-kitchen-note.moves.test.ts:234`.)
+- [x] GREEN: those files; `pnpm exec vitest run scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`
       (run, not edited); F; H2; Filing; server typecheck; `rg -n 'party\.main_bill_stays|CombineResult' apps/server packages`
-      prints nothing.
-- [ ] Commit: "Table actions answer the bills they leave, and Split a table takes any bill".
+      prints nothing. (Run: trace 2843 passed in 62; guards 36 in 2; F 267 in 5; H2 20 in 2; Filing
+      67 in 2, both files unchanged; server and till typechecks clean; `pnpm format:check` clean;
+      the `rg` exits 1. Deletion controls in `till-api.table-actions.test.ts`: no insert for a party
+      with none → 3 fail; no staying-party insert → 1 fails; number order reversed → 7 fail.)
+- [x] Commit: "Table actions answer the bills they leave, and Split a table takes any bill".
 
 ## Task 4b: the `bills` option and `merged` flag go, by a mechanical sweep (≈45 calls)
 

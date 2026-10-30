@@ -108,6 +108,16 @@ async function refused(run: () => Promise<unknown>, code: string, params: unknow
 }
 const actions = ["join", "move", "combine"] as const;
 type Action = (typeof actions)[number];
+/** The answer of an action that kept `into`'s and `from`'s bills apart; Combine answers nothing. */
+function keptApart(
+  action: Action,
+  from: { tabId: string },
+  into: { partyId: string; tabId: string },
+) {
+  return action === "combine"
+    ? undefined
+    : { partyId: into.partyId, billIds: [into.tabId, from.tabId] };
+}
 async function request(
   action: Action,
   from: Awaited<ReturnType<typeof party>>,
@@ -220,9 +230,9 @@ describe("table composition compares every affected bill before moving anything"
       const left = await save(from.partyId, from.tabId, venue.adminId);
       const right = await save(into.partyId, into.tabId, venue.adminId);
       const expected = await edits(from.partyId, into.partyId);
-      expect(await request(action, from, into, expected, "merge")).toMatchObject({
-        merged: false,
-      });
+      expect(await request(action, from, into, expected, "merge")).toEqual(
+        keptApart(action, from, into),
+      );
       const after = await edits(into.partyId);
       expect(after.map((e) => [e.billId, e.editorId, e.draftId])).toEqual(
         [
@@ -250,9 +260,9 @@ describe("table composition compares every affected bill before moving anything"
         await VENUE_SERVICE.retargetOrderContext(tx, venue.cfg, from.tabId, counter.zoneId);
       });
       const expected = await edits(from.partyId, into.partyId);
-      expect(await request(action, from, into, expected, "merge")).toMatchObject({
-        merged: false,
-      });
+      expect(await request(action, from, into, expected, "merge")).toEqual(
+        keptApart(action, from, into),
+      );
       const after = await edits(into.partyId);
       expect(after.map((e) => e.billId)).toEqual([from.tabId, into.tabId].sort());
       await refused(
@@ -275,7 +285,7 @@ describe("table composition compares every affected bill before moving anything"
       });
       expect(
         await request(action, from, into, await edits(from.partyId, into.partyId), "merge"),
-      ).toMatchObject({ merged: false });
+      ).toEqual(keptApart(action, from, into));
       const [kept] = await venue.db
         .select({ status: workingOrders.status })
         .from(workingOrders)

@@ -308,13 +308,13 @@ describe("existing service in a closed zone", () => {
     expect(answer.status).toBe(200);
     expect(answer.json).toMatchObject({
       partyId: expect.any(String),
-      mainBillId: expect.any(String),
+      billId: expect.any(String),
     });
     expect(
       await suite.db
         .select({ status: workingOrders.status })
         .from(workingOrders)
-        .where(eq(workingOrders.id, answer.json.mainBillId as string)),
+        .where(eq(workingOrders.id, answer.json.billId as string)),
     ).toEqual([{ status: "open" }]);
   });
 

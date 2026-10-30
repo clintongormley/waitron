@@ -46,7 +46,7 @@ async function fixtureOptions(
 
 export async function joinTables(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   partyId: string,
   tableId: string,
   options: TableActionOptions,
@@ -55,7 +55,7 @@ export async function joinTables(
 }
 export async function moveGuests(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   partyId: string,
   tableId: string,
   options: TableActionOptions,

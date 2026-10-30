@@ -1827,7 +1827,6 @@ async function mergeBills(v: Venue, source: Seated, destination: Seated): Promis
   });
   expect(result).toEqual({
     partyId: destination.partyId,
-    mainBillId: destination.tabId,
-    merged: false,
+    billIds: [destination.tabId, source.tabId],
   });
 }

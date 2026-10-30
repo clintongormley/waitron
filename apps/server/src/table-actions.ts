@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { diningTables, nowIso, parties, partyTables, workingOrders } from "@waitron/db";
 import type { Transaction } from "@waitron/db";
 import { AppError, MAX_GUEST_COUNT } from "@waitron/shared";
@@ -33,10 +33,9 @@ import {
   leaveForClearing,
   leaveTables,
   memberTables,
+  insertPartyBill,
   openParty,
-  partyMainBill,
   partyZone,
-  readMainBill,
   setMainBill,
 } from "./parties.js";
 import type { OriginConfig, TradingContext } from "./trading-context.js";
@@ -63,13 +62,8 @@ export interface TableActionOptions extends OtherPartyRead {
 
 export interface TableActionResult {
   partyId: string;
-  mainBillId: string | null;
-  merged: boolean;
-}
-
-export interface CombineResult {
-  merged: boolean;
-  mainBillId: string | null;
+  /** The party's bills that are not abandoned, in number order; never empty. */
+  billIds: string[];
 }
 
 /**
@@ -79,7 +73,7 @@ export interface CombineResult {
  */
 export async function moveGuests(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   partyId: string,
   toTableId: string,
   options: TableActionOptions,
@@ -109,7 +103,6 @@ export async function moveGuests(
   return withMovedSlips(tx, cfg, { parties: [partyId] }, async () => {
     const leaving = held.filter((id) => id !== toTableId);
     await leaveForClearing(tx, leaving, nowIso());
-    const mainBillId = await readMainBill(tx, partyId);
     if (table.holding === null) {
       await addTable(tx, partyId, toTableId);
     }
@@ -120,7 +113,7 @@ export async function moveGuests(
     await leaveMergeOf(tx, toTableId, held);
     for (const expected of options.expectedEdits)
       await relocateBillEditor(tx, expected.billId, expected);
-    return { partyId, mainBillId, merged: false };
+    return { partyId, billIds: await partyBillIds(tx, cfg, partyId) };
   });
 }
 
@@ -143,7 +136,7 @@ async function leaveMergeOf(
  */
 export async function joinTables(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   partyId: string,
   tableId: string,
   options: TableActionOptions,
@@ -172,16 +165,15 @@ export async function joinTables(
   const reach =
     options.slipsLater === undefined ? { parties: [partyId] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
-    const mainBillId = await readMainBill(tx, partyId);
     await addTable(tx, partyId, tableId);
-    return { partyId, mainBillId, merged: false };
+    return { partyId, billIds: await partyBillIds(tx, cfg, partyId) };
   });
 }
 
 /** {@link combineParties} as a table action. */
 async function combineAt(
   tx: Transaction,
-  cfg: TradingContext,
+  cfg: OriginConfig,
   from: string,
   into: string,
   tables: "leave" | "join",
@@ -191,7 +183,7 @@ async function combineAt(
   const reach =
     options.slipsLater === undefined ? { parties: [from, into] } : { later: options.slipsLater };
   return withMovedSlips(tx, cfg, reach, async () => {
-    const combined = await combineParties(tx, cfg, {
+    await combineParties(tx, cfg, {
       from,
       into,
       bills: options.bills,
@@ -200,7 +192,7 @@ async function combineAt(
       expectedEdits: options.expectedEdits,
       intoZoneId,
     });
-    return { partyId: into, mainBillId: combined.mainBillId, merged: combined.merged };
+    return { partyId: into, billIds: await partyBillIds(tx, cfg, into) };
   });
 }
 
@@ -232,7 +224,7 @@ export async function combineParties(
     /** `into`'s zone, when the caller has just read it. */
     intoZoneId?: string | null;
   },
-): Promise<CombineResult> {
+): Promise<void> {
   const { from, into } = args;
   const mains = await tx
     .select({ id: parties.id, mainBillId: parties.mainBillId, guestCount: parties.guestCount })
@@ -288,8 +280,6 @@ export async function combineParties(
     .set({ state: "closed", closedAt: at, closedBy: args.operatorId, mergedIntoPartyId: into })
     .where(eq(parties.id, from));
   await closePartyTables(tx, from);
-
-  return { merged: false, mainBillId: await readMainBill(tx, into) };
 }
 
 export interface SplitGuestCounts {
@@ -299,9 +289,9 @@ export interface SplitGuestCounts {
 
 /**
  * `tableId` leaves the party and its today's merge ({@link leaveMergesRestoring}), and a new,
- * unnamed party starts on it, taking `billId`, or a new empty main bill when none is chosen. The
- * chosen bill must be an open or presented bill of the party other than its main bill, holding no
- * dish held for the kitchen.
+ * unnamed party starts on it, taking `billId`, or a new empty bill when none is chosen. The chosen
+ * bill must be an open or presented bill of the party, holding no dish held for the kitchen. A
+ * staying party left with no bill that is not abandoned is given a new empty one.
  */
 export async function splitTable(
   tx: Transaction,
@@ -316,7 +306,7 @@ export async function splitTable(
     expectedEdits: BillEditExpected[];
   },
   attendance?: OrderAttendance,
-): Promise<{ partyId: string; mainBillId: string | null }> {
+): Promise<{ partyId: string; billId: string }> {
   await checkAndBumpParty(
     tx,
     partyId,
@@ -333,10 +323,9 @@ export async function splitTable(
     options.operatorId,
     options.expectedEdits,
   );
-  const partyMain = await readMainBill(tx, partyId);
   let firers: ReadonlyMap<string, Firer> = new Map();
   if (billId !== null) {
-    await refuseUnsplittableBill(tx, partyId, partyMain, billId);
+    await refuseUnsplittableBill(tx, partyId, billId);
     firers = await leaveParty(tx, billId);
   }
 
@@ -353,10 +342,11 @@ export async function splitTable(
     });
     await inheritKitchenNote(tx, cfg, { partyId }, { partyId: newParty }, "copy");
     await VENUE_SERVICE.splitPartyAllergies(tx, partyId, newParty, billId, options.operatorId);
-    let mainBillId: string | null = null;
+    let taken: string;
     if (billId === null) {
-      mainBillId = await partyMainBill(tx, cfg, newParty, "moved");
+      taken = await insertMainBill(tx, cfg, newParty);
     } else {
+      taken = billId;
       const { status } = await takeIntoParty(tx, cfg, billId, newParty, table!.zoneId);
       await VENUE_SERVICE.allocateBillNumber(tx, billId, newParty);
       await moveBillDraftsToParty(tx, billId, newParty, options.expectedEdits[0]!);
@@ -375,24 +365,22 @@ export async function splitTable(
             },
       );
       await printHoldTickets(tx, cfg, held);
-      if (status === "open") {
-        await setMainBill(tx, newParty, billId);
-        mainBillId = billId;
-      }
+      if (status === "open") await setMainBill(tx, newParty, billId);
+      // The staying party is given an empty bill when this was its last (D1).
+      await partyBillIds(tx, cfg, partyId);
     }
     await leaveMergesRestoring(tx, [tableId]);
-    return { partyId: newParty, mainBillId };
+    return { partyId: newParty, billId: taken };
   });
 }
 
 /**
  * Refuse a bill Split a table cannot give the new party, in this order: another party's (or none),
- * paid, abandoned or missing, and the party's main bill.
+ * paid, abandoned or missing.
  */
 async function refuseUnsplittableBill(
   tx: Transaction,
   partyId: string,
-  partyMain: string | null,
   billId: string,
 ): Promise<void> {
   const [bill] = await tx
@@ -403,7 +391,41 @@ async function refuseUnsplittableBill(
   if (bill.partyId !== partyId) throw new AppError("bill.other_party", { workingOrderId: billId });
   if (bill.status === "settled") throw new AppError("bill.paid", { workingOrderId: billId });
   if (bill.status === "abandoned") throw new AppError("tab.not_open", { tabId: billId });
-  if (billId === partyMain) throw new AppError("party.main_bill_stays", { partyId });
+}
+
+/**
+ * The party's bills that are not abandoned, in number order (unnumbered last, then by id). A party
+ * with none is given one new empty bill first (A803 D1); its revision is the caller's to move.
+ */
+async function partyBillIds(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<string[]> {
+  const rows = await tx
+    .select({ id: workingOrders.id })
+    .from(workingOrders)
+    .where(and(eq(workingOrders.partyId, partyId), ne(workingOrders.status, "abandoned")));
+  if (rows.length === 0) return [await insertMainBill(tx, cfg, partyId)];
+  const numbers = await VENUE_SERVICE.readBillIdentities(
+    tx,
+    rows.map((row) => row.id),
+  );
+  const numberOf = (id: string) => numbers.get(id)?.number ?? Number.POSITIVE_INFINITY;
+  return rows
+    .map((row) => row.id)
+    .sort((a, b) => numberOf(a) - numberOf(b) || (a < b ? -1 : a > b ? 1 : 0));
+}
+
+/** {@link insertPartyBill}, recorded as the party's main bill until A803 slice 3 Task 6b. */
+async function insertMainBill(
+  tx: Transaction,
+  cfg: OriginConfig,
+  partyId: string,
+): Promise<string> {
+  const billId = await insertPartyBill(tx, cfg, partyId);
+  await setMainBill(tx, partyId, billId);
+  return billId;
 }
 
 async function addTable(tx: Transaction, partyId: string, tableId: string): Promise<void> {

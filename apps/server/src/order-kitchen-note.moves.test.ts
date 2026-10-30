@@ -231,7 +231,7 @@ describe("kitchen notes when bills and parties move", () => {
       note: "They eat together",
       revision: 1,
     });
-    expect(await effective(result.mainBillId!)).toMatchObject({
+    expect(await effective(result.billId)).toMatchObject({
       note: "They eat together",
       scope: { partyId: result.partyId },
     });
