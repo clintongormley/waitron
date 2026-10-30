@@ -56,6 +56,7 @@ const NODE_ID = "11111111-1111-4111-8111-111111111111";
 const PATH = "/management-api/me/personal-data/export";
 /** The route's clock: the venue's date (Europe/Madrid) is 2026-06-01. */
 const AT = new Date("2026-06-01T10:00:00.000Z");
+const SESSION_OPENED_AT = "2026-06-01T10:19:19.993Z";
 /** Marta's first time entry's local day (00:30 at +01:00); its UTC date is 2026-03-02. */
 const FIRST_DAY = "2026-03-03";
 /** The day after the venue's date, which is later than her last entry. */
@@ -556,6 +557,10 @@ beforeEach(async () => {
     );
   cookie = await sessionCookie(martaId);
   adminCookie = await sessionCookie(admin!.id);
+  await suite.db
+    .update(managementSessions)
+    .set({ createdAt: SESSION_OPENED_AT })
+    .where(eq(managementSessions.personId, martaId));
 });
 
 type Sale = { code: string; number: number; total: number };
@@ -755,6 +760,21 @@ async function readable(files: Record<string, Uint8Array>): Promise<Record<strin
   return out;
 }
 
+function containsExportValue(file: string, content: string, value: string): boolean {
+  if (!file.endsWith(".json")) return content.includes(value);
+  // An amount can occur inside a session timestamp without being an exported pay or sale value.
+  const amount = /^\d+\.\d{2}$/.test(value);
+  const contains = (entry: unknown): boolean => {
+    if (typeof entry === "string") return amount ? entry === value : entry.includes(value);
+    if (typeof entry === "number") return String(entry) === value;
+    if (Array.isArray(entry)) return entry.some(contains);
+    if (entry !== null && typeof entry === "object")
+      return Object.entries(entry).some(([key, item]) => key.includes(value) || contains(item));
+    return false;
+  };
+  return contains(JSON.parse(content));
+}
+
 const occurrences = (content: string, part: string) => content.split(part).length - 1;
 
 const readme = (language: "en" | "es") =>
@@ -768,10 +788,47 @@ const readme = (language: "en" | "es") =>
   });
 
 describe("a staff member's whole personal-data download", () => {
+  it.each(["own", "administrator"] as const)(
+    "detects planted colleague values in every file of the %s download",
+    async (audience) => {
+      if (audience === "administrator")
+        await suite.db.update(persons).set({ status: "suspended" }).where(eq(persons.id, martaId));
+      const files = await download(
+        audience === "own" ? PATH : `/management-api/staff/${martaId}/personal-data/export`,
+        audience === "own" ? cookie : adminCookie,
+      );
+      const text = await readable(files);
+      for (const [file, content] of Object.entries(text)) {
+        for (const value of [...COLLEAGUE_VALUES, COLLEAGUE.name, colleagueId]) {
+          const planted = file.endsWith(".json")
+            ? JSON.stringify([JSON.parse(content), { nested: [value] }])
+            : `${content}\n${value}`;
+          expect(containsExportValue(file, planted, value), `${file}: ${value}`).toBe(true);
+          if (file.endsWith(".json")) {
+            const amount = /^\d+\.\d{2}$/.test(value);
+            const alternate = amount ? Number(value) : `A note containing ${value} here`;
+            expect(
+              containsExportValue(file, JSON.stringify({ nested: [alternate] }), value),
+              `${file}: ${value} as ${amount ? "a number" : "part of a note"}`,
+            ).toBe(true);
+          }
+        }
+      }
+      expect(
+        containsExportValue(
+          "profile.json",
+          '{"email":"colleague\\u002eruiz@example.test"}',
+          COLLEAGUE.email,
+        ),
+      ).toBe(true);
+    },
+  );
+
   it("holds every file, her values and none of a colleague's or the manager's", async () => {
     const files = await download();
     expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
     const text = await readable(files);
+    expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
 
     expect(MARTA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 
@@ -779,11 +836,11 @@ describe("a staff member's whole personal-data download", () => {
     expect(occurrences(text["rota.json"]!, colleagueAsOther)).toBe(1);
     const withoutOther = {
       ...text,
-      "rota.json": text["rota.json"]!.replaceAll(colleagueAsOther, ""),
+      "rota.json": text["rota.json"]!.replaceAll(colleagueAsOther, '"otherPerson": ""'),
     };
     const leaks = Object.entries(withoutOther).flatMap(([file, content]) =>
       [...COLLEAGUE_VALUES, COLLEAGUE.name, colleagueId]
-        .filter((value) => content.includes(value))
+        .filter((value) => containsExportValue(file, content, value))
         .map((value) => [file, value]),
     );
     expect(leaks).toEqual([]);
@@ -856,6 +913,7 @@ describe("a staff member's whole personal-data download", () => {
     );
     expect(Object.keys(files)).toEqual(["README.txt", ...FILES]);
     const text = await readable(files);
+    expect(text["sign-in.json"]).toContain(SESSION_OPENED_AT);
 
     expect(MARTA_VALUES.filter(([file, value]) => !text[file]!.includes(value))).toEqual([]);
 
@@ -863,11 +921,11 @@ describe("a staff member's whole personal-data download", () => {
     expect(occurrences(text["rota.json"]!, colleagueAsOther)).toBe(1);
     const withoutOther = {
       ...text,
-      "rota.json": text["rota.json"]!.replaceAll(colleagueAsOther, ""),
+      "rota.json": text["rota.json"]!.replaceAll(colleagueAsOther, '"otherPerson": ""'),
     };
     const leaks = Object.entries(withoutOther).flatMap(([file, content]) =>
       [...COLLEAGUE_VALUES, COLLEAGUE.name, colleagueId]
-        .filter((value) => content.includes(value))
+        .filter((value) => containsExportValue(file, content, value))
         .map((value) => [file, value]),
     );
     expect(leaks).toEqual([]);
