@@ -1478,3 +1478,35 @@ Two slices from those answers are open, each its own later pull request: 9b, the
   [Q52](../compliance/asesor-questions.md#q52-sales-recorded-under-a-restart-whose-clock-later-proved-wrong-added-2026-10-21)
   and
   [Q60](../compliance/asesor-questions.md#q60-sales-dated-later-than-the-real-time-by-a-clock-that-ran-ahead-added-2026-10-24).
+
+## A1187 part 1: what its reviews left open
+
+Part 1 of the recovery pack (design: [A1187](../superpowers/specs/2026-10-29-a1187-one-recovery-pack-design.md))
+landed in pull requests from #2250 to setup's first pack (PR E). What their reviews left, by the
+pull request that left it:
+
+- **#2250 (the pack format and its readers).** `waitron-restore`'s usage line still says
+  `<pack-file>` for `--from-archive`, which a test pins. The restore command's refusals for a file
+  holding no kit or no archive pack still name the kit file and the archive recovery pack file,
+  which tests pin word for word, where both forms now take the pack PDF. Setup's pack refusals say
+  "paste the code" where the field's help says "paste the kit".
+- **#2263 (the server makes and records the pack).** The same-origin TLS check is copied across
+  several routes; `promote-api.ts` still answers a plain-HTTP or cross-site request with
+  `authorization.not_permitted`, the answer the plan calls untruthful. The archive code, the
+  backup-key check, the bucket recovery kit, the server key's name and the created date are each
+  built twice, once in an older route and once for the pack. PR D removed the older routes in
+  `backup-api.ts`, `stream-api.ts` and `recovery-document-api.ts`. The old recovery sheet's
+  renderer (`packages/fiscal-verifactu/src/recovery-pdf-content.ts`) still draws the key's name and
+  created date; since PR E only tests and `packages/fiscal-verifactu/test/recovery-pdf-node-runner.ts`
+  call it, and it stays because the reader's tests draw old sheets with it.
+- **#2274 (the Backups card).** The card's "ready" line dates a just-made pack from the browser's
+  clock until the next status read names it; it is wrong only when the browser's clock and the
+  box's fall on different days in the venue's zone. The card and the fresh sign-in widget read the
+  pack status and the person's profile with their own read counters, and the Backups screen pokes
+  the card after each write, where the dashboard's live queries (`DashboardQueries`,
+  `apps/dashboard/src/api/live-queries.ts`) could keep both current. The fresh sign-in widget asks
+  only the recovery pack's passkey route, so the next action that needs a fresh sign-in has to
+  widen it. A pack whose receipt the box confirmed after the card left the page, or after the
+  person lost `system.manage`, is counted received though no link to it was offered. So is an older
+  pack whose receipt lands while a newer pack's link is on offer, unless it holds the newest server
+  key the card was handed.
