@@ -2047,6 +2047,53 @@ export interface ArchiveRecoveryPackAnswer {
   revision?: string;
 }
 
+/** The `signIn` field of `POST /api/backup/recovery-pack` — LOCAL copy of what
+ * `apps/server/src/fresh-sign-in.ts` reads. */
+export type FreshSignInBody = (
+  | { method: "password"; password: string }
+  | { method: "passkey"; challengeHandle: string; response: unknown }
+) & { totp?: string; recoveryCode?: string };
+
+export type RecoveryPackKeyState = "replaced" | "unchanged" | "failed";
+
+export interface MadeRecoveryPack {
+  pdf: Blob;
+  number: number;
+  key: RecoveryPackKeyState;
+}
+
+type RecoveryPackPart = "bucket" | "archives" | "server-key";
+
+/** `GET /api/backup/recovery-pack` — LOCAL copy of `apps/server/src/backup-recovery-pack-status.ts`'s
+ * `PackStatus`. */
+export interface RecoveryPackStatus {
+  latest: null | {
+    number: number;
+    madeAt: string;
+    madeByName: string | null;
+    received: boolean;
+    parts: {
+      part: RecoveryPackPart;
+      state: "included" | "absent" | "failed" | "not-set-up";
+    }[];
+  };
+  upToDate: boolean;
+  incomplete: boolean;
+  unreceived: null | { number: number; madeAt: string; holdsCurrentServerKey: boolean };
+  reasons: {
+    part: RecoveryPackPart;
+    kind: "key_changed" | "settings_changed" | "set_up_after" | "removed" | "key_replaced";
+    at?: string;
+  }[];
+  keep: {
+    number: number;
+    madeAt: string;
+    until: string | null;
+    why: "server_key" | "backup_key" | "replaced_server_key";
+  }[];
+  backupsUseOlderKey: boolean;
+}
+
 /** `GET /api/backup/stream` — LOCAL copy of `apps/server/src/stream-api.ts`'s `StreamSettingsView`.
  * Never carries the secret access key. */
 export interface StreamSettingsView {
@@ -4584,6 +4631,44 @@ export class DashboardApi {
     if (pdf.type !== "application/pdf" || pdf.size === 0 || pdf.size > 8 * 1024 * 1024)
       throw { code: "recovery.pack_invalid" };
     return pdf;
+  }
+
+  /** Refuses, as `recovery.pack_invalid`, an answer that is not a whole PDF with its pack headers. */
+  async makeRecoveryPack(body: {
+    locale: "en" | "es";
+    newServerKey: boolean;
+    signIn: FreshSignInBody;
+  }): Promise<MadeRecoveryPack> {
+    const file = await this.#request<DownloadedFile>("/api/backup/recovery-pack", "POST", body, {
+      as: "file",
+      headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+    });
+    const pdf = file.blob;
+    const number = file.headers?.["X-Waitron-Recovery-Pack"] ?? "";
+    const key = file.headers?.["X-Waitron-Recovery-Pack-Key"];
+    if (
+      pdf.type !== "application/pdf" ||
+      pdf.size === 0 ||
+      pdf.size > 8 * 1024 * 1024 ||
+      !/^[1-9][0-9]*$/.test(number) ||
+      (key !== "replaced" && key !== "unchanged" && key !== "failed")
+    )
+      throw { code: "recovery.pack_invalid" };
+    return { pdf, number: Number(number), key };
+  }
+
+  getRecoveryPackStatus(): Promise<RecoveryPackStatus> {
+    return this.#request<RecoveryPackStatus>("/api/backup/recovery-pack", "GET", undefined, {
+      passive: true,
+    });
+  }
+
+  recoveryPackPasskeyOptions(): Promise<PasskeyChallenge> {
+    return this.#request<PasskeyChallenge>("/api/backup/recovery-pack/passkey-options", "POST");
+  }
+
+  markRecoveryPackReceived(packNumber: number): Promise<void> {
+    return this.#request<void>(`/api/backup/recovery-pack/${packNumber}/received`, "POST", {});
   }
 
   mintBackupKey(): Promise<{ key: string }> {

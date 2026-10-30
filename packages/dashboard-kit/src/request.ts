@@ -10,17 +10,21 @@ export interface DownloadedFile {
   readonly blob: Blob;
   /** From `Content-Disposition: attachment; filename="<name>"` only; otherwise null. */
   readonly fileName: string | null;
+  /** Present only when the call named `headers`: each named header's value, or null when absent. */
+  readonly headers?: Readonly<Record<string, string | null>>;
 }
 
 /**
  * Per-call options. `as: "blob"` resolves a 2xx to its body's bytes, undecoded, for a file download;
- * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name. A refusal is
+ * `as: "file"` resolves to a `DownloadedFile`, the bytes with the server's file name, plus the values
+ * of any response `headers` the call names. A refusal is
  * decoded exactly as without either. Explicit deadlines apply to any method; ordinary reads
  * retain their default deadline. Cancellation bounds both fetch and response-body waits.
  */
 export interface RequestOptions {
   passive?: boolean;
   as?: "blob" | "file";
+  headers?: readonly string[];
   timeLimitMs?: number;
   signal?: AbortSignal;
   sessionErrors?: "caller";
@@ -171,10 +175,16 @@ export function createRequest(
       }
       if (typeof read !== "string") {
         if (options?.as !== "file") return read as T;
-        const file: DownloadedFile = {
-          blob: read,
-          fileName: attachmentName(res.headers.get("content-disposition")),
-        };
+        const fileName = attachmentName(res.headers.get("content-disposition"));
+        const named = options.headers;
+        const file: DownloadedFile =
+          named === undefined
+            ? { blob: read, fileName }
+            : {
+                blob: read,
+                fileName,
+                headers: Object.fromEntries(named.map((name) => [name, res.headers.get(name)])),
+              };
         return file as T;
       }
       return (read === "" ? undefined : JSON.parse(read)) as T;

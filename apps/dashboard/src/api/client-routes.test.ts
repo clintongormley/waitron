@@ -1914,3 +1914,104 @@ describe("DashboardApi.getDiskStop", () => {
     expect(await api.getDiskStop()).toEqual({ stopped: true, deleted });
   });
 });
+
+describe("the recovery pack calls", () => {
+  const SIGN_IN = { method: "password", password: "hunter2-hunter2" } as const;
+
+  function packResponse(body: BodyInit, headers: Record<string, string>): Response {
+    return new Response(body, { status: 200, headers });
+  }
+
+  it("makes a pack, handing back the PDF, its number and what happened to the server key", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      packResponse(new Uint8Array([37, 80, 68, 70]), {
+        "Content-Type": "application/pdf",
+        "X-Waitron-Recovery-Pack": "4",
+        "X-Waitron-Recovery-Pack-Key": "replaced",
+      }),
+    );
+    const api = new DashboardApi("", fetchImpl);
+
+    const made = await api.makeRecoveryPack({ locale: "es", newServerKey: true, signIn: SIGN_IN });
+
+    expect(made.number).toBe(4);
+    expect(made.key).toBe("replaced");
+    expect([...new Uint8Array(await made.pdf.arrayBuffer())]).toEqual([37, 80, 68, 70]);
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/recovery-pack", "POST", { locale: "es", newServerKey: true, signIn: SIGN_IN }],
+    ]);
+  });
+
+  it.each([
+    ["a body that is not a PDF", "<html></html>", "text/html", "4", "unchanged"],
+    ["an empty PDF", "", "application/pdf", "4", "unchanged"],
+    ["a missing pack number", "%PDF", "application/pdf", null, "unchanged"],
+    ["a pack number that is not a whole number", "%PDF", "application/pdf", "4a", "unchanged"],
+    ["an unknown key state", "%PDF", "application/pdf", "4", "rotated"],
+  ])("refuses %s as recovery.pack_invalid", async (_label, body, type, number, key) => {
+    const headers: Record<string, string> = { "Content-Type": type };
+    if (number !== null) headers["X-Waitron-Recovery-Pack"] = number;
+    headers["X-Waitron-Recovery-Pack-Key"] = key;
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(packResponse(body, headers)));
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
+  it("refuses a pack over 8 MiB as recovery.pack_invalid", async () => {
+    const api = new DashboardApi(
+      "",
+      vi.fn().mockResolvedValue(
+        packResponse(new Uint8Array(8 * 1024 * 1024 + 1), {
+          "Content-Type": "application/pdf",
+          "X-Waitron-Recovery-Pack": "1",
+          "X-Waitron-Recovery-Pack-Key": "unchanged",
+        }),
+      ),
+    );
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "recovery.pack_invalid" });
+  });
+
+  it("passes a refusal through with its code", async () => {
+    const api = new DashboardApi("", vi.fn().mockResolvedValue(refusal("password.invalid", 401)));
+
+    await expect(
+      api.makeRecoveryPack({ locale: "en", newServerKey: false, signIn: SIGN_IN }),
+    ).rejects.toEqual({ code: "password.invalid", status: 401 });
+  });
+
+  it("reads the status passively, asks for passkey options and marks a pack received with an empty JSON body", async () => {
+    const status = { latest: null, upToDate: false, incomplete: false, unreceived: null };
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(status))
+      .mockResolvedValueOnce(
+        jsonResponse({ challengeHandle: "h1", options: { challenge: "AQID" } }),
+      )
+      .mockResolvedValueOnce(emptyResponse());
+    const api = new DashboardApi("", fetchImpl);
+
+    expect(await api.getRecoveryPackStatus()).toEqual(status);
+    expect(await api.recoveryPackPasskeyOptions()).toEqual({
+      challengeHandle: "h1",
+      options: { challenge: "AQID" },
+    });
+    await api.markRecoveryPackReceived(7);
+
+    expect(callsOf(fetchImpl)).toEqual([
+      ["/api/backup/recovery-pack", "GET", undefined],
+      ["/api/backup/recovery-pack/passkey-options", "POST", undefined],
+      ["/api/backup/recovery-pack/7/received", "POST", {}],
+    ]);
+    expect(
+      fetchImpl.mock.calls.map(([, init]) => new Headers(init.headers).get("x-waitron-live")),
+    ).toEqual(["1", null, null]);
+    expect(new Headers(fetchImpl.mock.calls[2][1].headers).get("content-type")).toBe(
+      "application/json",
+    );
+  });
+});

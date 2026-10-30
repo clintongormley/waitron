@@ -344,6 +344,59 @@ describe('a download that keeps the server\'s file name (as: "file")', () => {
   });
 });
 
+describe("a download that also hands back the response headers it names (headers)", () => {
+  const PATH = "/api/backup/recovery-pack";
+
+  function packResponse(headers: Record<string, string>): Response {
+    return new Response(new Uint8Array([0x25, 0x50, 0x44, 0x46]), { status: 200, headers });
+  }
+
+  it("returns each named header's value, and null for one the answer lacks", async () => {
+    const request = createRequest({
+      fetchImpl: vi.fn<FetchLike>().mockResolvedValue(
+        packResponse({
+          "content-type": "application/pdf",
+          "x-waitron-recovery-pack": "3",
+          "x-other": "not asked for",
+        }),
+      ),
+    });
+
+    const out = await request<{
+      blob: Blob;
+      fileName: string | null;
+      headers: Record<string, string | null>;
+    }>(
+      PATH,
+      "POST",
+      {},
+      {
+        as: "file",
+        headers: ["X-Waitron-Recovery-Pack", "X-Waitron-Recovery-Pack-Key"],
+      },
+    );
+
+    expect(out.headers).toEqual({
+      "X-Waitron-Recovery-Pack": "3",
+      "X-Waitron-Recovery-Pack-Key": null,
+    });
+    expect(out.fileName).toBeNull();
+    expect([...new Uint8Array(await out.blob.arrayBuffer())]).toEqual([0x25, 0x50, 0x44, 0x46]);
+  });
+
+  it("adds no headers field to a file download that names none", async () => {
+    const request = createRequest({
+      fetchImpl: vi
+        .fn<FetchLike>()
+        .mockResolvedValue(packResponse({ "x-waitron-recovery-pack": "3" })),
+    });
+
+    const out = await request<object>(PATH, "POST", {}, { as: "file" });
+
+    expect(Object.keys(out).sort()).toEqual(["blob", "fileName"]);
+  });
+});
+
 describe("the time limit on a read", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
