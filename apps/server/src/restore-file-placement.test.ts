@@ -361,6 +361,55 @@ describe("restoreDatabase puts a backup's node.db back", () => {
     });
   });
 
+  it("leaves no node.db behind when a target that had none fails its final placement", async () => {
+    const { source, target, venueDir, stateDir, nodeDump } = await nodeFixture();
+    await rm(join(venueDir, "node.db"));
+    await rm(join(venueDir, "node.db-wal"));
+    await expect(
+      restoreDatabase({
+        databasePath: source,
+        venueDir,
+        stateDir,
+        log: () => {},
+        nodeDump,
+        fs: {
+          rm,
+          rmdir,
+          rename: async (from, to) => {
+            if (from === `${target}.incoming`) throw ioError("EIO");
+            await rename(from, to);
+          },
+        },
+      }),
+    ).rejects.toMatchObject({ code: "restore.placement_failed", params: { kept: "previous" } });
+    await oldIntact(venueDir);
+    await expect(stat(join(venueDir, "node.db"))).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(stat(join(venueDir, "node.db.incoming"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+  });
+
+  it("places node.db before venue.db", async () => {
+    const { source, target, venueDir, stateDir, nodeDump } = await nodeFixture();
+    const placed: string[] = [];
+    await restoreDatabase({
+      databasePath: source,
+      venueDir,
+      stateDir,
+      log: () => {},
+      nodeDump,
+      fs: {
+        rm,
+        rmdir,
+        rename: async (from, to) => {
+          if (to === target || to === join(venueDir, "node.db")) placed.push(to);
+          await rename(from, to);
+        },
+      },
+    });
+    expect(placed).toEqual([join(venueDir, "node.db"), target]);
+  });
+
   it("leaves the box's own node.db alone when handed no node copy", async () => {
     const { source, venueDir, stateDir } = await nodeFixture();
     await restoreDatabase({ databasePath: source, venueDir, stateDir, log: () => {} });
