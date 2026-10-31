@@ -296,6 +296,95 @@ describe("createClockWitnessStore", () => {
     expect(store.witnesses()).toHaveLength(1);
   });
 
+  it("hands AEAT's readings to forSetting with the box clocks they were noted at, until a step", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    const agreeingAt = clock.arrived();
+    store.noteAuthority({ authorityMs: START_WALL + 500, uncertaintyMs: 700, at: agreeingAt });
+    clock.advance(1_000);
+    const disagreeingAt = clock.arrived();
+    store.noteAuthority({
+      authorityMs: START_WALL + 1_000 + 172_800_000,
+      uncertaintyMs: 700,
+      at: disagreeingAt,
+    });
+    clock.advance(1_000);
+    const agreeing = {
+      kind: "authority",
+      id: "authority",
+      boxAt: iso(START_WALL),
+      witnessAt: iso(START_WALL + 500),
+      uncertaintyMs: 700,
+    };
+    const disagreeing = {
+      kind: "authority",
+      id: "authority",
+      boxAt: iso(START_WALL + 1_000),
+      witnessAt: iso(START_WALL + 1_000 + 172_800_000),
+      uncertaintyMs: 700,
+    };
+    expect(store.witnesses()).toEqual([agreeing, disagreeing]);
+    expect(store.forSetting()).toEqual([
+      { witness: agreeing, at: agreeingAt },
+      { witness: disagreeing, at: disagreeingAt },
+    ]);
+
+    clock.stepWall(5_000);
+    expect(store.witnesses()).toEqual([disagreeing]);
+    expect(store.forSetting()).toEqual([]);
+  });
+
+  it("hands forSetting no agreeing AEAT reading after a step, read before witnesses()", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteAuthority({ authorityMs: START_WALL + 500, uncertaintyMs: 700, at: clock.arrived() });
+    clock.stepWall(5_000);
+    expect(store.forSetting()).toEqual([]);
+  });
+
+  it("hands forSetting no AEAT disagreement older than five minutes", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteAuthority({
+      authorityMs: START_WALL + 172_800_000,
+      uncertaintyMs: 700,
+      at: clock.arrived(),
+    });
+    clock.advance(299_000);
+    expect(store.forSetting()).toHaveLength(1);
+    clock.advance(2_000);
+    expect(store.witnesses()).toHaveLength(1);
+    expect(store.forSetting()).toEqual([]);
+  });
+
+  it("never hands a device reading to forSetting", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteDevice("till-1", "192.168.10.31", START_WALL + 172_800_000, clock.arrived());
+    store.noteAuthority({
+      authorityMs: START_WALL + 172_800_000,
+      uncertaintyMs: 700,
+      at: clock.arrived(),
+    });
+    expect(store.witnesses().map((witness) => witness.kind)).toEqual(["device", "authority"]);
+    expect(store.forSetting().map((reading) => reading.witness.kind)).toEqual(["authority"]);
+  });
+
+  it("forgets forSetting's readings when the stop ends or the clock is cleared", () => {
+    const clock = clocks();
+    const store = storeWith(clock);
+    store.noteAuthority({
+      authorityMs: START_WALL + 172_800_000,
+      uncertaintyMs: 700,
+      at: clock.arrived(),
+    });
+    store.endStop();
+    expect(store.forSetting()).toEqual([]);
+    store.noteAuthority({ authorityMs: START_WALL + 500, uncertaintyMs: 700, at: clock.arrived() });
+    store.clear();
+    expect(store.forSetting()).toEqual([]);
+  });
+
   it("reads the box's own clocks when none are injected", () => {
     const store = createClockWitnessStore();
     const now = Date.now();

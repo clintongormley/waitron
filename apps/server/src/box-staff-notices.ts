@@ -1,6 +1,11 @@
 import type { Transaction } from "@waitron/db";
 import { readPrinterRoles } from "@waitron/layouts";
-import type { StaffNotice, StaffNoticeSource, WaitronModule } from "@waitron/module";
+import type {
+  StaffNotice,
+  StaffNoticeReadContext,
+  StaffNoticeSource,
+  WaitronModule,
+} from "@waitron/module";
 import type { DiskFullState } from "./disk-full-state.js";
 import type { FreeSpaceState } from "./free-space-watch.js";
 import { enabledStaffNoticeSources } from "./modules.js";
@@ -40,14 +45,37 @@ export function boxStaffNoticeSource(deps: {
   };
 }
 
-/** The box's source, then the modules', so the box's notice comes first among equal severities.
- * Give it the enabled modules. */
+/** Owner name of the clock check's marker: apart from the box's, so a failing read of the clock
+ * stop leaves the storage notices served. No module is named this. */
+export const BOX_CLOCK_NOTICE_OWNER = "box-clock";
+
+const CHECK_TIME: StaffNotice = {
+  key: "clock.check_time",
+  code: "clock.check_time",
+  severity: "error",
+  params: {},
+};
+
+type ClockCheck = (tx: Transaction, reading: StaffNoticeReadContext["reading"]) => Promise<boolean>;
+
+/** `clock.check_time` while `check` answers true at the read's reading. */
+export function clockCheckNoticeSource(check: ClockCheck): StaffNoticeSource {
+  return {
+    read: async ({ tx, reading }) => ((await check(tx, reading)) ? [CHECK_TIME] : []),
+  };
+}
+
+/** The box's source, the clock check's when given, then the modules', so the box's notices come
+ * first among equal severities. Give it the enabled modules. */
 export function deviceNoticeSources(
-  box: Parameters<typeof boxStaffNoticeSource>[0],
+  box: Parameters<typeof boxStaffNoticeSource>[0] & { clockCheck?: ClockCheck },
   modules: readonly WaitronModule[],
 ): readonly OwnedStaffNoticeSource[] {
   return [
     { owner: BOX_NOTICE_OWNER, source: boxStaffNoticeSource(box) },
+    ...(box.clockCheck === undefined
+      ? []
+      : [{ owner: BOX_CLOCK_NOTICE_OWNER, source: clockCheckNoticeSource(box.clockCheck) }]),
     ...enabledStaffNoticeSources(modules),
   ];
 }

@@ -171,6 +171,34 @@ export const ALERT_MESSAGES: Readonly<
   "clock.behind_chain_restarted": {
     en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
     es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
+    variants: {
+      byStaff: {
+        mode: "replace",
+        en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
+        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, miembro del personal, en la caja {device}.",
+      },
+    },
+  },
+  "clock.corrected": {
+    en: "The box set its clock from the tax agency's time: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+    es: "El equipo puso su reloj con la hora de Hacienda: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+    variants: {
+      unverified: {
+        mode: "replace",
+        en: "The box tried to set its clock but could not confirm the change took. Its clock read {before:minute} before and {after:minute} after ({direction:clock_step_direction} {stepMs:duration}). Check the box's clock on the Box status page.",
+        es: "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before:minute} antes y {after:minute} después ({direction:clock_step_direction} {stepMs:duration}). Comprueba la hora del equipo en Estado del equipo.",
+      },
+      byStaff: {
+        mode: "replace",
+        en: "The box's clock was set from till {device}, confirmed by {person}: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+        es: "El reloj del equipo se puso con la hora de la caja {device}, confirmada por {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+      },
+      byAdmin: {
+        mode: "replace",
+        en: "The box's clock was set from {person}'s device: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
+        es: "El reloj del equipo se puso con la hora del dispositivo de {person}: {direction:clock_step_direction} {stepMs:duration}, de {before:minute} a {after:minute}.",
+      },
+    },
   },
   "clock.records_misdated": {
     en: "{count} sales were recorded with a time later than the real time (from {from:minute} to {to:minute}). They stay as recorded. Go through them with your tax adviser; the list is on the Box status page.",
@@ -204,6 +232,10 @@ export const ALERT_MESSAGES: Readonly<
   "clock.disagrees": {
     en: "{count} devices agree that the time is {deviceAt:minute}, but the box's clock reads {boxAt:minute}. Check the box's date and time on the Box status page.",
     es: "{count} dispositivos coinciden en que marcan {deviceAt:minute}, pero el equipo marca {boxAt:minute}. Comprueba la fecha y la hora del equipo en Estado del equipo.",
+  },
+  "clock.sync_off": {
+    en: "{reason:clock_sync_off}",
+    es: "{reason:clock_sync_off}",
   },
   "clock.jump_detected": {
     en: "This device's clock went backwards: it changed by {wallClockDeltaSeconds} seconds. Check its date and time.",
@@ -474,6 +506,40 @@ export const ALERT_WORDS: Readonly<
     },
     otherwise: { en: "Contact support.", es: "Contacta con soporte." },
   },
+  // Why the box's time service is not keeping its clock right, by the `reason` param of
+  // `clock.sync_off`. `unreachable` names no install step: the person reading it has no terminal.
+  clock_sync_off: {
+    words: {
+      off: {
+        en: "The box's time service is switched off, so nothing keeps its clock right. Check its date and time on the Box status page.",
+        es: "El servicio de hora del equipo está desactivado, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+      },
+      stopped: {
+        en: "The box's time service is on but not running, so nothing keeps its clock right. Check its date and time on the Box status page.",
+        es: "El servicio de hora del equipo está activado pero no funciona, así que nada mantiene su reloj en hora. Comprueba su fecha y hora en Estado del equipo.",
+      },
+      unsynchronised: {
+        en: "The box's time service has not reached a time server, so its clock may drift. Check that the box can reach the internet and look at its date and time on the Box status page.",
+        es: "El servicio de hora del equipo no ha contactado con ningún servidor de hora, así que su reloj puede desviarse. Comprueba que el equipo tiene conexión a internet y revisa su fecha y hora en Estado del equipo.",
+      },
+      unreachable: {
+        en: "This box cannot see or control its time service: the part of the box that does that is not answering. If the box can reach the internet, its time service may still keep the clock right by itself.",
+        es: "Este equipo no puede ver ni controlar su servicio de hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún mantenga el reloj en hora por sí solo.",
+      },
+    },
+    otherwise: {
+      en: "The box's clock is not being kept right. Check its date and time on the Box status page.",
+      es: "El reloj del equipo no se mantiene en hora. Comprueba su fecha y hora en Estado del equipo.",
+    },
+  },
+  // `clock.corrected`'s direction; the reloj (masculine) is what moved, in Spanish.
+  clock_step_direction: {
+    words: {
+      forward: { en: "moved forward", es: "adelantado" },
+      back: { en: "moved back", es: "atrasado" },
+    },
+    otherwise: { en: "moved", es: "cambiado" },
+  },
   // What confirmed the box's clock when payments restarted, by the `confirmedBy` param of
   // `clock.behind_chain_restarted`.
   clock_confirmed_by: {
@@ -481,6 +547,7 @@ export const ALERT_WORDS: Readonly<
       authority: { en: "the tax agency's time", es: "la hora de Hacienda" },
       devices: { en: "two tills or handhelds", es: "dos cajas o terminales" },
       admin: { en: "an administrator", es: "un administrador" },
+      staff: { en: "a staff member", es: "un empleado" },
     },
     otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el equipo" },
   },

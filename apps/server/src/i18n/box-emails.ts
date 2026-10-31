@@ -47,13 +47,17 @@ export const CLOCK_CONFIRMED_BY_WORDS = {
     authority: "the tax agency's time",
     devices: "two tills or handhelds",
     admin: "an administrator",
+    staff: "a staff member on a till",
     otherwise: "a check recorded on the box",
+    staffNamed: "a staff member ({person}) on a till",
   },
   es: {
     authority: "la hora de Hacienda",
     devices: "dos cajas o terminales",
     admin: "un administrador",
+    staff: "un empleado en una caja",
     otherwise: "una comprobación anotada en el equipo",
+    staffNamed: "un miembro del personal ({person}) en una caja",
   },
 } as const satisfies Record<"en" | "es", Record<string, string>>;
 
@@ -61,12 +65,60 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
   en: {
     subject: "Payments restarted at {venue}",
     text: "The box's clock was confirmed by {confirmedBy} and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    byStaff:
+      "The box's clock was confirmed by {person}, a staff member, on {till}, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    namedTill: "till {device}",
+    unnamedTill: "a till",
   },
   es: {
     subject: "Se reanudaron los cobros en {venue}",
     text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    byStaff:
+      "La hora del equipo la confirmó {person}, miembro del personal, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    namedTill: "la caja {device}",
+    unnamedTill: "una caja",
   },
-} as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+} as const satisfies Record<
+  "en" | "es",
+  { subject: string; text: string; byStaff: string; namedTill: string; unnamedTill: string }
+>;
+
+/** By what set the clock, `unverified` (with its own subject) instead of any when the box could
+ * not confirm the step took; `{step}` is `forward`, `back` or `moved` with the step's length. */
+export const CLOCK_CORRECTED_EMAIL_WORDS = {
+  en: {
+    subject: "{venue}: the box's clock was set",
+    authority:
+      "The box set its clock from the tax agency's time: {step}, from {before} to {after}.",
+    admin: "The box's clock was set from {person}'s device: {step}, from {before} to {after}.",
+    staff:
+      "The box's clock was set from the time on {till}, confirmed by {person}, a staff member: {step}, from {before} to {after}.",
+    unverifiedSubject: "{venue}: the box could not confirm it set its clock",
+    unverified:
+      "The box tried to set its clock but could not confirm the change took. Its clock read {before} before and {after} after ({step}). Check the box's clock on the Box status page (in the dashboard, Settings → Box status).",
+    forward: "moved forward {duration}",
+    back: "moved back {duration}",
+    moved: "moved {duration}",
+    namedTill: "till {device}",
+    unnamedTill: "a till",
+  },
+  es: {
+    subject: "{venue}: se puso la hora del equipo",
+    authority: "El equipo puso su reloj con la hora de Hacienda: {step}, de {before} a {after}.",
+    admin:
+      "El reloj del equipo se puso con la hora del dispositivo de {person}: {step}, de {before} a {after}.",
+    staff:
+      "El reloj del equipo se puso con la hora de {till}, confirmada por {person}, miembro del personal: {step}, de {before} a {after}.",
+    unverifiedSubject: "{venue}: el equipo no pudo confirmar que puso su reloj",
+    unverified:
+      "El equipo intentó poner su reloj, pero no ha podido confirmar que el cambio se aplicara. Su reloj marcaba {before} antes y {after} después ({step}). Comprueba la hora del equipo en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    forward: "adelantado {duration}",
+    back: "atrasado {duration}",
+    moved: "cambiado {duration}",
+    namedTill: "la caja {device}",
+    unnamedTill: "una caja",
+  },
+} as const satisfies Record<"en" | "es", Record<string, string>>;
 
 /** `text` for several sales, `one` for one, `partial` appended to either; `unconfirmed` instead of
  * all three when the box cannot tell which sales. */

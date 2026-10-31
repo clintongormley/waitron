@@ -331,6 +331,71 @@ enable_time_sync() {
   fi
 }
 
+# 2e. The box's clock service: a root handler the app asks, through /run/waitron-box/box.sock, to read
+#     the time service and to set the clock from a confirmed time (the app's container cannot). Its
+#     socket's group is a host group waitron-box with the app's gid, 10001: systemd would not start a
+#     socket whose numeric group named no host group (A798-B slice 9b plan, "Measured for 9b", M5).
+#     A group of another name holding that number, or that name with another number, is never
+#     used, since its members could then set the clock. .env names the socket's folder only once the socket has started, so compose
+#     mounts it only then; otherwise the app finds no socket and cannot set the clock.
+# WAITRON_SH_SYSTEMD_DIR, WAITRON_SH_BOX_LIB_DIR and WAITRON_SH_BOX_UNIT_DIR are test overrides, as
+# WAITRON_SH_BLUETOOTH_DROPIN is.
+SYSTEMD_RUN_DIR="${WAITRON_SH_SYSTEMD_DIR:-/run/systemd/system}"
+BOX_LIB_DIR="${WAITRON_SH_BOX_LIB_DIR:-/usr/local/lib/waitron}"
+BOX_UNIT_DIR="${WAITRON_SH_BOX_UNIT_DIR:-/etc/systemd/system}"
+BOX_GROUP=waitron-box
+BOX_GID=10001
+box_group_refusal() {
+  local by_name by_gid
+  by_name="$(getent group "$BOX_GROUP" || true)"
+  by_gid="$(getent group "$BOX_GID" || true)"
+  if [ -n "$by_name" ]; then
+    [ "$(printf '%s' "$by_name" | cut -d: -f3)" = "$BOX_GID" ] && return 0
+    echo "the group $BOX_GROUP already exists with number $(printf '%s' "$by_name" | cut -d: -f3), and the clock service needs $BOX_GID"
+  elif [ -n "$by_gid" ]; then
+    echo "group number $BOX_GID already belongs to ${by_gid%%:*}, whose members would be able to set the clock"
+  fi
+}
+install_box_service() {
+  local ref="$1" refusal tmp socket_changed=no
+  local cannot="so Waitron cannot set this machine's clock itself when a confirmed time shows it is wrong"
+  if [ ! -d "$SYSTEMD_RUN_DIR" ]; then
+    env_unset WAITRON_BOX_SOCKET_DIR
+    echo "waitron.sh: no systemd on this host, so the box's clock service is not installed — $cannot"
+    return 0
+  fi
+  refusal="$(box_group_refusal)"
+  if [ -n "$refusal" ]; then
+    env_unset WAITRON_BOX_SOCKET_DIR
+    echo "waitron.sh: did not install the box's clock service — $refusal; $cannot" >&2
+    return 0
+  fi
+  if ! tmp="$(mktemp -d "$WAITRON_DIR/waitron-box.XXXXXX")"; then
+    env_unset WAITRON_BOX_SOCKET_DIR
+    echo "waitron.sh: could not set up the box's clock service — could not create a temp folder in $WAITRON_DIR; $cannot" >&2
+    return 0
+  fi
+  if fetch "${RAW_BASE}/${ref}/deploy/box/waitron-box.sh" "$tmp/waitron-box.sh" \
+    && fetch "${RAW_BASE}/${ref}/deploy/box/waitron-box.socket" "$tmp/waitron-box.socket" \
+    && fetch "${RAW_BASE}/${ref}/deploy/box/waitron-box@.service" "$tmp/waitron-box@.service" \
+    && { getent group "$BOX_GROUP" >/dev/null || as_root groupadd --system --gid "$BOX_GID" "$BOX_GROUP"; } \
+    && { [ ! -f "$BOX_UNIT_DIR/waitron-box.socket" ] || cmp -s "$tmp/waitron-box.socket" "$BOX_UNIT_DIR/waitron-box.socket" || socket_changed=yes; } \
+    && as_root install -d -m 0755 -o root -g root "$BOX_LIB_DIR" \
+    && as_root install -m 0755 -o root -g root "$tmp/waitron-box.sh" "$BOX_LIB_DIR/waitron-box.sh" \
+    && as_root install -m 0644 -o root -g root "$tmp/waitron-box.socket" "$BOX_UNIT_DIR/waitron-box.socket" \
+    && as_root install -m 0644 -o root -g root "$tmp/waitron-box@.service" "$BOX_UNIT_DIR/waitron-box@.service" \
+    && as_root systemctl daemon-reload \
+    && as_root systemctl enable --now waitron-box.socket \
+    && { [ "$socket_changed" = no ] || as_root systemctl restart waitron-box.socket; }; then
+    env_set WAITRON_BOX_SOCKET_DIR /run/waitron-box
+    echo "waitron.sh: installed the box's clock service, so Waitron can set this machine's clock from a confirmed time"
+  else
+    env_unset WAITRON_BOX_SOCKET_DIR
+    echo "waitron.sh: could not set up the box's clock service — $cannot" >&2
+  fi
+  rm -rf "$tmp"
+}
+
 # 3. main pulls every image in compose.yml and records no override; a branch/commit builds both
 #    Waitron images on the box from the git context and records the tags in .env so the box stays
 #    on them.
@@ -673,6 +738,7 @@ cmd_install() {
   load_print_agent_apparmor "$ref"
   disable_bluetooth_autopair
   enable_time_sync
+  install_box_service "$ref"
   select_image "$ref"
   cd "$WAITRON_DIR"
   local before

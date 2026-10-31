@@ -202,7 +202,7 @@ async function spyOnBoxEmailDutyStop() {
   vi.mocked(startBoxEmailDuty).mockImplementationOnce((deps) => {
     const duty = realStart(deps);
     stop.mockImplementation(() => duty.stop());
-    return { stop };
+    return { stop, remember: duty.remember };
   });
   return stop;
 }

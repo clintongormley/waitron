@@ -112,7 +112,13 @@ async function start(
     WAITRON_ENV: "preproduction",
     ...(await extraEnv(scratch)),
   };
-  const server: StartedServer = await startServer(env, env);
+  // A stand-in clock service, so a host where `waitron.sh install` has run answers the same.
+  const server: StartedServer = await startServer(env, env, {
+    boxHost: {
+      clockStatus: async () => ({ available: false, reason: "missing", detail: "ENOENT" }),
+      setClock: async () => ({ available: false, reason: "missing", detail: "ENOENT" }),
+    },
+  });
   cleanups.push(() => server.close());
   await awaitListening(httpPort());
   const origin = `http://127.0.0.1:${httpPort()}`;
@@ -220,6 +226,25 @@ describe("the running server's Box status read and free-space deletion", () => {
     expect((await box.free()).status).toBe(200);
     await box.get();
     expect(readDiskUsage).toHaveBeenCalledTimes(2);
+    expect(checkTimeHealth).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads Box status's clock through the same minute's cache", async () => {
+    const box = await start();
+    vi.mocked(checkTimeHealth).mockClear();
+
+    await box.get();
+    for (let read = 0; read < 2; read += 1) {
+      const response = await fetch(`${box.origin}/api/box/status`, {
+        headers: { cookie: box.venue.managerCookie },
+      });
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { time: unknown }).time).toEqual({
+        synced: false,
+        source: "unavailable",
+        warn: false,
+      });
+    }
     expect(checkTimeHealth).toHaveBeenCalledTimes(1);
   });
 

@@ -788,6 +788,22 @@ const CODE_MESSAGES: Record<string, { en: string; es: string }> = {
     en: "Can't be recorded: the box's clock reads earlier than its last sale. Tell a manager.",
     es: "No se puede registrar: la hora del equipo es anterior a la última venta. Avisa al encargado.",
   },
+  "clock.set_refused": {
+    en: "The box's clock was not set. Use “Check the time” to see why.",
+    es: "No se ha puesto en hora el reloj del equipo. Usa «Comprobar la hora» para ver por qué.",
+  },
+  "clock.set_failed": {
+    en: "The box could not set its clock. Nothing was changed.",
+    es: "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
+  },
+  "clock.check_expired": {
+    en: "The time check took too long. Check again.",
+    es: "La comprobación de la hora ha tardado demasiado. Vuelve a comprobarla.",
+  },
+  "clock.confirm_refused": {
+    en: "The box's time was not confirmed. Use “Check the time” to see why.",
+    es: "No se ha confirmado la hora del equipo. Usa «Comprobar la hora» para ver por qué.",
+  },
   "server.internal": {
     en: "Something went wrong, try again",
     es: "Algo salió mal, inténtalo de nuevo",

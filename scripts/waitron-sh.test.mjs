@@ -59,7 +59,8 @@ afterEach(() => {
 // suite as a Mac does, and `install` and `apparmor_parser` never write /etc/apparmor.d or load a
 // profile into the running kernel. WT_AA_PARSE_FAIL makes `apparmor_parser` refuse the profile.
 // `install` copies a file only when the destination is inside the case's own directory (WT_SANDBOX),
-// which is where each case points the Bluetooth drop-in. `systemctl show … FragmentPath` answers
+// which is where each case points the Bluetooth drop-in and the box's clock service, and applies
+// its `-m` mode there. WT_BOX_ENABLE_FAIL=1 makes `systemctl enable --now waitron-box.socket` fail. `systemctl show … FragmentPath` answers
 // WT_BT_UNIT, the path of a stand-in bluetooth.service, or nothing, as a host without Bluetooth
 // does, and `systemctl show … DropInPaths` lists the `.conf` files in the drop-in's folder, sorted by
 // name, so the drop-in counts only once it exists; WT_BT_RESTART_FAIL=1 makes every
@@ -262,7 +263,10 @@ stub(
   `
 dest="\${@: -1}"
 case "$dest" in
-  "\${WT_SANDBOX}"/*) if [ "$1" = "-d" ]; then mkdir -p "$dest"; else cp "\${@: -2:1}" "$dest"; fi ;;
+  "\${WT_SANDBOX}"/*)
+    if [ "$1" = "-d" ]; then mkdir -p "$dest"; else cp "\${@: -2:1}" "$dest"; fi
+    mode=""; prev=""; for a in "$@"; do [ "$prev" = "-m" ] && mode="$a"; prev="$a"; done
+    [ -n "$mode" ] && chmod "$mode" "$dest" ;;
 esac
 exit 0
 `,
@@ -274,6 +278,7 @@ case "$*" in
   "show -p FragmentPath --value bluetooth.service") [ -n "\${WT_BT_UNIT}" ] && echo "\${WT_BT_UNIT}" ;;
   "show -p DropInPaths --value bluetooth.service")
     find "$(dirname "\${WAITRON_SH_BLUETOOTH_DROPIN}")" -maxdepth 1 -name '*.conf' 2>/dev/null | LC_ALL=C sort | tr '\n' ' ' ;;
+  "enable --now waitron-box.socket") [ "\${WT_BOX_ENABLE_FAIL}" = "1" ] && exit 1 ;;
   "restart bluetooth")
     n=$(cat "\${WT_LOG}.restarts" 2>/dev/null || echo 0); n=$((n + 1)); echo "$n" > "\${WT_LOG}.restarts"
     [ "\${WT_BT_RESTART_FAIL}" = "1" ] && exit 1
@@ -286,6 +291,17 @@ stub(
   "timedatectl",
   '[ "${WT_TIMEDATECTL_FAIL}" = "1" ] && { echo "Failed to set ntp: NTP not supported" >&2; exit 1; }; exit 0',
 );
+// `getent group <key>` prints the WT_GROUPS entry (space-separated `name:x:gid:` lines) whose name
+// or number is the key, and exits 2, getent's "not found", when none is.
+stub(
+  "getent",
+  `for entry in \${WT_GROUPS}; do
+  IFS=: read -r name _ gid _ <<< "$entry"
+  if [ "$name" = "$2" ] || [ "$gid" = "$2" ]; then echo "$entry"; exit 0; fi
+done
+exit 2`,
+);
+stub("groupadd", "exit 0");
 // as_root calls `sudo -n <cmd>`; drop the -n and exec the rest so it lands on the stubbed systemctl.
 stub("sudo", `[ "$1" = "-n" ] && shift; exec "$@"`);
 
@@ -339,6 +355,9 @@ function sandbox({
   oldImages = false,
   imageStore = "classic",
   rmiFail = false,
+  systemd = false,
+  groups = "",
+  boxEnableFail = false,
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), `waitron-sh-${directorySuffix}`));
   dirs.push(root);
@@ -392,6 +411,11 @@ function sandbox({
       `[Unit]\nDescription=Bluetooth service\n\n[Service]\nType=dbus\nBusName=org.bluez\nExecStart=${bluetoothExecStart}\n`,
     );
   }
+  // The box's clock service is installed only on a host that booted with systemd, which a case asks
+  // for with `systemd: true`; every other case is a host without it, so that step adds no calls.
+  const systemdDir = join(root, systemd ? "run-systemd-system" : "no-systemd");
+  if (systemd) mkdirSync(systemdDir);
+  mkdirSync(join(root, "units"));
   const dropIn = join(root, "bluetooth.service.d", "waitron-noautopair.conf");
   // Other drop-ins of bluetooth.service, by file name: written beside ours before the case runs.
   for (const [name, body] of Object.entries(bluetoothDropIns)) {
@@ -435,6 +459,11 @@ function sandbox({
       WT_OLD_IMAGES: oldImages ? "1" : "0",
       WT_IMAGE_STORE: imageStore,
       WT_RMI_FAIL: rmiFail ? "1" : "0",
+      WT_GROUPS: groups,
+      WT_BOX_ENABLE_FAIL: boxEnableFail ? "1" : "0",
+      WAITRON_SH_SYSTEMD_DIR: systemdDir,
+      WAITRON_SH_BOX_LIB_DIR: join(root, "lib"),
+      WAITRON_SH_BOX_UNIT_DIR: join(root, "units"),
     },
   };
 }
@@ -1271,6 +1300,150 @@ describe("waitron.sh install and the host's time synchronisation", () => {
     expect(r.status).not.toBe(0);
     expect(r.stderr).toMatch(/PRODUCTION/);
     expect(calls(sb).filter((c) => c.startsWith("timedatectl"))).toEqual([]);
+  });
+});
+
+describe("waitron.sh install and the box's host service", () => {
+  const calls = (sb) => readFileSync(sb.log, "utf8").trimEnd().split("\n");
+  const env = (sb) => readFileSync(join(sb.boxDir, ".env"), "utf8");
+  const raw = (ref, file) =>
+    `https://raw.githubusercontent.com/clintongormley/waitron/${ref}/deploy/box/${file}`;
+  const FILES = ["waitron-box.sh", "waitron-box.socket", "waitron-box@.service"];
+  const touchesService = (log) =>
+    log.filter(
+      (c) =>
+        c.startsWith("getent ") ||
+        c.startsWith("groupadd ") ||
+        c.includes("waitron-box") ||
+        c.includes("/deploy/box/"),
+    );
+  const declined = (sb, r) => {
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    expect(log.filter((c) => c.startsWith("groupadd "))).toEqual([]);
+    expect(log.filter((c) => c.startsWith("install ") && c.includes("waitron-box"))).toEqual([]);
+    expect(log).not.toContain("systemctl enable --now waitron-box.socket");
+    expect(env(sb)).not.toContain("WAITRON_BOX_SOCKET_DIR");
+    expect(r.stderr.split("\n").filter((l) => l.includes("clock service"))).toHaveLength(1);
+    expect(r.stderr).toContain("cannot set this machine's clock");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  };
+
+  it("creates the group, installs the ref's three files, starts the socket, and names it in .env before starting", () => {
+    const sb = sandbox({ systemd: true });
+    const r = run(sb, ["install", "my-branch"]);
+    expect(r.status).toBe(0);
+    const log = calls(sb);
+    const fetched = FILES.map((f) =>
+      log.findIndex((c) => c.startsWith("curl ") && c.split(" ").includes(raw("my-branch", f))),
+    );
+    const grouped = log.indexOf("groupadd --system --gid 10001 waitron-box");
+    const installed = [
+      ["0755", join(sb.root, "lib", "waitron-box.sh")],
+      ["0644", join(sb.root, "units", "waitron-box.socket")],
+      ["0644", join(sb.root, "units", "waitron-box@.service")],
+    ].map(([mode, dest]) =>
+      log.findIndex(
+        (c) => c.startsWith(`install -m ${mode} -o root -g root `) && c.endsWith(` ${dest}`),
+      ),
+    );
+    const reloaded = log.lastIndexOf("systemctl daemon-reload");
+    const enabled = log.indexOf("systemctl enable --now waitron-box.socket");
+    const up = log.findIndex((c) => /^docker compose .*\bup -d\b/.test(c));
+    for (const i of [...fetched, grouped, ...installed]) expect(i).toBeGreaterThanOrEqual(0);
+    expect(Math.min(...installed)).toBeGreaterThan(Math.max(...fetched, grouped));
+    expect(reloaded).toBeGreaterThan(Math.max(...installed));
+    expect(enabled).toBeGreaterThan(reloaded);
+    expect(up).toBeGreaterThan(enabled);
+    expect(statSync(join(sb.root, "lib", "waitron-box.sh")).mode & 0o777).toBe(0o755);
+    expect(statSync(join(sb.root, "units", "waitron-box.socket")).mode & 0o777).toBe(0o644);
+    expect(statSync(join(sb.root, "units", "waitron-box@.service")).mode & 0o777).toBe(0o644);
+    expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+    expect(r.stdout).toContain("installed the box's clock service");
+  });
+
+  it("uses a waitron-box group that already has number 10001", () => {
+    const sb = sandbox({ systemd: true, groups: "waitron-box:x:10001:" });
+    expect(run(sb, ["install"]).status).toBe(0);
+    const log = calls(sb);
+    expect(log.filter((c) => c.startsWith("groupadd "))).toEqual([]);
+    expect(log).toContain("systemctl enable --now waitron-box.socket");
+    expect(env(sb)).toMatch(/^WAITRON_BOX_SOCKET_DIR=\/run\/waitron-box$/m);
+  });
+
+  it("installs no service when the waitron-box group has another number", () => {
+    const sb = sandbox({ systemd: true, groups: "waitron-box:x:10002:" });
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/waitron-box\n");
+    const r = run(sb, ["install"]);
+    declined(sb, r);
+    expect(r.stderr).toContain(
+      "the group waitron-box already exists with number 10002, and the clock service needs 10001",
+    );
+  });
+
+  it("installs no service, and shares no group, when number 10001 belongs to another group", () => {
+    const sb = sandbox({ systemd: true, groups: "staff2:x:10001:" });
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/waitron-box\n");
+    const r = run(sb, ["install"]);
+    declined(sb, r);
+    expect(r.stderr).toContain("group number 10001 already belongs to staff2");
+  });
+
+  it("names no socket, and says what that means, when the socket will not start", () => {
+    const sb = sandbox({ systemd: true, boxEnableFail: true });
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/waitron-box\n");
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(calls(sb)).toContain("systemctl enable --now waitron-box.socket");
+    expect(env(sb)).not.toContain("WAITRON_BOX_SOCKET_DIR");
+    expect(r.stderr).toContain("could not set up the box's clock service");
+    expect(r.stderr).toContain("cannot set this machine's clock");
+    expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("restarts a running socket whose file an update changed, and only then", () => {
+    const changed = sandbox({ systemd: true });
+    writeFileSync(join(changed.root, "units", "waitron-box.socket"), "[Socket]\nold\n");
+    expect(run(changed, ["install"]).status).toBe(0);
+    const log = calls(changed);
+    expect(log.indexOf("systemctl restart waitron-box.socket")).toBeGreaterThan(
+      log.indexOf("systemctl enable --now waitron-box.socket"),
+    );
+    const same = sandbox({ systemd: true });
+    // The curl stand-in serves every box file as this one line.
+    writeFileSync(join(same.root, "units", "waitron-box.socket"), "stub\n");
+    expect(run(same, ["install"]).status).toBe(0);
+    expect(calls(same)).toContain("systemctl enable --now waitron-box.socket");
+    expect(calls(same)).not.toContain("systemctl restart waitron-box.socket");
+    const first = sandbox({ systemd: true });
+    expect(run(first, ["install"]).status).toBe(0);
+    expect(calls(first)).not.toContain("systemctl restart waitron-box.socket");
+  });
+
+  it("installs nothing, and names no socket, on a host without systemd", () => {
+    const sb = sandbox();
+    writeFileSync(join(sb.boxDir, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/waitron-box\n");
+    const r = run(sb, ["install"]);
+    expect(r.status).toBe(0);
+    expect(touchesService(calls(sb))).toEqual([]);
+    expect(env(sb)).not.toContain("WAITRON_BOX_SOCKET_DIR");
+    expect(r.stdout).toContain("no systemd on this host");
+  });
+
+  it("leaves the service and its group alone on reset", () => {
+    const sb = sandbox({ systemd: true });
+    installedBox(sb);
+    expect(run(sb, ["reset", "--yes"]).status).toBe(0);
+    expect(touchesService(calls(sb))).toEqual([]);
+  });
+
+  it("refuses a production reset install before touching the service", () => {
+    const sb = sandbox({ systemd: true, tradingEnv: "WAITRON_ENV=production" });
+    installedBox(sb);
+    const r = run(sb, ["--reset", "--yes", "install", "my-branch"]);
+    expect(r.status).not.toBe(0);
+    expect(r.stderr).toMatch(/PRODUCTION/);
+    expect(touchesService(calls(sb))).toEqual([]);
   });
 });
 

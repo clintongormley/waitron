@@ -2,6 +2,9 @@ import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
 
 const RANK: Record<StaffNotice["severity"], number> = { error: 0, warning: 1, notice: 2 };
 
+/** The box's marker that this till may offer "Check the time": never shown as a line of its own. */
+const CHECK_TIME = "clock.check_time";
+
 function wellFormed(entry: unknown): StaffNotice | null {
   if (typeof entry !== "object" || entry === null) return null;
   const { owner, key, code, severity, params } = entry as Record<string, unknown>;
@@ -16,17 +19,21 @@ function wellFormed(entry: unknown): StaffNotice | null {
   };
 }
 
+function freshNotices(read: DeviceEquipmentRead): StaffNotice[] {
+  return (Array.isArray(read.notices) ? read.notices : [])
+    .map(wellFormed)
+    .filter((notice): notice is StaffNotice => notice !== null);
+}
+
 /** The notices to show after `read`: its own, plus the notices `previous` held from each owner
  * `read` names as unavailable, less any `read` sent again (same owner and key); ordered errors,
  * warnings, then the rest, keeping the order given within each. Entries that are not well formed
- * are dropped; an unknown severity counts as `notice`. */
+ * are dropped, and so is the check-the-time marker; an unknown severity counts as `notice`. */
 export function nextNotices(
   previous: readonly StaffNotice[],
   read: DeviceEquipmentRead,
 ): StaffNotice[] {
-  const fresh = (Array.isArray(read.notices) ? read.notices : [])
-    .map(wellFormed)
-    .filter((notice): notice is StaffNotice => notice !== null);
+  const fresh = freshNotices(read).filter((notice) => notice.code !== CHECK_TIME);
   const unavailable = Array.isArray(read.noticesUnavailable) ? read.noticesUnavailable : [];
   const kept = previous.filter(
     (notice) =>
@@ -34,4 +41,9 @@ export function nextNotices(
       !fresh.some((f) => f.owner === notice.owner && f.key === notice.key),
   );
   return [...fresh, ...kept].sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+}
+
+/** Whether `read` carries the box's well-formed check-the-time marker. */
+export function checkTimeOffered(read: DeviceEquipmentRead): boolean {
+  return freshNotices(read).some((notice) => notice.code === CHECK_TIME);
 }

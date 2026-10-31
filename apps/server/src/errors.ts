@@ -1415,6 +1415,36 @@ declare module "@waitron/shared" {
      * off. `deviceAt` is the box's time moved by their mean difference. Built as data by the
      * clock-disagrees alert source, never thrown. */
     "clock.disagrees": { count: number; deviceAt: string; boxAt: string };
+    /** The box's time service is switched off (`off`), on with no time unit running (`stopped`),
+     * running but not synchronised (`unsynchronised`), or the box's clock service did not answer in
+     * production (`unreachable`). Built as data by the clock-sync alert source, never thrown. */
+    "clock.sync_off": { reason: "off" | "stopped" | "unsynchronised" | "unreachable" };
+    /** The box did not set or confirm its clock from an administrator's device or a till, and
+     * asked its host to set nothing: the request came from the box itself, no stop holds, the host
+     * service did not answer, the time service says the clock is synchronised, AEAT has spoken
+     * during the stop, an administrator's device asked to set it is within a minute of the box,
+     * the device's time was measured before a step of the box's clock, the time would be before
+     * 28-10-2024 or from 2100 on (`target_invalid`), the readings taken before an earlier step are
+     * not yet recorded (`pending_disproofs`), or, for a staff member on a till, the box's start-up
+     * is over (`not_start_up`) or AEAT has not yet been asked (`authority_pending`). */
+    "clock.set_refused": {
+      reason:
+        | "same_machine"
+        | "not_stopped"
+        | "not_start_up"
+        | "authority_pending"
+        | "host_unavailable"
+        | "synchronised"
+        | "witnessed"
+        | "agrees"
+        | "stale"
+        | "target_invalid"
+        | "pending_disproofs";
+    };
+    /** The box asked its host to set the clock: `refused`, the clock moved by a second or less;
+     * `unverified`, it moved further, but the box could not confirm it landed where it was asked
+     * to. */
+    "clock.set_failed": { reason: "refused" | "unverified" };
     /** A restored box's first start (a certificate for this machine, the next membership term)
      * failed, so the box sells but does not copy to the bucket. Built as data by
      * `firstStartAlertSource`, never thrown. */

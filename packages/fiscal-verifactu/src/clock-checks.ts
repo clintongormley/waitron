@@ -113,15 +113,25 @@ function takenAfterStopEnded(
 export interface ClosingWitnesses {
   authority: ClockWitness | null;
   devices: readonly ClockWitness[];
+  /** The person's device's reading: an administrator's, or with `role: "staff"` a staff member's. */
   admin: ClockAdminReading | null;
+  role?: "staff";
+  device?: { deviceId: string; address: string | null };
 }
 
 const NO_WITNESSES: ClosingWitnesses = { authority: null, devices: [], admin: null };
 
-/** The witnesses as a confirmation's `proof` stores them. */
+/** The witnesses as a confirmation's `proof` stores them. A staff member's reading is stored under
+ * `staff`, with the till's id and address and no `admin` key; an administrator's on a till gets a
+ * `device` key, naming the till, beside `admin`. Each of those keys is written only when set, so a
+ * proof without a person on a till has exactly the keys it had before staff could confirm. */
 export function storedWitnesses(witnesses: ClosingWitnesses) {
-  const { authority, admin } = witnesses;
-  return {
+  const { authority, admin, device } = witnesses;
+  const person =
+    admin === null
+      ? null
+      : { boxAt: admin.boxAt, witnessAt: admin.witnessAt, uncertaintyMs: admin.uncertaintyMs };
+  const stored = {
     authority:
       authority === null
         ? null
@@ -136,10 +146,18 @@ export function storedWitnesses(witnesses: ClosingWitnesses) {
       boxAt: witness.boxAt,
       witnessAt: witness.witnessAt,
     })),
-    admin:
-      admin === null
-        ? null
-        : { boxAt: admin.boxAt, witnessAt: admin.witnessAt, uncertaintyMs: admin.uncertaintyMs },
+  };
+  if (witnesses.role === "staff")
+    return {
+      ...stored,
+      staff: { deviceId: device?.deviceId ?? null, address: device?.address ?? null, ...person },
+    };
+  return {
+    ...stored,
+    admin: person,
+    ...(device === undefined
+      ? {}
+      : { device: { deviceId: device.deviceId, address: device.address } }),
   };
 }
 

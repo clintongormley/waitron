@@ -22,7 +22,7 @@ import {
   writeClosing,
 } from "./clock-checks.js";
 import { confirmClockStop } from "./clock-confirmation.js";
-import { misdatedRecords } from "./clock-misdated.js";
+import { misdatedDetail, misdatedRecords } from "./clock-misdated.js";
 import { clockChecks } from "./schema/clock-checks.js";
 import { clockConfirmations } from "./schema/clock-confirmations.js";
 
@@ -149,7 +149,7 @@ async function insertClosing(input: {
       confirmedAt: new Date(input.confirmedAt),
       stepMs: 0,
       source,
-      personId: source === "admin" ? "person-1" : null,
+      personId: source === "admin" || source === "staff" ? "person-1" : null,
       reason: "behind_chain",
       proof: {
         authority: null,
@@ -324,6 +324,18 @@ describe("misdatedRecords", () => {
     expect(rows()).toHaveLength(27);
     expect(await list(id)).toEqual(first);
     expect(first).toHaveLength(24);
+  });
+
+  it("a list closed by a staff member's confirmation reads source staff and the person", async () => {
+    await aheadSales();
+    const check = await insertCheck({ openedAt: X, boot: BOOT, heads: heads() });
+    const closing = closingFor(check, X + 90 * M, { ms: BOOT_MS + 90 * M, id: "boot-1" });
+    const id = await insertClosing({ check, confirmedAt: X + 90 * M, source: "staff", closing });
+    expect(await withTransaction(suite.db, (tx) => misdatedDetail(tx, id))).toMatchObject({
+      known: true,
+      closing: { source: "staff", personId: "person-1" },
+    });
+    expect(await list(id)).toHaveLength(24);
   });
 
   it("lists the same from a closing the real writer stored", async () => {

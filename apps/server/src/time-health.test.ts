@@ -3,30 +3,35 @@ import { useVenueDb } from "@waitron/db/testing/venue-db.js";
 import { manifestSets, migrationOptionsFor } from "@waitron/migrations";
 import { provisionBillVenue, type BillVenue } from "./testing/bill-venue.js";
 import { describe, expect, it } from "vitest";
-import { checkTimeHealth, type CommandRunner } from "./time-health.js";
+import type { ClockServiceStatus } from "./box-host-client.js";
+import { checkTimeHealth } from "./time-health.js";
 
-const runnerReturning =
-  (stdout: string): CommandRunner =>
-  async () => ({ stdout });
-const runnerThrowing = (): CommandRunner => async () => {
-  const err = new Error("spawn timedatectl ENOENT") as NodeJS.ErrnoException;
-  err.code = "ENOENT";
-  throw err;
-};
+const hostAnswering = (synchronised: boolean) => async (): Promise<ClockServiceStatus> => ({
+  available: true,
+  service: "on",
+  unit: "systemd-timesyncd.service",
+  synchronised,
+  lastSyncAt: null,
+});
+const hostUnavailable = async (): Promise<ClockServiceStatus> => ({
+  available: false,
+  reason: "missing",
+  detail: "ENOENT",
+});
 
 describe("checkTimeHealth", () => {
-  it("reports synced when timedatectl says NTPSynchronized=yes", async () => {
-    const health = await checkTimeHealth({ run: runnerReturning("yes\n") });
+  it("reports synced when the box's clock service says synchronised", async () => {
+    const health = await checkTimeHealth({ status: hostAnswering(true) });
     expect(health).toEqual({ synced: true, source: "timedatectl", warn: false });
   });
 
-  it("warns when timedatectl says NTPSynchronized=no", async () => {
-    const health = await checkTimeHealth({ run: runnerReturning("no\n") });
+  it("warns when the box's clock service says not synchronised", async () => {
+    const health = await checkTimeHealth({ status: hostAnswering(false) });
     expect(health).toEqual({ synced: false, source: "timedatectl", warn: true });
   });
 
-  it("degrades to unavailable without warning when timedatectl is absent", async () => {
-    const health = await checkTimeHealth({ run: runnerThrowing() });
+  it("degrades to unavailable without warning when the box's clock service does not answer", async () => {
+    const health = await checkTimeHealth({ status: hostUnavailable });
     expect(health).toEqual({ synced: false, source: "unavailable", warn: false });
   });
 });

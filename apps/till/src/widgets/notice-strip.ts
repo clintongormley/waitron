@@ -3,7 +3,8 @@ import { customElement, property, state } from "lit/decorators.js";
 import { baseStyles, registerIcons, visuallyHiddenStyles } from "@waitron/ui";
 import "@waitron/ui/src/components/wt-icon.js";
 import type { StaffNotice } from "../api/client.js";
-import { staffNoticeText } from "../i18n/staff-notices.js";
+import "@waitron/ui/src/components/wt-button.js";
+import { checksTime, staffNoticeText } from "../i18n/staff-notices.js";
 import { countText, t } from "../i18n/t.js";
 
 const TONES = ["error", "warning", "notice"] as const;
@@ -20,16 +21,30 @@ function toneOf(severity: string): Tone {
   return (TONES as readonly string[]).includes(severity) ? (severity as Tone) : "notice";
 }
 
-function words(notice: StaffNotice): TemplateResult {
-  const { main, hint } = staffNoticeText(notice);
+/** A notice's icon and words; a clock stop's hint is a "Check the time" button while `checkTime`. */
+function words(notice: StaffNotice, checkTime: boolean, host: HTMLElement): TemplateResult {
+  const { main, hint } = staffNoticeText(notice, checkTime);
   return html`<wt-icon name=${`staff-notice-${toneOf(notice.severity)}`}></wt-icon
     ><span class="words"
-      ><strong class="main">${main}</strong> · <span class="hint">${hint}</span></span
+      ><strong class="main">${main}</strong>${
+        checksTime(notice, checkTime)
+          ? html` <wt-button
+              data-check-time
+              variant="secondary"
+              @click=${() =>
+                host.dispatchEvent(
+                  new CustomEvent("till-check-time", { bubbles: true, composed: true }),
+                )}
+              >${hint}</wt-button
+            >`
+          : html` · <span class="hint">${hint}</span>`
+      }</span
     >`;
 }
 
 /** The till's staff notices under its top bar: the first notice, and with more a tap that opens
- * the rest in the page's flow. Never a dialog and never dismissed; it emits no events. */
+ * the rest in the page's flow. Never a dialog and never dismissed; its one event is
+ * `till-check-time`, from a clock stop's "Check the time" while `checkTimeOffered`. */
 @customElement("till-notice-strip")
 export class TillNoticeStrip extends LitElement {
   static override styles = [
@@ -105,9 +120,21 @@ export class TillNoticeStrip extends LitElement {
 
       /* The strip spans the screen, so a ring drawn outside it would lose its sides. */
       button.line:focus-visible,
+      button.toggle:focus-visible,
       ul:focus-visible {
         outline: var(--wt-focus-ring);
         outline-offset: calc(-1 * var(--wt-focus-offset));
+      }
+
+      button.toggle {
+        flex: none;
+        min-block-size: var(--wt-tap-min);
+        min-inline-size: var(--wt-tap-min);
+        font: inherit;
+        color: inherit;
+        background: none;
+        border: 0;
+        cursor: pointer;
       }
 
       .more {
@@ -131,6 +158,8 @@ export class TillNoticeStrip extends LitElement {
   ];
 
   @property({ attribute: false }) notices: readonly StaffNotice[] = [];
+  /** The box offers this till "Check the time". */
+  @property({ attribute: false }) checkTimeOffered = false;
 
   @state() private open = false;
 
@@ -147,29 +176,41 @@ export class TillNoticeStrip extends LitElement {
   }
 
   #strip(first: StaffNotice): TemplateResult {
+    const checkTime = this.checkTimeOffered;
     if (this.notices.length === 1) {
       return html`<div class="strip" data-notice-strip>
-        <p class="line" data-notice-tone=${toneOf(first.severity)}>${words(first)}</p>
+        <p class="line" data-notice-tone=${toneOf(first.severity)}>
+          ${words(first, checkTime, this)}
+        </p>
       </div>`;
     }
     const more = this.notices.length - 1;
-    return html`<div class="strip" data-notice-strip>
-      <button
+    const moreWords = html`<span class="more" data-notice-more
+      ><span aria-hidden="true">${t("staff_notice.more").replace("{n}", String(more))}</span
+      ><span class="visually-hidden"
+        >${countText(more, "staff_notice.more_label", "staff_notice.more_label_one")}</span
+      ></span
+    >`;
+    const toggle = (cls: string, content: TemplateResult) =>
+      html`<button
         type="button"
-        class="line"
+        class=${cls}
         data-notice-tone=${toneOf(first.severity)}
         aria-expanded=${this.open ? "true" : "false"}
         aria-controls="notice-list"
         @click=${() => (this.open = !this.open)}
       >
-        ${words(first)}
-        <span class="more" data-notice-more
-          ><span aria-hidden="true">${t("staff_notice.more").replace("{n}", String(more))}</span
-          ><span class="visually-hidden"
-            >${countText(more, "staff_notice.more_label", "staff_notice.more_label_one")}</span
-          ></span
-        >
-      </button>
+        ${content}
+      </button>`;
+    // A button never holds another, so the "Check the time" line keeps its toggle beside it.
+    return html`<div class="strip" data-notice-strip>
+      ${
+        checksTime(first, checkTime)
+          ? html`<div class="line" data-notice-tone=${toneOf(first.severity)}>
+              ${words(first, checkTime, this)} ${toggle("toggle", moreWords)}
+            </div>`
+          : toggle("line", html`${words(first, checkTime, this)} ${moreWords}`)
+      }
       ${
         this.open
           ? html`<ul
@@ -181,7 +222,7 @@ export class TillNoticeStrip extends LitElement {
               ${this.notices.map(
                 (notice) =>
                   html`<li class="line" data-notice-tone=${toneOf(notice.severity)}>
-                    ${words(notice)}
+                    ${words(notice, checkTime, this)}
                   </li>`,
               )}
             </ul>`

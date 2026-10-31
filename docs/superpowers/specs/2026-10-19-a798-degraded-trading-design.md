@@ -1088,6 +1088,18 @@ to the chain code. Where a check could never be confirmed, it does not stop sell
 
 #### c. Who confirms the time, in order
 
+> **Pointer (2026-10-31):** the owner's answer to slice 9b's question changes who may SET the clock
+> (parts c and d): AEAT's time still sets it by itself; without it, a till proposes its time and any
+> staff member signed in on it confirms it, during a stop found at start-up; an administrator's own
+> device may set it at any time; two agreeing devices no longer set it by themselves. A clock problem
+> found while the box is running alerts the administrators. Slice 9b's plan, revision 4,
+> [plan](../plans/2026-10-24-a798-9b-box-sets-its-clock.md) (decisions 6 and 14–17), carries it out
+> and says what stays: slice 9's lift on two devices that agree with the box is unchanged in 9b
+> except while a stop found at start-up lasts, when a person confirms instead, or AEAT's time
+> agreeing with the box still lifts it (its revision 5).
+> A staff member's confirmation is recorded as `source = 'staff'`, through one migration that
+> widens part i's `clock_confirmations` CHECKs.
+
 1. **AEAT's time over the internet**, automatically: the `Date` header of AEAT's QR validation site,
    or a submission reply's timestamp (slice 9 as built).
 2. **Two tills or handhelds that agree with each other**, automatically, each having reported its

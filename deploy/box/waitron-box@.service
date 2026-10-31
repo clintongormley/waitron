@@ -1,0 +1,11 @@
+[Unit]
+Description=Waitron box: one clock request from the app
+CollectMode=inactive-or-failed
+
+[Service]
+ExecStart=/usr/local/lib/waitron/waitron-box.sh %i
+ExecStopPost=/usr/local/lib/waitron/waitron-box.sh --restore %i
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+RuntimeMaxSec=15

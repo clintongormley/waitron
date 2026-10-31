@@ -9,6 +9,8 @@ import {
 import { codeOf } from "@waitron/server-kit";
 import { bootReader, type BootReader, type BootReading } from "./boot-reader.js";
 import { readClockStopState } from "./box-health.js";
+import type { ClockAnchor, clockCorrection } from "./clock-correction.js";
+import type { ClockStartUp } from "./clock-start-up.js";
 import type { ClockWitnessStore } from "./clock-witnesses.js";
 import type { Logger } from "./logger.js";
 import { unrefTimer, type Timer } from "./unref-timer.js";
@@ -30,12 +32,21 @@ const JUMP_MS = 60_000;
  * (`aeat-transport.ts`). Past it the earliest are kept. */
 const PENDING_MAX = 1_440;
 
+/** How long the watch asks for no automatic set in a stop after the host refused one, timed out
+ * or did not verify it; doubled after each further failure, up to `SET_BACKOFF_MAX_MS`. */
+const SET_BACKOFF_MS = 10 * 60_000;
+const SET_BACKOFF_MAX_MS = 4 * 60 * 60_000;
+
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished, on the primary only. While the seat answers a clock stop state, each check offers
- * the seat a clock check to open, confirms the clock when the witnesses are ready, and asks AEAT's
- * time when an ask is due; while the seat answers a waiting check, each check does the same ask and
- * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished;
- * nothing is read, asked or written after it. */
+ * the seat a clock check to open, asks the correction to set the clock to AEAT's time when AEAT
+ * disagrees (not again in that check for a while after a set the host failed), confirms the clock
+ * when the witnesses are ready, and asks AEAT's time when an ask is due; while the seat answers a waiting check, each check does the same ask and
+ * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished,
+ * and no check runs after it; a disproof write that `stepComing` or `reanchor` began before it can
+ * still finish later. As a set's anchor, it takes no jump from the wall clock between
+ * `stepComing` and `reanchor`, and each of them first records the disproof of every disagreeing
+ * AEAT reading not yet taken, or throws. */
 export function startClockWatch(deps: {
   backend: Pick<
     FiscalBackend,
@@ -50,7 +61,7 @@ export function startClockWatch(deps: {
   >;
   store: Pick<
     ClockWitnessStore,
-    "noteAuthority" | "witnesses" | "takeNewAuthority" | "endStop" | "clear"
+    "noteAuthority" | "witnesses" | "forSetting" | "takeNewAuthority" | "endStop" | "clear"
   >;
   clock: Pick<TrustedClock, "now">;
   wall?: () => number;
@@ -60,12 +71,21 @@ export function startClockWatch(deps: {
   nodeId: string;
   read: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
   transaction: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
+  /** Sets the clock from AEAT; its one-at-a-time turn is taken around each confirmation's whole
+   * transaction. */
+  correction?: Pick<
+    ReturnType<typeof clockCorrection>,
+    "inTurn" | "set" | "steps" | "writePending"
+  >;
+  /** While open, two agreeing devices alone confirm nothing; a look that sees no stop holding
+   * closes it. */
+  startUp?: Pick<ClockStartUp, "open" | "noStop" | "authorityAsked">;
   filesRecords: () => boolean;
   isPrimary: () => boolean;
   intervalMs: number;
   log: Logger;
   timer?: (ms: number, fn: () => void) => Timer;
-}): { stop: () => Promise<void> } {
+}): ClockAnchor & { stop: () => Promise<void> } {
   const timer = deps.timer ?? unrefTimer;
   const wall = deps.wall ?? (() => Date.now());
   const boot = deps.boot ?? bootReader();
@@ -75,6 +95,14 @@ export function startClockWatch(deps: {
   let lastCheckId: string | null = null;
   let running: Promise<void> | null = null;
   let previous = { wallMs: wall(), monoMs: monotonic() };
+  /** A set is coming or under way: no look compares the wall clock with `previous`. */
+  let held = false;
+  let recording: Promise<void> = Promise.resolve();
+  const inTurn = deps.correction?.inTurn ?? (<T>(fn: () => Promise<T>) => fn());
+  /** By the open check's id: a new stop starts with no backoff. */
+  let backoff: { checkId: string | null; failures: number; atMs: number; waitMs: number } | null =
+    null;
+  let lastRefusal: string | null = null;
 
   /** Disproofs not yet recorded, oldest first; each leaves only once its transaction commits. */
   const pending: ClockProvedWrong[] = [];
@@ -96,7 +124,17 @@ export function startClockWatch(deps: {
     pending.push(input);
   }
 
-  async function recordPending(): Promise<void> {
+  /** Each call waits for the one before it to settle, so two never write the same head. */
+  function recordPending(): Promise<void> {
+    const call = recording.then(recordPendingNow, recordPendingNow);
+    recording = call.then(
+      () => {},
+      () => {},
+    );
+    return call;
+  }
+
+  async function recordPendingNow(): Promise<void> {
     const note = deps.backend.noteClockProvedWrong;
     if (note === undefined) {
       pending.length = 0;
@@ -114,6 +152,25 @@ export function startClockWatch(deps: {
         deps.log("warn", "clock_watch.disproved_held", { confirmationId, reason: input.reason });
       }
     }
+  }
+
+  function keepDisagreeing(): void {
+    const disagreeing = judgeClockWitnesses(deps.store.takeNewAuthority()).authorityDisagrees;
+    for (const witness of [...disagreeing].reverse()) {
+      keep({
+        trustedUntil: new Date(witness.boxAt),
+        observedAt: new Date(witness.witnessAt),
+        reason: "authority",
+      });
+    }
+  }
+
+  /** Throws when a disproof is left unrecorded because the watch has stopped: the set it guards
+   * must not go ahead without it. */
+  async function recordUntaken(): Promise<void> {
+    keepDisagreeing();
+    await recordPending();
+    if (stopped && pending.length > 0) throw new Error("clock_watch.stopped");
   }
 
   function recordable(reading: Reading): boolean {
@@ -153,13 +210,15 @@ export function startClockWatch(deps: {
     witnesses: readonly ClockWitness[],
   ): Promise<void> {
     if (deps.backend.confirmClockStop === undefined) return;
-    const { confirmation } = await deps.transaction((tx) =>
-      deps.backend.confirmClockStop!(tx, {
-        reading,
-        boot: bootAt,
-        witnesses,
-        nodeId: deps.nodeId,
-      }),
+    const { confirmation } = await inTurn(() =>
+      deps.transaction((tx) =>
+        deps.backend.confirmClockStop!(tx, {
+          reading,
+          boot: bootAt,
+          witnesses,
+          nodeId: deps.nodeId,
+        }),
+      ),
     );
     if (confirmation === null) return;
     deps.store.clear();
@@ -169,12 +228,62 @@ export function startClockWatch(deps: {
     });
   }
 
+  /** A steady clock that cannot be read, or that went backwards, does not hold a set back. */
+  function backedOff(): boolean {
+    if (backoff === null || backoff.checkId !== lastCheckId) return false;
+    const since = monotonic() - backoff.atMs;
+    return since >= 0 && since < backoff.waitMs;
+  }
+
+  /** Sets the clock to AEAT's disagreeing reading, measured where the store says it arrived. */
+  async function setFromAuthority(witness: ClockWitness, stepsSeen: number): Promise<void> {
+    const correction = deps.correction;
+    if (correction === undefined || backedOff()) return;
+    const settable = deps.store
+      .forSetting()
+      .find(
+        (kept) =>
+          kept.witness.boxAt === witness.boxAt && kept.witness.witnessAt === witness.witnessAt,
+      );
+    if (settable === undefined) return;
+    const checkId = lastCheckId;
+    const answer = await correction.set({
+      reason: "behind_chain",
+      source: "authority",
+      offsetMs: Date.parse(witness.witnessAt) - Date.parse(witness.boxAt),
+      measuredAt: { wallMs: settable.at.wallMs, monoMs: settable.at.monoMs },
+      stepsSeen,
+      witnesses: [settable.witness],
+      requester: { source: "authority", check: checkId },
+    });
+    if (answer.set) {
+      backoff = null;
+      lastRefusal = null;
+      return;
+    }
+    if (answer.reason !== lastRefusal) {
+      deps.log("info", "clock_watch.cannot_set", { reason: answer.reason });
+      lastRefusal = answer.reason;
+    }
+    // Only these reached the host; the other refusals toggle nothing.
+    if (answer.reason === "refused" || answer.reason === "unverified") {
+      const failures = backoff?.checkId === checkId ? backoff.failures + 1 : 1;
+      backoff = {
+        checkId,
+        failures,
+        atMs: monotonic(),
+        waitMs: Math.min(SET_BACKOFF_MS * 2 ** (failures - 1), SET_BACKOFF_MAX_MS),
+      };
+    }
+  }
+
   async function askAuthority(): Promise<void> {
     if (!deps.filesRecords() || deps.backend.readAuthorityTime === undefined || !authorityDue())
       return;
     lastAuthorityMs = monotonic();
     const sample = await deps.backend.readAuthorityTime();
     if (stopped) return;
+    deps.startUp?.authorityAsked(sample !== null);
     if (sample !== null) deps.store.noteAuthority(sample);
   }
 
@@ -189,16 +298,18 @@ export function startClockWatch(deps: {
     if (waiting === null || stopped) return;
     await askAuthority();
     if (stopped) return;
-    const { confirmation } = await deps.transaction(async (tx) => {
-      const witnesses = deps.store.witnesses();
-      const now = deps.clock.now();
-      return deps.backend.closeClockCheckByItself!(tx, {
-        reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
-        boot: boot.readBoot(),
-        witnesses,
-        nodeId: deps.nodeId,
-      });
-    });
+    const { confirmation } = await inTurn(() =>
+      deps.transaction(async (tx) => {
+        const witnesses = deps.store.witnesses();
+        const now = deps.clock.now();
+        return deps.backend.closeClockCheckByItself!(tx, {
+          reading: { instant: now.instant, offsetMinutes: now.offsetMinutes },
+          boot: boot.readBoot(),
+          witnesses,
+          nodeId: deps.nodeId,
+        });
+      }),
+    );
     if (confirmation === null) return;
     deps.store.clear();
     deps.log("info", "clock_watch.check_closed", {
@@ -216,7 +327,7 @@ export function startClockWatch(deps: {
       return;
     }
     const steadyElapsed = current.monoMs - earlier.monoMs;
-    if (current.wallMs - earlier.wallMs - steadyElapsed > JUMP_MS) {
+    if (!held && current.wallMs - earlier.wallMs - steadyElapsed > JUMP_MS) {
       keep({
         trustedUntil: new Date(earlier.wallMs + steadyElapsed),
         observedAt: new Date(current.wallMs),
@@ -232,7 +343,17 @@ export function startClockWatch(deps: {
       deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
     }
     if (stopped) return;
+    // A step's row is written only after the disproofs measured on the old clock (plan decision 8).
+    if (recorded && deps.correction !== undefined) {
+      try {
+        await deps.correction.writePending();
+      } catch (error) {
+        deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+      }
+      if (stopped) return;
+    }
     let stop = null;
+    let stepsSeen = 0;
     let reading: Reading | undefined;
     let bootAt: BootReading | undefined;
     let judged: readonly ClockWitness[] = [];
@@ -240,7 +361,10 @@ export function startClockWatch(deps: {
       stop = await deps.read((tx) =>
         readClockStopState(tx, {
           backend: deps.backend,
-          witnesses: () => (judged = deps.store.witnesses()),
+          witnesses: () => {
+            stepsSeen = deps.correction?.steps() ?? 0;
+            return (judged = deps.store.witnesses());
+          },
           clock: {
             now: () => {
               reading = deps.clock.now();
@@ -256,7 +380,10 @@ export function startClockWatch(deps: {
       // The seat answers no stop both at a reading no record could carry (before 28-10-2024) and
       // at one not behind the latest record; only the second ends the stop, and with it AEAT's
       // disagreements (plan decision 4).
-      if (reading === undefined || recordable(reading)) deps.store.endStop();
+      if (reading === undefined || recordable(reading)) {
+        deps.store.endStop();
+        deps.startUp?.noStop();
+      }
       if (reading !== undefined) {
         try {
           await closeWaiting({ instant: reading.instant, offsetMinutes: reading.offsetMinutes });
@@ -266,6 +393,7 @@ export function startClockWatch(deps: {
         if (stopped) return;
       }
     } else {
+      if (stop.proof === "confirmed") deps.startUp?.noStop();
       const at = { instant: reading!.instant, offsetMinutes: reading!.offsetMinutes };
       // A write that keeps failing must not keep the confirmation, AEAT's time and the disproofs
       // from running. The opening and the confirmation are separate transactions so that the
@@ -276,7 +404,18 @@ export function startClockWatch(deps: {
         deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
       }
       if (stopped) return;
-      if (stop.proof === "ready") {
+      // Revision 4: only AEAT sets the clock by itself; devices that disagree set nothing. With a
+      // disproof left unrecorded the set could only be refused `pending_disproofs`.
+      if (recorded && stop.proof === "contrary" && stop.contrary.authority !== null) {
+        try {
+          await setFromAuthority(stop.contrary.authority, stepsSeen);
+        } catch (error) {
+          deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
+        }
+      }
+      // Plan decision 18: during start-up a person, or AEAT, confirms the box's time.
+      const devicesOnly = stop.agreeing.authority === null && deps.startUp?.open() === true;
+      if (stop.proof === "ready" && !devicesOnly) {
         try {
           await confirm(at, bootAt!, judged);
         } catch (error) {
@@ -287,14 +426,7 @@ export function startClockWatch(deps: {
       await askAuthority();
       if (stopped) return;
     }
-    const disagreeing = judgeClockWitnesses(deps.store.takeNewAuthority()).authorityDisagrees;
-    for (const witness of [...disagreeing].reverse()) {
-      keep({
-        trustedUntil: new Date(witness.boxAt),
-        observedAt: new Date(witness.witnessAt),
-        reason: "authority",
-      });
-    }
+    keepDisagreeing();
     // Each entry is tried at most once a check; `endStop` and the drain above have already run.
     if (recorded) await recordPending();
   }
@@ -314,6 +446,18 @@ export function startClockWatch(deps: {
   let armed = timer(deps.intervalMs, scheduled);
 
   return {
+    stepComing: async () => {
+      held = true;
+      await recordUntaken();
+    },
+    reanchor: async () => {
+      try {
+        await recordUntaken();
+      } finally {
+        previous = { wallMs: wall(), monoMs: monotonic() };
+        held = false;
+      }
+    },
     stop: async () => {
       stopped = true;
       armed.cancel();

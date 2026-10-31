@@ -43,6 +43,10 @@ services:
       - state:/var/lib/waitron/state
       - logs:/var/lib/waitron/logs
       - backups:/var/lib/waitron/backups
+      # The box's clock service (deploy/box/). waitron.sh install names /run/waitron-box in .env only
+      # once the socket has started there; otherwise this is an empty volume and the app answers that
+      # it cannot set the clock.
+      - ${WAITRON_BOX_SOCKET_DIR:-box_socket}:/run/waitron-box
     # EITHER endpoint returning 200 is healthy, because neither exists in both modes: /health is 503
     # by design on a setup box (no duty loop means not trading-healthy) and /setup-api/status is
     # mounted only in setup mode. A probe on one alone would restart-loop the other mode forever.
@@ -177,3 +181,4 @@ volumes:
   backups:
   mailpit:
   print_agent:
+  box_socket:

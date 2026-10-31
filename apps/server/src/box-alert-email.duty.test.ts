@@ -142,6 +142,33 @@ const MISDATED: EmailedIncident = {
   },
 };
 
+function step(id: string, stepMs: number): EmailedIncident {
+  return {
+    id,
+    code: "clock.corrected",
+    params: {
+      confirmationId: `c-${id}`,
+      source: "authority",
+      person: null,
+      deviceId: null,
+      device: null,
+      before: "2025-03-14T08:12:00.000Z",
+      beforeOffsetMinutes: 60,
+      after: "2026-10-18T21:40:00.000Z",
+      afterOffsetMinutes: 120,
+      stepMs,
+      direction: "forward",
+      verified: true,
+      unverified: false,
+      byAdmin: false,
+      byStaff: false,
+    },
+  };
+}
+
+const FIRST_STEP = step("i-step-1", 86_400_000);
+const SECOND_STEP = step("i-step-2", 3_600_000);
+
 function clockEmail(incident: EmailedIncident, recipient: ManagerEmailRecipient) {
   return {
     recipient: recipient.email,
@@ -163,6 +190,146 @@ function expected(code: BoxEmailCode, recipient: ManagerEmailRecipient) {
     ...boxEmailMessage(code, recipient.language, VENUE),
   };
 }
+
+describe("startBoxEmailDuty for the box setting its clock", () => {
+  it("emails an open clock.corrected alert to each manager once", async () => {
+    const d = duty();
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
+  });
+
+  it("emails both of two steps inside one check interval, each once, though the first is handled", async () => {
+    const d = duty();
+    d.handle.remember(FIRST_STEP);
+    // The second step marks the first handled, so the read answers only the second.
+    d.handle.remember(SECOND_STEP);
+    d.state.incidents = [SECOND_STEP];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      clockEmail(FIRST_STEP, ANA),
+      clockEmail(FIRST_STEP, BEN),
+      clockEmail(SECOND_STEP, ANA),
+      clockEmail(SECOND_STEP, BEN),
+    ]);
+  });
+
+  it("sends a remembered step whose send failed on the next check, though it is handled, then never again", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.handle.remember(FIRST_STEP);
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    d.state.incidents = [];
+    await d.tick();
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
+    expect(d.context).toHaveBeenCalledTimes(2);
+  });
+
+  it("tries a handled step's failed send again on the next check", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.handle.remember(FIRST_STEP);
+    await d.tick();
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
+  });
+
+  it("ends a handled step's email for a manager whose address was refused outright", async () => {
+    const d = duty();
+    d.state.recipients = [ANA, BEN];
+    d.send.mockImplementation(async ({ recipient }) =>
+      recipient === BEN.email ? "rejected" : "sent",
+    );
+    d.handle.remember(FIRST_STEP);
+    d.handle.remember(SECOND_STEP);
+    for (let i = 0; i < 4; i++) await d.tick();
+    expect(d.sent()).toEqual([
+      clockEmail(FIRST_STEP, ANA),
+      clockEmail(FIRST_STEP, BEN),
+      clockEmail(SECOND_STEP, ANA),
+      clockEmail(SECOND_STEP, BEN),
+    ]);
+    expect(d.context).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps trying a refused address while the step's alert stays open", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "rejected");
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, BEN), clockEmail(FIRST_STEP, BEN)]);
+  });
+
+  it("ends a step's email once it has reached everyone and the alert is handled", async () => {
+    const d = duty();
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    d.state.incidents = [];
+    for (let i = 0; i < 3; i++) await d.tick();
+    expect(d.sent()).toEqual([clockEmail(FIRST_STEP, ANA), clockEmail(FIRST_STEP, BEN)]);
+    expect(d.context).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a remembered step after its no-recipients line when there is no one to email", async () => {
+    const d = duty();
+    d.state.recipients = [];
+    d.handle.remember(FIRST_STEP);
+    await d.tick();
+    d.state.recipients = [BEN];
+    await d.tick();
+    await d.tick();
+    expect(d.events("box_email.no_recipients")).toEqual([
+      ["warn", "box_email.no_recipients", { code: "clock.corrected" }],
+    ]);
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.context).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a remembered step after its not-configured line when email is not set up", async () => {
+    const d = duty();
+    d.state.delivery = { mode: "unconfigured" } as EmailDelivery;
+    d.handle.remember(FIRST_STEP);
+    await d.tick();
+    d.state.delivery = { mode: "smtp", smtp: SMTP } as EmailDelivery;
+    await d.tick();
+    expect(d.events("box_email.not_configured")).toHaveLength(1);
+    expect(d.send).not.toHaveBeenCalled();
+  });
+
+  it("emails a step the read found open and a later step then handled, once each", async () => {
+    const d = duty();
+    d.state.recipients = [BEN];
+    d.send.mockImplementationOnce(async () => "unknown");
+    d.state.incidents = [FIRST_STEP];
+    await d.tick();
+    d.state.incidents = [SECOND_STEP];
+    await d.tick();
+    await d.tick();
+    expect(d.sent()).toEqual([
+      clockEmail(FIRST_STEP, BEN),
+      clockEmail(FIRST_STEP, BEN),
+      clockEmail(SECOND_STEP, BEN),
+    ]);
+  });
+
+  it("still sends nothing for a remembered wrongly dated alert handled before it was sent", async () => {
+    const d = duty();
+    d.handle.remember(MISDATED);
+    await d.tick();
+    await d.tick();
+    expect(d.send).not.toHaveBeenCalled();
+  });
+});
 
 describe("startBoxEmailDuty", () => {
   it("emails each manager once when the low-space warning comes on, in their own language", async () => {
