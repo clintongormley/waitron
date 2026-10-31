@@ -1184,6 +1184,13 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     the sub-second unverified step); every existing value is unchanged. New cases check what
     `corrected` holds. Task 10.
 
+15. *(Added after CI on Task 11b's review fold, 2026-10-31.)*
+   `apps/server/src/boot.disk-full-wiring.test.ts:254` (the equipment read's notice owners,
+   `toEqual(["box", "fiscal-verifactu"])`) gains `"box-clock"` between them: Task 11b's review
+   gave the till's clock marker its own owner, so a failing clock read never marks the box's
+   storage notices unavailable. Both existing owners keep their values and order. CI run
+   41202806427 (`test-server (19)`) is where it failed.
+
 **Fixtures only, no assertion changed:**
 6. `apps/server/src/box-status.route.test.ts:120` and
    `apps/server/src/awaiting-fiscal-cert.test.ts:70`:
