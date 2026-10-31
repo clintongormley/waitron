@@ -27,7 +27,7 @@ function page(locale: "en-GB" | "es-ES", printer: EscSetting = PRINTER_80): Uint
   return formatPrinterTestPage({
     locale,
     printer,
-    printerName: "Barra Epson",
+    printerName: "Front Epson",
     now: NOW,
     timeZone: "Atlantic/Canary",
   });
@@ -58,7 +58,7 @@ describe("formatPrinterTestPage", () => {
   ] as const)("prints its %s words", (locale, title, dateTime, bottom) => {
     const text = words(page(locale));
     expect(text).toContain(title);
-    expect(text).toContain("Barra Epson");
+    expect(text).toContain("Front Epson");
     expect(text).toContain("80mm · 203dpi");
     expect(text).toContain(dateTime);
     expect(text).toContain("Café, jamón, niño · 5 € · ¿Sí? ¡Sí!");
@@ -70,7 +70,7 @@ describe("formatPrinterTestPage", () => {
     const madrid = formatPrinterTestPage({
       locale: "en-GB",
       printer: PRINTER_80,
-      printerName: "Barra Epson",
+      printerName: "Front Epson",
       now: NOW,
       timeZone: "Europe/Madrid",
     });

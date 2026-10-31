@@ -1039,6 +1039,9 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
   the administrator's personal names "Ana Maria" and "Lopez Garcia", and the operation
   description "Venta en establecimiento" its venue-defaults case reads from the fiscal package.
+  Group-route and course-deletion service-step suites use English names for their own courses.
+  The printer-test-page suite uses an English printer sample and retains its bilingual words
+  and accented-character checks.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented

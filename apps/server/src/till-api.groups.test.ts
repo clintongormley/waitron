@@ -953,7 +953,7 @@ describe("the tab routes that release lines, on a party with groups", () => {
     );
     const courseId = await inTx(venue, async (tx) => {
       const course = await createCourse(tx, venue.cfg, {
-        name: `Postres-${randomUUID().slice(0, 6)}`,
+        name: `Desserts-${randomUUID().slice(0, 6)}`,
         displayOrder: 9,
       });
       await setProductCourse(tx, venue.cfg, cake!.id, course.id);
