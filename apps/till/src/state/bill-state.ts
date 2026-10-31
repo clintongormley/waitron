@@ -44,6 +44,16 @@ export function billToShow(
     ?.workingOrderId;
 }
 
+/** A bill's short label, as the floor names a bill: "Bill 2", or "Bill 2 · Clint" when it has a
+ * name; "Bill" for a bill stored with no number. */
+export function billLabel(bill: Pick<PartyBill, "billNumber" | "billName">): string {
+  const label =
+    bill.billNumber === null
+      ? t("floor.unsent_bill_unnumbered")
+      : fill(t("floor.unsent_bill"), { n: String(bill.billNumber) });
+  return bill.billName === null ? label : `${label} · ${bill.billName}`;
+}
+
 /** A bill's name under the party's display name: its stored number, and its own name if it has one. */
 export function billName(
   partyName: string,

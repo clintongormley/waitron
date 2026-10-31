@@ -17,6 +17,7 @@ import {
   draftServer,
   floorPartyBills,
   mountWidget,
+  partyBillOf,
   type DraftServer,
 } from "./widgets/test-helpers.js";
 import { SUBMIT_RETRY_PAUSE_MS, TillApp } from "./till-app.js";
@@ -295,7 +296,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
 }
 
 /** A bills read in which a split's new bill, `wo-check`, joins the party it was split from once the
- * split has answered. */
+ * split has been sent. */
 function billsAfterSplit() {
   return floorPartyBills(undefined, (partyId) =>
     (api.splitBill?.mock.calls ?? []).some(([, , ask]) => ask?.partyId === partyId)
@@ -1488,10 +1489,30 @@ describe("till-app: a table's draft is kept on the server", () => {
   });
 });
 
+/** The bills and drafts reads of a server where table 7's party holds `wo-7` and the bill on screen,
+ * `wo-4`, belongs to Ana's party `v1` and, once relocated, to `v9`: each party's drafts read answers
+ * the editor state of that party's own bills only. */
+function relocatedBillReads() {
+  const billsOf = (partyId: string) =>
+    partyId === "v7"
+      ? [partyBillOf("v7", "wo-7")]
+      : partyId === "v1" || partyId === "v9"
+        ? [partyBillOf(partyId, "wo-4")]
+        : [];
+  return {
+    getPartyBills: vi.fn(async (partyId: string) => billsOf(partyId)),
+    listDrafts: vi.fn(async (...args: Parameters<DraftServer["listDrafts"]>) => {
+      const answer = await server.listDrafts(...args);
+      const own = new Set(billsOf(args[0]).map((bill) => bill.workingOrderId));
+      return { ...answer, billEdits: answer.billEdits.filter((edit) => own.has(edit.billId)) };
+    }),
+  };
+}
+
 describe("till-app: an order that moves to another party", () => {
   it("retains local edits without saving to the old party, then reads the relocated bill", async () => {
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      ...relocatedBillReads(),
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     await openTable(el);
@@ -4013,7 +4034,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     };
     let answerGroups!: () => void;
     const { el } = await mountApp({
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      ...relocatedBillReads(),
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
       listGroups: vi.fn(async (partyId: string) => {
         if (partyId !== "v9") return { revision: 3, groups: [], printProblems: [] };
@@ -9399,7 +9420,7 @@ describe("A773 non-open bill draft restrictions", () => {
     billName: null,
   });
 
-  it.each(["placed", "settled", "abandoned"] as const)(
+  it.each(["placed", "settled"] as const)(
     "opening a %s bill keeps its Sent reads but accepts no fresh dishes",
     async (status) => {
       const { el } = await mountApp({ getPartyBills: vi.fn().mockResolvedValue([bill(status)]) });
@@ -9413,6 +9434,21 @@ describe("A773 non-open bill draft restrictions", () => {
       expect(server.saveDraft).not.toHaveBeenCalled();
     },
   );
+
+  it("opening a table whose floor names an abandoned bill leaves it, says so, and accepts no fresh dishes", async () => {
+    const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([bill("abandoned")]),
+    });
+    const order = await openTable(el);
+    expect(browser(el)).toBeNull();
+    expect(order.orderId).toBeUndefined();
+    expect(order.draftStore).toBeNull();
+    expect(order.shadowRoot!.querySelector("[data-bill-gone]")!.textContent!.trim()).toBe(
+      "Bill is no longer at this table.",
+    );
+    expect(api.getTabLines).toHaveBeenCalledWith("wo-4");
+    expect(server.saveDraft).not.toHaveBeenCalled();
+  });
 
   it("a refreshed presented bill freezes unsaved dishes and a failed later read cannot unlock it", async () => {
     const getPartyBills = vi.fn().mockResolvedValue([bill("open")]);

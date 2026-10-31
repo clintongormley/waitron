@@ -781,6 +781,19 @@ task's red run; a red assertion not on this list that is not kind B/R/W/S/F unde
 | `data-discount-bill` sites: `panel-footer.test.ts` (7), `till-table-order-screen.adjustments.test.ts` (4), `till-app-adjustments.test.ts` (2), `panel-footer.a11y.test.ts` (1) | R | open the ⋮ first, then the same button, same event and detail | D16, Owner question 7 | 12 |
 | Any case that pins the payment step's Full invoice on a presented bill that already has an invoice number | B | not drawn (D8 gate, matching the server's `working_order.not_open`); confirm at red, none found by reading | master plan "an issued/paid bill never opens that editor" | 12 |
 | Task 8d-0: bills fakes list the floor's bills, every `expect` identical; files: `apps/till/src/widgets/test-helpers.ts` (new `partyBillOf`, `floorPartyBills`), `apps/till/test/allergy-app-fixture.ts`, `till-app-drafts.test.ts`, `till-app-table-service.test.ts`, `till-app-device-zones.test.ts`, `till-app-open-table.test.ts`, `till-app-bar-tables.test.ts`, `till-app-kitchen-note.test.ts`, `till-app-menu-refresh.test.ts`, `till-app-counter-adjustments.test.ts`, `till-app-setup-refresh.test.ts`, `till-app.a11y.test.ts`, `till-app-parties.test.ts`, `till-app.test.ts` | S | a bills fake that answered `[]`, or one party's bills whoever asked, answers what a server would: every bill a floor answer has named for the party (`openingBillId`), a newly seated party its `wo-new`, table 7's party its `wo-7`, the party the guests moved into all its bills (`billsOnceJoinedByAna`), and after a split or a paid tab the bill the answer named. Four cases keep their `[]` read (named in the Task 8d-0 record). No `expect`, title or production line changed (`git diff -U0 \| rg '^[-+].*expect'` prints nothing) | owner's standing rule: a fixture may grow what it lacks | 8d-0 |
+| 8d-0 review answers (`a803-3-reviews/task-8c-8d0.md`), built in Task 8d's commit: `widgets/test-helpers.ts:840` `floorPartyBills` (I1, I4, M1) | S | the fake also lists, first and as Bill 1, the `tabId` of a fulfilled `seatTable`/`seatAtTables` answer of the mounted api for that party (I1); it reads `mock.settledResults` (fulfilled only), so a bills read never waits on a floor read the test holds (M1); floor answers naming two different `openingBillId`s for one party make it fail the run with an uncaught error naming the party (I4); the doc comment says so, drops "since a party keeps its bills when the floor stops naming them", and says the outstanding is not split between several bills. Control: `till-app-menu-refresh.test.ts:1864` put back on `floorPartyBills()` gave `Tests 1 passed`, `Errors 1 error` ("floorPartyBills: the floor named wo-7 and then wo-next for party party-a; …"), exit 1. `till-app-counter-adjustments.test.ts:570` keeps its committed `floorPartyBills()` and is green with the seat-aware fake (its red was I1's, not a production defect) | I1, I4, M1 | 8d |
+| `till-app-drafts.test.ts:299` (`billsAfterSplit` comment, M2) | — (comment) | "once the split has answered" → "once the split has been sent", which is what the code checks | M2 | 8d |
+| `till-app-drafts.test.ts:1513`, `:4022` (relocation cases kept on `[]` by 8d-0), `till-app-open-table.test.ts:1406` (I2) | S | the bills read lists the bill on screen for the party holding it at each point (drafts: new local `relocatedBillReads()` `:1495`, `v1`/`v9` → `wo-4`, `v7` → `wo-7`; open-table: `v1` → `wo-4`, plus `wo-7` once Move guests is sent, `v7` → `wo-7`), and each party's `listDrafts` answers only that party's `billEdits` (the real route lists only the family's bills, `apps/server/src/till-api.ts:3548-3567`); every `expect` byte-identical. All three pass on the base production code with this setup (`Tests 7 passed` with the other S cases below). Under D11 rule 3 the `[]` read makes the screen leave the bill on screen, so `[]` could not stay | I2; D11 rule 3 | 8d |
+| `till-app-parties.test.ts:566` ("acts on the party the seat answered with when the floor cannot be read after seating", I3) | B | setup `onlyNewPartyBills()` plus `drafts.bills.add("wo-new")` (was `[]`); `finishTable("v-new", 0, [])` → `[newBillEdit]` and `joinTables(…, expectedEdits: [])` → `[newBillEdit]`, `newBillEdit` = `{ billId: "wo-new", editorVersion: 0, draftId: null, draftRevision: null }`, exact values; the party id and revision checks unchanged. The server refuses an `expectedEdits` list that does not name exactly the family's bills (`apps/server/src/bill-editing.ts:228-230`), and seating creates Bill 1 (D7) | I3; D7; D11 rule 3 | 8d |
+| `till-app-table-service.test.ts:2902` ("a table of 4 on one open bill shows 4, and a cash payment changed to 5 …") | S | `openTableWith(tableWith(4, 1))` → `openTableWith(tableWith(4, 1), [bill()])`: the bills read lists the one open bill the title names (was `[]`, which under D11 rule 3 leaves the bill, so no payment was taken: the 8d-0 record's "`recordSale` never called"); every `expect` byte-identical, green on the base production code. Not a production defect | D11 rule 3 | 8d |
+| `till-app-menu-refresh.test.ts:1864` (was "reads the table's party again and shows the tab the table now points at", I4) | B | the bills read is the server's state: `wo-7` Bill 1, then settled once the round is sent, beside `wo-next` Bill 2 open (another till took payment and the party moved on). Retitled "… stays on the bill the round was sent from, now paid, beside the tab the table points at"; `shownTab` and the last `getTabLines` `"wo-next"` → `"wo-7"`; the party, bills-read, line-count and banner checks unchanged. A paid bill on screen stays (Task 8d case 6); the find-tab follow takes the draft's own bill, not the floor's `openingBillId` (D7: a read for opening only; Task 8d Files ":12082 follows the draft's own bill"). Added beside it, `:1904` "… shows the bill the table now points at once the round's bill has left the party": read `wo-next` alone after the send → every old check of this case byte-identical (`wo-next`) plus the `data-bill-gone` line "Bill 1 is no longer at this table. Now showing Bill 2." | D7; D11 rule 3; Task 8d case 6 | 8d |
+| `till-app-menu-refresh.test.ts:2110` ("does not follow the table the round was sent from", I4) | S | own bills read in the server's order: `wo-7` before Move guests is sent, then `wo-other` Bill 1 and `wo-7` Bill 2 (the floor names the lowest owing, `wo-other`, and the answer lists `["wo-other", "wo-7"]`); every `expect` byte-identical, green on the base code. (`wo-7` keeps number 2 throughout; the fake does not model how it came by it) | I4 | 8d |
+| `till-app-drafts.test.ts:9423` (`it.each` "opening a %s bill keeps its Sent reads but accepts no fresh dishes", row `abandoned`) | B | the `abandoned` row leaves the `it.each` (the `placed`/`settled` rows unchanged) for its own case `:9438` "opening a table whose floor names an abandoned bill leaves it, says so, and accepts no fresh dishes": `orderId` `"wo-4"` → `undefined`, `bills[0].status` `abandoned` → `draftStore` `null` and no menu drawn (`browser(el)` `null`, stricter than `inert`: no dish can be tapped), plus `[data-bill-gone]` "Bill is no longer at this table."; `getTabLines` called with `wo-4` (the parallel read, D11 rule 4 allows it) and `saveDraft` not called, unchanged. Judged a changed row, not a retired case: the case's claim, no fresh dish on an abandoned bill, is checked more strictly | D7 (never names an abandoned bill); D11 rule 3 | 8d |
+| `till-app-parties.test.ts:4706`, `:4736`, new `:4760` (opening a seated table) | B | `:4706` title "opens the party's main bill" → "opens the bill the floor names" (no `expect` change). `:4736` "opens the latest bill when every bill of the party is paid" → "opens the bill the floor names, the highest-numbered, when every bill of the party is paid": the floor names `wo-2` (D7's choice with nothing owing) instead of `null`; `orderId` `"wo-2"` byte-identical (green on the base code too). New `:4760`: a floor naming no bill (a fault state) with `[wo-1, wo-2]` both paid opens `wo-1` with no notice, which the old `billToOpen` (last bill) would not: it would open `wo-2` | D7; D11 | 8d |
+| `till-app-parties.test.ts:6132` (the plan row's `:5830`, confirmed by title: "keeps the party on screen, not the older copy on the kept floor, when a send from another bill got no answer and the floor cannot be read") | B | retitled "keeps the party and the bill sent from on screen, …"; `orderId` `"wo-4"` (the floor's bill) → `"wo-check"`, the bill the round was sent from; the party `toEqual` and the Move guests request (both bills' edit states) byte-identical | D7; Task 8d Files (":12082 follows the draft's own bill") | 8d |
+| `till-app-parties.test.ts:2554`, `:4178` (`it.each` rows `party.main_bill_stays`); `api/client.test.ts:2743`; `i18n/codes.test.ts:322` | B | the two `it.each` rows go; the client case keeps its request and checks, the sample code `party.main_bill_stays` → `group.held_leaves_party` (a code Move this bill still meets, same params and status); `codes.test.ts`'s loop keeps its other two codes and the code's two wording checks go. `rg -n 'party\.main_bill_stays' apps/till` prints nothing | D14 | 8d |
+| `screens/till-table-order-screen.test.ts:5423` (Split a table's bill list, found at the GREEN run) | B | retitled "… then any of its open or presented bills, the one on screen included, or none"; `targetIds` `["wo-check", "wo-placed", "wo-part", "none"]` → `["wo-4", "wo-check", "wo-placed", "wo-part", "none"]`; every other check unchanged | master plan "now allowing any eligible bill"; Task 8d Files (`#splitTableBills`, any owing bill) | 8d |
+| The plan's 8d row `till-app-parties.test.ts:2126`, `:2452`, `:4395`, `:4405`, `:5830`; `till-app-drafts.test.ts:8720` | — | `:2126`, `:2452` and `till-app-drafts.test.ts:8720` needed no change (green under Task 8d unedited); `:4395`/`:4405`/`:5830` are, by title, the `:4736` and `:6132` rows above | — | 8d |
 
 **Task 3a's red run found 50 red cases (each `it.each` row counted) in 15 files** (trace: the union of the plan's command and
 `rg -l 'joinTables\(|moveGuests\(|combineParties\(|/join|/move-guests'`, 84 files); the rows
@@ -1734,11 +1747,14 @@ in parallel as today, then D11 rule 3 when the bills read lacks it; `#loadPartyB
 proposals, Owner question 1); tests `till-app-open-table.test.ts`, `till-app-parties.test.ts`,
 `till-app-drafts.test.ts:8720`, `api/client.test.ts`, `i18n/codes.test.ts:323-333`.
 
-- [ ] Cases `A803 opening bill` in `till-app-open-table.test.ts`: opening a seated table shows
+- [x] Cases `A803 opening bill` in `till-app-open-table.test.ts`: opening a seated table shows
       `openingBillId` with one bills request at most and lines in parallel (count the requests);
       opening a party whose floor row names no bill and whose bills read is empty sends **no**
       `createPartyBill` and no draft write, and shows no New order (I4).
-- [ ] Cases `A803 bill gone` (review-1 I3) in `till-app-parties.test.ts`:
+      As built (`:2002`): three cases: the bill the floor names, with one bills read and the lines of
+      `wo-4` read before the bills answer; no bill and no draft for an empty read; and "never opens
+      an abandoned bill when the floor names no bill".
+- [x] Cases `A803 bill gone` (review-1 I3) in `till-app-parties.test.ts`:
       1. "another till merged the bill on screen away": the bills read arrives without it → the
          screen's bill is the lowest-numbered owing bill, `[data-bill-gone]` reads "Bill 2 is no
          longer at this table. Now showing Bill 1.", and the next `saveDraft` request names Bill 1;
@@ -1754,16 +1770,64 @@ proposals, Owner question 1); tests `till-app-open-table.test.ts`, `till-app-par
          names the stale id (the parallel lines read may);
       6. "the bill on screen is paid by another till": it stays on screen shown Paid, with no
          notice and no switch, and New order refuses `bill.paid` (it did not vanish).
-- [ ] Case `A803 action results` in `till-app-parties.test.ts`: Move this bill to another table
+      As built (`:4257`), the six cases. **Departures:** "New order refuses `bill.paid`" (cases 2
+      and 6) is checked as the paid bill's draft being locked (`billStatus` `settled`, `editsLocked`,
+      no line, no `saveDraft`): no `bill.paid` sentence exists on the till today. Case 4: the lines
+      typed on the vanished bill are not flushed (D11 rule 4 forbids a write to a bill missing from
+      the latest read, so Task 9's flush-then-switch body is not used here); the switch drops the
+      draft and offers its unsaved lines in the retained-draft panel of the bill now shown
+      (`#carryCandidate`). A stale bill the till never read is named "Bill" ("Bill is no longer at
+      this table. Now showing Bill 1."), having no number to show.
+- [x] Case `A803 action results` in `till-app-parties.test.ts`: Move this bill to another table
       leaves the screen on the staying party's lowest-numbered owing bill, and the next draft
       request names it; `:3964` (back to the floor when it was the last) stays green unedited.
-- [ ] The till's new opening rule (`billToShow`, and any reuse of `billToOpen` for D11) must not
+      As built (`:4443`); `:3964`'s case green unedited.
+- [x] The till's new opening rule (`billToShow`, and any reuse of `billToOpen` for D11) must not
       carry `billToOpen`'s abandoned-bill pick: abandoned bills are never chosen (D7; Task 6c
       review Minor 3).
-- [ ] RED: `pnpm --filter @waitron/till exec vitest run src/till-app-open-table.test.ts src/till-app-parties.test.ts -t 'A803'`.
-- [ ] Implement; the Changed test checks rows for 8d.
-- [ ] GREEN: the five files unfiltered; till typecheck clean; `rg -n 'party\.main_bill_stays' apps/till` prints nothing.
-- [ ] Commit: "The till opens a table on the bill the floor names and never keeps a vanished bill on screen".
+- [x] RED: `pnpm --filter @waitron/till exec vitest run src/till-app-open-table.test.ts src/till-app-parties.test.ts -t 'A803'`.
+      As built, against the base production code (the task's tests in place): `Tests  7 failed | 29
+      passed | 650 skipped (686)`. The 7 are every new case that pins a new rule; the three new
+      cases passing on the base code pin kept behaviour (one bills read and parallel lines on
+      opening; no bill made for an empty read; a paid bill on screen stays). With Task 8d: `36 passed`.
+- [x] Implement; the Changed test checks rows for 8d.
+      As built: an earlier implementer's work, saved as a patch and applied, then judged and finished.
+      `till-app.ts`: opening sets `activeTabId` to `openingBillId`, reads lines, bills and the draft in
+      parallel, then `#followBillsRead` (D11 rule 3, `opening`); `#loadPartyBills` applies it to
+      every other read unless the caller picks the bill itself (`follow` false: the action follow,
+      Move this bill and the split follow); Move this bill takes `billToShow` over the bills left,
+      else the floor (`#billAfterMove` and `billToOpen` deleted); the find-tab follow takes only the
+      draft's own bill; `party.main_bill_stays` leaves `TABLE_REFUSALS` and `codes.ts`;
+      `state/bill-state.ts` `billLabel`; the screen's `data-bill-gone` `role="status"` line and
+      `#splitTableBills` taking any owing bill of the party; `table.bill_gone`/`table.bill_gone_none`
+      in English and the Spanish proposals. The Changed test checks rows marked Task 8d, the 8d-0
+      review answers among them. No production change came out of the record's "not diagnosed"
+      cases: each was a fake that left out the bill on screen (see the 8d-0 record's correction).
+      Controls (each production check mutated, the named cases run, the code restored and
+      `git diff --stat` the same as before): (1) opening with `activeTabId = undefined`: `3 failed` —
+      "shows the bill the floor names, reading its lines alongside one bills read", "opens the bill
+      the floor names", "opens the bill the floor names, the highest-numbered, …"; (2)
+      `#followBillsRead` acting on opening only: `4 failed | 2 passed` of `A803 bill gone` — merged
+      away, moved away, no bill survives, lines typed on the vanished bill (the two passing are the
+      paid-stays case, which never switches, and the stale-opening case, which is the opening
+      path); (3) `shownBills` keeping abandoned bills: `2 failed` — "never opens an abandoned bill
+      when the floor names no bill", "opening a table whose floor names an abandoned bill leaves it,
+      …"; (4) the vanished bill's draft not dropped: `1 failed` — "lines typed on the vanished bill
+      are not sent to the new bill, and are offered for review"; (5) Move this bill taking the last
+      bill left instead of `billToShow`: `1 failed` — "Move this bill to another table leaves the
+      screen on the staying party's lowest-numbered owing bill, …".
+- [x] GREEN: the five files unfiltered; till typecheck clean; `rg -n 'party\.main_bill_stays' apps/till` prints nothing.
+      As built: every `till-app*.test.ts` (41), `api/client.test.ts`, `state/bill-state.test.ts`, the 79
+      `till-table-order-screen*.test.ts` files and the two allergy screen files on the shared
+      fixture, in one run: `Test Files  122 passed (122)`, `Tests  6333 passed (6333)`, exit 0 (the
+      known split-click flake did not show). `pnpm --filter @waitron/till exec vitest run src/i18n`:
+      `Tests  259 passed (259)`. `pnpm exec vitest run scripts/english-only.test.ts
+      scripts/errors-reachable.test.ts scripts/alert-codes.test.ts`: `Tests  2024 passed (2024)`.
+      `pnpm --filter @waitron/till typecheck`, `prettier --check` and `eslint` on the changed files:
+      exit 0 each. `rg -n 'party\.main_bill_stays' apps/till`: no output, exit 1. The setup-only (S)
+      cases run on the base production code: `Tests  7 passed`.
+- [x] Commit: "The till opens a table on the bill the floor names and never keeps a vanished bill on screen".
+      As built: one commit, with the 8d-0 review answers in it (they touch the same test files).
 
 ### Task 8d-0 record (test setup only, done 2026-10-31 before Task 8d)
 
@@ -1792,6 +1856,14 @@ Still red under the hunks, for Task 8d to judge (no `expect` was touched):
   waits for its own save" (the 8a row for `:1405`/`:1427`); `till-app-parties` "acts on the party
   the seat answered with when the floor cannot be read after seating" (with `wo-new` listed, Finish
   sends its editor state, and the case expects `[]`).
+- Correction at Task 8d (from the 8d-0 review, I1-I4): the reason given above for the cases kept
+  on `[]` was true, but what went red under a realistic read was the fake `draftServer.listDrafts`,
+  which answered every party with every bill's editor state, not the till (I2); and
+  `till-app-parties` "acts on the party …" pinned an `expectedEdits: []` the server refuses (I3).
+  `till-app-counter-adjustments` "allows a table Move …" was red because `floorPartyBills` ignored
+  the seat's answer (I1), and `till-app-table-service` "a table of 4 …" because its bills read was
+  `[]` beside the bill on screen; neither is a production defect. Each is in a Task 8d row of
+  Changed test checks.
 - Not in the plan: `till-app-drafts` "opening a abandoned bill keeps its Sent reads but accepts no
   fresh dishes" (D11 never shows an abandoned bill, so the screen leaves it); `till-app-menu-refresh`
   "reads the table's party again and shows the tab the table now points at" (the party's earlier

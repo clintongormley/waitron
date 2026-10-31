@@ -2745,7 +2745,7 @@ describe("TillApi", () => {
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ error: { code: "party.main_bill_stays", params: { partyId: "v1" } } }),
+          JSON.stringify({ error: { code: "group.held_leaves_party", params: { partyId: "v1" } } }),
           { status: 409, headers: { "content-type": "application/json" } },
         ),
       );
@@ -2760,7 +2760,7 @@ describe("TillApi", () => {
           expectedEdits: [{ billId: "wo-4", editorVersion: 6, draftId: null, draftRevision: null }],
         },
       ),
-    ).rejects.toEqual({ code: "party.main_bill_stays", partyId: "v1", status: 409 });
+    ).rejects.toEqual({ code: "group.held_leaves_party", partyId: "v1", status: 409 });
   });
 
   it("joinTables POSTs the table and a table read free as otherPartyId null to the party's /join route", async () => {

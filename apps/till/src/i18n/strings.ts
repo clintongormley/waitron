@@ -1382,6 +1382,8 @@ export const en = {
   "table.taking_over": "Taking over the order…",
   "table.take_over_sent": "This order has just been sent. Here is the table as it is now.",
   "table.take_over_gone": "This order is no longer on this table. Here is the table as it is now.",
+  "table.bill_gone": "{gone} is no longer at this table. Now showing {shown}.",
+  "table.bill_gone_none": "{gone} is no longer at this table.",
   // Errors
   "pin.invalid": "Wrong PIN, try again",
   "pin.throttled": "Too many wrong PINs. Wait a moment, then try again",
@@ -3152,6 +3154,8 @@ export const es: Record<StringKey, string> = {
   "table.taking_over": "Tomando el pedido…",
   "table.take_over_sent": "Este pedido se acaba de enviar. Así está ahora la mesa.",
   "table.take_over_gone": "Este pedido ya no está en esta mesa. Así está ahora la mesa.",
+  "table.bill_gone": "{gone} ya no está en esta mesa. Ahora se muestra {shown}.",
+  "table.bill_gone_none": "{gone} ya no está en esta mesa.",
   "pin.invalid": "PIN incorrecto, inténtalo de nuevo",
   "pin.throttled": "Demasiados PIN incorrectos. Espera un momento y vuelve a intentarlo",
   "sale.error": "No se pudo completar la venta, inténtalo de nuevo",

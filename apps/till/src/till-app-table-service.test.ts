@@ -2900,7 +2900,7 @@ describe("till-app table ordering: the guests the receipt prints", () => {
   }
 
   it("a table of 4 on one open bill shows 4, and a cash payment changed to 5 sends 5 beside a bare tender", async () => {
-    const el = await openTableWith(tableWith(4, 1));
+    const el = await openTableWith(tableWith(4, 1), [bill()]);
     expect(guests(el)!.value).toBe("4");
     await stepUp(el);
 

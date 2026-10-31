@@ -808,39 +808,67 @@ export function partyBillOf(
 }
 
 function mountedFloor(): Mock | undefined {
-  const till = document.querySelector("till-app") as { api?: { getTablesState?: Mock } } | null;
-  return till?.api?.getTablesState;
+  return mountedApi()?.getTablesState;
+}
+
+function mountedApi(): Record<string, Mock | undefined> | undefined {
+  const till = document.querySelector("till-app") as {
+    api?: Record<string, Mock | undefined>;
+  } | null;
+  return till?.api;
+}
+
+/** What `mock` has answered so far: its fulfilled results only, never one still held. */
+function fulfilled(mock: Mock | undefined): unknown[] {
+  return (mock?.mock.settledResults ?? []).flatMap((result) =>
+    result.type === "fulfilled" ? [result.value] : [],
+  );
 }
 
 /**
- * A bills read that answers what a server holding the floor would: for a party, every bill a floor
- * answer so far named for it (`openingBillId`), since a party keeps its bills when the floor stops
- * naming them, then each of `more(partyId)`, numbered in that order.
- * It reads the answers `floor()`'s mock already gave, by default the mounted `till-app`'s
- * `getTablesState`, and never calls it; a party the floor does not seat has no bills.
+ * A bills read that answers what a server holding the floor would: for a party, the bill a seat
+ * created for it (a fulfilled `seatTable` or `seatAtTables` answer of the mounted `till-app`'s api,
+ * its `tabId`) as Bill 1, then the bill the floor answers name for it (`openingBillId`), then each
+ * of `more(partyId)`, numbered in that order, all open. With one bill it owes the floor row's
+ * `outstanding`; with several, each owes `0.00`, as the fake does not split the amount.
+ * It reads what `floor()`'s mock has answered so far, by default the mounted `till-app`'s
+ * `getTablesState`, and never calls it or waits on it; a party neither seated nor on the floor has
+ * no bills. Floor answers naming two different bills for one party describe a state this fake
+ * cannot hold (the earlier bill paid or gone), so it fails the test with an uncaught error: give
+ * such a case its own bills read.
  */
 export function floorPartyBills(
   floor: () => Mock | undefined = mountedFloor,
   more: (partyId: string) => readonly string[] = () => [],
 ): Mock {
   return vi.fn(async (partyId: string): Promise<PartyBill[]> => {
-    const named: string[] = [];
+    const api = mountedApi();
+    const seated = [...fulfilled(api?.seatTable), ...fulfilled(api?.seatAtTables)].flatMap(
+      (answer) => {
+        const seat = answer as { partyId?: string; tabId?: string } | null;
+        return seat?.partyId === partyId && typeof seat.tabId === "string" ? [seat.tabId] : [];
+      },
+    );
+    let named: string | null = null;
     let party: TableState["party"] = null;
-    for (const result of floor()?.mock.results ?? []) {
-      if (result.type !== "return") continue;
-      let answer: unknown;
-      try {
-        answer = await result.value;
-      } catch {
-        continue;
-      }
+    for (const answer of fulfilled(floor())) {
       if (!Array.isArray(answer)) continue;
       const row = (answer as TableState[]).find((table) => table.party?.id === partyId)?.party;
       if (row == null) continue;
       party = row;
-      if (row.openingBillId != null) named.push(row.openingBillId);
+      if (row.openingBillId == null) continue;
+      if (named !== null && named !== row.openingBillId) {
+        const error = new Error(
+          `floorPartyBills: the floor named ${named} and then ${row.openingBillId} for party ${partyId}; give this case its own bills read`,
+        );
+        queueMicrotask(() => {
+          throw error;
+        });
+        throw error;
+      }
+      named = row.openingBillId;
     }
-    const ids = [...new Set([...named, ...more(partyId)])];
+    const ids = [...new Set([...seated, ...(named === null ? [] : [named]), ...more(partyId)])];
     return ids.map((id, at) =>
       partyBillOf(
         partyId,

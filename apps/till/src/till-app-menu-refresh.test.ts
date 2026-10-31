@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
   floorPartyBills,
+  partyBillOf,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -1860,11 +1861,56 @@ describe("a round that got no answer while the party moved on to its next tab", 
   const shownParty = (el: TillApp) =>
     (tableScreen(el) as unknown as { party: { id: string } | null }).party?.id;
 
-  it("reads the table's party again and shows the tab the table now points at", async () => {
+  it("reads the table's party again and stays on the bill the round was sent from, now paid, beside the tab the table points at", async () => {
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: floorPartyBills(),
+        // Another till took payment for wo-7, and the party moved on to its next tab, wo-next.
+        getPartyBills: vi.fn(async () =>
+          api.submitDraft.mock.calls.length === 0
+            ? [partyBillOf("party-a", "wo-7", 1)]
+            : [
+                partyBillOf("party-a", "wo-7", 1, { status: "settled" }),
+                partyBillOf("party-a", "wo-next", 2),
+              ],
+        ),
+        submitDraft: vi.fn(async (...args: SubmitArgs) => {
+          drafts.apply(...args);
+          throw new TypeError("offline");
+        }),
+      }),
+    );
+    await toTable(el);
+    api.getTablesState.mockResolvedValue([
+      { ...seated, party: { ...party, revision: 2, openingBillId: "wo-next" } },
+    ]);
+    const round = roundStore(el);
+    await sendLemonadeRound(el);
+    // Two pauses between the three tries run on real time; wait for the message they end in.
+    await vi.waitFor(() => expect(banner(el)?.textContent).toContain(unconfirmed), {
+      timeout: 4000,
+      interval: 50,
+    });
+    await flush(el);
+
+    expect(shownTab(el)).toBe("wo-7");
+    expect(api.getTabLines).toHaveBeenLastCalledWith("wo-7");
+    expect(shownParty(el)).toBe("party-a");
+    expect(api.getPartyBills).toHaveBeenLastCalledWith("party-a");
+    expect(round.lineCount).toBe(0);
+    expect(banner(el)!.textContent).toContain(unconfirmed);
+  });
+
+  it("reads the table's party again and shows the bill the table now points at once the round's bill has left the party", async () => {
+    const { el } = await mountApp(
+      tableStubs(DINING, {
+        getTablesState: vi.fn().mockResolvedValue([seated]),
+        // Another till merged the round's bill, wo-7, into the party's next one, wo-next.
+        getPartyBills: vi.fn(async () =>
+          api.submitDraft.mock.calls.length === 0
+            ? [partyBillOf("party-a", "wo-7", 1)]
+            : [partyBillOf("party-a", "wo-next", 2)],
+        ),
         submitDraft: vi.fn(async (...args: SubmitArgs) => {
           drafts.apply(...args);
           throw new TypeError("offline");
@@ -1890,6 +1936,9 @@ describe("a round that got no answer while the party moved on to its next tab", 
     expect(api.getPartyBills).toHaveBeenLastCalledWith("party-a");
     expect(round.lineCount).toBe(0);
     expect(banner(el)!.textContent).toContain(unconfirmed);
+    expect(tableScreen(el).shadowRoot!.querySelector("[data-bill-gone]")!.textContent!.trim()).toBe(
+      "Bill 1 is no longer at this table. Now showing Bill 2.",
+    );
   });
 
   it("does not follow the table onto a new party's tab", async () => {
@@ -2060,14 +2109,20 @@ describe("a round the server adds to another tab while the floor cannot be read"
 describe("a round that got no answer while its tab moved to another table", () => {
   it("does not follow the table the round was sent from", async () => {
     let fail!: (error: unknown) => void;
+    const moveGuests = vi
+      .fn()
+      .mockResolvedValue({ partyId: "party-a", billIds: ["wo-other", "wo-7"] });
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: floorPartyBills(),
+        // Once the guests move, the party also holds wo-other, the bill the floor then names.
+        getPartyBills: vi.fn(async () =>
+          moveGuests.mock.calls.length === 0
+            ? [partyBillOf("party-a", "wo-7", 2)]
+            : [partyBillOf("party-a", "wo-other", 1), partyBillOf("party-a", "wo-7", 2)],
+        ),
         submitDraft: failLater((reject) => (fail = reject)),
-        moveGuests: vi
-          .fn()
-          .mockResolvedValue({ partyId: "party-a", billIds: ["wo-other", "wo-7"] }),
+        moveGuests,
       }),
     );
     await toTable(el);

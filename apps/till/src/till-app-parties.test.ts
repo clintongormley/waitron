@@ -35,6 +35,7 @@ import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
+import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
 import type {
   CurrentOrders,
   FloorZone,
@@ -563,13 +564,14 @@ describe("till-app: seating a party", () => {
   });
 
   it("acts on the party the seat answered with when the floor cannot be read after seating", async () => {
+    drafts.bills.add("wo-new");
     const getTablesState = vi
       .fn()
       .mockResolvedValueOnce([table4, table7, table9])
       .mockRejectedValue(new TypeError("Failed to fetch"));
     const { el } = await mountApp({
       getTablesState,
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: onlyNewPartyBills(),
       finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
     });
     const screen = await toFloor(el);
@@ -582,14 +584,20 @@ describe("till-app: seating a party", () => {
 
     emit(order, "finish-table", {});
     await flush(el);
-    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0, []);
+    const newBillEdit = {
+      billId: "wo-new",
+      editorVersion: 0,
+      draftId: null,
+      draftRevision: null,
+    };
+    expect(api.finishTable).toHaveBeenCalledWith("v-new", 0, [newBillEdit]);
 
     emit(tableOrder(el)!, "join-tables", { tableId: "t4" });
     await flush(el);
     expect(api.joinTables).toHaveBeenCalledWith("v-new", "t4", {
       expectedPartyRevision: 0,
       otherPartyId: null,
-      expectedEdits: [],
+      expectedEdits: [newBillEdit],
     });
   });
 
@@ -2540,7 +2548,6 @@ describe("till-app: table actions on the party", () => {
     ["party.not_open", "join-tables", { tableId: "t9" }, "joinTables"],
     ["table.not_shared", "split-table", { tableId: "t4", billId: null }, "splitTable"],
     ["table.not_joined", "split-table", { tableId: "t9", billId: null }, "splitTable"],
-    ["party.main_bill_stays", "split-table", { tableId: "t4", billId: "wo-4" }, "splitTable"],
     ["group.held_leaves_party", "split-table", { tableId: "t4", billId: "wo-check" }, "splitTable"],
     ["party.not_open", "name-party", { name: "Ana" }, "setPartyName"],
     ["party.not_open", "guests-party", { guestCount: 4 }, "setPartyGuests"],
@@ -4164,7 +4171,6 @@ describe("till-app: moving a bill", () => {
   });
 
   it.each([
-    "party.main_bill_stays",
     "bill.paid",
     "group.held_leaves_party",
     "table.needs_clearing",
@@ -4245,6 +4251,245 @@ describe("till-app: moving a bill", () => {
     expect(table4Row(el).party!.revision).toBe(4);
     // #rememberOrderParty runs only when #refreshFloor answers true.
     expect(tableOrder(el)!.party!.revision).toBe(4);
+  });
+});
+
+describe("A803 bill gone: a bills read no longer holds the bill on screen", () => {
+  const dish: TillProduct = {
+    id: "flan",
+    menuItemId: "flan",
+    catalogueId: "cat-default",
+    name: "Flan",
+    pricingUnit: "each",
+    unitPrice: "5.00",
+    vatClass: "general",
+    category: null,
+    allergens: null,
+  };
+  const paid = (bill: PartyBill): PartyBill => ({
+    ...bill,
+    status: "settled",
+    outstanding: "0.00",
+  });
+  const gone = (el: TillApp) =>
+    tableOrder(el)!.shadowRoot!.querySelector<HTMLElement>("[data-bill-gone]");
+
+  /** Another till changed the party, so this till's next party command is refused and the party's
+   * bills are read again. */
+  async function rereadAfterAnotherTill(el: TillApp): Promise<void> {
+    vi.mocked(api.setPartyName).mockRejectedValueOnce({
+      code: "party.out_of_date",
+      partyId: "v1",
+      revision: 5,
+    });
+    emit(tableOrder(el)!, "name-party", { name: "Ana" });
+    await flush(el);
+    await flush(el);
+  }
+
+  /** The draft saves sent since `before`, as `[billId, menuItemIds]`. */
+  const savesSince = (before: number) =>
+    vi
+      .mocked(drafts.saveDraft)
+      .mock.calls.slice(before)
+      .map(([, save]) => [save.billId, save.lines.map((line) => line.menuItemId)] as const);
+
+  /** New order on a paid bill takes no dish: its draft is locked, as a save would be refused
+   * `bill.paid`. */
+  const newOrderRefusesPaid = (el: TillApp) => {
+    const draft = partyDraft(tableOrder(el)!) as WorkingOrderStore & { billStatus: string };
+    return { billStatus: draft.billStatus, locked: draft.editsLocked, lines: draft.lineCount };
+  };
+
+  /** Rings the dish on the screen now showing and waits out the draft's save delay. */
+  async function ringAndWait(el: TillApp): Promise<void> {
+    partyDraft(tableOrder(el)!).addProduct(dish, "1");
+    await flush(el);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+  }
+
+  async function onBillTwo(bills: ReturnType<typeof vi.fn>, more: Record<string, unknown> = {}) {
+    const mounted = await mountApp({ getPartyBills: bills, ...more });
+    const order = await openMesa(mounted.el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(mounted.el);
+    expect(tableOrder(mounted.el)!.orderId).toBe("wo-check");
+    expect(gone(mounted.el)).toBeNull();
+    return mounted.el;
+  }
+
+  it("another till merged the bill on screen away: the screen shows Bill 1, says so, and the next draft names Bill 1", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const el = await onBillTwo(bills);
+    bills.mockResolvedValue([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
+
+    await rereadAfterAnotherTill(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(gone(el)!.getAttribute("role")).toBe("status");
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill 2 is no longer at this table. Now showing Bill 1.",
+    );
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    await ringAndWait(el);
+    expect(savesSince(before).at(-1)).toEqual(["wo-4", ["flan"]]);
+  });
+
+  it("another till moved the bill on screen to another table: the screen shows the paid Bill 1, and New order refuses it as paid", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const el = await onBillTwo(bills);
+    bills.mockResolvedValue([paid(tabBill)]);
+
+    await rereadAfterAnotherTill(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill 2 is no longer at this table. Now showing Bill 1.",
+    );
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    await ringAndWait(el);
+    expect(savesSince(before)).toEqual([]);
+    expect(newOrderRefusesPaid(el)).toEqual({ billStatus: "settled", locked: true, lines: 0 });
+  });
+
+  it("no bill survives: the screen says so, offers no New order and makes no bill", async () => {
+    const createPartyBill = vi.fn();
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const el = await onBillTwo(bills, { createPartyBill });
+    bills.mockResolvedValue([]);
+
+    await rereadAfterAnotherTill(el);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBeUndefined();
+    expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
+    expect(tableOrder(el)!.draftStore).toBeNull();
+    expect(createPartyBill).not.toHaveBeenCalled();
+  });
+
+  it("lines typed on the vanished bill are not sent to the new bill, and are offered for review", async () => {
+    let merged = false;
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const el = await onBillTwo(bills, {
+      saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+        if (merged && args[1].billId === "wo-check")
+          throw { code: "tab.not_open", status: 409, tabId: "wo-check" };
+        return drafts.saveDraft(...args);
+      }),
+    });
+    const before = vi.mocked(api.saveDraft).mock.calls.length;
+    partyDraft(tableOrder(el)!).addProduct(dish, "1");
+    merged = true;
+    bills.mockResolvedValue([tabBill, { ...checkBill, status: "abandoned", outstanding: "0.00" }]);
+
+    await rereadAfterAnotherTill(el);
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    const toBillOne = vi
+      .mocked(api.saveDraft)
+      .mock.calls.slice(before)
+      .filter(([, save]) => save.billId === "wo-4");
+    expect(toBillOne.flatMap(([, save]) => save.lines)).toEqual([]);
+    expect(api.submitDraft).not.toHaveBeenCalled();
+    expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual(["Flan"]);
+  });
+
+  it("a stale opening bill: the screen corrects to Bill 1 and says so, and no write names the stale bill", async () => {
+    const { el } = await mountApp({
+      getTablesState: vi
+        .fn()
+        .mockResolvedValue([seated({}, { openingBillId: "wo-stale" }), table7, table9]),
+    });
+    await openMesa(el);
+    await flush(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(gone(el)!.textContent!.trim()).toBe(
+      "Bill is no longer at this table. Now showing Bill 1.",
+    );
+    await ringAndWait(el);
+    emit(tableOrder(el)!, "fire-group", { groupId: "g3" });
+    await flush(el);
+    const named = (calls: unknown[][]) => JSON.stringify(calls).includes("wo-stale");
+    expect(named(vi.mocked(drafts.saveDraft).mock.calls)).toBe(false);
+    expect(named(vi.mocked(api.submitDraft).mock.calls)).toBe(false);
+    expect(named(vi.mocked(api.fireGroup).mock.calls)).toBe(false);
+    expect(vi.mocked(drafts.saveDraft).mock.calls.at(-1)![1].billId).toBe("wo-4");
+  });
+
+  it("the bill on screen paid by another till stays on screen, shown paid, with no notice, and New order refuses it", async () => {
+    const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+    const el = await onBillTwo(bills);
+    bills.mockResolvedValue([tabBill, paid(checkBill)]);
+
+    await rereadAfterAnotherTill(el);
+
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
+    expect(gone(el)).toBeNull();
+    expect(tableOrder(el)!.bills.find((bill) => bill.workingOrderId === "wo-check")!.status).toBe(
+      "settled",
+    );
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    await ringAndWait(el);
+    expect(savesSince(before)).toEqual([]);
+    expect(newOrderRefusesPaid(el)).toEqual({ billStatus: "settled", locked: true, lines: 0 });
+  });
+});
+
+describe("A803 action results: Move this bill", () => {
+  const numbered = (workingOrderId: string, billNumber: number, status: PartyBill["status"]) => ({
+    ...tabBill,
+    workingOrderId,
+    billNumber,
+    status,
+    outstanding: status === "open" ? tabBill.outstanding : "0.00",
+  });
+
+  it("Move this bill to another table leaves the screen on the staying party's lowest-numbered owing bill, and the next draft names it", async () => {
+    for (const id of ["wo-1", "wo-2"]) drafts.bills.add(id);
+    const staying = [
+      numbered("wo-1", 1, "settled"),
+      numbered("wo-2", 2, "open"),
+      numbered("wo-4", 3, "open"),
+    ];
+    const bills = vi.fn().mockResolvedValue([...staying, numbered("wo-check", 4, "open")]);
+    const { el } = await mountApp({
+      getPartyBills: bills,
+      moveBill: vi.fn().mockResolvedValue({ partyId: "v9", billId: "wo-check" }),
+    });
+    const order = await openMesa(el);
+    emit(order, "take-payment", { workingOrderId: "wo-check" });
+    await flush(el);
+    bills.mockResolvedValue(staying);
+
+    emit(tableOrder(el)!, "move-bill", { to: { tableId: "t9", seated: null } });
+    await flush(el);
+
+    expect(api.moveBill).toHaveBeenCalledOnce();
+    expect(tableOrder(el)!.orderId).toBe("wo-2");
+    expect(tableOrder(el)!.shadowRoot!.querySelector("[data-bill-gone]")).toBeNull();
+    const before = vi.mocked(drafts.saveDraft).mock.calls.length;
+    partyDraft(tableOrder(el)!).addProduct(
+      {
+        id: "flan",
+        menuItemId: "flan",
+        catalogueId: "cat-default",
+        name: "Flan",
+        pricingUnit: "each",
+        unitPrice: "5.00",
+        vatClass: "general",
+        category: null,
+        allergens: null,
+      },
+      "1",
+    );
+    await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+    await flush(el);
+    expect(vi.mocked(drafts.saveDraft).mock.calls.slice(before).at(-1)![1].billId).toBe("wo-2");
   });
 });
 
@@ -4458,7 +4703,7 @@ describe("till-app: paying a bill by its state", () => {
 });
 
 describe("till-app: opening a seated table", () => {
-  it("opens the party's main bill", async () => {
+  it("opens the bill the floor names", async () => {
     const { el } = await mountApp({
       getTablesState: vi
         .fn()
@@ -4488,7 +4733,7 @@ describe("till-app: opening a seated table", () => {
     expect(api.getTabLines).toHaveBeenCalledWith("wo-check");
   });
 
-  it("opens the latest bill when every bill of the party is paid", async () => {
+  it("opens the bill the floor names, the highest-numbered, when every bill of the party is paid", async () => {
     const first: PartyBill = {
       ...tabBill,
       workingOrderId: "wo-1",
@@ -4503,13 +4748,32 @@ describe("till-app: opening a seated table", () => {
       outstanding: "0.00",
     };
     const { el } = await mountApp({
-      getTablesState: vi.fn().mockResolvedValue([seated({}, { openingBillId: null }), table9]),
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { openingBillId: "wo-2" }), table9]),
       getPartyBills: vi.fn().mockResolvedValue([first, last]),
     });
 
     const order = await openMesa(el);
 
     expect(order.orderId).toBe("wo-2");
+  });
+
+  it("opens the lowest-numbered bill, with nothing said, when the floor names none and every bill is paid", async () => {
+    const paidBill = (workingOrderId: string, billNumber: number): PartyBill => ({
+      ...tabBill,
+      workingOrderId,
+      billNumber,
+      status: "settled",
+      outstanding: "0.00",
+    });
+    const { el } = await mountApp({
+      getTablesState: vi.fn().mockResolvedValue([seated({}, { openingBillId: null }), table9]),
+      getPartyBills: vi.fn().mockResolvedValue([paidBill("wo-1", 1), paidBill("wo-2", 2)]),
+    });
+
+    const order = await openMesa(el);
+
+    expect(order.orderId).toBe("wo-1");
+    expect(order.shadowRoot!.querySelector("[data-bill-gone]")).toBeNull();
   });
 });
 
@@ -5865,7 +6129,7 @@ describe("till-app: the order's groups", () => {
     expect(tableOrder(el)!.orderId).toBe("wo-check");
   });
 
-  it("keeps the party on screen, not the older copy on the kept floor, when a send from another bill got no answer and the floor cannot be read", async () => {
+  it("keeps the party and the bill sent from on screen, not the older copy on the kept floor, when a send from another bill got no answer and the floor cannot be read", async () => {
     const { el } = await mountApp({
       submitDraft: vi.fn().mockRejectedValue(new TypeError("Failed to fetch")),
     });
@@ -5894,7 +6158,7 @@ describe("till-app: the order's groups", () => {
     await flush(el);
 
     expect(api.submitDraft).toHaveBeenCalledTimes(3);
-    expect(tableOrder(el)!.orderId).toBe("wo-4");
+    expect(tableOrder(el)!.orderId).toBe("wo-check");
     expect(tableOrder(el)!.party).toEqual({ ...table4.party, revision: 4 });
     emit(tableOrder(el)!, "move-guests", { toTableId: "t9" });
     await flush(el);

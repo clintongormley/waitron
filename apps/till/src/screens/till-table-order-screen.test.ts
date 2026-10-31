@@ -5420,7 +5420,7 @@ describe("till-table-order-screen", () => {
       await el.updateComplete;
     }
 
-    it("Split a table picks one of the party's tables, then one of its open or presented bills other than the main one, or none", async () => {
+    it("Split a table picks one of the party's tables, then any of its open or presented bills, the one on screen included, or none", async () => {
       const { el } = await mount({
         lines: [pendingLine],
         orderId: "wo-4",
@@ -5443,7 +5443,7 @@ describe("till-table-order-screen", () => {
           .replace("{table}", "Mesa 5")
           .replace("{party}", "Ana (Mesa 4, 5)"),
       );
-      expect(targetIds(el)).toEqual(["wo-check", "wo-placed", "wo-part", "none"]);
+      expect(targetIds(el)).toEqual(["wo-4", "wo-check", "wo-placed", "wo-part", "none"]);
       expect(target(el, "none")!.textContent!.trim()).toBe(t("table.split_no_bill"));
       click(el, '[data-target="wo-check"]');
       await el.updateComplete;

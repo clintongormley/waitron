@@ -514,6 +514,10 @@ export class TillTableOrderScreen extends LitElement {
       }
 
       /* Words first, so the problem never rests on the warning colour. */
+      .bill-gone {
+        margin: 0;
+        padding: var(--wt-space-2) var(--wt-space-3);
+      }
       .print-problem {
         display: flex;
         flex-wrap: wrap;
@@ -1400,6 +1404,8 @@ export class TillTableOrderScreen extends LitElement {
 
   @property({ attribute: false }) otherDrafts: readonly OtherDraft[] = [];
   @property({ attribute: false }) retainedDraft: RetainedDraftCandidate | null = null;
+  /** Says that the bill on screen left the party's bills and which one shows instead (D11). */
+  @property({ attribute: false }) billGone: string | null = null;
   @property({ type: Boolean }) candidateReviewAllowed = false;
   @property({ type: Boolean }) candidateReviewBusy = false;
   /** Moved on by the app each time it refuses a bill's name because someone else's unsent dishes
@@ -2374,6 +2380,11 @@ export class TillTableOrderScreen extends LitElement {
           </wt-button>
           ${this.#floorBackButton()}
         </div>
+        ${
+          this.billGone === null
+            ? nothing
+            : html`<p class="bill-gone" role="status" data-bill-gone>${this.billGone}</p>`
+        }
         ${this.#printProblem()} ${this.#allergyHeading()}
         <till-order-kitchen-note
           .scopeKey=${this.party === null ? `order:${this.orderId ?? draft?.id ?? ""}` : `party:${this.party.id}`}
@@ -4969,14 +4980,12 @@ export class TillTableOrderScreen extends LitElement {
     ></till-party-guests-dialog>`;
   }
 
-  /** The party's bills Split a table can give the new party: open or presented, not the main one. */
+  /** The party's bills Split a table can give the new party: open or presented. */
   #splitTableBills(): { bill: PartyBill; name: string }[] {
     const party = this.party;
     if (party === null) return [];
     return this.#shownBills().flatMap((bill) =>
-      bill.partyId === party.id && bill.workingOrderId !== party.openingBillId && owing(bill)
-        ? [{ bill, name: this.#billName(bill) }]
-        : [],
+      bill.partyId === party.id && owing(bill) ? [{ bill, name: this.#billName(bill) }] : [],
     );
   }
 
