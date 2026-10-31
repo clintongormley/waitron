@@ -16,7 +16,7 @@ jobs:
   measure:
     name: Measure setting the host clock
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - id: checkout
         name: Check out the code
@@ -40,6 +40,9 @@ jobs:
           GIT_TRACE2_EVENT: 1
       - name: Measure
         run: sudo --preserve-env=RUNNER_TEMP timeout 600 bash scripts/host-clock-measure.sh
+      - name: Measure the shipped files
+        if: always()
+        run: sudo --preserve-env=RUNNER_TEMP timeout 600 bash scripts/host-clock-measure.sh --shipped
       - name: Start the time service again
         if: always()
         run: |
