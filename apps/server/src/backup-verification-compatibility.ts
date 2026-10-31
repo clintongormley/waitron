@@ -1,5 +1,7 @@
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { posix } from "node:path";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, posix } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { backupVerificationInventory } from "@waitron/composition";
 import { migrationOptionsFor } from "@waitron/migrations";
@@ -10,7 +12,7 @@ import {
   type WaitronModule,
 } from "@waitron/module";
 import { isAppError } from "@waitron/shared";
-import type { BackupQuery, BackupRow } from "@waitron/store";
+import { openBackupQuery, type BackupQuery, type BackupRow } from "@waitron/store";
 import type { ArchiveEntry } from "./backup-archive.js";
 import type { BackupManifest } from "./backup-manifest.js";
 import type { BackupVerificationTarget } from "./backup-verification-protocol.js";
@@ -157,20 +159,24 @@ async function reconcile(
   }
   const owned = new Set<string>();
   const journals = new Set<string>();
-  // A node set's tables and journal live in node.db, never in the venue copy, so the venue copy
-  // is reconciled without them and a venue copy holding one is refused as unknown.
+  // A node set's tables and journal live in node.db, never in the venue copy: each copy is
+  // reconciled against its own file's sets, and a table from the other file is refused as unknown.
   const venueOwned = new Set<string>();
   const venueJournals = new Set<string>();
+  const nodeOwned = new Set<string>();
+  const nodeJournals = new Set<string>();
   for (const { module, verification } of inventory) {
     const classified = (module.classification ?? []).map((c) => c.table).sort();
     if (!isDeepStrictEqual(classified, [...verification.data.tables].sort())) refuse("unsupported");
     for (const table of classified) {
       if (owned.has(table)) refuse("unsupported");
       owned.add(table);
-      if (module.migrations.database !== "node") venueOwned.add(table);
+      (module.migrations.database === "node" ? nodeOwned : venueOwned).add(table);
     }
     journals.add(module.migrations.table);
-    if (module.migrations.database !== "node") venueJournals.add(module.migrations.table);
+    (module.migrations.database === "node" ? nodeJournals : venueJournals).add(
+      module.migrations.table,
+    );
     const descriptor = actual.modules.find((m) => m.name === module.name)!;
     if (source[module.name] !== undefined && source[module.name]! > 0) {
       for (const dependency of Object.keys(descriptor.requires)) {
@@ -209,14 +215,49 @@ async function reconcile(
   for (const file of RECOVERY_FILES) if (!entries.has("secrets/" + file)) refuse("invalid");
   const config = entries.get("secrets/modules.json");
   if (config) moduleConfig(config.bytes, modules, source);
+  const tables = await schemaOf(before, venueOwned, venueJournals);
+  const nodeDump = entries.get("node.dump");
+  if (nodeDump === undefined)
+    return await reconcileModules(input, actual, inventory, entries, tables, before, null);
+  const scratch = await mkdtemp(join(tmpdir(), "waitron-node-copy-"));
+  try {
+    const path = join(scratch, "node.db");
+    await writeFile(path, nodeDump.bytes, { mode: 0o600 });
+    let opened: Awaited<ReturnType<typeof openBackupQuery>>;
+    try {
+      opened = await openBackupQuery(path);
+    } catch {
+      refuse("invalid");
+    }
+    try {
+      const nodeTables = await schemaOf(opened.query, nodeOwned, nodeJournals);
+      return await reconcileModules(input, actual, inventory, entries, tables, before, {
+        query: opened.query,
+        tables: nodeTables,
+      });
+    } finally {
+      await opened.close();
+    }
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+}
+
+/** Each table of one copy by name; any table neither owned, a journal nor engine metadata is
+ * refused. */
+async function schemaOf(
+  query: BackupQuery,
+  owned: ReadonlySet<string>,
+  journals: ReadonlySet<string>,
+): Promise<Map<string, BackupRow>> {
   const tables = new Map<string, BackupRow>();
-  for await (const row of before.rows(
+  for await (const row of query.rows(
     "select name, type, sql from sqlite_schema where type in ('table', 'view')",
   )) {
     if (typeof row.name !== "string" || row.type !== "table") refuse("unsupported");
     tables.set(row.name, row);
-    if (venueOwned.has(row.name)) continue;
-    if (venueJournals.has(row.name))
+    if (owned.has(row.name)) continue;
+    if (journals.has(row.name))
       tableShape(row.name, row, "id SERIAL PRIMARY KEY, hash text NOT NULL, created_at numeric");
     else {
       const internals: Readonly<Record<string, string>> = {
@@ -230,6 +271,20 @@ async function reconcile(
       tableShape(row.name, row, internals[row.name]!);
     }
   }
+  return tables;
+}
+
+async function reconcileModules(
+  input: Parameters<typeof checkBackupVerificationCompatibility>[0],
+  actual: BackupVerificationTarget,
+  inventory: ReturnType<typeof backupVerificationInventory>,
+  entries: ReadonlyMap<string, ArchiveEntry>,
+  tables: ReadonlyMap<string, BackupRow>,
+  before: BackupQuery,
+  node: { query: BackupQuery; tables: ReadonlyMap<string, BackupRow> } | null,
+): Promise<Verdict> {
+  const { manifest } = input;
+  const source = manifest.modules;
   const purposes = new Set<string>();
   if (tables.has("tenant_credentials")) {
     for await (const row of before.rows("select purpose from tenant_credentials")) {
@@ -238,20 +293,17 @@ async function reconcile(
     }
   }
   for (const { module, verification } of inventory) {
-    // Not yet read from anywhere: no archive carries a copy of node.db.
-    if (module.migrations.database === "node") continue;
+    const onNode = module.migrations.database === "node";
+    // With no node copy the node module finds no tables and no journal, and is refused below.
+    const copy = onNode ? (node?.tables ?? new Map<string, BackupRow>()) : tables;
     const version = Object.hasOwn(source, module.name) ? source[module.name]! : null;
     const material = verification.entries.filter((e) => !HOST_ENTRIES.includes(e.name));
     const present =
-      verification.data.tables.some((name) => tables.has(name)) ||
+      verification.data.tables.some((name) => copy.has(name)) ||
       material.some((e) => entries.has(e.name)) ||
       verification.secrets.some((name) => purposes.has(name));
     if (version === null) {
-      if (
-        verification.targetOnly === "unsupported" ||
-        present ||
-        tables.has(module.migrations.table)
-      )
+      if (verification.targetOnly === "unsupported" || present || copy.has(module.migrations.table))
         refuse("unsupported");
       continue;
     }
@@ -264,19 +316,19 @@ async function reconcile(
     } else {
       if (
         version === actual.modules.find((m) => m.name === module.name)!.schema &&
-        verification.data.tables.some((name) => !tables.has(name))
+        verification.data.tables.some((name) => !copy.has(name))
       )
         refuse("invalid");
       for (const entry of verification.entries)
         if (entry.presence === "required" && !entries.has(entry.name)) refuse("invalid");
     }
-    const journal = tables.get(module.migrations.table);
+    const journal = copy.get(module.migrations.table);
     if (journal === undefined) {
       if (version !== 0) refuse("invalid");
       continue;
     }
     const applied = await rows(
-      before,
+      onNode ? node!.query : before,
       `select id, hash, created_at from ${ident(module.migrations.table)} order by created_at`,
     );
     if (applied.length !== version) refuse("invalid");

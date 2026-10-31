@@ -4,7 +4,11 @@ import type { Database, NodeDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { buildManifest } from "./backup-manifest.js";
-import { collectStateParts, assembleArchiveEntries } from "./archive-entries.js";
+import {
+  collectStateParts,
+  assembleArchiveEntries,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
 import { packArchive } from "./backup-archive.js";
 import { encryptArtifactAsync } from "./artifact-cipher.js";
 import type { DeploymentEnvironment } from "./config.js";
@@ -28,7 +32,11 @@ export async function createCloudSnapshotArchive(
   await mkdir(staging, { recursive: true, mode: 0o700 });
   try {
     const manifest = await buildManifest({ ...deps, now: at });
-    const parts = await collectStateParts({ ...deps, resolvers: {} });
+    const parts = await collectStateParts({
+      ...deps,
+      resolvers: {},
+      snapshotNode: snapshotNodeDatabase(deps.node, staging),
+    });
     signal.throwIfAborted();
     await deps.db.archiveTo(path);
     signal.throwIfAborted();

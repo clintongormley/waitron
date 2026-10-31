@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
@@ -182,13 +182,79 @@ describe("strict backup compatibility", () => {
         tier: "mandatory",
         requires: undefined,
         migrations: { ...base.migrations, database: "node" },
+        backup: {
+          verification: policy(["node_things"], {
+            entries: [{ name: "node.dump", presence: "required" }],
+          }),
+        },
       });
       bindTarget();
       manifest = { ...manifest, modules: { ...manifest.modules, node: 1 } };
     }
+    /** Migrates the suite's own node.db, lets `change` alter it, and carries a copy as node.dump. */
+    async function carryNodeCopy(change = "") {
+      for (const row of suite.node.all<{ name: string }>(
+        sql`select name from sqlite_schema where type = 'table' and name not glob 'sqlite_*'`,
+      ))
+        suite.node.run(sql.raw(`drop table "${row.name}"`));
+      await runMigrations(suite.node, {
+        migrationsFolder: join(root!, "node"),
+        migrationsTable: "__drizzle_migrations_node",
+      });
+      for (const statement of change.split(";").filter((part) => part.trim()))
+        suite.node.run(sql.raw(statement));
+      const scratch = await mkdtemp(join(tmpdir(), "a947-node-copy-"));
+      try {
+        await suite.node.archiveTo(join(scratch, "node.db"));
+        setEntry("node.dump", "");
+        entries[entries.length - 1] = {
+          name: "node.dump",
+          bytes: await readFile(join(scratch, "node.db")),
+        };
+      } finally {
+        await rm(scratch, { recursive: true, force: true });
+      }
+    }
     it("does not look for its tables or journal in the venue copy", async () => {
       addNodeModule();
+      await carryNodeCopy();
       await expect(run()).resolves.toBe("passed");
+    });
+    it("refuses a backup that carries no node copy", async () => {
+      addNodeModule();
+      await expect(run()).resolves.toBe("invalid");
+    });
+    it("refuses a node copy that is not a database", async () => {
+      addNodeModule();
+      setEntry("node.dump", "this is not a database file, only some words");
+      await expect(run()).resolves.toBe("invalid");
+    });
+    it("refuses a node copy missing one of its tables at the exact target schema", async () => {
+      addNodeModule();
+      await carryNodeCopy("drop table node_things");
+      await expect(run()).resolves.toBe("invalid");
+    });
+    it.each([
+      [
+        "a migration this image does not know",
+        "update __drizzle_migrations_node set hash='unknown'",
+        "unsupported",
+      ],
+      [
+        "more migrations than the manifest names",
+        "insert into __drizzle_migrations_node(hash, created_at) select hash, 2 from __drizzle_migrations_node",
+        "invalid",
+      ],
+      ["no journal", "drop table __drizzle_migrations_node", "invalid"],
+    ])("reconciles the node copy's journal: %s", async (_name, change, verdict) => {
+      addNodeModule();
+      await carryNodeCopy(change);
+      await expect(run()).resolves.toBe(verdict);
+    });
+    it("refuses a node copy that carries a table nothing owns", async () => {
+      addNodeModule();
+      await carryNodeCopy("create table stray (id text)");
+      await expect(run()).resolves.toBe("unsupported");
     });
     // The control: the same module with no `database` is looked for in the venue copy.
     it("is reported missing from the venue copy when it names no file", async () => {
@@ -197,17 +263,20 @@ describe("strict backup compatibility", () => {
       modules[modules.length - 1] = {
         ...node,
         migrations: { name: "node", table: "__drizzle_migrations_node", from: "unused" },
+        backup: { verification: policy(["node_things"]) },
       };
       bindTarget();
       await expect(run()).resolves.toBe("invalid");
     });
     it("refuses a venue copy that carries its table", async () => {
       addNodeModule();
+      await carryNodeCopy();
       execute("create table node_things (node_id text primary key)");
       await expect(run()).resolves.toBe("unsupported");
     });
     it("refuses a venue copy that carries its journal", async () => {
       addNodeModule();
+      await carryNodeCopy();
       await runMigrations(suite.db, {
         migrationsFolder: join(root!, "node"),
         migrationsTable: "__drizzle_migrations_node",

@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { NODE_CLASSIFICATION } from "@waitron/node-db";
 import type { BackupVerificationContext, BackupVerificationContribution } from "@waitron/module";
 
@@ -15,22 +16,40 @@ async function holdsAny(query: BackupVerificationContext["before"]): Promise<boo
   return false;
 }
 
+function opensAsDatabase(bytes: Uint8Array | null): boolean {
+  if (bytes === null) return false;
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.deserialize(bytes);
+    database.prepare("select count(*) from sqlite_schema").get();
+    return true;
+  } catch {
+    return false;
+  } finally {
+    database.close();
+  }
+}
+
 /**
- * node.db is in no archive yet, so the one thing checked is that neither venue copy holds one of
- * its tables: they belong to the box, never to the venue.
+ * The archive's node.dump must open as a database, and neither venue copy may hold one of
+ * node.db's tables: they belong to the box, never to the venue.
  */
 export const NODE_BACKUP_VERIFICATION: BackupVerificationContribution = {
   version: 1,
   publicEvidenceDigest: null,
   data: { kind: "custom", tables, immutableTables: [], checks: ["data"] },
   secrets: [],
-  entries: [],
+  entries: [{ name: "node.dump", presence: "required" }],
   effects: [],
   zeroSchema: "absent_tables_and_entries",
   targetOnly: "empty_after_migration",
   async verifyRestoredData(context) {
     const status =
-      (await holdsAny(context.before)) || (await holdsAny(context.after)) ? "invalid" : "passed";
+      !opensAsDatabase(await context.entries.read("node.dump")) ||
+      (await holdsAny(context.before)) ||
+      (await holdsAny(context.after))
+        ? "invalid"
+        : "passed";
     return { status, checks: [{ code: "data", status }] };
   },
 };

@@ -40,11 +40,17 @@ it("an archive built with the backup room's files in the state folder holds none
     `${BACKUP_ROOM_START_DELETED_FILE}.tmp`,
   ])
     await writeFile(join(stateDir, name), '{"version":1}');
-  const parts = await collectStateParts({ stateDir, modules: ALL_MODULES, resolvers: {} });
+  const parts = await collectStateParts({
+    stateDir,
+    modules: ALL_MODULES,
+    resolvers: {},
+    snapshotNode: async () => Buffer.from("node"),
+  });
   const entries = assembleArchiveEntries(MANIFEST, Buffer.from("dump"), parts);
   expect(entries.map((entry) => entry.name)).toEqual([
     "manifest.json",
     "db.dump",
+    "node.dump",
     ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
     "secrets/backup.env",
     "secrets/modules.json",

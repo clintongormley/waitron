@@ -1,3 +1,6 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import {
   nodeSealedState,
@@ -8,7 +11,11 @@ import {
 } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
-import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
 import { decryptArtifact, encryptArtifactAsync } from "./artifact-cipher.js";
 import { packArchive, unpackArchive, type ArchiveEntry } from "./backup-archive.js";
 import { buildManifest, type BackupManifest } from "./backup-manifest.js";
@@ -22,6 +29,7 @@ export async function collectSealedEntries(deps: {
   readonly venueDir?: string;
   readonly modules: readonly WaitronModule[];
   readonly resolvers: Record<string, string>;
+  readonly snapshotNode: () => Promise<Uint8Array>;
   readonly manifest: BackupManifest;
 }): Promise<ArchiveEntry[]> {
   return assembleArchiveEntries(deps.manifest, null, await collectStateParts(deps));
@@ -126,13 +134,20 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
         environment: deps.environment,
         now,
       });
-      const entries = await collectSealedEntries({
-        stateDir: deps.stateDir,
-        venueDir: deps.venueDir,
-        modules: deps.modules,
-        resolvers: deps.resolvers,
-        manifest,
-      });
+      const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-state-"));
+      let entries: ArchiveEntry[];
+      try {
+        entries = await collectSealedEntries({
+          stateDir: deps.stateDir,
+          venueDir: deps.venueDir,
+          modules: deps.modules,
+          resolvers: deps.resolvers,
+          snapshotNode: snapshotNodeDatabase(deps.node, scratch),
+          manifest,
+        });
+      } finally {
+        await rm(scratch, { recursive: true, force: true });
+      }
       // Sealed before the transaction opens, so the write lock is not held across the derivation.
       const sealed = await sealNodeState(entries, recoveryKey);
       await withTransaction(deps.db, (tx) => writeSealedStateRow(tx, deps.nodeId, sealed, now));

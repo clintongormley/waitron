@@ -32,6 +32,9 @@ import type { StorageBackend, StoredObject } from "./storage-backend.js";
 
 // Never touched under an injected manifest builder.
 const NO_DB = {} as Database;
+const NODE_COPY = {
+  archiveTo: (path: string) => writeFile(path, "NODE"),
+} as unknown as NodeDatabase;
 
 const FIXED_MANIFEST: BackupManifest = {
   manifestVersion: 1,
@@ -116,7 +119,7 @@ describe("runOnce (fan-out)", () => {
   const deps = (backends: StorageBackend[], log = vi.fn()) => ({
     backends,
     db: NO_DB,
-    node: {} as NodeDatabase,
+    node: NODE_COPY,
     modules: ALL_MODULES,
     environment: "preproduction" as const,
     resolvers: { media: mediaDir },
@@ -264,7 +267,7 @@ describe("runOnce (fan-out)", () => {
     }
   });
 
-  it("packs the archive in a fixed entry order: manifest, database, required state, optional state", async () => {
+  it("packs the archive in a fixed entry order: manifest, database, node copy, required state, optional state", async () => {
     await writeFile(join(stateDir, "backup.env"), "WAITRON_BACKUP_DIR=/mnt/usb\n");
     await writeFile(join(stateDir, "modules.json"), '{"modules":{}}\n');
     const a = new FakeBackend("a");
@@ -275,6 +278,7 @@ describe("runOnce (fan-out)", () => {
     expect(order).toEqual([
       "manifest.json",
       "db.dump",
+      "node.dump",
       ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
       "secrets/backup.env",
       "secrets/modules.json",
@@ -470,7 +474,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
     backends: [backend],
     db: NO_DB,
-    node: {} as NodeDatabase,
+    node: NODE_COPY,
     modules: ALL_MODULES,
     environment: "preproduction",
     resolvers: {},

@@ -4,7 +4,11 @@ import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
-import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
+import {
+  assembleArchiveEntries,
+  collectStateParts,
+  snapshotNodeDatabase,
+} from "./archive-entries.js";
 import { encryptArtifactFile } from "./artifact-cipher-file.js";
 import { ArchiveReadBudget } from "./archive-read-budget.js";
 import { packArchiveStream, type ArchiveInputEntry } from "./backup-archive-file.js";
@@ -65,7 +69,7 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
-  /** Read only for the manifest. */
+  /** Read for the manifest, and copied whole as the archive's `node.dump` through `stagingDir`. */
   node: NodeDatabase;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
@@ -214,6 +218,7 @@ export async function runOnce(
           venueDir: deps.venueDir,
           modules: deps.modules,
           resolvers: deps.resolvers,
+          snapshotNode: snapshotNodeDatabase(deps.node, deps.stagingDir),
         },
         budget,
       ),

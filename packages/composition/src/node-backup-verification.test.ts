@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
@@ -18,7 +19,17 @@ beforeEach(() => {
   for (const suite of [before, after]) suite.db.run(sql`drop table if exists node_mode`);
 });
 
-async function run() {
+function nodeCopy(): Uint8Array {
+  const database = new DatabaseSync(":memory:");
+  try {
+    database.exec("create table node_mode (node_id text primary key)");
+    return database.serialize();
+  } finally {
+    database.close();
+  }
+}
+
+async function run(nodeDump: Uint8Array | null = nodeCopy()) {
   const path = (s: typeof before) =>
     s.db.all<{ file: string }>(sql`pragma database_list`).find((r) => r.file.endsWith("venue.db"))!
       .file;
@@ -29,7 +40,7 @@ async function run() {
       const context: BackupVerificationContext = {
         before: a.query,
         after: b.query,
-        entries: { read: async () => null },
+        entries: { read: async (name) => (name === "node.dump" ? nodeDump : null) },
         source: {
           nodeId: "20000000-0000-4000-8000-000000000002",
           locationId: "10000000-0000-4000-8000-000000000001",
@@ -62,10 +73,20 @@ describe("node.db's backup verification", () => {
     expect([...owner.data.tables].sort()).toEqual(
       NODE_CLASSIFICATION.map((entry) => entry.table).sort(),
     );
-    expect(owner.entries).toEqual([]);
+    expect(owner.entries).toEqual([{ name: "node.dump", presence: "required" }]);
   });
 
-  it("passes when neither venue copy holds a node.db table", async () => {
+  it.each([
+    ["missing", null],
+    ["not a database", Buffer.from("this is not a database file, only some words")],
+  ])("marks invalid a node.dump that is %s", async (_name, nodeDump) => {
+    await expect(run(nodeDump)).resolves.toEqual({
+      status: "invalid",
+      checks: [{ code: "data", status: "invalid" }],
+    });
+  });
+
+  it("passes when node.dump opens as a database and neither venue copy holds a node.db table", async () => {
     await expect(run()).resolves.toEqual({
       status: "passed",
       checks: [{ code: "data", status: "passed" }],

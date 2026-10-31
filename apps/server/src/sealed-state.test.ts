@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CORE_MIGRATIONS, withTransaction } from "@waitron/db";
 import { useVenueDb } from "@waitron/db/testing/venue-db.js";
+import { openBackupQuery } from "@waitron/store";
 import {
   BACKUP_ROOM_NOTE_FILE,
   BACKUP_ROOM_START_DELETED_FILE,
@@ -89,10 +90,12 @@ describe("collectSealedEntries", () => {
       stateDir,
       modules: ALL_MODULES,
       resolvers: {},
+      snapshotNode: async () => Buffer.from("node"),
       manifest: MANIFEST,
     });
     expect(names(entries)).toEqual([
       "manifest.json",
+      "node.dump",
       ...REQUIRED,
       "secrets/backup.env",
       "secrets/modules.json",
@@ -115,9 +118,10 @@ describe("collectSealedEntries with the backup room's files present", () => {
       stateDir,
       modules: ALL_MODULES,
       resolvers: {},
+      snapshotNode: async () => Buffer.from("node"),
       manifest: MANIFEST,
     });
-    expect(names(entries)).toEqual(["manifest.json", ...REQUIRED]);
+    expect(names(entries)).toEqual(["manifest.json", "node.dump", ...REQUIRED]);
   });
 });
 
@@ -193,7 +197,7 @@ describe("createSealedStateRefresher", () => {
     const log = vi.fn();
     expect(await createSealedStateRefresher(deps({ log })).refresh()).toBe("sealed");
     const entries = unsealNodeState((await row())!, KEY);
-    expect(names(entries)).toEqual(["manifest.json", ...REQUIRED]);
+    expect(names(entries)).toEqual(["manifest.json", "node.dump", ...REQUIRED]);
     const manifest = JSON.parse(text(entries, "manifest.json")) as BackupManifest;
     expect(manifest.environment).toBe("preproduction");
     expect(manifest.createdAt).toBe("2026-09-23T10:00:00.000Z");
@@ -202,6 +206,28 @@ describe("createSealedStateRefresher", () => {
     expect(log).toHaveBeenCalledWith("info", "backup.sealed_state_refreshed", {
       entries: entries.length,
     });
+  });
+
+  it("the sealed state carries node.dump", async () => {
+    suite.node.run(sql`create table node_probe (value text)`);
+    try {
+      suite.node.run(sql`insert into node_probe (value) values ('this box')`);
+      expect(await createSealedStateRefresher(deps()).refresh()).toBe("sealed");
+      const entries = unsealNodeState((await row())!, KEY);
+      const copy = join(stateDir, "node.copy");
+      await writeFile(copy, entries.find((e) => e.name === "node.dump")!.bytes);
+      const opened = await openBackupQuery(copy);
+      try {
+        const values = [];
+        for await (const probe of opened.query.rows("select value from node_probe"))
+          values.push(probe.value);
+        expect(values).toEqual(["this box"]);
+      } finally {
+        await opened.close();
+      }
+    } finally {
+      suite.node.run(sql`drop table node_probe`);
+    }
   });
 
   it("replaces the row rather than adding one, and carries each file as it now reads", async () => {
