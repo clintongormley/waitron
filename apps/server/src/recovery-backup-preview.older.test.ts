@@ -165,6 +165,7 @@ it("binds an older bucket copy before private preview migrations change its byte
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${nodeId}\n`),
       },
+      await nodeDumpEntry(suite.node, scratch),
       { name: "secrets/node-key.enc", bytes: Buffer.from("sealed") },
       { name: "secrets/cluster-id", bytes: Buffer.from("cluster") },
       {

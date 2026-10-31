@@ -345,6 +345,16 @@ describe("complete backup verification", () => {
       modules: [],
     });
   });
+  it("refuses an archive whose node.dump is not a database", async () => {
+    const f = await fixture();
+    f.entries[2] = { name: "node.dump", bytes: Buffer.from("not a database") };
+    await seal(f);
+    expect(await verify(f)).toMatchObject({
+      status: "invalid",
+      reason: "archive_invalid",
+      modules: [],
+    });
+  });
   it("refuses unclaimed archive data through real compatibility", async () => {
     const f = await fixture();
     f.entries.push({ name: "secrets/unowned.json", bytes: Buffer.from("private-unclaimed") });

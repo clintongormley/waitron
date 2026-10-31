@@ -106,6 +106,7 @@ it.each(["archive", "stream"] as const)(
       now: new Date("2026-10-16T11:40:00Z"),
     });
     const entries = [
+      await nodeDumpEntry(suite.node, root),
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
@@ -113,11 +114,7 @@ it.each(["archive", "stream"] as const)(
       },
     ];
     const artifact = encryptArtifact(
-      packArchive([
-        ...entries,
-        { name: "db.dump", bytes: await readFile(databasePath) },
-        await nodeDumpEntry(suite.node, root),
-      ]),
+      packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
       "separate archive password",
     );
     const binding = {

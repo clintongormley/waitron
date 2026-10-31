@@ -55,6 +55,7 @@ it.each(["archive", "bucket"])(
     const database = join(scratch, "selected.db");
     await suite.db.archiveTo(database);
     const entries = [
+      await nodeDumpEntry(suite.node, scratch),
       {
         name: "manifest.json",
         bytes: Buffer.from(
@@ -78,11 +79,7 @@ it.each(["archive", "bucket"])(
       },
     ];
     const artifact = encryptArtifact(
-      packArchive([
-        ...entries,
-        { name: "db.dump", bytes: await readFile(database) },
-        await nodeDumpEntry(suite.node, scratch),
-      ]),
+      packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
       "archive-key",
     );
     download.mockResolvedValue({

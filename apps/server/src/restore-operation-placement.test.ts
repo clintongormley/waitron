@@ -77,6 +77,7 @@ async function fixture(module: WaitronModule) {
   await suite.db.archiveTo(databasePath);
   const validated = {
     databasePath,
+    nodeDump: (await nodeDumpEntry(suite.node, root)).bytes,
     discard: async () => {},
     manifest: {
       manifestVersion: 1 as const,
@@ -390,7 +391,10 @@ it.each(["archive", "stream"] as const)(
         : {
             kind: "stream",
             databasePath: f.validated.databasePath,
-            entries: f.validated.secretEntries,
+            entries: [
+              { name: "node.dump", bytes: f.validated.nodeDump },
+              ...f.validated.secretEntries,
+            ],
             environment: "preproduction",
           },
     );
@@ -497,6 +501,7 @@ it("carries the runner through real stream validation and placement", async () =
     databasePath: f.validated.databasePath,
     entries: [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(f.validated.manifest)) },
+      { name: "node.dump", bytes: f.validated.nodeDump },
       ...f.validated.secretEntries,
     ],
   });

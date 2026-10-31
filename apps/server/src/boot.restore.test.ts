@@ -178,6 +178,7 @@ describe("startServer, against a migrated venue directory", () => {
       const entries = unsealNodeState(rows[0]!.sealed, key);
       expect(entries.map((e) => e.name)).toEqual([
         "manifest.json",
+        "node.dump",
         ...RECOVERY_FILES.map((rel) => `secrets/${rel}`),
         "secrets/modules.json",
       ]);

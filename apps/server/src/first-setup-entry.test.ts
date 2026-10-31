@@ -113,6 +113,7 @@ it("checks before archive/bucket placement changes either database or host state
           modules: {},
         },
         secretEntries: [],
+        nodeDump: Buffer.from("NODE"),
         discard: async () => {},
       },
       {
@@ -174,6 +175,7 @@ it.each(["first-setup.json", "first-setup-claim.json", "module-operation-public.
           }),
         ),
       },
+      { name: "node.dump", bytes: Buffer.from("NODE") },
       { name: `secrets/${name}`, bytes: Buffer.from("{}") },
     ];
     await expect(
@@ -402,6 +404,7 @@ it.each([
             }),
           ),
         },
+        { name: "node.dump", bytes: Buffer.from("NODE") },
         { name: `secrets/${name}`, bytes: Buffer.from("{}") },
       ],
       join(f.root, "source.db"),

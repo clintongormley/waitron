@@ -167,6 +167,7 @@ export async function stagedHourCrash(
       now: new Date(),
     });
     const entries = [
+      await nodeDumpEntry(nodeDb, root),
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
       {
         name: "secrets/trading.env",
@@ -187,11 +188,7 @@ export async function stagedHourCrash(
     ];
     await db.archiveTo(databasePath);
     const artifact = encryptArtifact(
-      packArchive([
-        ...entries,
-        { name: "db.dump", bytes: await readFile(databasePath) },
-        await nodeDumpEntry(nodeDb, root),
-      ]),
+      packArchive([...entries, { name: "db.dump", bytes: await readFile(databasePath) }]),
       encryptionKey,
     );
     const restore = {

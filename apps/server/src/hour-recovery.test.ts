@@ -67,6 +67,7 @@ async function archive(
     now: new Date(createdAt),
   });
   const entries = [
+    await nodeDumpEntry(suite.node, scratch),
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     {
       name: "secrets/trading.env",
@@ -82,11 +83,7 @@ async function archive(
   const database = join(scratch, "selected.db");
   await suite.db.archiveTo(database);
   const artifact = encryptArtifact(
-    packArchive([
-      ...entries,
-      { name: "db.dump", bytes: await readFile(database) },
-      await nodeDumpEntry(suite.node, scratch),
-    ]),
+    packArchive([...entries, { name: "db.dump", bytes: await readFile(database) }]),
     archiveKey,
   );
   return { manifest, entries, database, artifact };
@@ -237,7 +234,6 @@ it("does not infer recorded filing authority from migrations applied only while 
         ),
       },
       { name: "db.dump", bytes: await readFile(f.database) },
-      await nodeDumpEntry(suite.node, scratch),
     ]),
     archiveKey,
   );
@@ -330,11 +326,7 @@ async function hourEvidenceArchive(value: unknown = publicHourEvidence) {
     { name: hourEvidenceName, bytes: Buffer.from(JSON.stringify(value)) },
   ];
   const artifact = encryptArtifact(
-    packArchive([
-      ...entries,
-      { name: "db.dump", bytes: await readFile(f.database) },
-      await nodeDumpEntry(suite.node, scratch),
-    ]),
+    packArchive([...entries, { name: "db.dump", bytes: await readFile(f.database) }]),
     archiveKey,
   );
   return { ...f, entries, artifact };

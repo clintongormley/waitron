@@ -227,6 +227,7 @@ it.each(["archive", "bucket"])(
     };
     const entries = [
       { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+      await nodeDumpEntry(suite.node, root),
       {
         name: "secrets/trading.env",
         bytes: Buffer.from(`WAITRON_NODE_ID=${NODE}\n`),
@@ -252,11 +253,7 @@ it.each(["archive", "bucket"])(
       kind === "bucket"
         ? encodeRecoveryKit(kit)
         : encryptArtifact(
-            packArchive([
-              ...entries,
-              { name: "db.dump", bytes: await readFile(source) },
-              await nodeDumpEntry(suite.node, root),
-            ]),
+            packArchive([...entries, { name: "db.dump", bytes: await readFile(source) }]),
             backupKey,
           ),
     );

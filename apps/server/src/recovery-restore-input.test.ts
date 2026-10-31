@@ -67,6 +67,7 @@ const kit = {
   recoveryKey: "separate backup key",
   pointerSignerPublicKey: "MCowBQYDK2VwAyEA0000000000000000000000000000000000000000000=",
 };
+let nodeCopy: Awaited<ReturnType<typeof nodeDumpEntry>>;
 let root: string;
 let stateDir: string;
 let databasePath: string;
@@ -107,6 +108,7 @@ beforeEach(async () => {
   await mkdir(stateDir);
   databasePath = join(root, "backup.db");
   await suite.db.archiveTo(databasePath);
+  nodeCopy = await nodeDumpEntry(suite.node, root);
   operationPath = join(root, "operation.json");
   await writeFile(operationPath, JSON.stringify(request));
   archivePath = join(root, "artifact");
@@ -116,7 +118,7 @@ beforeEach(async () => {
       packArchive([
         { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
         { name: "db.dump", bytes: await readFile(databasePath) },
-        await nodeDumpEntry(suite.node, root),
+        nodeCopy,
         ...secretEntries,
       ]),
       kit.recoveryKey,
@@ -223,6 +225,7 @@ it.each(["archive", "bucket"])(
           databasePath,
           entries: [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ],
         }),
@@ -263,6 +266,7 @@ it.each(["archive", "bucket"])(
           databasePath,
           entries: [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ],
         }),
@@ -286,6 +290,7 @@ it.each(["archive", "stream"] as const)(
             databasePath,
             entries: [
               { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+              nodeCopy,
               ...secretEntries,
             ],
             environment: "preproduction",
@@ -455,6 +460,7 @@ it.each(["archive", "stream"] as const)(
       kind === "stream"
         ? await recoveryStreamSourceId(databasePath, [
             { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+            nodeCopy,
             ...secretEntries,
           ])
         : recoveryArchiveSourceId(await readFile(archivePath));
@@ -466,6 +472,7 @@ it.each(["archive", "stream"] as const)(
             databasePath,
             entries: [
               { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
+              nodeCopy,
               ...secretEntries,
             ],
             environment: "preproduction",

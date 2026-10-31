@@ -73,6 +73,7 @@ export async function persistBackupRepairPublication(
   const bytes = packArchive([
     { name: META, bytes: Buffer.from(JSON.stringify(metadata)) },
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(copy.manifest)) },
+    { name: "node.dump", bytes: copy.nodeDump },
     ...copy.secretEntries,
   ]);
   if ((await readDurableHostJson(pathFor(record), LIMIT)) !== null) {

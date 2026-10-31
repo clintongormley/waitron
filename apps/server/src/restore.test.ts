@@ -171,6 +171,15 @@ const MANIFEST: BackupManifest = {
  * cases inject `migrate` and `openDb`, so nothing opens what `restoreDatabase` placed.
  */
 const VENUE_BYTES = Buffer.from("SQLite format 3\u0000 — placed, never opened by this suite");
+/** The archive's copy of node.db: an empty database. */
+const NODE_BYTES = (() => {
+  const empty = new DatabaseSync(":memory:");
+  try {
+    return Buffer.from(empty.serialize());
+  } finally {
+    empty.close();
+  }
+})();
 const MEDIA = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]); // jpeg-ish binary
 const SECRET = "WAITRON_VAULT_MASTER_KEY=deadbeef\n";
 
@@ -198,6 +207,7 @@ function buildArtifact(
 
 const FULL_ENTRIES: ArchiveEntry[] = [
   { name: "db.dump", bytes: VENUE_BYTES },
+  { name: "node.dump", bytes: NODE_BYTES },
   { name: "secrets/secrets.env", bytes: Buffer.from(SECRET) },
   { name: "secrets/trading.env", bytes: Buffer.from(TRADING_ENV) },
 ];
@@ -409,6 +419,7 @@ setInterval(() => db, 1000);`;
   it("refuses a traversal entry name BEFORE any restore or write", async () => {
     const evil: ArchiveEntry[] = [
       { name: "db.dump", bytes: VENUE_BYTES },
+      { name: "node.dump", bytes: NODE_BYTES },
       { name: "secrets/../../evil.env", bytes: Buffer.from(SECRET) },
     ];
     await expect(
@@ -439,6 +450,7 @@ setInterval(() => db, 1000);`;
     // An entry the restore does not route fails loud rather than being silently dropped.
     const artifact = buildArtifact([
       { name: "db.dump", bytes: VENUE_BYTES },
+      { name: "node.dump", bytes: NODE_BYTES },
       { name: "documents/x", bytes: Buffer.from("orphan") },
     ]);
     await expect(restoreFromArtifact(deps({ artifact }))).rejects.toMatchObject({
@@ -603,6 +615,7 @@ describe("validateArtifact / writeValidated (R3 validate-before-wipe split)", ()
   it("validateArtifact throws on a traversal entry (guard) and writes NOTHING", async () => {
     const evil: ArchiveEntry[] = [
       { name: "db.dump", bytes: VENUE_BYTES },
+      { name: "node.dump", bytes: NODE_BYTES },
       { name: "secrets/../../evil.env", bytes: Buffer.from(SECRET) },
     ];
     await expect(validateArtifact(deps({ artifact: buildArtifact(evil) }))).rejects.toMatchObject({

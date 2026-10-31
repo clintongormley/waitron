@@ -118,6 +118,8 @@ export async function checkBackupVerificationCompatibility(input: {
   before: BackupQuery;
   entries: readonly ArchiveEntry[];
   migrationsRoot?: string | null;
+  /** Where the node copy is opened from; the verifier may write only under its own scratch. */
+  scratchDir?: string;
 }): Promise<Verdict> {
   try {
     return await reconcile(input);
@@ -219,7 +221,7 @@ async function reconcile(
   const nodeDump = entries.get("node.dump");
   if (nodeDump === undefined)
     return await reconcileModules(input, actual, inventory, entries, tables, before, null);
-  const scratch = await mkdtemp(join(tmpdir(), "waitron-node-copy-"));
+  const scratch = await mkdtemp(join(input.scratchDir ?? tmpdir(), "waitron-node-copy-"));
   try {
     const path = join(scratch, "node.db");
     await writeFile(path, nodeDump.bytes, { mode: 0o600 });
