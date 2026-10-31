@@ -6159,8 +6159,8 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   [Detail](backlog/architecture.md#a913s-fix-items-general-code-english-only)
 
 - **A1241. Continue the dashboard test sample-name cleanup, one small slice per PR.**
-  Sales-category, catalogue, device, device-profile and floor-plan suites still carry Spanish
-  sample names.
+  Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
+  device, device-profile and floor-plan suites still carry Spanish sample names.
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
   fixture `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`,
   which the in-flight A1089 reply-evidence branch changes. Recheck live branch paths before

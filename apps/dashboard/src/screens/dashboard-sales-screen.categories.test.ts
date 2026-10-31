@@ -137,7 +137,7 @@ const currentReport: CategorySalesDto = {
     node({
       kind: "category",
       id: "c-drinks",
-      name: "Bebidas Hoy",
+      name: "Current drinks",
       depth: 0,
       gross: "4.00",
       net: "3.60",
@@ -159,8 +159,8 @@ const currentReport: CategorySalesDto = {
 };
 
 const printers = [
-  { id: "p-bar", name: "Barra Casa" },
-  { id: "p-kitchen", name: "Cocina Impresora" },
+  { id: "p-bar", name: "House bar" },
+  { id: "p-kitchen", name: "House kitchen printer" },
 ];
 
 function stubApi(overrides: Partial<DashboardApi> = {}): DashboardApi {
@@ -261,7 +261,7 @@ describe("dashboard-sales-screen — category report", () => {
     await flush(el);
     expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false);
     expect(q(el, "categories-heading")!.textContent!.trim()).toBe("Categorías actuales");
-    expect(rows(el).map((r) => r[0])).toEqual(["Bebidas Hoy", "No registrada"]);
+    expect(rows(el).map((r) => r[0])).toEqual(["Current drinks", "No registrada"]);
     pickMode(el, "at_time_of_sale");
     await flush(el);
     expect(api.getCategorySales).toHaveBeenLastCalledWith(
@@ -375,7 +375,7 @@ describe("dashboard-sales-screen — category report", () => {
               node({
                 kind: "category",
                 id,
-                name: "Principales",
+                name: "House mains",
                 depth: 1,
                 gross: "10.00",
                 net: "9.00",
@@ -391,7 +391,7 @@ describe("dashboard-sales-screen — category report", () => {
       }) satisfies CategorySalesDto;
     // Today's tree renamed Almuerzo to Mediodía, so each mode's rows name their own parents.
     const twoBranches = (mode: CategorySalesDto["mode"]): CategorySalesDto => {
-      const food = mains("c-food-mains", "c-food", "Comida", mode);
+      const food = mains("c-food-mains", "c-food", "House food", mode);
       const lunchName = mode === "current" ? "Mediodía" : "Almuerzo";
       const lunch = mains("c-lunch-mains", "c-lunch", lunchName, mode);
       return { ...food, tree: [...lunch.tree, ...food.tree], gross: "20.00", net: "18.00" };
@@ -411,18 +411,18 @@ describe("dashboard-sales-screen — category report", () => {
       });
     expect(shown()).toEqual([
       "Almuerzo",
-      "Almuerzo › Principales",
-      "Comida",
-      "Comida › Principales",
+      "Almuerzo › House mains",
+      "House food",
+      "House food › House mains",
     ]);
     pickMode(el, "current");
     await flush(el);
     expect(api.getCategorySales).toHaveBeenLastCalledWith(today(), today(), "current", false);
     expect(shown()).toEqual([
       "Mediodía",
-      "Mediodía › Principales",
-      "Comida",
-      "Comida › Principales",
+      "Mediodía › House mains",
+      "House food",
+      "House food › House mains",
     ]);
   });
 
@@ -643,8 +643,8 @@ describe("dashboard-sales-screen — printing the category report", () => {
     const select = q<PrinterField>(el, "print-printer")!;
     expect(select.name).toBe("printerId");
     expect(select.options.map((o) => [o.value, o.label])).toEqual([
-      ["p-bar", "Barra Casa"],
-      ["p-kitchen", "Cocina Impresora"],
+      ["p-bar", "House bar"],
+      ["p-kitchen", "House kitchen printer"],
     ]);
     expect(select.value).toBe("p-bar");
     q<HTMLInputElement>(el, "extras-into-dish")!.click();
@@ -661,7 +661,7 @@ describe("dashboard-sales-screen — printing the category report", () => {
     });
     const status = q(el, "print-status")!;
     expect(status.getAttribute("role")).toBe("status");
-    expect(status.textContent!.trim()).toBe("Category sales sent to Cocina Impresora.");
+    expect(status.textContent!.trim()).toBe("Category sales sent to House kitchen printer.");
     expect(q(el, "print-error")).toBeNull();
     // A new question clears the answer to the old one.
     pickMode(el, "current");
@@ -787,13 +787,13 @@ describe("dashboard-sales-screen — printing the category report", () => {
     await chooseOption(select, "p-kitchen");
     // A refresh that still holds the chosen printer keeps it.
     vi.mocked(api.getReportPrinters).mockResolvedValue([
-      { id: "p-new", name: "Terraza Casa" },
+      { id: "p-new", name: "House patio" },
       ...printers,
     ]);
     liveData.invalidate([{ type: "printers", id: "p-new" }]);
     await vi.waitFor(() => expect(q<PrinterField>(el, "print-printer")!.options).toHaveLength(3));
     expect(q<PrinterField>(el, "print-printer")!.value).toBe("p-kitchen");
-    vi.mocked(api.getReportPrinters).mockResolvedValue([{ id: "p-new", name: "Terraza Casa" }]);
+    vi.mocked(api.getReportPrinters).mockResolvedValue([{ id: "p-new", name: "House patio" }]);
     liveData.invalidate([{ type: "printers", id: "p-kitchen" }]);
     await vi.waitFor(() => expect(q<PrinterField>(el, "print-printer")!.value).toBe("p-new"));
     q(el, "print-categories")!.click();
@@ -851,8 +851,8 @@ describe("dashboard-sales-screen — the report printer field", () => {
     expect(printer!.label).toBe(t("sales.printer"));
     expect(printer!.search).toBe("auto");
     expect(printer!.options).toEqual([
-      { value: "p-bar", label: "Barra Casa" },
-      { value: "p-kitchen", label: "Cocina Impresora" },
+      { value: "p-bar", label: "House bar" },
+      { value: "p-kitchen", label: "House kitchen printer" },
     ]);
     expect(printer!.value).toBe("p-bar");
     await chooseOption(printer!, "p-kitchen");
