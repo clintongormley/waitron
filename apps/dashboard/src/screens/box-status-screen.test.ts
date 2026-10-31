@@ -1267,7 +1267,7 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       },
     );
 
-    it("reads again only once the dialog closes when the step has signed this session out", async () => {
+    it("reads again at once after a step that signs this session out", async () => {
       deviceNow(DEVICE_AT);
       const api = setApi(undefined, {
         clockSet: vi
@@ -1278,51 +1278,162 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       await open(el);
       vi.mocked(api.liveData.refresh).mockClear();
       await useThisTime(el);
-      expect(api.liveData.refresh).not.toHaveBeenCalled();
-      await userEvent.click(q(el, "[data-test=clock-check-close]")!);
-      await flush(el);
-      expect(api.liveData.refresh).toHaveBeenCalled();
+      expect(api.liveData.refresh).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      ["agreeing with", "agreeing"],
+      ["contradicting", "contrary"],
+    ] as const)(
+      "does not offer this device's time once the tax agency's time is in hand, %s the box",
+      async (_, side) => {
+        deviceNow(DEVICE_AT);
+        const authority = {
+          kind: "authority" as const,
+          id: "aeat-1",
+          boxAt: BOX_AT,
+          witnessAt: "2026-10-22T19:30:00.000Z",
+          uncertaintyMs: 400,
+        };
+        const stop = { ...STOPPED, [side]: { authority, devices: [] } };
+        const el = await mountClock(setApi({ clockStop: stop, clock: SETTABLE }));
+        await open(el);
+        expect(q(el, "[data-test=clock-set-question]")).toBeNull();
+        expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
+          t("box_status.clock.admin.differ"),
+        );
+        expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
+      },
+    );
+
+    const REFUSAL_WORDS = [
+      [
+        "synchronised",
+        "box_status.clock.admin.set.refused.synchronised",
+        "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
+        false,
+      ],
+      [
+        "witnessed",
+        "box_status.clock.admin.set.refused.witnessed",
+        "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
+        true,
+      ],
+      [
+        "stale",
+        "box_status.clock.admin.set.refused.stale",
+        "The box's clock changed while this was being checked. Close this and check again.",
+        true,
+      ],
+      [
+        "host_unavailable",
+        "box_status.clock.admin.set.refused.host_unavailable",
+        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
+        false,
+      ],
+      [
+        "target_invalid",
+        "box_status.clock.admin.set.refused.target_invalid",
+        "Your device's date is not one the box can take. Check your device's date and time.",
+        false,
+      ],
+      [
+        "pending_disproofs",
+        "box_status.clock.admin.set.refused.pending_disproofs",
+        "The box has not finished recording what it found about its clock. Try again in a minute.",
+        false,
+      ],
+      [
+        "same_machine",
+        "box_status.clock.admin.set.refused.same_machine",
+        "This screen is the box itself, so its clock is the box's own. Use your phone or another computer.",
+        false,
+      ],
+      [
+        "not_stopped",
+        "box_status.clock.admin.set.refused.not_stopped",
+        "The box's clock no longer needs setting. See the Clock row.",
+        true,
+      ],
+    ] as const;
+
+    it.each(REFUSAL_WORDS)(
+      "words a set refused as %s above the buttons and reads again",
+      async (reason, _key, words, onlyClose) => {
+        deviceNow(DEVICE_AT);
+        const api = setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED(reason)) });
+        const el = await mountClock(api);
+        await open(el);
+        await useThisTime(el);
+        expect(dialog(el).open).toBe(true);
+        expect(footerMessage(el)).toBe(words);
+        expect(api.liveData.refresh).toHaveBeenCalled();
+        expect(buttons(el)).toEqual(
+          onlyClose
+            ? [["clock-check-close", "secondary", "Close"]]
+            : [
+                ["clock-check-cancel", "secondary", "Cancel"],
+                ["clock-set-confirm", "primary", "Use this time"],
+              ],
+        );
+      },
+    );
+
+    it.each(REFUSAL_WORDS)("words a set refused as %s in Spanish", async (reason, key) => {
+      setLocale("es");
+      deviceNow(DEVICE_AT);
+      const el = await mountClock(
+        setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED(reason)) }),
+      );
+      await open(el);
+      await useThisTime(el);
+      expect(footerMessage(el)).toBe(es[key]);
     });
 
     it.each([
       [
-        "synchronised",
-        "The box keeps its clock in time over the internet and says it is right, so it does not take a time from a device. If your device's time is right, check the box's internet connection.",
+        "refused",
+        "box_status.clock.admin.set.failed.refused",
+        "The box could not set its clock. Close this and check again.",
       ],
       [
-        "witnessed",
-        "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from a device's. If a try fails, it tries again later.",
+        "unverified",
+        "box_status.clock.admin.set.failed.unverified",
+        "The box moved its clock but could not confirm it landed on your device's time. Close this and check again.",
       ],
-      ["stale", "The box's clock changed while this was being checked. Read the time again."],
-      [
-        "host_unavailable",
-        "This box cannot set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its time service may still put the clock right by itself. Once the box's clock is within a minute of your device's, you can confirm it here.",
-      ],
-      [
-        "target_invalid",
-        "Your device's date is not one the box can take. Check your device's date and time.",
-      ],
-      [
-        "pending_disproofs",
-        "The box is still recording what it found after an earlier change of its clock. Try again in a minute.",
-      ],
-      [
-        "same_machine",
-        "This screen is the box itself, so its clock is the box's own. Confirm from your phone or another computer.",
-      ],
-      ["not_stopped", "There is nothing left to confirm. See the Clock row."],
-    ])("words a set refused as %s above the buttons and reads again", async (reason, words) => {
+    ] as const)("words a set that failed as %s, in each language", async (reason, key, words) => {
+      for (const locale of ["en", "es"]) {
+        setLocale(locale);
+        deviceNow(DEVICE_AT);
+        const api = setApi(undefined, {
+          clockSet: vi.fn().mockRejectedValue({ code: "clock.set_failed", params: { reason } }),
+        });
+        const el = await mountClock(api);
+        await open(el);
+        await useThisTime(el);
+        expect(footerMessage(el)).toBe(locale === "en" ? words : es[key]);
+        expect(buttons(el)).toEqual([["clock-check-close", "secondary", t("action.close")]]);
+        expect(api.liveData.refresh).toHaveBeenCalled();
+        cleanupWidgets();
+      }
+    });
+
+    it("words a challenge refused during a set as the check's own refusal", async () => {
       deviceNow(DEVICE_AT);
-      const api = setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED(reason)) });
+      const api = setApi(undefined, {
+        clockChallenge: vi
+          .fn()
+          .mockResolvedValueOnce({ challengeId: "ch-1", boxAt: BOX_AT })
+          .mockRejectedValue(REFUSED("same_machine")),
+      });
       const el = await mountClock(api);
       await open(el);
       await useThisTime(el);
-      expect(dialog(el).open).toBe(true);
-      expect(footerMessage(el)).toBe(words);
-      expect(api.liveData.refresh).toHaveBeenCalled();
+      expect(api.clockSet).not.toHaveBeenCalled();
+      expect(footerMessage(el)).toBe(t("box_status.clock.admin.refused.same_machine"));
     });
 
-    it("words each set refusal in Spanish from the words file", async () => {
+    it("words the question and its button in Spanish from the words file", async () => {
       setLocale("es");
       deviceNow(DEVICE_AT);
       const el = await mountClock(
@@ -1338,17 +1449,16 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(text(q(el, "[data-test=clock-set-confirm]"))).toBe(
         es["box_status.clock.admin.set.confirm"],
       );
-      await useThisTime(el);
-      expect(footerMessage(el)).toBe(es["box_status.clock.admin.set.refused.synchronised"]);
     });
 
     it("turns to the agree path when the box finds the fresh times agree", async () => {
       deviceNow(DEVICE_AT);
-      const el = await mountClock(
-        setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED("agrees")) }),
-      );
+      const api = setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED("agrees")) });
+      const el = await mountClock(api);
       await open(el);
+      vi.mocked(api.liveData.refresh).mockClear();
       await useThisTime(el);
+      expect(api.liveData.refresh).toHaveBeenCalled();
       expect(footerMessage(el)).toBe("");
       expect(text(q(el, "[data-test=clock-check-verdict]"))).toBe(
         t("box_status.clock.admin.agree"),
@@ -1370,21 +1480,16 @@ describe("dashboard-box-status-screen's check of the box's clock with this devic
       expect(buttons(el)).toEqual([["clock-check-close", "secondary", "Close"]]);
     });
 
-    it("words a failed set and any other refusal by their codes", async () => {
-      for (const error of [
-        { code: "clock.set_failed", params: { reason: "unverified" } },
-        SET_REFUSED("a_new_reason"),
-      ]) {
-        deviceNow(DEVICE_AT);
-        const el = await mountClock(
-          setApi(undefined, { clockSet: vi.fn().mockRejectedValue(error) }),
-        );
-        await open(el);
-        await useThisTime(el);
-        expect(footerMessage(el)).toBe(codeMessage(error.code));
-        expect(q(el, "[data-test=clock-set-confirm]")).not.toBeNull();
-        cleanupWidgets();
-      }
+    it("words any other refusal by its code", async () => {
+      deviceNow(DEVICE_AT);
+      const el = await mountClock(
+        setApi(undefined, { clockSet: vi.fn().mockRejectedValue(SET_REFUSED("a_new_reason")) }),
+      );
+      await open(el);
+      await useThisTime(el);
+      expect(footerMessage(el)).toBe("The box's clock was not set. See the Clock row.");
+      expect(footerMessage(el)).toBe(codeMessage("clock.set_refused"));
+      expect(q(el, "[data-test=clock-set-confirm]")).not.toBeNull();
     });
 
     it("sends one set per press and holds both buttons while it is sent", async () => {

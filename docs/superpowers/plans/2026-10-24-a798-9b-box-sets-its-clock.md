@@ -3470,21 +3470,34 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
 - **Wiring controls, each failing the boot case:** no `boxClock` handed to `mountTillApi` (404), and a
   filing switch that is always on (409 at the challenge: AEAT not yet asked).
 
-### Task 13's departures (2026-10-31)
+### Task 13's departures and per-task review, folded (2026-10-31)
 
 - **`host_unavailable`'s words speak to the administrator reading them.** Decision 13's last
   sentence, "An administrator can still confirm the clock when it is right", becomes "Once the
   box's clock is within a minute of your device's, you can confirm it here", since the person who
   reads it is that administrator; "the part of its install" becomes "the part of the box", as
   Task 7's departure did for `clock.sync_off`.
-- **`target_invalid` and `pending_disproofs` have their own words** (Task 12's departure added
-  both reasons): "Your device's date is not one the box can take. Check your device's date and
-  time." and "The box is still recording what it found after an earlier change of its clock. Try
-  again in a minute." `same_machine` and `not_stopped` reuse the confirmation's sentences, and
-  `not_stopped` clears the question as it clears the confirmation's times.
-- **A set clock keeps the dialog open** with "The box's clock is set." and Close only, so the
-  sentence is read. When the step is more than `IDLE_TIMEOUT_MS` either way, the dialog adds
-  "Sign in again to go on." and the screen's read waits for Close: a read at once would meet the
-  ended session and leave the page before the sentence is read.
-- **`clock.set_failed` is worded by its code** for both reasons ("The box could not set its
-  clock. Read the time again."), and a reason the screen does not know by `clock.set_refused`'s.
+- **Every set refusal has its own words**, `target_invalid` and `pending_disproofs` included
+  (Task 12's departure added both), and `same_machine` and `not_stopped` say "use" and "set"
+  rather than the confirmation's "confirm" (review M6). `pending_disproofs` names no earlier
+  step, since the box also answers it when the watch cannot record this step's readings first
+  (review M4). Each `clock.set_failed` reason has its own words: `unverified` says the box moved
+  its clock, as the bell's `clock.corrected` will (review I1).
+- **"Use this time" is not offered once AEAT's time is in hand during a clock-behind stop**
+  (review I2): the box answers `witnessed` whenever the stop's `agreeing.authority` or
+  `contrary.authority` is set (`apps/server/src/clock-correction.ts`, `judge`), and the read
+  carries both. During the before-28-10-2024 stop the box judges AEAT from readings the read does
+  not carry, so the offer stays and the refusal's words answer.
+- **A refusal a second press could only meet again ends the question** — `not_stopped`,
+  `witnessed`, `stale` and either `clock.set_failed` — leaving Close, and their words say "Close
+  this and check again" where a fresh reading is what helps (review M5).
+- **A set clock keeps the dialog open** with "The box's clock is set." and Close only. When the
+  step is more than `IDLE_TIMEOUT_MS` either way, it adds "Sign in again to go on." The screen
+  reads again at once: the background read and the live connection meet the ended session within
+  about 15 seconds anyway (review I3), and the sign-in page then says the session has expired.
+- **A challenge refused during a set** is worded as the check's own refusal (review M9), and a
+  set reason the screen does not know by `clock.set_refused`'s sentence, which now points at the
+  Clock row.
+- **Not changed:** the 30-minute limit is judged on the step alone (review M2): the confirming
+  administrator's request has just stamped the session's last use, so only the step can carry it
+  past the limit; a backward step ends a session from Task 15 on, in this same pull request.
