@@ -1633,9 +1633,11 @@ describe("generation housekeeping", () => {
 
   it("reads the bucket's clock again at the daily prune when the marker could not be read at opening", async () => {
     const h = await harness();
+    // Wrong before the generation opens, so the box's time standing in for the bucket's is wrong too.
+    h.clock.step(400 * DAY);
     h.store.failNext({
       operation: "list",
-      key: markerOf(generationName(2, NODE, new Date(START))),
+      key: markerOf(generationName(2, NODE, new Date(Date.parse(START) + 400 * DAY))),
       error: new Error("connection reset"),
     });
     await h.supervisor.start();
@@ -1646,7 +1648,6 @@ describe("generation housekeeping", () => {
     oldGeneration(h, old, Date.parse(START) - 8 * DAY);
     const recent = generationName(1, "node-recent", new Date(Date.parse(START) - 2 * DAY));
     oldGeneration(h, recent, Date.parse(START) - DAY);
-    h.clock.step(400 * DAY);
     h.clock.advance(PRUNE_EVERY_MS);
     await h.clock.next(); // the streaming tick
     await vi.waitFor(() => expect(h.store.has(fullCopyOf(old))).toBe(false));

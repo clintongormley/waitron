@@ -4221,8 +4221,9 @@ A798-B slice 9b, Task 15. One row per job that compares a stored time with the w
 is a step 400 days forward (stored times now look 400 days old), "−400" one 400 days back (stored
 times sit 400 days ahead). A step the box makes moves its clock towards the right time; a time
 stored while the clock was wrong is what the step exposes. Rows marked "test" name the tests
-behind them; every other row was read, not run (at `a3ef1ff3a`, or by Task 15's two reviews, which
-ran the backup schedule, the PIN throttle and the three in-memory limiters). The rows come from the
+behind them. Every other row was read at `a3ef1ff3a` or by Task 15's two reviews, and not run,
+except five the reviews ran in a scratch test: the backup schedule, the PIN throttle and the three
+in-memory limiters. The rows come from the
 audit's two greps (calls of `Date.now()`, `new Date()` and `now().getTime()`, and files holding
 timers, outside tests; both in Task 15's commit message) and from those reviews. The greps do not
 find `nowIso()` cutoffs, comparisons made in SQL, or `Date.now` handed on as a value, so a job of
@@ -4257,8 +4258,8 @@ out.
 | Invoice deliveries (`apps/server/src/invoice-delivery.ts:229`, `:253-256`) | retried at once; a stuck claim lapses | a retry waits 400 days; a claim stamped ahead never lapses until a restart | Task 15c fixes it (a customer's invoice copy) |
 | Print-job lease (`packages/printing/src/runtime.ts:55-62`) | a job mid-print is claimed again | a job left printing is not claimed again for 400 days: a ticket that never prints | Task 15c fixes it (cuts a station off) |
 | PIN throttle (`packages/identity/src/pin-throttle.ts:89-96`, `:118-122`, in memory) | waits end | a person in a wait is refused at that slot for 400 days, until a restart | Task 15c fixes it (cuts a person off the till) |
-| Device-join limiter (`apps/server/src/enrol-rate-limit.ts:39-56`, in memory) | the window reopens | the window never reopens: once 30 joins are counted every device join is refused `device.join_rate_limited`, until a restart | Task 15c fixes it (cuts tills off) |
-| Account-action limiter (`apps/server/src/account-rate-limit.ts:31-54`, in memory) | the window reopens | once its count is reached, account actions are refused `account_action.rate_limited`, until a restart | Task 15c fixes it |
+| Device-join limiter (`apps/server/src/enrol-rate-limit.ts:39-56`, in memory) | the window reopens | once 30 joins are counted every device join is refused `device.join_rate_limited` for 400 days, until the clock passes the window's start again or a restart | Task 15c fixes it (cuts tills off) |
+| Account-action limiter (`apps/server/src/account-rate-limit.ts:31-54`, in memory) | the window reopens | once its count is reached, account actions are refused `account_action.rate_limited` for 400 days, or until a restart | Task 15c fixes it |
 | Password-reset and invitation cooldown (`apps/server/src/account-rate-limit.ts:14-28`, in memory) | ends | that email's reset or invitation is blocked for 400 days, until a restart | Task 15c fixes it |
 | Venue liveness (`packages/store/src/venue-liveness.ts:127`) | none: measured on `process.hrtime` | none | nothing to do |
 | The box's TLS certificate (`apps/server/src/self-signed-cert.ts:160`) | — | the box may see its own leaf as not yet valid; its repair route reissues one | accepted with a backlog line (plan Task 15): a leaf issued while the clock was more than a day ahead is refused by devices whose clock is right; read, not run |

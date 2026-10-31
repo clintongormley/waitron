@@ -1223,9 +1223,9 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
     people in at today's real time, then moves `Date` back weeks — a backward step past the idle
     timeout, which Task 15's management-session rule now ends (`management_session.expired`, the
     401 the boot case printed). Each gains one statement re-stamping `management_sessions.last_seen_at`
-    at the moved clock, as if they had signed in then. No assertion changes. The build ran the
-    `apps/`/`packages/` test files that fake `Date` and touch a session and saw only these two
-    fail; CI on `63f3c866b` (run 41240072661, server shard 13) then failed a third,
+    at the moved clock, as if they had signed in then. No assertion changes. The build ran a set of
+    test files it took to be those that fake `Date` and touch a session, and saw only these two
+    fail; that set cannot have been the one the command below selects. CI on `63f3c866b` (run 41240072661, server shard 13) then failed a third,
     `apps/server/src/orders-api.test.ts` ("Orders data node clock": staff signed in at the real
     time, `Date` moved months back, 401), which gains the same re-stamp after its second
     `setSystemTime`; the review of the fold found it too. The build did not save its command; this
@@ -3026,7 +3026,7 @@ since they were read, not run):
   the wait for the next fire works out `fireAt` once, before the wait, so after a step back it
   sleeps until the new clock reaches the old `fireAt`. Recompute it when it lies further ahead of
   now than the schedule allows: one interval for an `interval` schedule, the schedule's longest
-  gap for the wall-clock ones (`daily`, weekdays, `auto`, `backup-schedule.ts:68-80`, up to 8 civil
+  gap for the wall-clock ones (`daily`, weekdays, `auto`, `backup-schedule.ts:68-80`, at most 7
   days). Test in `backup-sweep.test.ts`: a step back 400 days during the wait → the next archive is
   taken within that gap; a run with no step as the control. The comments at `backup-sweep.ts:421-423`
   and `backup-schedule.ts:9` say a clock jump is noticed within the hour, true only forward: correct
