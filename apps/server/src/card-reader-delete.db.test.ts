@@ -123,15 +123,15 @@ type ReaderOptions = {
 };
 
 /**
- * Reader R "Lector barra" and control reader Q on two profiles and four devices: Caja 1 chooses R
- * and holds it, Caja 2 takes Sala's default R, Vieja (switched off) chooses R, Caja 3 takes
- * Terraza's default Q and holds Q.
+ * Reader R "Bar reader" and control reader Q on two profiles and four devices: Till 1 chooses R
+ * and holds it, Till 2 takes Dining room's default R, Unplugged till (switched off) chooses R,
+ * Till 3 takes Terrace's default Q and holds Q.
  */
 async function seedVenue(options: ReaderOptions = {}) {
   await seedTenant(suite.db);
   const [location] = await suite.db
     .insert(locations)
-    .values({ name: "Barra", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
+    .values({ name: "Main bar", invoiceLocales: ["es-ES"], operationDescription: "Venta" })
     .returning({ id: locations.id });
   const locationId = location!.id;
   const [rRow] = await suite.db
@@ -139,7 +139,7 @@ async function seedVenue(options: ReaderOptions = {}) {
     .values({
       provider: options.provider ?? "stripe",
       providerRef: "tmr_R",
-      name: "Lector barra",
+      name: "Bar reader",
       active: options.active ?? true,
       disabledAt: options.disabledAt ?? null,
       unpairedAt: options.unpairedAt === undefined ? UNPAIRED : options.unpairedAt,
@@ -147,7 +147,7 @@ async function seedVenue(options: ReaderOptions = {}) {
     .returning({ id: cardReaders.id });
   const [qRow] = await suite.db
     .insert(cardReaders)
-    .values({ provider: "stripe", providerRef: "tmr_Q", name: "Lector terraza" })
+    .values({ provider: "stripe", providerRef: "tmr_Q", name: "Terrace reader" })
     .returning({ id: cardReaders.id });
   const r = rRow!.id;
   const q = qRow!.id;
@@ -161,8 +161,8 @@ async function seedVenue(options: ReaderOptions = {}) {
     )[0]!.id,
     name,
   });
-  const diningProfile = await profile("Sala");
-  const terraceProfile = await profile("Terraza");
+  const diningProfile = await profile("Dining room");
+  const terraceProfile = await profile("Terrace");
   await suite.db.insert(deviceProfileCardReaders).values([
     { deviceProfileId: diningProfile.id, readerId: r, position: 0, isDefault: true },
     { deviceProfileId: diningProfile.id, readerId: q, position: 1, isDefault: false },
@@ -179,10 +179,10 @@ async function seedVenue(options: ReaderOptions = {}) {
     )[0]!.id,
     name,
   });
-  const firstTill = await device("Caja 1", diningProfile.id);
-  const secondTill = await device("Caja 2", diningProfile.id);
-  const retiredTill = await device("Vieja", terraceProfile.id, false);
-  const thirdTill = await device("Caja 3", terraceProfile.id);
+  const firstTill = await device("Till 1", diningProfile.id);
+  const secondTill = await device("Till 2", diningProfile.id);
+  const retiredTill = await device("Unplugged till", terraceProfile.id, false);
+  const thirdTill = await device("Till 3", terraceProfile.id);
   await suite.db.insert(deviceCardReaders).values([
     { deviceId: firstTill.id, readerId: r },
     { deviceId: retiredTill.id, readerId: r },
@@ -269,7 +269,7 @@ describe("the card reader delete impact", () => {
   it("names every device choice, inherited default, profile list, profile default and holder", async () => {
     const v = await seedVenue();
     expect(await read(seats, v.r)).toEqual({
-      target: { id: v.r, name: "Lector barra" },
+      target: { id: v.r, name: "Bar reader" },
       refusals: [],
       ends: [],
       removes: [
@@ -284,7 +284,7 @@ describe("the card reader delete impact", () => {
 
   it("names no switched-off device under the default it would inherit", async () => {
     const v = await seedVenue();
-    const disabledTill = await v.device("Apagada", v.diningProfile.id, false);
+    const disabledTill = await v.device("Switched-off till", v.diningProfile.id, false);
     const impact = await read(seats, v.r);
     expect(impact.removes).toContainEqual({
       key: "device_reader_default",
@@ -372,13 +372,13 @@ describe("deleting a card reader", () => {
     expect((await snapshot()).payments).toEqual(before.payments);
     await suite.db
       .insert(cardReaders)
-      .values({ provider: "stripe", providerRef: "tmr_R", name: "Lector barra" });
+      .values({ provider: "stripe", providerRef: "tmr_R", name: "Bar reader" });
     const joined = await suite.db.execute(
       sql`select card_readers.id, card_readers.name from payments
           join card_readers on card_readers.id = payments.reader_id
           where payments.id = ${before.payments![0]!.id}`,
     );
-    expect(joined.rows).toEqual([{ id: v.r, name: "Lector barra" }]);
+    expect(joined.rows).toEqual([{ id: v.r, name: "Bar reader" }]);
     expect((await suite.db.execute(sql`pragma foreign_key_check`)).rows).toEqual([]);
   });
 
@@ -493,7 +493,7 @@ describe("deleting a card reader", () => {
 
   it("never looks up the provider of an unpaired reader", async () => {
     const v = await seedVenue({ provider: "gone" });
-    expect((await read(seats, v.r)).target).toEqual({ id: v.r, name: "Lector barra" });
+    expect((await read(seats, v.r)).target).toEqual({ id: v.r, name: "Bar reader" });
     await remove(seats, v.r);
     const [row] = await suite.db.select().from(cardReaders).where(eq(cardReaders.id, v.r));
     expect(row!.deletedAt).toBe(NOW.toISOString());

@@ -220,7 +220,7 @@ async function reader(name: string): Promise<string> {
 }
 
 /** An open order labelled `label` (null for none); its id. */
-async function openOrder(venue: Venue, label: string | null = "Mesa 1"): Promise<string> {
+async function openOrder(venue: Venue, label: string | null = "Table 1"): Promise<string> {
   const orderId = randomUUID();
   const offers = await inTx((tx) => offerProducts(tx, venue.cfg));
   await parkOrder({ db: suite.db }, venue.cfg, {
@@ -392,7 +392,7 @@ async function seed() {
       lines: [
         {
           lineNo: 1,
-          name: "Café",
+          name: "Coffee",
           descriptions: { "es-ES": "Café" },
           quantity: "1",
           unitPrice: "1.00",
@@ -515,7 +515,7 @@ describe("the device delete impact", () => {
     "refuses with device.payment_in_progress naming each open order with %s",
     async (_what, start) => {
       const s = await seed();
-      const control = await openOrder(s.venue, "Mesa 2");
+      const control = await openOrder(s.venue, "Table 2");
       await start(control, s.pass);
       const unlabelled = await openOrder(s.venue, null);
       const orderId = await openOrder(s.venue);
@@ -527,7 +527,7 @@ describe("the device delete impact", () => {
         {
           code: "device.payment_in_progress",
           params: {},
-          targets: [{ id: orderId, name: "Mesa 1" }],
+          targets: [{ id: orderId, name: "Table 1" }],
         },
       ]);
 
@@ -537,7 +537,7 @@ describe("the device delete impact", () => {
       );
       expect((await read()).refusals[0]!.targets).toEqual([
         { id: unlabelled, name: `#${rows[0]!.order_number}` },
-        { id: orderId, name: "Mesa 1" },
+        { id: orderId, name: "Table 1" },
       ]);
 
       const before = await snapshot();
@@ -579,7 +579,7 @@ describe("the device delete impact", () => {
       {
         code: "device.payment_in_progress",
         params: {},
-        targets: [{ id: orderId, name: "Mesa 1" }],
+        targets: [{ id: orderId, name: "Table 1" }],
       },
     ]);
     expect(await refusals(s.pass)).toEqual([]);
