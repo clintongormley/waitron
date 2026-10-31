@@ -243,7 +243,7 @@ describe.each(["light", "dark"] as const)("payments-screen a11y (%s theme)", (th
           {
             code: "reader.payment_in_progress",
             params: { readerId: "r-1" },
-            targets: [{ id: "device-2", name: "Caja 2" }],
+            targets: [{ id: "device-2", name: "Till 2" }],
           },
         ]
       : [],

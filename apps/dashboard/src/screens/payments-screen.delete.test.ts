@@ -50,7 +50,7 @@ const paying = (impact: DeleteImpact): DeleteImpact => ({
     {
       code: "reader.payment_in_progress",
       params: { readerId: impact.target.id },
-      targets: [{ id: "d2", name: "Caja 2" }],
+      targets: [{ id: "d2", name: "Till 2" }],
     },
   ],
 });
@@ -363,7 +363,7 @@ describe("Deleting a card reader", () => {
       client({ getReaderDeleteImpact: vi.fn().mockResolvedValue(paying(counterImpact)) }),
     );
     await openDelete(el, "counter");
-    expect(linesOf(el)).toContain("Payment in progress on Caja 2");
+    expect(linesOf(el)).toContain("Payment in progress on Till 2");
     expect(confirmOf(el).getAttribute("variant")).toBe("secondary");
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
   });
@@ -489,7 +489,7 @@ describe("Deleting a card reader", () => {
     api.liveData!.invalidate([{ type: "payments", id: "pay-1" }]);
     await vi.waitFor(() => expect(dialogOf(el)!.impact?.refusals).toHaveLength(1));
     await flush(el);
-    expect(linesOf(el)).toContain("Payment in progress on Caja 2");
+    expect(linesOf(el)).toContain("Payment in progress on Till 2");
     expect(confirmOf(el).hasAttribute("disabled")).toBe(true);
   });
 

@@ -1552,14 +1552,14 @@ describe("card payments stuck after a restart", () => {
 
   it("names the device a payment started on, or the job that started one with no device", async () => {
     const rows: StuckPaymentRow[] = [
-      { ...STUCK[0]!, deviceName: "Barra 2" },
+      { ...STUCK[0]!, deviceName: "Counter 2" },
       { ...STUCK[1]!, source: "readiness_test", deviceId: null, deviceName: null },
     ];
     const { el } = await mount(stubApi({ listStuckPayments: vi.fn().mockResolvedValue(rows) }));
 
     const device = (id: string) =>
       q(el, `[data-test=stuck-${id}] [data-test=stuck-device]`)!.textContent!.trim();
-    expect(device("pay-1")).toBe("Barra 2");
+    expect(device("pay-1")).toBe("Counter 2");
     expect(device("pay-2")).toBe("Readiness test");
   });
 
