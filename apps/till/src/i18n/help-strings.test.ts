@@ -140,3 +140,14 @@ describe("the kitchen board's help", () => {
     });
   }
 });
+
+describe("the pass's help", () => {
+  for (const [language, help, words] of [
+    ["English", helpEn, en],
+    ["Spanish", helpEs, es],
+  ] as const) {
+    it(`the pass card's help names the Forgotten flag by its own word (${language})`, () => {
+      expect(help["help.pass.card"]).toContain(words["expo.item_forgotten"]);
+    });
+  }
+});

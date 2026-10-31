@@ -6,9 +6,11 @@ import {
 import { groupName } from "../widgets/group-name.js";
 import { extraCount, queueCrossRefs } from "../widgets/queue-crossrefs.js";
 import { optionAnswers } from "../widgets/option-snapshot.js";
-import { ContentLanguageController } from "@waitron/ui";
+import { ContentLanguageController, HelpModeController } from "@waitron/ui";
 import { LitElement, type TemplateResult, css, html, nothing, unsafeCSS } from "lit";
 import { PHONE_WIDTH } from "../widgets/language-chooser-styles.js";
+import { helpBadge, kitchenHelpStyles } from "../widgets/help-badge.js";
+import { helpText } from "../i18n/help-strings.js";
 import { customElement, property, state } from "lit/decorators.js";
 import { TickingClock, baseStyles } from "@waitron/ui";
 import { BAND_RANK, type TimingBand, classifyBand, worstBand } from "@waitron/shared";
@@ -76,7 +78,8 @@ const READ_LIMIT_MS = 25_000;
  *
  * At a till it shows the device's pass screen when the device chose one, else All stations; a
  * kitchen display (`deviceMode`) shows its own pass screen, its levers on the device's routes. A pass
- * monitor (`monitor`) is a kitchen display's read-only All stations, narrowed: no button of any kind.
+ * monitor (`monitor`) is a kitchen display's read-only All stations, narrowed: no button but help
+ * mode's badges.
  *
  * AGE. An expo order's items can span several stations, each with its own thresholds, so each item is
  * classified against its OWN `queuedAt`/`thresholds`. The server's `ExpoItem.band`/`ExpoOrder.worstBand`
@@ -89,12 +92,18 @@ export class TillExpoScreen extends LitElement {
     new ContentLanguageController(this);
   }
 
+  /** The badges are drawn only while help is on, so a monitor otherwise has no button at all. */
+  readonly #help = new HelpModeController(this);
+  #cardBadgeDrawn = false;
+  #leverBadgeDrawn = false;
+
   static override styles = [
     baseStyles,
     dietBadgeStyles,
     kitchenAllergyStyles,
     unavailableStyles,
     orderNumberStyles,
+    kitchenHelpStyles,
     css`
       :host {
         display: block;
@@ -185,7 +194,7 @@ export class TillExpoScreen extends LitElement {
       }
 
       /* Age accents on the card's left edge — a data-driven colour, never behind text (a11y). Three
-         escalating bands (KDS order-timing alerts, design §7.2): warm (amber-ish primary), overdue (red), forgotten
+         escalating bands (KDS order-timing alerts, design §7.2): warm (primary), overdue (red), forgotten
          (red + a repeating flash, .flash below). 'fresh' gets no override — it keeps the base
          .order border colour. */
       .order.age-warm {
@@ -404,6 +413,11 @@ export class TillExpoScreen extends LitElement {
         color: var(--wt-color-text-muted);
         font-size: var(--wt-font-size-sm);
         white-space: nowrap;
+      }
+
+      .lever-anchor {
+        display: flex;
+        flex-direction: column;
       }
 
       .lever {
@@ -721,6 +735,8 @@ export class TillExpoScreen extends LitElement {
   }
 
   override render() {
+    this.#cardBadgeDrawn = false;
+    this.#leverBadgeDrawn = false;
     return html`
       <section class="screen" aria-label=${t("expo.title")}>
         ${this.#onDevice() ? html`<h1 class="title">${this.deviceName ?? ""}</h1>` : nothing}
@@ -803,7 +819,12 @@ export class TillExpoScreen extends LitElement {
     const visible =
       order.party === undefined ? this.#visibleCourses(order) : this.#visibleGroups(order);
     const band = this.#orderBand(order);
-    return html`<article class="order ${this.#accentClasses(band)}" data-order=${order.orderNumber}>
+    const badge = !this.#cardBadgeDrawn;
+    this.#cardBadgeDrawn = true;
+    return html`<article
+      class="order help-anchor help-inset ${this.#accentClasses(band)}"
+      data-order=${order.orderNumber}
+    >
       <div class="order-head">
         <span class="number">${orderNumber(order.orderNumber, order.formerNumbers)}</span>
         ${kitchenAllergyMarker(visible.some((part) => part.items.some((item) => item.allergy !== null)))}
@@ -819,6 +840,13 @@ export class TillExpoScreen extends LitElement {
             )
       }
       ${this.#onDevice() || this.#isMonitor() ? nothing : this.#reprintAction(order)}
+      ${
+        badge && this.#help.on
+          ? helpBadge("help.pass.card", helpText("help.pass.cards_part"), {
+              guide: "kitchen-service.service-lifetime",
+            })
+          : nothing
+      }
     </article>`;
   }
 
@@ -879,19 +907,22 @@ export class TillExpoScreen extends LitElement {
     ) {
       return nothing;
     }
-    return html`<button
-      class="lever ready"
-      data-group-ready=${groupId}
-      aria-label=${`${t("expo.group_ready")} ${name}`}
-      @click=${() =>
-        void this.#groupAct(order, party, (command) =>
-          this.deviceMode
-            ? this.api.bumpDeviceGroupReady(party.id, groupId, command)
-            : this.api.bumpGroupReady(party.id, groupId, command),
-        )}
-    >
-      ${t("expo.group_ready")}
-    </button>`;
+    return this.#withLeverBadge(
+      t("expo.group_ready"),
+      html`<button
+        class="lever ready"
+        data-group-ready=${groupId}
+        aria-label=${`${t("expo.group_ready")} ${name}`}
+        @click=${() =>
+          void this.#groupAct(order, party, (command) =>
+            this.deviceMode
+              ? this.api.bumpDeviceGroupReady(party.id, groupId, command)
+              : this.api.bumpGroupReady(party.id, groupId, command),
+          )}
+      >
+        ${t("expo.group_ready")}
+      </button>`,
+    );
   }
 
   #courseSection(order: ExpoOrder, course: ExpoCourse): TemplateResult {
@@ -1008,19 +1039,31 @@ export class TillExpoScreen extends LitElement {
     ) {
       return nothing;
     }
-    return html`<button
-      class="lever ready"
-      data-ready=${courseId}
-      aria-label=${`${t("expo.ready")} ${name}`}
-      @click=${() =>
-        void this.#act(order, () =>
-          this.deviceMode
-            ? this.api.bumpDeviceCourseReady(order.orderId, courseId)
-            : this.api.bumpCourseReady(order.orderId, courseId),
-        )}
-    >
-      ${t("expo.ready")}
-    </button>`;
+    return this.#withLeverBadge(
+      t("expo.ready"),
+      html`<button
+        class="lever ready"
+        data-ready=${courseId}
+        aria-label=${`${t("expo.ready")} ${name}`}
+        @click=${() =>
+          void this.#act(order, () =>
+            this.deviceMode
+              ? this.api.bumpDeviceCourseReady(order.orderId, courseId)
+              : this.api.bumpCourseReady(order.orderId, courseId),
+          )}
+      >
+        ${t("expo.ready")}
+      </button>`,
+    );
+  }
+
+  /** The first lever drawn sits in a wrapper that holds its badge beside it, never inside it. */
+  #withLeverBadge(label: string, lever: TemplateResult): TemplateResult {
+    if (this.#leverBadgeDrawn) return lever;
+    this.#leverBadgeDrawn = true;
+    return html`<span class="help-anchor help-inset lever-anchor"
+      >${lever}${this.#help.on ? helpBadge("help.pass.ready", label) : nothing}</span
+    >`;
   }
 
   /** Never a fresh `Date.now()`, so every render in one tick sees the identical `now`. */

@@ -55,6 +55,11 @@ export const helpEn = {
     "Read each change, which names its order, then tap Got it. Got it clears it from every screen at this station; it does not change the card.",
   "help.kitchen.merge":
     "Switches between a board for each station and one board for all of them, where each dish names its station. This device remembers the choice.",
+  "help.pass.card":
+    "One card per order, its dishes by course, or by group on a table's bill. The minutes count from when the order was opened. The left edge turns blue, then red, as its dishes wait, by their stations' late flags; a dish that waits too long says Forgotten.",
+  "help.pass.cards_part": "Order cards",
+  "help.pass.ready":
+    "Marks every fired dish of this course or group Ready, at every station, not only the ones this screen shows. Held dishes do not change.",
 } as const;
 
 export type HelpKey = keyof typeof helpEn;
@@ -112,6 +117,11 @@ export const helpEs: Record<HelpKey, string> = {
     "Lee cada cambio, que nombra su pedido, y toca Entendido. Entendido lo quita de todas las pantallas de esta estación; no cambia la tarjeta.",
   "help.kitchen.merge":
     "Cambia entre un tablero por estación y un solo tablero para todas, donde cada plato indica su estación. Este dispositivo recuerda la elección.",
+  "help.pass.card":
+    "Una tarjeta por pedido, con sus platos por curso, o por grupo en la cuenta de una mesa. Los minutos cuentan desde que se abrió el pedido. El borde izquierdo pasa a azul y luego a rojo mientras sus platos esperan, según los avisos de demora de sus estaciones; un plato que espera demasiado dice Olvidado.",
+  "help.pass.cards_part": "Tarjetas de pedido",
+  "help.pass.ready":
+    "Marca como listos todos los platos ya marchados de este curso o grupo, en todas las estaciones, no solo las que muestra esta pantalla. Los platos en espera no cambian.",
 };
 const helpCatalogues: Record<string, Partial<Record<HelpKey, string>>> = {
   en: helpEn,
