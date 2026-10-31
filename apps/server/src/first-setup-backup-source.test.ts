@@ -18,7 +18,7 @@ import { mintBreakGlassKey } from "./break-glass.js";
 import { createCloudRecoveryClient } from "./cloud-recovery.js";
 import * as adapter from "./first-setup-backup-source.js";
 
-const proofNodeRows = vi.hoisted(() => ({ seen: [] as unknown[][] }));
+const proofNodeRows = vi.hoisted(() => ({ recording: false, seen: [] as unknown[][] }));
 vi.mock("./recovery-backup-preview.js", async (original) => {
   const actual = await original<typeof import("./recovery-backup-preview.js")>();
   const path = await import("node:path");
@@ -26,6 +26,7 @@ vi.mock("./recovery-backup-preview.js", async (original) => {
   return {
     ...actual,
     readRecoveryCopyPreview: async (...args: Parameters<typeof actual.readRecoveryCopyPreview>) => {
+      if (!proofNodeRows.recording) return actual.readRecoveryCopyPreview(...args);
       const copy = new DatabaseSync(path.join(path.dirname(args[0].databasePath), "node.db"), {
         readOnly: true,
       });
@@ -108,6 +109,7 @@ beforeEach(async () => {
   );
 });
 afterEach(async () => {
+  proofNodeRows.recording = false;
   if (scratch) await rm(scratch, { recursive: true, force: true });
 });
 
@@ -397,6 +399,7 @@ it("the proof preview's folder holds the backup's node copy, not an empty node.d
   const selected = await adapter.openFirstSetupBackupSource(archive(), deps());
   try {
     proofNodeRows.seen = [];
+    proofNodeRows.recording = true;
     await adapter.authenticatedFirstSetupBackupPreview(
       selected,
       {
