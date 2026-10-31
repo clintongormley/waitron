@@ -277,6 +277,7 @@ export async function archiveHost(kind: "archive" | "stream" = "archive") {
   const f = await host();
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),
@@ -629,6 +630,7 @@ export async function managedHttp(f: Awaited<ReturnType<typeof archiveHost>>) {
     modules: (
       await buildManifest({
         db: suite.db,
+        node: suite.node,
         modules: ALL_MODULES,
         environment: "preproduction",
         now: new Date(),

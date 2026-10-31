@@ -423,6 +423,7 @@ describe("comparison immediately before real archive placement", () => {
     await suite.db.archiveTo(archivePath);
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),

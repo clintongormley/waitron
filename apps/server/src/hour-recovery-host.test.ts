@@ -349,6 +349,7 @@ it("admits recovery from the real validated archive preview with its public spen
   agreeInternet();
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),

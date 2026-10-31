@@ -45,7 +45,7 @@ export async function readRecoveryCopyPreview(
   const original = await openVenueDatabase(directory);
   let recordedVersions: Record<string, number>;
   try {
-    recordedVersions = await schemaVersionsByModule(original.venue, deps.modules);
+    recordedVersions = await schemaVersionsByModule(original, deps.modules);
   } finally {
     await original.close();
   }

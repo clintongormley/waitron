@@ -60,6 +60,7 @@ async function archive(
 ) {
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules,
     environment: "preproduction",
     now: new Date(createdAt),

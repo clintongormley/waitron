@@ -1,6 +1,6 @@
 import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import type { ClockStep } from "@waitron/fiscal";
 import { recordBackupOutcome, type BackupOutcomeHolder } from "./alert-sources.js";
 import type { WaitronModule } from "@waitron/module";
@@ -48,6 +48,7 @@ import "./errors.js";
 
 export type ManifestBuilder = (deps: {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
@@ -64,6 +65,8 @@ export interface BackupSweepDeps {
   backends: StorageBackend[];
   /** Read only for the manifest; the copy goes through {@link BackupSweepDeps.archive}. */
   db: Database;
+  /** Read only for the manifest. */
+  node: NodeDatabase;
   modules: readonly WaitronModule[];
   environment: DeploymentEnvironment;
   resolvers: Record<string, string>;
@@ -200,6 +203,7 @@ export async function runOnce(
     const [manifest, parts] = await Promise.all([
       buildBackupManifest({
         db: deps.db,
+        node: deps.node,
         modules: deps.modules,
         environment: deps.environment,
         now: stamp,

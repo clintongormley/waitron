@@ -1043,7 +1043,7 @@ describe("restoreFromStream (the command line's whole path)", () => {
       environment: "preproduction",
       modules: [],
       migrate: vi.fn(async () => {}),
-      openDb: async () => ({ db: suite.db, close: async () => {} }),
+      openDb: async () => ({ db: suite.db, node: suite.node, close: async () => {} }),
       confirmVenue: () => true,
     });
     const placed = await openVenueDatabase(venueDir);

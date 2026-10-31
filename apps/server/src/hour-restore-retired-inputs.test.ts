@@ -50,7 +50,7 @@ afterEach(async () => {
   fixture = undefined;
 });
 async function stage(kind: "archive" | "stream") {
-  fixture = await stagedHourCrash(suite.db, kind, "cloud-offline-restore");
+  fixture = await stagedHourCrash(suite, kind, "cloud-offline-restore");
   const original = await suite.db.select().from(registrosFacturacion);
   expect(original).toHaveLength(1);
   return { ...fixture, original };

@@ -45,7 +45,7 @@ it("refuses the real pre-A261-2 export through setup without writing database ro
   const stateDir = await mkdtemp(join(tmpdir(), "waitron-previous-export-"));
   dirs.push(stateDir);
   const ring = loadKeyRing({ WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 17).toString("base64") });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const snapshot = async () => {
     const tables = await suite.db.execute<{ name: string }>(
       sql`select name from sqlite_schema where type = 'table' order by name`,

@@ -1,5 +1,5 @@
-import type { Database } from "@waitron/db";
-import { appliedSchemaVersion } from "@waitron/migrations";
+import type { Database, NodeDatabase } from "@waitron/db";
+import { appliedSchemaVersion, type MigrationFiles } from "@waitron/migrations";
 import type { WaitronModule } from "@waitron/module";
 import type { DeploymentEnvironment } from "./config.js";
 
@@ -15,19 +15,21 @@ export type BackupManifest = {
   readonly modules: Record<string, number>;
 };
 
-/** Each module's applied schema version as read off `db`, never an expected count. */
+/** Each module's applied schema version as read off the file it is applied to, never an expected
+ * count. */
 export async function schemaVersionsByModule(
-  db: Pick<Database, "execute">,
+  files: MigrationFiles,
   modules: readonly WaitronModule[],
 ): Promise<Record<string, number>> {
   const entries = await Promise.all(
-    modules.map(async (m) => [m.name, await appliedSchemaVersion(db, m.migrations)] as const),
+    modules.map(async (m) => [m.name, await appliedSchemaVersion(files, m.migrations)] as const),
   );
   return Object.fromEntries(entries);
 }
 
 export async function buildManifest(deps: {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly modules: readonly WaitronModule[];
   readonly environment: DeploymentEnvironment;
   readonly now: Date;
@@ -36,6 +38,6 @@ export async function buildManifest(deps: {
     manifestVersion: 1,
     createdAt: deps.now.toISOString(),
     environment: deps.environment,
-    modules: await schemaVersionsByModule(deps.db, deps.modules),
+    modules: await schemaVersionsByModule({ venue: deps.db, node: deps.node }, deps.modules),
   };
 }

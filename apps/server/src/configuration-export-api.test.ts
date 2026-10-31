@@ -54,7 +54,7 @@ const suite = useVenueDb({
   migrations: migrationOptionsFor(manifestSets(), null),
   setup: async (db) => {
     venue = await applyVenue(planVenue(request, ALL_MODULES), { db, modules: ALL_MODULES });
-    moduleVersions = await schemaVersionsByModule(db, ALL_MODULES);
+    moduleVersions = await schemaVersionsByModule({ venue: db, node: suite.node }, ALL_MODULES);
     cookie = await withTransaction(db, async (tx) => {
       const admin = await tx.execute<{ id: string }>(sql`
         select id from persons where role = 'admin'

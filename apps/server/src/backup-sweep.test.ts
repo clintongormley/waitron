@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from "
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { withTransaction, type Database } from "@waitron/db";
+import { withTransaction, type Database, type NodeDatabase } from "@waitron/db";
 import { setupVenue } from "./testing/venue-fixtures.js";
 import { readVenueDetails, writeVenueDetails } from "./venue-details.js";
 import { resolveVenueClock } from "./report-api.js";
@@ -116,6 +116,7 @@ describe("runOnce (fan-out)", () => {
   const deps = (backends: StorageBackend[], log = vi.fn()) => ({
     backends,
     db: NO_DB,
+    node: {} as NodeDatabase,
     modules: ALL_MODULES,
     environment: "preproduction" as const,
     resolvers: { media: mediaDir },
@@ -469,6 +470,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
   const loopDeps = (backend: StorageBackend, overrides: LoopOverrides): BackupSweepDeps => ({
     backends: [backend],
     db: NO_DB,
+    node: {} as NodeDatabase,
     modules: ALL_MODULES,
     environment: "preproduction",
     resolvers: {},
@@ -725,6 +727,7 @@ describe("runBackupSweep (loop logic, injected archive + sleep)", () => {
     await runBackupSweep(
       loopDeps(backend, {
         db: suite.db,
+        node: suite.node,
         signal: controller.signal,
         log: vi.fn(),
         now: () => now,
@@ -1516,6 +1519,7 @@ describe("runOnce with the real buildManifest (a migrated venue)", () => {
     await runOnce({
       backends: [a],
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       resolvers: {},

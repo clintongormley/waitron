@@ -96,6 +96,7 @@ beforeAll(async () => {
     expect(
       await createSealedStateRefresher({
         db: suite.db,
+        node: suite.node,
         nodeId: T.nodeId,
         stateDir: root,
         modules: ALL_MODULES,
@@ -113,6 +114,7 @@ beforeAll(async () => {
     await runOnce({
       backends: [backend],
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "production",
       resolvers: {},
@@ -138,6 +140,7 @@ beforeAll(async () => {
     const cloud = await createCloudSnapshotArchive(
       {
         db: suite.db,
+        node: suite.node,
         modules: ALL_MODULES,
         environment: "preproduction",
         stateDir: root,

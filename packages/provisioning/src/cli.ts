@@ -8,6 +8,7 @@ import {
   stampDeployment,
   type Database,
   type DeploymentEnvironment,
+  type NodeDatabase,
   type VenueDatabase,
 } from "@waitron/db";
 import {
@@ -56,6 +57,7 @@ export interface CliDeps {
   firstSetupDeployment?: (context: {
     runtime: ReturnType<typeof createFirstSetupRuntime>;
     db: Database;
+    node: NodeDatabase;
   }) => FirstSetupCommandDeployment;
   initialVenue?: Pick<VenueApplyDeps, "moduleInputs" | "initialNodeId" | "initialAdministratorId">;
   /** Absent, no `modules.json` is written. */
@@ -350,7 +352,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
     return await withVenueState(
       venueDir,
       deps,
-      async (target) => {
+      async (target, node) => {
         let environment: DeploymentEnvironment | null;
         let migrated: boolean;
         try {
@@ -430,7 +432,7 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
             }
           }
           if (deps.firstSetupDeployment === undefined) throw new AppError("setup.not_ready", {});
-          const deployment = deps.firstSetupDeployment({ runtime, db: target });
+          const deployment = deps.firstSetupDeployment({ runtime, db: target, node });
           if (values["test-fiscal"] && ["claimed", "consumption-intent"].includes(state.status)) {
             if (deployment.runReadiness === undefined) throw new AppError("setup.not_ready", {});
             const answer = (await deps.io.prompt("Send a preproduction fiscal test? [y/N]: "))
@@ -493,13 +495,13 @@ async function venue(argv: string[], deps: CliDeps): Promise<number> {
 }
 
 /**
- * `body` is handed the VENUE file's handle: every migration set is applied to that file, none to the
- * node file. Only the open is classified (`asUnreadable`); `body`'s own failures pass through.
+ * `body` is handed the venue file's handle and the node file's. Only the open is classified
+ * (`asUnreadable`); `body`'s own failures pass through.
  */
 async function withVenueState(
   venueDir: string,
   deps: CliDeps,
-  body: (target: Database) => Promise<number>,
+  body: (target: Database, node: NodeDatabase) => Promise<number>,
   authorize?: () => Promise<unknown>,
 ): Promise<number> {
   if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
@@ -513,7 +515,7 @@ async function withVenueState(
   try {
     if (authorize === undefined) await assertVenueFirstSetupAllowed(venueDir);
     else await authorize();
-    return await body(store.venue);
+    return await body(store.venue, store.node);
   } finally {
     await store.close();
   }

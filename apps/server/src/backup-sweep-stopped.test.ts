@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import type { BackupOutcomeHolder } from "./alert-sources.js";
 import { BACKUP_ENCRYPT_DIR_PREFIX } from "./backup-keys.js";
@@ -35,6 +35,7 @@ async function loopDeps(
   const deps: BackupSweepDeps = {
     backends: [backend],
     db: {} as Database,
+    node: {} as NodeDatabase,
     modules: [],
     environment: "preproduction",
     resolvers: {},

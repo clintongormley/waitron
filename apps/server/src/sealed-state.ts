@@ -1,5 +1,11 @@
 import { eq } from "drizzle-orm";
-import { nodeSealedState, withTransaction, type Database, type Transaction } from "@waitron/db";
+import {
+  nodeSealedState,
+  withTransaction,
+  type Database,
+  type NodeDatabase,
+  type Transaction,
+} from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { codeOf } from "@waitron/server-kit";
 import { assembleArchiveEntries, collectStateParts } from "./archive-entries.js";
@@ -76,6 +82,7 @@ export interface SealedStateStatus {
 
 export interface SealedStateDeps {
   readonly db: Database;
+  readonly node: NodeDatabase;
   readonly nodeId: string;
   readonly stateDir: string;
   readonly venueDir?: string;
@@ -114,6 +121,7 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
       const now = deps.now();
       const manifest = await buildManifest({
         db: deps.db,
+        node: deps.node,
         modules: deps.modules,
         environment: deps.environment,
         now,

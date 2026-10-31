@@ -76,11 +76,14 @@ describe("appliedSchemaVersion — input validation", () => {
       },
     } as unknown as Database;
     const error = await captureError(() =>
-      appliedSchemaVersion(neverQueried, {
-        name: "evil",
-        table: 'users"; drop table audit_log --',
-        from: "x",
-      }),
+      appliedSchemaVersion(
+        { venue: neverQueried, node: neverQueried },
+        {
+          name: "evil",
+          table: 'users"; drop table audit_log --',
+          from: "x",
+        },
+      ),
     );
     expect(isAppError(error) && error.code).toBe("migrations.invalid_table");
   });
@@ -90,7 +93,9 @@ describe("appliedSchemaVersion — against a real database", () => {
   const suite = useVenueDb({ migrations: migrationOptionsFor([core], null) });
 
   it("equals expectedSchemaVersion after a full migrate", async () => {
-    expect(await appliedSchemaVersion(suite.db, core)).toBe(expectedSchemaVersion(core, null));
+    expect(await appliedSchemaVersion({ venue: suite.db, node: suite.node }, core)).toBe(
+      expectedSchemaVersion(core, null),
+    );
   });
 
   it("reports N on a partially-applied table, visibly LOWER than expected", async () => {
@@ -113,7 +118,7 @@ describe("appliedSchemaVersion — against a real database", () => {
     const root = journalRoot("core", ["0000_a", "0001_b", "0002_c"]);
     try {
       const partialSet = { name: "core", table: partialTable, from: "unused" };
-      const applied = await appliedSchemaVersion(suite.db, partialSet);
+      const applied = await appliedSchemaVersion({ venue: suite.db, node: suite.node }, partialSet);
       const expected = expectedSchemaVersion(partialSet, root);
 
       expect(applied).toBe(n);
@@ -129,7 +134,7 @@ describe("appliedSchemaVersion — against a real database", () => {
 
   it("returns 0 when the table is absent", async () => {
     const absentSet = { name: "nope", table: "__drizzle_migrations_absent", from: "x" };
-    expect(await appliedSchemaVersion(suite.db, absentSet)).toBe(0);
+    expect(await appliedSchemaVersion({ venue: suite.db, node: suite.node }, absentSet)).toBe(0);
   });
 
   it("rethrows a driver error rather than swallowing it as 0", async () => {
@@ -140,9 +145,8 @@ describe("appliedSchemaVersion — against a real database", () => {
     const directory = mkdtempSync(join(tmpdir(), "waitron-schema-version-dead-"));
     try {
       const store = await openVenueDatabase(directory);
-      const dead = store.venue;
       await store.close();
-      const error = await captureError(() => appliedSchemaVersion(dead, core));
+      const error = await captureError(() => appliedSchemaVersion(store, core));
       expect((error as { code?: string }).code).toBe("ERR_INVALID_STATE");
     } finally {
       rmSync(directory, { recursive: true, force: true });

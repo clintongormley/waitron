@@ -16,7 +16,7 @@ afterEach(async () => {
 it.each(["archive", "stream"] as const)(
   "restores staged %s using the selected backup's older named node key and the current hour flow",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "paper-offline-restore");
+    f = await stagedHourRestore(suite, kind, "paper-offline-restore");
     const retained = f.journal();
     await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
     const log = vi.fn();
@@ -58,7 +58,7 @@ it.each(["archive", "stream"] as const)(
 it.each(["missing", "wrong event", "wrong source"] as const)(
   "rereads retained hour intent and refuses %s evidence before placement",
   async (mode) => {
-    f = await stagedHourRestore(suite.db, "archive", "paper-offline-restore");
+    f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
     const record = JSON.parse(f.journal());
     if (mode === "missing") record.revisions = [];
     else {
@@ -86,7 +86,7 @@ it.each(["missing", "wrong event", "wrong source"] as const)(
   },
 );
 it("refuses the archive encryption key as node authentication before changing the destination", async () => {
-  f = await stagedHourRestore(suite.db, "archive", "paper-offline-restore");
+  f = await stagedHourRestore(suite, "archive", "paper-offline-restore");
   await writeFile(join(f.stateDir, "restore-request.node-key"), f.encryptionKey);
   const destination = await f.seedDestination();
   await writeFile(join(f.stateDir, "trading.env"), "untouched identity");

@@ -12,6 +12,7 @@ import {
   withTransaction,
   writeNodeMembership,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import {
   buildNextMembershipDocument,
@@ -59,9 +60,10 @@ function conflict(): never {
 export function createFirstSetupCommandDeployment(options: {
   runtime: ReturnType<typeof createFirstSetupRuntime>;
   db: Database;
+  node: NodeDatabase;
   environment: Record<string, string | undefined>;
 }): FirstSetupCommandDeployment {
-  const { runtime, db } = options;
+  const { runtime, db, node } = options;
   const environment = Object.freeze({ ...options.environment });
   let publication:
     | {
@@ -90,7 +92,7 @@ export function createFirstSetupCommandDeployment(options: {
     );
     const versions: Record<string, number> = {};
     for (const module of modules)
-      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+      versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     validateConfigurationBundle(staged.bundle, modules, versions);
     return { bundle: staged.bundle, versions };
   }
@@ -108,7 +110,7 @@ export function createFirstSetupCommandDeployment(options: {
     const modules = enabledModules(runtime.modules, selected.config);
     const versions: Record<string, number> = {};
     for (const module of modules)
-      versions[module.name] = await appliedSchemaVersion(db, module.migrations);
+      versions[module.name] = await appliedSchemaVersion({ venue: db, node }, module.migrations);
     const input = fiscalReadinessInput({
       venue: state.frozen.request,
       contribution: selected.contribution,

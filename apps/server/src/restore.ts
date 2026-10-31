@@ -34,6 +34,7 @@ import {
   retireNodeSeriesTx,
   withTransaction,
   type Database,
+  type NodeDatabase,
   type Transaction,
   type VenueLock,
 } from "@waitron/db";
@@ -107,8 +108,11 @@ export interface RestoreDeps extends ValidationDeps {
   readonly managedCloud?: { requestId: string; pointId: string };
   /** The directory holding `venue.db` and `node.db` (`packages/store/src/index.ts`). */
   readonly venueDir: string;
-  /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file. */
-  readonly openDb?: (directory: string) => Promise<{ db: Database; close(): Promise<void> }>;
+  /** Opens the handle the hook transaction runs on. Default {@link openVenueDatabase}'s venue file,
+   * with its node file beside it. */
+  readonly openDb?: (
+    directory: string,
+  ) => Promise<{ db: Database; node: NodeDatabase; close(): Promise<void> }>;
   /** Migrates the restored database to this binary's schema before any hook runs. Default
    * `applyMigrations`. */
   readonly migrate?: typeof applyMigrations;
@@ -298,7 +302,11 @@ async function placeValidated(validated: ValidatedArtifact, deps: PlacementDeps)
   if (deps.resumeOperation !== undefined) {
     const existing = await (deps.openDb ?? openVenue)(deps.venueDir);
     try {
-      await assertNotAhead(existing.db, orderedMigrationSets(deps.modules), deps.migrationsRoot);
+      await assertNotAhead(
+        { venue: existing.db, node: existing.node },
+        orderedMigrationSets(deps.modules),
+        deps.migrationsRoot,
+      );
     } finally {
       await existing.close();
     }
@@ -874,9 +882,11 @@ export async function runRestoreHooks(args: {
  * `close` closes BOTH files, not just the venue one — `openVenueDatabase` opens `node.db` beside it
  * and a handle left open would hold the restored directory for the life of the process.
  */
-async function openVenue(directory: string): Promise<{ db: Database; close(): Promise<void> }> {
+async function openVenue(
+  directory: string,
+): Promise<{ db: Database; node: NodeDatabase; close(): Promise<void> }> {
   const store = await openVenueDatabase(directory);
-  return { db: store.venue, close: () => store.close() };
+  return { db: store.venue, node: store.node, close: () => store.close() };
 }
 
 export type RestoreFileDeps = Omit<RestoreDeps, "artifact"> & { readonly artifactPath: string };

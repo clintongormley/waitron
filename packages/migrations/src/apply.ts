@@ -5,7 +5,7 @@ import { openVenueDatabase, removeChangeFeed, runMigrations, type Database } fro
 import { AppError, sqliteFailureOf } from "@waitron/shared";
 import { installAppendOnlyTriggers, openLock } from "@waitron/store";
 import type { VenueMigrationOptions } from "./manifest.js";
-import { appliedSchemaVersion } from "./schema-version.js";
+import { appliedSchemaVersion, type MigrationFiles } from "./schema-version.js";
 import "./errors.js";
 
 /**
@@ -67,9 +67,8 @@ async function migrateEverySet(
     // `requires` (`orderedMigrationSets`, which refuses a missing dependency or a cycle). Core must
     // come before media, whose triggers are on core's `products`.
     for (const set of options) {
-      const db = set.database === "node" ? store.node : store.venue;
-      await runSet(db, set);
-      await assertSetApplied(db, set);
+      await runSet(set.database === "node" ? store.node : store.venue, set);
+      await assertSetApplied(store, set);
       // Inside the loop, not once at the end, so a set already migrated is protected even when a
       // LATER set aborts the run.
       if (set.database !== "node") {
@@ -110,18 +109,16 @@ async function runSet(db: Database, set: VenueMigrationOptions): Promise<void> {
  * `expectedSchemaVersion`, which would resolve a relative folder against the parent of this
  * module's directory rather than the working directory drizzle uses.
  */
-async function assertSetApplied(
-  db: Pick<Database, "execute">,
-  set: VenueMigrationOptions,
-): Promise<void> {
+async function assertSetApplied(files: MigrationFiles, set: VenueMigrationOptions): Promise<void> {
   // `MigrationOptions` carries no set NAME, only a folder and a table, so the table names the set
   // here and in the thrown params.
   const migrationSet = {
     name: set.migrationsTable,
     table: set.migrationsTable,
     from: set.migrationsFolder,
+    database: set.database,
   };
-  const applied = await appliedSchemaVersion(db, migrationSet);
+  const applied = await appliedSchemaVersion(files, migrationSet);
   const journal = JSON.parse(
     readFileSync(join(set.migrationsFolder, "meta", "_journal.json"), "utf8"),
   ) as { entries: unknown[] };

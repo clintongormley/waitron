@@ -52,8 +52,8 @@ async function main(): Promise<number> {
           },
         };
       },
-      firstSetupDeployment: ({ runtime, db }) =>
-        createFirstSetupCommandDeployment({ runtime, db, environment: process.env }),
+      firstSetupDeployment: ({ runtime, db, node }) =>
+        createFirstSetupCommandDeployment({ runtime, db, node, environment: process.env }),
       applyVenue,
       modules: ALL_MODULES,
       configureFirstSetup: (venueDir) => {

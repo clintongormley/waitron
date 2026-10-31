@@ -1,6 +1,6 @@
 import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import type { WaitronModule } from "@waitron/module";
 import { AppError } from "@waitron/shared";
 import { buildManifest } from "./backup-manifest.js";
@@ -12,6 +12,7 @@ import "./errors.js";
 export async function createCloudSnapshotArchive(
   deps: {
     db: Database;
+    node: NodeDatabase;
     modules: readonly WaitronModule[];
     environment: DeploymentEnvironment;
     stateDir: string;

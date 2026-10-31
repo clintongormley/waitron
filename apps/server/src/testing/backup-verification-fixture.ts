@@ -323,6 +323,7 @@ export function useBackupVerificationFixture() {
     await suite.db.archiveTo(databasePath);
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "production",
       now: new Date(verificationTime),

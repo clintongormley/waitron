@@ -99,6 +99,7 @@ it.each(["archive", "stream"] as const)(
     await suite.db.archiveTo(databasePath);
     const manifest = await buildManifest({
       db: suite.db,
+      node: suite.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date("2026-10-16T11:40:00Z"),

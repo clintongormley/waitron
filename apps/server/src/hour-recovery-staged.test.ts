@@ -70,6 +70,7 @@ vi.mock("@waitron/fiscal-verifactu/src/hour-history-reader.js", async (original)
 async function olderBackup() {
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date(),

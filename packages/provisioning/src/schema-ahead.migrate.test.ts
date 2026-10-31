@@ -42,8 +42,8 @@ describe("an ahead database", () => {
 
   // The negative control for the next test: a freshly migrated directory must be accepted.
   it("is not reported for a database this image migrated itself", async () => {
-    expect(await findAheadSets(target, manifestSets(), null)).toEqual([]);
-    await expect(assertNotAhead(target, manifestSets(), null)).resolves.toBeUndefined();
+    expect(await findAheadSets(store, manifestSets(), null)).toEqual([]);
+    await expect(assertNotAhead(store, manifestSets(), null)).resolves.toBeUndefined();
   });
 
   it("is named, with its set and the unknown hash, once a newer image's migration is recorded", async () => {
@@ -55,10 +55,10 @@ describe("an ahead database", () => {
           values (${unknown}, ${AHEAD_WHEN})`,
     );
 
-    expect(await findAheadSets(target, manifestSets(), null)).toEqual([
+    expect(await findAheadSets(store, manifestSets(), null)).toEqual([
       { set: "core", unknownMigrations: [unknown] },
     ]);
-    await expect(assertNotAhead(target, manifestSets(), null)).rejects.toMatchObject({
+    await expect(assertNotAhead(store, manifestSets(), null)).rejects.toMatchObject({
       code: "provisioning.database_ahead",
       params: { set: "core", unknownMigrations: [unknown] },
     });
@@ -72,7 +72,7 @@ describe("an ahead database", () => {
       applyMigrations(directory, migrationOptionsFor(manifestSets(), null)),
     ).resolves.toBeUndefined();
     expect(await coreJournalRows()).toBe(before);
-    expect(await findAheadSets(target, manifestSets(), null)).toEqual([
+    expect(await findAheadSets(store, manifestSets(), null)).toEqual([
       { set: "core", unknownMigrations: ["f".repeat(64)] },
     ]);
   });

@@ -35,7 +35,12 @@ it("keeps hardware readers and their slip settings outside configuration bundles
     { db: suite.db, modules },
   );
   const payments = modules.find((module) => module.name === "payments")!;
-  const versions = { payments: await appliedSchemaVersion(suite.db, payments.migrations) };
+  const versions = {
+    payments: await appliedSchemaVersion(
+      { venue: suite.db, node: suite.node },
+      payments.migrations,
+    ),
+  };
   await suite.db.execute(
     sql`insert into card_readers (id, provider, provider_ref, name, prints_own_slip_automatically, created_at) values ('00000000-0000-4000-8000-000000000123', 'sumup', 'hardware-source', 'Counter', 1, '2026-10-27T12:00:00Z')`,
   );

@@ -29,7 +29,13 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   await writeFile(join(root, "cloud-tls/staff.key"), "private staff key");
   const at = new Date("2026-09-24T12:00:00Z");
   const result = await createCloudSnapshotArchive(
-    { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+    {
+      db: db.db,
+      node: db.node,
+      modules: ALL_MODULES,
+      environment: "preproduction",
+      stateDir: root,
+    },
     "recovery key",
     at,
     new AbortController().signal,
@@ -56,7 +62,13 @@ it("builds an encrypted real SQLite archive with module versions and no Cloud cr
   c.abort();
   await expect(
     createCloudSnapshotArchive(
-      { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+      {
+        db: db.db,
+        node: db.node,
+        modules: ALL_MODULES,
+        environment: "preproduction",
+        stateDir: root,
+      },
       "key",
       at,
       c.signal,
@@ -83,7 +95,13 @@ it("refuses an oversized SQLite copy and removes its plaintext staging", async (
   try {
     await expect(
       createCloudSnapshotArchive(
-        { db: db.db, modules: ALL_MODULES, environment: "preproduction", stateDir: root },
+        {
+          db: db.db,
+          node: db.node,
+          modules: ALL_MODULES,
+          environment: "preproduction",
+          stateDir: root,
+        },
         "key",
         new Date(),
         new AbortController().signal,

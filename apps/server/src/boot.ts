@@ -1057,7 +1057,7 @@ async function bootServer(
   // soft-disabled module's data is kept; it is simply not migrated.
   let appliedModuleVersions: Record<string, number> = {};
   if (config.node !== undefined) {
-    const myModuleVersions = await schemaVersionsByModule(db, availableModules);
+    const myModuleVersions = await schemaVersionsByModule(store, availableModules);
     appliedModuleVersions = myModuleVersions;
     const migrated = new Set(
       Object.entries(myModuleVersions)
@@ -1331,7 +1331,11 @@ async function bootServer(
               bundle.venue.location.fiscalTerritory,
             );
             const modules = enabledModules(availableModules, resolvedConfig);
-            validateConfigurationBundle(bundle, modules, await schemaVersionsByModule(db, modules));
+            validateConfigurationBundle(
+              bundle,
+              modules,
+              await schemaVersionsByModule(store, modules),
+            );
           }),
         clearConfiguration: () => clearStagedConfigurationImport(config.stateDir),
         runFiscalTest: async ({ request, contribution, secret }) => {
@@ -1340,7 +1344,7 @@ async function bootServer(
             request.venue.location.fiscalTerritory,
           );
           const modules = enabledModules(availableModules, resolvedConfig);
-          const moduleVersions = await schemaVersionsByModule(db, modules);
+          const moduleVersions = await schemaVersionsByModule(store, modules);
           const input = fiscalReadinessInput({
             venue: request.venue,
             contribution,
@@ -1370,7 +1374,7 @@ async function bootServer(
             request.venue.location.fiscalTerritory,
           );
           const modules = enabledModules(availableModules, resolvedConfig);
-          const moduleVersions = await schemaVersionsByModule(db, modules);
+          const moduleVersions = await schemaVersionsByModule(store, modules);
           await createFiscalReadinessStore(
             config.stateDir,
             async () => ({ status: "uncertain" }),
@@ -1416,7 +1420,8 @@ async function bootServer(
                 req.configurationDigest)
           )
             throw new AppError("setup.attempt_conflict", {});
-          const versions = staged === null ? undefined : await schemaVersionsByModule(db, modules);
+          const versions =
+            staged === null ? undefined : await schemaVersionsByModule(store, modules);
           const result = await provisionVenue(
             {
               ownerDb: db,
@@ -2387,6 +2392,7 @@ async function bootServer(
   // After migrations, so the row's manifest names the schema the database holds.
   const sealedState = createSealedStateRefresher({
     db,
+    node: store.node,
     nodeId: tradingContext.nodeId,
     stateDir: config.stateDir,
     venueDir: config.venueDir,
@@ -3215,6 +3221,7 @@ async function bootServer(
             createCloudSnapshotArchive(
               {
                 db,
+                node: store.node,
                 modules: availableModules,
                 environment: config.environment,
                 stateDir: config.stateDir,

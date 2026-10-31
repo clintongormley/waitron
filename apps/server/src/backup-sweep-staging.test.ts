@@ -12,7 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import { VENUE_FILE, WAL_SUFFIX } from "@waitron/store";
 import { runOnce } from "./backup-sweep.js";
 import { venueStagingEstimate } from "./backup-supervisor.js";
@@ -68,6 +68,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: StorageBackend[]
     ...f,
     backends,
     db: {} as Database,
+    node: {} as NodeDatabase,
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},

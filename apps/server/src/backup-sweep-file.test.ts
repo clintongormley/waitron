@@ -2,7 +2,7 @@ import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/pro
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
-import type { Database } from "@waitron/db";
+import type { Database, NodeDatabase } from "@waitron/db";
 import { runOnce } from "./backup-sweep.js";
 import { parseBackupArchiveKey } from "./backup-keys.js";
 import { LocalFsBackend } from "./local-fs-backend.js";
@@ -58,6 +58,7 @@ function deps(f: Awaited<ReturnType<typeof fixture>>, backends: LocalFsBackend[]
     ...f,
     backends,
     db: {} as Database,
+    node: {} as NodeDatabase,
     modules: [],
     environment: "preproduction" as const,
     resolvers: {},

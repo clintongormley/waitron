@@ -322,7 +322,7 @@ it("ownership lost during open refuses before the command reads the opened datab
     });
     return {
       venue: venue.db,
-      node: venue.db,
+      node: venue.node,
       close: async () => {
         closes++;
       },
@@ -531,10 +531,11 @@ it("a restarted venue command finishes the exact commit without preparing or act
 it("the real preproduction deployment adapter completes publication through the venue command", async () => {
   const f = await activationFixture();
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
-  f.deps.firstSetupDeployment = ({ runtime, db }) =>
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) =>
     createFirstSetupCommandDeployment({
       runtime,
       db,
+      node,
       environment: {
         WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",
         WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
@@ -608,7 +609,11 @@ it("stale command ownership refuses before loading publication settings", async 
     password: PASSWORD,
   });
   expect(recovered.state.ownerGeneration).toBe(owner.ownerGeneration + 1);
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   const publication = vi.spyOn(deployment, "publication");
   const { completeFirstSetupCommand } = await import("./first-setup-command-activation.js");
   await expect(
@@ -622,8 +627,8 @@ it("the real command deployment refuses production before committing any venue",
   const f = await activationFixture();
   f.deps.env.WAITRON_ENV = "production";
   const { createFirstSetupCommandDeployment } = await import("./first-setup-command-deployment.js");
-  f.deps.firstSetupDeployment = ({ runtime, db }) =>
-    createFirstSetupCommandDeployment({ runtime, db, environment: {} });
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) =>
+    createFirstSetupCommandDeployment({ runtime, db, node, environment: {} });
   expect(await runCliPastWait(f.args, f.deps)).toBe(1);
   expect(f.output).toContain("setup.not_ready {}");
   expect((await f.runtime.store.read())!.status).toBe("consumption-intent");
@@ -640,8 +645,8 @@ async function realActivationFixture(environment: Record<string, string | undefi
     WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
     ...environment,
   };
-  f.deps.firstSetupDeployment = ({ runtime, db }) => {
-    const deployment = createFirstSetupCommandDeployment({ runtime, db, environment: env });
+  f.deps.firstSetupDeployment = ({ runtime, db, node }) => {
+    const deployment = createFirstSetupCommandDeployment({ runtime, db, node, environment: env });
     const publication = deployment.publication;
     return {
       ...deployment,
@@ -857,7 +862,10 @@ async function productionFixture(accepted: boolean, certificate = productionCert
   const versions: Record<string, number> = {};
   const { appliedSchemaVersion } = await import("@waitron/migrations");
   for (const module of modules)
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   const readiness = fiscalReadinessInput({
     venue: {
@@ -1238,7 +1246,11 @@ async function unpreparedDeploymentFixture(
     randomBytes(32).toString("base64url"),
   );
   const state = (await f.runtime.store.read())!;
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
   const provision = firstSetupProvisionRequest(state);
   return { ...f, state, deployment, provision };
@@ -1299,7 +1311,11 @@ it("command deployment refuses to provision over its already completed venue", a
   const state = (await f.runtime.store.read())!;
   const before = await venue.db.select().from(invoiceSeries);
   const tenants = await readTenantIdentities(venue.db);
-  const deployment = f.deps.firstSetupDeployment!({ runtime: f.runtime, db: venue.db });
+  const deployment = f.deps.firstSetupDeployment!({
+    runtime: f.runtime,
+    db: venue.db,
+    node: venue.node,
+  });
   await deployment.publication(state);
   const { firstSetupProvisionRequest } = await import("./first-setup-activation.js");
   await expect(

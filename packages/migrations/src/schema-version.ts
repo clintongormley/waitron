@@ -16,6 +16,20 @@ import "./errors.js";
  */
 const DRIZZLE_MIGRATIONS_TABLE = /^__drizzle_migrations_[a-z_]+$/;
 
+/** A node's two files, as a reader of migration journals needs them. */
+export interface MigrationFiles {
+  readonly venue: Pick<Database, "execute">;
+  readonly node: Pick<Database, "execute">;
+}
+
+/** The file `set` is applied to, and so the one holding its journal: venue.db unless it names node.db. */
+export function fileOf(
+  files: MigrationFiles,
+  set: Pick<MigrationSetSource, "database">,
+): Pick<Database, "execute"> {
+  return set.database === "node" ? files.node : files.venue;
+}
+
 /**
  * The schema version the module's CODE ships — its drizzle journal head, `entries.length` from
  * `<folder>/meta/_journal.json` (equivalently the latest `idx + 1`). A static property of the
@@ -37,8 +51,9 @@ export function expectedSchemaVersion(set: MigrationSetSource, root: string | nu
 
 /**
  * The schema version a node's DATABASE has — the row count of the module's drizzle journal table
- * (`set.table`), since drizzle writes exactly one row per applied migration. Returns 0 when the
- * table does not exist yet: an unmigrated module is at version 0, not an error.
+ * (`set.table`) in the file the set is applied to ({@link fileOf}), since drizzle writes exactly
+ * one row per applied migration. Returns 0 when the table does not exist yet: an unmigrated module
+ * is at version 0, not an error.
  *
  * **`sqlite_master` is asked, rather than a refusal being caught**: `node:sqlite` reports a missing
  * table with the same `code`, `errcode` and `errstr` as a syntax error, so only the message text
@@ -49,9 +64,10 @@ export function expectedSchemaVersion(set: MigrationSetSource, root: string | nu
  * re-migrating.
  */
 export async function appliedSchemaVersion(
-  db: Pick<Database, "execute">,
+  files: MigrationFiles,
   set: MigrationSetSource,
 ): Promise<number> {
+  const db = fileOf(files, set);
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }

@@ -415,7 +415,10 @@ it("the built production command checks readiness and seals settings without sen
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
   for (const module of enabledModules(ALL_MODULES, selected.config))
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { createFiscalReadinessStore } = await import("./fiscal-readiness.js");
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   await createFiscalReadinessStore(
@@ -587,7 +590,10 @@ it("the built production command runs a confirmed isolated test and refuses acti
   const selected = venueFiscalSelection(ALL_MODULES, "ES-common");
   const versions: Record<string, number> = {};
   for (const module of enabledModules(ALL_MODULES, selected.config))
-    versions[module.name] = await appliedSchemaVersion(venue.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: venue.db, node: venue.node },
+      module.migrations,
+    );
   const { fiscalReadinessInput } = await import("./fiscal-readiness-input.js");
   const readiness = fiscalReadinessInput({
     venue: {

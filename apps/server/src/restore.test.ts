@@ -145,7 +145,7 @@ async function seriesOfNode(): Promise<{ code: string; retired: boolean; next: n
   return rows.map(({ code, retiredAt, next }) => ({ code, retired: retiredAt !== null, next }));
 }
 
-const openDb = async () => ({ db: suite.db, close: async () => {} });
+const openDb = async () => ({ db: suite.db, node: suite.node, close: async () => {} });
 
 /** ALL_MODULES with every real `migrations` kept (the gate and the migrate step resolve them) and the
  * restore hooks replaced: named modules get the given hook, every other module none. */

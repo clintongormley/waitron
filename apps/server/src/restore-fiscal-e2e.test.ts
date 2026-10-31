@@ -264,6 +264,7 @@ async function buildArtifact(older: boolean, artifact: string): Promise<void> {
     }
     const manifest = await buildManifest({
       db: store.venue,
+      node: store.node,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),
@@ -428,7 +429,7 @@ describe("fiscal restore, end to end", () => {
       ).toBeDefined();
       expect(blocked?.errcode).toBe(SQLITE_CONSTRAINT_TRIGGER);
       expect(blocked?.message).toMatch(/registros_facturacion is append-only/);
-      expect(await schemaVersionsByModule(db, ALL_MODULES)).toEqual(
+      expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [m.name, expectedSchemaVersion(m.migrations, migrationsRoot)]),
         ),
@@ -446,7 +447,7 @@ describe("fiscal restore, end to end", () => {
     await drive(dirs, olderArtifactPath);
     const store = await openVenueDatabase(dirs.venueDir);
     try {
-      expect(await schemaVersionsByModule(store.venue, ALL_MODULES)).toEqual(
+      expect(await schemaVersionsByModule(store, ALL_MODULES)).toEqual(
         Object.fromEntries(
           ALL_MODULES.map((m) => [
             m.name,

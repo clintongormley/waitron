@@ -1476,7 +1476,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           { ...sourceIds, sourceOperatorId: exporter!.id },
           modules,
           new Date(),
-          await schemaVersionsByModule(source.store.venue, modules),
+          await schemaVersionsByModule(source.store, modules),
         ),
         PASSPHRASE,
       );
@@ -1594,7 +1594,7 @@ describe("startServer — setup-mode routes that hand work to the boot's own wir
           { ...sourceIds, sourceOperatorId: exporter!.id },
           modules,
           new Date(),
-          await schemaVersionsByModule(source.store.venue, modules),
+          await schemaVersionsByModule(source.store, modules),
         ),
         PASSPHRASE,
       );

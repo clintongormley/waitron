@@ -170,7 +170,10 @@ describe("deleting a course with service steps", () => {
     expect(await stepsOf(v, departmentId)).toEqual([
       { name: "Coffee", start: "seated", minutes: 5 },
     ]);
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const bundle = await buildConfigurationBundle(
       suite.db,
       v.cfg,

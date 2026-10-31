@@ -22,7 +22,10 @@ const target = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null
 it("a configuration import over a venue whose closed party has a completed step succeeds and leaves no completion", async () => {
   const at = new Date("2026-10-22T20:00:00Z");
   const venue = await createClockVenue(source.db, () => at);
-  const versions = await schemaVersionsByModule(source.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule(
+    { venue: source.db, node: source.node },
+    ALL_MODULES,
+  );
   const exported = await exportConfigurationTables(source.db, ALL_MODULES);
   const [operator] = await source.db
     .select({ id: persons.id })

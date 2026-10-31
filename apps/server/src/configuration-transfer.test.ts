@@ -234,7 +234,7 @@ it("transfers two photo identities sharing replacement bytes with framing, names
       );
     return [a, b];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -325,7 +325,7 @@ it("refuses corrupt photo override configuration before writing any target rows"
       "es",
     );
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
     suite.db,
     source,
@@ -583,7 +583,10 @@ describe("configuration transfer database path", () => {
       agentId: agent!.id,
     });
     const [operator] = await suite.db.select({ id: persons.id }).from(persons);
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       { ...source, sourceOperatorId: operator!.id },
@@ -654,7 +657,10 @@ describe("configuration transfer database path", () => {
         invoicePrinterDefaultId: sourcePagePrinterId,
       });
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -872,7 +878,10 @@ describe("configuration transfer database path", () => {
       where role = 'admin'
         and id <> '12121212-aaaa-aaaa-aaaa-121212121212'
     `);
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       { ...source, sourceOperatorId: sourceOperator.rows[0]!.id },
@@ -1073,7 +1082,10 @@ describe("configuration transfer database path", () => {
     await suite.db.execute(
       sql`update catalogue_settings set default_product_vat_class = 'zero' where id = 1`,
     );
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1103,7 +1115,10 @@ describe("configuration transfer database path", () => {
     await suite.db.execute(
       sql`update catalogue_settings set default_color = '#b12525' where id = 1`,
     );
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1140,7 +1155,10 @@ describe("configuration transfer database path", () => {
       });
       await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1181,7 +1199,10 @@ describe("configuration transfer database path", () => {
       });
       await tx.execute(sql`update products set color = '#256bb1' where id = ${product.id}`);
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const clean = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1245,7 +1266,10 @@ describe("configuration transfer database path", () => {
         sql`update menu_details set till_columns = 8, handheld_order = 'menu_first' where menu_id = ${menu.id}`,
       );
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1420,7 +1444,7 @@ it("transfers the extras and options lists, remaps their ids and preserves menu 
     });
     return { optionList: withDefault, extraList, shotId: shot.id };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1519,7 +1543,7 @@ it("transfers sections and their members, remapping ids, with a section's image"
     await addMember(tx, rootSectionId, { kind: "section", sectionId: drinks.id });
     return { drinks: drinks.id, image: image.filename };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1612,7 +1636,7 @@ it("an include's folder photo travels with the configuration", async () => {
       .where(eq(sectionMembers.id, direct.id));
     return overrides;
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1654,7 +1678,7 @@ it("refuses a bundle whose photo still carries alt text and labels, as it refuse
   await withTransaction(suite.db, (tx) =>
     uploadImage(tx, { image: photo, names: { es: "Pan" } }, {}),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1746,7 +1770,10 @@ it.each([3, 2])(
           .where(eq(menuPublications.menuId, menu.id));
       }
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -1802,7 +1829,7 @@ it("transfers the adjustment reasons with their limits and order", async () => {
     await createAdjustmentReason(tx, { ...policy, name: "Guest complaint" });
     return listAdjustmentReasons(tx);
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1831,7 +1858,7 @@ async function starterReasonsBundle(taxId: string, change?: (tx: Transaction) =>
     modules: ALL_MODULES,
   });
   if (change !== undefined) await withTransaction(suite.db, change);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -1943,7 +1970,7 @@ it("transfers staff roles, who holds them and a painted season week under new id
     }
     return [department.id, season!.id, holder!.id, waiter, runner, ...days];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2055,7 +2082,7 @@ it("transfers a station's painted season day and a special day's painted date un
              (${randomUUID()}, ${dateDay}, ${cook}, 4, '19:00', '23:45')`);
     return [department.id, station!.id, season!.id, cook, specialDay, date, stationDay, dateDay];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2148,7 +2175,7 @@ it("transfers the venue's limit on a bill's comps and who approves past it", asy
     billApproverRoles: ["supervisor" as const, "manager" as const, "admin" as const],
   };
   await withTransaction(suite.db, (tx) => saveAdjustmentSettings(tx, settings));
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2184,7 +2211,7 @@ it("transfers a department's receipt logo with its image and pictures, and the i
     await writeDepartmentReceipt(tx, cfg, department.id, { logo }, pictures);
     await tx.insert(tenantReceipts).values({ receipt: { headerSubtitle: "Retired default" } });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2236,7 +2263,7 @@ it("transfers a station's rest of the order switch", async () => {
       showsRestOfOrder: true,
     }),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2272,7 +2299,7 @@ it("transfers each station's MOVED slips choice, print, don't print, or never se
       { locationId: source.locationId, name: "Moved unset", printMovedSlips: null },
     ]),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2310,7 +2337,7 @@ it("transfers a station's colour", async () => {
       colour: "teal",
     }),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2355,7 +2382,7 @@ it("transfers each station's ticket grouping and held printing", async () => {
       },
     ]),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2395,7 +2422,7 @@ it("refuses an imported ticket grouping outside the two values before writing an
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2441,7 +2468,7 @@ it("transfers each station's bump mode", async () => {
       { locationId: source.locationId, name: "Cold", bumpMode: "line" },
     ]),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2483,7 +2510,7 @@ it("transfers each station's ready warning time", async () => {
       { locationId: source.locationId, name: "Cold" },
     ]),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2527,7 +2554,10 @@ it.each(["ticket", "line"] as const)(
     await suite.db.execute(
       sql`update locations set bump_mode = 'ticket' where id = ${source.locationId}`,
     );
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -2561,7 +2591,7 @@ it("refuses an imported bump mode outside the two values before writing anything
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2607,7 +2637,7 @@ it("transfers each station's changes after sending", async () => {
       { locationId: source.locationId, name: "Cold", changesAfterSending: "held" },
     ]),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2646,7 +2676,7 @@ it("refuses an imported changes after sending outside the three values before wr
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2693,7 +2723,7 @@ it("A725 allocates omitted imported colours after reserving explicit colours lat
       { locationId: source.locationId, name: "Bar", colour: "blue" },
     ]);
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -2748,7 +2778,10 @@ it.each([null, [], {}, 1, false, "invalid-colour"])(
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -2839,7 +2872,10 @@ describe("custom themes in a configuration copy", () => {
         expect(stored!.theme).toMatchObject({ printedLogo: redrawn });
       }
     }
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -3099,7 +3135,7 @@ it("transfers a printer on two stations in configuration export", async () => {
   ])
     expect(declared).not.toContain(retired);
   expect(declared).not.toContain("devices");
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3140,7 +3176,7 @@ it("transfers a printer's pick-up set and refuses a drawer role in the uploaded 
       pickupRoles: ["payment_slip"],
     });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3205,7 +3241,7 @@ it("transfers a device profile's receipt and payment-slip printer lists, in orde
       paymentSlipPrinterIds: [added[2]!.id],
     });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3267,7 +3303,7 @@ it("leaves a table's clearing state behind", async () => {
       update dining_tables set needs_clearing_since = '2026-09-29T10:00:00.000Z'
       where id = 'eeeeeeee-bbbb-bbbb-bbbb-eeeeeeeeeeee'`);
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
 
   const transferred = await buildConfigurationBundle(
     suite.db,
@@ -3300,7 +3336,7 @@ it("carries a department's Needs clearing switch to the importing venue", async 
       .set({ needsClearing: true })
       .where(eq(departments.id, department.id));
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3340,7 +3376,10 @@ describe("a department's late-send manager setting in a configuration transfer",
         .set({ lateSendNeedsManager: true })
         .where(eq(departments.id, department.id));
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -3372,7 +3411,10 @@ describe("a department's late-send manager setting in a configuration transfer",
       db: suite.db,
       modules: ALL_MODULES,
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -3425,7 +3467,7 @@ it("carries a department's reminder minutes to the importing venue", async () =>
       .set({ releaseReminderMinutes: 25 })
       .where(eq(departments.id, department.id));
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3468,7 +3510,7 @@ it("leaves out a print agent's node, so the importing venue does not show it as 
   await withTransaction(suite.db, (tx) =>
     selfEnrolNodeAgent(tx, configFor(source), { nodeId: source.nodeId, name: "Source box" }),
   );
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3537,7 +3579,7 @@ it("leaves out a print agent's setup page address and port, so the import links 
       setupPort: 9210,
     });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3616,7 +3658,7 @@ it("round-trips missing home slots alongside live tiles with fresh ids and uncha
     await deleteSection(tx, beer.id);
     return { menu: menu.id, tile: tile.id, home: home.homeSectionId };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3676,7 +3718,7 @@ it("gives each imported product the folded key of its own name, whatever the bun
     await createProduct(tx, { ...fields, name, unitPrice: "2.00", vatClass: "general" });
     return name;
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3784,7 +3826,7 @@ async function shortNamedBundle(taxId: string) {
       new Date("2026-10-11T12:00:00Z"),
     );
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -3923,7 +3965,7 @@ it("keeps a name that equals another row's id, while the ids that point at rows 
     );
     return { menu: menu.id, category: category.id, product: product.id };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4008,7 +4050,7 @@ it("refuses a bundle holding duplicate names whole, at staging and at import", a
       vatClass: "general",
     });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const clean = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4096,7 +4138,7 @@ it("refuses an Inactive product in a menu list and a menu price for an Inactive 
     await setMenuVariantPrice(tx, item.id, single!.id, "6.00", menu.id);
     return { gin: gin.id, single: single!.id };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const clean = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4159,7 +4201,7 @@ it("counts an exported product with no Active flag as Active, as the column stor
       vatClass: "general",
     });
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const clean = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4319,7 +4361,7 @@ it("leaves behind a retired profile that no row uses, and the bundle still impor
     .values({ name: "Old till", formFactor: "till" })
     .returning({ id: deviceProfiles.id });
   await retireProfile(source.locationId, retired!.id);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4370,7 +4412,7 @@ it("leaves a retired profile's printer lists behind with it, while a live profil
     return { live: live!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4448,7 +4490,7 @@ it("transfers a profile's department and zones, leaving a retired profile's behi
     return { live: live!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4545,7 +4587,7 @@ it("transfers a profile's kitchen screens, leaving a retired profile's behind", 
     return { till: till!.id, wall: wall!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -4682,7 +4724,7 @@ it("transfers a profile's admitted roles and person exceptions, leaving a retire
     return { admin: admin!.id, mia: mia!.id, live: live!.id, retired: retired!.id };
   });
   await retireProfile(source.locationId, original.retired);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     { ...source, sourceOperatorId: original.admin },
@@ -4979,7 +5021,7 @@ it("carries each station's own late flags to the importing venue", async () => {
       forgottenAfterMinutes: 16,
     })
     .returning({ id: kitchenStations.id });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5025,7 +5067,7 @@ it.each([
     name: "Invalid imported timing",
     warmAfterMinutes: 3,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5071,7 +5113,7 @@ it("refuses an imported ready warning of 0 before writing anything", async () =>
   await suite.db
     .insert(kitchenStations)
     .values({ locationId: source.locationId, name: "Invalid imported ready warning" });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5119,7 +5161,7 @@ it("imports a station row with no ready warning as 3", async () => {
     name: "Older file station",
     readyWarningAfterMinutes: 8,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5148,7 +5190,7 @@ it("exports no service settings", async () => {
     db: suite.db,
     modules: ALL_MODULES,
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5167,7 +5209,7 @@ it("refuses an imported minute that is not a whole number", async () => {
   await suite.db
     .insert(kitchenStations)
     .values({ locationId: source.locationId, name: "Fractional imported timing" });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5227,7 +5269,10 @@ describe("venue detail edits and configuration boundaries", () => {
       }),
     );
     expect(saved.changed).toBe(true);
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const exported = await buildConfigurationBundle(
       suite.db,
       source,
@@ -5291,7 +5336,10 @@ describe("venue detail edits and configuration boundaries", () => {
           fiscalState: "not_applicable",
         });
       const initial = await withTransaction(suite.db, (tx) => readVenueDetails(tx, target));
-      const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+      const versions = await schemaVersionsByModule(
+        { venue: suite.db, node: suite.node },
+        ALL_MODULES,
+      );
       const exported = await buildConfigurationBundle(
         suite.db,
         target,
@@ -5334,7 +5382,10 @@ it.each(["department_sale_policies", "zone_sale_policies"])(
       db: targetSuite.db,
       modules: ALL_MODULES,
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const exported = await buildConfigurationBundle(
       suite.db,
       source,
@@ -5409,7 +5460,7 @@ it("A725 transfers station and department choices", async () => {
       .set({ receiptPrintMode: null })
       .where(eq(zoneSalePolicies.zoneId, inherited.id));
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const exported = await buildConfigurationBundle(
     suite.db,
     source,
@@ -5479,7 +5530,7 @@ it("transfers a department's customer and staff period menus to its zone under n
     });
     return [department.id, bar.id, drinks.id, breakfasts.id, period.id];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(
       await buildConfigurationBundle(
@@ -5634,7 +5685,7 @@ it("exports and imports all seven cell classes into another venue, remapping eve
       product.id,
     ];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(
       await buildConfigurationBundle(
@@ -5767,7 +5818,7 @@ it("carries a cell's period choices with their cell, including a period whose me
         (${randomUUID()}, ${categoryCell}, ${period.id}, ${department.id}, null, 1)`);
     return [department.id, terrace.id, bar!.id, griddle!.id, period.id, productCell, categoryCell];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const decoded = decodeConfigurationBundle(
     encodeConfigurationBundle(
       await buildConfigurationBundle(
@@ -5950,7 +6001,10 @@ describe("special days in a configuration transfer", () => {
       await insertSpecialDay(tx, cfg, { date: "2027-01-01", name: "New Year" });
       await setStationToday(tx, cfg, bar.id, "closed", AT);
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
     return { source, versions, transferred };
   }
@@ -6047,7 +6101,10 @@ describe("special days in a configuration transfer", () => {
         pass.id,
       );
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
     expect(transferred.tables).not.toHaveProperty("hours_week_cells");
     expect(transferred.tables).not.toHaveProperty("special_date_hours");
@@ -6216,7 +6273,10 @@ describe("public holidays in a configuration transfer", () => {
       await saveHolidayArea(tx, cfg, { areaKey: "aran" });
     });
     await moveTo(suite.db, source, "Madrid", "  MADRID ");
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(suite.db, source, ALL_MODULES, AT, versions);
     return { source, versions, transferred };
   }
@@ -6476,7 +6536,7 @@ it("round-trips departmental transfer directions and desks with remapped ids, le
     });
     return [a.id, b.id, profile!.id];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
     suite.db,
     source,
@@ -6580,7 +6640,7 @@ it("round-trips service periods with colours, ordered staff menus and remapped b
     );
     return [department.id, customer.id, staffFirst.id, staffSecond.id, period.id];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
     suite.db,
     source,
@@ -6704,7 +6764,7 @@ it("transfers order start policies under new department and zone ids", async () 
       where zone_id = ${explicit.id}`);
     return { departmentId: department.id, explicitId: explicit.id, inheritedId: inherited.id };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const exported = await buildConfigurationBundle(
     suite.db,
     source,
@@ -6819,7 +6879,7 @@ it("transfers department receipt maps and pictures with remapped ids and no venu
     });
     return [own.id, empty.id, imported.id];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const exported = await buildConfigurationBundle(
     suite.db,
     source,
@@ -6955,7 +7015,10 @@ describe("a deleted printer in a configuration transfer", () => {
       role: "payment_slip",
       position: 0,
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const transferred = await buildConfigurationBundle(
       suite.db,
       source,
@@ -7194,7 +7257,7 @@ it("round-trips deleted kitchen configuration and preserves archived products an
       live: live.id,
     };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -7359,7 +7422,7 @@ it("round-trips a deleted service hierarchy while remapping only its live namesa
       table: linked!.id,
     };
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -7470,7 +7533,7 @@ it("carries Long table's parts, naming the imported tables", async () => {
     const parts = await tx.execute<{ id: string }>(sql`select id from floor_plan_table_parts`);
     return [...Object.values(ids), ...parts.rows.map((row) => row.id)];
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -7539,7 +7602,7 @@ it("carries a kept size, naming the imported table", async () => {
     );
     return Object.values(ids);
   });
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const transferred = await buildConfigurationBundle(
     suite.db,
     source,
@@ -7604,7 +7667,10 @@ describe("dated business-day configuration transfer", () => {
     await suite.db
       .insert(locationBusinessDaySettings)
       .values({ locationId: source.locationId, revision: 4 });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const exported = await buildConfigurationBundle(
       suite.db,
       source,
@@ -7705,7 +7771,10 @@ describe("dated business-day configuration transfer", () => {
       effectiveBusinessDay: "2026-11-04",
       dayCutover: "07:00:00",
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     for (const at of ["2026-11-02T12:00:00Z", "2026-11-04T05:59:59.999Z"]) {
       await expect(
         buildConfigurationBundle(suite.db, source, ALL_MODULES, new Date(at), versions),
@@ -7811,7 +7880,10 @@ describe("seasons in a configuration transfer", () => {
       );
     });
     const exported = await seasonsOf(suite.db, scope);
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const bundle = await buildConfigurationBundle(
       suite.db,
       source,
@@ -7947,7 +8019,10 @@ describe("special days in a configuration transfer", () => {
       await tx.execute(sql`insert into zone_day_ranges (id, day_id, kind, starts_at, ends_at)
         values (${randomUUID()}, ${terraceDay}, 'closed', '21:00:00', '22:00:00')`);
     });
-    const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+    const versions = await schemaVersionsByModule(
+      { venue: suite.db, node: suite.node },
+      ALL_MODULES,
+    );
     const bundle = await buildConfigurationBundle(
       suite.db,
       source,
@@ -8142,7 +8217,7 @@ it("round-trips explicit unit staff identity, empty and disabled translations an
     .where(eq(units.seedKey, "kg"));
   const original = await suite.db.select().from(units).orderBy(units.seedKey);
   const marker = await suite.db.select().from(unitSeedStates);
-  const versions = await schemaVersionsByModule(suite.db, ALL_MODULES);
+  const versions = await schemaVersionsByModule({ venue: suite.db, node: suite.node }, ALL_MODULES);
   const bundle = await buildConfigurationBundle(
     suite.db,
     source,

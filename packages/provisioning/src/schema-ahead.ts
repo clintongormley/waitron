@@ -1,6 +1,10 @@
-import type { Database } from "@waitron/db";
 import { AppError } from "@waitron/shared";
-import { imageMigrationHashes, journalHashes, type MigrationSetSource } from "@waitron/migrations";
+import {
+  imageMigrationHashes,
+  journalHashes,
+  type MigrationFiles,
+  type MigrationSetSource,
+} from "@waitron/migrations";
 import "./errors.js";
 
 export interface AheadSet {
@@ -25,13 +29,13 @@ export function unknownHashes(inDatabase: readonly string[], inImage: readonly s
  * fault in an unused module's folder cannot fail a boot that never needed it.
  */
 export async function findAheadSets(
-  db: Pick<Database, "execute">,
+  files: MigrationFiles,
   sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<AheadSet[]> {
   const ahead: AheadSet[] = [];
   for (const set of sets) {
-    const inDatabase = await journalHashes(db, set);
+    const inDatabase = await journalHashes(files, set);
     if (inDatabase === null) continue;
     const unknownMigrations = unknownHashes(inDatabase, imageMigrationHashes(set, root));
     if (unknownMigrations.length > 0) ahead.push({ set: set.name, unknownMigrations });
@@ -42,11 +46,11 @@ export async function findAheadSets(
 /** Reports only the FIRST ahead set: one named set with its unknown hashes is what an installer
  * acts on. */
 export async function assertNotAhead(
-  db: Pick<Database, "execute">,
+  files: MigrationFiles,
   sets: readonly MigrationSetSource[],
   root: string | null,
 ): Promise<void> {
-  const ahead = await findAheadSets(db, sets, root);
+  const ahead = await findAheadSets(files, sets, root);
   const first = ahead[0];
   if (first !== undefined) throw new AppError("provisioning.database_ahead", first);
 }

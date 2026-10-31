@@ -88,6 +88,7 @@ async function fixture() {
   await suite.db.archiveTo(databasePath);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules,
     environment: "preproduction",
     now: new Date(capturedAt),

@@ -718,7 +718,10 @@ describe("routing cells in a staged import", () => {
         );
         return large!.id;
       });
-      const versions = await schemaVersionsByModule(source.db, ALL_MODULES);
+      const versions = await schemaVersionsByModule(
+        { venue: source.db, node: source.node },
+        ALL_MODULES,
+      );
       const bundle = await buildConfigurationBundle(
         source.db,
         venueResult,

@@ -16,7 +16,7 @@ afterEach(async () => {
 it.each(["archive", "stream"] as const)(
   "restores a staged %s with the selected copy's older key and a durably selected current hour",
   async (kind) => {
-    f = await stagedHourRestore(suite.db, kind, "emergency-offline-restore");
+    f = await stagedHourRestore(suite, kind, "emergency-offline-restore");
     const before = f.journal();
     await mintBreakGlassSecret(suite.db, TENANT_A.nodeId);
     const log = vi.fn();
@@ -58,7 +58,7 @@ it.each(["archive", "stream"] as const)(
   },
 );
 it("rereads the retained selected-hour binding and refuses a changed event before placement", async () => {
-  f = await stagedHourRestore(suite.db, "archive", "emergency-offline-restore");
+  f = await stagedHourRestore(suite, "archive", "emergency-offline-restore");
   const path = join(f.stateDir, "restore-request.json");
   const marker = JSON.parse(await readFile(path, "utf8"));
   marker.recoveryOperation.binding.eventId = "another-recovery";

@@ -293,6 +293,7 @@ export class BackupSupervisor {
       this.#worker = runBackupSweep({
         backends: this.#backends,
         db: venue.venue,
+        node: venue.node,
         modules: this.#deps.modules,
         environment: this.#deps.environment,
         resolvers: {},

@@ -93,6 +93,7 @@ async function artifact(f: Awaited<ReturnType<typeof fixture>>) {
   await suite.db.archiveTo(database);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now: new Date("2026-10-06T00:00:00Z"),
@@ -199,6 +200,7 @@ it("roundtrips real SQLite and state through scheduled capture, local file stora
     ...f,
     stateDir: captureState,
     db: suite.db,
+    node: suite.node,
     backends: [backend],
     resolvers: {},
     retain: 3,

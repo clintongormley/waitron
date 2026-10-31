@@ -66,6 +66,7 @@ function codeThrownBy(fn: () => unknown): unknown {
 
 const deps = (over: Partial<SealedStateDeps> = {}): SealedStateDeps => ({
   db: suite.db,
+  node: suite.node,
   nodeId: NODE_ID,
   stateDir,
   modules: ALL_MODULES,

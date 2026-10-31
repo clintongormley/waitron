@@ -1,8 +1,9 @@
 import { sql } from "drizzle-orm";
 import { readMigrationFiles } from "drizzle-orm/migrator";
-import { tableExists, type Database } from "@waitron/db";
+import { tableExists } from "@waitron/db";
 import { AppError } from "@waitron/shared";
 import { type MigrationSetSource, resolveExistingMigrationsFolder } from "./manifest.js";
+import { fileOf, type MigrationFiles } from "./schema-version.js";
 import "./errors.js";
 
 /** The same guard `appliedSchemaVersion` uses: the table name reaches SQL as TEXT, never a placeholder. */
@@ -21,7 +22,8 @@ export function imageMigrationHashes(set: MigrationSetSource, root: string | nul
 }
 
 /**
- * The migration hashes a DATABASE carries for a set — or `null` when the set's journal table does
+ * The migration hashes a DATABASE carries for a set, read from the file the set is applied to
+ * ({@link fileOf}) — or `null` when the set's journal table does
  * not exist.
  *
  * `null`, not `[]`: "never migrated" and "migrated, nothing recorded" are different facts, and a
@@ -42,9 +44,10 @@ export function imageMigrationHashes(set: MigrationSetSource, root: string | nul
  * check, catching an EDITED migration file that keeps its `when`.
  */
 export async function journalHashes(
-  db: Pick<Database, "execute">,
+  files: MigrationFiles,
   set: MigrationSetSource,
 ): Promise<string[] | null> {
+  const db = fileOf(files, set);
   if (!DRIZZLE_MIGRATIONS_TABLE.test(set.table)) {
     throw new AppError("migrations.invalid_table", { table: set.table });
   }

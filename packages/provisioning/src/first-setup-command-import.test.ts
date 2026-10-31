@@ -78,7 +78,10 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
   );
   const versions: Record<string, number> = {};
   for (const module of modules)
-    versions[module.name] = await appliedSchemaVersion(source.db, module.migrations);
+    versions[module.name] = await appliedSchemaVersion(
+      { venue: source.db, node: source.node },
+      module.migrations,
+    );
   const seeded = await applyHistoricalTestVenue(
     planVenue(
       {
@@ -171,7 +174,12 @@ async function fixture(newTaxpayer = false, change?: (bundle: ConfigurationBundl
   expect(
     (await runtime.commandDelivery.deliver(owner, io, join(root, "recovery.pdf"), "es")).status,
   ).toBe("ready");
-  const deployment = createFirstSetupCommandDeployment({ runtime, db: target.db, environment });
+  const deployment = createFirstSetupCommandDeployment({
+    runtime,
+    db: target.db,
+    node: target.node,
+    environment,
+  });
   return { root, stateDir, runtime, owner, deployment, bundle, artifact, seeded };
 }
 
@@ -352,6 +360,7 @@ it("recovered exact Finish completes after imported configuration has been clear
   const deployment = createFirstSetupCommandDeployment({
     runtime: f.runtime,
     db: target.db,
+    node: target.node,
     environment: {
       WAITRON_CREDENTIALS_KEY: Buffer.alloc(32, 73).toString("base64"),
       WAITRON_ADVERTISED_ORIGIN: "https://olivo.example.test:3443",

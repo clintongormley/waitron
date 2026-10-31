@@ -14,6 +14,7 @@ import {
   stampDeployment,
   withTransaction,
   type Database,
+  type NodeDatabase,
 } from "@waitron/db";
 import { withOperationAuthority, type OperationBinding } from "@waitron/module";
 import { createFirstSetupCoordinator } from "@waitron/provisioning";
@@ -49,7 +50,7 @@ const bases = [
   { code: "R", purpose: "rectificative" },
 ];
 export async function stagedHourCrash(
-  db: Database,
+  { db, node: nodeDb }: { db: Database; node: NodeDatabase },
   kind: "archive" | "stream",
   eventId: string,
   seams: {
@@ -159,6 +160,7 @@ export async function stagedHourCrash(
     const databasePath = join(root, "backup.db");
     const manifest = await buildManifest({
       db,
+      node: nodeDb,
       modules: ALL_MODULES,
       environment: "preproduction",
       now: new Date(),

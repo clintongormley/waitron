@@ -114,6 +114,7 @@ async function restore() {
   await suite.db.archiveTo(database);
   const manifest = await buildManifest({
     db: suite.db,
+    node: suite.node,
     modules: ALL_MODULES,
     environment: "preproduction",
     now,

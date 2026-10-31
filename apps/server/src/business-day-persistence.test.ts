@@ -85,6 +85,7 @@ describe("business-day timeline through cold restore and reset", () => {
       await suite.db.archiveTo(dump);
       const manifest = await buildManifest({
         db: suite.db,
+        node: suite.node,
         modules: ALL_MODULES,
         environment: "preproduction",
         now: new Date("2026-11-08T12:00:00Z"),

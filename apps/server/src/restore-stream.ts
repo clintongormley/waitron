@@ -240,7 +240,7 @@ async function readRestoredCopy(args: {
   try {
     const problems = await args.checkIntegrity(store);
     if (problems.length > 0) integrityFailed(args.log, problems);
-    await assertNotAhead(store.venue, manifestSets(), args.migrationsRoot);
+    await assertNotAhead(store, manifestSets(), args.migrationsRoot);
     const table = await store.venue.execute<{ name: string }>(
       sql`select name from sqlite_master where type = 'table' and name = ${"node_sealed_state"}`,
     );
