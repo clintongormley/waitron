@@ -35,7 +35,7 @@ import {
 
 const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null) });
 
-async function course(v: PartyVenue, name = "Postres"): Promise<string> {
+async function course(v: PartyVenue, name = "Desserts"): Promise<string> {
   return (await inTx(v, (tx) => createCourse(tx, v.cfg, { name, displayOrder: 3 }))).id;
 }
 
@@ -45,7 +45,7 @@ async function courseRow(v: PartyVenue, id: string) {
 
 /** A round on a fresh table whose one dish names `courseId` on its line and its kitchen record. */
 async function orderedWith(v: PartyVenue, courseId: string): Promise<string> {
-  const { tabId } = await seat(v, await v.table(`Mesa ${randomUUID().slice(0, 8)}`));
+  const { tabId } = await seat(v, await v.table(`Table ${randomUUID().slice(0, 8)}`));
   await inTx(v, (tx) =>
     addTabRound(tx, v.cfg, tabId, [{ menuItemId: v.item("Flan"), quantity: "1", courseId }]),
   );
@@ -67,7 +67,7 @@ describe("removing a course", () => {
     await inTx(v, (tx) => setProductCourse(tx, v.cfg, v.productId("Flan"), id));
     expect(await inTx(v, (tx) => coursesInUse(tx, [id]))).toEqual(new Set([id]));
     await inTx(v, (tx) => deleteCourse(tx, v.cfg, id));
-    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: false }]);
+    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Desserts", active: false }]);
     expect(
       await inTx(v, (tx) =>
         tx
@@ -127,7 +127,7 @@ describe("removing a course", () => {
   it("retains a deleted course only an unsent draft's line names", async () => {
     const v = await setupPartyVenue(suite.db);
     const id = await course(v);
-    const { partyId, tabId } = await seat(v, await v.table("Borrador"));
+    const { partyId, tabId } = await seat(v, await v.table("Draft"));
     const draft = await inTx(v, (tx) =>
       saveDraft(tx, v.cfg, partyId, OPERATOR, {
         billId: tabId,
@@ -170,7 +170,7 @@ describe("removing a course", () => {
       code: "management.request_invalid",
       params: { field: "active" },
     });
-    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Postres", active: true }]);
+    expect(await courseRow(v, id)).toMatchObject([{ id, name: "Desserts", active: true }]);
   });
 
   it("stops reading references once every course asked about is found, counting a repeated id once", async () => {

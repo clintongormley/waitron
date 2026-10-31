@@ -27,7 +27,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 describe("permanent course deletion", () => {
   it("deleting a product-default course clears all defaults and retains its row", async () => {
     const v = await setupPartyVenue(suite.db);
-    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Postres" }));
+    const { id } = await inTx(v, (tx) => createCourse(tx, v.cfg, { name: "Desserts" }));
     const parentId = v.productId("Flan");
     const [parent] = await inTx(v, (tx) =>
       tx.select().from(products).where(eq(products.id, parentId)),
@@ -52,7 +52,7 @@ describe("permanent course deletion", () => {
       tx.select().from(kitchenCourses).where(eq(kitchenCourses.id, id)),
     );
     const impact = {
-      target: { id, name: "Postres" },
+      target: { id, name: "Desserts" },
       refusals: [],
       ends: [],
       removes: [{ key: "course_products", count: 3, targets: [] }],

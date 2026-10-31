@@ -548,6 +548,16 @@ until A977).
   department-receipt-mount, kitchen-delete and service-delete management API suites keep only the
   Spanish names their shared venue (`apps/server/src/testing/venue-fixtures.ts`) or party venue
   (`apps/server/src/testing/party-venue.ts`) creates.
+  The card-reader, device and course delete suites (`apps/server/src/card-reader-delete.db.test.ts`,
+  `device-delete.db.test.ts`, `course-delete.test.ts` and `kitchen.remove-course.test.ts`) and the
+  kitchen-delete integration suite (`kitchen-delete.integration.test.ts`) give English reader,
+  profile, device, location, course, table and order names to what they create, and the
+  delete-impact naming suite (`delete-impact.test.ts`) uses English labels for its sample targets;
+  the card-reader suite keeps its es-ES locale and the operation description "Venta", the
+  device-delete suite its sale line's es-ES description "Café" and the names its shared venue
+  creates, and the course and kitchen-delete suites only the Spanish names their shared party venue
+  creates. The device-delete history suite (`apps/server/src/device-delete.history.test.ts`) still
+  labels its open order "Mesa 1" and names its sale line "Café".
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -560,7 +570,7 @@ until A977).
   Spanish venue (`packages/provisioning/src/starter-content.ts`), and keeps Spanish values inside
   its translation maps, its accented name-key case, official holiday and place names, its street
   lines, and "Fiesta" (also an English word). The device-api pass suite
-  (`apps/server/src/device-api.pass.test.ts`) and the device, device-delete, join-request,
+  (`apps/server/src/device-api.pass.test.ts`) and the device, join-request,
   join-api, join-api database and device-session suites keep only the Spanish names the shared
   test helpers create, and the device and device-session suites' operation description "Venta en
   establecimiento". Screen tests take translated expectations from
@@ -635,7 +645,7 @@ until A977).
   the default kitchen station the shared seed helper names "Cocina" stay.
   The server's device, device-session, join, station-alert, party and configuration-transfer
   suites no longer use "Pase" or "Pantalla" in sample names.
-  The device, device-delete, join-request, join-api, join-api database and device-session suites
+  The device, join-request, join-api, join-api database and device-session suites
   give English names to what they create; the names the shared test helpers create and the
   operation description stay Spanish.
   Named-day occurrence samples use English custom-day names; repetition, closure, public-holiday
@@ -940,6 +950,16 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   department-receipt-mount, kitchen-delete and service-delete management API suites keep only the
   Spanish names their shared venue (`apps/server/src/testing/venue-fixtures.ts`) or party venue
   (`apps/server/src/testing/party-venue.ts`) creates.
+  The card-reader, device and course delete suites (`apps/server/src/card-reader-delete.db.test.ts`,
+  `device-delete.db.test.ts`, `course-delete.test.ts` and `kitchen.remove-course.test.ts`) and the
+  kitchen-delete integration suite (`kitchen-delete.integration.test.ts`) give English reader,
+  profile, device, location, course, table and order names to what they create, and the
+  delete-impact naming suite (`delete-impact.test.ts`) uses English labels for its sample targets;
+  the card-reader suite keeps its es-ES locale and the operation description "Venta", the
+  device-delete suite its sale line's es-ES description "Café" and the names its shared venue
+  creates, and the course and kitchen-delete suites only the Spanish names their shared party venue
+  creates. The device-delete history suite (`apps/server/src/device-delete.history.test.ts`) still
+  labels its open order "Mesa 1" and names its sale line "Café".
   The venue-service menu-timetable suite (`packages/venue-service/src/menu-timetable.test.ts`)
   still keys and names its menus in Spanish (Desayunos, Almuerzo, Cena, Bebidas, Café, Cócteles,
   Copas, "Deli para llevar") and uses "Sala" and "Terraza".
@@ -954,7 +974,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   configuration-transfer suite gives English names to what it creates; it still reads setup's
   Spanish default station "Cocina", and keeps Spanish translation-map values, its accented
   name-key case, official holiday and place names, its street lines and "Fiesta". The device,
-  device-api, device-api pass, device-delete, join-request, join-api, join-api database and
+  device-api, device-api pass, join-request, join-api, join-api database and
   device-session suites give English names to what they create; the names the shared test helpers
   create stay Spanish, as does the device and device-session suites' operation description.
   Venue-service period-deletion and zone-closure suites use English venue, station,

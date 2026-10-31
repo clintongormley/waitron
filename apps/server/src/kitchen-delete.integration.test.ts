@@ -66,7 +66,7 @@ const suite = useVenueDb({ migrations: migrationOptionsFor(manifestSets(), null)
 
 it("keeps retained draft, group, course and ready station history through management deletion", async () => {
   const v = await setupPartyVenue(suite.db);
-  const seated = await seat(v, await v.table("Mesa history"));
+  const seated = await seat(v, await v.table("Table history"));
   const { course, station, defaultStation } = await inTx(v, async (tx) => {
     const createdCourse = await createCourse(tx, v.cfg, {
       name: "Recorded dessert",
@@ -389,7 +389,7 @@ it("refuses a queued station delete after another writer sends preparing food", 
     );
     return row;
   });
-  const seated = await seat(v, await v.table("Mesa queued"));
+  const seated = await seat(v, await v.table("Table queued"));
   expect((await inTx(v, (tx) => readStationDeleteImpact(tx, v.cfg, station.id))).refusals).toEqual(
     [],
   );
