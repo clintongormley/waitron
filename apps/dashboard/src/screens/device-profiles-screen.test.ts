@@ -2382,7 +2382,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       printsOwnSlipAutomatically: false,
       id: "r1",
       provider: "acme",
-      name: "Mostrador",
+      name: "Counter",
       active: true,
       canEnable: true,
       deviceCount: 0,
@@ -2392,7 +2392,7 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       printsOwnSlipAutomatically: false,
       id: "r2",
       provider: "acme",
-      name: "Terraza",
+      name: "Terrace",
       active: true,
       canEnable: true,
       deviceCount: 0,
@@ -2671,8 +2671,8 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
       ),
     ];
     expect(switches.map((s) => [s.label, s.checked])).toEqual([
-      ["Mostrador", true],
-      ["Terraza", false],
+      ["Counter", true],
+      ["Terrace", false],
     ]);
     const fallback = field(el, "profile-readers-default");
     expect(fallback.getAttribute("name")).toBe("defaultReaderId");
@@ -3044,10 +3044,10 @@ describe("device-profiles-screen equipment defaults, drawers and card readers", 
         "[data-test=profile-readers] wt-switch",
       ),
     ];
-    const off = `Mostrador (${t("devices.watcher_disabled_mark")})`;
+    const off = `Counter (${t("devices.watcher_disabled_mark")})`;
     expect(switches.map((s) => [s.dataset.test, s.label, s.checked])).toEqual([
       ["profile-reader-r1", off, true],
-      ["profile-reader-r2", "Terraza", false],
+      ["profile-reader-r2", "Terrace", false],
     ]);
     expect(field(el, "profile-readers-default").options).toEqual([
       { value: "", label: t("device_profiles.default_none") },
