@@ -92,7 +92,7 @@ export class TillShell extends LitElement {
     new ThemeChoiceController(this);
     // A kitchen screen never waits at the lock screen, so help and a guide left open go after two idle minutes.
     new HelpIdleController(this, {
-      applies: () => this.kiosk || this.formFactor === "kds",
+      applies: () => this.#drawsCorner(),
       onIdle: () => {
         this.guideHref = "";
         this.#guideBadge = undefined;
@@ -963,6 +963,14 @@ export class TillShell extends LitElement {
       : nothing;
   }
 
+  #barless(): boolean {
+    return this.kiosk || this.formFactor === "kds";
+  }
+
+  #drawsCorner(): boolean {
+    return this.#barless() && this.loadLocales !== undefined;
+  }
+
   #helpSwitch(): TemplateResult {
     return html`<wt-help-switch
       data-test="help-switch"
@@ -1401,8 +1409,8 @@ export class TillShell extends LitElement {
     return html`
       <div class="shell">
         ${
-          this.kiosk || this.formFactor === "kds"
-            ? this.loadLocales !== undefined
+          this.#barless()
+            ? this.#drawsCorner()
               ? html`<div class="language-corner">
                   ${this.#helpSwitch()}${themeChooser()}${this.#chooser()}
                 </div>`

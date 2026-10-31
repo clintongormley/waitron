@@ -180,6 +180,16 @@ describe("till-shell's Help switch in the kitchen corner", () => {
     expect(modal.open).toBe(false);
   });
 
+  it("on a kitchen screen with no corner, and so no Help switch, help does not go off by itself", async () => {
+    await page.viewport(1280, 844);
+    const el = await mounted({ formFactor: "kds" });
+    expect(el.shadowRoot!.querySelector(".language-corner")).toBeNull();
+    fakeClock();
+    setHelpMode(true);
+    vi.advanceTimersByTime(KITCHEN_HELP_IDLE_MS);
+    expect(currentHelpMode()).toBe(true);
+  });
+
   it.each([
     ["till", { formFactor: "till", activeScreen: "counter", operatorName: "Ana", loadLocales }],
     [

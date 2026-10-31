@@ -2414,7 +2414,8 @@ keep their axe cases in a `*.help.a11y.test.ts` beside it), and `menu-browser.he
 **Kitchen screens.** A kitchen screen never waits at the lock screen, so help there goes off by itself after two
 minutes without a touch, and a guide page left open in the shell closes with it.
 `HelpIdleController` (`apps/till/src/state/help-idle.ts`) runs the clock in `till-shell` while help
-is on and the shell is in kiosk mode or has the `kds` form factor: turning help on starts it, a
+is on and the shell is in kiosk mode or has the `kds` form factor and draws its corner (it is given
+`loadLocales`, so the Help switch is there): turning help on starts it, a
 `pointerdown` or `keydown` anywhere inside the shell restarts it (heard in the capture phase, so a
 part that stops the event still counts; `till-guide-sheet` relays a same-origin guide page's own), turning help off or the shell
 leaving the page stops it, and a redraw never restarts it. On a till or a handheld help still goes
