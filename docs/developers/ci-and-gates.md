@@ -2006,10 +2006,20 @@ External provenance, read 2026-10-31:
 | A first failure may be tolerated | [Workflow syntax](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#jobsjob_idstepscontinue-on-error): “Prevents a job from failing when a step fails.” | Only the first attempt sets `continue-on-error: true`. |
 | Retry selection uses the original result | [Steps context](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#steps-context): “before `continue-on-error` is applied” | The retry checks `outcome`, rather than the adjusted `conclusion`. |
 
+Source-level corroboration, rather than a hosted failure probe: runner
+[v2.337.0 `StepsRunner.cs:323–336`](https://github.com/actions/runner/blob/v2.337.0/src/Runner.Worker/StepsRunner.cs#L323-L336)
+assigns `TaskResult.Failed` when the step's cancellation token is set while the job's is not,
+and assigns `TaskResult.Canceled` for the other cancellation path. Its source words are
+`step.ExecutionContext.Result = TaskResult.Failed`. The tagged file was fetched through the
+contents API (blob `4a114fe0b241c1b6e9ebb7bf205b05108e0faea5`); this does not establish
+which runner version a future hosted job uses or prove that a real setup timeout recovers.
+
 The Node-setup cases in `scripts/ci-workflow.test.mjs` are weaker than their name:
-they read literal workflow steps and check both deadlines, the failure-only condition, tolerated
+they read literal workflow steps and check that both deadlines are whole numbers from one to two
+minutes, the failure-only condition, tolerated
 first failure, strict second failure, and equal action versions, inputs and environment. They do
-not run the hosted timeout or retry path. Composite actions, external reusable workflows, YAML
+not run the hosted timeout or retry path, validate YAML or check for duplicate step ids. The
+current sites all use two minutes; this guard also permits a one-minute limit. Composite actions, external reusable workflows, YAML
 anchors and expression-based action names are outside the reader. `scripts/setup-node-pnpm.test.mjs`
 continues to check the package-manager cache prerequisites for both attempts.
 

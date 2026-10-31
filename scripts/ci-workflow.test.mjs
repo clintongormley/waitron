@@ -4435,7 +4435,7 @@ describe("the workflows' artifact uploads", () => {
   });
 });
 
-// Weaker than its name: reads literal workflow steps, not the hosted runner's execution.
+// Weaker than its name: reads literal steps, not hosted execution, YAML validity or duplicate ids.
 describe("the workflows' Node setups", () => {
   const sites = workflowFiles.flatMap((name) =>
     jobBlocks(readFileSync(join(workflowsDir, name), "utf8")).flatMap(({ id, lines }) => {
