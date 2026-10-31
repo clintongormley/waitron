@@ -12,21 +12,22 @@ import { withNodeTransaction, withTransaction } from "./tenancy.js";
  * A bare pair of files per case, built here rather than through `useVenueDb`: what is under test is
  * the transaction helper on the node file, which carries no migration set and no `change_log`.
  */
-const opened: { store: VenueDatabase; directory: string }[] = [];
+const opened: VenueDatabase[] = [];
+const directories: string[] = [];
 
 const open = async (): Promise<VenueDatabase> => {
   const directory = mkdtempSync(join(tmpdir(), "waitron-tenancy-node-"));
+  directories.push(directory);
   const store = await openVenueDatabase(directory);
-  opened.push({ store, directory });
+  opened.push(store);
   store.node.run(sql`create table probe_node (id text primary key)`);
   return store;
 };
 
 afterEach(async () => {
-  while (opened.length > 0) {
-    const { store, directory } = opened.pop()!;
-    await store.close();
-    await rm(directory, { recursive: true, force: true });
+  while (opened.length > 0) await opened.pop()!.close();
+  while (directories.length > 0) {
+    await rm(directories.pop()!, { recursive: true, force: true });
   }
 });
 
