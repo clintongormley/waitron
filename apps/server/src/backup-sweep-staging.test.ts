@@ -452,6 +452,33 @@ it("deletes the oldest backup before copying when that makes the room, then stor
   expect(kept).not.toContain(s.keys[1]);
 });
 
+it("after a +400-day step, deletes a correctly dated backup before one the step holds", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(401), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = { ...deps(f, [backend]), retain: 10 };
+  await runOnce({
+    ...d,
+    stagingEstimateBytes: async () => 1000,
+    statfs: rising(2700, s.sizes),
+    spaceFloorBytes: 10,
+    spaceAimBytes: 100,
+    installationStartedAt: async () => days(500),
+    latestClockStep: async () => ({
+      confirmedAt: days(3).toISOString(),
+      stepMs: 400 * 86_400_000,
+    }),
+  });
+  const deleted = d.log.mock.calls.filter(([, event]) => event === "backup.archive_deleted");
+  expect(deleted.map(([, , fields]) => (fields as { key: string }).key)).toEqual([s.keys[1]]);
+  expect(backend.puts).toBe(1);
+  expect(await left(s.dir)).toContain(s.keys[0]);
+});
+
 it("deletes only what the floor needs when old backups cannot reach the aim, then stores", async () => {
   const f = await fixture();
   // The need is 3000 (two working copies and the folder copy). Free 2600 plus the two deletable

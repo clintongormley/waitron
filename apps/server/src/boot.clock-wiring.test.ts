@@ -297,6 +297,10 @@ describe("boot's authority clock wiring", () => {
       expect(stepDeps.installationStartedAt).toBe(hooks.readInstallationStart);
       expect(stepDeps.onArchivesDeleted).toBe(hooks.recordArchivesDeleted);
       expect(stepDeps.statfs).toBe(watchDeps.statfs);
+      // The same step read as every run, so making room holds what the run's pruning keeps; the
+      // age cap is the running duty's, none here.
+      expect(stepDeps.latestClockStep).toBe(clocks.archive!.latestClockStep);
+      expect(stepDeps.retainDays!()).toBeUndefined();
       // The step's folders are the running duty's, read from the supervisor's live status: this
       // primary has no backups set up, so there are none.
       expect(stepDeps.backends()).toEqual([]);

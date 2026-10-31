@@ -390,6 +390,87 @@ describe("lowSpaceBackupDeletion", () => {
     ]);
   });
 
+  describe("across a step the box made to its clock", () => {
+    const DAY = 86_400_000;
+    const step = { confirmedAt: hours(2).toISOString(), stepMs: 400 * DAY };
+
+    it("deletes the backups a +400-day step holds after every other, reading the step it holds with the retention days", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, SPACE_OK_BYTES - 2 * GIB - 1);
+      const latestClockStep = vi.fn(async () => step);
+      const { deps: args, onArchivesDeleted } = deps(f, d.statfs, {
+        latestClockStep,
+        retainDays: () => 30,
+      });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(latestClockStep).toHaveBeenCalledTimes(1);
+      expect(deletedKeys(onArchivesDeleted)).toEqual([[f.keys[1], f.keys[2], f.keys[0]]]);
+      expect(f.paths.map(gone)).toEqual([true, true, true, false]);
+    });
+
+    it("deletes by stamp alone once the step is as old as the retention days", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, SPACE_OK_BYTES - 2 * GIB - 1);
+      const { deps: args, onArchivesDeleted } = deps(f, d.statfs, {
+        latestClockStep: async () => step,
+        retainDays: () => 27,
+      });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(deletedKeys(onArchivesDeleted)).toEqual([[f.keys[0], f.keys[1], f.keys[2]]]);
+    });
+
+    it("never reads the step with room to spare", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, SPACE_LOW_BYTES);
+      const latestClockStep = vi.fn(async () => step);
+      const { deps: args } = deps(f, d.statfs, { latestClockStep, retainDays: () => 30 });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(latestClockStep).not.toHaveBeenCalled();
+    });
+
+    it("deletes nothing when the step cannot be read, and logs why", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, GIB);
+      const {
+        deps: args,
+        log,
+        onArchivesDeleted,
+      } = deps(f, d.statfs, {
+        latestClockStep: async () => {
+          throw new Error("locked");
+        },
+        retainDays: () => 30,
+      });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(f.paths.some(gone)).toBe(false);
+      expect(onArchivesDeleted).not.toHaveBeenCalled();
+      expect(log.mock.calls).toEqual([
+        ["warn", "backup.clock_step_unreadable", { errorCode: "unknown", errno: undefined }],
+      ]);
+    });
+
+    it("deletes nothing when backups' retention days are not known", async () => {
+      const f = await fixture();
+      const d = disk(f.paths, GIB);
+      const { deps: args } = deps(f, d.statfs, {
+        latestClockStep: async () => step,
+        retainDays: () => undefined,
+      });
+
+      await lowSpaceBackupDeletion(args)(signal());
+
+      expect(f.paths.some(gone)).toBe(false);
+    });
+  });
+
   it("deletes nothing when the installation start is unknown", async () => {
     const f = await fixture();
     const d = disk(f.paths, GIB);

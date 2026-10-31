@@ -224,6 +224,93 @@ describe("listDeletableArchives", () => {
     ]);
   });
 
+  describe("across a step the box made to its clock", () => {
+    const DAY = 86_400_000;
+    const stepAt = T.getTime() + 100 * DAY;
+    const nowMs = stepAt + 3 * DAY;
+    const at = (ms: number) => new Date(ms);
+    const hold = { fromMs: stepAt, toMs: nowMs + 60_000 };
+
+    /** The reviewer's E4 folder: three archives stamped 400 days ahead by the clock a −400-day step
+     * corrected, then three stamped correctly after it. */
+    async function steppedBack() {
+      const a = await folder("a");
+      const ahead2 = await archive(a, at(stepAt + 398 * DAY));
+      const ahead1 = await archive(a, at(stepAt + 399 * DAY));
+      const ahead0 = await archive(a, at(stepAt + 400 * DAY));
+      const after2 = await archive(a, at(stepAt + DAY));
+      const after1 = await archive(a, at(stepAt + 2 * DAY));
+      const after0 = await archive(a, at(stepAt + 2.5 * DAY));
+      return { a, ahead2, ahead1, ahead0, after2, after1, after0 };
+    }
+
+    it("offers the archives a −400-day step holds after every other, and keeps the newest correctly dated one", async () => {
+      const f = await steppedBack();
+
+      const listed = await listDeletableArchives(
+        [{ destination: "da", dir: f.a }],
+        T,
+        undefined,
+        hold,
+      );
+
+      expect(listed.map((e) => e.key)).toEqual([f.after2, f.after1, f.ahead2, f.ahead1, f.ahead0]);
+    });
+
+    it("offers the same folder by stamp alone with no step", async () => {
+      const f = await steppedBack();
+
+      const listed = await listDeletableArchives([{ destination: "da", dir: f.a }], T);
+
+      expect(listed.map((e) => e.key)).toEqual([f.after2, f.after1, f.after0, f.ahead2, f.ahead1]);
+    });
+
+    it("keeps the newest held archive when the step holds every archive in a folder", async () => {
+      const a = await folder("a");
+      const old = await archive(a, at(stepAt - 300 * DAY));
+      const mid = await archive(a, at(stepAt - 200 * DAY));
+      await archive(a, at(stepAt - DAY));
+
+      const listed = await listDeletableArchives(
+        [{ destination: "da", dir: a }],
+        new Date(stepAt - 400 * DAY),
+        undefined,
+        hold,
+      );
+
+      expect(listed.map((e) => e.key)).toEqual([old, mid]);
+    });
+
+    it("offers a held archive from one folder after an archive the step does not hold from another, whatever their stamps", async () => {
+      const a = await folder("a");
+      const b = await folder("b");
+      const heldA = await archive(a, at(stepAt - DAY));
+      await archive(a, at(stepAt + DAY));
+      const freeB = await archive(b, at(stepAt + 2 * DAY));
+      await archive(b, at(stepAt + 2.5 * DAY));
+
+      const listed = await listDeletableArchives(
+        [
+          { destination: "da", dir: a },
+          { destination: "db", dir: b },
+        ],
+        new Date(stepAt - 10 * DAY),
+        undefined,
+        hold,
+      );
+
+      expect(listed.map((e) => e.key)).toEqual([freeB, heldA]);
+    });
+
+    it("offers nothing while the step cannot be read", async () => {
+      const f = await steppedBack();
+
+      expect(
+        await listDeletableArchives([{ destination: "da", dir: f.a }], T, undefined, "everything"),
+      ).toEqual([]);
+    });
+  });
+
   it("lists nothing from a folder whose entries cannot be looked at", async () => {
     const a = await folder("a");
     await archive(a, hours(1));
@@ -528,6 +615,42 @@ describe("makeRoom", () => {
     expect(f.paths.every(exists)).toBe(true);
     expect(d.reads()).toBe(1);
     expect(log).not.toHaveBeenCalled();
+    expect(onDeleted).not.toHaveBeenCalled();
+  });
+
+  it("deletes the archives a clock step holds last, and asks for the hold only once short of the aim", async () => {
+    const f = await backups();
+    const d = disk(f.paths, NEED + AIM - 350);
+    const { args, onDeleted } = base(f, d);
+    const clockStepHold = vi.fn(async () => ({
+      fromMs: hours(2).getTime(),
+      toMs: hours(5).getTime(),
+    }));
+
+    await makeRoom({ ...args, clockStepHold });
+
+    expect(clockStepHold).toHaveBeenCalledTimes(1);
+    expect(f.paths.map(exists)).toEqual([true, false, false, true]);
+    expect(deletedKeys(onDeleted)).toEqual([[f.keys[1], f.keys[2]]]);
+
+    const roomy = disk(f.paths, 10 * NEED);
+    const notAsked = vi.fn(async () => undefined);
+    await makeRoom({ ...base(f, roomy).args, clockStepHold: notAsked });
+    expect(notAsked).not.toHaveBeenCalled();
+  });
+
+  it("deletes nothing, and refuses as with nothing to offer, while the clock step cannot be read", async () => {
+    const f = await backups();
+    const d = disk(f.paths, NEED + FLOOR - 1);
+    const { args, onDeleted } = base(f, d);
+
+    await expect(
+      makeRoom({ ...args, clockStepHold: async () => "everything" as const }),
+    ).rejects.toMatchObject({
+      code: "backup.staging_space_low",
+      params: { afterDeleting: false },
+    });
+    expect(f.paths.every(exists)).toBe(true);
     expect(onDeleted).not.toHaveBeenCalled();
   });
 

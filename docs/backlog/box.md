@@ -1462,6 +1462,17 @@ This applies on a primary that files records. The module reports no stop while t
 a date before 28-10-2024, so no HEAD is sent then.
   Left open by A798-B slice 9 (#2025).
 
+## The start on a full disk deletes backups by stamp alone after a clock step.
+
+Making room before a backup run, and the free-space watch, offer last the backups a recent step of
+the box's clock holds (stamped before the step, or more than a minute ahead), as the run's pruning
+keeps them. The start on a full disk (`apps/server/src/start-backup-room.ts`) has no database, so it
+reads only `backup-room-note.json`'s installation start and deletes oldest by stamp, never the newest by
+stamp: after a −400-day step it can delete the real newest backups and keep the ones dated by the
+wrong clock. The note is written when backup settings load (`backup-supervisor.ts`), not when the
+clock steps, so carrying the step means a new note field and a rewrite on every step. Left open by
+A798-B slice 9b, Task 14a.
+
 ## AEAT's time outranks the devices.
 
 AEAT agreeing with the box restarts payments even if two

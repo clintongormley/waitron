@@ -27,6 +27,7 @@ import {
 import { withDestinationCall } from "./backup-destination-call.js";
 import {
   foldersOnDisk,
+  heldByStep,
   installationStartOrNull,
   makeRoom,
   reportArchivesDeleted,
@@ -187,7 +188,7 @@ export async function runOnce(
   const reportDeleted = (deleted: readonly DeletableArchive[]) =>
     reportArchivesDeleted(deps.onArchivesDeleted, deleted, now(), deps.log);
   try {
-    const held = await runHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
+    const held = await readClockStepHold(deps.latestClockStep, nowMs, deps.retainDays, deps.log);
     // Collected before the copy, so a broken state folder fails the tick without copying the
     // whole database.
     const [manifest, parts] = await Promise.all([
@@ -231,6 +232,7 @@ export async function runOnce(
           reason: "backup_room",
           outOfReach: "floor",
           installationStartedAt,
+          clockStepHold: async () => held,
           signal: deps.signal,
           log: deps.log,
           onDeleted: reportDeleted,
@@ -347,9 +349,9 @@ export function clockStepHold(
   return { fromMs, toMs: nowMs + AHEAD_TOLERANCE_MS };
 }
 
-/** A run's hold: everything when the step cannot be read (logged `backup.clock_step_unreadable`),
+/** The hold now: everything when the step cannot be read (logged `backup.clock_step_unreadable`),
  * as an installation start that cannot be read deletes nothing. */
-async function runHold(
+export async function readClockStepHold(
   read: (() => Promise<ClockStep | null>) | undefined,
   nowMs: number,
   retainDays: number,
@@ -391,7 +393,7 @@ export async function pruneBackend(
     const parsed = parseBackupArchiveKey(key);
     if (parsed === null) return [];
     const ms = parsed.timestamp.getTime();
-    if (held !== undefined && (ms < held.fromMs || ms > held.toMs)) {
+    if (heldByStep(held, ms)) {
       heldArchives.push({ key, ms });
       return [];
     }

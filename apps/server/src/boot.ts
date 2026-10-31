@@ -2344,6 +2344,12 @@ async function bootServer(
     record: backupRoom.recordArchivesDeleted,
     log,
   });
+  // A write-lock turn, not a transaction: a run, or the free-space watch, on a nearly full disk must
+  // still read it.
+  const latestClockStep = async () => {
+    const read = nodeBackend.latestClockStep?.bind(nodeBackend);
+    return read === undefined ? null : db.withWriteLock(() => read(db));
+  };
   const backupSupervisor = new BackupSupervisor({
     buildConfig: async () =>
       loadBackupSettings({
@@ -2371,11 +2377,7 @@ async function bootServer(
     stagingTurn,
     readInstallationStart: backupRoom.readInstallationStart,
     recordArchivesDeleted: backupRoom.recordArchivesDeleted,
-    // A write-lock turn, not a transaction: a run on a nearly full disk must still read it.
-    latestClockStep: async () => {
-      const read = nodeBackend.latestClockStep?.bind(nodeBackend);
-      return read === undefined ? null : db.withWriteLock(() => read(db));
-    },
+    latestClockStep,
     nodeId: tradingContext.nodeId,
     log,
   });
@@ -2449,6 +2451,8 @@ async function bootServer(
       staging: stagingTurn,
       backends: () => runningLocalBackends(backupSupervisor.current()),
       installationStartedAt: backupRoom.readInstallationStart,
+      latestClockStep,
+      retainDays: () => backupSupervisor.current().retention?.days,
       onArchivesDeleted: backupRoom.recordArchivesDeleted,
       now,
       log,

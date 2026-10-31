@@ -2726,6 +2726,20 @@ the order is today's; `"everything"` offers nothing; the free-space watch passes
 
 **Deletion control.** Drop the held ranking → the −400 folder case offers `after0` first and fails.
 
+**Built (2026-10-31).** `listDeletableArchives(folders, start, readdir?, held?)` and
+`makeRoom({ clockStepHold })`, asked only short of the aim, as the installation start is; the
+predicate `heldByStep` is shared with `pruneBackend`. The backup run hands both room checks the hold
+it read; the free-space watch reads the step through boot's one write-lock read (shared with the
+run) and takes the age cap from the running duty's `retention.days`, deleting nothing when that is
+unknown. **The start on a full disk is not changed**: the note is written when backup settings load,
+not when the clock steps, so carrying the step needs a new note field and a rewrite on every step —
+backlog entry "The start on a full disk deletes backups by stamp alone after a clock step"
+(`docs/backlog/box.md`). **Departure from the control above:** in the −400 folder every correctly
+dated archive is stamped before every held one, so dropping the ranking alone changes nothing there;
+it is the choice of the newest not-held archive that the −400 case pins. Dropping the ranking fails
+the +400 cases (the cross-folder listing, `makeRoom`'s, the run's and the watch's). Controls:
+`~/waitron-campaign-b/a798-9b/t14a/mutate.py` → `mutate.out`, nine, each fails a named case.
+
 ### Task 15: The other wall-clock jobs, and the audit table
 
 **Goal.** Decision 11 for the rest; then a written table.
@@ -2961,7 +2975,10 @@ it is sent loses it for a change already handled; once the change is handled, a 
 address the mail server refused outright is not tried again — Task 9's review); the sign-in note of FYI 6 (only a dashboard
 session; a step of more than half an hour either way ends it, and a smaller forward step shortens
 its idle time by the step; tills stay signed in); and the backup hold's limit (Task 14: only
-steps the box made). `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
+steps the box made). The paragraph on deleting old backups (`box-status.md:106-112`, "deletes its
+oldest backups", and the Spanish twin's "copias más antiguas", `:111-116`) gains that, for a while
+after the box steps its clock, backups dated by the wrong clock are deleted last, and that the start
+on a full disk does not do this yet (Task 14a). `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
 gains what "Check the time" at the end of a red clock line means (the box started with its clock in
 doubt and could not reach the tax agency's time), what the dialog shows,
 what each button does, that nobody types a time, that the till's own time is what is sent so a
