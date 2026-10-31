@@ -593,6 +593,7 @@ until A977).
   weekday validation and overnight ranges retain their checks.
   The kitchen-note upgrade fixture uses an English operation description and keeps its
   es-ES locale, translated dish description and populated-predecessor comparisons.
+  The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain
@@ -834,6 +835,7 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   weekday validation and overnight ranges retain their checks.
   The kitchen-note upgrade fixture uses an English operation description and keeps its
   es-ES locale, translated dish description and populated-predecessor comparisons.
+  The kitchen-notice suite uses English station samples; its statement-count checks remain.
   Catalogue stored-name-key samples use English dish and template names; accented folding,
   variant renaming, batch boundaries and clash checks stay.
   Catalogue pricing samples use English dish and modifier text; pricing checks retain

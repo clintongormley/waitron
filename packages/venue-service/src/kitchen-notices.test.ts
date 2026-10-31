@@ -1392,7 +1392,7 @@ describe.each([
 
     it("reads three stations' notices in one statement, and sends no more statements than for one station", async () => {
       const v = await venue();
-      const third = await seedStation(v.locationId, "Postre");
+      const third = await seedStation(v.locationId, "Dessert");
       const one = await statementsOf((tx) => listStationsNotices(tx, v.cfg, [v.grill]));
       const three = await statementsOf((tx) =>
         listStationsNotices(tx, v.cfg, [v.grill, v.bar, third]),
