@@ -1,6 +1,6 @@
 import "./errors.js";
 import type { Transaction } from "@waitron/db";
-import type { ClockConfirmation, ClockStepRequest } from "@waitron/fiscal";
+import type { ClockStepRecorded, ClockStepRequest } from "@waitron/fiscal";
 import type { ErrorParams, NodeId } from "@waitron/shared";
 import { CLOCK_BEHIND_MARGIN_MS, chainHeads, latestRecord } from "./clock-behind.js";
 import {
@@ -57,7 +57,7 @@ async function stepCheck(
 export async function confirmClockStep(
   tx: Transaction,
   input: ClockStepRequest,
-): Promise<{ confirmation: ClockConfirmation | null }> {
+): Promise<ClockStepRecorded> {
   assertPersonMatchesSource(input);
   const { admin, after, source } = input;
   const params: ErrorParams["clock.corrected"] = {
@@ -78,9 +78,11 @@ export async function confirmClockStep(
     byStaff: source === "staff",
   };
   if (!input.verified) {
-    if (Math.abs(input.stepMs) > UNVERIFIED_STEP_FLOOR_MS)
-      await recordCorrected(tx, { detectedAt: after.instant, params });
-    return { confirmation: null };
+    const corrected =
+      Math.abs(input.stepMs) > UNVERIFIED_STEP_FLOOR_MS
+        ? await recordCorrected(tx, { detectedAt: after.instant, params })
+        : null;
+    return { confirmation: null, corrected };
   }
 
   const stop = input.reason === "behind_chain" ? await stepCheck(tx, input) : null;
@@ -154,8 +156,12 @@ export async function confirmClockStep(
       partial: closing!.partial,
       reading: after,
     });
-  await recordCorrected(tx, { detectedAt: after.instant, params: { ...params, confirmationId } });
+  const corrected = await recordCorrected(tx, {
+    detectedAt: after.instant,
+    params: { ...params, confirmationId },
+  });
   return {
+    corrected,
     confirmation: {
       id: confirmationId,
       seq,

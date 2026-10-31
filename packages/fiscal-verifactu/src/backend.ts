@@ -13,6 +13,7 @@ import type {
   ClockCheckOpenRequest,
   ClockConfirmation,
   ClockConfirmRequest,
+  ClockStepRecorded,
   ClockStepRequest,
   ClockProvedWrong,
   ClockStopState,
@@ -211,7 +212,7 @@ export class VerifactuBackend implements FiscalBackend {
   confirmClockStep(
     tx: Transaction,
     input: ClockStepRequest,
-  ): Promise<{ confirmation: ClockConfirmation | null }> {
+  ): Promise<ClockStepRecorded> {
     return confirmClockStep(tx, input);
   }
 

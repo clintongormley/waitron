@@ -549,6 +549,48 @@ describe("a step that failed verification", () => {
   });
 });
 
+describe("the clock.corrected a step answers", () => {
+  function openCorrected() {
+    return suite.db.all<{ id: string; params: string }>(
+      sql`select id, params from incidents where code = 'clock.corrected' and acknowledged_at is null`,
+    );
+  }
+
+  it("answers a verified step's alert by its id, with the params it stored", async () => {
+    await sale(T);
+    const { corrected } = await step(request(T + 5 * M));
+
+    const [open] = openCorrected();
+    expect(corrected).toEqual({ id: open!.id, params: JSON.parse(open!.params) });
+  });
+
+  it("answers an unverified step's alert by its id, with the params it stored", async () => {
+    await sale(T);
+    const { corrected } = await step(request(T + 5 * M, { verified: false }));
+
+    const [open] = openCorrected();
+    expect(corrected).toEqual({ id: open!.id, params: JSON.parse(open!.params) });
+  });
+
+  it("answers the second step's alert, not the first one it marked handled", async () => {
+    await sale(R - 5 * M);
+    const first = R + H;
+    await step(request(first));
+    const { corrected } = await step(
+      request(first + 2 * H, { before: reading(first + M), stepMs: H }),
+    );
+
+    const [open] = openCorrected();
+    expect(corrected?.id).toBe(open!.id);
+  });
+
+  it("answers none when the clock moved by no more than a second", async () => {
+    await sale(T);
+    const { corrected } = await step(request(R + 3 * S, { verified: false }));
+    expect(corrected).toBeNull();
+  });
+});
+
 it("marks the open clock.corrected handled by the system when a second step is recorded", async () => {
   await sale(R - 5 * M);
   const first = R + H;
