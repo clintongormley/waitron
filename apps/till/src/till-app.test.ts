@@ -835,6 +835,50 @@ describe("till-app", () => {
     expect(order).toEqual(["ask", "pay"]);
   });
 
+  it("a counter routing question that a second question replaces settles as cancelled, and nothing is sent for it", async () => {
+    const askSaleDeadEnds = vi.fn(async () => ({
+      sends: true,
+      deadEnds: [
+        {
+          key: "0",
+          name: "Café",
+          quantity: "1",
+          stationId: "bar",
+          stationName: "Bar",
+          why: "closed" as const,
+        },
+      ],
+      stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+    }));
+    const recordSale = vi.fn(async () => saleResult);
+    const { el } = await mountApp({ askSaleDeadEnds, recordSale });
+    const c = await toCounter(el);
+    c.store.addProduct(cafe, "1");
+    await flush(el);
+    const first = vi.fn();
+    const second = vi.fn();
+    emit(tenderPay(el), "check-before-tender", { resolve: first });
+    await flush(el);
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    emit(tenderPay(el), "check-before-tender", { resolve: second });
+    await flush(el);
+
+    expect(askSaleDeadEnds).toHaveBeenCalledTimes(2);
+    expect(first).toHaveBeenCalledExactlyOnceWith(false);
+    expect(second).not.toHaveBeenCalled();
+    expect(c.store.lines.map((line) => line.makeAt)).toEqual([undefined]);
+    expect(el.shadowRoot!.querySelector("till-dead-ends-dialog")).not.toBeNull();
+    const dialog = el.shadowRoot!.querySelector("till-dead-ends-dialog")!;
+    const cancelled = new Promise((done) =>
+      dialog.addEventListener("dead-ends-cancel", done, { once: true }),
+    );
+    dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+    await cancelled;
+    await flush(el);
+    expect(second).toHaveBeenCalledExactlyOnceWith(false);
+    expect(recordSale).not.toHaveBeenCalled();
+  });
+
   it("holds an integrated card charge until its counter routing question is answered", async () => {
     let answer: (value: DeadEndAnswer) => void = () => undefined;
     const askSaleDeadEnds = vi.fn(

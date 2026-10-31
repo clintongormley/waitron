@@ -39,7 +39,7 @@ import type { TillCancelCreditDialog } from "./widgets/cancel-credit-dialog.js";
 import type { TillSupervisorOverrideDialog } from "./widgets/supervisor-override-dialog.js";
 import type { FormFactor, CapabilityFlag } from "./layout.js";
 import { WorkingOrderStore } from "./state/working-order.js";
-import { DRAFT_SAVE_DELAY_MS } from "./state/draft-sync.js";
+import { DRAFT_SAVE_DELAY_MS, TABLE_REQUEST_LIMIT_MS } from "./state/draft-sync.js";
 import type {
   CurrentOrders,
   FloorZone,
@@ -4398,10 +4398,12 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
     async function onBillTwoMergedLater(
       refused = "tab.not_open",
       after: PartyBill[] = [tabBill, abandoned],
+      more: Record<string, unknown> = {},
     ) {
       let merged = false;
       const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
       const el = await onBillTwo(bills, {
+        ...more,
         saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
           if (merged && args[1].billId === "wo-check")
             throw refused === "tab.not_open"
@@ -4931,6 +4933,221 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
         await flush(el, 6);
 
         expectSwitchedKeepingFlan(el, before);
+      });
+    });
+
+    describe("LOOK fix review 2: this till's own work never holds the re-read back for good", () => {
+      const deadEnd = {
+        sends: true,
+        revision: 3,
+        deadEnds: [
+          {
+            key: "line-1",
+            name: "Café",
+            quantity: "1",
+            stationId: "bar",
+            stationName: "Bar",
+            why: "closed",
+          },
+        ],
+        stations: [{ id: "kitchen", name: "Kitchen", open: true }],
+      };
+      const deadEndsDialog = (el: TillApp) =>
+        el.shadowRoot!.querySelector<HTMLElement>("till-dead-ends-dialog");
+      const continueDeadEnds = async (el: TillApp) => {
+        const dialog = deadEndsDialog(el)!;
+        dialog
+          .shadowRoot!.querySelector<HTMLElement>("till-dead-ends-section")!
+          .dispatchEvent(
+            new CustomEvent("make-at", { detail: { key: "line-1", stationId: "kitchen" } }),
+          );
+        await (dialog as HTMLElement & { updateComplete: Promise<unknown> }).updateComplete;
+        dialog.shadowRoot!.querySelector<HTMLElement>("[data-continue]")!.click();
+        await flush(el, 6);
+      };
+
+      it("I1: two Move this bill questions, the one on screen cancelled: the next 15-second re-read still follows the bill another till merged away", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const askOrderDeadEnds = vi.fn().mockResolvedValue(deadEnd);
+          const moveBill = vi.fn();
+          const { el, merge } = await onBillTwoMergedLater(undefined, undefined, {
+            askOrderDeadEnds,
+            moveBill,
+          });
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(askOrderDeadEnds).toHaveBeenCalledTimes(2);
+          const dialog = deadEndsDialog(el)!;
+          const cancelled = new Promise((done) =>
+            dialog.addEventListener("dead-ends-cancel", done, { once: true }),
+          );
+          dialog.shadowRoot!.querySelector<HTMLElement>("[data-cancel]")!.click();
+          await cancelled;
+          await flush(el, 6);
+          expect(deadEndsDialog(el)).toBeNull();
+          merge();
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(moveBill).not.toHaveBeenCalled();
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I1: while Move this bill's question is on screen the 15-second re-read still follows the bill another till merged away, and Continue then sends nothing", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const askOrderDeadEnds = vi.fn().mockResolvedValue(deadEnd);
+          const setMakeAt = vi.fn().mockResolvedValue({ revision: 4 });
+          const moveBill = vi.fn();
+          const { el, merge } = await onBillTwoMergedLater(undefined, undefined, {
+            askOrderDeadEnds,
+            setMakeAt,
+            moveBill,
+          });
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(deadEndsDialog(el)).not.toBeNull();
+          merge();
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+          await continueDeadEnds(el);
+          expect(setMakeAt).not.toHaveBeenCalled();
+          expect(moveBill).not.toHaveBeenCalled();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I1: a Move this bill that gets no answer holds the 15-second re-read back only as long as the till waits on a request", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const moveBill = vi.fn(() => new Promise(() => undefined));
+          const { el, merge } = await onBillTwoMergedLater(undefined, undefined, { moveBill });
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(moveBill).toHaveBeenCalledOnce();
+          merge();
+          const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads);
+          expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+          await vi.advanceTimersByTimeAsync(TABLE_REQUEST_LIMIT_MS);
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m1: a dish refused on a bill another till merged away while this till's own Move this bill is out follows as soon as the move ends", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let failMove: ((error: unknown) => void) | undefined;
+          const moveBill = vi.fn(() => new Promise((_, reject) => (failMove = reject)));
+          const { el, merge } = await onBillTwoMergedLater(undefined, undefined, { moveBill });
+          const before = vi.mocked(api.saveDraft).mock.calls.length;
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(failMove).toBeDefined();
+          merge();
+          const reads = vi.mocked(api.getPartyBills).mock.calls.length;
+
+          partyDraft(tableOrder(el)!).addProduct(dish, "1");
+          await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
+          await flush(el, 6);
+          expect(vi.mocked(api.saveDraft).mock.calls.length).toBeGreaterThan(before);
+          expect(vi.mocked(api.getPartyBills).mock.calls.length).toBe(reads);
+          expect(tableOrder(el)!.orderId).toBe("wo-check");
+
+          failMove!(new TypeError("Failed to fetch"));
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+          expect(tableOrder(el)!.retainedDraft?.lines.map((line) => line.product.name)).toEqual([
+            "Flan",
+          ]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I2: Send all whose save is still out when the 15-second re-read finds no bill left to show says the dish was not sent", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let holding = false;
+          let refuse: ((error: unknown) => void) | undefined;
+          const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+          const el = await onBillTwo(bills, {
+            saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+              if (holding && args[1].billId === "wo-check")
+                return new Promise((_, reject) => (refuse = reject));
+              return drafts.saveDraft(...args);
+            }),
+          });
+          const store = partyDraft(tableOrder(el)!);
+          holding = true;
+          store.addProduct(dish, "1");
+          await flush(el);
+          emit(tableOrder(el)!, "submit-draft", {
+            lines: [{ menuItemId: "flan", quantity: "1" }],
+            groups: [{ release: "fire", lineIndexes: [0] }],
+            store,
+            sent: store.lines.slice(0, 1),
+          });
+          await flush(el, 6);
+          expect(refuse).toBeDefined();
+          bills.mockResolvedValue([]);
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          refuse!({ code: "tab.not_open", status: 409, tabId: "wo-check" });
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBeUndefined();
+          expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
+          expect(api.submitDraft).not.toHaveBeenCalled();
+          expect(banner(el)!.textContent).toContain(t("table.error"));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I2: a dish refused on a bill another till merged away, with no bill left to show, says the save was refused", async () => {
+        const { el, merge } = await onBillTwoMergedLater(undefined, []);
+        merge();
+
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.orderId).toBeUndefined();
+        expect(gone(el)!.textContent!.trim()).toBe("Bill 2 is no longer at this table.");
+        expect(banner(el)!.textContent).toContain(t("table.error"));
       });
     });
   });

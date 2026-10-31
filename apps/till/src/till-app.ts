@@ -1431,10 +1431,16 @@ interface Sent {
   opens: number;
 }
 
+interface OwnBillsHold {
+  take: () => void;
+  release: () => void;
+}
+
 /** A read of the party's bills: the party it was for (null when there was none), the bills (null
  * when the read failed), and its generation, current until a later read starts or
  * {@link #forgetParty} clears the order. */
 interface ReadBills {
+  /** The read's number; -1 for a read not made, which no read's number can equal. */
   read: number;
   partyId: string | null;
   bills: PartyBill[] | null;
@@ -2916,13 +2922,18 @@ export class TillApp extends LitElement {
   /** Bills reads numbered up to this were sent before this till learned of the bill it chose to
    * show ({@link #chooseBill}), so a bill missing from one of them has not gone. */
   #billChosenRead = 0;
-  /** This till's own merges, moves and splits under way ({@link #ownBillsChange}), and how many have
-   * started: a background bills read neither starts during one nor counts if one started while it
-   * was out, so it cannot say the bill this till itself moved has gone. */
+  /** This till's own merges, moves and splits holding the window ({@link #ownBillsChange}), and how
+   * many times one has taken it: a background bills read neither starts while one holds it nor
+   * counts if one took it while the read was out, so it cannot say the bill this till itself moved
+   * has gone. */
   #ownBillsChanges = 0;
   #ownBillsStarted = 0;
-  /** Drafts dropped because their bill left the party ({@link #followBillsRead}). */
-  readonly #leftBillDrafts = new WeakSet<DraftSync>();
+  /** A refused save whose bills read was not made, or set aside, for this till's own change: it is
+   * followed once no own change holds the window. */
+  #leftBillWaiting?: { sync: DraftSync; refusal: DraftRefused };
+  /** Drafts dropped because their bill left the party ({@link #followBillsRead}), and whether their
+   * unsaved lines are kept for review on the bill now shown. */
+  readonly #leftBillDrafts = new WeakMap<DraftSync, boolean>();
   /** The bill chosen last in the switcher while the draft's save before showing it is out. */
   #switchTo: string | undefined;
   /** Numbers each read of the party's groups as it starts; {@link #printProblemsShown} is the number
@@ -6789,7 +6800,10 @@ export class TillApp extends LitElement {
     });
   }
 
+  /** There is one question window: a question still waiting when another opens gets `null`, the
+   * answer Cancel gives, or its caller would wait for good. */
   #openDeadEnds(answer: DeadEndAnswer, allowRemove: boolean): Promise<DeadEndsDecision | null> {
+    this.#resolveDeadEnds?.(null);
     return new Promise((resolve) => {
       this.#resolveDeadEnds = resolve;
       this.deadEndsQuestion = { answer, allowRemove };
@@ -11613,13 +11627,31 @@ export class TillApp extends LitElement {
     await this.#loadPartyBills(undefined, true, true);
   }
 
-  async #ownBillsChange(run: () => Promise<void>): Promise<void> {
-    this.#ownBillsChanges++;
-    this.#ownBillsStarted++;
+  /** Holds the window for this till's own change to the bills while `run` is under way. Move this
+   * bill lets go of it around its dead-end check, question included (`release`, then `take`), and
+   * the hold lapses {@link TABLE_REQUEST_LIMIT_MS} after it is taken, so neither a question left on
+   * screen nor a request with no answer keeps the background bills read away for good. */
+  async #ownBillsChange(run: (hold: OwnBillsHold) => Promise<void>): Promise<void> {
+    let held = false;
+    let lapse: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      if (!held) return;
+      held = false;
+      clearTimeout(lapse);
+      if (--this.#ownBillsChanges === 0) this.#followWaitingLeftBill();
+    };
+    const take = () => {
+      if (held) return;
+      held = true;
+      this.#ownBillsChanges++;
+      this.#ownBillsStarted++;
+      lapse = setTimeout(release, TABLE_REQUEST_LIMIT_MS);
+    };
+    take();
     try {
-      await run();
+      await run({ take, release });
     } finally {
-      this.#ownBillsChanges--;
+      release();
     }
   }
 
@@ -11741,11 +11773,31 @@ export class TillApp extends LitElement {
   /** The refusal may be the first sign that another till merged or moved the bill on screen: the
    * bills read lets {@link #followBillsRead} move the screen and keep the unsaved lines for review.
    * A read that still shows the bill, or fails, says the refusal instead; one set aside for this
-   * till's own change to the bills says nothing, as that change reads the bills itself. */
+   * till's own change to the bills waits for that change to end. A draft the read drops whose lines
+   * could not be kept for review says the refusal too. */
   async #followLeftBill(sync: DraftSync, refusal: DraftRefused): Promise<void> {
     const { setAside } = await this.#loadPartyBills(undefined, true, true);
-    if (setAside === undefined && sync === this.#draftSync && sync.billId === this.activeTabId)
+    if (setAside !== undefined) {
+      this.#leftBillWaiting = { sync, refusal };
+      if (this.#ownBillsChanges === 0) this.#followWaitingLeftBill();
+      return;
+    }
+    if (
+      (sync === this.#draftSync && sync.billId === this.activeTabId) ||
+      this.#leftBillDrafts.get(sync) === false
+    )
       this.errorKey = draftRefusalError(refusal);
+  }
+
+  #followWaitingLeftBill(): void {
+    const waiting = this.#leftBillWaiting;
+    this.#leftBillWaiting = undefined;
+    if (
+      waiting !== undefined &&
+      waiting.sync === this.#draftSync &&
+      this.#billLeft(waiting.sync, waiting.refusal)
+    )
+      void this.#followLeftBill(waiting.sync, waiting.refusal);
   }
 
   #otherDrafts(shown: WorkingOrderStore | null): readonly OtherDraft[] {
@@ -11854,11 +11906,12 @@ export class TillApp extends LitElement {
   }
 
   /** A failed read leaves the list empty rather than showing another party's bills, unless it is a
-   * `background` read (one no action of the waiter's asked for), which keeps the last list read. A
-   * read overtaken by a later one leaves the list alone, and only its generation, compared with
-   * {@link #partyBillsRead}, tells a caller so. Unless `follow` is false, a read that no longer
-   * shows the bill on screen moves the screen off it ({@link #followBillsRead}); a caller choosing
-   * the bill itself passes false. */
+   * `background` read (a check that the bill on screen is still there, not a read after this
+   * till's own change to the bills), which keeps the last list read. A read overtaken by a later
+   * one leaves the list alone, and only its generation, compared with {@link #partyBillsRead},
+   * tells a caller so. Unless `follow` is false, a read that no longer shows the bill on screen
+   * moves the screen off it ({@link #followBillsRead}); a caller choosing the bill itself passes
+   * false. */
   async #loadPartyBills(
     balance?: BillBalance,
     follow = true,
@@ -11867,7 +11920,7 @@ export class TillApp extends LitElement {
     const party = this.orderParty;
     if (background && this.#ownBillsChanges > 0)
       return {
-        read: this.#partyBillsRead,
+        read: -1,
         partyId: party?.id ?? null,
         bills: null,
         setAside: true,
@@ -11942,9 +11995,11 @@ export class TillApp extends LitElement {
         shown: shown === undefined ? "" : billLabel(shown),
       });
       if (sync !== undefined && sync.billId === gone) {
-        this.#leftBillDrafts.add(sync);
         this.#dropDraft();
-        if (next !== undefined) this.#carryCandidate(sync.personId, gone, next);
+        this.#leftBillDrafts.set(
+          sync,
+          next !== undefined && this.#carryCandidate(sync.personId, gone, next),
+        );
       }
     }
     await this.#loadTabLines();
@@ -11959,18 +12014,19 @@ export class TillApp extends LitElement {
   }
 
   /** The unsaved lines a dropped draft kept for `from`, offered for review on `to` instead, unless
-   * `to` already holds lines kept for review. */
-  #carryCandidate(personId: string, from: string, to: string): void {
+   * `to` already holds lines kept for review; answers whether they were moved. */
+  #carryCandidate(personId: string, from: string, to: string): boolean {
     const fromKey = JSON.stringify([personId, from]);
     const toKey = JSON.stringify([personId, to]);
     const kept = this.#draftCandidates.get(fromKey);
-    if (kept === undefined || this.#draftCandidates.has(toKey)) return;
+    if (kept === undefined || this.#draftCandidates.has(toKey)) return false;
     this.#draftCandidates.delete(fromKey);
     this.#draftCandidates.set(toKey, {
       ...kept,
       billId: to,
       base: { billId: to, editorVersion: 0, draftId: null, draftRevision: null },
     });
+    return true;
   }
 
   /** The balance of the bill on screen when its party's bills say it holds a payment; none
@@ -12514,7 +12570,7 @@ export class TillApp extends LitElement {
         )
           return;
         if (saved !== "failed" && BILL_LEFT_REFUSALS.has(saved.refused)) return;
-        if (saved === "failed" && this.#leftBillDrafts.has(sync)) return;
+        if (saved === "failed" && this.#leftBillDrafts.get(sync) === true) return;
         this.errorKey = saved === "failed" ? "table.error" : draftRefusalError(saved);
         return;
       }
@@ -15009,7 +15065,7 @@ export class TillApp extends LitElement {
     await this.#loadLinesAndBills();
   }
 
-  async #onMoveBill(event: Event): Promise<void> {
+  async #onMoveBill(event: Event, hold?: OwnBillsHold): Promise<void> {
     const { to, prompt } = (event as CustomEvent<MoveBillDetail>).detail;
     const billId = this.activeTabId;
     const party = this.orderParty;
@@ -15033,18 +15089,17 @@ export class TillApp extends LitElement {
         const zoneId = toTable
           ? this.tables.find((table) => table.id === to.tableId)?.zoneId
           : this.counterServiceZoneId;
-        if (
-          !(await this.#askStoredDeadEnds(
-            billId,
-            {
-              api: asked.source.api,
-              expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
-              current: () => this.#billCompositionUnchanged(asked.source),
-            },
-            zoneId || undefined,
-          ))
-        )
-          return;
+        hold?.release();
+        const proceed = await this.#askStoredDeadEnds(
+          billId,
+          {
+            api: asked.source.api,
+            expectedEdit: asked.source.expectedEdits.find((edit) => edit.billId === billId)!,
+            current: () => this.#billCompositionUnchanged(asked.source),
+          },
+          zoneId || undefined,
+        ).finally(() => hold?.take());
+        if (!proceed) return;
         if (!this.#billCompositionUnchanged(asked.source)) return;
         result = await asked.source.api.moveBill(
           billId,
@@ -19502,7 +19557,8 @@ export class TillApp extends LitElement {
         @cancel-offer-taken=${() => (this.cancelOffer = null)}
         @table-relocation-open=${(event: Event) => void this.#onRelocationOpen(event)}
         @move-guests=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveGuests(event))}
-        @move-bill=${(event: Event) => void this.#ownBillsChange(() => this.#onMoveBill(event))}
+        @move-bill=${(event: Event) =>
+          void this.#ownBillsChange((hold) => this.#onMoveBill(event, hold))}
         @held-relocation-open=${(event: Event) => void this.#onHeldRelocationOpen(event)}
         @move-held-order-open=${() => {
           this.#onFloorRefresh();
