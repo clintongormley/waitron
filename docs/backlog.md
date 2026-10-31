@@ -5736,6 +5736,14 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   fails it. [Setup cleanup](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal),
   [Spanish cleanup guidance](backlog/ci.md#a1251-spanish-exhausted-cleanup-test-checks-mapping-only).
 
+- **A1251: qualify artifact-upload retries after a step timeout.**
+  Check the first attempt's recorded outcome and whether its retry runs; the existing collision
+  probe does not cover a timeout or an interrupted upload. [Detail](backlog/ci.md#a1251-qualify-artifact-upload-retries-after-a-step-timeout).
+
+- **A1251: reject conditional error tolerance in artifact-download guards.**
+  The scanner accepts a retry with `continue-on-error: ${{ true }}` while rejecting literal
+  `true`. Add refusal cases and retain legitimate absent/false controls. [Detail](backlog/ci.md#a1251-reject-conditional-error-tolerance-in-artifact-download-guards).
+
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree
   merge.

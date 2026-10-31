@@ -241,6 +241,34 @@ assertion and every unrelated check. The Spanish branch still used the catalogue
 main when checked on 31 October 2026. The retained screenshots show the intended wording; the
 failing control concerns what the test catches.
 
+## A1251: qualify artifact-upload retries after a step timeout
+
+Before treating artifact-upload retries as qualified for stalled connections, run a bounded
+hosted probe whose first attempt reaches its step time limit. Observe the first attempt's
+recorded outcome and whether the failure-only retry runs. Check recovery from an interrupted
+upload separately, including replacement of an artifact left by that attempt.
+
+The retrospective review of [PR #2069](https://github.com/clintongormley/waitron/pull/2069)
+left both paths unverified. Its existing
+[collision probe](../developers/ci-and-gates.md#every-artifact-upload-is-bounded) recovered from
+a duplicate name after a complete upload. Neither that result nor the workflow text checks
+establishes recovery after a timeout, cancellation or interruption. Preserve the distinction
+when reporting the next experiment.
+
+## A1251: reject conditional error tolerance in artifact-download guards
+
+The download scanner in `scripts/ci-workflow.test.mjs` rejects literal `true` for
+`continue-on-error` on the cleanup and retry steps, but accepts other strings. An expression
+such as `${{ true }}` therefore passes that check. Refuse unsupported error-tolerance
+expressions on both steps, retaining controls for legitimate absent and literal `false` values.
+
+The #2069 retrospective found this in the older download guard, introduced by
+[PR #2017](https://github.com/clintongormley/waitron/pull/2017). On 31 October 2026, executing
+the current scanner functions over the current nightly workflow accepted an in-memory copy
+whose first download retry gained `continue-on-error: ${{ true }}`. The same copy with literal
+`true` was refused; the intact workflow passed. That experiment changed no workflow on disk.
+It demonstrates a gap in the scanner, not a failing download in the current workflow.
+
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
 - A case that waits several times can still outlast a bound that
