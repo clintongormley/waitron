@@ -2,6 +2,8 @@ import { currentLocale } from "./i18n/t.js";
 
 export const GUIDE_LINKS = {
   "products.nutrition-at-the-till": { page: "products", section: "nutrition-at-the-till" },
+  "kitchen-service.kitchen-screen": { page: "kitchen-service", section: "kitchen-screen" },
+  "kitchen-service.corrections": { page: "kitchen-service", section: "corrections" },
 } as const;
 
 export type GuideLink = keyof typeof GUIDE_LINKS;

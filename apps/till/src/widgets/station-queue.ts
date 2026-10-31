@@ -38,6 +38,8 @@ import {
 } from "../state/kitchen-board-fit.js";
 import { PHONE_WIDTH } from "./language-chooser-styles.js";
 import { segmentedOptionStyles } from "./segmented-control-styles.js";
+import { helpBadge, kitchenHelpStyles } from "./help-badge.js";
+import { helpText } from "../i18n/help-strings.js";
 import type {
   KitchenNotice,
   KitchenNoticeKind,
@@ -124,6 +126,7 @@ export class TillStationQueue extends LitElement {
     kitchenAllergyStyles,
     orderNumberStyles,
     segmentedOptionStyles,
+    kitchenHelpStyles,
     css`
       :host {
         display: block;
@@ -590,7 +593,8 @@ export class TillStationQueue extends LitElement {
         margin-bottom: var(--wt-space-2);
       }
 
-      .board-head [data-columns-open] {
+      .columns-anchor {
+        display: flex;
         margin-inline-start: auto;
       }
 
@@ -669,6 +673,12 @@ export class TillStationQueue extends LitElement {
         flex-direction: column;
         gap: var(--wt-space-2);
         margin-bottom: var(--wt-space-4);
+      }
+
+      /* Half a badge of room after the words, so the badge starts where they end. */
+      .notices-head {
+        align-self: flex-start;
+        padding-inline-end: calc(var(--wt-help-badge-target) / 2);
       }
 
       .notices-title {
@@ -791,6 +801,8 @@ export class TillStationQueue extends LitElement {
    *  between the container's own refreshes. */
   readonly #clock = new TickingClock(this);
 
+  /** Set once a render has drawn the one card that carries the help badge. */
+  #cardBadgeDrawn = false;
   /** The host's width and sizes, read before each drawing so the first is already tabs or columns. */
   #measured?: BoardMeasure;
   #resizing?: ResizeObserver;
@@ -992,14 +1004,20 @@ export class TillStationQueue extends LitElement {
   }
 
   override render() {
+    this.#cardBadgeDrawn = false;
     const cards = kitchenCards(this.groups);
     return html`<div class="width-probe"></div>
       <div class="board-head" data-board-head>
-        <slot name="lead"></slot>${this.#header(cards)}<wt-button
-          data-columns-open
-          variant="secondary"
-          @click=${(event: Event) => this.#openColumns(event.currentTarget as HTMLElement)}
-          >${t("station.columns")}</wt-button
+        <slot name="lead"></slot>${this.#header(cards)}<span
+          class="help-anchor help-inset columns-anchor"
+          ><wt-button
+            data-columns-open
+            variant="secondary"
+            @click=${(event: Event) => this.#openColumns(event.currentTarget as HTMLElement)}
+            >${t("station.columns")}</wt-button
+          >${helpBadge("help.kitchen.columns", t("station.columns"), {
+            guide: "kitchen-service.kitchen-screen",
+          })}</span
         >
       </div>
       <slot name="status"></slot>${this.#notices()}${
@@ -1020,7 +1038,12 @@ export class TillStationQueue extends LitElement {
   #notices(): TemplateResult | typeof nothing {
     if (this.notices.length === 0) return nothing;
     return html`<section class="notices" aria-labelledby="notices-title">
-      <h2 class="notices-title" id="notices-title">${t("station.notices")}</h2>
+      <div class="help-anchor notices-head">
+        <h2 class="notices-title" id="notices-title">${t("station.notices")}</h2>
+        ${helpBadge("help.kitchen.notices", t("station.notices"), {
+          guide: "kitchen-service.corrections",
+        })}
+      </div>
       <ul class="notice-list">
         ${this.notices.map((notice) => this.#notice(notice))}
       </ul>
@@ -1387,8 +1410,10 @@ export class TillStationQueue extends LitElement {
         ? nothing
         : html`<span class="age">${this.#elapsedMinutes(since)} ${t("station.min")}</span>`
     }`;
+    const badge = !this.#cardBadgeDrawn;
+    this.#cardBadgeDrawn = true;
     return html`<article
-      class="ticket ${accent}"
+      class="ticket help-anchor help-inset ${accent}"
       data-card=${card.key}
       data-order=${first.orderNumber}
       data-card-group=${group?.id ?? "none"}
@@ -1413,6 +1438,13 @@ export class TillStationQueue extends LitElement {
       ${card.orders.map((order) => this.#elsewhere(order, tag(order)))}
       ${card.orders.map((order) => this.#collectAction(order, tag(order)))}
       ${card.orders.map((order) => this.#reprintAction(order, tag(order)))}
+      ${
+        badge
+          ? helpBadge("help.kitchen.card", helpText("help.kitchen.cards_part"), {
+              guide: "kitchen-service.kitchen-screen",
+            })
+          : nothing
+      }
     </article>`;
   }
 
