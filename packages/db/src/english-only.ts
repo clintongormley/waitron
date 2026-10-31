@@ -44,6 +44,7 @@ export const GENERIC_PACKAGES = [
   "composition",
   "fiscal-none",
   "recovery-pack",
+  "node-db",
   "provisioning",
   "ui",
   // Generic browser infrastructure, same as `ui`: the dashboard module-UI kit (i18n + code-message

@@ -92,7 +92,7 @@ it reads each config's `thresholds` literal as TEXT and never reads an exclude o
 More: [ci-and-gates.md](docs/developers/ci-and-gates.md).
 
 **A mutation floor of 90 breaks the run in every mutation-tested package — `ui`, `ui-core`,
-`shared`, `fiscal` and `db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
+`shared`, `fiscal`, `db` and `node-db`** (the owner's 90-everywhere decision of 2026-09-19). WHERE it bites
 differs — on a pull request, only in the nightly run, or only locally — and neither `fiscal`'s nor
 `db`'s floor is package-wide. Guard: `scripts/mutation-break-thresholds.test.mjs`, weaker than its
 name — it reads the workflow as TEXT for the sharded packages' bars (db, ui and ui-core). Which

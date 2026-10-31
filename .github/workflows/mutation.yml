@@ -582,3 +582,73 @@ jobs:
 
       - name: Score the package
         run: node scripts/mutation-aggregate.mjs mutation-reports --package db --shards 10 --break 90
+
+  # packages/node-db is small enough to run unsharded, so its break: 90 lives in its own
+  # stryker.config.json and this one job gates it.
+  mutation-node-db:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - id: checkout
+        name: Check out the code
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+      - name: Stop the first checkout's leftover git
+        if: steps.checkout.outcome == 'failure'
+        run: for p in $(pgrep '^git(-remote-https?)?$'); do [ "$(readlink /proc/$p/cwd)" = "$GITHUB_WORKSPACE" ] && kill -9 "$p" && echo "stopped git $p"; done; true
+      - name: Check out the code, second attempt
+        if: steps.checkout.outcome == 'failure'
+        uses: actions/checkout@v7
+        timeout-minutes: 2
+        env:
+          GIT_HTTP_LOW_SPEED_LIMIT: 1000
+          GIT_HTTP_LOW_SPEED_TIME: 20
+
+      - name: Set up pnpm
+        timeout-minutes: 5
+        run: bash scripts/ci-setup-pnpm.sh
+
+      - id: setup-node
+        name: Set up Node
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+      - name: Set up Node, second attempt
+        if: steps.setup-node.outcome == 'failure'
+        uses: actions/setup-node@v7
+        timeout-minutes: 2
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter @waitron/node-db mutation
+
+      - id: upload_blob
+        name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        continue-on-error: true
+        with:
+          name: mutation-report-node-db
+          path: packages/node-db/reports/mutation/
+          retention-days: 30
+
+      - name: Retry artifact upload
+        if: always() && steps.upload_blob.outcome == 'failure'
+        uses: actions/upload-artifact@v7
+        timeout-minutes: 1
+        with:
+          name: mutation-report-node-db
+          path: packages/node-db/reports/mutation/
+          retention-days: 30
+          overwrite: true
