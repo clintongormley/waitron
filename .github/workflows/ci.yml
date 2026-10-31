@@ -714,7 +714,7 @@ jobs:
   # pins the deploy wiring and this pull-request-only event split.
   image:
     needs: changes
-    if: (needs.changes.outputs.deploy == 'true' || (needs.changes.outputs.code == 'true' && github.event_name != 'pull_request')) && needs.changes.outputs.reuse != 'true'
+    if: needs.changes.outputs.deploy == 'true' || (needs.changes.outputs.code == 'true' && github.event_name != 'pull_request')
     permissions:
       contents: read
     uses: ./.github/workflows/image-smoke.yml

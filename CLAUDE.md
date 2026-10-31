@@ -130,7 +130,8 @@ hook, or how tests are scheduled:
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
   `packages` outputs before treating a green PR as evidence about the workspace. A main push
   reuses a same-repository PR's successful CI only after API verification of equal trees and
-  complete successful job evidence; its summary names the source run. Otherwise normal CI runs.
+  complete successful job evidence, plus a full-green main run for the pushed commit's parent.
+  Main retains image smoke before publishing; its summary names both evidence runs. Otherwise normal CI runs.
   [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.

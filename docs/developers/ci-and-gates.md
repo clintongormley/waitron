@@ -1042,9 +1042,10 @@ A tree identifies the complete tracked file contents and modes. A different comm
 does not require another test run; additional main changes do.
 
 On a push to `refs/heads/main`, `scripts/ci-reuse.mjs` reads GitHub's API before allowing reuse.
-Every checkout in this workflow explicitly selects the PR head on PR events and the pushed
-commit otherwise. This avoids claiming that a temporary merge tree tested by PR CI was the
-head tree. The PR trigger selects main as its base branch. A source run with an identical
+Every checkout defined directly in `ci.yml` explicitly selects the PR head on PR events and the
+pushed commit otherwise. The called image-smoke workflow keeps its existing checkout policy;
+main runs that smoke for its own pushed commit before publishing. This avoids claiming that a
+temporary merge tree tested by PR CI was the head tree. The PR trigger selects main as its base branch. A source run with an identical
 tree includes these same workflow rules; this does not depend on the run API retaining its
 optional PR association list after a merge.
 It requires one associated closed, merged PR whose merge commit is this push, targeting this
@@ -1058,20 +1059,31 @@ and all be completed with success or an intentional skip. Changes, lint, root-gu
 must each have one successful entry. It re-reads the source run afterwards; a changed attempt
 or unsuccessful result refuses reuse. Missing evidence, API errors, more than one page of runs
 or jobs, direct pushes, release tags, manual dispatches and different trees retain normal CI.
+The pushed commit must have exactly one parent, whose latest main push run must also be
+complete and successful. The verifier checks that parent's commit, repository, workflow,
+branch, tree and exact attempt. Every current job must be present with distinct names, and
+every job must have succeeded; skipped package jobs, including those from earlier reuse,
+refuse this proof of a full run. It re-reads the main run after its jobs to reject a changed
+attempt. A docs-only parent run or an older green run behind a newer red one is insufficient.
+This conservative rule can repeat the suite after a reused or docs-only run. It prevents a
+scoped PR result from concealing an unfinished or failed main test of unrelated code.
+
 Each API command has a 15-second timeout; the workflow step has a three-minute limit. An
 unexpected process failure fails changes rather than creating permission to skip checks.
 
-The changes summary links the source run id, its attempt, PR head and tree. Its separate reuse
-outputs skip the other upstream jobs, including lint, root guards, builds, image smoke and the
-in-workflow shared mutation job. Lint and root guards still run if changes fails, even after
-it emitted reuse outputs, so a classifier failure retains those diagnostics. The existing
+The changes summary links the source PR run and the earlier full main run, with the PR attempt,
+head and tree. Its separate reuse outputs skip lint, root guards, repeated builds and tests,
+and the in-workflow shared mutation job. The image job keeps its normal condition, so a
+code-gated main push still runs image smoke before publishing, including under reuse. Lint and
+root guards still run if changes fails, even after it emitted reuse outputs, so a classifier failure retains those diagnostics. The existing
 classification still decides whether publishing
 is needed. The ci aggregate still checks its current dependencies through needs and the jobs
 API; its coverage-merge exception requires a reuse decision with a source run id and head SHA.
 Publish remains downstream of ci, builds the current commit and asks main-tag-guard before
 moving `:main`. Every main push keeps its own run. Other workflow files are unchanged.
 
-You are reusing the PR's scoped result, not claiming unrelated package suites ran. An unequal
+You reuse the PR's scoped result after verifying earlier main's full result. Unrelated
+package suites do not run again in that reused main run. An unequal
 tree takes the existing main selection, which runs all packages when code is in scope.
 Check `reuse`, `reuse_run`, `reuse_sha` and the linked source run before interpreting a skipped
 main job. A missing source or a failed source must never be explained as reuse.

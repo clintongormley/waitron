@@ -2064,9 +2064,9 @@ describe("the image smoke's scoping", () => {
 
   const cases = [
     {
-      name: "verified reuse skips the repeated smoke",
+      name: "verified reuse still smokes the current main image",
       ctx: { event_name: "push", code: "true", deploy: "true", reuse: "true" },
-      run: false,
+      run: true,
     },
     {
       name: "a PR that changes no image input skips",
@@ -2385,7 +2385,7 @@ describe("verified equal-tree main CI reuse", () => {
 
   it("skips every upstream check only on the verified reuse output, preserving publish and concurrency", () => {
     for (const { id, body } of jobs) {
-      if (["changes", "ci", "publish"].includes(id)) continue;
+      if (["changes", "ci", "publish", "image"].includes(id)) continue;
       expect(
         body.find((line) => /^ {4}if:/.test(line)),
         id,
@@ -2407,6 +2407,7 @@ describe("verified equal-tree main CI reuse", () => {
         );
       }
     }
+    expect(job("image").body.join("\n")).not.toContain("outputs.reuse");
     expect(job("publish").body.join("\n")).not.toContain("outputs.reuse");
     expect(job("publish").body.join("\n")).toContain("decision=$(scripts/main-tag-guard.sh");
     expect(concurrency.group).toContain("github.event_name == 'push' && github.run_id");

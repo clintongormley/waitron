@@ -116,7 +116,66 @@ export function findReuse(context, api, workflow) {
 
     // A rerun can replace the latest attempt between the run and jobs reads.
     if (!admitted(api(`${prefix}/actions/runs/${run.id}`))) return null;
-    return { sha: pr.head.sha, runId: run.id, attempt: run.run_attempt, tree: head.tree.sha };
+    if (pushed.parents.length !== 1 || !shaPattern.test(pushed.parents[0].sha)) return null;
+    const baseSha = pushed.parents[0].sha;
+    const base = api(`${prefix}/git/commits/${baseSha}`);
+    if (base.sha !== baseSha || !shaPattern.test(base.tree.sha)) return null;
+    const mainListing = api(
+      `${prefix}/actions/workflows/${current.workflow_id}/runs?head_sha=${baseSha}&event=push&branch=main&per_page=100`,
+    );
+    if (
+      !Array.isArray(mainListing.workflow_runs) ||
+      !mainListing.workflow_runs.length ||
+      mainListing.total_count !== mainListing.workflow_runs.length
+    )
+      return null;
+    const main = [...mainListing.workflow_runs].sort((a, b) => b.id - a.id)[0];
+    const mainAdmitted = (candidate) =>
+      candidate.id === main.id &&
+      positiveInteger(candidate.id) &&
+      candidate.workflow_id === current.workflow_id &&
+      candidate.path === ".github/workflows/ci.yml" &&
+      candidate.event === "push" &&
+      candidate.head_sha === baseSha &&
+      candidate.head_branch === "main" &&
+      candidate.repository.full_name === repository &&
+      candidate.head_repository.full_name === repository &&
+      candidate.status === "completed" &&
+      candidate.conclusion === "success" &&
+      positiveInteger(candidate.run_attempt) &&
+      candidate.run_attempt === main.run_attempt &&
+      candidate.head_commit.tree_id === base.tree.sha;
+    if (!mainAdmitted(main)) return null;
+    const mainEvidence = api(
+      `${prefix}/actions/runs/${main.id}/attempts/${main.run_attempt}/jobs?per_page=100`,
+    );
+    const mainJobs = mainEvidence.jobs;
+    if (
+      !Array.isArray(mainJobs) ||
+      !mainJobs.length ||
+      mainJobs.length !== mainEvidence.total_count ||
+      new Set(mainJobs.map((job) => job.name)).size !== mainJobs.length ||
+      ids.some((id) => !mainJobs.some((job) => matches(job.name, id))) ||
+      mainJobs.some(
+        (job) =>
+          !ids.some((id) => matches(job.name, id)) ||
+          job.run_id !== main.id ||
+          job.run_attempt !== main.run_attempt ||
+          job.head_sha !== baseSha ||
+          job.status !== "completed" ||
+          job.conclusion !== "success",
+      )
+    )
+      return null;
+    if (!mainAdmitted(api(`${prefix}/actions/runs/${main.id}`))) return null;
+    return {
+      sha: pr.head.sha,
+      runId: run.id,
+      attempt: run.run_attempt,
+      tree: head.tree.sha,
+      baseSha,
+      baseRunId: main.id,
+    };
   } catch {
     return null;
   }
@@ -154,7 +213,7 @@ export function runReuse(
     `reuse=${Boolean(result)}\nreuse_run=${result?.runId ?? ""}\nreuse_sha=${result?.sha ?? ""}\n`,
   );
   const summary = result
-    ? `Reusing successful PR CI [run ${result.runId}](https://github.com/${env.GITHUB_REPOSITORY}/actions/runs/${result.runId}) (attempt ${result.attempt}).\n\nPR head: \`${result.sha}\`; identical Git tree: \`${result.tree}\`.\n`
+    ? `Reusing successful PR CI [run ${result.runId}](https://github.com/${env.GITHUB_REPOSITORY}/actions/runs/${result.runId}) (attempt ${result.attempt}).\n\nPR head: \`${result.sha}\`; identical Git tree: \`${result.tree}\`.\n\nEarlier main: \`${result.baseSha}\`, complete green [run ${result.baseRunId}](https://github.com/${env.GITHUB_REPOSITORY}/actions/runs/${result.baseRunId}).\n`
     : "No verified equal-tree PR CI result. Running the normal CI selection.\n";
   appendFileSync(env.GITHUB_STEP_SUMMARY, summary);
   return result;

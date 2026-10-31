@@ -10,6 +10,8 @@ const repository = "clintongormley/waitron";
 const sha = "a".repeat(40);
 const head = "b".repeat(40);
 const tree = "c".repeat(40);
+const base = "e".repeat(40);
+const baseTree = "f".repeat(40);
 const workflow =
   "on:\n  push:\n  pull_request:\npermissions:\n  contents: read\njobs:\n  changes:\n  lint:\n  root-guards:\n  test-server:\n  ci:\n  publish:\n";
 const context = { event: "push", ref: "refs/heads/main", sha, repository, runId: "43" };
@@ -48,15 +50,44 @@ function fixture() {
       conclusion: name === "publish" ? "skipped" : "success",
     }),
   );
+  const main = {
+    ...run,
+    id: 40,
+    event: "push",
+    head_sha: base,
+    head_branch: "main",
+    head_commit: { tree_id: baseTree },
+  };
+  const mainJobs = jobs.map((job) => ({
+    ...job,
+    run_id: 40,
+    head_sha: base,
+    conclusion: "success",
+  }));
   const data = {
+    main,
+    mainRuns: { total_count: 1, workflow_runs: [main] },
+    mainJobs: { total_count: mainJobs.length, jobs: mainJobs },
     prs: [pr],
     run,
     current,
     runs: { total_count: 1, workflow_runs: [run] },
     jobs: { total_count: jobs.length, jobs },
-    commits: { [sha]: { sha, tree: { sha: tree } }, [head]: { sha: head, tree: { sha: tree } } },
+    commits: {
+      [sha]: { sha, tree: { sha: tree }, parents: [{ sha: base }] },
+      [head]: { sha: head, tree: { sha: tree } },
+      [base]: { sha: base, tree: { sha: baseTree } },
+    },
   };
   const api = (path) => {
+    if (path === `repos/${repository}/actions/runs/40`) return data.main;
+    if (
+      path ===
+      `repos/${repository}/actions/workflows/10/runs?head_sha=${base}&event=push&branch=main&per_page=100`
+    )
+      return data.mainRuns;
+    if (path === `repos/${repository}/actions/runs/40/attempts/1/jobs?per_page=100`)
+      return data.mainJobs;
     if (path === `repos/${repository}/actions/runs/43`) return data.current;
     if (path === `repos/${repository}/actions/runs/42`) return data.run;
     if (path === `repos/${repository}/commits/${sha}/pulls?per_page=100`) return data.prs;
@@ -84,7 +115,227 @@ describe("main CI reuse", () => {
   it("accepts a merged same-repository PR with equal API trees and a complete successful CI attempt", async () => {
     const findReuse = await verifier();
     const { api } = fixture();
-    expect(findReuse(context, api, workflow)).toEqual({ sha: head, runId: 42, attempt: 1, tree });
+    expect(findReuse(context, api, workflow)).toEqual({
+      sha: head,
+      runId: 42,
+      attempt: 1,
+      tree,
+      baseSha: base,
+      baseRunId: 40,
+    });
+  });
+
+  it.each([
+    [
+      "no earlier main run",
+      (d) => {
+        d.mainRuns = { total_count: 0, workflow_runs: [] };
+      },
+    ],
+    [
+      "truncated earlier main runs",
+      (d) => {
+        d.mainRuns.total_count = 101;
+      },
+    ],
+    [
+      "earlier main still running",
+      (d) => {
+        d.main.status = "in_progress";
+      },
+    ],
+    [
+      "earlier main red",
+      (d) => {
+        d.main.conclusion = "failure";
+      },
+    ],
+    [
+      "earlier main cancelled",
+      (d) => {
+        d.main.conclusion = "cancelled";
+      },
+    ],
+    [
+      "earlier main used scoped reuse",
+      (d) => {
+        d.mainJobs.jobs[3].conclusion = "skipped";
+      },
+    ],
+    [
+      "partial earlier main jobs",
+      (d) => {
+        d.mainJobs.total_count++;
+      },
+    ],
+    [
+      "missing earlier main test job",
+      (d) => {
+        d.mainJobs.jobs.splice(3, 1);
+        d.mainJobs.total_count--;
+      },
+    ],
+    [
+      "duplicate earlier main job",
+      (d) => {
+        d.mainJobs.jobs.push(d.mainJobs.jobs[0]);
+        d.mainJobs.total_count++;
+      },
+    ],
+    [
+      "unknown earlier main job",
+      (d) => {
+        d.mainJobs.jobs.push({ ...d.mainJobs.jobs[0], name: "unknown" });
+        d.mainJobs.total_count++;
+      },
+    ],
+    [
+      "earlier main job red",
+      (d) => {
+        d.mainJobs.jobs[3].conclusion = "failure";
+      },
+    ],
+    [
+      "earlier main job unfinished",
+      (d) => {
+        d.mainJobs.jobs[3].status = "in_progress";
+      },
+    ],
+    [
+      "earlier main job wrong attempt",
+      (d) => {
+        d.mainJobs.jobs[3].run_attempt = 2;
+      },
+    ],
+    [
+      "earlier main job wrong run",
+      (d) => {
+        d.mainJobs.jobs[3].run_id = 39;
+      },
+    ],
+    [
+      "earlier main job wrong head",
+      (d) => {
+        d.mainJobs.jobs[3].head_sha = head;
+      },
+    ],
+    [
+      "earlier main wrong workflow",
+      (d) => {
+        d.main.workflow_id = 11;
+      },
+    ],
+    [
+      "earlier main wrong path",
+      (d) => {
+        d.main.path = ".github/workflows/other.yml";
+      },
+    ],
+    [
+      "earlier main wrong event",
+      (d) => {
+        d.main.event = "pull_request";
+      },
+    ],
+    [
+      "earlier main wrong branch",
+      (d) => {
+        d.main.head_branch = "feature";
+      },
+    ],
+    [
+      "earlier main wrong head",
+      (d) => {
+        d.main.head_sha = head;
+      },
+    ],
+    [
+      "earlier main wrong repository",
+      (d) => {
+        d.main.repository = { full_name: "other/repo" };
+      },
+    ],
+    [
+      "earlier main fork",
+      (d) => {
+        d.main.head_repository = { full_name: "other/repo" };
+      },
+    ],
+    [
+      "earlier main wrong tree",
+      (d) => {
+        d.main.head_commit.tree_id = tree;
+      },
+    ],
+    [
+      "earlier main invalid id",
+      (d) => {
+        d.main.id = 0;
+      },
+    ],
+    [
+      "earlier main invalid attempt",
+      (d) => {
+        d.main.run_attempt = 0;
+      },
+    ],
+    [
+      "wrong parent response",
+      (d) => {
+        d.commits[base].sha = head;
+      },
+    ],
+    [
+      "invalid parent tree",
+      (d) => {
+        d.commits[base].tree.sha = "invalid";
+      },
+    ],
+    [
+      "no single parent",
+      (d) => {
+        d.commits[sha].parents = [];
+      },
+    ],
+    [
+      "multiple parents",
+      (d) => {
+        d.commits[sha].parents.push({ sha: head });
+      },
+    ],
+    [
+      "malformed parent",
+      (d) => {
+        d.commits[sha].parents[0].sha = "invalid";
+      },
+    ],
+  ])("retains full CI for %s", async (_name, change) => {
+    const findReuse = await verifier();
+    const { data, api } = fixture();
+    change(data);
+    expect(findReuse(context, api, workflow)).toBeNull();
+  });
+
+  it("refuses an earlier main attempt restarted after reading its jobs", async () => {
+    const findReuse = await verifier();
+    const { api } = fixture();
+    expect(
+      findReuse(
+        context,
+        (path) => (path.endsWith("/runs/40") ? { ...api(path), run_attempt: 2 } : api(path)),
+        workflow,
+      ),
+    ).toBeNull();
+  });
+
+  it("does not trust an older green main run when the latest run is red", async () => {
+    const findReuse = await verifier();
+    const { data, api } = fixture();
+    data.mainRuns = {
+      total_count: 2,
+      workflow_runs: [data.main, { ...data.main, id: 41, conclusion: "failure" }],
+    };
+    expect(findReuse(context, api, workflow)).toBeNull();
   });
 
   it.each([
@@ -453,6 +704,10 @@ it("records the source run and tree in outputs and the job summary, or an explic
     `https://github.com/${repository}/actions/runs/42`,
   );
   expect(readFileSync(env.GITHUB_STEP_SUMMARY, "utf8")).toContain(tree);
+  expect(readFileSync(env.GITHUB_STEP_SUMMARY, "utf8")).toContain(
+    `https://github.com/${repository}/actions/runs/40`,
+  );
+  expect(readFileSync(env.GITHUB_STEP_SUMMARY, "utf8")).toContain(base);
   source.runReuse(
     env,
     () => {
