@@ -144,7 +144,7 @@ come after the list above:
   (Overview, the first kitchen column, counting each dish to make with the held after a +; below
   the width its columns need, a kitchen board shows them as tabs; a late card's tab, and its
   collapsed column, carry a red bar) landed in #2144, from the build plan's slice 9c. What is left of
-  A797: slices 10–11 once A803's slice 3 lands, and 12b after A773-2, which builds the pass's
+  A797: slices 10–11, now that A803's slice 3 has landed (#PR), and 12b after A773-2, which builds the pass's
   part: [design](superpowers/specs/2026-10-18-a797-device-screens-design.md) §8,
   [build plan](superpowers/plans/2026-10-24-a797-device-screens-build.md),
   [mockups](backlog/mockups/a797-device-screens/).
@@ -1990,14 +1990,10 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   2026-10-18).** Owner-approved design; A773-1 has landed. Slice 1, portions and current
   ticket/receipt grouping, has landed. What it leaves open is A1191–A1202, A1217 and the store limit under
   _Modules, data and code health_. Slice 2, named bills that keep their number at the table, has
-  landed; it leaves open A1233–A1235. Remaining slices: always-on bill dropdown with + New bill, even for one bill, and one kebab with current-bill
-  then Whole table headings; one picker for Move dishes and Split a table, including waiting
-  courses; pre-bills after asesor S2 (A446). The main bill and Tab go; the table
-  footer has totals and Pay, no Hold. This bill's unsent dishes make Pay quiet but tappable,
-  explaining "Send or remove the unsent dishes before paying." Other bills' drafts do not quiet
-  it. Full invoice is offered at payment per A739; the plan keeps an unpaid-bill menu shortcut,
-  while paid correction waits for A802's known entry or an owner decision, with no A803 fiscal
-  implementation. One payment pays one bill. Station modes, pass naming and grouped cross-bill
+  landed; it leaves open A1235–A1238. Slice 3, one bill switcher with + New bill, one ⋮ menu and no
+  main bill, has landed (#PR); it leaves open A1256, A1258 and A1261–A1265. Remaining slices: one
+  picker for Move dishes and Split a table, including waiting courses; pre-bills after asesor S2
+  (A446). One payment pays one bill. Station modes, pass naming and grouped cross-bill
   firing wait for pending A773-2, independently of S2. New Spanish wording requires approval
   during implementation. Each new seating starts at Bill 1
   (owner, 2026-10-19); bills staying at their table retain their numbers.
@@ -2028,18 +2024,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1219. At 390 px the till header clips «Pedidos aparcados» and hides its count** (Spanish; with
   one counter zone the Floor tab shows as "F" behind the "?" button). Seen in A1208's LOOK.
 
-- **A1233. A paid bill a merged party kept cannot be named from the till (left open by A803 slice
-  2).** Name this bill acts on the bill on screen, and a paid row in the bills list offers only
-  Receipt copy, so nothing puts such a bill on screen. The server accepts the rename (seen in the
-  slice's LOOK by sending the screen's event by script: "1, 2, 3 · Bill 7 · Pat"). Slice 3's bill
-  dropdown may be where it belongs.
-
-- **A1234. Focus after the naming windows lands on "Table details" or the page (seen in A803 slice
-  2's LOOK).** Choosing Name this bill or Name the party closes the actions panel, so the action is
-  gone when the window closes: Cancel, Escape and Discard leave focus on "Table details", Save on
-  the page itself. Enter on "Table actions" also leaves focus on the page. Decide where focus goes
-  (the "Table actions" button is the likely place) for both windows together.
-
 - **A1235. Parked orders, Waiting and department transfers can still name a table bill by an old
   table (left open by A803 slice 2).** Parked orders now shows a table bill's stored number and
   name, but builds it on `orderLabel` (`apps/till/src/widgets/held-orders.ts`), which joins the
@@ -2066,6 +2050,41 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 - **A1237. The English till's "dishes not served" window showed the reason «No servido» (seen in
   A803 slice 2's LOOK, on the demo venue).** Not traced: it may be the demo venue's own reason
   name rather than a till string. Believed to predate the slice; not run on main.
+
+- **A1261. A full invoice for a bill already paid, from the table's ⋮ (left open by A803 slice 3,
+  Owner question 2, #PR).** As built, the ⋮ offers Full invoice only for a bill still to pay and
+  not yet invoiced; for a paid bill it is a correction, which A802 has not built. Once A802 gives
+  the till a way in, offer it from the ⋮ for a paid bill. If the owner instead picks "show it
+  quiet and explain on tap", that needs a new sentence in English and Spanish first.
+
+- **A1262. An open bill holding a payment still offers Transfer items and Merge bills in the ⋮
+  (left open by A803 slice 3, #PR).** The server refuses both for a bill with any payment
+  (`bill.payments_received`, through `requireUntouchedPair` in
+  `apps/server/src/bill-actions.ts`), so the waiter picks a bill and is then refused (by reading,
+  not run). Hide both
+  for such a bill, as the LOOK fix F5 hid them for paid and presented bills
+  (`apps/till/src/screens/till-table-order-screen.ts`); Split by item stays, as the server takes it.
+
+- **A1263. Switching profile after only viewing another person's draft would say "draft
+  replaced" (left open by A803 slice 3, #PR).** `#switchProfile` in `apps/till/src/till-app.ts`
+  reads a taken-over answer as a lost change even when this till had nothing of its own to save.
+  The LOOK fix F3 stopped this at six other leave points by checking `DraftSync.ownEditWaiting`
+  first; this one was found by reading, not run.
+
+- **A1264. A bill another till merged or moved away is noticed only on the 15-second timer (left
+  open by A803 slice 3, #PR).** The till has no push from the server. Since the LOOK fix F1 it
+  re-reads the party's bills on its draft timer and after a refused save; a window focus, or the
+  page becoming visible again, re-reads the draft but not the bills, so the screen can keep the
+  gone bill for up to 15 seconds after the till is picked up. Re-read the bills there too
+  (`apps/till/src/till-app.ts`).
+
+- **A1265. The table screen's ⋮ list is taller than the room below it, so Finish table starts
+  below the fold (seen in A803 slice 3's LOOK, finding F8).** At 1280×900 the list holds 743 px
+  in a 665 px box that scrolls; "Move guests" is cut and Finish table shows only after scrolling;
+  the same at 390×844 (617 px box). Nothing is lost, but the whole-table actions are easy to miss.
+  Decide whether the list gets shorter (fewer items, or tighter rows) or the table section comes
+  first. Pictures `x-t1-menu-open`, `k5-*` in the LOOK's folder
+  (`~/waitron-campaign-c/a803-3-shots/`, not in the repository).
 
 - **A1193. Choosing which portions of a grouped row an action takes, and Fire now on a grouped
   row (left open by A803 slice 1, D14 and D31).** Actions on a row take a count, never chosen
@@ -2319,11 +2338,6 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   revision, as `/api/menu-state` does. (A756 PR 7, 2026-10-24, moved the bump mode onto each queue
   order, so that refreshes.)
 
-- **A786. A seated table with no main bill reads its bills before its lines (left open by A768,
-  2026-10-17).** The lines read needs the bill `billToOpen` picks, so opening such a table sends
-  two requests one after the other. A768's after-change probe timed it at 241–266 ms, against
-  113–120 ms for a second table in the same zone.
-
 - **On a short phone the till's More menu is taller than the room it gets (found by A681's look,
   2026-10-17).** On a handheld, since A797 slice 3, Log out follows the Settings group, last in ☰
   but for A1096's "Powered by" line (and its rule) under it while a venue logo is in use, which adds
@@ -2432,6 +2446,9 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   The payment-window build still needs A790 Cut A and its complete live Cut B, plus G4/path
   releases. Preserve A948's enabled F1 paths in every environment; F2-to-F3 replacement remains
   A556. The remaining payment-window implementation and runtime acceptance stay open.
+  At a table, A803 slice 3 (#PR) left the wide screen's pay controls (Cash, Card, the pay ways,
+  the bill's Full invoice and receipt language) in the foot under the totals; this window puts
+  them behind one Pay button, as a handheld already has (its D16, Owner question 7).
   [Four-case boards](backlog/mockups/a739-owner-receipt-flow/README.md),
   [historical detail](backlog/till.md#a739-paying-hold--pay-and-one-payment-window).
 
@@ -2484,11 +2501,14 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
 
 _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
 
-- **An unpaid table bill shows two "Full invoice" buttons**: the payment panel's own
+- **An unpaid table bill showed two "Full invoice" buttons**: the payment panel's own
   (`till-tender-pay`) and the bill's smaller one (`#billChoices`,
   `apps/till/src/screens/till-table-order-screen.ts`), both drawn since A231 (#1256). While full
   invoices are switched off neither is drawn (A741), so the question is for when they are on.
-  **Next action:** draw both placements for the owner to pick which one stays (owner, 2026-10-17).
+  A803 slice 3 (#PR) draws only the bill's own at a table, its Owner question 3's default; the
+  counter keeps the panel's. **Next action:** owner to pick between the two pictures:
+  [the bill's own, as built](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-bill-button.png)
+  and [the payment panel's](backlog/mockups/a803-bills-and-tables/slice3-q3-full-invoice-pay-panel-button.png).
 
 - **The device delete dialog's sign-in count is not live**: `sessions` is not a declared live
   table (`apps/dashboard/src/api/live-queries.ts:75-92`), so a sign-in or sign-out while the
@@ -2940,8 +2960,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - A party with no table whose chain of merges never ends (an unknown id, or two parties recorded
     as merged into each other, which the database accepts) is named by the bill's own label;
     whether any till action can make such a loop was not checked.
-  - `party.main_bill_stays`'s till wording says "the table has other unpaid bills", which Split a
-    table choosing the main bill need not satisfy.
   - Left by #906's review: `computeOverdueOrders` is the one report function that reads its own
     node's location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
     suggested, not done); no case pins what a correction slip prints for a counter order delivered
@@ -2956,7 +2974,6 @@ _Formerly A4; part of A9._ Detail: [backlog/till.md](backlog/till.md).
   - The till sends `otherPartyId: null` when its floor does not list the target table at all (a
     failed floor read empties the list); a table another party holds is then refused as out of
     date, never combined.
-  - On a 390 px phone the bill choice's buttons wrap ("Keep separate bills" on three lines).
   - **From C84's review (#913):** when a void or line change gets no answer, `#rereadAmounts()`
     can put on screen what the party still owes, taken from its bills after its own floor read
     failed, while the revision on screen stays where it was. Traced in the code, not reproduced.
@@ -4210,7 +4227,9 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   [Detail](backlog/dashboard.md#a781-one-shared-panel-placement-and-arrow-key-helper-for-the-wt--pop-up-fields-left-open-by-1828)
 
 - **A1256. A `wt-row-actions` menu of `role="menu"` items has no arrow keys, and choosing an item
-  drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).**
+  drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).** The till's bill
+  switcher shows it too: Enter on a bill leaves focus on the page, and there are no arrow keys
+  (A803 slice 3's LOOK, finding F6).
   [Detail](backlog/dashboard.md#a1256-a-wt-row-actions-menu-of-rolemenu-items-has-no-arrow-keys-and-choosing-an-item-drops-focus-to-the-page-found-in-a803-slice-3s-task-9-review-2026-10-31)
 
 - **A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated

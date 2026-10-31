@@ -896,8 +896,7 @@ Open:
   other, which the database accepts) is named by the bill's own label; whether any till action
   can make such a loop was not checked. `partyFamilies`, the reverse lookup of `partySurvivors`,
   stayed in `apps/server/src/parties.ts`, while `partySurvivors` is in
-  `packages/db/src/party-table-labels.ts`. `party.main_bill_stays`'s till wording says "the table
-  has other unpaid bills", which Split a table choosing the main bill need not satisfy. Left by
+  `packages/db/src/party-table-labels.ts`. Left by
   #906's review: `computeOverdueOrders` is the one report function that reads its own node's
   location rather than being handed one (adding `locationId` to `OverdueOrdersInput` was
   suggested, not done); no case pins what a correction slip prints for a counter order delivered
@@ -917,8 +916,7 @@ Open:
   have the move set the wrong table on the new party; the suggested fix is to count only table
   opens started in the current operator session; not queued. The till sends `otherPartyId: null`
   when its floor does not list the target table at all (a failed floor read empties the list); a
-  table another party holds is then refused as out of date, never combined. On a 390 px phone the
-  bill choice's buttons wrap ("Keep separate bills" on three lines).
+  table another party holds is then refused as out of date, never combined.
 - **Open, from C84's review (#913):** when a void or line change gets no answer,
   `#rereadAmounts()` can put on screen what the party still owes, taken from its bills after its
   own floor read failed, while the revision on screen stays where it was. A later floor read that

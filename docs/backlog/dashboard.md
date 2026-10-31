@@ -1093,6 +1093,12 @@ The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:7
   movement and `aria-haspopup="menu"` as `packages/ui/src/menu-popover.ts` does for the language
   and theme choosers (A781 is the shared-helper half of this).
 
+  The till's bill switcher has the same fault (A803 slice 3's LOOK, finding F6,
+  `~/waitron-campaign-c/a803-3-look-report.md`, outside the repository): Enter on the switcher
+  opens it with focus left on the trigger, ArrowDown does nothing though the list is
+  `role="menu"` with `menuitemradio` rows, and Enter on "Bill 2" showed Bill 2 with focus on
+  `<body>`, not back on the switcher.
+
 
 ## A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated (found in A803 slice 3's Task 10 fix review, 2026-10-31).
 
