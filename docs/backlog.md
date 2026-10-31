@@ -6243,8 +6243,6 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   test suites before the next cleanup slices.
   Order, printer and API suites also need their printer/venue samples audited.
   The order-detail suite does not check its `row.tables` sample independently of `party.tables`.
-  The payment-screen suites now use English till and counter sample names; their card-reader
-  holder fixtures still use `Terraza` and `Móvil 2`.
   Keep Spanish-language checks, recorded receipt snapshots and the unit-screen accent-search
   fixture `Gin & Tónic`. This slice skips `apps/dashboard/src/widgets/alerts-bell.test.ts`,
   which the in-flight A1089 reply-evidence branch changes. Recheck live branch paths before
