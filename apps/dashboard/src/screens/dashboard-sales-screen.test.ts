@@ -26,7 +26,7 @@ const close: DailyCloseDto = {
       {
         source: "device",
         deviceId: "device-1",
-        deviceName: "Barra 1",
+        deviceName: "Bar 1",
         byMethod: [
           { method: "cash", amount: "80.00", tip: "5.00" },
           { method: "card", amount: "96.00", tip: "3.00" },
@@ -40,12 +40,12 @@ const close: DailyCloseDto = {
   counts: { sales: 10, corrections: 1, voids: 2 },
   topSellers: [
     {
-      name: "Café",
+      name: "Coffee",
       quantity: "5",
       total: "10.00",
       variants: [
-        { name: "Doble", quantity: "3", total: "7.50" },
-        { name: "Solo", quantity: "2", total: "2.50" },
+        { name: "Double", quantity: "3", total: "7.50" },
+        { name: "Single", quantity: "2", total: "2.50" },
       ],
     },
   ],
@@ -61,8 +61,8 @@ const period: SalesPeriodDto = {
     grossTotal: "1210.00",
   },
   topSellers: [
-    { name: "Croqueta", quantity: "40", total: "80.00", variants: [] },
-    { name: "Tortilla", quantity: "12", total: "36.00", variants: [] },
+    { name: "Croquette", quantity: "40", total: "80.00", variants: [] },
+    { name: "Omelette", quantity: "12", total: "36.00", variants: [] },
   ],
 };
 
@@ -265,13 +265,13 @@ describe("dashboard-sales-screen", () => {
     // Top sellers, rendered through the shared table widget (stable `top-sellers-table` hook), with
     // the row's plain staff name — no locale lookup.
     expect(root.querySelector("[data-test=top-sellers-table]")).not.toBeNull();
-    expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Café");
+    expect(root.querySelector("[data-test=seller-name]")!.textContent).toContain("Coffee");
     // Its variants follow as their own rows, each under its own name and figures.
     const variant0 = root.querySelector('[data-test="seller-row-0-variant-0"]')!;
-    expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Doble");
+    expect(variant0.querySelector("[data-test=variant-name]")!.textContent).toBe("Double");
     expect(variant0.textContent).toContain("7,50\u00a0€");
     const variant1 = root.querySelector('[data-test="seller-row-0-variant-1"]')!;
-    expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Solo");
+    expect(variant1.querySelector("[data-test=variant-name]")!.textContent).toBe("Single");
     // Painted by this screen's styles: the variant's name is indented past its product's, and the
     // product name repeated for screen readers takes no room on screen.
     const parentIndent = parseFloat(
@@ -297,7 +297,7 @@ describe("dashboard-sales-screen", () => {
         cell.textContent!.trim(),
       );
     expect(cells("[data-test=tender-row-device-1-cash]")).toEqual([
-      "Barra 1",
+      "Bar 1",
       "cash",
       "€80.00",
       "€5.00",
@@ -311,7 +311,7 @@ describe("dashboard-sales-screen", () => {
       "Gross total",
       "€176.00",
     ]);
-    expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual(["Café, Doble", "3", "€7.50"]);
+    expect(cells('[data-test="seller-row-0-variant-0"]')).toEqual(["Coffee, Double", "3", "€7.50"]);
   });
 
   it("heads each device's rows with its name, and a job's rows with the job's name", async () => {
@@ -339,7 +339,7 @@ describe("dashboard-sales-screen", () => {
     const headings = [
       ...el.shadowRoot!.querySelectorAll("[data-test=tender-table] tbody th[scope=row]"),
     ].map((cell) => cell.textContent!.trim());
-    expect(headings).toEqual(["Barra 1", "Barra 1", t("source.demo_seed")]);
+    expect(headings).toEqual(["Bar 1", "Bar 1", t("source.demo_seed")]);
     expect(headings).not.toContain("device-1");
   });
 
@@ -379,7 +379,7 @@ describe("dashboard-sales-screen", () => {
     const names = [...root.querySelectorAll("[data-test=seller-name]")].map((n) =>
       n.textContent?.trim(),
     );
-    expect(names).toEqual(["Croqueta", "Tortilla"]); // each row's plain staff name, in server order
+    expect(names).toEqual(["Croquette", "Omelette"]); // each row's plain staff name, in server order
   });
 
   it("switches to a period roll-up when `from` is an earlier date", async () => {
