@@ -1094,6 +1094,17 @@ The off track is `--wt-color-border` (`packages/ui/src/components/wt-switch.ts:7
   and theme choosers (A781 is the shared-helper half of this).
 
 
+## A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated (found in A803 slice 3's Task 10 fix review, 2026-10-31).
+
+`packages/ui/src/components/wt-row-actions.ts` places its popup when it opens and again when the
+  popup's own size changes (its `ResizeObserver`), and a window resize does not change that size.
+  Measured by the A803 slice 3 Task 10 fix review's probes (15 items, trigger at 58–102 px): shrunk
+  from 1024×768 to 1024×500 while open, the popup kept its place and ran past the window's bottom,
+  with and without `opens-below`; rotated to 768×1024, the table screen's ⋮ kept its old height cap.
+  Fix in the primitive, once: while open, call `positionPopup()` on `resize` of `window` (or
+  `visualViewport`), and remove the listener when it closes.
+
+
 ## The box's trust page and the favicon still follow the device's setting, not the Theme choice (left open by A681).
 
 The trust page (`apps/server/src/trust-page.ts`, its logo in

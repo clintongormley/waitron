@@ -2557,6 +2557,106 @@ Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 61% befor
 | `.empty-drawer.a11y.test.ts:38-39`, `:92-93`; `.populated-drawer.a11y.test.ts:88-90`; `.test.ts:573`, `:760-763`, `:2932`; `.drawer-placement-retirement*`; `.drawer-service-retirement`; `.drawer-station-retirement`; `.current-list-retirement`; `.sent-course*`; `.sent-prices*`; `.service-migration.a11y`; `.current-orders.test.ts:631-632` | R (widened) | `[data-table-menu] X` / `menu.querySelector(X)` null → `el.shadowRoot.querySelector(X)` null; the ⋮'s `textContent` → the ⋮'s and the switcher's text; expected values unchanged | review M1 | 11a review |
 | `.test.ts` "keeps serving in Sent…", "fires a held dish through Sent More…", "keeps sent line $lineNo read-only…", describe "the party's groups in the Sent panel" | retitled | titles promising a drawer check → what the case checks; no assertion changed | review M2 | 11a review |
 
+### Task 10 fix review answers (2026-10-31, `a803-3-reviews/task-10-fix.md`)
+
+Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 59–60% before the browser
+runs. "RED" means the new cases run against the parent's code: for the primitive, `git show
+HEAD:packages/ui/src/components/wt-row-actions.ts` written over the file, then the saved copy put
+back (`cmp`, no difference). Every deletion control changed one production line by a script that
+asserts its pattern occurs once, ran the named cases, and put the file back the same way.
+
+- **I1, nothing showed that the ⋮'s list goes on.** Fixed in the primitive, for `opens-below`
+  only: after capping the height to the room under the trigger, `capBelow` rounds the cap down so
+  the list's bottom edge cuts through the middle of an action (the menu's drawn `button`,
+  `a[href]` and `wt-button` elements, slotted directly or inside a slotted group). Half of the next action's label always shows; nothing new is painted (no token, so no
+  token-painting case is owed; the existing `opens-below` a11y case runs in both themes and passes).
+  Why the review's picture showed nothing at 1024×768: the old cut was 13px into "Join a table"
+  (746–790, cut 759), but the items are borderless, so those 13px held no ink. Measured now:
+  1024×768 list 102–721, cut 720 through "Split a table" (698–742); 375×667 list 154–629, cut 628
+  through "Name the party" (606–650).
+  - `wt-row-actions.test.ts` "a list cut short is cut through the middle of an action…": trigger
+    tops 40–130px in steps of 7 at 600×400, 15 actions; at each, the cut is within 1px of an
+    action's middle and the popup's bottom stays at or above 8px from the window's bottom. RED:
+    `trigger top 40px: expected 12 to be less than or equal to 1`.
+  - `.table-menu.test.ts` "at %ix%i the list's bottom edge cuts through the middle of an item, so
+    half its label shows" (1024×768, 375×667): exactly one item crosses the cut, within a tenth of
+    its height of its middle. RED: `expected 9 to be less than or equal to 4.4` (1024×768) and
+    `expected 18 to be less than or equal to 4.4` (375×667). A first version that asked only for
+    the cut to be between a quarter and three quarters into the item passed at 1024×768 on the old
+    code (13 of 44px), so it was tightened to the middle before the fix.
+  - `wt-row-actions.test.ts` "actions inside a slotted group are cut through the middle too" (15
+    actions in one `role="group"` column, as the till's ⋮ slots them). Control C5 (groups not
+    searched): fails, `expected 676 to be greater than 676` (no actions found, so nothing was
+    capped). A first version of this case laid the group's buttons out in one row, so the list fit
+    and the case failed on the fixed code; the group is now a grid column.
+  - Control C1 (the rounding line deleted): the primitive's middle case fails at trigger top 40px
+    (`expected 12…`), the other `opens-below` cases pass.
+  - `wt-row-actions.ts` per-file coverage over its two test files: 100% statements, branches,
+    functions and lines.
+- **M1, Escape closed the step under an open list.** Fixed: the step panel's Escape handler returns
+  without acting, and without cancelling the key, while `#layerOpen()` finds an open popover
+  anywhere in the screen's shadow tree (walked down through each element's shadow root, since the
+  ⋮'s and the switcher's popovers sit inside their own `wt-row-actions`). The browser's own Escape
+  then closes the popover. The review's own control (handler's `preventDefault()` removed) showed
+  that close happens only while the key is not cancelled. A `dialog[open]` arm was written first
+  and taken out: no dialog sits inside the panel (`render()` draws the screen's dialogs, the split-guests
+  dialog among them, after the panel's container, not inside it), so no case could exercise it.
+  - `.table-menu.test.ts` "Escape in a step while %s is open closes only that list; the next Escape
+    closes the step" (the ⋮; the bill switcher): Merge bills opened from the ⋮, the list opened by
+    `show()`, the step heading focused, Escape → the list closed and the panel still there; Escape
+    again → the panel gone. RED (`|| this.#layerOpen()` taken out): both fail, `expected true to be
+    false` (the list still open). Control (the shadow-root walk replaced by `return false`, so only
+    the screen's own root is read): both fail the same way.
+- **M2, no floor under `opens-below`, and a cap left behind.** Minimum chosen: one whole action and
+  half of the next. Below that the list would show one action at most and give no sign there is
+  more, so moving it up over the trigger (the old placement) shows more of it, at the cost the
+  setting exists to avoid. `capBelow` clears `max-height` and returns false, and `positionPopup`
+  takes the old placement. `positionPopup` also clears `max-height` whenever `opens-below` is off.
+  - `wt-row-actions.test.ts` "with room under the trigger for %s, it opens there or moves up to
+    fit": the room for one action and half the next is measured from the mounted menu, then the
+    trigger is placed so the room is that plus 2px (opens under the trigger, scrolls) or that minus
+    2px (moves up, bottom 8px above the window, no cap, nothing to scroll). RED on the old code:
+    the "less than that" row fails (`expected 315 to be less than 315`: it opened under the
+    trigger); the "fits" row passes on both, as the control in the other direction. "a trigger at
+    the window's bottom edge moves the list up to fit, whole" (trigger top 350px of 400): RED
+    `expected 412 to be close to 392` (the popup below the window). Control C2 (the floor's `if`
+    made `if (false)`): both fail with the same messages.
+  - "hidden actions do not count toward the one action and a half the room must show": three
+    `hidden` actions put before five, room 2px short of one visible action and a half → moves up,
+    no cap. Control C4 (the zero-height filter deleted): fails, `expected 315 to be less than 315`.
+  - "turned off, the next open drops the height it capped": RED `expected '300px' to be ''`.
+    Control C3 (the clearing line deleted): fails, `expected '272px' to be ''`.
+- **M3.** `docs/developers/design-system.md`, the `wt-row-actions` row: one clause for
+  `opens-below` (default off; capped to the room down to 8px above the window's bottom, cut
+  through an action's middle; with less room than one action and half the next it moves up as it
+  does without the setting).
+- **M4** is not fixed here (the review believes it predates the branch). Filed as **A1258** in
+  `docs/backlog.md` and `docs/backlog/dashboard.md`, beside A1256.
+- **Runs (GREEN).** `packages/ui` `wt-row-actions.test.ts`, `.a11y.test.ts`, `wt-data-table`,
+  `wt-menu-row`, `tap-target-and-focus`, `no-hardcoded-chrome`: `Test Files 6 passed (6)`, `Tests
+  790 passed (790)`. Till's other `wt-row-actions` users (every `till-shell*.test.ts`,
+  `floor-zone-menu*.test.ts`, `till-floor-screen.zone-menu.test.ts`): `Test Files 18 passed (18)`,
+  `Tests 425 passed (425)`. Dashboard sample (`alerts-bell*`, `staff-list*`,
+  `content-languages-screen.layout`, `menu-structure-table*`): `Test Files 8 passed (8)`, `Tests 354
+  passed (354)`. These two ran before the last change to `capBelow`/`rows()` (the hidden-action
+  filter kept, a no-actions fallback dropped); none of those users sets `opens-below`, so neither
+  function runs for them, and they were not run again. `rg -l 'till-table-order-screen' apps/till/src/screens -g '*.test.ts' | sed 's#apps/till/##' | xargs pnpm --filter @waitron/till exec vitest run`:
+  `Test Files 91 passed (91)`, `Tests 1776 passed (1776)`, no `Errors` line, exit 0. `pnpm
+  --filter @waitron/till typecheck` and `pnpm --filter @waitron/ui typecheck` exit 0; `pnpm exec
+  prettier --check` and `pnpm exec eslint` on the four changed source files exit 0; `pnpm exec
+  vitest run scripts/style-token-names.test.ts scripts/primary-coloured-text.test.ts`: `Tests 49
+  passed (49)`.
+- **LOOK.** `a803-3-reviews/task-10-fix2-shots/`: `{old,new}-{1024x768,375x667}-{light,dark}-open.png`
+  (four sent lines, two bills, two tables). Looked at: old 1024 light (ends at "Split a table",
+  then blank: nothing of "Join a table" visible), new 1024 light and dark ("Split a table" cut
+  through its label at the bottom edge), new 375 light and dark ("Name the party" cut through its
+  label). The ⋮'s kebab is still a blank gap in these screen tests (no icons registered), as the
+  review explained.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `packages/ui/src/components/wt-row-actions.test.ts` "a menu taller than the room under its trigger opens under it…" (the `box.bottom` line) | B | `box.bottom` close to `innerHeight - 8` → at most `innerHeight - 8` (+0.5) and less than one action's pitch above it; the new "cut through the middle of an action" case pins where in that band, to 1px. The old exact edge is the picture review I1 asked to change | review I1 | 10 fix review |
+
 ## Task 11b: app tests and helpers that opened the drawer (≈55 calls)
 
 **Files.** `till-app-parties.test.ts` (25 sites), `till-app-adjustments.test.ts`,

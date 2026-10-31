@@ -4207,6 +4207,10 @@ Detail: [backlog/dashboard.md](backlog/dashboard.md).
   drops focus to the page (found in A803 slice 3's Task 9 review, 2026-10-31).**
   [Detail](backlog/dashboard.md#a1256-a-wt-row-actions-menu-of-rolemenu-items-has-no-arrow-keys-and-choosing-an-item-drops-focus-to-the-page-found-in-a803-slice-3s-task-9-review-2026-10-31)
 
+- **A1258. An open `wt-row-actions` menu is not placed again when the window is resized or rotated
+  (found in A803 slice 3's Task 10 fix review, 2026-10-31).**
+  [Detail](backlog/dashboard.md#a1258-an-open-wt-row-actions-menu-is-not-placed-again-when-the-window-is-resized-or-rotated-found-in-a803-slice-3s-task-10-fix-review-2026-10-31)
+
 - **The box's trust page and the favicon still follow the device's setting, not the Theme choice
   (left open by A681).**
   [Detail](backlog/dashboard.md#the-boxs-trust-page-and-the-favicon-still-follow-the-devices-setting-not-the-theme-choice-left-open-by-a681)

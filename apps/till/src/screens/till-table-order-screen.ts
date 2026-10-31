@@ -5423,6 +5423,15 @@ export class TillTableOrderScreen extends LitElement {
     }
   }
 
+  /** A popover is open anywhere in the screen, shadow trees included. Escape belongs to it, and
+   * the browser closes it only while the keydown is not cancelled. */
+  #layerOpen(root: ShadowRoot = this.shadowRoot!): boolean {
+    if (root.querySelector(":popover-open") !== null) return true;
+    return [...root.querySelectorAll("*")].some(
+      (element) => element.shadowRoot !== null && this.#layerOpen(element.shadowRoot),
+    );
+  }
+
   /** The step a ⋮ item opened, beside the order, while one is open. */
   #actionPanel(): TemplateResult | typeof nothing {
     if (this.actionStep === "closed") return nothing;
@@ -5431,7 +5440,7 @@ export class TillTableOrderScreen extends LitElement {
       data-action-panel
       aria-label=${t("table.actions_title")}
       @keydown=${(event: KeyboardEvent) => {
-        if (event.key !== "Escape" || event.defaultPrevented) return;
+        if (event.key !== "Escape" || event.defaultPrevented || this.#layerOpen()) return;
         event.preventDefault();
         this.#actionBack(event);
       }}

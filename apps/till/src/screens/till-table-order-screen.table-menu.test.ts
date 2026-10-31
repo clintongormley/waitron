@@ -334,6 +334,31 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
     },
   );
 
+  it.each([
+    [1024, 768],
+    [375, 667],
+  ])(
+    "at %ix%i the list's bottom edge cuts through the middle of an item, so half its label shows",
+    async (width, height) => {
+      await page.viewport(width, height);
+      try {
+        const el = await mountScreen();
+        const popup = menu(el).shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        await userEvent.click(menu(el).shadowRoot!.querySelector("button")!);
+
+        const cut = popup.getBoundingClientRect().top + popup.clientTop + popup.clientHeight;
+        const across = [...menu(el).querySelectorAll<HTMLElement>("wt-button")]
+          .map((action) => action.getBoundingClientRect())
+          .filter((box) => box.top < cut && box.bottom > cut);
+        expect(across).toHaveLength(1);
+        const { top, height } = across[0]!;
+        expect(Math.abs(cut - (top + height / 2))).toBeLessThanOrEqual(height / 10);
+      } finally {
+        await page.viewport(1280, 900);
+      }
+    },
+  );
+
   describe("the ⋮'s copies keep the guards of the controls they copy", () => {
     it("a paid bill without a receipt offers no Receipt copy", async () => {
       const paid = partyBill("wo-2", 2, "0.00", {
@@ -451,6 +476,34 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
         await page.viewport(1280, 900);
       }
     });
+
+    it.each([
+      ["the ⋮", "[data-table-menu]"],
+      ["the bill switcher", "[data-bill-switcher]"],
+    ])(
+      "Escape in a step while %s is open closes only that list; the next Escape closes the step",
+      async (_name, selector) => {
+        const el = await mountScreen();
+        await userEvent.click(menu(el));
+        await userEvent.click(item(el, '[data-action="merge"]')!);
+        await el.updateComplete;
+        const list = el.shadowRoot!.querySelector<HTMLElement & { show(): void }>(selector)!;
+        const popup = list.shadowRoot!.querySelector<HTMLElement>("[popover]")!;
+        list.show();
+        el.shadowRoot!.querySelector<HTMLElement>("[data-action-panel] h2")!.focus();
+        expect(popup.matches(":popover-open")).toBe(true);
+        expect(focusOnStep(el)).toBe(true);
+
+        await userEvent.keyboard("{Escape}");
+        await el.updateComplete;
+        expect(popup.matches(":popover-open")).toBe(false);
+        expect(el.shadowRoot!.querySelector("[data-action-panel]")).not.toBeNull();
+
+        await userEvent.keyboard("{Escape}");
+        await el.updateComplete;
+        expect(el.shadowRoot!.querySelector("[data-action-panel]")).toBeNull();
+      },
+    );
 
     it("a second step replacing the first takes focus too, and Back from it returns to the first", async () => {
       const el = await mountScreen({ bills: three });
