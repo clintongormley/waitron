@@ -142,7 +142,7 @@ function demoBody(): Record<string, unknown> {
       legalName: "Waitron Dev SL",
       taxpayerDomicile: "Calle Fiscal 8, 28013 Madrid",
       location: {
-        name: "Sala principal",
+        name: "Main dining room",
         fiscalTerritory: "ES-common",
         invoiceLocales: ["es-ES"],
         operationDescription: "Retail counter sales",
@@ -158,7 +158,7 @@ function demoBody(): Record<string, unknown> {
       fullSeriesCode: "FF",
       rectificativeSeriesCode: "R",
       admin: {
-        displayName: "Administradora",
+        displayName: "Administrator",
         firstNames: "Ana Maria",
         lastNames: "Lopez Garcia",
         pin: "1357",
@@ -1311,7 +1311,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
     async (code) => {
       const app = new Hono();
       const provision = vi.fn(async () => {
-        throw new AppError(code, { field: "name", name: "Agua" });
+        throw new AppError(code, { field: "name", name: "Water" });
       });
       const { deps } = makeDeps({ provision });
       mountSetup(app, deps, noopLog);
@@ -1319,7 +1319,7 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       const res = await postProvision(app, demoBody());
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: { code, params: { field: "name", name: "Agua" } },
+        error: { code, params: { field: "name", name: "Water" } },
       });
     },
   );
@@ -1335,9 +1335,9 @@ describe("POST /setup-api/provision — orchestration, onboarding intent, cert g
       400,
       {
         zoneId: "z",
-        zoneName: "Terraza",
+        zoneName: "Terrace",
         departmentId: "d",
-        departmentName: "Comedor",
+        departmentName: "Dining room",
         row: "all",
       },
     ],
@@ -1396,22 +1396,22 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     [
       "a series code with a space",
       "seriesCode",
-      (b) => void (asRec(b.venue).seriesCode = "Serie A"),
+      (b) => void (asRec(b.venue).seriesCode = "Series A"),
     ],
     [
       "a rectificative series code with a space",
       "rectificativeSeriesCode",
-      (b) => void (asRec(b.venue).rectificativeSeriesCode = "Serie R"),
+      (b) => void (asRec(b.venue).rectificativeSeriesCode = "Series R"),
     ],
     [
       "a full invoice series code with a space",
       "fullSeriesCode",
-      (b) => void (asRec(b.venue).fullSeriesCode = "Serie F"),
+      (b) => void (asRec(b.venue).fullSeriesCode = "Series F"),
     ],
     [
       "an operation description carrying a character XML forbids",
       "location.operationDescription",
-      (b) => void (asRec(asRec(b.venue).location).operationDescription = "Barra\u0007principal"),
+      (b) => void (asRec(asRec(b.venue).location).operationDescription = "Main\u0007bar"),
     ],
     // Without this row `legalName` could be wired to any other string field and every test would
     // still pass.
@@ -1450,7 +1450,7 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     // The certificate is supplied so the series code is the ONLY fault: without it the secret gate
     // would refuse first, and the 400 would prove nothing about the venue-field seat.
     const body: Record<string, unknown> = { ...liveBody(), aeatCert: CERT };
-    asRec(body.venue).seriesCode = "Serie A";
+    asRec(body.venue).seriesCode = "Series A";
     const res = await app.request("/setup-api/fiscal-test", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -1473,7 +1473,7 @@ describe("POST /setup-api/provision — the regime's rules on the operator's ven
     mountSetup(app, deps, noopLog);
 
     const body = liveBody();
-    asRec(body.venue).seriesCode = "Serie A";
+    asRec(body.venue).seriesCode = "Series A";
     const res = await postProvision(app, body);
 
     expect(res.status).toBe(400);
@@ -1711,7 +1711,7 @@ describe("POST /setup-api/configuration", () => {
     "answers 409 when staging refuses an export for %s",
     async (code) => {
       const stageConfiguration = vi.fn(async () => {
-        throw new AppError(code, { field: "name", name: "Agua" });
+        throw new AppError(code, { field: "name", name: "Water" });
       });
       const app = new Hono();
       mountSetup(app, { environment: "preproduction", stageConfiguration }, noopLog);
@@ -1720,7 +1720,7 @@ describe("POST /setup-api/configuration", () => {
 
       expect(response.status).toBe(409);
       expect(await response.json()).toEqual({
-        error: { code, params: { field: "name", name: "Agua" } },
+        error: { code, params: { field: "name", name: "Water" } },
       });
     },
   );
@@ -1728,9 +1728,9 @@ describe("POST /setup-api/configuration", () => {
   it("answers 400 with the routing choice's params when staging refuses an export for service_zone.not_found", async () => {
     const params = {
       zoneId: "z",
-      zoneName: "Terraza",
+      zoneName: "Terrace",
       departmentId: "d",
-      departmentName: "Comedor",
+      departmentName: "Dining room",
       row: "all",
     } as const;
     const stageConfiguration = vi.fn(async () => {
@@ -2131,7 +2131,7 @@ describe("POST /setup-api/restore-bucket", () => {
   it("answers an unconfirmed venue with 409 and its names, and stages the retry that names its tax id", async () => {
     const dir = mkdtempSync(join(tmpdir(), "waitron-setup-bucket-"));
     try {
-      const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Local" };
+      const venue = { legalName: "Waitron SL", taxId: "89890001K", locationName: "Main bar" };
       const stageBucketRestore = vi
         .fn()
         .mockRejectedValueOnce(new AppError("restore.stream_venue_unconfirmed", venue))

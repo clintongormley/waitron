@@ -204,7 +204,7 @@ async function setupVenue(): Promise<Venue> {
         taxId: "70000001K",
         legalName: "Deli Test SL",
         location: {
-          name: "Sala principal",
+          name: "Main dining room",
           fiscalTerritory: "ES-common",
           invoiceLocales: [LOCALE],
           operationDescription: "Venta en establecimiento",
@@ -219,7 +219,7 @@ async function setupVenue(): Promise<Venue> {
         seriesCode: "A",
         rectificativeSeriesCode: "R",
         admin: {
-          displayName: "Administradora",
+          displayName: "Administrator",
           pinHash: hashPin("1234"),
           passwordHash: hashPassword("dashPass123"),
           email: "owner@example.test",
@@ -453,8 +453,8 @@ describe("sections and the reporting and routing they do not touch", () => {
     const v = await setupVenue();
     const app = mountApp();
     const catalogueId = await createCatalogue(app, v.managerCookie, "Routed menu");
-    const categoryId = await createCategory(app, v.managerCookie, "Bebidas");
-    const productId = await createProduct(app, v.managerCookie, catalogueId, "Agua");
+    const categoryId = await createCategory(app, v.managerCookie, "Beverages");
+    const productId = await createProduct(app, v.managerCookie, catalogueId, "Water");
     expect(
       (
         await send(app, "POST", "/management-api/folders/move", v.managerCookie, {
@@ -508,7 +508,7 @@ describe("sections and the reporting and routing they do not touch", () => {
       `/management-api/sections/${root}/sections`,
       v.managerCookie,
       {
-        internalName: "Bebidas (sección)",
+        internalName: "Beverages (section)",
       },
     );
     expect(created.status).toBe(201);
