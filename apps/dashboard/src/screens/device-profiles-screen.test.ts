@@ -1072,13 +1072,13 @@ describe("device-profiles-screen printer lists", () => {
     const el = await mount(api);
     el.shadowRoot!.querySelector<HTMLElement>("[data-test=create]")!.click();
     await el.updateComplete;
-    change(el, "profile-name", "Caja");
+    change(el, "profile-name", "Register");
     toggle(el, "receipt-printers-pr2", true);
     toggle(el, "payment-slip-printers-pr1", true);
     await el.updateComplete;
     await save(el);
     expect(api.createDeviceProfile).toHaveBeenCalledWith(
-      "Caja",
+      "Register",
 
       [],
       "till",
