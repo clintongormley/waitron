@@ -1,5 +1,11 @@
 # A798-B slice 9b — the box sets its own clock, and watches its time service (BUILD PLAN)
 
+> **Revision 3 (2026-10-31, after Task 1's two runs):** M5 printed its failing case — systemd will
+> not start a socket whose numeric group names no host group — and M5b took the fallback M9
+> names: a host group `waitron-box` of gid 10001, which install creates (decision 1, Tasks 2, 3
+> and 18). The owner is told in `questions.md` as an FYI with that default; the build carries on,
+> since the pull request is parked for the owner either way.
+>
 > **Revision 2 of the full plan (2026-10-31).** Written from the outline of 2026-10-24 when slice
 > 9b was taken; the outline's owner FYI defaults, owner question, rejected alternative,
 > measurement table, decisions and review notes are folded in below, each corrected where the
@@ -429,15 +435,16 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
 
 | # | Run | Printed | Verdict |
 | --- | --- | --- | --- |
-| M1 | | | |
-| M2 | | | |
-| M3 | | | |
-| M4 | | | |
-| M5 | | | |
-| M6 | | | |
+| M1 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `NTP=yes NTPSynchronized=yes`; `systemd 255 (255.4-1ubuntu8.18)`; `list /usr/lib/systemd/ntp-units.d/50-chrony.list: chrony.service`; `is-active systemd-timesyncd: inactive`, `chronyd: active`, `chrony: active`; `chronyd is unit chrony.service` | expected — the active unit is listed (`chronyd` is an alias of `chrony.service`). Run [41172990866](https://github.com/clintongormley/waitron/actions/runs/41172990866) printed a false failing case: the script compared the alias, not the unit (fixed in 48be808ad) |
+| M2 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `rc=1 output: Failed to set time: Automatic time synchronization is enabled; wall moved 0 s` | expected |
+| M3 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | before `wall_ns=1793425411088008032 uptime=53.43 is-enabled=alias NTP=yes`; after `wall_ns=1793425531253131399 uptime=53.45 is-enabled=alias NTP=no NTPSynchronized=no`; boot id `c149e53c-…` both; `wall minus target: -0.007 s`; `uptime moved 0.020 s`; battery clock `05:43:30` → `05:45:31` | expected — the fraction taken, uptime and boot id untouched, enablement unchanged, battery clock +121 s. Run [41172990866](https://github.com/clintongormley/waitron/actions/runs/41172990866)'s battery-clock failing case was the script reading a date as a number (fixed in 48be808ad; that run's dates moved 05:32:54 → 05:34:54) |
+| M4 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `offset from the reference just after start: 120.142 s`; `offset after polling: 0.007 s` | expected |
+| M5 | [41172990866](https://github.com/clintongormley/waitron/actions/runs/41172990866), [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `socket start rc=1; srw-rw---- root:root`; `group 10001 in /etc/group: none`; journal `Failed to resolve group 10001: No such process`, `status=216/GROUP`; container `unavailable EACCES` for both requests | **FAILING CASE** — systemd resolves a numeric `SocketGroup=` through the group database, so a gid with no host group is refused at start. Taken in by M9's named fallback (decision 1, revision 3): M5b |
+| M5b | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `with group waitron-box (gid 10001) added: socket start rc=0; srw-rw---- root:waitron-box`; `clock.status … reply {"synchronised":"yes"} boot c149e53c-… took 51 ms`; `clock.set 1793425487119 … reply {"rc":0,"before":1793425457238,"after":1793425487121} boot c149e53c-… took 59 ms` | expected — with a named host group of gid 10001 the unprivileged container reads status, sets the host clock (after − target = 2 ms) and sees the host's boot id |
+| M6 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `without the bind: unavailable ENOENT … took 2 ms` | expected |
 | M7 | — | not run: Docker Desktop not answering on 2026-10-31 | — |
-| M8 | | | |
-| M9 | | | |
+| M8 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `M8: not measured (no file /var/lib/systemd/timesync/clock on this runner)` | not measured — the runner runs chrony, not timesyncd; Task 19's backlog entry asks for it on a real box (Task 1, step 2) |
+| M9 | [41173702824](https://github.com/clintongormley/waitron/actions/runs/41173702824) | `systemd-analyze verify rc=0 output: <none>`; `a 60-second instance under RuntimeMaxSec=15 ended after 15 s (state failed)` | the kill: expected. The verify line is no evidence: it accepted the numeric `SocketGroup=10001` that M5's start refused, so `verify` does not resolve the group. The failing case M9 was there to catch is M5's |
 | M5′ (Task 4) | | | |
 | M7′ (Task 4) | | | |
 | M8′ (Task 4) | | | |
@@ -448,7 +455,7 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
 
 1. **The host service** `waitron-box`: a socket unit `deploy/box/waitron-box.socket`
    (`ListenStream=/run/waitron-box/box.sock`, `Accept=yes`, `SocketMode=0660`, `SocketUser=root`,
-   `SocketGroup=10001` (M9), `MaxConnections=4`) and a template `deploy/box/waitron-box@.service`
+   `SocketGroup=waitron-box`, `MaxConnections=4`) and a template `deploy/box/waitron-box@.service`
    (`StandardInput=socket`, `StandardOutput=socket`, `StandardError=journal`, `RuntimeMaxSec=15`,
    `ExecStart=/usr/local/lib/waitron/waitron-box.sh %i`,
    `ExecStopPost=/usr/local/lib/waitron/waitron-box.sh --restore %i`) running as root: one
@@ -471,6 +478,16 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    state (the per-instance "stopped unit" marker, the set lock) lives in `/run/waitron-box-state/`,
    created `0700 root`, never in the mounted folder: a marker the app could write would let it
    name a unit for root to start.
+   **The socket's group is a named host group, `waitron-box`, of gid 10001** (revision 3, from
+   M5 and M5b): systemd refused to start a socket whose `SocketGroup=10001` names no host group
+   (`Failed to resolve group 10001: No such process`, `status=216/GROUP`), and started it with
+   `root:waitron-box` once the group existed, after which the container's uid and gid 10001 read
+   and set the clock. Install makes the group: when `waitron-box` exists with gid 10001 it is used;
+   when neither the name nor gid 10001 exists it runs `groupadd --system --gid 10001 waitron-box`;
+   when `waitron-box` exists with another gid, or gid 10001 belongs to another group, install
+   prints one line naming what the box cannot do and installs no service (as when `systemctl` is
+   missing). It never reuses another group's gid: that group's members would gain a socket that
+   sets the clock. Reset and a re-install leave the group alone.
 2. **`clock.status`** answers `{"ok":true,"service":"on"|"off"|"stopped","unit":<name>|null,
    "synchronised":bool,"lastSyncAt":<ms>|null,"nowMs":<ms>}` — `off` when `NTP=no`, `stopped` when
    `NTP=yes` and no listed unit is active, `on` otherwise; `lastSyncAt` the mtime of
@@ -832,7 +849,7 @@ file"):
 - A second set while the lock is held (the `flock` stub answering busy) → `busy`, no stop.
 - An unknown first word answers `unknown_request`; an empty line too.
 - The socket and service files, read as text: `Accept=yes`, `SocketMode=0660`,
-  `SocketGroup=10001`, `RuntimeMaxSec=15`, `StandardInput=socket`, `StandardError=journal`, and an
+  `SocketGroup=waitron-box`, `RuntimeMaxSec=15`, `StandardInput=socket`, `StandardError=journal`, and an
   `ExecStopPost=` running the handler with `--restore %i`.
 
 **Deletion controls.** Remove the `synchronised` refusal → its case fails; remove the `trap` → the
@@ -862,7 +879,11 @@ names the socket folder in `.env` only once it listens; compose mounts it only t
   `systemctl enable --now waitron-box.socket`, then sets `WAITRON_BOX_SOCKET_DIR=/run/waitron-box`
   in `.env` before `docker compose up`; when `systemctl` is missing or enabling fails, prints one
   line naming what the box cannot do (set its own clock from a confirmed time), unsets the variable
-  and carries on; reset leaves the service alone; a production `--reset install` refused before
+  and carries on; the host group (decision 1): with no `waitron-box` and no gid 10001 the
+  `groupadd` stub is called with `--system --gid 10001 waitron-box` before `enable`; with
+  `waitron-box` at gid 10001 no `groupadd` is called; with `waitron-box` at gid 10002, and with gid
+  10001 named `staff2`, no `groupadd`, no unit installed, no `enable`, one printed line, and the
+  variable unset; reset leaves the service and the group alone; a production `--reset install` refused before
   touching it (as the time-sync case at `:1267` does). The installed files: the handler mode
   `0755`, both units `0644` (read with `statSync` in the override directory), and the `install`
   stub's log shows `-o root -g root` for all three (a test cannot chown to root without root).
@@ -871,7 +892,8 @@ names the socket folder in `.env` only once it listens; compose mounts it only t
   `deploy/compose.yml`.
 
 **Deletion controls.** Remove the `env_set` → the `.env` case fails; make it unconditional → the
-"enabling fails" case fails; install the handler `0644` → the mode case fails.
+"enabling fails" case fails; install the handler `0644` → the mode case fails; drop the check that
+gid 10001 is free → the `staff2` case fails.
 
 **Focused commands.** `pnpm exec vitest run scripts/waitron-sh.test.mjs -t "host service"`;
 `pnpm exec vitest run scripts/deploy-image-env.test.ts`; then each file whole, since a name-filtered
@@ -880,7 +902,10 @@ run does not load its other cases.
 ### Task 4: Measure the shipped files on the runner
 
 **Goal.** Run the files Tasks 2–3 wrote on Linux: M5′ (M5 against `deploy/box/` installed by the
-script instead of the throwaway handler), M8′ (M8 through the shipped handler), M9′
+script instead of the throwaway handler, its host group made by the same `groupadd --system --gid 10001
+waitron-box` install's step runs — `waitron.sh` cannot be sourced, it ends `main "$@"`
+(`deploy/waitron.sh:800`), so the step's group rule is tested in Task 3, not here; `systemd-analyze verify` does not resolve the group,
+M9's row, so the socket's start is the evidence), M8′ (M8 through the shipped handler), M9′
 (`systemd-analyze verify` of the shipped units, and `systemctl show -p StandardError
 waitron-box@measure.service` answering `journal`), M7′ (`docker compose -f deploy/compose.yml
 config --format json` with and without `WAITRON_BOX_SOCKET_DIR=/run/waitron-box`, printing the
@@ -1773,7 +1798,8 @@ task.
 - **B3's plan** (`docs/superpowers/plans/2026-10-26-b3-usb-installer.md`, Task 3.1, after its
   **Interfaces** paragraph at `:158`; the lead's ruling (a)): a paragraph "The clock requests
   slice 9b shipped" stating the server↔host contract B3 must keep or migrate: the socket
-  `/run/waitron-box/box.sock` (`waitron-box.socket`, `Accept=yes`, group 10001, mode 0660) and its
+  `/run/waitron-box/box.sock` (`waitron-box.socket`, `Accept=yes`, host group `waitron-box` of
+  gid 10001, mode 0660) and its
   template `waitron-box@.service`, which B3's planned `waitron-box.service` would collide with by
   name; the server's client `apps/server/src/box-host-client.ts`, which B3's plan lists as a NEW
   file (its Task 3 row, `:51`) but 9b creates first, so B3 changes or replaces 9b's client rather
