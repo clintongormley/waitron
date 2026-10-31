@@ -34,13 +34,14 @@ on:
     # be published from a commit whose suite has not run. Release tags take the full, unscoped path.
     tags: ["v*"]
   pull_request:
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
   # A PUSH IS NEVER GROUPED: its group is unique to the run, so no push can cancel or delay another.
   #
-  # A push to `main` that changes code runs the unfiltered suite over the merged tree and publishes
-  # an image for it. A manual recovery also runs that suite, without publishing. Grouping pushes
+  # Without verified equal-tree PR reuse, a code push runs the unfiltered suite over the merged tree.
+  # A manual recovery also runs that suite, without publishing. Grouping pushes
   # together cannot leave that alone, whatever `cancel-in-progress` says: GitHub allows only one
   # PENDING run per group and a newer arrival cancels the one already waiting, while
   # `cancel-in-progress` governs a run that has already STARTED and so never reaches that case. The
@@ -64,7 +65,7 @@ jobs:
   # Works out what the rest of the workflow needs to do. Everything below gates on its outputs.
   #
   # Two independent decisions, deliberately not merged into one:
-  #   `code`  — does anything here reach a code-gated job? If not, only the ungated `lint` (eslint and
+  #   `code`  — does anything here reach a code-gated job? If not, absent reuse only `lint` (eslint and
   #             format:check) and `root-guards` (the repo-level Vitest project) jobs run, on pull requests
   #             AND on main, so an inert change — prose, or root config no code-gated job reads —
   #             costs nothing in either place, and neither does a change to the repository's OWN
@@ -74,7 +75,7 @@ jobs:
   #             it is `code=true`, and a reporter every test command loads (GLOBAL_ROOT_FILES there),
   #             which runs everything.
   #   `scope` — on a pull request, narrow the test shards to the packages that changed and the
-  #             packages that depend on them. On main, run everything, because that unfiltered run
+  #             packages that depend on them. Without reuse, main runs everything, because that unfiltered run
   #             is what verifies the narrowing was right.
   #
   # Both come out of ONE `scripts/changed-packages.mjs` call, which is the same call and the same
@@ -110,7 +111,11 @@ jobs:
     permissions:
       contents: read
       actions: read
+      pull-requests: read
     outputs:
+      reuse: ${{ steps.reuse.outputs.reuse }}
+      reuse_run: ${{ steps.reuse.outputs.reuse_run }}
+      reuse_sha: ${{ steps.reuse.outputs.reuse_sha }}
       code: ${{ steps.classify.outputs.code }}
       scope: ${{ steps.classify.outputs.scope }}
       packages: ${{ steps.classify.outputs.packages }}
@@ -143,6 +148,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -156,6 +162,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -197,6 +204,13 @@ jobs:
           node-version-file: ".nvmrc"
           package-manager-cache: false
 
+      - id: reuse
+        name: Verify equal-tree pull-request CI evidence
+        timeout-minutes: 3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci-reuse.mjs
+
       - id: classify
         env:
           BASE_REF: ${{ github.base_ref }}
@@ -213,8 +227,8 @@ jobs:
           # Five lines out — `code=`, `scope=` (one of documentation, root, global, packages),
           # `packages=`, `root=` and `deploy=` — from ONE classifier call, which is also the one
           # `.husky/pre-push` makes. Four become job outputs: `root=` is emitted for the record and
-          # read by no consumer today — the hook routes a root-only push on `scope=root`, and here
-          # the repo-level suite is ungated anyway — while `deploy=` is read by the `image` job.
+          # read by no consumer today — the hook routes a root-only push on `scope=root` — while
+          # `deploy=` is read by the `image` job. Reuse leaves these publishing inputs intact.
           # Its reason goes to stderr, so it lands in this job's log rather than in $GITHUB_OUTPUT.
           #
           # `set -e` is what makes a classifier that cannot run FAIL this step rather than quietly
@@ -325,20 +339,21 @@ jobs:
               | node scripts/changed-scope.mjs >> "$GITHUB_OUTPUT"
           fi
 
-  # Always runs, on every path, including a documentation-only change — Prettier is the only tool
-  # here that reads prose. Cheap enough that gating it would save nothing.
-  #
   # Worth knowing precisely what `format:check` covers: .prettierignore lists `docs/`, so
   # root-level Markdown (CLAUDE.md, README.md, CONTRIBUTING.md) IS checked and nothing under docs/
   # is. Established by malforming a file in each location — `prettier --check` reports an ignored
   # path and a clean path identically, so the obvious probe proves nothing.
   lint:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -351,6 +366,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -376,15 +393,17 @@ jobs:
 
       - run: pnpm format:check
 
-  # Always runs, on every path: the repo-level suite is what proves the `changes` job's own
-  # classifier still works.
   root-guards:
+    needs: changes
+    if: always() && (needs.changes.result != 'success' || needs.changes.outputs.reuse != 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -397,6 +416,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -419,7 +440,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       # The repo-level project only (`vitest run` at the root, NOT `pnpm test`, which would also run
-      # every package). Three reasons it belongs in a job nothing gates:
+      # every package). Three reasons it belongs in this root job:
       #
       #   the two CLASSIFIERS under `scripts/` — if either is wrong, every gating decision below is
       #   wrong, so they must run even on the paths they would otherwise skip;
@@ -437,7 +458,7 @@ jobs:
   # TypeScript source. Gated on `code` because a Markdown edit cannot change an esbuild bundle.
   bundle-smoke:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: (needs.changes.outputs.code == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     # One of the steps below now starts a server that runs until it is killed. Its own `timeout`
     # bounds it, and this bounds the job if that ever stops working — without it a hung step waits
@@ -447,6 +468,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -459,6 +482,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -697,13 +722,15 @@ jobs:
   # TypeScript project-wide type check. No Playwright/Chromium involved.
   typecheck:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: (needs.changes.outputs.code == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -716,6 +743,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -780,7 +809,7 @@ jobs:
     # every code change; and `@waitron/db[<base>]` — pnpm's changed-since form, which this workflow no
     # longer uses at all — misses db when one of db's own dependencies changed. The `changes` job
     # resolves membership properly and answers here with a boolean.
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -793,6 +822,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -806,6 +836,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -881,12 +912,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-heavy]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.heavy == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -899,6 +932,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -958,7 +993,7 @@ jobs:
   test-server:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -971,6 +1006,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -984,6 +1020,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1076,12 +1113,14 @@ jobs:
   test-server-stream:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1094,6 +1133,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1203,12 +1244,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-server, test-server-stream]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.server == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1221,6 +1264,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1269,7 +1314,7 @@ jobs:
   test-fiscal-verifactu:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -1282,6 +1327,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1295,6 +1341,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1378,12 +1425,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-fiscal-verifactu]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.fiscal_verifactu == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1396,6 +1445,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1454,12 +1505,14 @@ jobs:
   test-ui:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.ui == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1472,6 +1525,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1558,7 +1613,7 @@ jobs:
   test-till:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -1568,6 +1623,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1580,6 +1637,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1657,12 +1716,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-till]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.till == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1675,6 +1736,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1730,7 +1793,7 @@ jobs:
   test-dashboard:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -1740,6 +1803,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1752,6 +1817,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1835,12 +1902,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-dashboard]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.dashboard == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1853,6 +1922,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1908,12 +1979,14 @@ jobs:
   test-setup:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.setup == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -1926,6 +1999,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -1979,7 +2054,7 @@ jobs:
   test-venue-service:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -1989,6 +2064,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2001,6 +2078,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2130,12 +2209,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-venue-service]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.venue_service == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2148,6 +2229,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2197,12 +2280,14 @@ jobs:
   test-adjustments:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.adjustments == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2215,6 +2300,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2261,12 +2348,14 @@ jobs:
   test-staffing:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.staffing == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2279,6 +2368,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2325,7 +2416,7 @@ jobs:
   test-bookings:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.bookings == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2334,6 +2425,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2347,6 +2439,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2395,7 +2488,7 @@ jobs:
   test-media:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.media == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2404,6 +2497,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2417,6 +2511,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2466,7 +2561,7 @@ jobs:
   test-payments-stripe:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_stripe == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2475,6 +2570,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2488,6 +2584,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2536,7 +2633,7 @@ jobs:
   test-payments-sumup:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.payments_sumup == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2545,6 +2642,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2558,6 +2656,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2604,7 +2703,7 @@ jobs:
   test-provisioning:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -2614,6 +2713,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2626,6 +2727,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2684,12 +2787,14 @@ jobs:
       contents: read
       actions: read
     needs: [changes, test-provisioning]
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.provisioning == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -2702,6 +2807,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2749,7 +2856,7 @@ jobs:
   test-identity:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.identity == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2758,6 +2865,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2771,6 +2879,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2803,7 +2912,7 @@ jobs:
   test-workforce:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.workforce == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2812,6 +2921,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2825,6 +2935,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2861,7 +2972,7 @@ jobs:
   test-light-a:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_a == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2870,6 +2981,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2883,6 +2995,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2965,7 +3078,7 @@ jobs:
   test-light-b:
     timeout-minutes: 10
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.light_b == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     steps:
       - id: checkout
@@ -2974,6 +3087,7 @@ jobs:
         timeout-minutes: 2
         continue-on-error: true
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -2987,6 +3101,7 @@ jobs:
         uses: actions/checkout@v7
         timeout-minutes: 2
         with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -3078,13 +3193,15 @@ jobs:
   # matched pair would leave the mechanism reading as a special case rather than as the rule.
   mutation-shared:
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true'
+    if: (needs.changes.outputs.code == 'true' && needs.changes.outputs.shared == 'true') && needs.changes.outputs.reuse != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -3097,6 +3214,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000
@@ -3207,11 +3326,18 @@ jobs:
             | $ENV.NEEDS | fromjson
             | if type != "object" or length == 0 then error("no needed job results to read") else . end
             | (.changes.outputs // {}) as $scope
+            | if $scope.reuse == "true" and
+                 (($scope.reuse_run // "" | test("^[1-9][0-9]*$")) | not)
+                 then error("verified reuse needs a source run id") else . end
+            | if $scope.reuse == "true" and
+                 (($scope.reuse_sha // "" | test("^[a-f0-9]{40}$")) | not)
+                 then error("verified reuse needs a source head SHA") else . end
             | to_entries
             | (.[] | "\(.key): \(.value.result)"),
               (map(select(.value.result != "success" and .value.result != "skipped") | .key)
                | if length > 0 then error("not succeeded or skipped: \(join(", "))") else empty end),
               (map(select(.value.result == "skipped" and $merges[.key] != null
+                          and $scope.reuse != "true"
                           and $scope.code == "true" and $scope[$merges[.key].gate] == "true")
                    | "\($merges[.key].package) was selected but its coverage merge job \(.key) was skipped")
                | if length > 0 then error(join("; ")) else empty end)
@@ -3317,9 +3443,8 @@ jobs:
 
   # Publishes the image to GHCR — a POST-GATE LEAF, downstream of the WHOLE suite rather than of the
   # image smoke alone. `needs: [changes, ci]` waits on the `ci` aggregate, so a push to `main` (or a
-  # `v*` tag) whose full unfiltered run goes red never ships `:main` / `:sha-…` / `:<version>` to a
-  # box that follows it via `docker compose pull` (spec §10; the red post-merge `main` run is exactly
-  # what CLAUDE.md §2 relies on to catch a cross-package failure a scoped PR skipped). `changes` is
+  # `v*` tag) whose CI gate goes red never ships `:main` / `:sha-…` / `:<version>` to a
+  # box that follows it via `docker compose pull` (spec §10). `changes` is
   # needed for its `code` output.
   #
   # It cannot appear in `ci`'s `needs` — that would be a cycle — so it is the ONE job the
@@ -3340,6 +3465,8 @@ jobs:
       - id: checkout
         name: Check out the code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         continue-on-error: true
         env:
@@ -3352,6 +3479,8 @@ jobs:
       - name: Check out the code, second attempt
         if: steps.checkout.outcome == 'failure'
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
         timeout-minutes: 2
         env:
           GIT_HTTP_LOW_SPEED_LIMIT: 1000

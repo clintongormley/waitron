@@ -128,7 +128,11 @@ hook, or how tests are scheduled:
 - **Moving harness code out of a `.test.ts` and into `src/testing/` can put it under coverage and
   mutation**, depending on the package's coverage settings and Stryker `mutate` list.
 - **CI does not run every check on every push.** Read the `changes` job's `code`, `scope` and
-  `packages` outputs before treating a green PR as evidence about the workspace.
+  `packages` outputs before treating a green PR as evidence about the workspace. A main push
+  reuses a same-repository PR's successful CI only after API verification of equal trees and
+  complete successful job evidence, plus a full-green main run for the pushed commit's parent.
+  Main retains image smoke before publishing; its summary names both evidence runs. Otherwise normal CI runs.
+  [Details and limits](docs/developers/ci-and-gates.md#main-can-reuse-an-identical-pull-request-tree).
 - **No front-end bundle is built by a pull request that changed no image input**, and wherever one
   is built nothing opens it, so a bundle that renders nothing passes anyway.
 - **Every Node bundle is built by `scripts/bundle-node.mjs`, which leaves sharp out; the box image
@@ -197,8 +201,9 @@ hook, or how tests are scheduled:
 
 **Claude never pushes with `--no-verify`**; the owner may, in an emergency (owner decision
 2026-10-03), and the failure still has to be fixed because CI runs the same checks. The hook's
-failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure the PR does not reproduce is a check CI has deferred to the
-unfiltered `main` run, not a wrong hook.
+failure message says so beside its skip hint, pinned by `scripts/pre-push.test.mjs`. A hook failure
+the PR does not reproduce still needs investigation: PR scoping or verified reuse may skip that
+check in CI. A green scoped run does not overrule the hook's failure.
 
 ---
 
@@ -710,8 +715,9 @@ browser test** — most of these rules exist because a test passed while proving
   marker that only provider-verified adoption clears.
 - **Source scanners select files, not just paths ending in `.ts`.** A failing browser test creates a
   screenshot DIRECTORY named `*.test.ts`; `sourceFilesIn` checks `isFile()`.
-- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the ungated
-  `root-guards` job and the hook run on every non-docs push. The root project does
+- **A guard that reads the whole tree belongs in the ROOT Vitest project**, which the
+  `root-guards` job runs unless main reuses verified equal-tree PR CI; the hook runs it on every
+  non-docs push. The root project does
   not typecheck, and a module tested only from there must be in the root `coverage.include` to be
   measured at all, and excluded from its own package's.
 - **Prove a guard by deletion**, and confirm a negative control fails for the reason you think.

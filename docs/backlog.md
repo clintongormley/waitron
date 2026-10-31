@@ -5710,6 +5710,10 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
 
 ### CI, tests and developer tooling
 
+- **A1242: qualify identical-tree PR CI reuse on real main pushes.** Owner-approved safeguards
+  require a complete green run for earlier main and retain main image smoke. Finish current-head
+  qualification, then retain main run ids proving equal-tree reuse and different-tree full fallback.
+
 - **A1213. Does a re-run till shard's report reach `test-till-merge`?** Seen once, not proven, in
   A1125's CI (#2238, 2026-10-29), while the merge still used the download action. Since A1216 the
   merge runs `scripts/download-coverage-blobs.mjs`, which keeps the highest-id copy of each report
@@ -6728,7 +6732,8 @@ the reason that is left is the `@vitest/coverage-v8` cross-fork branch-merge art
 is in #558's first commit message (2026-09-24). `packages/db` keeps `maxWorkers: 4`, which CI's
 `test-heavy` shards inherit because they pass no worker count of their own. Either way a new package
 that copies one of those configs must hold `98/98/98/95` (CLAUDE.md §2) — anything else and
-`scripts/coverage-thresholds.test.ts` fails it in the ungated `root-guards` job.
+`scripts/coverage-thresholds.test.ts` fails it in `root-guards` (or in the PR run that main reuses
+after verifying equal trees).
 
 **Specs still in the tree** (checked against the code 2026-09-27). A spec whose work is built is
 deleted once nothing points at it; one stays while a developer doc or code comment points at it, or
