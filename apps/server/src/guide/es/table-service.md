@@ -281,7 +281,7 @@ mesa** para todas las cuentas de la mesa, y luego las formas de cobrar esta cuen
 **Factura completa** de la cuenta y, cuando el local ofrece más de un idioma de ticket, el idioma en
 que se imprimirá su ticket. Cuando ya se ha pagado una parte de la cuenta, **Parte de esta cuenta ya
 está pagada: cobra el resto como pago de cuenta** ocupa el lugar de **Efectivo** y **Tarjeta**. En
-un móvil o una tableta, un solo botón **Cobrar** ocupa el lugar de **Efectivo**, **Tarjeta** y las
+un terminal de camarero, un solo botón **Cobrar** ocupa el lugar de **Efectivo**, **Tarjeta** y las
 formas de cobrar, salvo en una cuenta presentada que ya está pagada en parte. El pie no tiene
 **Aparcar**: la cuenta de una mesa ya espera en su mesa.
 

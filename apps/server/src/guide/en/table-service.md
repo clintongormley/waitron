@@ -267,7 +267,7 @@ of the table's bills, then the ways to pay this bill: **Cash** and **Card**, **P
 **Contribute** and **Split equally**, the bill's **Full invoice** and, when the venue offers more
 than one receipt language, the language its receipt will print in. Once part of the bill is paid,
 **Part of this bill is already paid: take the rest as a bill payment** takes the place of **Cash**
-and **Card**. On a phone or tablet, one **Pay** button takes the place of **Cash**, **Card** and the
+and **Card**. On a handheld, one **Pay** button takes the place of **Cash**, **Card** and the
 ways to pay, except on a presented bill that is already partly paid. The foot has no **Park**: a
 table's bill already waits at its table.
 
