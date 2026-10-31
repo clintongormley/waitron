@@ -6243,7 +6243,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Historical-category and renamed-parent samples in the sales-category suite, plus catalogue,
   device and floor-plan suites still carry Spanish sample names.
   Device-profile samples still need cleanup, including profile names, printer-loading and
-  accessibility states, equipment defaults, invoice printers, departments, zones, card readers
+  accessibility states, A4 invoice-printer names, departments, zones, card-reader samples
   and devices.
   The order-delivery suite still uses `Barra` and `Oficina` as printer sample names.
   Menu-preview accessibility states still use `Terraza` as a sample menu name.
