@@ -193,6 +193,7 @@ describe("no source writes a table the application role may only read", () => {
       "mirror_config",
       "node_mirror_link",
       "node_mode",
+      "node_recovery_key",
       "node_roles",
       "nodes",
       "tenants",

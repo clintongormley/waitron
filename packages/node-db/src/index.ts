@@ -17,3 +17,4 @@ export {
   setSingletonRoleTx,
 } from "./mode.js";
 export type { RoleWriteHandles } from "./mode.js";
+export { readRecoveryKeyName, readRecoveryKeyVerifier, setRecoveryKeyTx } from "./recovery-key.js";
