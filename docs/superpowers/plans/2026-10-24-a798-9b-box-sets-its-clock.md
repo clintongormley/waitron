@@ -3339,3 +3339,28 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   description names the automatic set (review M7).
 - **Not changed**: a steady clock that cannot be read lets a set through the backoff, as it lets
   an AEAT ask through (`authorityDue`); the reviewer called it a deliberate choice.
+
+### Task 11b's departures and per-task review, folded (2026-10-31)
+
+- **The marker has a source and an owner of its own** (review I1). `boxStaffNoticeSource` is
+  unchanged; `clock.check_time` comes from `clockCheckNoticeSource(check)` under the owner
+  `box-clock` (`BOX_CLOCK_NOTICE_OWNER`), which `deviceNoticeSources` adds after the box's own source
+  only when it is handed a `clockCheck`. Cost avoided: the box's source used to read no database, and
+  with the clock-stop read inside it a failing read marked the whole `box` owner unavailable, so the
+  till kept a stale storage notice or missed a new disk-full one. The literal stays in
+  `apps/server/src/box-staff-notices.ts`, which `scripts/staff-notice-codes.test.ts` reads. **For
+  Task 13a:** the till finds the marker by its code; its owner is `box-clock`, not `box`.
+- **`createAuthorityClockStatus` moved down beside the window**, straight after `isSingletonPrimary`,
+  so its `onSample` can tell the window AEAT answered. Its first use is the alert source after the
+  watch, and nothing calls its `observe` before the filing wiring.
+- **The watch reports `authorityAsked` only after its `stopped` check**, as it notes the sample.
+- **`tillClockCheck`'s "the box can ask"** is `filesRecords()` and a seat with `readAuthorityTime`,
+  decision 14's definition; it skips its read once the window has closed.
+- **The boot cases are a new file**, `apps/server/src/boot.clock-start-up.test.ts`; the non-primary
+  boot stamps the deployment before setting the singleton role `secondary`. Its cases also check
+  that the till's check reads the same window, seat and filing switch as the watch (review I2) and
+  that a filing reply's AEAT time still reaches the witness store (review I3).
+- **The till's words until Task 13a**: "The box's time needs checking" / "Hay que comprobar la hora
+  del equipo", with the tell-a-manager hint the other fixed codes take. Its case checks only the
+  words (review M3), so Task 13a's change of hint edits no assertion.
+- 26 deletion controls (20 from the task, 6 from the review), each failing a named case.
