@@ -1882,6 +1882,12 @@ _Formerly the kitchen entries in the opening part of the old Track A (before A1)
   reads it; the same write-only key exists at `1f88662fb`. Remove the redundant write without
   adding cross-login restoration. Found during A738 review; retain the filter-lifetime tests.
 
+- **A1259. Two till strings have no user: `table.pending_title` and `table.none_pending`.** On
+  `main` and on A803 slice 3 only tests name them (`git grep` outside test files: `strings.ts`
+  alone); their last screen or widget user went in A773-1 (#1897, `c9ad7a634`). Delete both, in
+  English and Spanish; three screen test files (`.test.ts`, `.empty-drawer.a11y`,
+  `.populated-drawer.a11y`) check the screen does not show them.
+
 - **A1051. Hiding a zone does not check its other tables' unsent dishes, on a till or a
   handheld.** Read, not run: `#hidesOrderZone` (`apps/till/src/till-app.ts`) checks only the counter
   basket and the open table, as since A740's #1825 (`c90856059`); ticking the zone again brings the

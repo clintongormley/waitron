@@ -2863,7 +2863,9 @@ prefix for app files; lines are at this task's commit unless written "was :N" (a
   "the refusal is inside the window" check with the refusal drawn above the foot: tapping Finish
   table in the ⋮ at the top left the refusal below the window, which is the Task 10 review's M1
   problem in a new place. `updated()` now scrolls the refusal into view (`#showFinishRefusal`, using
-  the step panel's `#scrollIntoViewOnceDrawn`) when `finishRefused` turns on.
+  the step panel's `#scrollIntoViewOnceDrawn`) when `finishRefused` turns on. (2026-10-31: on a
+  narrow screen that still left it hidden; replaced by `#revealFinishRefusal`, see _Task 11c review
+  answers_ I1.)
 - **Departure: the GREEN grep.** The plan's `rg -n 'data-open-drawer|drawerOpen|open_drawer|data-pending-badge' apps/till`
   can never print nothing: `open_drawer` also matches `action.open_drawer`, the cash drawer's Open
   drawer (`strings.ts:338`, `:2149`, `till-paid-view.ts:280`, `till-ticket-view.ts:1095`,
@@ -2904,9 +2906,9 @@ prefix for app files; lines are at this task's commit unless written "was :N" (a
 | `.test.ts:588` (was "badges the drawer handle with the pending-to-serve count") | R | badge text contains 1 → the Sent summary reads `sentCounts(0, 1, 0, 1)` (1 firing, 1 served); one-portion line; the service read added so Sent draws | D17 | 11c |
 | `.test.ts:598` (was "names the drawer handle by … its pending count") | R | the handle's name "Tab 1" → the Sent toggle's name, its title and `sentCounts(0, 1, 0, 1)`, with `toHaveAccessibleName` | D17 | 11c |
 | `.test.ts:610` (was "hides the badge and duplicate To serve card …") | R | the badge null after the last dish is served → moved to `A803 to serve`, which reads the Sent summary's not-yet-served counts as 0 after it; this case runs on the stored-lines fallback, where Sent draws no summary; its other checks unchanged; retitled | D17 | 11c |
-| `.test.ts:802` (empty tab) | R | badge null → `sentSummary` undefined (Sent draws no summary); retitled "no Sent counts" | D17 | 11c |
+| `.test.ts:802` (empty tab) | R + S | badge null → `sentSummary` undefined (Sent draws no summary); retitled "no Sent counts". Corrected by the 11c review answers (I2): as first built the case gave no service read, so the check passed with a dish still to serve; it now mounts with `orderId: "wo-4"` and a service read listing no rows (S), and the same check fails when that read holds an unserved dish | D17 | 11c |
 | `.test.ts:4150`, `:4186` (status in the head actions; one line each at 390px in Spanish) | R | the status's next sibling, and the button measured beside the pin, the Tab button → the bill switcher; `[1, 1, 1]` and the same-row check unchanged | §3.5, D4 | 11c |
-| `.empty-drawer.a11y.test.ts:51-53` | R | badge null after a served line with the service read unread → the Sent panel draws no summary | D17 | 11c |
+| `.empty-drawer.a11y.test.ts:51-53` | R | badge null after a served line with the service read unread → (11c review answers, I2) the check moves to after the case's service read lists that served line: the Sent summary reads exactly `0 ready · 0 firing · 0 held · 1 served` (Spanish in the `es` runs). The first-built check (no summary while the read is unread) passed with a dish still to serve and is gone | D17 | 11c |
 | `.populated-drawer.a11y.test.ts:96-106` | R | badge text "2" → Sent summary `0 ready · 2 firing · 0 held · 1 served`. The 2 agrees for a different reason: the badge counted the dish and its extra row, the summary the dish's two portions; a one-portion fixture would change this case's total checks, so it was kept | D17 | 11c |
 | `.parties.test.ts` `mountScreen` (was `:105`) | S | the drawer opened for every case → not opened | — | 11c |
 | `.parties.test.ts:145` (was "lists every bill with what it came to …") | B + R | the drawer rows' `[data-bill-total]` (14.00, 30.00) and `[data-bill-state]` (Paid, "To pay €30.00") → the switcher rows' `.bill-row-owes` ("Paid ✓", €30.00), row count 2 unchanged (B); `[data-party-outstanding]` €30.00 read in the foot (R, `toBe` byte-identical) | §3.5 "listing each bill with what it owes (or Paid ✓)"; D9 | 11c |
@@ -2929,7 +2931,7 @@ prefix for app files; lines are at this task's commit unless written "was :N" (a
 | `.bill-payments.test.ts` was `:167-184` ("shows a saved full-invoice choice and customer on an unissued bill") | deleted, **Q5e** | the drawer row's `[data-invoice-choice]` "Full invoice · Cliente SL · B12345674" → nothing: no control on the table screen shows a saved recipient once the drawer goes | — | 11c |
 | `-bill-payments.test.ts:574` (saving a full-invoice recipient) | stand-in, **Q5e** | the drawer's `[data-invoice-choice]` contains "Ana García" → the bill the app handed the screen has that recipient (`order.bills`); weaker: not what staff see | — | 11c |
 | `-bill-payments.test.ts` `listed` (`:3049`), used by `:3112`, `:3123`, `:3143` | B | the drawer rows' `[data-bill-total]` (wo-4 €120.00, wo-9 €12.00) → the switcher rows' owing (wo-4 €70.00, the partly paid bill's outstanding; wo-9 €12.00) | §3.5 "what it owes" | 11c |
-| `-parties.test.ts` `figures` (`:784`) and its ten callers (was `:911`, `:941`, `:989`, `:1055`, `:1072`, `:1096`, `:1203`, `:1287`, `:1317`, `:1358`, each opening the drawer first) | B + R + S | the drawer row's `[data-bill-total]` and `[data-bill-state]` "To pay X" → the switcher row's owing X (same amount: each fixture owes its total) (B); `total` field dropped, since the bill's total from the bills read is drawn nowhere now (the foot's total comes from the lines, €30.00 here, and was tried first: 10 failures); still-to-pay from the foot, byte-identical (R); the drawer opens removed (S) | §3.5; D9 | 11c |
+| `-parties.test.ts` `figures` (`:784`) and its ten callers (was `:911`, `:941`, `:989`, `:1055`, `:1072`, `:1096`, `:1203`, `:1287`, `:1317`, `:1358`, each opening the drawer first) | B + R + S | the drawer row's `[data-bill-total]` and `[data-bill-state]` "To pay X" → the switcher row's owing X (same amount: each fixture owes its total) (B); `total` field dropped, since the bill on screen's total from the bills read is drawn nowhere now; the Split a table and Merge/Transfer lists still show other bills' totals (the foot's total comes from the lines, €30.00 here, and was tried first: 10 failures); still-to-pay from the foot, byte-identical (R); the drawer opens removed (S) | §3.5; D9 | 11c |
 | `-parties.test.ts:2776` (`billNameShown` `:2699`, "4 · Bill 1 · Clint") | B | the drawer's `.bill-name` → the switcher row's label "Bill 1 · Clint"; the drawer open removed | §3.5; D4 | 11c |
 | `-parties.test.ts:5222` (split-off bill still listed) | R | the drawer's `[data-bill]` rows → the switcher's `[data-switch-bill]` rows; `toContain(wo-check)` unchanged | §3.5 | 11c |
 | `-parties.test.ts` `requestedOnScreen` (`:5285`, used at `:5317`, `:5332`, `:5346`, `:5440`) | B | the drawer's bill-requested chip → the ⋮ offering Cancel the bill request (it does only while requested); true/false unchanged | D4 | 11c |
@@ -2946,6 +2948,76 @@ go):
   be a full invoice, or to whom, until they open the Full invoice editor. Neither §3.5 nor D4/D8/D9
   names a new place. The screen case is deleted; the app case reads the data handed to the screen.
   Possible answers: show the choice under the foot's Full invoice button, or in the switcher's row.
+
+### Task 11c review answers (2026-10-31, `a803-3-reviews/task-11c.md`)
+
+Answered on top of Task 12 (`241c38630`); each finding was checked against that tip, where the
+refusal, `#showFinishRefusal` and the two to-serve checks were as the review read them at
+`2c36c4bc5`. Runs in the foreground with `AI_AGENT`/`CLAUDECODE` unset; free memory 55–61% before
+each browser run. Every control changed one line by a script that asserts its pattern occurs once,
+ran the named case, and put the file back from a saved copy (`cmp`-equal after). Lines are at this
+answer's commit.
+
+- **I1 (behaviour), the refusal hidden on a narrow screen.** Fixed: `#showFinishRefusal` in
+  `updated()` is replaced by `#revealFinishRefusal`, started from `willUpdate` when `finishRefused`
+  turns on, as `#revealTakeOver` is for another person's draft. Below 720 px wide, while browsing
+  with a New order, it opens Review first (`#openReview`, which puts focus on Review's Back), then
+  scrolls the refusal into view once its buttons are drawn. Wide screens and screens with no New
+  order (whose order pane is never hidden) only scroll, as before.
+  - `.panel-footer.test.ts:305` is now `it.each` over 1024×768 and 390×844 (was 1024×768 only),
+    keeping the visibility, `role="alert"`, in-window and above-the-total checks, and adding M2's.
+    RED (screen as at `241c38630`): `Tests 1 failed | 1 passed | 30 skipped (32)`, the 390×844 row
+    failing at `refusal.checkVisibility()` (`expected false to be true`); 1024×768 passed.
+  - App case, new: `till-app-handheld-pay.test.ts:5409` "Finish table refused from the ⋮ on a
+    handheld opened from the floor": a phone (`phone-portrait`) at 390×844, two bills, Finish table
+    refused `party.bill_outstanding`, the table opened from the floor with `openTable` (not from the
+    paid screen), the order pane checked hidden first, the ⋮'s Finish table tapped with
+    `userEvent.click`; then the refusal, its Take payment and its Record unpaid departure are each
+    `checkVisibility()` true and the refusal is in the window. Its in-window check rounds the bottom
+    edge: it failed unrounded, and a probe run then measured the refusal at 752.44–844.44 in an 844 px
+    window after the scroll.
+  - GREEN: both screen rows and the app case pass.
+  - Deletion control: the Review-opening line removed → screen `1 failed | 1 passed`, the 390×844
+    row at `refusal.checkVisibility()`; the app case `1 failed`, at `refusal.checkVisibility()`.
+- **I2, two to-serve checks that could not fail.** Both now read a real Sent summary.
+  - `.test.ts:801` (empty tab) mounts with `orderId: "wo-4"` and a service read listing no rows
+    (`sentRows([])`), and keeps `expect(await sentSummary(el)).toBeUndefined()`: with nothing sent,
+    Sent draws no summary, so "assert 0 counts" has nothing to read here. Probe (one unserved one-portion
+    dish put in both the lines and the read): `1 failed`, at that check, `expected '0 ready · 1
+    firing · 0 held · 0 served' to be undefined`. The first try without `orderId` failed only at the
+    later total check (the read's rows belong to `wo-4`, so with no bill on screen nothing counted
+    them), which is why `orderId` is set.
+  - `.empty-drawer.a11y.test.ts:82`: the unread-state check is gone; after the case's own service
+    read lists the served line, the Sent summary must read exactly `0 ready · 0 firing · 0 held · 1
+    served` (in Spanish for the `es` runs). Probe (an unserved row added to that read): `8 failed`,
+    each at this check (`expected '0 ready · 1 firing · 0 held · 1 served' to be '0 ready · 0 firing
+    · 0 held · 1 served'`, and the Spanish `Marchados: 1` against `Marchados: 0`; read per case from
+    Vitest's JSON report).
+  - GREEN: the 9 cases pass. Rows corrected in _Task 11c as built_: `.test.ts:802` becomes R + S
+    (the service read added), `.empty-drawer.a11y.test.ts:51-53` states where the check now sits.
+- **M1.** The `-parties.test.ts figures` row now says the bill on screen's total from the bills read
+  is drawn nowhere, and that the Split a table and Merge/Transfer lists still show other bills'
+  totals. The B kind and the `figures()` reasoning are unchanged.
+- **M2.** The refusal case asserts `checkVisibility()` on both Take payment and Record unpaid
+  departure, then taps Record unpaid departure with `userEvent.click` and captures exactly one
+  `record-unpaid-departure`, at both widths. Control: `hidden` added to `[data-record-departure]` →
+  `2 failed` (both widths), at `record.checkVisibility()` (`.panel-footer.test.ts:340`).
+- **M3.** Backlog line A1259 in _The till, devices and table service_ (`docs/backlog.md`): the two
+  strings, that only tests name them on `main` and here, their last user's removal in A773-1
+  (#1897, `c9ad7a634`, `git log -S` on `origin/main`), and the three test files that check them.
+  Four lines, so no detail file. The item counter moved from A1259 to A1260.
+- **Runs.** The whole screen set (91 files): `Test Files 91 passed (91)`, `Tests 1801 passed
+  (1801)` (Task 12's 1800 plus the 390×844 row), no `Errors` line. The 12 app files of the review's
+  app set: `Test Files 12 passed (12)`, `Tests 3200 passed (3200)` (3199 plus the app case). After
+  the final edits, `.panel-footer`, `.empty-drawer.a11y`, `.test.ts` and `-handheld-pay` again:
+  `Tests 630 passed (630)`. `pnpm --filter @waitron/till typecheck` exit 0; `prettier --check` and
+  `eslint` on the changed files exit 0.
+
+| Test | Kind | Before → after | Source | Task |
+| --- | --- | --- | --- | --- |
+| `.panel-footer.test.ts:305` (Finish table's refusal above the foot) | stricter | 1024×768 only, Record unpaid departure only `not.toBeNull()` → also 390×844; Take payment and Record unpaid departure `checkVisibility()` true; a real tap on Record unpaid departure sends one `record-unpaid-departure`; every earlier check unchanged; retitled with the size | D9; review 11c I1, M2 | 11c answers |
+| `.test.ts:801` (empty tab) | S | the mount gains `orderId: "wo-4"` and an empty service read; the `expect`s are byte-identical | review 11c I2 | 11c answers |
+| `.empty-drawer.a11y.test.ts:53` (was) → `:82` | stricter | no summary while the read is unread → after the read, the summary is exactly 0 ready, 0 firing, 0 held, 1 served | D17; review 11c I2 | 11c answers |
 
 ## Task 12: the table's foot: totals and Pay, no Hold, quiet Pay, one Full invoice (≈65 calls)
 

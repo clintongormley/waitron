@@ -41,6 +41,7 @@ import {
   equipmentWith,
   SECOND_READER,
   lock,
+  mesa,
   money,
   offers,
   paymentOf,
@@ -61,6 +62,8 @@ import {
   till,
   type,
 } from "../test/bill-pay-app.js";
+import { openTableMenu } from "./screens/till-table-order-screen.bill-switcher.test-helpers.js";
+import { resized } from "./screens/till-table-order-screen.test-helpers.js";
 
 let api: TillApi;
 
@@ -5400,5 +5403,59 @@ describe("till-app: a reader refused at Take payment, and a printer that has gon
       await flush(el);
       expect(pay).toHaveBeenCalledOnce();
     });
+  });
+});
+
+describe("till-app: Finish table refused from the ⋮ on a handheld opened from the floor", () => {
+  it("shows the refusal, its Take payment and its Record unpaid departure in the window at 390x844", async () => {
+    const viewport = { width: window.innerWidth, height: window.innerHeight };
+    await page.viewport(390, 844);
+    try {
+      const { el } = await mountApp(
+        onPhone({
+          getTablesState: vi
+            .fn()
+            .mockResolvedValue([mesa({ outstanding: "148.50", billCount: 2 })]),
+          getPartyBills: vi.fn().mockResolvedValue([
+            billOf(),
+            billOf({
+              workingOrderId: "wo-5",
+              billNumber: 2,
+              total: "28.50",
+              outstanding: "28.50",
+            }),
+          ]),
+          finishTable: vi.fn().mockRejectedValue({ code: "party.bill_outstanding" }),
+        }),
+      );
+      const order = await openTable(el);
+      await resized(order);
+      expect(order.shadowRoot!.querySelector("[data-draft-pane]")!.checkVisibility()).toBe(false);
+
+      await openTableMenu(order);
+      await userEvent.click(inOrder(order, "[data-table-menu] [data-finish-table]")!);
+      await flush(el);
+
+      expect(vi.mocked(api.finishTable)).toHaveBeenCalledTimes(1);
+      const refusal = inOrder(order, "[data-finish-refusal]")!;
+      expect(refusal).not.toBeNull();
+      expect(refusal.checkVisibility()).toBe(true);
+      expect(text(refusal.querySelector("span"))).toBe(codeMessage("party.bill_outstanding"));
+      expect(inOrder(order, "[data-finish-refusal] [data-take-payment]")!.checkVisibility()).toBe(
+        true,
+      );
+      expect(
+        inOrder(order, "[data-finish-refusal] [data-record-departure]")!.checkVisibility(),
+      ).toBe(true);
+      await expect
+        .poll(() => {
+          const box = refusal.getBoundingClientRect();
+          // scrollIntoView leaves the box's fractional offset, under a pixel past the edge.
+          return box.top >= 0 && Math.round(box.bottom) <= innerHeight;
+        })
+        .toBe(true);
+    } finally {
+      await page.viewport(viewport.width, viewport.height);
+    }
   });
 });

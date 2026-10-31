@@ -48,9 +48,6 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
         el.currentOrdersUnread = true;
         await el.updateComplete;
         expect(menu.querySelector(".pending")).toBeNull();
-        const sent = el.shadowRoot!.querySelector<TillSentOrders>("till-sent-orders")!;
-        await sent.updateComplete;
-        expect(sent.shadowRoot!.querySelector("[data-sent-panel] .summary")).toBeNull();
         const total = q("[data-order-total]");
         expect(total.textContent).toContain(formatMoney("2.00", currentLocale()));
         expect(total.checkVisibility()).toBe(true);
@@ -82,6 +79,13 @@ describe.each(["en", "es"] as const)("drawer without pending dishes in %s", (loc
         await el.updateComplete;
         const panel = q("till-sent-orders") as TillSentOrders;
         await panel.updateComplete;
+        expect(panel.shadowRoot!.querySelector("[data-sent-panel] .summary")!.textContent).toBe(
+          t("table.sent_counts")
+            .replace("{ready}", "0")
+            .replace("{firing}", "0")
+            .replace("{held}", "0")
+            .replace("{served}", "1"),
+        );
         for (const selector of ["[data-sent-toggle]", "[data-served-toggle]"]) {
           const toggle = panel.shadowRoot!.querySelector<HTMLElement>(selector)!;
           if (toggle.getAttribute("aria-expanded") === "false") {

@@ -302,37 +302,49 @@ describe("A803 no tab panel", () => {
     expect(q(el, "[data-party-outstanding]")).toBeNull();
   });
 
-  it("shows Finish table's refusal above the foot, where the ⋮'s Finish table was tapped", async () => {
-    await page.viewport(1024, 768);
-    const { el } = await mountFooter(twoBills);
-    await resized(el);
-    el.addEventListener("finish-table", () => {
-      el.finishRefused = true;
-    });
-    const payments = capture(el, "take-payment");
-    await openTableMenu(el);
-    await userEvent.click(q(el, "[data-table-menu] [data-finish-table]")!);
-    await el.updateComplete;
+  it.each([
+    [1024, 768],
+    [390, 844],
+  ])(
+    "shows Finish table's refusal above the foot at %ix%i, where the ⋮'s Finish table was tapped",
+    async (width, height) => {
+      await page.viewport(width, height);
+      const { el } = await mountFooter(twoBills);
+      await resized(el);
+      el.addEventListener("finish-table", () => {
+        el.finishRefused = true;
+      });
+      const payments = capture(el, "take-payment");
+      await openTableMenu(el);
+      await userEvent.click(q(el, "[data-table-menu] [data-finish-table]")!);
+      await el.updateComplete;
 
-    const refusal = q(el, "[data-finish-refusal]")!;
-    expect(refusal).not.toBeNull();
-    expect(refusal.checkVisibility()).toBe(true);
-    expect(refusal.getAttribute("role")).toBe("alert");
-    expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
-    await expect
-      .poll(() => {
-        const box = refusal.getBoundingClientRect();
-        return box.top >= 0 && box.bottom <= innerHeight;
-      })
-      .toBe(true);
-    expect(
-      refusal.compareDocumentPosition(q(el, "[data-order-summary]")!) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(q(el, "[data-finish-refusal] [data-record-departure]")).not.toBeNull();
-    await userEvent.click(q(el, "[data-finish-refusal] [data-take-payment]")!);
-    expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
-  });
+      const refusal = q(el, "[data-finish-refusal]")!;
+      expect(refusal).not.toBeNull();
+      expect(refusal.checkVisibility()).toBe(true);
+      expect(refusal.getAttribute("role")).toBe("alert");
+      expect(refusal.textContent).toContain(codeMessage("party.bill_outstanding"));
+      await expect
+        .poll(() => {
+          const box = refusal.getBoundingClientRect();
+          return box.top >= 0 && box.bottom <= innerHeight;
+        })
+        .toBe(true);
+      expect(
+        refusal.compareDocumentPosition(q(el, "[data-order-summary]")!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      const take = q(el, "[data-finish-refusal] [data-take-payment]")!;
+      const record = q(el, "[data-finish-refusal] [data-record-departure]")!;
+      expect(take.checkVisibility()).toBe(true);
+      expect(record.checkVisibility()).toBe(true);
+      const departures = capture(el, "record-unpaid-departure");
+      await userEvent.click(record);
+      expect(departures).toHaveLength(1);
+      await userEvent.click(take);
+      expect(payments.map((event) => event.detail)).toEqual([{ workingOrderId: "wo-5" }]);
+    },
+  );
 
   it("shows Move guests' table picker in the side column, and Back closes it", async () => {
     const { el } = await mountFooter(twoBills);

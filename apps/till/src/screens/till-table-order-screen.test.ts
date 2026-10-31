@@ -799,7 +799,7 @@ describe("till-table-order-screen", () => {
   });
 
   it("handles an empty tab: no Sent counts or duplicate To serve card, zero total", async () => {
-    const { el } = await mount({ lines: [] });
+    const { el } = await mount({ orderId: "wo-4", lines: [], currentOrders: sentRows([]) });
     await openTableMenu(el);
     expect(await sentSummary(el)).toBeUndefined();
     const text = tableMenuAndSwitcherText(el);

@@ -1947,6 +1947,7 @@ export class TillTableOrderScreen extends LitElement {
       this.revealOtherDrafts !== changed.get("revealOtherDrafts")
     )
       void this.#revealTakeOver();
+    if (changed.has("finishRefused") && this.finishRefused) void this.#revealFinishRefusal();
     if (changed.has("nameRefusal") && this.nameRefusal !== null) {
       this.naming = { value: this.nameRefusal.name, refusal: this.nameRefusal.message };
     }
@@ -1994,10 +1995,9 @@ export class TillTableOrderScreen extends LitElement {
 
   /** The app clears its offer on this event, so a screen mounted later does not open it again. Taken
    * even when the line is gone, for the same reason. */
-  override updated(changed: PropertyValues<this>): void {
+  override updated(): void {
     this.#refocusMenu();
     this.#placeStepFocus();
-    this.#showFinishRefusal(changed);
     this.#watchAutomaticRouting();
     this.#sizeDraftBar();
     if (!this.#offerTaken) return;
@@ -2064,11 +2064,12 @@ export class TillTableOrderScreen extends LitElement {
   }
 
   /** Finish table is tapped in the ⋮ at the top, and its refusal is drawn above the foot, which can
-   * be below the window. */
-  #showFinishRefusal(changed: PropertyValues<this>): void {
-    if (!changed.has("finishRefused") || !this.finishRefused) return;
+   * be below the window, and on a narrow screen is in the Review view, hidden while browsing. */
+  async #revealFinishRefusal(): Promise<void> {
+    if (!this.wide && !this.reviewing && this.#draftStore !== null) await this.#openReview();
+    await this.updateComplete;
     const refusal = this.renderRoot.querySelector<HTMLElement>("[data-finish-refusal]");
-    if (refusal !== null) void this.#scrollIntoViewOnceDrawn(refusal);
+    if (refusal !== null) await this.#scrollIntoViewOnceDrawn(refusal);
   }
 
   #drawnStep: ActionStep = "closed";
