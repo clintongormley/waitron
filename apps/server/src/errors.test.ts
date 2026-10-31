@@ -15,9 +15,9 @@ describe("the zone error codes carry their declared params", () => {
   });
 
   it("constructs zone.name_taken with the operator-supplied name, matching table.label_taken's shape", () => {
-    const error = new AppError("zone.name_taken", { name: "Terraza" });
+    const error = new AppError("zone.name_taken", { name: "Terrace" });
     expect(error.code).toBe("zone.name_taken");
-    expect(error.params).toEqual({ name: "Terraza" });
+    expect(error.params).toEqual({ name: "Terrace" });
   });
 });
 
@@ -51,9 +51,9 @@ describe("the table error codes carry their declared params", () => {
 
 describe("the station error codes carry their declared params", () => {
   it("constructs station.name_taken with the operator-supplied name, matching zone.name_taken's shape", () => {
-    const error = new AppError("station.name_taken", { name: "Cocina" });
+    const error = new AppError("station.name_taken", { name: "Kitchen" });
     expect(error.code).toBe("station.name_taken");
-    expect(error.params).toEqual({ name: "Cocina" });
+    expect(error.params).toEqual({ name: "Kitchen" });
   });
 
   it("constructs station.not_found with the qualified stationId, matching zone.not_found's shape", () => {
@@ -82,9 +82,9 @@ describe("the ticket error code carries its declared params", () => {
 
 describe("the course error codes carry their declared params", () => {
   it("constructs course.name_taken with the operator-supplied name, matching station.name_taken's shape", () => {
-    const error = new AppError("course.name_taken", { name: "Entrantes" });
+    const error = new AppError("course.name_taken", { name: "Starters" });
     expect(error.code).toBe("course.name_taken");
-    expect(error.params).toEqual({ name: "Entrantes" });
+    expect(error.params).toEqual({ name: "Starters" });
   });
 
   it("constructs course.not_found with the qualified courseId, matching station.not_found's shape", () => {

@@ -34,11 +34,11 @@ describe("leaveForClearing", () => {
   async function secondDepartment(): Promise<{ departmentId: string; zoneId: string }> {
     return inTx(v, async (tx) => {
       const department = await createDepartment(tx, v.cfg, {
-        name: `Terraza ${randomUUID()}`,
+        name: `Terrace ${randomUUID()}`,
         orderStart: "table",
       });
       const zone = await createServiceZone(tx, v.cfg, {
-        name: `Zona ${randomUUID()}`,
+        name: `Zone ${randomUUID()}`,
         departmentId: department.id,
       });
       return { departmentId: department.id, zoneId: zone.id };
@@ -51,10 +51,13 @@ describe("leaveForClearing", () => {
     await inTx(v, async (tx) => {
       await tx
         .insert(floorZones)
-        .values({ id: zoneId, locationId: v.cfg.locationId, name: `Sin departamento ${zoneId}` });
-      await tx
-        .insert(diningTables)
-        .values({ id: tableId, locationId: v.cfg.locationId, label: "Mesa sin", zoneId });
+        .values({ id: zoneId, locationId: v.cfg.locationId, name: `No department ${zoneId}` });
+      await tx.insert(diningTables).values({
+        id: tableId,
+        locationId: v.cfg.locationId,
+        label: "Table without department",
+        zoneId,
+      });
       await tx.insert(floorTodayTables).values({ tableId });
     });
     return tableId;
@@ -70,8 +73,8 @@ describe("leaveForClearing", () => {
     const other = await secondDepartment();
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
     await switchDepartment(other.departmentId, false);
-    const a = await v.table("Mesa A");
-    const b = await v.table("Mesa B", other.zoneId);
+    const a = await v.table("Table A");
+    const b = await v.table("Table B", other.zoneId);
 
     await inTx(v, (tx) => leaveForClearing(tx, [a, b], at));
 
@@ -90,8 +93,8 @@ describe("leaveForClearing", () => {
 
   it("asks venue-service once for all the leaving tables", async () => {
     const other = await secondDepartment();
-    const a = await v.table("Mesa A");
-    const b = await v.table("Mesa B", other.zoneId);
+    const a = await v.table("Table A");
+    const b = await v.table("Table B", other.zoneId);
     const c = await tableInZoneWithoutDepartment();
     const asked = vi.spyOn(VENUE_SERVICE, "readTablesNeedingClearing");
     try {
@@ -105,7 +108,7 @@ describe("leaveForClearing", () => {
 
   it("keeps a table marked after its department is switched off, until Mark cleared", async () => {
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, true));
-    const a = await v.table("Mesa A");
+    const a = await v.table("Table A");
 
     await inTx(v, (tx) => leaveForClearing(tx, [a], at));
     await inTx(v, (tx) => setNeedsClearingInEveryDepartment(tx, false));
