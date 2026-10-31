@@ -1376,7 +1376,9 @@ describe("waitron.sh install and the box's host service", () => {
     writeFileSync(join(sb.boxDir, ".env"), "WAITRON_BOX_SOCKET_DIR=/run/waitron-box\n");
     const r = run(sb, ["install"]);
     declined(sb, r);
-    expect(r.stderr).toContain("waitron-box already exists with another number");
+    expect(r.stderr).toContain(
+      "the group waitron-box already exists with number 10002, and the clock service needs 10001",
+    );
   });
 
   it("installs no service, and shares no group, when number 10001 belongs to another group", () => {
@@ -1394,9 +1396,28 @@ describe("waitron.sh install and the box's host service", () => {
     expect(r.status).toBe(0);
     expect(calls(sb)).toContain("systemctl enable --now waitron-box.socket");
     expect(env(sb)).not.toContain("WAITRON_BOX_SOCKET_DIR");
-    expect(r.stderr).toContain("could not install the box's clock service");
+    expect(r.stderr).toContain("could not set up the box's clock service");
     expect(r.stderr).toContain("cannot set this machine's clock");
     expect(composeCalls(sb)).toContainEqual(expect.stringMatching(/^up -d\b/));
+  });
+
+  it("restarts a running socket whose file an update changed, and only then", () => {
+    const changed = sandbox({ systemd: true });
+    writeFileSync(join(changed.root, "units", "waitron-box.socket"), "[Socket]\nold\n");
+    expect(run(changed, ["install"]).status).toBe(0);
+    const log = calls(changed);
+    expect(log.indexOf("systemctl restart waitron-box.socket")).toBeGreaterThan(
+      log.indexOf("systemctl enable --now waitron-box.socket"),
+    );
+    const same = sandbox({ systemd: true });
+    // The curl stand-in serves every box file as this one line.
+    writeFileSync(join(same.root, "units", "waitron-box.socket"), "stub\n");
+    expect(run(same, ["install"]).status).toBe(0);
+    expect(calls(same)).toContain("systemctl enable --now waitron-box.socket");
+    expect(calls(same)).not.toContain("systemctl restart waitron-box.socket");
+    const first = sandbox({ systemd: true });
+    expect(run(first, ["install"]).status).toBe(0);
+    expect(calls(first)).not.toContain("systemctl restart waitron-box.socket");
   });
 
   it("installs nothing, and names no socket, on a host without systemd", () => {
