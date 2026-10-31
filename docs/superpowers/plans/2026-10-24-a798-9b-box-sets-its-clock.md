@@ -3437,3 +3437,30 @@ Revision 4 changes none of these rulings. It carries out the owner's answer of 2
   routes read it.
 - **Not changed:** `till-api.profile-zones.test.ts`'s `ROUTES` lists routes bounded by service zones;
   these two are bounded by none, so it gains no row.
+
+### Task 12b's departures (2026-10-31)
+
+- **Boot builds the host client and the correction just before the till's routes**, not after the
+  email duty: `mountTillApi` runs before `startBoxEmailDuty`. The correction's `onCorrected` is
+  therefore `(incident) => boxEmails.remember(incident)`, which is called only once a set has run.
+  The cache anchor and the watch are still added to it where the watch starts.
+- **The two-tills case uses one staff member on two tills** (the fixture's second till), not two
+  people; challenges are keyed by session, so the case is the same.
+- **The plan's control for it does not hold on its own.** Without the step counter, the second
+  set is still refused, as `not_stopped`: the first set's row confirms the stop, and the second set
+  judges the stop again inside the turn. Without the turn, the stale check made after the host's
+  status read refuses it. Run, each on its own: dropping the whole stale check changes the second
+  till's refusal from `stale` to `not_stopped` (the case fails on it); taking the set out of the turn
+  alone leaves the case green; both together give two host sets.
+- **The order case's agreeing confirmation is refused `stale`**, writing no row, because a real set
+  moved the clock after the till's reading: the case asserts the order `["step"]`. Taken out of the
+  turn, it writes first: `["stop", "step"]`.
+- **The boot case answers `clock.set_failed { reason: "refused" }`, not `"unverified"`.** A host that
+  answers but leaves the clock where it was is `refused` (`!verified && !moved` in
+  `clock-correction.ts`); `unverified` needs a clock that moved but not to the target, which a fake
+  host cannot cause on a booted server's real clock. No row either way.
+- **`boot.clock-watch.test.ts`'s stand-in for `startClockWatch` now passes the real watch's methods
+  through.** It returned only `stop`, so once the correction held the watch as an anchor, a set found
+  no `stepComing` and answered `pending_disproofs`.
+- **Wiring controls, each failing the boot case:** no `boxClock` handed to `mountTillApi` (404), and a
+  filing switch that is always on (409 at the challenge: AEAT not yet asked).
