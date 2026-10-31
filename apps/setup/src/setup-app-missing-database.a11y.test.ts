@@ -10,7 +10,7 @@ import {
   click,
   damagedSummary,
   missingDatabaseFixture,
-  recoverMissing,
+  openMissing,
   runningActivity,
   stoppedActivity,
   stoppedSummary,
@@ -56,7 +56,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                   );
               },
             });
-            if (state !== "password") await recoverMissing(app);
+            if (state !== "password") await openMissing(app);
             if (state === "confirmation" || state === "damaged" || state === "refusal") {
               await click(app, "start-again");
               await userEvent.click(q<HTMLInputElement>(app, "retire-confirmed")!);
@@ -116,7 +116,7 @@ for (const locale of ["en-GB", "es-ES"] as const)
                     },
                   }),
             });
-            if (state === "stopped") await recoverMissing(app);
+            if (state === "stopped") await openMissing(app);
             await app.updateComplete;
             expect(
               q(app, state === "running" ? "recovery-running" : "recovery-stopped"),
