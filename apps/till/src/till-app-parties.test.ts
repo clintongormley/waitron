@@ -4604,6 +4604,335 @@ describe("A803 bill gone: a bills read no longer holds the bill on screen", () =
         vi.useRealTimers();
       }
     });
+
+    describe("LOOK fix review: the re-read beside this till's own work", () => {
+      /** The presented bill's foot total, how many items the ⋮ offers for the bill, and the
+       * switcher's bill rows. */
+      const onScreen = (el: TillApp) => {
+        const screen = tableOrder(el)!.shadowRoot!;
+        return {
+          total: screen.querySelector("[data-order-total]")?.textContent?.trim(),
+          billItems: screen.querySelectorAll("[data-table-menu-bill] wt-button").length,
+          rows: screen.querySelectorAll("[data-bill-switcher] [data-switch-bill]").length,
+        };
+      };
+
+      it("I1: a failed 15-second bills read changes nothing on a presented bill's screen and says nothing", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const presented: PartyBill = {
+            ...checkBill,
+            status: "placed",
+            total: "7.80",
+            outstanding: "7.80",
+          };
+          const bills = vi.fn().mockResolvedValue([tabBill, presented]);
+          const el = await onBillTwo(bills, {
+            getTabLines: vi.fn(async (id: string) => {
+              if (id === "wo-check") throw { code: "tab.not_open", status: 409, tabId: id };
+              return { lines: [tabLine], revision: 0 };
+            }),
+          });
+          const shown = onScreen(el);
+          expect(shown.total).toContain("7.80");
+          expect(shown.billItems).toBeGreaterThan(0);
+          expect(shown.rows).toBe(2);
+          const reads = bills.mock.calls.length;
+          bills.mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(bills.mock.calls.length).toBe(reads + 1);
+          expect(onScreen(el)).toEqual(shown);
+          expect(banner(el)?.textContent?.trim() ?? "").toBe("");
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I1: after a failed 15-second read the switcher keeps its rows, and the next read still follows the bill merged away", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const { el, merge } = await onBillTwoMergedLater();
+          vi.mocked(api.getPartyBills).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(onScreen(el).rows).toBe(2);
+          expect(tableOrder(el)!.orderId).toBe("wo-check");
+          expect(gone(el)).toBeNull();
+
+          merge();
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)!.textContent!.trim()).toBe(
+            "Bill 2 is no longer at this table. Now showing Bill 1.",
+          );
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("I1: a refused save whose bills read fails keeps the switcher's rows", async () => {
+        const { el, merge } = await onBillTwoMergedLater();
+        merge();
+        vi.mocked(api.getPartyBills).mockRejectedValue(new TypeError("Failed to fetch"));
+
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await new Promise((resolve) => setTimeout(resolve, DRAFT_SAVE_DELAY_MS + 50));
+        await flush(el, 6);
+
+        expect(tableOrder(el)!.orderId).toBe("wo-check");
+        expect(onScreen(el).rows).toBe(2);
+        expect(banner(el)!.textContent).toContain(t("table.error"));
+      });
+
+      it("m1: the 15-second re-read answering inside this till's own Move this bill says nothing about the bill this till moved", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let moved = false;
+          let holdFloor = false;
+          let releaseFloor: (() => void) | undefined;
+          const tables = [table4, table7, table9];
+          const getTablesState = vi.fn(() => {
+            if (!holdFloor) return Promise.resolve(tables);
+            holdFloor = false;
+            return new Promise((resolve) => (releaseFloor = () => resolve(tables)));
+          });
+          const moveBill = vi.fn(async () => {
+            moved = true;
+            holdFloor = true;
+            return { partyId: null, billId: "wo-check" };
+          });
+          const bills = vi.fn(async () => (moved ? [tabBill] : [tabBill, checkBill]));
+          const el = await onBillTwo(bills, { moveBill, getTablesState });
+
+          await vi.advanceTimersByTimeAsync(14_000);
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(moveBill).toHaveBeenCalledOnce();
+          expect(releaseFloor).toBeDefined();
+          const draftReads = vi.mocked(api.listDrafts).mock.calls.length;
+          await vi.advanceTimersByTimeAsync(1_500);
+          await flush(el, 6);
+          expect(vi.mocked(api.listDrafts).mock.calls.length).toBeGreaterThan(draftReads);
+          releaseFloor!();
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m1: a 15-second re-read sent before this till's own Move this bill and answering after it says nothing about the bill this till moved", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let moved = false;
+          let holdFloor = false;
+          let releaseFloor: (() => void) | undefined;
+          const tables = [table4, table7, table9];
+          const getTablesState = vi.fn(() => {
+            if (!holdFloor) return Promise.resolve(tables);
+            holdFloor = false;
+            return new Promise((resolve) => (releaseFloor = () => resolve(tables)));
+          });
+          const moveBill = vi.fn(async () => {
+            moved = true;
+            holdFloor = true;
+            return { partyId: null, billId: "wo-check" };
+          });
+          const read = heldBills(() => (moved ? [tabBill] : [tabBill, checkBill]));
+          const el = await onBillTwo(read.bills, { moveBill, getTablesState });
+          read.hold();
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          expect(read.held()).toBe(true);
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(moveBill).toHaveBeenCalledOnce();
+          expect(releaseFloor).toBeDefined();
+          read.release([tabBill]);
+          await flush(el, 6);
+          releaseFloor!();
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m1: a 15-second re-read sent before this till's own Split table took the bill on screen answers after it and says nothing", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          const atTwo = seated({}, { tableIds: ["t4", "t5"] });
+          const table5 = seated({ id: "t5", label: "5" }, { tableIds: ["t4", "t5"] });
+          const afterSplit = [
+            seated({}, { revision: 4, tableIds: ["t4"] }),
+            seated({ id: "t5", label: "5" }, { id: "v-split", revision: 0, tableIds: ["t5"] }),
+            table7,
+            table9,
+          ];
+          let split = false;
+          let holdFloor = false;
+          let releaseFloor: (() => void) | undefined;
+          const getTablesState = vi.fn(() => {
+            const tables = split ? afterSplit : [atTwo, table5, table7, table9];
+            if (!holdFloor) return Promise.resolve(tables);
+            holdFloor = false;
+            return new Promise((resolve) => (releaseFloor = () => resolve(tables)));
+          });
+          const splitTable = vi.fn(async () => {
+            split = true;
+            holdFloor = true;
+            return { partyId: "v-split", billId: "wo-check" };
+          });
+          const read = heldBills(() => (split ? [tabBill] : [tabBill, checkBill]));
+          const { el } = await mountApp({ getPartyBills: read.bills, getTablesState, splitTable });
+          await openMesa(el, "t5");
+          emit(tableOrder(el)!, "take-payment", { workingOrderId: "wo-check" });
+          await flush(el);
+          expect(tableOrder(el)!.orderId).toBe("wo-check");
+          read.hold();
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          expect(read.held()).toBe(true);
+          emit(tableOrder(el)!, "split-table", {
+            tableId: "t5",
+            billId: "wo-check",
+            guestCounts: { staying: null, leaving: null },
+          });
+          await flush(el, 6);
+          expect(splitTable).toHaveBeenCalledOnce();
+          expect(releaseFloor).toBeDefined();
+          read.release([tabBill]);
+          await flush(el, 6);
+          releaseFloor!();
+          await flush(el, 6);
+
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m1: a dish's save refused inside this till's own Move this bill reads no bills and says nothing", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let moved = false;
+          let holdFloor = false;
+          let releaseFloor: (() => void) | undefined;
+          const tables = [table4, table7, table9];
+          const getTablesState = vi.fn(() => {
+            if (!holdFloor) return Promise.resolve(tables);
+            holdFloor = false;
+            return new Promise((resolve) => (releaseFloor = () => resolve(tables)));
+          });
+          const moveBill = vi.fn(async () => {
+            moved = true;
+            holdFloor = true;
+            return { partyId: null, billId: "wo-check" };
+          });
+          const bills = vi.fn(async () => (moved ? [tabBill] : [tabBill, checkBill]));
+          const el = await onBillTwo(bills, {
+            moveBill,
+            getTablesState,
+            saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+              if (moved && args[1].billId === "wo-check")
+                throw { code: "bill.other_party", status: 409, workingOrderId: "wo-check" };
+              return drafts.saveDraft(...args);
+            }),
+          });
+          emit(tableOrder(el)!, "move-bill", { to: { counter: true } });
+          await flush(el, 6);
+          expect(releaseFloor).toBeDefined();
+          const saves = vi.mocked(api.saveDraft).mock.calls.length;
+          const reads = bills.mock.calls.length;
+
+          partyDraft(tableOrder(el)!).addProduct(dish, "1");
+          await vi.advanceTimersByTimeAsync(DRAFT_SAVE_DELAY_MS + 50);
+          await flush(el, 6);
+
+          expect(vi.mocked(api.saveDraft).mock.calls.length).toBeGreaterThan(saves);
+          expect(bills.mock.calls.length).toBe(reads);
+          expect(banner(el)?.textContent?.trim() ?? "").toBe("");
+          releaseFloor!();
+          await flush(el, 6);
+          expect(tableOrder(el)!.orderId).toBe("wo-4");
+          expect(gone(el)).toBeNull();
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m2: Send all whose save is still out when the 15-second re-read finds the bill merged away says nothing beside the moved screen", async () => {
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+        try {
+          let holding = false;
+          let refuse: ((error: unknown) => void) | undefined;
+          const bills = vi.fn().mockResolvedValue([tabBill, checkBill]);
+          const el = await onBillTwo(bills, {
+            saveDraft: vi.fn(async (...args: Parameters<DraftServer["saveDraft"]>) => {
+              if (holding && args[1].billId === "wo-check")
+                return new Promise((_, reject) => (refuse = reject));
+              return drafts.saveDraft(...args);
+            }),
+          });
+          const before = vi.mocked(api.saveDraft).mock.calls.length;
+          const store = partyDraft(tableOrder(el)!);
+          holding = true;
+          store.addProduct(dish, "1");
+          await flush(el);
+          emit(tableOrder(el)!, "submit-draft", {
+            lines: [{ menuItemId: "flan", quantity: "1" }],
+            groups: [{ release: "fire", lineIndexes: [0] }],
+            store,
+            sent: store.lines.slice(0, 1),
+          });
+          await flush(el, 6);
+          expect(refuse).toBeDefined();
+          bills.mockResolvedValue([tabBill, abandoned]);
+
+          await vi.advanceTimersByTimeAsync(15_000);
+          await flush(el, 6);
+          refuse!({ code: "tab.not_open", status: 409, tabId: "wo-check" });
+          await flush(el, 6);
+
+          expectSwitchedKeepingFlan(el, before);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("m2: a bill switch whose save is refused because the bill was merged away says nothing beside the moved screen", async () => {
+        const { el, merge } = await onBillTwoMergedLater();
+        merge();
+        // The bills read answers after the refused save, as over a network.
+        vi.mocked(api.getPartyBills).mockImplementation(
+          () => new Promise((resolve) => setTimeout(() => resolve([tabBill, abandoned]), 30)),
+        );
+        const before = vi.mocked(api.saveDraft).mock.calls.length;
+        partyDraft(tableOrder(el)!).addProduct(dish, "1");
+        await flush(el);
+
+        emit(tableOrder(el)!, "switch-bill", { workingOrderId: "wo-4" });
+        await flush(el, 6);
+        await new Promise((resolve) => setTimeout(resolve, 80));
+        await flush(el, 6);
+
+        expectSwitchedKeepingFlan(el, before);
+      });
+    });
   });
 
   it("a stale opening bill: the screen corrects to Bill 1 and says so, and no write names the stale bill", async () => {

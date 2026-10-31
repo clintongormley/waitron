@@ -5379,11 +5379,12 @@ export class TillTableOrderScreen extends LitElement {
       </wt-button>`;
     const verb = (name: ActionVerb, key: StringKey) =>
       action(name, key, () => this.#chooseVerb(name));
-    const lineVerbs = [
-      verb("split", "table.action_split"),
+    const split = verb("split", "table.action_split");
+    const pairVerbs = [
       verb("transfer", "table.action_transfer"),
       verb("merge", "table.action_merge_bills"),
     ];
+    const lineVerbs = [split, ...pairVerbs];
     const tableMoves = [
       verb("join", "table.action_join"),
       verb("move", "table.action_move_guests"),
@@ -5403,8 +5404,9 @@ export class TillTableOrderScreen extends LitElement {
           ? []
           : [
               action("name-bill", "table.action_name_bill", () => this.#openBillNaming()),
-              // The server refuses each of these on a presented or paid bill.
-              ...(shown.status === "open" ? lineVerbs : []),
+              // The server refuses each of these on a presented or paid bill, and the pair verbs on
+              // a bill holding a payment.
+              ...(shown.status !== "open" ? [] : shown.hasPayments ? [split] : lineVerbs),
               this.#movable() ? verb("move-bill", "table.action_move_bill") : nothing,
               this.#compBill(),
               ...this.#billDocumentItems(shown),

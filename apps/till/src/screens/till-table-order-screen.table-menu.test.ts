@@ -410,6 +410,33 @@ describe("A803 single menu: one ⋮ for the bill on screen, then the whole table
 
       expect(billItem(el, '[data-action="split"]')).not.toBeNull();
     });
+
+    // mergeBills and transferItems refuse `bill.payments_received` when either bill holds a
+    // payment (requireUntouchedPair); splitBill takes a partly paid bill.
+    it("an open bill holding a payment offers no Transfer items or Merge bills", async () => {
+      const el = await mountScreen({
+        bills: [
+          partyBill("wo-2", 2, "40.00", { total: "54.00", hasPayments: true }),
+          partyBill("wo-3", 3, "20.00", { total: "20.00" }),
+        ],
+      });
+
+      expect(billItem(el, '[data-action="transfer"]')).toBeNull();
+      expect(billItem(el, '[data-action="merge"]')).toBeNull();
+      expect(billItem(el, '[data-action="split"]')).not.toBeNull();
+    });
+
+    it("an open bill holding no payment, beside one that does, still offers Transfer items and Merge bills", async () => {
+      const el = await mountScreen({
+        bills: [
+          partyBill("wo-2", 2, "54.00", { total: "54.00" }),
+          partyBill("wo-3", 3, "10.00", { total: "20.00", hasPayments: true }),
+        ],
+      });
+
+      expect(billItem(el, '[data-action="transfer"]')).not.toBeNull();
+      expect(billItem(el, '[data-action="merge"]')).not.toBeNull();
+    });
   });
 
   describe("the ⋮'s copies keep the guards of the controls they copy", () => {
