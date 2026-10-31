@@ -202,6 +202,31 @@ could happen; `startS3TestServer` now recovers from it. A sibling scan found two
 That is not two draws before either bind. The remaining work concerns the release-to-bind
 interval, including single draws.
 
+## A1251: setup-test cleanup after a listener-readiness refusal
+
+The retrospective review of [PR #2143](https://github.com/clintongormley/waitron/pull/2143)
+found that `withSetupBoot` in `apps/server/src/boot.setup-routes.test.ts` awaits
+`awaitListening(port!)` before entering the block that closes its server. Put that wait under
+cleanup and add a regression that checks the fixture can accept writes after the refused wait.
+Preserve the existing setup assertions and configured-port contracts.
+
+On 31 October 2026, a disposable real-boot probe injected a readiness error at that await.
+The assertion `expect(() => beforeServerStarts()).not.toThrow()` failed because the server
+remained registered as running. Moving the injected error inside the existing cleanup block
+passed the same assertion. Both runs used
+`pnpm --filter @waitron/server exec vitest run src/boot.setup-routes.test.ts -t 'A1251 closes the setup server when listener readiness refuses'`.
+The probe explicitly closed the retained server afterwards. This isolates the cleanup gap;
+it does not establish that a natural bind failure reaches the wait before the fatal-exit path.
+The startup and cleanup prefix was identical in the reviewed squash and main at the check.
+
+Keep the shared fixture’s scope explicit when extending it: `ephemeralHttpMock` in
+`apps/server/src/testing/ephemeral-listener.ts` rewrites every `serve` port in its default mode,
+and `httpPort()` reports the last listener. A synthetic two-listener request reached the second
+listener. The converted suites passed 233 cases with listener-call instrumentation.
+Paired main/landing listeners retain the configured binding;
+do not assume the default fixture can identify the main listener in that shape.
+The remaining configured-port hand-off work stays in the preceding entry.
+
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
 - A case that waits several times can still outlast a bound that

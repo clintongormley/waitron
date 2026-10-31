@@ -5729,6 +5729,8 @@ The membership, promotion and rejoin arc remains in the tree. What remains, larg
   Review the remaining code and workflow changes, and address still-live findings in separate PRs.
   Check the later regional demo guides’ photo-library name claims against image metadata and the
   screen’s content-language selection.
+  Repair the setup-test helper’s cleanup after a listener-readiness refusal, and retain the
+  shared port fixture’s multiple-listener limit. [Detail](backlog/ci.md#a1251-setup-test-cleanup-after-a-listener-readiness-refusal).
 
 - **A1242: qualify publishing after reused CI and the differing-tree fallback on real main pushes.**
   Retain real main run ids proving publication after reuse and the full suite after an unequal-tree
