@@ -18,7 +18,8 @@
 > `start` check is the gate the owner describes, and it closes on AEAT's time, on a till's time
 > confirmed by a staff member signed in on it, or on an administrator's device — never on two
 > agreeing devices alone; 9b builds the till's check, its `staff` record and an in-memory start-up
-> window, and 9c widens the window to "while a `start` check is open". The Goal, FYI 6, decision 5,
+> window — during which two agreeing devices alone no longer lift a stop (9b's revision 5,
+> decision 18) — and 9c widens the window to "while a `start` check is open". The Goal, FYI 6, decision 5,
 > "Open for the full plan" and the review notes below are updated to match; the rest is as written.
 
 **Goal.** The box checks its clock at every start and whenever its clock changes by more than a
@@ -132,8 +133,8 @@ where nothing on the venue's network could lift it** (design §4.9 h).
    check: the till is offered while the check is open. For a `change` or `disagrees` check, opened
    while running, the till is not offered; the administrators are alerted, and AEAT or an
    administrator closes it. Whether slice 9's two-agreeing-devices lift still closes a `change` or
-   `disagrees` check is for the full plan (9b's owner FYI 12 left that lift alone for the stop
-   proper).
+   `disagrees` check is for the full plan (9b's revision 5, its decision 18, holds that lift only
+   while the start-up window is open; 9c's `start` check inherits the hold).
 6. **Wrongly dated after a change** (round 1, I8, the runner's ruling): with e₀ the clock's error
    before the change, Δ the change and s the step the confirmation applies, e₀ = −(Δ + s) and the
    clock after the change was off by −s. List the records written since the previous confirmation
