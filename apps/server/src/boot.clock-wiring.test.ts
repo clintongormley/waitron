@@ -38,6 +38,8 @@ const { beforeServerStarts, startServer, httpPort } = ephemeralServerFixture();
 
 const clocks = vi.hoisted(() => ({
   archive: undefined as BackupSupervisorDeps | undefined,
+  supervisor: undefined as
+    { current(): { retention?: { count: number; days: number } } } | undefined,
   order: [] as string[],
 }));
 vi.mock("./backup-supervisor.js", async (original) => {
@@ -48,6 +50,7 @@ vi.mock("./backup-supervisor.js", async (original) => {
       constructor(deps: BackupSupervisorDeps) {
         super(deps);
         clocks.archive = deps;
+        clocks.supervisor = this;
       }
       override async reload() {
         clocks.order.push("reload");
@@ -301,6 +304,12 @@ describe("boot's authority clock wiring", () => {
       // age cap is the running duty's, none here.
       expect(stepDeps.latestClockStep).toBe(clocks.archive!.latestClockStep);
       expect(stepDeps.retainDays!()).toBeUndefined();
+      const running = clocks.supervisor!.current();
+      const current = vi
+        .spyOn(clocks.supervisor!, "current")
+        .mockReturnValue({ ...running, retention: { count: 3, days: 12 } });
+      expect(stepDeps.retainDays!()).toBe(12);
+      current.mockRestore();
       // The step's folders are the running duty's, read from the supervisor's live status: this
       // primary has no backups set up, so there are none.
       expect(stepDeps.backends()).toEqual([]);

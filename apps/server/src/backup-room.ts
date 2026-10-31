@@ -27,11 +27,10 @@ export interface DeletableArchive {
 
 /**
  * The archives the box may delete to make room, oldest first (ties by key): regular files named as
- * archives, taken strictly after the current installation began, never the newest in their folder.
- * An unknown installation start offers nothing. An archive `held` by a clock step (see
+ * archives, taken strictly after the current installation began, never the newest of those in their
+ * folder. An unknown installation start offers nothing. An archive `held` by a clock step (see
  * {@link heldByStep}) is offered only after every other, and "the newest" is then the newest one not
- * held, or the newest held one when every archive in the folder is held. `"everything"` offers
- * nothing.
+ * held, or the newest held one when every one is held. `"everything"` offers nothing.
  */
 export async function listDeletableArchives(
   folders: readonly BackupFolder[],
@@ -45,14 +44,12 @@ export async function listDeletableArchives(
     byAgeThenKey(a, b);
   const out: DeletableArchive[] = [];
   for (const { destination, dir } of folders) {
-    const archives = await archivesIn(destination, dir, readdir);
+    const archives = (await archivesIn(destination, dir, readdir)).filter(
+      (a) => a.takenAt.getTime() > installationStartedAt.getTime(),
+    );
     const free = archives.filter((a) => !heldByStep(held, a.takenAt.getTime()));
     const newest = (free.length > 0 ? free : archives).sort(byAgeThenKey).at(-1);
-    out.push(
-      ...archives.filter(
-        (a) => a !== newest && a.takenAt.getTime() > installationStartedAt.getTime(),
-      ),
-    );
+    out.push(...archives.filter((a) => a !== newest));
   }
   return out.sort(order);
 }
@@ -223,7 +220,8 @@ export interface MakeRoomOptions {
 }
 
 /**
- * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting the oldest deletable archives, or
+ * Makes `neededBytes` plus `aimBytes` free at `dir` by deleting archives in
+ * {@link listDeletableArchives}'s order (oldest first, held ones last), or
  * plus `floorBytes` when the aim cannot be reached and `outOfReach` is `"floor"` (an aim below the
  * floor counts as the floor).
  * Refuses with `backup.staging_space_low` (`afterDeleting: false`), deleting nothing, when free

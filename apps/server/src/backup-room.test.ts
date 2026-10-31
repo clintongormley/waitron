@@ -302,6 +302,22 @@ describe("listDeletableArchives", () => {
       expect(listed.map((e) => e.key)).toEqual([freeB, heldA]);
     });
 
+    it("keeps the newest archive of the current installation when the only one the step does not hold predates it", async () => {
+      const a = await folder("a");
+      await archive(a, at(stepAt + DAY));
+      const ahead1 = await archive(a, at(stepAt + 399 * DAY));
+      await archive(a, at(stepAt + 400 * DAY));
+
+      const listed = await listDeletableArchives(
+        [{ destination: "da", dir: a }],
+        at(stepAt + 2 * DAY),
+        undefined,
+        hold,
+      );
+
+      expect(listed.map((e) => e.key)).toEqual([ahead1]);
+    });
+
     it("offers nothing while the step cannot be read", async () => {
       const f = await steppedBack();
 

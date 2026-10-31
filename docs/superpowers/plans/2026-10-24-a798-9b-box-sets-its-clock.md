@@ -2740,6 +2740,15 @@ it is the choice of the newest not-held archive that the −400 case pins. Dropp
 the +400 cases (the cross-folder listing, `makeRoom`'s, the run's and the watch's). Controls:
 `~/waitron-campaign-b/a798-9b/t14a/mutate.py` → `mutate.out`, nine, each fails a named case.
 
+**Task 14a's per-task review, folded (2026-10-31; C0/I1/M4).** I1: the boot wiring test now reads
+the watch's age cap from the supervisor's live retention (a `retainDays: () => undefined` boot
+fails it). M1: "the newest" is chosen among the archives after the installation start, so a
+not-held archive from before it no longer leaves every current one offered. M2: a run whose step
+cannot be read deletes nothing to make room (an unreadable step treated as "no hold" fails it).
+M3: the `makeRoom` and `stagingEstimateBytes` docs name the order; the user and developer docs are
+named in Tasks 16 and 18. M4: the watch's doc and the backlog entry no longer say "as the run's
+pruning keeps them", and the watch's doc lists its two new reasons to delete nothing.
+
 ### Task 15: The other wall-clock jobs, and the audit table
 
 **Goal.** Decision 11 for the rest; then a written table.
@@ -2978,7 +2987,8 @@ its idle time by the step; tills stay signed in); and the backup hold's limit (T
 steps the box made). The paragraph on deleting old backups (`box-status.md:106-112`, "deletes its
 oldest backups", and the Spanish twin's "copias más antiguas", `:111-116`) gains that, for a while
 after the box steps its clock, backups dated by the wrong clock are deleted last, and that the start
-on a full disk does not do this yet (Task 14a). `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
+on a full disk does not do this yet (Task 14a). The same sentence goes in `data-protection.md`'s
+English (`:376`, "delete its oldest backups") and Spanish (`:407-408`) paragraphs on a full disk. `apps/server/src/guide/{en,es}/till-notices.md`: the `{#notices}` section
 gains what "Check the time" at the end of a red clock line means (the box started with its clock in
 doubt and could not reach the tax agency's time), what the dialog shows,
 what each button does, that nobody types a time, that the till's own time is what is sent so a
@@ -3020,6 +3030,11 @@ times and its buttons fit a 390-wide phone in Spanish without clipping; a defect
 task.
 
 ### Task 18: Developer docs, CLAUDE.md, the deploy README, the asesor question and B3's contract
+
+- `docs/developers/conventions-data.md`'s "What may be deleted" and "Deleting. Oldest first"
+  (`:4580-4593`) gain Task 14a's rule: archives a recent clock step holds are offered last, the
+  newest of the current installation's not-held archives is never offered, an unreadable step
+  offers nothing, and the start on a full disk does not apply it (backlog).
 
 - `docs/developers/conventions-data.md`: a section "The box sets its own clock" after "A
   confirmation of the clock lifts the stop for one step back" (`:3969`): the host service and its

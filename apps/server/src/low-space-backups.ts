@@ -45,9 +45,9 @@ export interface LowSpaceBackupDeps {
  * next reading tries again. Once it holds the turn it reads free space and the backup settings again
  * and lists the folders; once the installation start is read it checks that each listed folder's
  * destination is still among `backends()` with the same `localDir`, and deletes nothing if not.
- * Archives a recent step to the clock holds are deleted last, as the backup run's pruning keeps them. A
- * venue folder whose disk cannot be read is logged `backup.venue_disk_unreadable` and deletes
- * nothing.
+ * Archives a recent step to the clock holds are offered last (see `listDeletableArchives`). A venue
+ * folder whose disk cannot be read is logged `backup.venue_disk_unreadable` and deletes nothing, as
+ * do a step that cannot be read (logged `backup.clock_step_unreadable`) and unknown `retainDays`.
  */
 export function lowSpaceBackupDeletion(
   deps: LowSpaceBackupDeps,

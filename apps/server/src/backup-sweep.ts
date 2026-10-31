@@ -110,7 +110,8 @@ export interface BackupSweepDeps {
    * The venue database's current size. Before the copy, a tick needs twice this in `stagingDir` (the
    * staged copy and its ciphertext) plus this once more for each local destination counted as on
    * the same disk (each folder copy's working file). When free space there is short, it first
-   * deletes old backups, oldest first and only those `installationStartedAt` allows, and refuses
+   * deletes old backups, oldest first (those a clock step holds last) and only those
+   * `installationStartedAt` allows, and refuses
    * only when that cannot bring free space to the need plus `spaceFloorBytes`. After the copy it
    * refuses when free space is under the copy's own size. After encrypting, when at least one
    * local destination is counted as on that disk (one whose disk could not be read is counted), a

@@ -506,6 +506,35 @@ it("deletes only what the floor needs when old backups cannot reach the aim, the
   expect(kept).toContain(s.keys[2]);
 });
 
+it("deletes no backup to make room while the clock step cannot be read, so a short run is refused", async () => {
+  const f = await fixture();
+  const s = await seeded(f, [
+    [days(3), 500],
+    [days(2), 500],
+    [days(1), 500],
+  ]);
+  const backend = new Watched("a", s.dir);
+  const d = deps(f, [backend]);
+  await expect(
+    runOnce({
+      ...d,
+      stagingEstimateBytes: async () => 1000,
+      statfs: rising(2700, s.sizes),
+      spaceFloorBytes: 10,
+      spaceAimBytes: 100,
+      installationStartedAt: async () => days(10),
+      latestClockStep: async () => {
+        throw new Error("locked");
+      },
+    }),
+  ).rejects.toMatchObject({
+    code: "backup.staging_space_low",
+    params: { neededBytes: 3010, availableBytes: 2700, afterDeleting: false },
+  });
+  expect(await left(s.dir)).toEqual([...s.keys].sort());
+  expect(backend.puts).toBe(0);
+});
+
 it("refuses a run whose need even every deletable backup cannot meet, deleting nothing and copying nothing", async () => {
   const f = await fixture();
   const s = await seeded(f, [

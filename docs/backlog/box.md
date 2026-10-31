@@ -1465,8 +1465,7 @@ a date before 28-10-2024, so no HEAD is sent then.
 ## The start on a full disk deletes backups by stamp alone after a clock step.
 
 Making room before a backup run, and the free-space watch, offer last the backups a recent step of
-the box's clock holds (stamped before the step, or more than a minute ahead), as the run's pruning
-keeps them. The start on a full disk (`apps/server/src/start-backup-room.ts`) has no database, so it
+the box's clock holds (stamped before the step, or more than a minute ahead). The start on a full disk (`apps/server/src/start-backup-room.ts`) has no database, so it
 reads only `backup-room-note.json`'s installation start and deletes oldest by stamp, never the newest by
 stamp: after a −400-day step it can delete the real newest backups and keep the ones dated by the
 wrong clock. The note is written when backup settings load (`backup-supervisor.ts`), not when the
