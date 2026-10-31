@@ -97,20 +97,26 @@ describe("bounded release discovery without application", () => {
           throw new Error("aborted");
         },
       });
-      const pending = discoverRelease(h.input, h.deps, h.signal);
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const beforeWait = Date.now();
-        await vi.waitUntil(() => attempts === attempt + 1 && vi.getTimerCount() === 1, {
-          interval: 0,
-        });
-        expect(Date.now()).toBe(beforeWait);
-        await vi.advanceTimersByTimeAsync(30_000);
+      const controller = new globalThis.AbortController();
+      const pending = discoverRelease(h.input, h.deps, controller.signal);
+      try {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const beforeWait = Date.now();
+          await vi.waitUntil(() => attempts === attempt + 1 && vi.getTimerCount() === 1, {
+            interval: 0,
+          });
+          expect(Date.now()).toBe(beforeWait);
+          await vi.advanceTimersByTimeAsync(30_000);
+          await timerTurn();
+        }
+        expect(await pending).toMatchObject({ kind: "deferred", reason: "manifest-unavailable" });
+        expect(attempts).toBe(3);
+        expect(vi.getTimerCount()).toBe(0);
         await timerTurn();
+      } finally {
+        controller.abort();
+        await pending;
       }
-      expect(await pending).toMatchObject({ kind: "deferred", reason: "manifest-unavailable" });
-      expect(attempts).toBe(3);
-      expect(vi.getTimerCount()).toBe(0);
-      await timerTurn();
     },
   );
 
@@ -368,58 +374,71 @@ describe("bounded release discovery without application", () => {
   });
 
   it.each([
-    ["manifest", 30_000],
-    ["hold", 30_000],
-    ["image", 600_000],
-  ])("bounds each cooperative %s attempt at %i ms", async (stage, budget) => {
-    vi.useFakeTimers();
-    let attempts = 0;
-    const armed = Array.from({ length: 3 }, () => Promise.withResolvers());
-    const signals = [];
-    const hanging = (signal) => {
-      attempts++;
-      signals.push(signal);
-      return new Promise((resolve, reject) =>
-        signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
-      );
-    };
-    const overrides =
-      stage === "manifest"
-        ? { fetchManifest: hanging }
-        : stage === "hold"
-          ? { hold: { check: (_, signal) => hanging(signal) } }
-          : { pullImage: (_, signal) => hanging(signal) };
-    const h = harness({
-      ...overrides,
-      sleep: (ms, signal) => {
-        const pending = sleep(ms, signal);
-        if (attempts > 0) armed[attempts - 1].resolve();
-        return pending;
-      },
-    });
-    let completed = false;
-    const pending = discoverRelease(h.input, h.deps, h.signal).then((result) => {
-      completed = true;
-      return result;
-    });
-    await armed[0].promise;
-    await vi.advanceTimersByTimeAsync(budget - 1);
-    expect(attempts).toBe(1);
-    expect(completed).toBe(false);
-    expect(signals[0].aborted).toBe(false);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(signals[0].aborted).toBe(true);
-    await timerTurn();
-    await armed[1].promise;
-    await vi.advanceTimersByTimeAsync(budget);
-    await timerTurn();
-    await armed[2].promise;
-    await vi.advanceTimersByTimeAsync(budget);
-    await timerTurn();
-    expect(await pending).toMatchObject({ kind: "deferred" });
-    expect(attempts).toBe(3);
-    expect(vi.getTimerCount()).toBe(0);
-  });
+    ["manifest", 30_000, "immediate"],
+    ["hold", 30_000, "immediate"],
+    ["image", 600_000, "immediate"],
+    ["manifest", 30_000, "next-turn"],
+    ["hold", 30_000, "next-turn"],
+    ["image", 600_000, "next-turn"],
+  ])(
+    "bounds each cooperative %s attempt at %i ms with %s admission",
+    async (stage, budget, admission) => {
+      vi.useFakeTimers();
+      let attempts = 0;
+      const signals = [];
+      const hanging = async (signal) => {
+        if (admission === "next-turn") await nextTurn();
+        signal.throwIfAborted();
+        attempts++;
+        signals.push(signal);
+        return new Promise((resolve, reject) =>
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+        );
+      };
+      const overrides =
+        stage === "manifest"
+          ? { fetchManifest: hanging }
+          : stage === "hold"
+            ? { hold: { check: (_, signal) => hanging(signal) } }
+            : { pullImage: (_, signal) => hanging(signal) };
+      const h = harness(overrides);
+      const waitForAttempt = async (attempt) => {
+        const beforeWait = Date.now();
+        await vi.waitUntil(() => attempts === attempt && vi.getTimerCount() === 1, {
+          interval: 0,
+        });
+        expect(Date.now()).toBe(beforeWait);
+      };
+      const controller = new globalThis.AbortController();
+      let completed = false;
+      const pending = discoverRelease(h.input, h.deps, controller.signal).then((result) => {
+        completed = true;
+        return result;
+      });
+      try {
+        await waitForAttempt(1);
+        await vi.advanceTimersByTimeAsync(budget - 1);
+        expect(attempts).toBe(1);
+        expect(completed).toBe(false);
+        expect(signals[0].aborted).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(signals[0].aborted).toBe(true);
+        await timerTurn();
+        await waitForAttempt(2);
+        await vi.advanceTimersByTimeAsync(budget);
+        await timerTurn();
+        await waitForAttempt(3);
+        await vi.advanceTimersByTimeAsync(budget);
+        await timerTurn();
+        expect(await pending).toMatchObject({ kind: "deferred" });
+        expect(attempts).toBe(3);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        controller.abort();
+        await pending;
+      }
+    },
+  );
 
   it("returns on an uncooperative timeout but admits no retry or second discovery until it settles", async () => {
     vi.useFakeTimers();
