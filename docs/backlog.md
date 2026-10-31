@@ -6239,6 +6239,7 @@ _Formerly B8, parts of B9, and the old Track C's correctness items; part of A9._
   Menu-preview accessibility states still use `Terraza` as a sample menu name.
   Audit the remaining `Terraza` occurrences in the menu-screen, look-card and equipment-label
   test suites before the next cleanup slices.
+  Order, printer and API suites also need their printer/venue samples audited.
   The order-detail suite does not check its `row.tables` sample independently of `party.tables`.
   The payment-screen suites now use English till and counter sample names; their card-reader
   holder fixtures still use `Terraza` and `Móvil 2`.
