@@ -91,6 +91,25 @@ it("shares the bound across required and optional state before accepting a sched
     ),
   ).rejects.toMatchObject(refusal("metadata_too_large"));
 });
+it("counts the node copy against the shared bound before accepting a scheduled capture", async () => {
+  const dir = await fresh();
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(join(dir, "tls"));
+  for (const rel of RECOVERY_FILES) await writeFile(join(dir, rel), "x");
+  const budget = new ArchiveReadBudget();
+  budget.addEntry("previous", ARCHIVE_MAX_METADATA_BYTES - 100);
+  await expect(
+    collectStateParts(
+      {
+        stateDir: dir,
+        modules: [],
+        resolvers: {},
+        snapshotNode: async () => Buffer.alloc(1000),
+      },
+      budget,
+    ),
+  ).rejects.toMatchObject(refusal("metadata_too_large"));
+});
 it("bounds module state and optional state while retaining small legitimate bytes", async () => {
   const dir = await fresh();
   await writeFile(join(dir, "a"), "small");

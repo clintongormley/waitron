@@ -1,6 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { eq } from "drizzle-orm";
 import {
   nodeSealedState,
@@ -134,20 +132,14 @@ export function createSealedStateRefresher(deps: SealedStateDeps): SealedStateRe
         environment: deps.environment,
         now,
       });
-      const scratch = await mkdtemp(join(tmpdir(), "waitron-sealed-state-"));
-      let entries: ArchiveEntry[];
-      try {
-        entries = await collectSealedEntries({
-          stateDir: deps.stateDir,
-          venueDir: deps.venueDir,
-          modules: deps.modules,
-          resolvers: deps.resolvers,
-          snapshotNode: snapshotNodeDatabase(deps.node, scratch),
-          manifest,
-        });
-      } finally {
-        await rm(scratch, { recursive: true, force: true });
-      }
+      const entries = await collectSealedEntries({
+        stateDir: deps.stateDir,
+        venueDir: deps.venueDir,
+        modules: deps.modules,
+        resolvers: deps.resolvers,
+        snapshotNode: snapshotNodeDatabase(deps.node, tmpdir()),
+        manifest,
+      });
       // Sealed before the transaction opens, so the write lock is not held across the derivation.
       const sealed = await sealNodeState(entries, recoveryKey);
       await withTransaction(deps.db, (tx) => writeSealedStateRow(tx, deps.nodeId, sealed, now));

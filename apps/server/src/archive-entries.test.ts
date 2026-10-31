@@ -56,3 +56,47 @@ it("an archive built with the backup room's files in the state folder holds none
     "secrets/modules.json",
   ]);
 });
+
+it("a failing state read waits for the node copy to finish before it rejects", async () => {
+  // No recovery files: the secrets read refuses at once.
+  const stateDir = await mkdtemp(join(tmpdir(), "archive-entries-"));
+  dirs.push(stateDir);
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  const collecting = collectStateParts({
+    stateDir,
+    modules: [],
+    resolvers: {},
+    snapshotNode: async () => {
+      await released;
+      return Buffer.from("NODE");
+    },
+  });
+  const settled = collecting.then(
+    () => "settled",
+    () => "settled",
+  );
+  const beforeRelease = await Promise.race([
+    settled,
+    new Promise((resolve) => setTimeout(() => resolve("waiting"), 300)),
+  ]);
+  release();
+  expect(beforeRelease).toBe("waiting");
+  await expect(collecting).rejects.toMatchObject({ code: "recovery.state_incomplete" });
+});
+
+it("rejects with the node copy's failure when it and a state read both fail, whichever fails first", async () => {
+  const stateDir = await mkdtemp(join(tmpdir(), "archive-entries-"));
+  dirs.push(stateDir);
+  const copyFailure = new Error("node copy failed");
+  const collecting = collectStateParts({
+    stateDir,
+    modules: [],
+    resolvers: {},
+    snapshotNode: async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      throw copyFailure;
+    },
+  });
+  await expect(collecting).rejects.toBe(copyFailure);
+});

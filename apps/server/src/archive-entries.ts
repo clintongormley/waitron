@@ -29,7 +29,9 @@ export async function collectStateParts(
   },
   budget?: ArchiveReadBudget,
 ): Promise<StateParts> {
-  const [nodeDump, secrets, nonDbState, optionalState] = await Promise.all([
+  // Every part settles before any failure is thrown, so a caller's clean-up of the node copy's
+  // folder never runs while the copy is still writing into it.
+  const [node, secrets, nonDbState, optionalState] = await Promise.allSettled([
     deps.snapshotNode(),
     collectStateSecrets(deps.stateDir, budget),
     collectModuleNonDbState(deps.modules, deps.resolvers, budget, {
@@ -45,7 +47,19 @@ export async function collectStateParts(
     }),
     collectOptionalStateFiles(deps.stateDir, OPTIONAL_BACKUP_STATE, budget),
   ]);
-  return { nodeDump, nonDbState, secrets, optionalState };
+  const parts: StateParts = {
+    nodeDump: valueOf(node),
+    secrets: valueOf(secrets),
+    nonDbState: valueOf(nonDbState),
+    optionalState: valueOf(optionalState),
+  };
+  budget?.addEntry("node.dump", parts.nodeDump.length);
+  return parts;
+}
+
+function valueOf<T>(part: PromiseSettledResult<T>): T {
+  if (part.status === "rejected") throw part.reason;
+  return part.value;
 }
 
 /** A whole copy of node.db, taken through a scratch folder under `parent` that is removed after. */
@@ -55,7 +69,7 @@ export function snapshotNodeDatabase(
 ): () => Promise<Uint8Array> {
   return async () => {
     await mkdir(parent, { recursive: true, mode: 0o700 });
-    const scratch = await mkdtemp(join(parent, "node-copy-"));
+    const scratch = await mkdtemp(join(parent, "waitron-node-copy-"));
     try {
       const path = join(scratch, "node.db");
       await node.archiveTo(path);
@@ -78,7 +92,7 @@ export function assembleArchiveEntries(
   return [
     { name: "manifest.json", bytes: Buffer.from(JSON.stringify(manifest)) },
     ...(dump === null ? [] : [{ name: "db.dump", bytes: dump }]),
-    // Copied a moment apart from db.dump; with one filing box that window is small.
+    // Not copied with db.dump: a change spanning both files between the two copies is in only one.
     { name: "node.dump", bytes: parts.nodeDump },
     ...parts.nonDbState,
     ...Object.entries(parts.secrets).map(([path, contents]) => ({

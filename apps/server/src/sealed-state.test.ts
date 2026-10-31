@@ -314,6 +314,35 @@ describe("createSealedStateRefresher", () => {
     });
   });
 
+  it("lets a node copy still writing into its folder finish, then logs the state read's own failure", async () => {
+    const log = vi.fn();
+    let copyFinished = false;
+    const busyCopy = async (path: string): Promise<void> => {
+      for (let part = 0; part < 10; part += 1) {
+        await writeFile(join(dirname(path), `part-${part}`), "x");
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await writeFile(path, "NODE");
+      copyFinished = true;
+    };
+    const node = new Proxy(suite.node, {
+      get: (target, key) => {
+        if (key === "archiveTo") return busyCopy;
+        const value: unknown = Reflect.get(target, key, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const refresher = createSealedStateRefresher(deps({ log, node }));
+    await rm(join(stateDir, "secrets.env"));
+    await mkdir(join(stateDir, "secrets.env"));
+    expect(await refresher.refresh()).toBe("failed");
+    expect(copyFinished).toBe(true);
+    expect(log).toHaveBeenCalledWith("warn", "backup.sealed_state_failed", {
+      errorCode: "unknown",
+      errno: "EISDIR",
+    });
+  });
+
   it("logs no errno for a thrown value whose code is not a system error's", async () => {
     const log = vi.fn();
     const leak = Object.assign(new Error("boom"), { code: `open ${stateDir}/secrets.env` });
