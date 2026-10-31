@@ -227,6 +227,20 @@ Paired main/landing listeners retain the configured binding;
 do not assume the default fixture can identify the main listener in that shape.
 The remaining configured-port hand-off work stays in the preceding entry.
 
+## A1251: Spanish exhausted-cleanup test checks mapping only
+
+The retrospective review of [PR #2077](https://github.com/clintongormley/waitron/pull/2077)
+found that the Spanish exhausted-cleanup case in
+`apps/dashboard/src/screens/box-status-screen.test.ts` compares the screen with the current
+catalogue entry. Restoring the old Spanish installer referral on the reviewed squash left both
+locale cases passing. Restoring the old English text too failed the English case while Spanish
+still passed. Reproduce with
+`pnpm --filter @waitron/dashboard exec vitest run src/screens/box-status-screen.test.ts -t 'exhausted cleanup'`.
+Add an independent check that rejects the Spanish referral while retaining the locale-mapping
+assertion and every unrelated check. The Spanish branch still used the catalogue comparison on
+main when checked on 31 October 2026. The retained screenshots show the intended wording; the
+failing control concerns what the test catches.
+
 ## The spawn-timeout guard compares a bound against the LARGEST SINGLE wait, never the sum
 
 - A case that waits several times can still outlast a bound that
