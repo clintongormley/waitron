@@ -15,7 +15,7 @@ type Language = "en" | "es";
 export interface MisdatedSalesInput {
   venue: string;
   language: Language;
-  /** The administrator's display name, for a closing an administrator confirmed. */
+  /** The display name of the administrator or staff member who confirmed the closing. */
   confirmedByName: string | null;
   episode: { from: string; fromOffsetMinutes: number; to: string; toOffsetMinutes: number };
   detail: Extract<MisdatedDetail, { known: true }>;
@@ -55,10 +55,11 @@ function header(input: MisdatedSalesInput, boundMs: number, offsetMinutes: numbe
   const { closing, records } = input.detail;
   const words = MISDATED_SALES_WORDS[input.language];
   const by = CLOCK_CONFIRMED_BY_WORDS[input.language];
+  const word = by[SOURCE_WORD[closing.source]];
   const confirmedBy =
-    closing.source === "admin" && input.confirmedByName !== null
-      ? `${by.admin} (${input.confirmedByName})`
-      : by[SOURCE_WORD[closing.source]];
+    (closing.source === "admin" || closing.source === "staff") && input.confirmedByName !== null
+      ? `${word} (${input.confirmedByName})`
+      : word;
   // "Made before" stays true at minute precision only when a bound with seconds is rounded up.
   const roundedBound = Math.ceil(boundMs / MINUTE_MS) * MINUTE_MS;
   const sentence = fill(records.length === 1 ? words.header.one : words.header.text, {

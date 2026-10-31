@@ -691,7 +691,9 @@ describe("the Clock row while payments are stopped for the clock", () => {
 
   const NO_WITNESS = { authority: null, devices: [] };
 
-  function confirmedStop(source: "authority" | "devices" | "admin" | "elapsed"): ClockStop {
+  function confirmedStop(
+    source: "authority" | "devices" | "admin" | "staff" | "elapsed",
+  ): ClockStop {
     return clockStop({
       proof: "confirmed",
       confirmation: { id: "c-1", source, personName: "Ana", confirmedAt: CONFIRMED },
@@ -932,6 +934,12 @@ describe("the Clock row while payments are stopped for the clock", () => {
       devicesProof(),
       `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by two tills or handhelds.`,
     ]);
+  });
+
+  it("names a staff member's confirmation as a staff member", () => {
+    expect(clockRow({ clockStop: confirmedStop("staff") }).details.at(-1)).toBe(
+      `Payments restarted at ${formatIsoMinute(CONFIRMED)}, confirmed by a staff member.`,
+    );
   });
 
   it("names what confirmed the clock with the bell's words for each source", () => {

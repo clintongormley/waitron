@@ -63,12 +63,23 @@ export const CLOCK_RESTARTED_EMAIL_WORDS = {
   en: {
     subject: "Payments restarted at {venue}",
     text: "The box's clock was confirmed by {confirmedBy} and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    byStaff:
+      "The box's clock was confirmed by {person}, a staff member, on {till}, and payments started again. Sales recorded with a later time than the real one are listed on the Box status page (in the dashboard, Settings → Box status).",
+    namedTill: "till {device}",
+    unnamedTill: "a till",
   },
   es: {
     subject: "Se reanudaron los cobros en {venue}",
     text: "La hora del equipo se confirmó con {confirmedBy} y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    byStaff:
+      "La hora del equipo la confirmó {person}, un empleado, en {till}, y se volvió a cobrar. Las ventas registradas con una hora posterior a la real están en Estado del equipo (en el panel de gestión, Ajustes → Estado del equipo).",
+    namedTill: "la caja {device}",
+    unnamedTill: "una caja",
   },
-} as const satisfies Record<"en" | "es", { subject: string; text: string }>;
+} as const satisfies Record<
+  "en" | "es",
+  { subject: string; text: string; byStaff: string; namedTill: string; unnamedTill: string }
+>;
 
 /** `text` for several sales, `one` for one, `partial` appended to either; `unconfirmed` instead of
  * all three when the box cannot tell which sales. */

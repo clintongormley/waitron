@@ -601,6 +601,16 @@ describe("payments restarted on a clock behind the last sale", () => {
     }
   });
 
+  it("names the staff member and the till when a staff member confirmed, in each language", () => {
+    const params = { ...base, confirmedBy: "staff", person: "Ana", byStaff: true, device: "Bar" };
+    expect(alertMessage("clock.behind_chain_restarted", params, "en")).toBe(
+      `Payments restarted on the box's clock (${clockAt}), earlier than the last sale (${lastRecordAt}), once Ana, a staff member, confirmed it on till Bar.`,
+    );
+    expect(alertMessage("clock.behind_chain_restarted", params, "es")).toBe(
+      `Se reanudaron los cobros con la hora del equipo (${clockAt}), anterior a la última venta (${lastRecordAt}), al confirmarla Ana, un empleado, en la caja Bar.`,
+    );
+  });
+
   it("words each way the clock can be confirmed", () => {
     expect(ALERT_WORDS["clock_confirmed_by"]!.words).toEqual({
       authority: { en: "the tax agency's time", es: expect.any(String) },

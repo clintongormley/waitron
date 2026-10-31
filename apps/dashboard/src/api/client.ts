@@ -1887,7 +1887,7 @@ export interface ClockStopView {
   contrary: { authority: ClockWitnessView | null; devices: ClockStopDeviceView[] };
   confirmation: {
     id: string;
-    source: "authority" | "devices" | "admin" | "elapsed";
+    source: "authority" | "devices" | "admin" | "staff" | "elapsed";
     personName: string | null;
     confirmedAt: string;
   } | null;

@@ -102,6 +102,18 @@ function wordsFor(
         ? by[source as keyof typeof by]
         : by.otherwise;
     const words = CLOCK_RESTARTED_EMAIL_WORDS[language];
+    const person = params?.["person"];
+    if (params?.["byStaff"] === true && typeof person === "string") {
+      const device = params["device"];
+      const till =
+        typeof device === "string"
+          ? words.namedTill.replaceAll("{device}", () => device)
+          : words.unnamedTill;
+      return {
+        subject: words.subject,
+        text: words.byStaff.replaceAll("{person}", () => person).replaceAll("{till}", () => till),
+      };
+    }
     return {
       subject: words.subject,
       text: words.text.replaceAll("{confirmedBy}", () => confirmedBy),

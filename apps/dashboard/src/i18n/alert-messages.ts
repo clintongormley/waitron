@@ -171,6 +171,13 @@ export const ALERT_MESSAGES: Readonly<
   "clock.behind_chain_restarted": {
     en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {confirmedBy:clock_confirmed_by} confirmed it.",
     es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {confirmedBy:clock_confirmed_by}.",
+    variants: {
+      byStaff: {
+        mode: "replace",
+        en: "Payments restarted on the box's clock ({clockAt:minute}), earlier than the last sale ({lastRecordAt:minute}), once {person}, a staff member, confirmed it on till {device}.",
+        es: "Se reanudaron los cobros con la hora del equipo ({clockAt:minute}), anterior a la última venta ({lastRecordAt:minute}), al confirmarla {person}, un empleado, en la caja {device}.",
+      },
+    },
   },
   "clock.corrected": {
     en: "The box set its clock from the tax agency's time: {direction:clock_step_direction} {stepMs:duration}, from {before:minute} to {after:minute}.",
@@ -540,6 +547,7 @@ export const ALERT_WORDS: Readonly<
       authority: { en: "the tax agency's time", es: "la hora de Hacienda" },
       devices: { en: "two tills or handhelds", es: "dos cajas o terminales" },
       admin: { en: "an administrator", es: "un administrador" },
+      staff: { en: "a staff member", es: "un empleado" },
     },
     otherwise: { en: "a check recorded on the box", es: "una comprobación anotada en el equipo" },
   },
