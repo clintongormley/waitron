@@ -6,7 +6,9 @@
 > tree on `main` `65bc0441a` contradicts it (listed under "Where the outline was wrong on this
 > tree"). Revision 2 folds the fresh-context plan review of revision 1 (one critical, eight
 > important, seven minor findings) and the lead's rulings on its four open points ("The lead's
-> rulings", at the end).
+> rulings", at the end). A narrow claim check of that fold (2026-10-31) is folded too: Task 15a
+> split into 15a and 15b, the turn taken before the write lock, one `recordPending` at a time,
+> `reanchor` taking and recording again, and a bounded read that can see an over-long line.
 > Design: revision 7, §4.9 c, d, g, h, with §2.5, §8 item 9b and §12
 > ([design](../specs/2026-10-19-a798-degraded-trading-design.md)). Base: slice 9
 > ([plan](2026-10-23-a798-9-clock-restart.md), landed as #2025); seams left for slice 9c
@@ -66,7 +68,10 @@ Run in this order. A STOP stops the build there and the lead reports to the coor
     `passkey.ts`. STOP if a job that deletes data, keeps a credential alive, cuts tills off or
     blocks a legal record is left unfixed and not accepted by this plan.
 15a. **A shift begun before a backward step can be clocked out and in again** —
-    `packages/workforce/src/clocking.ts`. STOP if a workforce suite must be edited.
+    `packages/workforce/src/record-reads.ts`, `clocking.ts`. STOP if a workforce suite must be
+    edited.
+15b. **The till reads the same state** — `apps/server/src/till-clock-state.ts`,
+    `attendance-discovery.ts`. STOP if a till-clock or attendance suite must be edited.
 16. **Guides, English and Spanish** — `apps/server/src/guide/{en,es}/box-status.md`.
 17. **LOOK, without the dev stack** — browser-test screenshots.
 18. **Developer docs, the asesor question, the deploy README, B3's contract** —
@@ -120,7 +125,10 @@ files, each check's state) into the ledger before going on.
    `packages/identity/src/management-session.ts:13`) ahead of the new clock — the mirror of today's
    idle rule (`:80`), which already ends a session after a forward step past 30 minutes. So a step
    of more than about half an hour either way signs the confirming administrator out (their
-   request has just stamped `lastSeenAt` at the reading before); a smaller one signs nobody out.
+   request has just stamped `lastSeenAt` at the reading before). A smaller FORWARD step shortens
+   every session's remaining idle time by the step (the rule is `Date.now() − lastSeenAt >
+   IDLE_TIMEOUT_MS`, `:80`), so a session already idle for more than 30 minutes less the step
+   ends; a smaller BACKWARD step ends none.
    Tills and handhelds stay signed in: `apps/server/src/till-session.ts` has no time-based
    expiry, and the only one in `packages/identity/src` is `IDLE_TIMEOUT_MS`, for management
    sessions (run 2026-10-31: `/usr/bin/grep -rn "\.expired\"\|_TIMEOUT_MS\|TTL_MS\|expiresAt"
@@ -462,8 +470,11 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    "synchronised":bool,"lastSyncAt":<ms>|null,"nowMs":<ms>}` — `off` when `NTP=no`, `stopped` when
    `NTP=yes` and no listed unit is active, `on` otherwise; `lastSyncAt` the mtime of
    `/run/systemd/timesync/synchronized`.
-3. **The handler reads one line, bounded**: `read -r -t 5 -n 700` (a line longer than 700
-   characters, or none within 5 s, answers `request_invalid`). **`clock.set <epochMs>
+3. **The handler reads one line, bounded**: `read -r -t 5 -n 701`, and a line of more than 700
+   characters read, or none within 5 s, answers `request_invalid`. `-n 700` could not tell: lines
+   of 700 and 701 characters both read 700 with status 0; with `-n 701` a line of 700 reads 700,
+   one of 701 or 702 reads 701, each with status 0 (bash 3.2.57 on this Mac, 2026-10-31; Task 2's
+   tests run both lengths on the runner's bash). **`clock.set <epochMs>
    <requester>`** refuses (`{"ok":false,"reason":…}`) a target that does not match
    `^[1-9][0-9]{12}$` (`target_invalid`; bash reads a leading zero as octal —
    `t=037000000000000; echo $(( t / 1000 ))` printed `2130303778`, 2037-07-04, and
@@ -521,8 +532,16 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    whatever its answer. The target is the wall clock now plus the offset — valid only while no
    step has happened since `measuredAt`.
    **Order (round 1, M7; round 2, C1, I2), each step tested in order:** take the one-at-a-time
-   turn — the same turn the watch's confirmation and `POST /api/box/clock-confirm` now take, so no
-   confirmation lifts or closes the stop between the judging below and the row; refuse `stale`
+   turn — the same turn the watch's two confirmation writers (`confirm` and `closeWaiting`) and
+   `POST /api/box/clock-confirm` now take, so no confirmation lifts or closes the stop between the
+   judging below and the row. **The turn is always taken before the write lock, never inside it**
+   (claim check, 2026-10-31): `withTransaction` is a `db.withWriteLock` turn
+   (`packages/db/src/tenancy.ts:30-39`), so a caller that waited for the turn inside a
+   transaction would hold the lock while the set, holding the turn, waits for the lock in its
+   `read` — neither would finish. So every user wraps its WHOLE transaction in the turn: the
+   route's `withTransaction` (`apps/server/src/box-health-api.ts:269`), the watch's whole
+   `deps.transaction` in `confirm` (`clock-watch.ts:156`) and in `closeWaiting` (`:192`; its
+   AEAT question, `:190`, stays outside the turn, so no network wait holds it); refuse `stale`
    when `stepsSeen` is not the counter now, or when the wall clock has moved against the steady
    clock by more than a second since `measuredAt` (a step by the time service or by hand); judge
    the stop again in a write-lock turn with no drain (the stop proper or `clock.unusable` at a
@@ -533,7 +552,12 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    disprove the lift this set writes; if that write fails, the set is refused `pending_disproofs`
    and nothing is asked of the host); read wall and boot clocks; raise the step counter; ask the
    host; read both again; verify `|wallAfter − (target + (bootAfter − bootBefore))| ≤ 2 000`;
-   re-anchor every anchor (also when the host refused or timed out); clear the witness store; then
+   re-anchor every anchor (also when the host refused or timed out) — `reanchor()` returns a
+   promise, and the watch's first takes and records again every AEAT reading not yet taken, as
+   `stepComing` does, because a filing reply noted while the host was setting (up to the client's
+   20 s) was measured on the old clock and `clear()` keeps untaken readings
+   (`clock-witnesses.ts:34-36`, `:116-120`); if that write fails, the row is kept pending
+   (decision 8) rather than written now; clear the witness store; then
    write the row (decision 7) and the alert in one transaction, and hand the alert to the email
    duty (decision 9).
    **Backoff** (round 2, I3): after a set that the host refused (`set_failed`, `busy`), that timed
@@ -562,9 +586,11 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
    record can be written before 28-10-2024). Always `clock.corrected` (decision 9). A set that
    failed verification writes no row and records `clock.corrected` with `verified: false` and the
    measured step, when the clock moved by more than a second.
-8. **A step whose row could not be written** (a full disk) is kept in memory and written on the
-   watch's next look, as the watch keeps disproofs (`clock-watch.ts:79-117`); a restart loses it,
-   and the host's journal line remains. Logged `clock_correction.row_pending` once.
+8. **A step whose row could not be written** (a full disk, or an anchor whose `reanchor()` write
+   failed) is kept in memory and written on the watch's next look, as the watch keeps disproofs
+   (`clock-watch.ts:79-117`), and only after that look's first `recordPending()` has succeeded, so
+   a disproof measured on the old clock is always written before the step's row; a restart loses
+   it, and the host's journal line remains. Logged `clock_correction.row_pending` once.
 9. **`clock.corrected`** params `{ confirmationId | null, source, person | null, before,
    beforeOffsetMinutes, after, afterOffsetMinutes, stepMs, verified }`, severity warning, no sale.
    Recording it first marks any open `clock.corrected` handled by the system
@@ -596,11 +622,11 @@ Filled from the job's log by the lead; each row gives the run's URL and the prin
     set is `clock.set_failed { reason: "refused" | "unverified" }` (502). No transaction is held
     while the host sets.
 11. **Every job that reads the wall clock** is made safe for a step of days, or accepted with a
-    reason (round 1, I5), in Tasks 14, 15 and 15a: backups pruned by the age in their names; the
-    stream's generation pruning; management sessions (the lead's ruling (d)) and passkey challenges
-    whose stored time is ahead of the clock; a shift begun before a backward step; then whatever
-    the audit's greps find (Task 15's table). The STOP rule covers a job that deletes data, keeps a
-    credential alive past its limit, cuts tills off, or blocks a legal record (round 2, I7).
+    reason (round 1, I5), in Tasks 14, 15, 15a and 15b: backups pruned by the age in their names;
+    the stream's generation pruning; management sessions (the lead's ruling (d)) and passkey
+    challenges whose stored time is ahead of the clock; a shift begun before a backward step; then
+    whatever the audit's greps find (Task 15's table). The STOP rule covers a job that deletes data,
+    keeps a credential alive past its limit, cuts tills off, or blocks a legal record (round 2, I7).
 12. **What 9c inherits:** the anchor registration of decision 6 (9c's change guard registers
     beside the watch); `confirmClockStep` taking any open check's reason (9c's `start`, `change`,
     `disagrees`); `clock.sync_off`'s `unreachable` (9c's alert-not-stop case, design §4.9 h.2).
@@ -666,8 +692,9 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
 and the disk walk for a minute…", which mocks `checkTimeHealth` by name: the name stays), every
 `clock-confirmation*`, `clock-checks*`, `clock-behind*`, `clock-misdated*` and `clock-confirm.route`
 test, `apps/server/src/box-alert-email*.test.ts` (every other code keeps today's episode rule),
-every suite under `packages/workforce/src` and `packages/workforce/test` (Task 15a), and every
-other test on `main`.
+every suite under `packages/workforce/src` and `packages/workforce/test` (Task 15a), every
+`apps/server/src/till-clock*`, `attendance-discovery*` and `boot.till-clock` suite (Task 15b), and
+every other test on `main`.
 
 ## Global constraints
 
@@ -781,7 +808,9 @@ file"):
   2024-10-28T00:00:00Z); `4102444800000` (2100-01-01T00:00:00Z); `NTPSynchronized=yes`; a
   requester with a control character; one of 513 bytes; one not wrapped in braces. Controls that
   go through: `1730073600000`, `4102444799999`, and a requester of exactly 512 bytes.
-- The read is bounded: a line of 701 characters → `request_invalid`; no line within the test's
+- The read is bounded: a line of 701 characters → `request_invalid`; the control, a `clock.set`
+  line of exactly 700 characters (a valid target, its requester too long), → `requester_invalid`,
+  not `request_invalid` (no valid request is 700 characters long); no line within the test's
   shortened limit → `request_invalid` (the limit read from `WAITRON_BOX_READ_SECONDS`, 5 when
   unset).
 - A requester `{"x":"$(touch <marker>)`;`touch <marker>`;"}` (within the charset) goes through: the
@@ -803,8 +832,9 @@ file"):
 
 **Deletion controls.** Remove the `synchronised` refusal → its case fails; remove the `trap` → the
 kill case fails; remove the range check → the 2100 case fails; drop the leading-zero pattern
-(keep only the range) → the `037000000000000` case fails; drop `-n 700` → the 701-character case
-fails; drop the restore's list check → the `ssh.service` case fails. Restore each.
+(keep only the range) → the `037000000000000` case fails; drop the more-than-700 check (keep
+`-n 701`) → the 701-character case fails; drop the restore's list check → the `ssh.service`
+case fails. Restore each.
 
 **Focused command.** `pnpm exec vitest run scripts/waitron-box-sh.test.mjs`.
 
@@ -1109,8 +1139,9 @@ confirmation, the confirm route) join it in Tasks 11 and 12.
 export const DEVICES_MAY_SET_BACK_PAST_LAST_SALE = true; // owner, 2026-10-24 04:24
 export function devicesMaySet(input: { targetMs: number; stepMs: number;
   latestRecordAt: number | null; rule: boolean }): boolean;
-/** `stepComing` may write (the watch records its pending disproofs); a throw refuses the set. */
-export interface ClockAnchor { stepComing(): Promise<void>; reanchor(): void }
+/** Both may write (the watch records its pending disproofs). A throw from `stepComing` refuses
+ * the set; a throw from `reanchor` keeps the step's row pending (decision 8). */
+export interface ClockAnchor { stepComing(): Promise<void>; reanchor(): Promise<void> }
 export function clockCorrection(deps: {
   host: BoxHostClient; backend: Pick<FiscalBackend, "confirmClockStep" | "clockStopState">;
   store: Pick<ClockWitnessStore, "clear">; clock: Pick<TrustedClock, "now">;
@@ -1125,7 +1156,8 @@ export function clockCorrection(deps: {
   addAnchor(anchor: ClockAnchor): void;
   /** The correction's step counter; a caller reads it when it measures its offset. */
   steps(): number;
-  /** The one-at-a-time turn, which the watch's confirmation and the confirm route also take. */
+  /** The one-at-a-time turn, which the watch's `confirm` and `closeWaiting` and the confirm
+   * route also take. Taken before any transaction, never inside one (decision 6). */
   inTurn<T>(fn: () => Promise<T>): Promise<T>;
   set(input: { reason: "behind_chain" | "unusable"; source: "authority" | "devices" | "admin";
     offsetMs: number; measuredAt: { wallMs: number; monoMs: number }; stepsSeen: number;
@@ -1141,6 +1173,8 @@ export function clockCorrection(deps: {
 - The order: the stop judged (`clockStopState` in `read`), `clockStatus`, every anchor's
   `stepComing`, the readings, `setClock`, the readings, every anchor's `reanchor`, `store.clear`,
   `confirmClockStep`, then `onCorrected` — asserted as one list of calls.
+- An anchor whose `reanchor` rejects (a full-disk write) → the clock set, no `confirmClockStep`
+  now; the next `writePending()` writes the row once.
 - Synchronised → `{ set: false, reason: "synchronised" }`, no `setClock`, no anchor told;
   unavailable → `host_unavailable`, the same; the stop no longer holding → `not_stopped`, the
   same; an anchor whose `stepComing` throws → `pending_disproofs`, no `setClock`, every anchor
@@ -1186,16 +1220,32 @@ re-judging → the `not_stopped` case calls the host.
 their `BoxClockReading`; `forSetting()` hands out every reading `witnesses()` would, each with its
 `at`, and only those with no step since — a kept disagreement included only while `fresh` holds
 for it; `witnesses()` and its doc unchanged), `apps/server/src/clock-watch.ts` (the watch
-implements `ClockAnchor`; its confirmation runs inside `correction.inTurn` when a `correction` dep
-is passed), `apps/server/src/boot.ts` (create the correction before `startClockWatch` at `:2437`,
-pass it, `correction.addAnchor(clockWatch)`).
+implements `ClockAnchor`; when a `correction` dep is passed, BOTH its confirmation writers take
+`correction.inTurn` around their whole `deps.transaction` — `confirm` (`clock-watch.ts:150-170`)
+and `closeWaiting`'s `closeClockCheckByItself` (`:185-208`), which also closes a check and so
+must not land between a set's judging and its row; `closeWaiting`'s `askAuthority()` stays outside
+the turn; `recordPending` runs one call at a time), `apps/server/src/boot.ts` (create the
+correction before `startClockWatch` at `:2437`, pass it, `correction.addAnchor(clockWatch)`).
 
 **The anchor.** `stepComing()` sets a hold that skips the jump comparison on EVERY look until
 `reanchor()` clears it — not only the next look, which a set still in flight would use up (round
 2, minor 1) — and first takes every AEAT reading not yet taken (`takeNewAuthority`), keeps each
 disagreeing one as a disproof as the end of a look does (`clock-watch.ts:290-297`), and records the
 pending disproofs in their own transaction; a failed write throws, so the correction refuses the
-set (`pending_disproofs`). `reanchor()` sets `previous` from fresh readings and clears the hold.
+set (`pending_disproofs`). `reanchor()` (a promise) does the same take-and-record first — a filing
+reply noted while the host was setting was measured on the old clock, and `clear()` leaves it
+untaken (`clock-witnesses.ts:34-36`) — then sets `previous` from fresh readings and clears the
+hold whatever the write's outcome, and rejects if the write failed.
+
+**One `recordPending` at a time** (claim check, 2026-10-31). Today it reads `pending[0]`, awaits
+the write, then `shift()`s with no check that the head is still the entry it wrote
+(`clock-watch.ts:105-109`); a `stepComing` or `reanchor` during a look runs a second copy. Read,
+not run, with the write queue first come, first served (`packages/store/src/write-queue.ts:44-46`):
+both copies write the head, and a copy's `shift()` can remove the next disproof while the other
+copy is still writing it — so `stepComing` can return before that disproof is recorded, and if
+its write then fails it is gone from `pending` and never recorded. Each call waits for the one
+before it to settle (a promise chain that passes on neither the earlier call's value nor its
+error), then runs as today.
 
 **Failing tests first** in a new `apps/server/src/clock-watch.anchor.test.ts` (the existing
 harness) and in `apps/server/src/clock-witnesses.test.ts` (new cases only):
@@ -1210,15 +1260,38 @@ harness) and in `apps/server/src/clock-witnesses.test.ts` (new cases only):
   look records NO `clock.behind_chain_disproved` naming that lift. Control: the same reading noted
   AFTER `reanchor` and saying the new clock is wrong → disproved as today.
 - `stepComing` with a seat whose `noteClockProvedWrong` throws a full-disk error → it throws.
+- **A reply noted while the host is still answering** (claim check, 2026-10-31): the stop proper
+  holding; `stepComing`; then an AEAT reading saying the box is a day ahead noted through
+  `noteAuthority` while the fake set has not answered; the fake host answers, moving the clock a
+  day back; `reanchor()` → the disproof is recorded before the fake seat writes the lift, and the
+  next look records NO `clock.behind_chain_disproved` naming that lift. Control: the same reading
+  noted after `reanchor` → disproved as today. `reanchor` with a seat that throws a full-disk
+  error → it rejects, and the hold is cleared.
+- **Two `recordPending` at once**: two disproofs pending, the seat's `noteClockProvedWrong` held
+  on a promise the test releases; a look starts recording the first; `stepComing` is called
+  during it → `stepComing` does not resolve before both are written; each is written exactly
+  once, in order. The same with the second write failing (a full-disk error) → `stepComing`
+  rejects and the second disproof is still pending, and the next look records it.
+- **Turn, then lock** (claim check, 2026-10-31): the correction and the watch on a real venue
+  database (`useVenueDb`), so `read` and `transaction` take the real write lock; a `set` held at
+  the fake host's `clockStatus` (after its `read`, so it holds the turn) until the watch's
+  `confirm` has started, then released → both finish within a 5-second deadline on real timers
+  (`Promise.race` with a timer that fails the case), so a deadlock fails rather than hangs; the
+  same with `closeWaiting`. Control: the turn moved inside the transaction (the deletion below)
+  → the deadline fires.
 - The store: a disagreement noted, then the wall clock stepped by 5 s against the steady clock →
   `witnesses()` still hands it out (unchanged), `forSetting()` does not; with no step, both do and
   `forSetting()` carries the `at` it was noted with.
-- A confirmation that the watch writes waits for a set in flight in the same turn (a fake
-  correction whose `inTurn` records order).
+- A confirmation that the watch writes, from `confirm` and from `closeWaiting`, waits for a set
+  in flight in the same turn (a fake correction whose `inTurn` records order).
 
 **Deletion controls.** Clear the hold on the next look instead of on `reanchor` → the two-looks
 case records a jump; drop the take-and-record in `stepComing` → the filing-reply case disproves
-the new lift; drop the `fresh` filter from `forSetting()` → the stepped-disagreement case fails.
+the new lift; drop it in `reanchor` → the reply-while-answering case disproves the new lift; drop
+the chain in `recordPending` → the two-at-once case writes the first twice or loses the
+second; take the turn inside `deps.transaction` instead of around it → the turn-then-lock case
+hits its deadline; drop the `fresh` filter from `forSetting()` → the stepped-disagreement case
+fails.
 
 **Focused commands.**
 `pnpm --filter @waitron/server exec vitest run src/clock-watch.anchor.test.ts
@@ -1234,8 +1307,10 @@ src/clock-watch.restart.test.ts`.
 the devices' mean, each with the chosen readings' `measuredAt` from `forSetting()` and
 `stepsSeen: correction.steps()` read when the witnesses are read; when `stop === null` and the
 reading is not recordable, judge `forSetting()` with `judgeClockWitnesses` and set from a
-disagreeing group of devices; `writePending()` first on each look; the backoff of decision 6, kept
-in memory by stop key; log a refusal once per change of reason, not every 15 s).
+disagreeing group of devices; `writePending()` on each look straight after its first
+`recordPending()` succeeds (`clock-watch.ts:228`), never before it or when it failed, so a disproof
+measured on the old clock is written before the step's row (decision 8); the backoff of
+decision 6, kept in memory by stop key; log a refusal once per change of reason, not every 15 s).
 
 **Failing tests first** in a new `apps/server/src/clock-watch.correction.test.ts` (the existing
 harness, a fake correction recording calls):
@@ -1245,6 +1320,9 @@ harness, a fake correction recording calls):
 - A stop with one device disagreeing → no set.
 - `clock.unusable` (a reading in 2001) with two devices disagreeing → `reason: "unusable"`.
 - A correction answering `synchronised` on three looks logs `clock_watch.cannot_set` once.
+- A disproof pending in the watch and a step row pending in the correction → the look writes the
+  disproof, then calls `writePending()`; with the disproof's write failing → `writePending()` is
+  not called on that look.
 - **Backoff**: a correction answering `{ set: false, reason: "refused" }` on every call, looks
   every 15 s of the fake steady clock → one call in the first 10 minutes, the second at 10
   minutes, the third 20 minutes after that; an answer `synchronised` on every look → asked every
@@ -1276,7 +1354,8 @@ src/boot.clock-watch.test.ts`.
 
 **Files.** Modify `apps/server/src/box-health-api.ts` (`clockConfirm` deps gain `correction`;
 mount `POST /api/box/clock-set` when `confirmClockStep` exists; `POST /api/box/clock-confirm`'s
-seat call runs inside `correction.inTurn` when a correction is passed, round 2 C1); create
+WHOLE `withTransaction` (`:269`) runs inside `correction.inTurn` when a correction is passed —
+the turn before the lock, never inside it, decision 6; round 2 C1); create
 `apps/server/src/clock-set.route.test.ts`; modify `apps/server/src/boot.ts` (`:2594-2605`).
 
 **The route**, in order: refuse on the box (`same_machine`, as `:247-250`);
@@ -1308,12 +1387,17 @@ read; the before-2024 case → 200 with `reason: "unusable"`. Every refusal: zer
 zero host sets, counted.
 
 A case for the confirm route: `POST /api/box/clock-confirm` started while a set holds the turn
-writes its row only after the set's row (both through the stub seat, order recorded).
+writes its row only after the set's row (both through the stub seat, order recorded). And the
+deadlock case (claim check, 2026-10-31): on the route's real venue database, a `correction.set`
+held at the fake host's `clockStatus` (after its `read`, so it holds the turn) until a
+`POST /api/box/clock-confirm` has started, then released → both finish within a 5-second
+deadline on real timers (`Promise.race` with a timer that fails the case).
 
 **Deletion controls.** Drop the `witnessed` check → its two cases fail; judge `witnessed` before
 the host's status → the two I4 cases answer `witnessed`; drop the on-the-box check →
 `same_machine` fails; drop the permission → the manager case fails; take the confirm route out of
-the turn → the order case fails.
+the turn → the order case fails; take the turn inside its `withTransaction` → the deadlock case
+hits its deadline.
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/clock-set.route.test.ts
 src/clock-confirm.route.test.ts src/box-health-api.test.ts`.
@@ -1424,8 +1508,9 @@ src/backup-sweep-file.test.ts src/backup-sweep-staging.test.ts src/backup-sweep-
 - **Management sessions** (`packages/identity/src/management-session.ts:80`): a `lastSeenAt` more
   than `IDLE_TIMEOUT_MS` (30 minutes, `:13`) after now counts as expired
   (`management_session.expired`) — the mirror of today's idle rule, so a backward step past half
-  an hour ends sessions as a forward one already does, and a smaller step ends none (FYI 6, the
-  lead's ruling (d)). Tests: 30 minutes and 1 s ahead → expired; 29 minutes 59 s ahead → accepted
+  an hour ends sessions as a forward one already does, and a smaller backward step ends none (a
+  smaller forward step already shortens every session's idle time by the step; FYI 6, the lead's
+  ruling (d)). Tests: 30 minutes and 1 s ahead → expired; 29 minutes 59 s ahead → accepted
   (the control); 10 minutes ahead → accepted, and the touch then stamps `lastSeenAt` at now. No
   till or handheld session changes: `apps/server/src/till-session.ts` has no time-based expiry.
 - **Passkey challenges** (`packages/identity/src/passkey.ts:109`): a `createdAt` more than a minute
@@ -1471,8 +1556,8 @@ Two more, decided here (round 2, I7):
 
 **STOP rule** (widened, round 2 I7). A job that, on a step of days, deletes data, keeps a
 credential alive past its limit, cuts tills off, or blocks a legal record is fixed in
-this task (or Task 15a) with a test, or accepted by this plan with a reason (the certificate,
-above), or the build stops for a decision.
+this task (or Tasks 15a and 15b) with a test, or accepted by this plan with a reason (the
+certificate, above), or the build stops for a decision.
 
 **Focused commands.** `pnpm --filter @waitron/stream exec vitest run src/supervisor.test.ts`;
 `pnpm --filter @waitron/identity exec vitest run src/management-session.test.ts
@@ -1481,60 +1566,145 @@ src/passkey.test.ts`.
 ### Task 15a: A shift begun before a backward step can be clocked out and in again
 
 **Goal.** The working-time record keeps working across a backward step (round 2, I7; the STOP
-rule's "blocks a legal record").
+rule's "blocks a legal record"). Split from one task after the claim check of 2026-10-31 found
+three more reads: 15a fixes the workforce package's read, 15b the till's.
 
-**What happens today, read and not run** (the task's first tests show it). The fresh review said
-a clock-out after a backward step is refused `shift.invalid` `ends_not_after_starts`; that does not
-hold on this tree: the only thrower of that reason is `shiftInterval`
-(`packages/workforce/src/clocking.ts:678-692`; `/usr/bin/grep -rn ends_not_after_starts apps
-packages --include='*.ts'`, test files left out, printed only `:689` on 2026-10-31), which only the
-roster's `addShift` and
-`updateShift` call (`:436`, `:462`). A clock-out goes `clockOut` → `append` → `appendToChain`
-(`:179-183`, `:614-642`) with no check of time order, so the record IS written. The defect is in
-the reading: `currentState` takes the person's latest live entry by `compareEvents`
-(`:607-612`), which orders by `event_at` first
-(`packages/workforce/src/effective-entries.ts:11-13`).
-After the box steps back a day, a clock-in stamped on the old clock sorts after the clock-out
-written on the new one, so the person still reads as working: their next clock-in is refused
-`attendance.already_open` for as long as the step — a legal record blocked — and
-`projectWorkSessions` (`packages/workforce/src/projection.ts:145-181`) sees the `out` before any
-`in` and never closes the shift.
+**What happens today.** A clock-out after a backward step is not refused `shift.invalid`
+`ends_not_after_starts`, as the fresh review said: the only thrower of that reason is
+`shiftInterval` (`packages/workforce/src/clocking.ts:678-692`; `/usr/bin/grep -rn
+ends_not_after_starts apps packages --include='*.ts'`, test files left out, printed only `:689` on
+2026-10-31), which only the roster's `addShift` and `updateShift` call (`:436`, `:462`). A
+clock-out goes `clockOut` → `append` → `appendToChain` (`:179-183`, `:614-642`) with no check of
+time order, so the record IS written. The defect is in the reading, in three places, each of which
+takes the latest entry by `event_at` first:
+- `currentState` (`clocking.ts:607-612`, behind `clockIn`, `clockOut`, `breakStart`, `breakEnd`)
+  sorts by `compareEvents` (`packages/workforce/src/effective-entries.ts:11-13`), but only over
+  what `readLatestLiveEntries` hands it — the person's live entries AT the latest `event_at`
+  (`packages/workforce/src/record-reads.ts:83-100`) — so re-sorting inside `currentState` alone
+  changes nothing;
+- the till's `readTillClockState` (`apps/server/src/till-clock-state.ts:42-57`, ordered by
+  `event_at` first), behind `GET /api/clock/state`, the clock routes' `before.state` and
+  `lastEntryId` check (`apps/server/src/till-clock-api.ts:115-121`) and
+  `reconcileAttendanceBeforeClock` (`apps/server/src/attendance-discovery.ts:29`);
+- that function's `start` read, the person's latest clock-in (`attendance-discovery.ts:31-49`).
 
-**The rule.** In `currentState` only: take the person's latest DIRECT live entry by chain position
-(`sequence_no` — entries the clocking routes wrote, not a manager's approved missing-entry
-correction; on one node a later position is a later write, whatever the clock said); the state is
-the state after it, unless an approved missing-entry correction is dated after its `event_at`, in
-which case the latest such correction by `event_at` decides, as today. While the box's clock only
-moves forward, the latest direct entry by chain position is also the latest by `event_at`, so this
-answers what today's rule answers; after a backward step it still follows the order the person
-clocked in. Every entry keeps the time it was written with — the legal
-record's times are the box's clock, as every record's are (CLAUDE.md §5); the session's hours read
-as written (a negative or missing session) and a manager corrects the clock-in through the
-existing correction flow. Accepted for 9b, with a backlog line: the hours read and the end-of-day
-pass (`end-of-day.ts`'s `intervalsFor`, which also sorts by `compareEvents`) are not changed.
+The claim checker ran it on this tree (2026-10-31; its receipt, not re-run for this fold): clock
+in at 21:00, clock out at 20:30 → written; the next clock-in refused `attendance.already_open`;
+and a SECOND clock-out at 20:50 also accepted and written (`sequence_no` 3), because the only
+entry read was the 21:00 `in`; and the till's state read still said `working` after the
+clock-out. So until real time passes the clock-in, the person cannot clock in again, and (read,
+not run beyond the second) every clock-out dated before 21:00 is accepted, since the latest
+instant stays the 21:00 `in` — a legal record blocked and wrong ones written — and
+`projectWorkSessions`
+(`packages/workforce/src/projection.ts:145-181`) sees an `out` before any `in`.
 
-**Files.** `packages/workforce/src/clocking.ts`, a new
-`packages/workforce/src/clocking-step.test.ts`.
+**The rule, for every state read.** Chain positions are only comparable within one chain: a chain
+is one node and one location (`workforce_chains`' primary key, `schema/workforce-chains.ts:27`),
+each append takes that chain's next `sequence_no` (`chain.ts:109`), and the person's entries at
+two locations sit in two chains (clock in at A, out at A, in at B → 1, 2, 1 on a fresh box). So:
+1. For each chain (`node_id`, `location_id`), the person's latest DIRECT live entry (`in`, `out`,
+   `break_start`, `break_end` — entries the clocking routes wrote, not a manager's approved
+   missing-entry correction) by `sequence_no`: within one chain a later position is a later
+   write, whatever the clock said.
+2. Across chains, the latest of those by `compareEvents`.
+3. Unless an approved missing-entry correction is dated after that entry's `event_at`: then the
+   latest such correction by `compareEvents` decides, as today.
+While the box's clock only moves forward, each chain's latest by position is also its latest by
+`event_at`, so this answers what today's rule answers.
+
+**It changes only how state is DERIVED, never what is recorded.** `append` (`clocking.ts:614-642`)
+and the chain's `attemptAppend` (`chain.ts:102-…`) are not touched: an entry's `event_at` is still
+the clock action's own time (`clocking.ts:625`), its `recorded_at` still clamped to its chain's
+high-water mark (`chain.ts:115-122`), its position and hash as today (`:109`, `:124-140`). What
+follows the derived state is which clock action is accepted, and on the till the `lastEntryId` a
+request is checked against and whether a break end is appended before a clock-out
+(`till-clock-api.ts:160`). Every entry keeps the time it was written with — the legal record's
+times are the box's clock, as every record's are (CLAUDE.md §5); the session's hours read as
+written (a negative or missing session) and a manager corrects the clock-in through the existing
+correction flow. Accepted for 9b, with a backlog line: the hours read, the end-of-day pass
+(`end-of-day.ts`'s `intervalsFor`) and the correction check (`corrections.ts`'s
+`validateSequence`, `:94-113`) still order by `compareEvents`. Read, not run: that check runs over
+all the person's effective entries (`corrections.ts:202`, `:207-216`), so until the clock-in is
+retimed to before the clock-out every other correction for that person is refused
+`correction.invalid` `unmatched_out`; the retime itself puts the entries back in order. The test
+below tries the retime.
+
+**Open for the lead (found in the 2026-10-31 fold; not decided here).** Step 2 still compares
+times across chains, so it can mislead after a backward step when the person moved location within
+it: in at A at 21:00 and out at A at 21:10, the clock stepped back an hour, in at B at 20:15 → A's
+latest is the `out` at 21:10, B's is the `in` at 20:15, and the person reads `out` while working at
+B, until real time passes 21:10 — up to the step's size, which may be days. This needs two
+locations on one node and a move within the step. Before the build starts the lead either accepts
+it with a backlog line and a reason, or names an order across chains that a step cannot move; the
+build does not start Task 15a until it is decided.
+
+**Files.** Modify `packages/workforce/src/record-reads.ts` (`readLatestLiveEntries`, whose only
+caller is `currentState` — `/usr/bin/grep -rn readLatestLiveEntries packages apps
+--include='*.ts'` printed only `record-reads.ts:83` and `clocking.ts:29`, `:608` on 2026-10-31 —
+is replaced by `readLatestLiveEntry(tx, personId, { kind?: "in" })`, which applies the rule above
+and is exported from `packages/workforce/src/index.ts` for Task 15b), `clocking.ts`
+(`currentState` reads it). Create `packages/workforce/src/clocking-step.test.ts`.
 
 **Failing tests first** (`useVenueDb`, the workforce test fixture): clock in at 21:00, then clock
 out at 20:30 the same day (a backward step of an hour in between) → the out is written (a row
-counted) AND the state reads `out` (today: `working`); then clock in at 20:45 → accepted (today:
-`attendance.already_open`) and the state reads `working`; then clock out at 21:30 → accepted.
-Controls: clock in 09:00, out 17:00 → as today; a manager's approved missing-entry `out` dated
-after the latest direct `in` → the state reads `out`, as today; one dated before it → `working`,
-as today (corrections come through `liveClockEntries`' missing-entry branch,
-`effective-entries.ts:68-76`).
+counted) AND the state reads `out` (today: `working`); a second clock-out at 20:50 → refused
+`attendance.no_open_entry`, no row written (today: accepted, `sequence_no` 3); then clock in at
+20:45 → accepted (today: `attendance.already_open`) and the state reads `working`; then clock out
+at 21:30 → accepted. `readLatestLiveEntry` with `kind: "in"` after that → the 20:45 entry. A
+manager's retime of the 21:00 clock-in to 20:00 → accepted (refused is the STOP rule's "blocks a
+legal record").
+Controls, each passing before AND after the change: clock in 09:00, out 17:00 → as today; **two
+locations**: clock in at A, out at A, in at B, no step (sequence numbers 1, 2, 1) → reads
+`working`, the entry B's `in`; a manager's approved missing-entry `out` dated after the latest
+direct `in` → reads `out`, as today; one dated before it → `working`, as today (corrections come
+through `liveClockEntries`' missing-entry branch, `effective-entries.ts:68-76`).
 
 **STOP** if any existing suite under `packages/workforce` must be edited to pass: the rule then
 needs a workforce decision, and the lead reports.
 
-**Deletion controls.** Order direct entries by `compareEvents` again → the 20:30 case reads
-`working`; drop the correction branch → the later-dated missing-entry control reads `working`.
+**Deletion controls.** Order each chain's entries by `compareEvents` again → the 20:30 case reads
+`working`; order by `sequence_no` across all chains → the two-location control reads `out`; drop
+the correction branch → the later-dated missing-entry control reads `working`.
 
 **Focused commands.** `pnpm --filter @waitron/workforce exec vitest run src/clocking-step.test.ts`;
 then `pnpm --filter @waitron/workforce exec vitest run` whole, since the rule touches the state
-every
-clocking route reads.
+every clocking route reads.
+
+### Task 15b: The till reads the same state
+
+**Goal.** The till's state, its stale-request check and the attendance reconcile follow Task
+15a's rule, so the till and the clocking routes never disagree.
+
+**Files.** Modify `apps/server/src/till-clock-state.ts` (the `latest` read, `:42-57`, becomes
+`readLatestLiveEntry`; the `firstClockIn` read, `:58-71`, is unchanged: it asks whether any
+clock-in falls in today's bounds, not which is latest) and `apps/server/src/attendance-discovery.ts`
+(the `start` read, `:31-49`, becomes `readLatestLiveEntry(tx, personId, { kind: "in" })`). Create
+`apps/server/src/till-clock-step.test.ts`, on `till-clock-attendance.test.ts`'s harness (a
+mutable `instant` the API's `now` reads, `:27-29`).
+
+**Failing tests first.** Through the till's routes, with `instant` moved back an hour between the
+clock-in and the clock-out: `POST /api/clock/in` at 21:00, `POST /api/clock/out` at 20:30 → 200;
+then `GET /api/clock/state` → `state: "out"`, `activeLocationId: null` (today: `working`); a
+second `POST /api/clock/out`, sent with the `expectedEntryId` the state read gave → refused
+`attendance.no_open_entry`, no row written (today: written); `POST /api/clock/in` at 20:45 with
+the `expectedEntryId` the state read gave → 200 and `working`. Controls, passing before and
+after: the same with no step (in 09:00, out 17:00), and Task 15a's two-location case through the
+state read. The reconcile's `start`, with the venue's `dayCutover` at 05:00 local: in at 05:30,
+the clock stepped back an hour, out at 04:35, in at 04:40, then a state read at 05:10 → the 04:40
+clock-in's business day (ended at 05:00) is the one reconciled. (Before Task 15a the 04:40
+clock-in is itself refused; the case shows the `start` read through its deletion control below.)
+
+**STOP** if any existing `till-clock*`, `attendance-discovery*` or `boot.till-clock` suite must be
+edited to pass.
+
+**Deletion controls.** Put back `readTillClockState`'s `event_at`-first order → the state case
+reads `working`; put back the `start` read's → it picks 05:30, whose day has not ended, so
+`reconcileAttendanceBeforeClock` returns at `attendance-discovery.ts:58` and the reconcile case
+finds nothing reconciled.
+
+**Focused commands.** `pnpm --filter @waitron/server exec vitest run src/till-clock-step.test.ts
+src/till-clock-state.test.ts src/till-clock-api.test.ts src/till-clock-attendance.test.ts
+src/attendance-discovery.test.ts src/boot.till-clock.test.ts`.
 
 ### Task 16: Guides, English and Spanish
 
@@ -1545,7 +1715,8 @@ never while it keeps time over the internet; a new section `{#clock-service}` on
 `clock.sync_off`'s reasons and decision 13's words for `unreachable` (no install instruction);
 "Emails about the box" (`{#emails}`) gains the clock-change email and its limit (a restart before
 it is sent loses it for a change already handled); the sign-in note of FYI 6 (only a dashboard
-session, only past half an hour; tills stay signed in); and the backup hold's limit (Task 14: only
+session; a step of more than half an hour either way ends it, and a smaller forward step shortens
+its idle time by the step; tills stay signed in); and the backup hold's limit (Task 14: only
 steps the box made). `deploy/README.md` gains the host service (Task 18).
 
 **Focused commands.** `pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts`;
@@ -1567,9 +1738,10 @@ task.
 - `docs/developers/conventions-data.md`: a section "The box sets its own clock" after "A
   confirmation of the clock lifts the stop for one step back" (`:3969`): the host service and its
   two requests, the order, the step counter and `stale`, what a step's row stores, the alert and
-  its email, the backoff, the pruning holds and their limit, Task 15's audit table, Task 15a's
-  rule, and the measurements with their run URLs. Update "A jump" (`:4163`) for `stepComing`'s
-  hold until `reanchor`.
+  its email, the backoff, the pruning holds and their limit, Task 15's audit table, Tasks 15a
+  and 15b's rule, the turn taken before the write lock, and the measurements with their run URLs.
+  Update "A jump" (`:4163`) for `stepComing`'s and `reanchor`'s take-and-record and the hold until
+  `reanchor`.
 - `CLAUDE.md` §5's clock bullet gains one clause: "the box sets its clock only through the host
   service, never while it keeps time over the internet, and every step it makes is alerted and
   emailed", naming its guards (`clock-correction.test.ts`, `clock-set.route.test.ts`,
@@ -1596,12 +1768,14 @@ task.
   slice 9b shipped" stating the server↔host contract B3 must keep or migrate: the socket
   `/run/waitron-box/box.sock` (`waitron-box.socket`, `Accept=yes`, group 10001, mode 0660) and its
   template `waitron-box@.service`, which B3's planned `waitron-box.service` would collide with by
-  name; one text line in, one JSON line out; `clock.status` and `clock.set <epochMs> <requester>`
-  with decision 2's and decision 3's replies; and that the requester is SELF-REPORTED JSON the
-  host only logs — weaker than B3's `VerifiedHostActor`, which "caller JSON … cannot mint"
-  (`:70`), since the server alone authorizes a set. B3 either keeps the two requests on this wire
-  or moves them under its own protocol and actor, in the same change that moves the server's
-  client. Lines ≤ 100 characters, in the paragraph's own words.
+  name; the server's client `apps/server/src/box-host-client.ts`, which B3's plan lists as a NEW
+  file (its Task 3 row, `:51`) but 9b creates first, so B3 changes or replaces 9b's client rather
+  than creating it; one text line in, one JSON line out; `clock.status` and `clock.set
+  <epochMs> <requester>` with decision 2's and decision 3's replies; and that the requester is
+  SELF-REPORTED JSON the host only logs — weaker than B3's `VerifiedHostActor`, which "caller
+  JSON … cannot mint" (`:70`), since the server alone authorizes a set. B3 either keeps the two
+  requests on this wire or moves them under its own protocol and actor, in the same change that
+  moves the server's client. Lines ≤ 100 characters, in the paragraph's own words.
 - Docs-only changes travel in this pull request (they describe its code).
 
 ### Task 19: The backlog
@@ -1615,8 +1789,9 @@ task.
    (a setting of the wall clock), leaving a real suspend unmeasured.
 2. New entries: B3 keeps or migrates 9b's clock requests and requester (the lead's ruling (a),
    pointing at the B3 paragraph Task 18 writes); the box's certificate issued under a clock wrongly
-   ahead (Task 15); the hours read and the end-of-day pass after a backward step (Task 15a); the
-   stream's pruning measured by the bucket's own times (Task 15); anything else Task 15 accepted
+   ahead (Task 15); the hours read, the end-of-day pass and the correction check after a
+   backward step, and the cross-chain case if the lead accepts it (Task 15a); the stream's
+   pruning measured by the bucket's own times (Task 15); anything else Task 15 accepted
    that a later slice must revisit.
 3. This plan's status line: built, parked, the pull request's number. (The measurement workflow
    was deleted in Task 4; `git log --diff-filter=D --oneline --

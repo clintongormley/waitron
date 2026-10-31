@@ -1227,6 +1227,11 @@ cases where an administrator alone cannot, and what the box does in each:
 2. **The host service does not answer** (a box upgraded without re-running `waitron.sh install`, or
    a host without systemd): a start or change check is a bell alert, not a stop, because nothing
    could correct a wrong clock; `clock.sync_off` says to re-run the install.
+   > **Pointer (2026-10-31):** slice 9b's plan (decision 13,
+   > [plan](../plans/2026-10-24-a798-9b-box-sets-its-clock.md#decisions-the-build-follows)) drops
+   > "re-run the install" from `clock.sync_off`'s words, since the box's operator has no terminal,
+   > and says instead that the box's own time service may still put the clock right by itself if
+   > the box can reach the internet. The install line moves to `deploy/README.md`.
 3. **A primary in the cloud or behind a proxy**, where every request looks like the box's own:
    today a venue has one node and there is no cloud primary (CLAUDE.md §5); when one exists it needs
    its own rule, and the backlog says so.
