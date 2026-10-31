@@ -5841,7 +5841,7 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
   [Detail](backlog/ci.md#the-invoice-pdf-test-took-162-s-on-one-ci-run).
 
 - **A1252. Split the held-setup suite after A1131's recovery work lands.**
-  PR #2335 adds cases to the same file; preserve those checks when splitting it.
+  PR #2335 (landed 2026-10-31) added cases to the same file; preserve those checks when splitting it.
   Its latest measured main times were 489–499 seconds, so refreshing the table
   and splitting the holdings reader cannot bring every shard to four minutes.
   After the remaining split, qualify three main runs that execute every server
