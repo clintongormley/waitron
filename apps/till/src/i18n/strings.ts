@@ -1405,8 +1405,12 @@ export const en = {
     "Card charged, but the sale is not recorded: the box is out of space. Do not charge again; tell a manager.",
   "sale.clock_unusable":
     "Sale not recorded: the box's clock is wrong (it reads {date}). Tell a manager. If you already charged a card on the terminal, refund it there.",
+  "sale.clock_unusable_check":
+    "Sale not recorded: the box's clock is wrong (it reads {date}). Use “Check the time” at the top of the screen. If you already charged a card on the terminal, refund it there.",
   "sale.clock_behind_chain":
     "Sale not recorded: the box's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open; tell a manager. If you already charged on another card machine, don't charge again: record it once this is fixed.",
+  "sale.clock_behind_chain_check":
+    "Sale not recorded: the box's clock ({clockAt}) reads earlier than the last sale ({lastRecordAt}). The order stays open. Use “Check the time” at the top of the screen. If you already charged on another card machine, don't charge again: record it once this is fixed.",
   "sale.charged_clock_behind":
     "Card charged, but the sale is not recorded: the box's clock reads earlier than its last sale. Don't charge again. Once it is fixed, press Pay: it is recorded without charging again.",
   "take_payment.not_permitted": "You do not have permission to take payments",
@@ -1801,6 +1805,51 @@ export const en = {
   "staff_notice.since": "since {time}",
   "staff_notice.unknown": "The box needs attention",
   "staff_notice.tell_manager": "Tell a manager",
+  "staff_notice.check_time": "Check the time",
+  "box_time.title": "Check the time",
+  "box_time.loading": "Reading the box's time…",
+  "box_time.differs": "The box's clock says {box}. This till says {till}.",
+  "box_time.differs_ask":
+    "Use this till's time? The box's clock is set to it and payments start again. Every manager is told it was you, from this till.",
+  "box_time.differs_wrong_till":
+    "If this till's time is wrong too, correct it in the till's own settings first.",
+  "box_time.agrees":
+    "The box's clock says {box}, and this till agrees. If that is the right time, confirm it: payments start again. Every manager is told it was you.",
+  "box_time.not_now": "Not now",
+  "box_time.use_till": "Use this till's time",
+  "box_time.time_right": "The time is right",
+  "box_time.set_to": "The box's clock is set to {after}.",
+  "box_time.confirmed": "The box's time is confirmed.",
+  "box_time.close": "Close",
+  "box_time.check_again": "Check again",
+  "box_time.admin": "Administrator sign-in",
+  "box_time.refused.not_stopped": "The box's clock no longer needs checking.",
+  "box_time.refused.not_start_up":
+    "The box has been running since its clock was last right, so a staff member can no longer set it from a till. An administrator can, here.",
+  "box_time.refused.authority_pending":
+    "The box is still trying the tax agency's time over the internet. Check again in a minute.",
+  "box_time.refused.witnessed":
+    "The box has the tax agency's time, so it confirms or sets its clock from that time itself, not from this till's. If a try fails, it tries again later.",
+  "box_time.refused.target_invalid":
+    "This till's clock reads {till}, which cannot be right. Correct this till's date and time in its settings, then check again.",
+  "box_time.refused.synchronised":
+    "The box keeps its clock in time over the internet, so it does not take a time from a till. Check this till's own clock.",
+  "box_time.refused.host_unavailable":
+    "This box cannot read or set its own clock: the part of the box that does that is not answering. If the box can reach the internet, its own time service may still put the clock right by itself. If this till's time agrees with the box's, you can still confirm it.",
+  "box_time.refused.stale": "The box's clock changed while this was being checked.",
+  "box_time.refused.check_expired": "This took too long.",
+  "box_time.refused.same_machine":
+    "This screen is the box itself, so its clock is the box's own. Check from a till or handheld instead.",
+  "box_time.refused.contrary_proof":
+    "The tax agency's time or two other tills disagree with the box's clock, so this till cannot confirm it. If one of those tills shows the right time, check the time from that till.",
+  "box_time.refused.not_admitted":
+    "This till's profile no longer lets you work on it, so it cannot check the time for you. Sign in on a till whose profile admits you.",
+  "box_time.refused.set_failed_refused": "The box could not set its clock. Nothing was changed.",
+  "box_time.refused.set_failed_unverified":
+    "The box asked for its clock to be set but could not confirm it took.",
+  "box_time.refused.pending_disproofs":
+    "The box has not finished recording what it found about its clock. Check again in a minute.",
+  "box_time.refused.other": "The box's time was not checked. Nothing was changed.",
   "staff_notice.retried": "Retried automatically",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} more notices",
@@ -3179,8 +3228,12 @@ export const es: Record<StringKey, string> = {
     "Cobrado con tarjeta, pero la venta no se ha registrado: el equipo no tiene espacio. No vuelvas a cobrar; avisa al encargado.",
   "sale.clock_unusable":
     "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Avisa al encargado. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
+  "sale.clock_unusable_check":
+    "Venta no registrada: la hora del equipo es incorrecta (marca {date}). Usa «Comprobar la hora» arriba. Si ya has cobrado con tarjeta en el datáfono, devuelve el importe ahí.",
   "sale.clock_behind_chain":
     "Venta no registrada: la hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto; avisa al encargado. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
+  "sale.clock_behind_chain_check":
+    "Venta no registrada: la hora del equipo ({clockAt}) es anterior a la última venta ({lastRecordAt}). El pedido sigue abierto. Usa «Comprobar la hora» arriba. Si ya has cobrado en otro datáfono, no vuelvas a cobrar: regístralo cuando se arregle.",
   "sale.charged_clock_behind":
     "Cobrado con tarjeta, pero la venta no se ha registrado: la hora del equipo es anterior a la última venta. No vuelvas a cobrar. Cuando se arregle, pulsa Cobrar: se registra sin cobrar otra vez.",
   "take_payment.not_permitted": "No tienes permiso para cobrar",
@@ -3569,6 +3622,52 @@ export const es: Record<StringKey, string> = {
   "staff_notice.since": "desde {time}",
   "staff_notice.unknown": "El equipo necesita atención",
   "staff_notice.tell_manager": "Avisa al encargado",
+  "staff_notice.check_time": "Comprobar la hora",
+  "box_time.title": "Comprobar la hora",
+  "box_time.loading": "Leyendo la hora del equipo…",
+  "box_time.differs": "El reloj del equipo marca {box}. Esta caja marca {till}.",
+  "box_time.differs_ask":
+    "¿Usar la hora de esta caja? El reloj del equipo se pone a esa hora y se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú, desde esta caja.",
+  "box_time.differs_wrong_till":
+    "Si la hora de esta caja también está mal, corrígela primero en los ajustes de la propia caja.",
+  "box_time.agrees":
+    "El reloj del equipo marca {box} y esta caja coincide. Si es la hora correcta, confírmala: se puede volver a cobrar. Se avisa a todos los encargados de que fuiste tú.",
+  "box_time.not_now": "Ahora no",
+  "box_time.use_till": "Usar la hora de esta caja",
+  "box_time.time_right": "La hora es correcta",
+  "box_time.set_to": "El reloj del equipo marca ahora {after}.",
+  "box_time.confirmed": "La hora del equipo está confirmada.",
+  "box_time.close": "Cerrar",
+  "box_time.check_again": "Comprobar otra vez",
+  "box_time.admin": "Acceso de administrador",
+  "box_time.refused.not_stopped": "Ya no hace falta comprobar el reloj del equipo.",
+  "box_time.refused.not_start_up":
+    "El equipo lleva en marcha desde la última vez que su reloj estaba bien, así que un empleado ya no puede ponerlo en hora desde una caja. Un administrador sí puede, aquí.",
+  "box_time.refused.authority_pending":
+    "El equipo aún está intentando obtener la hora de Hacienda por internet. Vuelve a comprobarlo dentro de un minuto.",
+  "box_time.refused.witnessed":
+    "El equipo tiene la hora de Hacienda, así que confirma o pone su reloj en hora con esa hora él solo, no con la de esta caja. Si un intento falla, lo vuelve a intentar más tarde.",
+  "box_time.refused.target_invalid":
+    "El reloj de esta caja marca {till}, y eso no puede ser correcto. Corrige la fecha y la hora de esta caja en sus ajustes y vuelve a comprobarlo.",
+  "box_time.refused.synchronised":
+    "El equipo mantiene su reloj en hora por internet, así que no toma la hora de una caja. Comprueba el reloj de esta caja.",
+  "box_time.refused.host_unavailable":
+    "Este equipo no puede leer ni poner su propio reloj en hora: la parte del equipo que lo hace no responde. Si el equipo tiene conexión a internet, puede que su servicio de hora aún corrija el reloj por sí solo. Si la hora de esta caja coincide con la del equipo, aún puedes confirmarla.",
+  "box_time.refused.stale": "El reloj del equipo ha cambiado mientras se comprobaba.",
+  "box_time.refused.check_expired": "Ha tardado demasiado.",
+  "box_time.refused.same_machine":
+    "Esta pantalla es el propio equipo, así que su reloj es el del equipo. Compruébalo desde una caja o un terminal de mano.",
+  "box_time.refused.contrary_proof":
+    "La hora de Hacienda u otras dos cajas no coinciden con el reloj del equipo, así que esta caja no puede confirmarlo. Si una de esas cajas muestra la hora correcta, comprueba la hora desde esa caja.",
+  "box_time.refused.not_admitted":
+    "El perfil de esta caja ya no te deja trabajar en ella, así que no puede comprobar la hora por ti. Inicia sesión en una caja cuyo perfil te admita.",
+  "box_time.refused.set_failed_refused":
+    "El equipo no ha podido poner su reloj en hora. No se ha cambiado nada.",
+  "box_time.refused.set_failed_unverified":
+    "El equipo pidió poner su reloj en hora, pero no ha podido confirmar que se hiciera.",
+  "box_time.refused.pending_disproofs":
+    "El equipo aún no ha terminado de registrar lo que encontró sobre su reloj. Vuelve a comprobarlo dentro de un minuto.",
+  "box_time.refused.other": "No se ha comprobado la hora del equipo. No se ha cambiado nada.",
   "staff_notice.retried": "Se reintenta solo",
   "staff_notice.more": "+{n}",
   "staff_notice.more_label": "{n} avisos más",

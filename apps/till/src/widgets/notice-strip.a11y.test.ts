@@ -28,6 +28,8 @@ const UNSENT: StaffNotice = {
   params: { count: 3, held: 0 },
 };
 
+const BEHIND: StaffNotice = { ...DISK, key: "behind", code: "clock.behind_chain" };
+
 describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (theme) => {
   it.each([
     ["one error", [DISK]],
@@ -36,6 +38,22 @@ describe.each(["light", "dark"] as const)("till-notice-strip a11y (%s theme)", (
     ["three closed", [DISK, SPACE, UNSENT]],
   ])("has no violations with %s", async (_state, notices) => {
     const { host } = await mountWidget<TillNoticeStrip>("till-notice-strip", { notices }, theme);
+    await expectNoA11yViolations(host);
+  });
+
+  it.each([
+    ["Check the time alone", [BEHIND]],
+    ["Check the time first, open", [BEHIND, DISK]],
+    ["Check the time second, open", [DISK, BEHIND]],
+  ])("has no violations with %s", async (_state, notices) => {
+    const { el, host } = await mountWidget<TillNoticeStrip>(
+      "till-notice-strip",
+      { notices, checkTimeOffered: true },
+      theme,
+    );
+    const toggle = el.shadowRoot!.querySelector<HTMLButtonElement>("button[aria-expanded]");
+    if (toggle !== null) await userEvent.click(toggle);
+    await el.updateComplete;
     await expectNoA11yViolations(host);
   });
 

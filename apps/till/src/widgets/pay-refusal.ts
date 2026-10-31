@@ -47,7 +47,8 @@ function chargeableText(amount: string): string {
   return t("bill_pay.chargeable").replace("{amount}", () => formatMoney(amount, currentLocale()));
 }
 
-export function refusalText(refusal: PayRefusal): string {
+/** With `checkTime`, a clock stop's words point at the till's "Check the time". */
+export function refusalText(refusal: PayRefusal, checkTime = false): string {
   if (refusal.text !== undefined) return refusal.text;
   if (refusal.unsent !== undefined) return billUnsentText(refusal.billLabel);
   if (isTakePaymentRefusal(refusal)) return t("take_payment.not_permitted");
@@ -77,11 +78,12 @@ export function refusalText(refusal: PayRefusal): string {
   }
   if (refusal.code === "clock.unusable") {
     const reading = clockReadingOf(refusal);
-    if (reading !== undefined) return clockUnusableText(reading.clockAt, reading.offsetMinutes);
+    if (reading !== undefined)
+      return clockUnusableText(reading.clockAt, reading.offsetMinutes, checkTime);
   }
   if (refusal.code === "clock.behind_chain") {
     const behind = clockBehindOf(refusal);
-    if (behind !== undefined) return clockBehindText(behind);
+    if (behind !== undefined) return clockBehindText(behind, checkTime);
   }
   if (refusal.code === "sale.charged_not_recorded" && refusal.reason === "disk_full")
     return t("sale.charged_disk_full");

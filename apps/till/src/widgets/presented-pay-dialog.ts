@@ -141,6 +141,8 @@ export class TillPresentedPayDialog extends LitElement {
   ];
 
   @property({ type: Boolean }) open = false;
+  /** The box offers this till "Check the time": a clock refusal points at it. */
+  @property({ attribute: false }) checkTimeOffered = false;
   /** The bill's whole amount. */
   @property() amount = "";
   @property() tableName = "";
@@ -315,7 +317,7 @@ export class TillPresentedPayDialog extends LitElement {
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
     const errors = new Map(own);
     const field = this.#refusalField();
-    if (field !== null) errors.set(field, refusalText(this.shownRefusal!));
+    if (field !== null) errors.set(field, refusalText(this.shownRefusal!, this.checkTimeOffered));
     return errors;
   }
 
@@ -323,7 +325,7 @@ export class TillPresentedPayDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(refusalText(this.shownRefusal));
+      parts.push(refusalText(this.shownRefusal, this.checkTimeOffered));
     return parts.join(" ");
   }
 
@@ -496,7 +498,7 @@ export class TillPresentedPayDialog extends LitElement {
       ${payNotice(this.notice)}`;
     const actions = html`<wt-form-actions
       slot="footer"
-      .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal)}
+      .error=${this.shownRefusal === null ? "" : refusalText(this.shownRefusal, this.checkTimeOffered)}
     >
       <wt-button
         slot="cancel"

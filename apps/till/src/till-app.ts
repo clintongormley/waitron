@@ -398,7 +398,8 @@ import type { FormFactor, CapabilityFlag, DeviceKind, NavigationScreen } from ".
 import { SessionActivity } from "./session-activity.js";
 import { MenuStatePoll } from "./state/menu-state-poll.js";
 import { EquipmentPoll } from "./state/equipment-poll.js";
-import { nextNotices } from "./state/staff-notices.js";
+import { checkTimeOffered, nextNotices } from "./state/staff-notices.js";
+import "./widgets/box-time-dialog.js";
 import { EquipmentNfc, type EquipmentCode } from "./state/equipment-nfc.js";
 import {
   type BasketRefresh,
@@ -1453,6 +1454,7 @@ function errorText(
   menus: readonly TillZoneMenu[],
   tables: readonly TableState[],
   billLabel?: string,
+  checkTime = false,
 ): string | TemplateResult {
   if (typeof error === "object" && "unsentBill" in error) return billUnsentText(billLabel);
   if (typeof error === "string") return t(error);
@@ -1519,8 +1521,12 @@ function errorText(
   }
   if ("overLimit" in error) return overLimitText(error.overLimit);
   if ("clockUnusable" in error)
-    return clockUnusableText(error.clockUnusable.clockAt, error.clockUnusable.offsetMinutes);
-  if ("clockBehind" in error) return clockBehindText(error.clockBehind);
+    return clockUnusableText(
+      error.clockUnusable.clockAt,
+      error.clockUnusable.offsetMinutes,
+      checkTime,
+    );
+  if ("clockBehind" in error) return clockBehindText(error.clockBehind, checkTime);
   if ("billPayments" in error)
     return [
       t("table.bill_to_pay").replace("{amount}", () =>
@@ -3237,6 +3243,9 @@ export class TillApp extends LitElement {
    * screens offer the reader the boot read named. */
   @state() private deviceEquipment: DeviceEquipment | null = null;
   @state() private staffNotices: readonly StaffNotice[] = [];
+  /** The box offers this till "Check the time", from the latest equipment read applied. */
+  @state() private checkTimeOffered = false;
+  @state() private boxTimeOpen = false;
   /** Numbers each equipment read when sent, so a slower earlier read cannot replace the notices a
    * later one brought. */
   #noticeReadsSent = 0;
@@ -9863,6 +9872,7 @@ export class TillApp extends LitElement {
     if (session === this.#operatorSession && sent > this.#noticeReadApplied) {
       this.#noticeReadApplied = sent;
       this.staffNotices = nextNotices(this.staffNotices, read);
+      this.checkTimeOffered = checkTimeOffered(read);
     }
     return read;
   }
@@ -10424,6 +10434,7 @@ export class TillApp extends LitElement {
     const pending = this.#unansweredPayments.get(open.billId);
     const reason = this.#payReaderReason();
     return html`<till-bill-pay-dialog
+        .checkTimeOffered=${this.checkTimeOffered}
         .balance=${open.balance}
         .lines=${open.lines}
         .way=${open.way}
@@ -10478,6 +10489,7 @@ export class TillApp extends LitElement {
     if (open === null || bill === undefined) return nothing;
     const reason = this.#payReaderReason();
     return html`<till-presented-pay-dialog
+      .checkTimeOffered=${this.checkTimeOffered}
       .open=${true}
       .amount=${bill.outstanding}
       .tableName=${this.#activeTableTitle()}
@@ -17427,6 +17439,8 @@ export class TillApp extends LitElement {
     this.#dismissStationChoices();
     this.#endReloadLock();
     this.staffNotices = [];
+    this.checkTimeOffered = false;
+    this.boxTimeOpen = false;
     this.#menuPoll.stop();
     this.#equipmentPoll.stop();
     this.#stopFloorPoll();
@@ -17623,6 +17637,7 @@ export class TillApp extends LitElement {
       typeof error === "object" && "unsentBill" in error
         ? this.#paymentBillLabel(error.unsentBill.billId)
         : undefined,
+      this.checkTimeOffered,
     );
     return {
       code: typeof error === "string" ? error : "code" in error ? error.code : "sale.error",
@@ -19438,6 +19453,7 @@ export class TillApp extends LitElement {
           typeof this.errorKey === "object" && "unsentBill" in this.errorKey
             ? this.#paymentBillLabel(this.errorKey.unsentBill.billId)
             : undefined,
+          this.checkTimeOffered,
         )
       : nothing;
     return html`
@@ -20104,9 +20120,20 @@ export class TillApp extends LitElement {
                             this.deviceMode
                               ? nothing
                               : html`<till-notice-strip
-                                  slot="notices"
-                                  .notices=${this.staffNotices}
-                                ></till-notice-strip>`
+                                    slot="notices"
+                                    .notices=${this.staffNotices}
+                                    .checkTimeOffered=${this.checkTimeOffered}
+                                    @till-check-time=${() => (this.boxTimeOpen = true)}
+                                  ></till-notice-strip
+                                  >${
+                                    this.boxTimeOpen
+                                      ? html`<till-box-time-dialog
+                                          .api=${this.api}
+                                          @box-time-close=${() => (this.boxTimeOpen = false)}
+                                          @box-time-done=${() => void this.#readEquipment()}
+                                        ></till-box-time-dialog>`
+                                      : nothing
+                                  }`
                           }
                           ${
                             this.transferSnapshot === undefined

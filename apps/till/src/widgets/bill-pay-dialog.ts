@@ -441,6 +441,8 @@ export class TillBillPayDialog extends LitElement {
   /** The bill's total, received, reserved and outstanding, and the quantity of each line paid;
    * null while it is being read. */
   @property({ attribute: false }) balance: BillBalance | null = null;
+  /** The box offers this till "Check the time": a clock refusal points at it. */
+  @property({ attribute: false }) checkTimeOffered = false;
   /** The bill's dishes; those already paid for in full are not offered. */
   @property({ attribute: false }) lines: PayLine[] = [];
   /** The way the dialog opens on; unset, Whole bill on a handheld and Pay items on a till. */
@@ -1001,7 +1003,9 @@ export class TillBillPayDialog extends LitElement {
   }
 
   #refusalMessage(field: Field): string {
-    return field === "tendered" ? t("bill_pay.tendered_short") : refusalText(this.shownRefusal!);
+    return field === "tendered"
+      ? t("bill_pay.tendered_short")
+      : refusalText(this.shownRefusal!, this.checkTimeOffered);
   }
 
   #fieldErrors(own: ReadonlyMap<Field, string>): Map<Field, string> {
@@ -1017,7 +1021,7 @@ export class TillBillPayDialog extends LitElement {
     const parts: string[] = [];
     if (fieldErrors.size > 0) parts.push(t("form.fix_fields"));
     if (this.shownRefusal !== null && this.#refusalField() === null)
-      parts.push(refusalText(this.shownRefusal));
+      parts.push(refusalText(this.shownRefusal, this.checkTimeOffered));
     if (extra !== undefined) parts.push(extra);
     return parts.join(" ");
   }
