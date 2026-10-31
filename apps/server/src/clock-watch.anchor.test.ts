@@ -170,6 +170,49 @@ describe("the clock watch as a set's anchor", () => {
     expect(h.reasons()).toEqual(["jump"]);
   });
 
+  it("compares the next look with the clock as reanchor found it, when no look ran during the set", async () => {
+    const h = harness();
+    await h.watch.stepComing();
+    h.stepWall(2 * DAY);
+    await h.watch.reanchor();
+    await h.look();
+    expect(h.reasons()).toEqual([]);
+  });
+
+  it("keeps the hold until reanchor has recorded what it took", async () => {
+    const held = deferred();
+    const h = harness({
+      note: async (_input, call) => {
+        if (call === 1) await held.promise;
+      },
+    });
+    await h.watch.stepComing();
+    h.aeatSaysAhead(DAY);
+    h.stepWall(2 * DAY);
+    const reanchored = h.watch.reanchor();
+    await vi.waitFor(() => expect(h.backend.noteClockProvedWrong).toHaveBeenCalledTimes(1));
+    // A look that fires while reanchor's write waits.
+    h.fire();
+    held.release();
+    await reanchored;
+    await vi.waitFor(() => expect(h.armed()).toBe(2));
+    expect(h.reasons()).toEqual(["authority"]);
+  });
+
+  it("refuses a set after it stopped while a disproof is unrecorded", async () => {
+    const h = harness();
+    h.aeatSaysAhead(DAY);
+    await h.watch.stop();
+    await expect(h.watch.stepComing()).rejects.toThrow("clock_watch.stopped");
+    await expect(h.watch.reanchor()).rejects.toThrow("clock_watch.stopped");
+    expect(h.notes).toEqual([]);
+
+    const quiet = harness();
+    await quiet.watch.stop();
+    await expect(quiet.watch.stepComing()).resolves.toBeUndefined();
+    await expect(quiet.watch.reanchor()).resolves.toBeUndefined();
+  });
+
   it("takes a jump when no set is coming (the control)", async () => {
     const h = harness();
     await h.look(2 * DAY);
