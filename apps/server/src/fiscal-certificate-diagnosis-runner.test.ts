@@ -3,6 +3,9 @@ import { EventEmitter } from "node:events";
 import { Duplex, PassThrough } from "node:stream";
 import { createServer, createConnection, type AddressInfo, type Socket } from "node:net";
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createCertificateDiagnosisRunner } from "./fiscal-certificate-diagnosis-runner.js";
 import {
   diagnosisFrame,
@@ -31,6 +34,107 @@ function runner(options = {}) {
 }
 
 describe("certificate diagnosis admission", () => {
+  it.each([
+    ["normal", { outcome: "completed", value: { value: "selected" } }],
+    [
+      "progress-crash",
+      {
+        outcome: "interrupted",
+        reason: "unavailable",
+        lastProgress: { stage: "response", category: "http-response", httpStatus: 403 },
+      },
+    ],
+  ])("retains %s output delivered after the exact child's exit", async (mode, expected) => {
+    const root = await mkdtemp(join(tmpdir(), "diagnosis-exit-output-"));
+    const actual = await vi.importActual<typeof import("node:child_process")>("node:child_process");
+    let exited = false;
+    vi.mocked(spawn).mockImplementationOnce((...args) => {
+      const child = actual.spawn(...args);
+      const channel = child.stdio[3] as Duplex;
+      channel.pause();
+      child.once("exit", () => {
+        exited = true;
+        setImmediate(() => channel.resume());
+      });
+      return child;
+    });
+    const value = runner({
+      entry: new URL("./testing/certificate-diagnosis-child.ts", import.meta.url),
+      execArgv: ["--import", import.meta.resolve("tsx")],
+    });
+    try {
+      await expect(
+        value.attempt(
+          async (runChild, abort) => ({
+            result: await runChild({ mode, marker: join(root, "child"), value: "selected" }, abort),
+          }),
+          signal(),
+        ),
+      ).resolves.toEqual({ result: expected });
+      expect(exited).toBe(true);
+      await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    } finally {
+      await value.stop();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(["end", "close", "bound", "cancel"])(
+    "keeps an exited child's unread pipe bounded through %s",
+    async (terminal) => {
+      vi.useFakeTimers();
+      const channel = new Duplex({
+        read() {},
+        write(_chunk, _encoding, callback) {
+          callback();
+        },
+      });
+      const child = Object.assign(new EventEmitter(), {
+        pid: 123456,
+        kill: vi.fn(() => true),
+        stdio: [null, null, null, channel],
+      });
+      vi.mocked(spawn).mockReturnValueOnce(child as unknown as ChildProcess);
+      const value = runner({ workMs: 1_000, cleanupMs: 200 });
+      const controller = new AbortController();
+      let settled = false;
+      const pending = value.attempt(
+        async (runChild, abort) => ({ result: await runChild(null, abort) }),
+        controller.signal,
+      );
+      void pending.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      const answer =
+        terminal === "cancel"
+          ? expect(pending).rejects.toMatchObject({
+              code: "fiscal.certificate_diagnosis_unavailable",
+            })
+          : expect(pending).resolves.toEqual({
+              result: { outcome: "interrupted", reason: "unavailable", lastProgress: null },
+            });
+      child.emit("exit", 0);
+      await vi.advanceTimersByTimeAsync(199);
+      expect(settled).toBe(false);
+      await expect(value.attempt(async () => "early", signal())).rejects.toMatchObject({
+        code: "fiscal.certificate_diagnosis_busy",
+      });
+      if (terminal === "cancel") controller.abort();
+      else if (terminal === "bound") await vi.advanceTimersByTimeAsync(1);
+      else channel.emit(terminal);
+      await answer;
+      expect(channel.destroyed).toBe(true);
+      expect(child.kill).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+      await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
+    },
+  );
+
   it("refuses a second attempt before calling its authorization or material reader", async () => {
     const value = runner();
     let finish!: () => void;

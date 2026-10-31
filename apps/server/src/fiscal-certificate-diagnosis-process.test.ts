@@ -24,13 +24,14 @@ afterEach(async ({ task }) => {
   }
   await rm(root, { recursive: true, force: true });
 });
-function runner(workMs = 5_000, cleanupMs = 200) {
+function runner(workMs = 5_000, cleanupMs = 200, monotonicNow?: () => number) {
   const value = createCertificateDiagnosisRunner({
     fiscalId: "fixture",
     entry: new URL("./testing/certificate-diagnosis-child.ts", import.meta.url),
     execArgv: ["--import", import.meta.resolve("tsx")],
     workMs,
     cleanupMs,
+    monotonicNow,
   });
   runners.push(value);
   return value;
@@ -91,7 +92,8 @@ describe("owned certificate child lifetime", () => {
   );
 
   it("includes startup in the work deadline and never releases late evidence", async () => {
-    const value = runner(1, 200);
+    const now = vi.fn(() => performance.now());
+    const value = runner(1, 200, now);
     const at = performance.now();
     await expect(
       value.attempt(
@@ -104,6 +106,7 @@ describe("owned certificate child lifetime", () => {
       result: { outcome: "interrupted", reason: "deadline", lastProgress: null },
     });
     expect(performance.now() - at).toBeLessThan(3_000);
+    now.mockReturnValue(performance.now());
     await expect(value.attempt(async () => "next", signal())).resolves.toBe("next");
   });
 

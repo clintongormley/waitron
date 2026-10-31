@@ -102,6 +102,7 @@ export function createCertificateDiagnosisRunner(options: {
       active = state;
       function release() {
         if (!settled || !childExited) return;
+        cleanChild?.();
         for (const timer of timers) clearTimeout(timer);
         timers.clear();
         signal.removeEventListener("abort", cancelled);
@@ -181,8 +182,9 @@ export function createCertificateDiagnosisRunner(options: {
           endSupervision = resolve;
         });
         const cleanup = (notify = true) => {
-          if (cleaning || childExited) return;
+          if (cleaning) return;
           cleaning = true;
+          if (childExited) return;
           const at = now();
           const frame = diagnosisFrame(
             { type: "abort", reason: interruption ?? "unavailable" },
@@ -239,20 +241,38 @@ export function createCertificateDiagnosisRunner(options: {
         const exited = (code: number | null) => {
           if (childExited) return;
           childExited = true;
-          removeFrames();
-          channel.destroy();
           child.removeListener("error", spawnFailed);
           child.removeListener("exit", exited);
           childSignal.removeEventListener("abort", childCancelled);
-          cleanChild = undefined;
           state.child = null;
           endSupervision();
-          const answer: FiscalCertificateDiagnosisChildResult =
-            result !== undefined && code === 0 && interruption === null
-              ? { outcome: "completed", value: result }
-              : interrupted();
-          finishChild?.(answer);
-          release();
+          const finish = () => {
+            cleanChild = undefined;
+            removeFrames();
+            channel.removeListener("end", finish);
+            channel.removeListener("close", finish);
+            channel.destroy();
+            const answer: FiscalCertificateDiagnosisChildResult =
+              result !== undefined && code === 0 && interruption === null
+                ? { outcome: "completed", value: result }
+                : interrupted();
+            finishChild?.(answer);
+            release();
+          };
+          cleanChild = finish;
+          // Exit can precede readable output; draining still shares the attempt's cleanup bound.
+          if (
+            result !== undefined ||
+            interruption !== null ||
+            channel.readableEnded ||
+            channel.destroyed
+          )
+            finish();
+          else {
+            channel.once("end", finish);
+            channel.once("close", finish);
+            schedule(Math.min(now() + cleanupMs, attemptEnd), finish);
+          }
         };
         const spawnFailed = () => {
           if (child.pid === undefined) {
