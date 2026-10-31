@@ -1124,7 +1124,7 @@ export class SetupApp extends LitElement {
   @state() private firstActivityUnreadable = false;
   /** The ask's summary named a recovery that the backup status did not report as stopped. */
   @state() private firstRecoveryUnsettled = false;
-  /** The box refused Start again for a cause that no later read on this page lifts. */
+  /** The box's refusal of Start again, drawn in Start again's place until Reconnect reads the setup again. */
   @state() private firstStartAgainRefused?: StartAgainRefusalCause | "unavailable";
   #activityTimer?: ReturnType<typeof setInterval>;
   #firstSession?: FirstSetupSession;

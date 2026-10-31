@@ -598,10 +598,6 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   #2101).
   [Detail](backlog/setup.md#a1147-start-agains-finisher-removes-an-empty-folder-the-box-did-not-create)
 
-- **A1148: a stray `venue.db-journal` beside an unchanged marked `venue.db` stays beside the next
-  setup's database.** It is neither a finding nor deleted. Predates A1098 (A1042, #2101).
-  [Detail](backlog/setup.md#a1148-a-stray-venuedb-journal-beside-an-unchanged-marked-venuedb-stays-beside-the-next-setups-database)
-
 - **A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw
   after a recorded choice answers a bare 500.** Both recovery-page routes. Left open by A1098.
   [Detail](backlog/setup.md#a1149-a-failed-restart-after-retry-or-a-move-exits-the-process-and-a-page-that-fails-to-draw-after-a-recorded-choice-answers-a-bare-500)
@@ -626,7 +622,7 @@ _Formerly A2 and B1._ Detail: [backlog/setup.md](backlog/setup.md).
   [Detail](backlog/setup.md#a-waitron-cloud-recovery-whose-download-takes-more-than-30-seconds-may-be-refused-its-series-name)
 
 - **A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts**
-  Slice 2 (one wipe, no password) is on its branch; slices 3 and 4 are still to come.
+  Slice 2 (one wipe, no password) landed; slices 3 and 4 are still to come.
   [Detail](backlog/setup.md#a1131c-recover-from-backup-first-wipes-the-failed-setup-and-start-agains-page-drops-the-item-counts).
 
 - **A1131: Start again beside a recovery record that cannot be read, with the setup database missing.**

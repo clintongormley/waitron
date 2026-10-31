@@ -112,7 +112,7 @@ function confirmation(value: StartAgainConfirmationInput): StartAgainConfirmatio
     // Only a present, damaged database is shown as one that cannot be read.
     (database === "unreadable") !== (shown.databaseUnreadable === true) ||
     (Object.hasOwn(shown, "databaseUnreadable") && shown.databaseUnreadable !== true) ||
-    // With the database present, a Start again writes a record only when it discards a recovery.
+    // A record with database "present" is written only when Start again discards a recovery.
     (database === "present" && !Object.hasOwn(shown, "recovery"))
   )
     throw invalid();

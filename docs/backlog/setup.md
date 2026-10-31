@@ -573,15 +573,6 @@ and the finisher lists it for removal and removes it by `rmdir`
 `deleteMarkedAttempt`). Run by the A1098 plan's probe ("Current behaviour", `12a`). Nothing in it
 is lost, but it is a removal of something the box did not create.
 
-## A1148: a stray `venue.db-journal` beside an unchanged marked `venue.db` stays beside the next setup's database
-
-Predates A1098: from A1042 (#2101, `e2a957138`, `git blame`). The finisher's side files are the
-`-wal` and `-shm` files only (`SIDE_FILES`,
-`packages/provisioning/src/first-setup-start-again-deletion.ts:35`), so a `venue.db-journal`
-written beside a marked, unchanged `venue.db` is neither a finding nor deleted: the finisher
-deletes `venue.db` and leaves the journal, which then sits beside the next setup's database. Run
-by the A1098 plan's probe ("Current behaviour", `12b`).
-
 ## A1149: a failed restart after Retry or a Move exits the process, and a page that fails to draw after a recorded choice answers a bare 500
 
 Left open by A1098. Both recovery-page routes, `POST /recovery-api/retry` and `POST
@@ -748,6 +739,8 @@ after a reload during the box's wait (read, not run: `#select(true)` in `first-h
   Start-again flow") is still true of the spare release, which covers the four `START_AGAIN_ROUTES`
   (`apps/server/src/setup-first-fiscal-api.ts`), but since A1131bc slice 2 Start again's flow uses
   three of them: `/recover` is Continue's alone. Reword it. Left open by A1131bc slice 2 (plan, N4).
+  The same wording stands at `START_AGAIN_ROUTES`' comment (`apps/server/src/setup-first-fiscal-api.ts`)
+  and `releaseSpareBeforeStartAgain`'s comment (`apps/server/src/spare-space.ts`).
 
 ## A1131c: Recover from backup first wipes the failed setup, and Start again's page drops the item counts
 
@@ -829,7 +822,8 @@ minute, a sale is then refused by the clock-behind stop, and a confirmation list
 
 - **DECIDED (owner, 2026-10-28 ~15:25–15:40; A1131bc design revised 2026-10-29, not yet built):
   Recover from backup first wipes the failed setup, then restores.** (2026-10-29, A1206: the
-  never-reuse note is retired, so the wipe adds nothing first.) Someone who only
+  never-reuse note is retired, so the wipe adds nothing first.) (2026-10-30, A1131bc slice 2: Start
+  again's half is built; Recover from backup's is slices 3–4.) Someone who only
   opens a backup to look has still chosen to discard the setup. Wiping a failed setup needs no proof
   beyond reaching the repair page ("If you have access to the box you can reinstall it"); restoring
   needs the backup's own secrets. The design applies the same rule to Start again, which runs the same
