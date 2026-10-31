@@ -84,7 +84,7 @@ it("adds order instructions to a populated predecessor without changing its dish
     .values({
       name: "Existing restaurant",
       invoiceLocales: ["es-ES"],
-      operationDescription: "Restaurante",
+      operationDescription: "Restaurant service",
     })
     .returning();
   const [station] = await suite.db
@@ -140,7 +140,9 @@ it("adds order instructions to a populated predecessor without changing its dish
     appendOnlyTables: upgradedAppendOnly,
   });
 
-  expect(await suite.db.select().from(locations)).toEqual([location]);
+  expect(await suite.db.select().from(locations)).toEqual([
+    { ...location, operationDescription: "Restaurant service" },
+  ]);
   expect(await suite.db.select().from(workingOrderLines)).toEqual([line]);
   expect(await suite.db.select().from(workingOrders)).toEqual([order]);
   // Keep this historical projection independent of columns introduced by later migrations.
