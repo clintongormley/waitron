@@ -1,11 +1,47 @@
 # A1131b/c slice 3: Recover from backup becomes the wipe — Implementation Plan
 
+**Revision 3 (2026-10-31).** This revision folds the round-3 claim check of revision 2
+(`~/waitron-campaign/item-a1131bc-3-round3.md`: 0 critical, 1 important, 8 minor).
+- **I-1:** revision 2's fold of M1 said Continue gets a person out of a "repairable" setup record.
+  That is false whenever the setup database holds records or is missing. Continue repairs the
+  marker only when `repairEligible` (`packages/provisioning/src/first-setup-owner.ts:254-256`) is
+  true, and that needs a pair of `repairable`, a present database with no rows (`emptyDatabase`,
+  which is false for a missing database, `first-setup-resolution-inspection.ts:82`, `:94-96`), and
+  no other file left behind (`:365`; read). Run: `pnpm --filter @waitron/provisioning exec vitest
+  run src/first-setup-resolution-inspection.test.ts -t "marker repair|repair a supposedly|repairs|repair"`
+  gave "Tests 10 passed | 50 skipped (60)". That includes "refuses marker repair when the existing
+  database carries a taxpayer" (refused `setup.not_ready`), and "audits legacy password recovery's
+  marker repair before rebinding ownership", where the repair goes ahead.
+  - The replacement sentence was traced the same way. Where Continue cannot repair, nothing else is
+    offered. Continue is not drawn at all with the database missing or the record unreadable
+    (`setup-app.ts:2514-2521`). Start again and Recover need `pair === "valid"` (`:236-239`).
+    Abandon needs a signed-in session (`:2627`). So a reinstall is the only way out "unless the setup had
+    saved nothing yet". N2, the guide sentence and the backlog line now say that.
+- **M-1:** the stopped-recovery line is also drawn after a failed summary read (`setup-app.ts:2538`)
+  and on load (`:2578-2580`). The first now follows the kind too, and Task 2a tests it. The on-load
+  line keeps "Start again deletes it.", which stays true; OQ1 now says so.
+- **M-2:** this header names what I rechecked instead of giving a count.
+- **M-3:** Task 6a's re-run searches only the phrases that must be gone.
+- **M-4:** Task 6b's search gets "repair recovery" back and includes `docs/backlog.md`.
+- **M-5:** citations corrected: `LEFT_STATE` is at `:328-330`; the 409 comes from
+  `setup-first-fiscal-api.ts:41`, and the restart request is at `:1072-1073`; the ordinary setup
+  server's discovery route (`apps/server/src/discovery-api.ts:120-126`, `:75-81`) is cited beside
+  the repair page's.
+- **M-6:** `confirmation` no longer starts from `recovery-stopped`, and the help-line check names
+  real elements.
+- **M-7:** Check again's kind-keeping moves from Task 1 to Task 2a, beside its test. Task 2a now
+  also tests the missing-database Check again (`:2588-2594`).
+- **M-8:** Task 3 reads the incomplete-wipe words through `formErrors`.
+- Also new: a Task 6b backlog entry for the setup page's "Contact support." message
+  (`apps/setup/src/i18n/strings/shell.ts:8`), which breaks the refusal rule (CLAUDE.md §3). This is
+  an entry only; it is not fixed here.
+
 **Revision 2 (2026-10-31).** This revision folds the fresh plan review
 (`~/waitron-campaign/item-a1131bc-3-plan-review.md`: 0 critical, 7 important, 12 minor; its probes
 are in `~/waitron-campaign/a1131bc-3-plan-review-probes/`). I checked each finding against the code
-before folding it. The fourteen marked "read" or "run" below were rechecked by me; the other five I
-took from the review's own reading. Every finding is folded; M3 is folded by naming the departure,
-not by changing the page.
+before folding it. I re-read the code for I2, I5, M1, M8 and the citations I changed, and re-read
+the review's P1 output for I6. For the rest I followed the review's reading or runs (P3 for I4).
+Every finding is folded; M3 is folded by naming the departure, not by changing the page.
 - **I1:** Task 1 loops over `cases` without the stopped-recovery row, because Recover is not drawn
   there until Task 2a (`setup-app.ts:2586`). That row moves into Task 2a.
 - **I2:** with the database missing, the stopped-recovery line is drawn by the ask
@@ -17,7 +53,8 @@ not by changing the page.
   session cannot take the tab's lock). Task 2a now checks each refusal's expected words on one page
   at a time.
 - **I5:** D6 is restated. Whether a page load starts on the "Is this page secure?" screen depends
-  on the box's own certificate file (`setup-app.ts:822`; `first-setup-entry.ts:390-397`, read), not
+  on the box's own certificate file (`setup-app.ts:822`; `first-setup-entry.ts:390-397` and
+  `discovery-api.ts:120-126`, read), not
   on HTTPS. OQ2, N3, the guide bullets and the spec line now say what is true on a box with that
   file and on one without it.
 - **I6:** Task 0 gains a third case: a wipe that discards a stopped recovery, then the ordinary
@@ -112,6 +149,11 @@ Every file:line below was read on 4c5ba38db unless marked "run".
     confirms, the box restarts, and Reconnect opens "Join or recover". Under the alternative she
     sees only **Start again**. Pressing it lands her on the first setup screen, where she has to
     find "Join or recover" herself.
+  - Under the default, the stopped-recovery line drawn on load, before either button is pressed,
+    keeps today's words ("…Start again deletes it."; `setup-app.ts:2578-2580`). That is true, but
+    it names only Start again while both buttons are drawn. Recover's confirmation then says
+    Recover deletes it first. If the owner wants on-load words naming both, that is a small
+    follow-up (round 3, M-1).
   - **Alternative:** keep Recover hidden there, as today. This needs no new words, and the five
     changed checks marked OQ1 below stay unedited.
 - **OQ2 — Reloading the page between the wipe and Reconnect.**
@@ -119,7 +161,10 @@ Every file:line below was read on 4c5ba38db unless marked "run".
     including Reconnects pressed while the box is still restarting (experiment E1, case B). A
     reload or a closed tab forgets it. The page then opens its first screen: "Is this page
     secure?" on a box that holds its own certificate file, the setup choice screen otherwise
-    (`setup-app.ts:631`, `:822`; `first-setup-entry.ts:390-397`). The person presses **Continue to
+    (`setup-app.ts:631`, `:822`). After the restart, the ordinary setup server answers that from
+    `readBoxPublicCa` (`apps/server/src/discovery-api.ts:120-126`, `:75-81`, which also answers
+    "no file" when the box is set not to serve it); the repair page answers it the same way
+    (`first-setup-entry.ts:390-397`). The person presses **Continue to
     setup** if asked, then picks "Join or recover". That is what the spec's §6 already accepts after
     a power cut ("the ordinary setup page's first screen; the person picks 'Join or recover'"). It
     also keeps the page's rule that screens come "from in-memory state, never a URL route"
@@ -151,10 +196,22 @@ Every file:line below was read on 4c5ba38db unless marked "run".
   - **Repair marker** (pair `repairable`): the password is checkable and there is a revision, but
     `wipeOffered` also needs `pair === "valid"`, and a `repairable` pair is one whose claim marker
     needs repair (`:340-349`).
-  - The way out is Continue with the setup password where it can be checked (the `repairable`
-    case), or a reinstall. The spec's own "For your information" covers both ("or a setup the box
-    cannot show is safe to delete"). The guide's sentence "You can use this route even if the old
-    setup password cannot be checked." goes.
+  - **The way out is a reinstall, unless the setup had saved nothing yet** (round 3, I-1).
+    - For a `repairable` record, Continue with the setup password repairs the marker only when
+      `repairEligible` is true (`packages/provisioning/src/first-setup-owner.ts:254-256`). That
+      needs a present setup database with no rows, and no other file left behind
+      (`first-setup-resolution-inspection.ts:365`). With the database present but holding rows,
+      Continue answers `setup.not_ready` (run: "refuses marker repair when the existing database
+      carries a taxpayer"). With the database missing, Continue is not drawn at all
+      (`setup-app.ts:2514-2521` needs `!missing`), and `emptyDatabase` would be false anyway
+      (`first-setup-resolution-inspection.ts:82`).
+    - For an unreadable record, Continue is not drawn either (`setup-app.ts:2514-2521` needs
+      `password === "checkable"` when no session is signed in).
+    - Nothing else is offered in either case: Start again and Recover need `pair === "valid"`, and
+      Abandon needs a signed-in session (`setup-app.ts:2627`).
+  - The spec's own "For your information" covers both cases ("or a setup the box cannot show is
+    safe to delete"). The guide's sentence "You can use this route even if the old setup password
+    cannot be checked." goes.
 - **N3 — Start again's landing is corrected (D6).** Today Reconnect after a successful Start again
   opens the venue screen with no mode chosen (experiment E1, case A). The spec's §1 step 3 says "the
   page's first screen, as today". After this slice it opens the setup choice screen ("Set up this
@@ -317,9 +374,13 @@ Every file:line below was read on 4c5ba38db unless marked "run".
   Only the drawing differs: the paragraph, the tick's words, Confirm's label and `data-test`, and
   the stopped-recovery line. That line is drawn by the confirmation with the database present
   (`setup-app.ts:2453`, `:2468`) and by the missing ask with it missing (`:2566-2571`); in both
-  places it uses `recoveryStoppedRecover` when the kind is `"recover"` (review I2). **Check again**
-  (`:2544-2550`, `:2588-2594`) calls `#openWipeConfirmation(this.firstWipeKind)`, so it keeps the
-  kind the person chose (review I3). The Start again and Recover buttons pass their own kind.
+  places it uses `recoveryStoppedRecover` when the kind is `"recover"` (review I2). The same goes
+  for the line drawn after a failed summary read, beside Check again (`firstWipeUnread`,
+  `setup-app.ts:2538`; round 3, M-1). The line drawn on load, before either button is pressed
+  (`:2578-2580`), keeps `recoveryStopped` ("…Start again deletes it."). That is still true, though
+  it names only one of the two buttons (OQ1). **Check again** (`:2544-2550`, `:2588-2594`) calls
+  `#openWipeConfirmation(this.firstWipeKind)`, so it keeps the kind the person chose (review I3;
+  built in Task 2a, round 3 M-7). The Start again and Recover buttons pass their own kind.
 - **D2 — The §9b paragraph is three keys** (`recoverDeletes`, `noInvoiceSent`, `recoverThen`), so
   the middle sentence can be left out under §9a's rule. A test pins the joined text to §9b's exact
   sentence in both languages.
@@ -342,7 +403,8 @@ Every file:line below was read on 4c5ba38db unless marked "run".
 - **D5 — Carrying the choice across the restart** (spec "Open, not measured"; E1). A private field
   `#afterWipe?: "start-again" | "recover"` is set when `sendWipe` resolves, and also when the send
   is refused `setup.start_again_incomplete`. That refusal means the box asked for its own restart,
-  and the start finishes the deletion (`apps/server/src/setup-first-fiscal-api.ts:1072`, a 409 answer; spec
+  and the start finishes the deletion (`apps/server/src/setup-first-fiscal-api.ts:1072-1073` asks for the restart; the answer is
+  409, `:41`; spec
   §6). Its words ("Start again has not finished. Reload this page…", `shell.ts:9-10`) say to
   reload, which forgets the choice, but a person who presses Reconnect instead now lands where the
   kind says, not on the venue screen (review M5). `#reconnectFirstSetup` reads it
@@ -356,7 +418,8 @@ Every file:line below was read on 4c5ba38db unless marked "run".
   - On a page load, the first screen is "Is this page secure?" (`"connection"`, `setup-app.ts:631`).
     The page moves past it by itself only when the box has no certificate file of its own to
     offer (`!discovery.caDownloadAvailable`, `:822`; the repair-page server answers that from
-    `readBoxPublicCa(roots.stateDir)`, `first-setup-entry.ts:390-397`).
+    `readBoxPublicCa(roots.stateDir)`, `first-setup-entry.ts:390-397`; after the restart the
+    ordinary setup server answers from the same file, `discovery-api.ts:120-126`, `:75-81`).
   - After a wipe the person is already on the box's secure connection, because both wipe routes
     refuse plain HTTP. So Reconnect skips that screen and opens the choice screen directly. That is
     the first screen on a box without its own certificate file, and one step past it on a box with
@@ -490,7 +553,7 @@ source change.
   - The state folder's `first-setup-resolutions` is NOT asserted absent. Start again keeps the
     discarded recovery's record folder there (`backupRecoveryKept`,
     `packages/provisioning/src/first-setup-start-again-deletion.ts:237-260`; the held file's
-    `LEFT_STATE`, `:322-324`), and the review's run P1 printed `resolutions state true`. Assert it
+    `LEFT_STATE`, `:328-330`), and the review's run P1 printed `resolutions state true`. Assert it
     is present, so a later change that removes it is seen.
   - The review's run P1 printed exactly these results ("Tests 2 passed", control
     `setup.attempt_uncertain`), so this is expected to pass. If it fails, STOP for the lead.
@@ -506,20 +569,24 @@ source change.
 **Files:**
 - `apps/setup/src/screens/initial-owner-strings.ts`: the four keys in Global Constraints.
 - `apps/setup/src/setup-app.ts`: `firstWipeKind`; `#openWipeConfirmation(kind)`; the Recover
-  button's handler; Check again passing `this.firstWipeKind` (D1); the confirmation drawing; and
+  button's handler; the confirmation drawing; and
   `#startAgainFirstSetup` renamed `#sendWipeFirstSetup`.
 - New `apps/setup/test/wipe-browser.ts`. Move `t`, `text`, `formErrors`, `OWNER_HEADER`,
   `wipeFixture`, `Sent`, `summaryReads`, `sends` and `cases` out of `setup-app-wipe.test.ts`
   (`:35-174`) into it, and import them back. Generalise `confirmation` and `fieldsIn` (`:38-63`):
-  `confirmation(app, confirm = "confirm-start-again")` walks from the first of
-  `recovery-record-damaged`, `setup-database-unreadable`, `recovery-stopped`, `start-again-deletes`
-  or `recover-deletes` to the actions holding `confirm` (review M7).
+  `confirmation(app, confirm = "confirm-start-again")` walks from the first, in document order, of
+  `recovery-record-damaged`, `setup-database-unreadable`, `start-again-deletes` or
+  `recover-deletes`, to the actions holding `confirm` (review M7). It does not start from
+  `recovery-stopped`: with the database present that block follows the paragraph
+  (`setup-app.ts:2464-2468`), and with it missing the block is drawn by the ask, outside the
+  confirmation (round 3, M-6).
 - New `apps/setup/src/setup-app-recover.test.ts`.
 - Add to `setup-app-resolution.test.ts`'s words test (`:127`).
 
 **Interfaces — Produces:**
 - `#openWipeConfirmation(kind: "start-again" | "recover"): Promise<void>`. The Start again button
-  passes `"start-again"`, the Recover button `"recover"`, and Check again `this.firstWipeKind`.
+  passes `"start-again"` and the Recover button `"recover"`. Check again keeps passing
+  `"start-again"` until Task 2a.
 - `@state() private firstWipeKind: "start-again" | "recover"`.
 - `apps/setup/test/wipe-browser.ts` exports:
   - `wipeFixture(options)`, as today, plus an optional
@@ -549,9 +616,10 @@ source change.
     - The tick's label equals `s.retireRecover` and its `name` is `retire-setup`.
     - `confirm-recover` shows `s.recoverBackup`, is disabled until ticked, and is `danger` after.
     - `start-again-deletes` and `confirm-start-again` are absent.
-    - The help line is not drawn: the `data-test`s of `confirmation(app, "confirm-recover")`'s
-      elements are exactly `["recover-deletes", <the tick's label>, <the actions>]`, with no
-      paragraph between them (review M6).
+    - The help line is not drawn: `confirmation(app, "confirm-recover")` is exactly three
+      elements, which match in turn `p[data-test=recover-deletes]`, `label` (holding
+      `retire-confirmed`) and `wt-form-actions`. No `<p>` lies between them (review M6; round 3,
+      M-6).
   - "with the setup database missing, Recover's confirmation leaves out the no-invoice sentence
     and uses the missing-database tick": the paragraph equals `${recoverDeletes} ${recoverThen}`;
     the tick's label is `missingConfirm` and its name `missing-database-confirmed`;
@@ -585,7 +653,9 @@ source change.
 
 **Files:**
 - `apps/setup/src/setup-app.ts`: D3, D4, D7, D9, and D1's stopped-recovery line (in the
-  confirmation with the database present, in the missing ask with it missing).
+  confirmation with the database present, in the missing ask with it missing, and after a failed
+  summary read). Also D1's Check again, which passes `this.firstWipeKind` at both of its buttons
+  (`:2544-2550`, `:2588-2594`; moved here from Task 1 so it lands beside its tests, round 3 M-7).
 - `apps/setup/src/setup-app-recover.test.ts`.
 
 - [ ] **Step 1: Failing tests** (in `setup-app-recover.test.ts`):
@@ -636,16 +706,30 @@ source change.
   - **Check again keeps the choice (review I3).** "after a failed summary read beside a stopped
     recovery, Check again from Recover reopens Recover's confirmation". Use `wipeFixture` with
     `activity: stoppedActivity` and a summary that answers 500 `server.internal` on read 0 and
-    `stoppedSummary` after. Press `recover-backup`, poll for `check-again`, press it. Then
-    `recover-deletes` and `confirm-recover` are drawn, and `start-again-deletes` is absent. Fails
-    without D1's Check-again change (prove by deletion once built: pass `"start-again"` from Check
-    again, see it fail, restore). Task 3 follows the same path through to Reconnect.
+    `stoppedSummary` after. Press `recover-backup` and poll for `check-again`. Before pressing it,
+    the first line of `recovery-stopped` equals `recoveryStoppedRecover` with `{started}` filled,
+    and the text has no "Start again deletes it" (round 3, M-1: the line drawn at
+    `setup-app.ts:2538`). Press it. Then `recover-deletes` and `confirm-recover` are drawn, and
+    `start-again-deletes` is absent. Fails today (Recover navigates away), and fails without D1's
+    Check-again change. Prove that by deletion once built: pass `"start-again"` from that Check
+    again, see it fail, restore. Task 3 follows the same path through to Reconnect.
+  - **The missing-database Check again (round 3, M-7).** "with the database missing and a recovery
+    not yet settled, Check again from Recover reopens Recover's confirmation". Use
+    `missingDatabaseFixture` with `summary: stoppedSummary` and a `/backup/status` answer of phase
+    `selected` on its first read and `prepared` after. With a recovery in the summary and a phase
+    outside the stopped ones, the page treats the recovery as not yet settled (`#readMissingAsk`,
+    `setup-app.ts:1355-1357`). Press `recover-backup` (drawn on load with the database missing),
+    then poll for `check-again` and `recovery-unreadable` (the button at `:2588-2594`). Press it.
+    Then `recover-deletes` and `confirm-recover` are drawn, the ask's stopped line equals
+    `recoveryStoppedRecover`, and Confirm sends `confirmMissingDatabase` with `stoppedSummary`.
+    Prove by deletion as above, at the second Check again.
   - Review Focus 5: "a Recover send refused kept-records closes the confirmation, says the setup
     changed, and offers Recover again" (`startAgain: () => refusedCause("kept-records")`).
     `heldChanged` is among `formErrors(app)`; `recover-backup` is enabled and holds focus
     (`app.shadowRoot!.activeElement` is the `recover-backup` host). Fails today.
 - [ ] **Step 2:** run `src/setup-app-recover.test.ts`. The new cases fail as stated.
-- [ ] **Step 3: Implement** D3, D4, D7, D9 and D1's stopped-recovery line. For D7: delete the
+- [ ] **Step 3: Implement** D3, D4, D7, D9, D1's stopped-recovery line and D1's Check again. For
+  D7: delete the
   `Screen` member, the render case and the two `#onGoto` branches, then run
   `rg '"first-backup"' apps/setup/src --glob '!*.test.ts'`, which must print nothing.
 - [ ] **Step 4:** `setup-app-recover.test.ts` green; typecheck and lint. **Red until Task 2b, by
@@ -704,7 +788,9 @@ probe did.
   - Review M5: "a Recover send answered setup.start_again_incomplete keeps the choice: Reconnect,
     once the box answers no setup, opens Join or recover". The `startAgain` answer is 409 `{ error:
     { code: "setup.start_again_incomplete", params: {} } }`; the status then answers
-    `{ claimed: false }`. The page draws the existing "Start again has not finished" words, then
+    `{ claimed: false }`. `formErrors(app)` contains
+    `shellEn["shell.first_setup.start_again_incomplete"]`; those words are drawn inside
+    `wt-form-actions`' own shadow root, where `text(app)` cannot see them (round 3, M-8). Then
     Reconnect leads to `screen-role`. Fails without D5's extra case (`screen-venue`).
   - "from Join or recover, Restore from backup opens the fresh-box restore screen, and nothing went
     to the old recovery's routes": from `screen-role`, click `choose-restore` (inside the role
@@ -799,8 +885,9 @@ After the edit, EN and ES must say the same, and each must say:
   - **Start again** and **Recover from backup** delete the failed setup the same way, with no
     password, and both are refused in the same cases, in the page's words.
   - Neither can be used when the setup's own record cannot be read, or carries a mark that needs
-    repair. The page then offers Continue with the setup password where that password can be
-    checked; otherwise only a reinstall clears the box (N2, review M1).
+    repair. Then the only way out is to reinstall Waitron, unless the setup had saved nothing yet,
+    in which case **Continue** with the setup password repairs the record and carries on (N2;
+    review M1; round 3, I-1).
   - Pressing Recover from backup shows §9b's words (quoted) and its tick. With the database
     missing, it shows the missing-database lines and the "Nothing was filed…" tick.
   - After confirming, the box restarts. **Reconnect** opens "Join or recover an existing
@@ -838,8 +925,10 @@ After the edit, EN and ES must say the same, and each must say:
 
 - [ ] **Step 1:** edit, then run `pnpm exec prettier --write` on both files. Read each file whole
   afterwards.
-- [ ] **Step 2:** re-run the search. Expect only the sentences about a recovery begun before this
-  version.
+- [ ] **Step 2:** check that the retired phrases are gone (round 3, M-3):
+  `rg -n -i "open backup|abrir copia|finish saved recovery|finalizar la recuperación guardada|even if the old setup password|aunque no se pueda comprobar la contraseña|does not offer \*\*recover|no ofrece \*\*recuperar|stay in their own folders|se conservan en sus propias" apps/server/src/guide`
+  prints nothing. The broader search also hits the page title and the new **Recover from backup**
+  sentences, which is expected; read those hits for truth instead.
 - [ ] **Step 3:** `… pnpm --filter @waitron/server exec vitest run src/guide-content.test.ts src/guide-backup-recovery.test.ts`,
   then root `scripts/guide-links.test.ts`. Commit.
 
@@ -850,8 +939,8 @@ After the edit, EN and ES must say the same, and each must say:
 `docs/backlog/setup.md`, `docs/backlog/fiscal.md`, `docs/backlog/mockups/a1131bc-restore/README.md`,
 and the spec (one dated line).
 
-Find every sentence again with Task 6a's search, run over
-`docs/operations docs/backlog apps/server/README.md`. Hits read on 4c5ba38db:
+Find every sentence again with Task 6a's search plus `repair recovery` (round 3, M-4), run over
+`docs/operations docs/backlog docs/backlog.md apps/server/README.md`. Hits read on 4c5ba38db:
 `first-live-fiscal-setup.md:128-129`, `:142-143`, `:163-164`; `hour-recovery.md:30-54`;
 `backups-and-support.md:22-28`; `docs/backlog/setup.md:456`, `:542`, `:747-758`, `:823-826`;
 `docs/backlog.md:622-624`; `docs/backlog/fiscal.md:783-787` (found by review M8).
@@ -890,9 +979,16 @@ After the edit each must say:
     the setup first, then uses the ordinary restore. The anchor now describes that.)" (review M8).
   - New short entries in `docs/backlog/setup.md`, each "Left open by A1131bc slice 3", with
     one-line pointers in `docs/backlog.md`:
-    - N2: no Recover from backup when the setup record is unreadable or carries a repair mark;
-      Continue or a reinstall only (review M1);
-    - N5: the bucket and Waitron Cloud restores have not been run after a wipe (review M11).
+    - N2: no Recover from backup when the setup record is unreadable or carries a repair mark.
+      The only way out is a reinstall, unless the setup had saved nothing yet (then Continue
+      repairs the record). Review M1; round 3, I-1;
+    - N5: the bucket and Waitron Cloud restores have not been run after a wipe (review M11);
+    - the setup page's message for an unreadable saved setup ends "Contact support."
+      (`shell.first_setup.attempt_invalid`, `apps/setup/src/i18n/strings/shell.ts:8`). That sends
+      the person to somebody else, against CLAUDE.md §3's refusal rule. Wanted: say what happened
+      and what each choice does. Noticed while planning A1131bc slice 3 and not fixed there
+      (pre-existing; `git log -S "Contact support" -- apps/setup/src/i18n/strings/shell.ts` gives
+      its origin when the entry is written).
   - Under "Decisions and deliberate limits": OQ2's default (a reload between the wipe and Reconnect
     forgets the choice).
 - **Mock-ups README:** one dated line under the table: "2026-10-31, A1131bc slice 3: the help line
