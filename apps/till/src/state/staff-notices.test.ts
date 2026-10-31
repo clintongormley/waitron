@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DeviceEquipmentRead, StaffNotice } from "../api/client.js";
-import { nextNotices } from "./staff-notices.js";
+import { checkTimeOffered, nextNotices } from "./staff-notices.js";
 
 const notice = (
   owner: string,
@@ -95,5 +95,40 @@ describe("the notices an equipment read leaves shown", () => {
       good,
       { ...purple, severity: "notice" },
     ]);
+  });
+});
+
+describe("the box's check-the-time marker", () => {
+  const marker: StaffNotice = {
+    owner: "box-clock",
+    key: "clock.check_time",
+    code: "clock.check_time",
+    severity: "error",
+    params: {},
+  };
+  const behind: StaffNotice = {
+    owner: "fiscal",
+    key: "clock.behind_chain",
+    code: "clock.behind_chain",
+    severity: "error",
+    params: {},
+  };
+
+  it("is offered, and left out of the notices shown, when the read carries it", () => {
+    const withMarker = read({ notices: [marker, behind] });
+    expect(nextNotices([], withMarker)).toEqual([behind]);
+    expect(checkTimeOffered(withMarker)).toBe(true);
+  });
+
+  it("is not offered when the read does not carry it, and the notices are as before", () => {
+    const without = read({ notices: [behind] });
+    expect(nextNotices([], without)).toEqual([behind]);
+    expect(checkTimeOffered(without)).toBe(false);
+    expect(checkTimeOffered(read())).toBe(false);
+  });
+
+  it("is not offered by a marker that is not well formed", () => {
+    const broken = { ...marker, params: null } as unknown as StaffNotice;
+    expect(checkTimeOffered(read({ notices: [broken] }))).toBe(false);
   });
 });

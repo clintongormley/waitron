@@ -37,6 +37,55 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("TillApi", () => {
+  describe("checking the box's time", () => {
+    it("asks for a challenge, saying when an administrator asks", async () => {
+      const fetchStub = vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(jsonResponse({ challengeId: "c1", boxAt: "2001-01-02T03:04:00.000Z" })),
+        );
+      const api = new TillApi("", fetchStub);
+      expect(await api.boxClockChallenge()).toEqual({
+        challengeId: "c1",
+        boxAt: "2001-01-02T03:04:00.000Z",
+      });
+      const override = { personId: "p-admin", pin: "1234" };
+      await api.boxClockChallenge(override);
+      expect(fetchStub.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
+        ["/api/box-clock/challenge", "POST", JSON.stringify({})],
+        ["/api/box-clock/challenge", "POST", JSON.stringify({ override })],
+      ]);
+    });
+
+    it("sends the till's own time with the challenge, and an administrator's PIN when given", async () => {
+      const answer = { confirmationId: "k1", stepMs: 5, confirmedAt: "2026-10-31T17:00:00.000Z" };
+      const fetchStub = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(answer)));
+      const api = new TillApi("", fetchStub);
+      expect(await api.boxClockConfirm({ challengeId: "c1", deviceAt: 42 })).toEqual(answer);
+      const override = { personId: "p-admin", pin: "1234" };
+      await api.boxClockConfirm({ challengeId: "c2", deviceAt: 43, override });
+      expect(fetchStub.mock.calls.map(([path, init]) => [path, init.method, init.body])).toEqual([
+        ["/api/box-clock/confirm", "POST", JSON.stringify({ challengeId: "c1", deviceAt: 42 })],
+        [
+          "/api/box-clock/confirm",
+          "POST",
+          JSON.stringify({ challengeId: "c2", deviceAt: 43, override }),
+        ],
+      ]);
+    });
+
+    it("throws a refusal with its reason", async () => {
+      const fetchStub = vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ error: { code: "clock.set_refused", params: { reason: "stale" } } }, 409),
+        );
+      await expect(
+        new TillApi("", fetchStub).boxClockConfirm({ challengeId: "c1", deviceAt: 1 }),
+      ).rejects.toEqual({ code: "clock.set_refused", reason: "stale", status: 409 });
+    });
+  });
+
   it("carries the captured editing observation when abandoning a table bill", async () => {
     const fetchStub = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
     const expectedEdit = { billId: "wo-4", editorVersion: 8, draftId: null, draftRevision: null };

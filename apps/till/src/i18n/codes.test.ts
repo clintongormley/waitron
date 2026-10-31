@@ -822,3 +822,18 @@ it("words a dish whose period has ended, in both languages", () => {
   expect(codeMessage("menu_period.ended", "en")).toBe("A dish's period has ended.");
   expect(codeMessage("menu_period.ended", "es")).toBe("Ha terminado el periodo de un plato.");
 });
+
+it("words the box clock's check refusals plainly, in both languages, never as the generic sentence", () => {
+  const generic = [codeMessage("no.such_code", "en-GB"), codeMessage("no.such_code", "es-ES")];
+  for (const code of [
+    "clock.set_refused",
+    "clock.set_failed",
+    "clock.check_expired",
+    "clock.confirm_refused",
+  ]) {
+    const words = [codeMessage(code, "en-GB"), codeMessage(code, "es-ES")];
+    expect(words[0]).not.toBe(generic[0]);
+    expect(words[1]).not.toBe(generic[1]);
+    expect(words[0]).not.toBe(words[1]);
+  }
+});

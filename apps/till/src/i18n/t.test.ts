@@ -2,7 +2,9 @@ import { afterEach, expect, it } from "vitest";
 import {
   carriedText,
   clockBehindText,
+  clockDateTime,
   clockTime,
+  clockUnusableText,
   countText,
   currentLocale,
   differentPeopleText,
@@ -13,6 +15,7 @@ import {
   t,
 } from "./t.js";
 import { catalogues, en } from "./strings.js";
+import { refusalText } from "../widgets/pay-refusal.js";
 
 it.each(["constructor", "toString", "__proto__"])(
   "falls back to English for inherited locale key %s",
@@ -173,5 +176,49 @@ it.each(["en-GB", "es-ES"])(
     });
     expect(text).toContain("(14/03/2025\u00a009:12)");
     expect(text).toContain("(18/10/2026\u00a023:40)");
+  },
+);
+
+const BEHIND = {
+  clockAt: "2025-03-14T08:12:00.000Z",
+  offsetMinutes: 60,
+  lastRecordAt: "2026-10-18T21:40:00.000Z",
+  lastRecordOffsetMinutes: 120,
+};
+
+it.each([
+  ["en-GB", "Use “Check the time” at the top of the screen.", "Tell a manager"],
+  ["es-ES", "Usa «Comprobar la hora» arriba.", "Avisa al encargado"],
+])(
+  "points a clock refusal at Check the time while the box offers it, and nowhere else (%s)",
+  (locale, check, tell) => {
+    setLocale(locale);
+    const unusable = clockUnusableText("2001-01-01T10:00:00.000Z", 60, true);
+    expect(unusable).toContain(check);
+    expect(unusable).not.toContain(tell);
+    expect(clockUnusableText("2001-01-01T10:00:00.000Z", 60)).not.toContain(check);
+    const behind = clockBehindText(BEHIND, true);
+    expect(behind).toContain(check);
+    expect(behind).toContain("(14/03/2025\u00a009:12)");
+    expect(clockBehindText(BEHIND)).not.toContain(check);
+  },
+);
+
+it("words a clock.behind_chain payment refusal with Check the time only while it is offered", () => {
+  const refusal = { code: "clock.behind_chain", ...BEHIND };
+  expect(refusalText(refusal, true)).toBe(clockBehindText(BEHIND, true));
+  expect(refusalText(refusal)).toBe(clockBehindText(BEHIND));
+  expect(refusalText(refusal)).toContain("tell a manager");
+  const unusable = { code: "clock.unusable", clockAt: BEHIND.clockAt, offsetMinutes: 60 };
+  expect(refusalText(unusable, true)).toBe(clockUnusableText(BEHIND.clockAt, 60, true));
+  expect(refusalText(unusable)).toBe(clockUnusableText(BEHIND.clockAt, 60));
+});
+
+it.each(["en-GB", "es-ES"])(
+  "writes a date and time of day on one line in the till's own time zone (%s)",
+  (locale) => {
+    setLocale(locale);
+    expect(clockDateTime(new Date(2001, 0, 2, 3, 4))).toBe("02/01/2001\u00a003:04");
+    expect(clockDateTime(new Date(2026, 9, 31, 17, 45).getTime())).toBe("31/10/2026\u00a017:45");
   },
 );
