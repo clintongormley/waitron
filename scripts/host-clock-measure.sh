@@ -81,7 +81,9 @@ if [ -z "$UNIT" ]; then
   UNIT=systemd-timesyncd
 else
   echo "$UNIT" >"$UNIT_STATE_FILE"
-  if echo " $LISTED " | grep -Eq "(^|[[:space:]])$UNIT(\.service)?([[:space:]]|$)"; then
+  UNIT_ID=$($T systemctl show -p Id --value "$UNIT" || echo "$UNIT")
+  say M1 "$UNIT is unit $UNIT_ID"
+  if echo " $LISTED " | grep -Eq "(^|[[:space:]])${UNIT_ID%.service}(\.service)?([[:space:]]|$)"; then
     verdict M1 yes "active unit $UNIT is listed"
   else
     verdict M1 no "active unit $UNIT is NOT listed: set-time cannot see it; the handler must stop it by name"
@@ -141,7 +143,8 @@ verdict M3 "$m3_ok" "set applied with its fraction, uptime and boot id untouched
 if [ -z "$rtc_before" ] || [ -z "$rtc_after" ] || [ "$rtc_before" = n/a ]; then
   say M3 "battery clock: not measured (no RTC reading: before='$rtc_before' after='$rtc_after')"
 else
-  rtc_step=$(awk -v a="$rtc_before" -v b="$rtc_after" 'BEGIN { printf "%.1f", (b - a) / 1e6 }')
+  rtc_step=$(($(date -d "$rtc_after" +%s) - $(date -d "$rtc_before" +%s)))
+  say M3 "battery clock before '$rtc_before', after '$rtc_after' (whole seconds)"
   if awk -v s="$rtc_step" 'BEGIN { exit !(s >= 110 && s <= 130) }'; then
     verdict M3 yes "battery clock moved $rtc_step s"
   else
@@ -216,6 +219,8 @@ $T systemctl stop waitron-box-measure-sleep 2>/dev/null || true
 rc=0
 $T systemctl start waitron-box-measure.socket || rc=$?
 say M5 "socket start rc=$rc; $(stat -c '%A %U:%G' "$MEASURE_DIR/box.sock" 2>&1)"
+say M5 "group 10001 in /etc/group: $(getent group 10001 || echo none)"
+$T journalctl -u waitron-box-measure.socket --no-pager -n 20 -o cat 2>&1 | sed 's/^/M5: journal: /' || true
 $T docker pull -q "$IMAGE" >/dev/null 2>&1 || true
 CLIENT='
 const net = require("node:net");
@@ -254,6 +259,32 @@ if [ -z "$after_ms" ] || ! within "$after_ms" "$set_target" 2000; then
   m5_why="$m5_why the set did not land within 2 s of its target;"
 fi
 verdict M5 "$m5_ok" "an unprivileged container reads status, sets the host clock, and shares the host's boot id${m5_why:+ — but:$m5_why}"
+
+# ---- M5b: the plan's fallback for a refused numeric group: a named host group with gid 10001
+if getent group 10001 >/dev/null; then
+  say M5b "not measured (gid 10001 already names $(getent group 10001 | cut -d: -f1))"
+else
+  $T groupadd -g 10001 waitron-box || say M5b "groupadd failed"
+  $T systemctl stop waitron-box-measure.socket 2>/dev/null || true
+  $T systemctl reset-failed waitron-box-measure.socket 2>/dev/null || true
+  rm -f "$MEASURE_DIR/box.sock"
+  rc=0
+  $T systemctl start waitron-box-measure.socket || rc=$?
+  say M5b "with group waitron-box (gid 10001) added: socket start rc=$rc; $(stat -c '%A %U:%G' "$MEASURE_DIR/box.sock" 2>&1)"
+  status_out=$(timeout 180 docker run --rm --user 10001:10001 -v "$MEASURE_DIR:/run/waitron-box" \
+    "$IMAGE" node -e "$CLIENT" "clock.status" 2>&1 || true)
+  say M5b "clock.status from the container: $(echo "$status_out" | tr '\n' ' ')"
+  set_target=$(($(date +%s%3N) + 30000))
+  set_out=$(timeout 180 docker run --rm --user 10001:10001 -v "$MEASURE_DIR:/run/waitron-box" \
+    "$IMAGE" node -e "$CLIENT" "clock.set $set_target {\"source\":\"measure\"}" 2>&1 || true)
+  say M5b "clock.set $set_target from the container: $(echo "$set_out" | tr '\n' ' ')"
+  after_ms=$(echo "$set_out" | sed -n 's/.*"after":\([0-9]*\).*/\1/p' | head -1)
+  m5b_ok=yes
+  echo "$status_out" | grep -q '^reply {"synchronised"' || m5b_ok=no
+  echo "$status_out" | grep -q "^boot $host_boot$" || m5b_ok=no
+  if [ -z "$after_ms" ] || ! within "$after_ms" "$set_target" 2000; then m5b_ok=no; fi
+  verdict M5b "$m5b_ok" "with a named group the container reads status and sets the host clock"
+fi
 
 m6_out=$(timeout 180 docker run --rm --user 10001:10001 "$IMAGE" node -e "$CLIENT" "clock.status" 2>&1 || true)
 say M6 "without the bind: $(echo "$m6_out" | tr '\n' ' ')"
