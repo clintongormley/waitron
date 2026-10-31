@@ -998,3 +998,37 @@ separates a loaded module from an assigned file; a case-start event precedes its
 beforeEach hooks. These events do not provide a browser JavaScript stack or name
 a pending application promise. Product behavior, test assertions, test deadlines
 and shard counts have not changed in this diagnostic slice.
+
+## A1252: remaining server job time after the held-setup split
+
+On 31 October 2026, [PR #2341](https://github.com/clintongormley/waitron/pull/2341)
+landed the held-setup split, preserving all 73 cases, including A1131's three
+fresh-box restore cases. Its final [CI run 41200533986](https://github.com/clintongormley/waitron/actions/runs/41200533986)
+checked out `3f446266f2b8872798ddc250fabce46b8079aeea` in every ordinary server job.
+All 1,125 selected ordinary files ran exactly once. The coverage merge reports
+26,935 tests passed and one skipped across 1,135 files, including the separate
+stream/full-disk job.
+
+The five held-setup files took 90.2–143.6 seconds each. Complete ordinary jobs
+took 173–305 seconds, so this run does not meet the target of about 4.5 minutes
+for every job. The table lists each job above 270 seconds and its longest file.
+The test step runs the complete file group and coverage; setup and cleanup are
+the rest of the job's recorded duration.
+
+| Shard | Whole job (s) | Test step (s) | Setup and cleanup (s) | Longest file (s) |
+| --- | ---: | ---: | ---: | --- |
+| test-server (1) | 283 | 238 | 45 | `src/first-setup-start-again-backup-discard.test.ts` (206.6) |
+| test-server (13) | 272 | 228 | 44 | `src/hour-recovery-placement-3.test.ts` (144) |
+| test-server (2) | 274 | 226 | 48 | `src/invoice-pdf.test.ts` (180.1) |
+| test-server (11) | 295 | 250 | 45 | `src/first-setup-backup-reopen.test.ts` (186.5) |
+| test-server (10) | 274 | 228 | 46 | `src/first-setup-backup-recovery-preparation.test.ts` (167.1) |
+| test-server (5) | 305 | 249 | 56 | `src/first-fiscal-hour.e2e.test.ts` (199.5) |
+| test-server (20) | 271 | 236 | 35 | `src/first-setup-backup-resume-authority.test.ts` (141.6) |
+| test-server (16) | 275 | 231 | 44 | `src/hour-recovery-placement-2.test.ts` (160.4) |
+
+Keep the three later main-run observations open. Count runs that execute every
+server shard; a run that reuses PR evidence supplies no new server timing.
+Retain whole-job, test-step and per-file times when a job exceeds the target.
+Use those measurements to choose further packing or suite-setup work while
+preserving every behavioural assertion. The measurements above do not establish
+a cause for every over-budget group.

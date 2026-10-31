@@ -5849,6 +5849,8 @@ changeover. See the [testing guide](developers/testing-guide.md#a-recent-timesta
 
 - **A1252. Qualify three main runs after splitting the held-setup suite.**
   The split retains A1131's three fresh-box restore cases from PR #2335.
+  The final PR run still has complete jobs above the target; see the
+  [timings and remaining work](backlog/ci.md#a1252-remaining-server-job-time-after-the-held-setup-split).
   Read three later main runs that execute every server shard; each job should
   take at most about 4.5 minutes, or name the slow suite and its cause.
   [Method](developers/ci-and-gates.md#refresh-after-the-held-setup-suites-grew).
