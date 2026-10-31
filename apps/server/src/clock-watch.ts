@@ -38,8 +38,9 @@ const SET_BACKOFF_MAX_MS = 4 * 60 * 60_000;
 
 /** Checks every `intervalMs`, the first one `intervalMs` after start, each next one armed after the
  * last finished, on the primary only. While the seat answers a clock stop state, each check offers
- * the seat a clock check to open, confirms the clock when the witnesses are ready, and asks AEAT's
- * time when an ask is due; while the seat answers a waiting check, each check does the same ask and
+ * the seat a clock check to open, asks the correction to set the clock to AEAT's time when AEAT
+ * disagrees (not again in that check for a while after a set the host failed), confirms the clock
+ * when the witnesses are ready, and asks AEAT's time when an ask is due; while the seat answers a waiting check, each check does the same ask and
  * offers the seat the witnesses to close it. `stop` resolves once a check in flight has finished,
  * and no check runs after it; a disproof write that `stepComing` or `reanchor` began before it can
  * still finish later. As a set's anchor, it takes no jump from the wall clock between
@@ -260,7 +261,7 @@ export function startClockWatch(deps: {
       deps.log("info", "clock_watch.cannot_set", { reason: answer.reason });
       lastRefusal = answer.reason;
     }
-    // Only these asked the host to move the clock; the other refusals toggle nothing.
+    // Only these reached the host; the other refusals toggle nothing.
     if (answer.reason === "refused" || answer.reason === "unverified") {
       const failures = backoff?.checkId === checkId ? backoff.failures + 1 : 1;
       backoff = {
@@ -394,14 +395,14 @@ export function startClockWatch(deps: {
         deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
       }
       if (stopped) return;
-      // Revision 4: only AEAT sets the clock by itself; devices that disagree set nothing.
-      if (stop.proof === "contrary" && stop.contrary.authority !== null) {
+      // Revision 4: only AEAT sets the clock by itself; devices that disagree set nothing. With a
+      // disproof left unrecorded the set could only be refused `pending_disproofs`.
+      if (recorded && stop.proof === "contrary" && stop.contrary.authority !== null) {
         try {
           await setFromAuthority(stop.contrary.authority, stepsSeen);
         } catch (error) {
           deps.log("warn", "clock_watch.check_failed", { errorCode: codeOf(error) });
         }
-        if (stopped) return;
       }
       if (stop.proof === "ready") {
         try {

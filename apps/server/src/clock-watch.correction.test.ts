@@ -48,6 +48,9 @@ function harness(
     note?: (input: ClockProvedWrong) => Promise<void>;
     /** A reading no record could carry: the seat answers no stop. */
     unusable?: boolean;
+    /** The correction's step counter rises while the seat judges the stop, after the witnesses
+     * were read. */
+    stepDuringStopRead?: boolean;
   } = {},
 ) {
   let wallMs = START_MS;
@@ -58,10 +61,12 @@ function harness(
   const sets: ClockSetInput[] = [];
   const log = vi.fn();
   const store = createClockWitnessStore({ wall: () => wallMs, monotonic: () => monoMs });
+  let steps = 0;
   const backend = {
-    clockStopState: vi.fn(async (_tx: Transaction, _at: unknown, witnesses: ClockWitness[]) =>
-      options.unusable === true ? null : contraryStop(witnesses),
-    ),
+    clockStopState: vi.fn(async (_tx: Transaction, _at: unknown, witnesses: ClockWitness[]) => {
+      if (options.stepDuringStopRead === true) steps += 5;
+      return options.unusable === true ? null : contraryStop(witnesses);
+    }),
     assertRecordableAt: () => {
       if (options.unusable === true)
         throw new AppError("clock.unusable", {
@@ -76,7 +81,6 @@ function harness(
     }),
     openClockCheck: vi.fn(async () => ({ id: checkId })),
   };
-  let steps = 0;
   const correction = {
     inTurn: <T>(fn: () => Promise<T>) => fn(),
     steps: () => steps,
@@ -146,6 +150,7 @@ function harness(
 
   return {
     watch,
+    backend,
     correction,
     sets,
     order,
@@ -290,6 +295,33 @@ describe("the clock watch sets the clock from AEAT during a stop", () => {
     expect(h.order.slice(0, 2)).toEqual(["disproof authority", "writePending"]);
   });
 
+  it("reads the step counter when it reads the witnesses, not when it sets", async () => {
+    const h = harness({ stepDuringStopRead: true });
+    h.aeatSays(2 * DAY);
+    await h.look();
+    expect(h.sets).toEqual([expect.objectContaining({ stepsSeen: 0 })]);
+  });
+
+  it("sets nothing on a look whose first disproof write failed", async () => {
+    let failing = false;
+    const h = harness({
+      note: async () => {
+        if (failing) throw new AppError("storage.disk_full", {});
+      },
+    });
+    h.aeatSays(2 * DAY);
+    await h.look();
+    expect(h.sets).toHaveLength(1);
+
+    // The next look's first write fails on the disagreement this look leaves unrecorded.
+    failing = true;
+    h.aeatSays(2 * DAY);
+    await h.look();
+    h.aeatSays(2 * DAY);
+    await h.look();
+    expect(h.sets).toHaveLength(2);
+  });
+
   it("logs a failing writePending and still sets on that look", async () => {
     const h = harness();
     h.correction.writePending.mockRejectedValue(new AppError("storage.disk_full", {}));
@@ -336,9 +368,9 @@ describe("the clock watch sets the clock from AEAT during a stop", () => {
     await stopping;
     await looking.catch(() => {});
 
-    // No disproof write, AEAT ask or set after the stop.
+    // No stop read or disproof write after the stop.
     expect(h.order).toEqual(before);
-    expect(h.sets).toEqual([]);
+    expect(h.backend.clockStopState).toHaveBeenCalledTimes(method === "set" ? 1 : 0);
   });
 
   describe("backs off after a set the host refused, timed out or did not verify", () => {
@@ -389,7 +421,7 @@ describe("the clock watch sets the clock from AEAT during a stop", () => {
       });
     });
 
-    it("so an unverified step is recorded at most once a backoff step", async () => {
+    it("so a correction recording clock.corrected for each unverified answer records at most one a backoff step", async () => {
       const corrected: number[] = [];
       const h = harness({
         answer: (_input, call) => {

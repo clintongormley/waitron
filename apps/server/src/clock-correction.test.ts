@@ -91,7 +91,7 @@ function withoutMethod<T extends { clockStopState?: unknown; confirmClockStep?: 
 }
 
 type HostBehaviour =
-  "sets" | "answers-unmoved" | "refuses" | "times-out-after-moving" | "times-out";
+  "sets" | "answers-unmoved" | "refuses" | "times-out-after-moving" | "times-out" | "missing";
 
 function harness(
   options: {
@@ -150,6 +150,7 @@ function harness(
           return { available: true, beforeMs, afterMs: wallMs };
         if (behaviour === "refuses")
           return { available: false, reason: "refused", refusal: "set_failed" };
+        if (behaviour === "missing") return { available: false, reason: "missing" };
         return { available: false, reason: "timeout" };
       },
     },
@@ -651,6 +652,16 @@ describe("verifying the step", () => {
     expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "unverified" });
     expect(h.seatCalls).toHaveLength(1);
     expect(h.seatCalls[0]).toMatchObject({ verified: false, stepMs: H });
+    expect(h.calls).toContain("reanchor");
+  });
+
+  it("answers host_unavailable when the host's socket was gone at the set, with the clock unmoved", async () => {
+    const h = harness({ host: "missing" });
+    expect(await h.correction.set(aeat(h))).toEqual({ set: false, reason: "host_unavailable" });
+    expect(h.log).toHaveBeenCalledWith("warn", "clock_correction.set_refused", {
+      reason: "missing",
+    });
+    expect(h.calls).not.toContain("confirmClockStep");
     expect(h.calls).toContain("reanchor");
   });
 

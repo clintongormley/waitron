@@ -265,6 +265,9 @@ export function clockCorrection(deps: {
       deps.log("warn", "clock_correction.set_refused", {
         reason: answer.available ? "unmoved" : answer.reason,
       });
+      // No socket: the request never reached the host, so nothing was refused or tried.
+      if (!answer.available && answer.reason === "missing")
+        return { set: false, reason: "host_unavailable" };
       return { set: false, reason: "refused" };
     }
     deps.store.clear();
