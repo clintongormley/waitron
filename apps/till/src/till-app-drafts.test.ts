@@ -15,6 +15,7 @@ import {
   cleanupWidgets,
   expectNoA11yViolations,
   draftServer,
+  floorPartyBills,
   mountWidget,
   type DraftServer,
 } from "./widgets/test-helpers.js";
@@ -271,7 +272,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({
@@ -1479,6 +1480,7 @@ describe("till-app: a table's draft is kept on the server", () => {
 describe("till-app: an order that moves to another party", () => {
   it("retains local edits without saving to the old party, then reads the relocated bill", async () => {
     const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([]),
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
     });
     await openTable(el);
@@ -3999,6 +4001,7 @@ describe("till-app: an order that moves to a party whose groups answer late", ()
     };
     let answerGroups!: () => void;
     const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([]),
       moveGuests: vi.fn().mockRejectedValue({ code: "party.out_of_date", partyId: "v1" }),
       listGroups: vi.fn(async (partyId: string) => {
         if (partyId !== "v9") return { revision: 3, groups: [], printProblems: [] };

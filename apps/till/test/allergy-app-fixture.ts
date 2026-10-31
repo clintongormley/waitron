@@ -4,7 +4,12 @@ import { userEvent } from "vitest/browser";
 import type { AllergySendTarget, PartyAllergyRead } from "@waitron/module";
 import { deviceZonesFixture } from "./device-zones.js";
 import { HOME_DISPLAY_DEFAULTS } from "@waitron/catalogue/src/device-home.js";
-import { draftServer, mountWidget, type DraftServer } from "../src/widgets/test-helpers.js";
+import {
+  floorPartyBills,
+  draftServer,
+  mountWidget,
+  type DraftServer,
+} from "../src/widgets/test-helpers.js";
 import { TillApp } from "../src/till-app.js";
 import type { TillLockScreen } from "../src/screens/till-lock-screen.js";
 import type { TillFloorScreen } from "../src/screens/till-floor-screen.js";
@@ -245,7 +250,7 @@ export function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({

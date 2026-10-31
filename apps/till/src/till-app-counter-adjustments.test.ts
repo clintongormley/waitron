@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import { offer as menuOffer } from "../test/allergy-app-fixture.js";
 import { productUnit } from "./widgets/product-name.js";
-import { cleanupWidgets, mountWidget, servedMenus } from "./widgets/test-helpers.js";
+import {
+  floorPartyBills,
+  cleanupWidgets,
+  mountWidget,
+  servedMenus,
+} from "./widgets/test-helpers.js";
 import type { TillApp } from "./till-app.js";
 import "./till-app.js";
 import { formatMoney } from "@waitron/shared";
@@ -562,7 +567,7 @@ describe("till-app: counter station choice", () => {
         groups: [],
         ungrouped: [],
       }),
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: floorPartyBills(),
     });
     vi.mocked(api.listStations).mockImplementationOnce(() => read.promise);
     emitMakeAt(el, 1);

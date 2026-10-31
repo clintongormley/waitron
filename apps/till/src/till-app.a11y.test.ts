@@ -4,6 +4,7 @@ import { page } from "vitest/browser";
 import { setLocale } from "./i18n/t.js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   expectNoA11yViolations,
@@ -302,7 +303,7 @@ describe.each(["light", "dark"] as const)("till-app a11y (%s theme)", (theme) =>
       ]),
       getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: floorPartyBills(),
       ...(({ listDrafts, saveDraft, submitDraft }) => ({ listDrafts, saveDraft, submitDraft }))(
         draftServer(),
       ),

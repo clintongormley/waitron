@@ -3,6 +3,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { billOptions, billRow, listPage } from "../test/find-bill-fixtures.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -274,7 +275,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),
@@ -1402,6 +1403,7 @@ describe("A768 the left draft saves in the background", () => {
 
   it("moving guests onto the table just left waits for its own save", async () => {
     const { el } = await mountApp({
+      getPartyBills: vi.fn().mockResolvedValue([]),
       moveGuests: vi.fn().mockResolvedValue({ partyId: "v1", billIds: ["wo-4", "wo-7"] }),
     });
     await openTable(el);

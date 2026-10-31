@@ -3,6 +3,7 @@ import { deviceZonesFixture, deviceZonesFor } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -1863,7 +1864,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: floorPartyBills(),
         submitDraft: vi.fn(async (...args: SubmitArgs) => {
           drafts.apply(...args);
           throw new TypeError("offline");
@@ -1895,7 +1896,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: floorPartyBills(),
         submitDraft: vi.fn().mockRejectedValue(new TypeError("offline")),
       }),
     );
@@ -1925,7 +1926,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: floorPartyBills(),
         mergeBills: vi.fn().mockResolvedValue(undefined),
       }),
     );
@@ -1952,7 +1953,7 @@ describe("a round that got no answer while the party moved on to its next tab", 
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated, tableB]),
-        getPartyBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: floorPartyBills(),
         submitDraft: failLater((reject) => (fail = reject)),
       }),
     );
@@ -2062,7 +2063,7 @@ describe("a round that got no answer while its tab moved to another table", () =
     const { el } = await mountApp(
       tableStubs(DINING, {
         getTablesState: vi.fn().mockResolvedValue([seated]),
-        getPartyBills: vi.fn().mockResolvedValue([]),
+        getPartyBills: floorPartyBills(),
         submitDraft: failLater((reject) => (fail = reject)),
         moveGuests: vi
           .fn()

@@ -13,6 +13,8 @@ import type {
   BillDraftSnapshot,
   DraftTakeover,
   PartyDraftSnapshot,
+  PartyBill,
+  TableState,
   GroupLine,
   GroupRelease,
   SubmittedDraft,
@@ -777,3 +779,77 @@ export const BUSY_COUNTER: Partial<TillShell> = {
 };
 
 export const COUNTER_LOGO = png(120, 40);
+
+/** One bill of a seated party as `GET /api/parties/:id/bills` answers it: open, unnamed, no
+ * payment, owing `outstanding`. */
+export function partyBillOf(
+  partyId: string,
+  workingOrderId: string,
+  billNumber = 1,
+  over: Partial<PartyBill> = {},
+): PartyBill {
+  const outstanding = over.outstanding ?? "0.00";
+  return {
+    workingOrderId,
+    revision: 1,
+    invoiceType: "F2",
+    recipient: null,
+    partyId,
+    label: null,
+    billNumber,
+    billName: null,
+    status: "open",
+    total: outstanding,
+    outstanding,
+    hasPayments: false,
+    receiptAvailable: false,
+    ...over,
+  };
+}
+
+function mountedFloor(): Mock | undefined {
+  const till = document.querySelector("till-app") as { api?: { getTablesState?: Mock } } | null;
+  return till?.api?.getTablesState;
+}
+
+/**
+ * A bills read that answers what a server holding the floor would: for a party, the bill the latest
+ * floor answer names for it (`openingBillId`), then each of `more[partyId]`, numbered in that order.
+ * It reads the answers `floor()`'s mock already gave, by default the mounted `till-app`'s
+ * `getTablesState`, and never calls it; a party the floor does not seat has no bills.
+ */
+export function floorPartyBills(
+  floor: () => Mock | undefined = mountedFloor,
+  more: Record<string, readonly string[]> = {},
+): Mock {
+  return vi.fn(async (partyId: string): Promise<PartyBill[]> => {
+    let tables: TableState[] | undefined;
+    for (const result of [...(floor()?.mock.results ?? [])].reverse()) {
+      if (result.type !== "return") continue;
+      try {
+        const answer: unknown = await result.value;
+        if (Array.isArray(answer)) {
+          tables = answer as TableState[];
+          break;
+        }
+      } catch {
+        // A refused floor read names no bill; an earlier answer may.
+      }
+    }
+    const party = tables?.find((row) => row.party?.id === partyId)?.party ?? null;
+    const ids = [
+      ...new Set([
+        ...(party?.openingBillId == null ? [] : [party.openingBillId]),
+        ...(more[partyId] ?? []),
+      ]),
+    ];
+    return ids.map((id, at) =>
+      partyBillOf(
+        partyId,
+        id,
+        at + 1,
+        ids.length === 1 && party ? { outstanding: party.outstanding } : {},
+      ),
+    );
+  });
+}

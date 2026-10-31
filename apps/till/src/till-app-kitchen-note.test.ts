@@ -2,7 +2,13 @@ import { answeredPartyAllergy } from "../test/answered-party-allergy.js";
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
-import { cleanupWidgets, mountWidget, servedMenus, draftServer } from "./widgets/test-helpers.js";
+import {
+  floorPartyBills,
+  cleanupWidgets,
+  mountWidget,
+  servedMenus,
+  draftServer,
+} from "./widgets/test-helpers.js";
 import { TillApp } from "./till-app.js";
 import { codeMessage } from "./i18n/codes.js";
 import { currentLocale, setLocale } from "./i18n/t.js";
@@ -940,7 +946,7 @@ async function mountedTable(
         .mockResolvedValue({ deviceId: "till-dev", name: "Till 1", formFactor }),
       getTablesState: vi.fn().mockResolvedValue([tableRow(initialParty)]),
       getTabLines: vi.fn().mockResolvedValue({ revision: 0, lines: [] }),
-      getPartyBills: vi.fn().mockResolvedValue([]),
+      getPartyBills: floorPartyBills(),
       listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
       listDrafts: server.listDrafts,
       saveDraft: server.saveDraft,

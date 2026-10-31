@@ -3,6 +3,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -280,7 +281,7 @@ function stubApi(overrides: Record<string, unknown> = {}) {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     submitGroups: vi.fn().mockRejectedValue(new Error("the table no longer sends groups inline")),

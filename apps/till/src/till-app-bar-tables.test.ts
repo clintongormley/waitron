@@ -1,6 +1,7 @@
 import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  floorPartyBills,
   cleanupWidgets,
   draftServer,
   mountWidget,
@@ -279,7 +280,7 @@ function stubApi(formFactor: FormFactor, overrides: Record<string, unknown> = {}
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     getTabLines: vi.fn().mockResolvedValue({ lines: [], revision: 0 }),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     readCurrentOrders: vi.fn().mockResolvedValue({

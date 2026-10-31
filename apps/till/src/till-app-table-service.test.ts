@@ -3,6 +3,7 @@ import { deviceZonesFixture } from "../test/device-zones.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TillMenuBrowser } from "./widgets/menu-browser.js";
 import {
+  floorPartyBills,
   adjustmentStubs,
   cancelReason,
   cancelThroughDialog,
@@ -276,7 +277,7 @@ function stubApi(overrides: Record<string, unknown> = {}): TillApi {
       payments: [],
       paidLines: [],
     })),
-    getPartyBills: vi.fn().mockResolvedValue([]),
+    getPartyBills: floorPartyBills(),
     listGroups: vi.fn().mockResolvedValue({ revision: 3, groups: [], printProblems: [] }),
     fireGroup: vi.fn().mockResolvedValue({ revision: 4 }),
     fireCourse: vi.fn().mockResolvedValue(undefined),
