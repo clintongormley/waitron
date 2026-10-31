@@ -65,4 +65,13 @@ describe("createTtlCache", () => {
     expect(await cache.get("r", recompute)).toBe(2);
     expect(recompute).not.toHaveBeenCalled();
   });
+
+  it("reads afresh after the clock is set back, rather than keeping a value from its future", async () => {
+    let clock = new Date("2026-10-31T10:00:00Z");
+    const cache = createTtlCache<number>({ ttlMs: 60_000, now: () => clock });
+    expect(await cache.get("r", async () => 1)).toBe(1);
+    clock = new Date("2026-10-28T10:00:00Z");
+    expect(await cache.get("r", async () => 2)).toBe(2);
+    expect(await cache.get("r", async () => 3)).toBe(2);
+  });
 });

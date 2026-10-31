@@ -112,7 +112,13 @@ async function start(
     WAITRON_ENV: "preproduction",
     ...(await extraEnv(scratch)),
   };
-  const server: StartedServer = await startServer(env, env);
+  // A stand-in clock service, so a host where `waitron.sh install` has run answers the same.
+  const server: StartedServer = await startServer(env, env, {
+    boxHost: {
+      clockStatus: async () => ({ available: false, reason: "missing", detail: "ENOENT" }),
+      setClock: async () => ({ available: false, reason: "missing", detail: "ENOENT" }),
+    },
+  });
   cleanups.push(() => server.close());
   await awaitListening(httpPort());
   const origin = `http://127.0.0.1:${httpPort()}`;
