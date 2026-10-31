@@ -217,6 +217,7 @@ describe("a step of the box's clock during a payment stop", () => {
       recordAt: null,
     });
     expect(answer).toEqual({
+      corrected: expect.anything(),
       confirmation: {
         id: row!.id,
         seq: 1,
@@ -524,7 +525,10 @@ describe("a step that failed verification", () => {
   it("writes no row and records the measured step as unverified", async () => {
     await sale(T);
     const A = T + 5 * M;
-    expect(await step(request(A, { verified: false }))).toEqual({ confirmation: null });
+    expect(await step(request(A, { verified: false }))).toEqual({
+      confirmation: null,
+      corrected: expect.anything(),
+    });
 
     expect(count("clock_confirmations")).toBe(0);
     expect(count("clock_checks")).toBe(0);
@@ -535,7 +539,10 @@ describe("a step that failed verification", () => {
 
   it("records nothing when the clock moved by no more than a second", async () => {
     await sale(T);
-    expect(await step(request(R + 3 * S, { verified: false }))).toEqual({ confirmation: null });
+    expect(await step(request(R + 3 * S, { verified: false }))).toEqual({
+      confirmation: null,
+      corrected: null,
+    });
 
     expect(count("clock_confirmations")).toBe(0);
     expect(incidentsOf("clock.corrected")).toEqual([]);
