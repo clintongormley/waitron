@@ -40,7 +40,7 @@ async function setupVenue(): Promise<TradingContext> {
   const [loc] = await db
     .insert(locations)
     .values({
-      name: "Barra",
+      name: "Main bar",
       invoiceLocales: [LOCALE],
       operationDescription: "Venta en establecimiento",
     })
@@ -82,7 +82,7 @@ function printer(cfg: TradingContext, name: string): Promise<string> {
 describe("station→printer mapping verbs", () => {
   it("attaches a mapping, lists it, and is idempotent on a repeat attach", async () => {
     const cfg = await setupVenue();
-    const s1 = await station(cfg, "Cocina");
+    const s1 = await station(cfg, "Main kitchen");
     const p1 = await printer(cfg, "Kitchen");
 
     await asApp(cfg, (tx) =>
@@ -102,7 +102,7 @@ describe("station→printer mapping verbs", () => {
 
   it("detaches a mapping and is idempotent on a repeat detach on a live station", async () => {
     const cfg = await setupVenue();
-    const s1 = await station(cfg, "Cocina");
+    const s1 = await station(cfg, "Main kitchen");
     const p1 = await printer(cfg, "Kitchen");
     await asApp(cfg, (tx) =>
       attachPrinterToStation(tx, { locationId: cfg.locationId, stationId: s1, printerId: p1 }),
@@ -136,7 +136,7 @@ describe("station→printer mapping verbs", () => {
 
   it("rejects an attach to a printer that is not live (printer.not_found)", async () => {
     const cfg = await setupVenue();
-    const s1 = await station(cfg, "Cocina");
+    const s1 = await station(cfg, "Main kitchen");
     const missing = randomUUID();
     await expect(
       asApp(cfg, (tx) =>
@@ -151,8 +151,8 @@ describe("station→printer mapping verbs", () => {
 
   it("filters the listing by stationId and by printerId", async () => {
     const cfg = await setupVenue();
-    const s1 = await station(cfg, "Cocina");
-    const s2 = await station(cfg, "Plancha");
+    const s1 = await station(cfg, "Main kitchen");
+    const s2 = await station(cfg, "Griddle");
     const p1 = await printer(cfg, "Kitchen");
     const p2 = await printer(cfg, "Pass");
     // A group printer (p1) on both stations; a station-local printer (p2) on s1 only.
@@ -191,7 +191,7 @@ describe("station→printer mapping verbs", () => {
 describe("station→printer mapping verbs naming a deleted printer", () => {
   async function venueWithLinks() {
     const cfg = await setupVenue();
-    const s1 = await station(cfg, "Cocina");
+    const s1 = await station(cfg, "Main kitchen");
     const gone = await printer(cfg, "Gone");
     const kept = await printer(cfg, "Kept");
     for (const printerId of [gone, kept]) {
@@ -207,7 +207,7 @@ describe("station→printer mapping verbs naming a deleted printer", () => {
 
   it("refuses attaching, detaching and listing by it with printer.not_found, changing nothing", async () => {
     const { cfg, s1, gone } = await venueWithLinks();
-    const s2 = await station(cfg, "Plancha");
+    const s2 = await station(cfg, "Griddle");
     await asApp(cfg, (tx) => deletePrinter(tx, printCfg(cfg), gone));
     const before = await allLinks();
 

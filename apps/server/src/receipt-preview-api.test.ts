@@ -314,7 +314,7 @@ describe("POST /management-api/receipt-preview", () => {
 
   it("saves nothing and enqueues no print job, even with a receipt printer registered", async () => {
     await withPrinters(
-      [{ device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" }],
+      [{ device: "Till 1", paperWidth: "80mm", resolution: "203dpi" }],
       async () => {
         const count = async (table: string) =>
           (
@@ -398,7 +398,7 @@ describe("POST /management-api/receipt-preview", () => {
 
   it("is drawn 512 dots wide (80 mm at 180 dpi) when the location has no active receipt printer", async () => {
     await withPrinters(
-      [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi", active: false }],
+      [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi", active: false }],
       async () => {
         const result = await rendered({});
         expect([result.preview.widthDots, result.preview.columns]).toEqual([512, 42]);
@@ -408,7 +408,7 @@ describe("POST /management-api/receipt-preview", () => {
 
   it("is drawn at the width of the receipt printer of the location's one device that has one", async () => {
     await withPrinters(
-      [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
+      [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi" }],
       async () => {
         const result = await rendered({ headerSubtitle: "Calle Mayor 1" });
         expect([result.preview.widthDots, result.preview.columns]).toEqual([384, 30]);
@@ -422,8 +422,8 @@ describe("POST /management-api/receipt-preview", () => {
   it("takes the receipt printer of the device first by name when two devices' paper widths tie", async () => {
     await withPrinters(
       [
-        { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
-        { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
+        { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
       ],
       async () => {
         expect((await rendered({})).preview.widthDots).toBe(360);
@@ -441,9 +441,9 @@ describe("POST /management-api/receipt-preview", () => {
     it("offers each width the location's receipt printers have, narrowest first, and draws at the one most devices use", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
-          { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Till 2", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
           const result = await at();
@@ -456,17 +456,17 @@ describe("POST /management-api/receipt-preview", () => {
     it("counts a printer two devices share once for each device", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
           const [shared] = await suite.db
             .select({ printerId: devices.receiptPrinterId })
             .from(devices)
-            .where(eq(devices.label, "Caja 1"));
+            .where(eq(devices.label, "Till 1"));
           const { deviceId } = await seedDevice(suite.db, {
             locationId: venue.cfg.locationId,
-            label: "Caja 2",
+            label: "Till 2",
           });
           try {
             await suite.db
@@ -484,8 +484,8 @@ describe("POST /management-api/receipt-preview", () => {
     it("leaves out the receipt printer of a device that is no longer active", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "58mm", resolution: "180dpi", deviceActive: false },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "180dpi", deviceActive: false },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
           const result = await at();
@@ -496,7 +496,7 @@ describe("POST /management-api/receipt-preview", () => {
 
     it("reads each device's receipt printer, not every printer at the location", async () => {
       await withPrinters(
-        [{ device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" }],
+        [{ device: "Till 1", paperWidth: "80mm", resolution: "203dpi" }],
         async () => {
           const [unusedPrinter] = await suite.db
             .insert(printers)
@@ -533,7 +533,7 @@ describe("POST /management-api/receipt-preview", () => {
         .returning({ id: printers.id });
       const { deviceId, profileId } = await seedDevice(suite.db, {
         locationId: venue.cfg.locationId,
-        label: "Caja por defecto",
+        label: "Till on the default printer",
       });
       try {
         await withTransaction(suite.db, (tx) =>
@@ -557,9 +557,9 @@ describe("POST /management-api/receipt-preview", () => {
     it("draws at the width asked for, at the resolution of that width's printer", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
-          { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Till 2", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
           const result = await at("58mm");
@@ -572,8 +572,8 @@ describe("POST /management-api/receipt-preview", () => {
     it("breaks a tie between widths by the device first by name, and says which width it drew", async () => {
       await withPrinters(
         [
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
-          { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
         ],
         async () => {
           const result = await at();
@@ -585,9 +585,9 @@ describe("POST /management-api/receipt-preview", () => {
     it("takes a width's resolution from the device first by name with that width", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "80mm", resolution: "180dpi" },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
-          { device: "Caja 2", paperWidth: "58mm", resolution: "203dpi" },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "80mm", resolution: "180dpi" },
+          { device: "Till 2", paperWidth: "58mm", resolution: "203dpi" },
         ],
         async () => {
           const result = await at("80mm");
@@ -600,7 +600,7 @@ describe("POST /management-api/receipt-preview", () => {
 
     it("offers one width when every receipt printer has it", async () => {
       await withPrinters(
-        [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
+        [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi" }],
         async () => {
           const result = await at();
           expect([result.paperWidths, result.paperWidth]).toEqual([["58mm"], "58mm"]);
@@ -616,8 +616,8 @@ describe("POST /management-api/receipt-preview", () => {
     it("leaves an inactive printer's width out", async () => {
       await withPrinters(
         [
-          { device: "Barra", paperWidth: "58mm", resolution: "203dpi", active: false },
-          { device: "Caja 1", paperWidth: "80mm", resolution: "203dpi" },
+          { device: "Bar", paperWidth: "58mm", resolution: "203dpi", active: false },
+          { device: "Till 1", paperWidth: "80mm", resolution: "203dpi" },
         ],
         async () => {
           const result = await at();
@@ -628,7 +628,7 @@ describe("POST /management-api/receipt-preview", () => {
 
     it("honours an explicit width with the default resolution when no receipt printer has it", async () => {
       await withPrinters(
-        [{ device: "Caja 1", paperWidth: "58mm", resolution: "203dpi" }],
+        [{ device: "Till 1", paperWidth: "58mm", resolution: "203dpi" }],
         async () => {
           const result = await at("80mm");
           expect(result.paperWidth).toBe("80mm");
@@ -777,8 +777,8 @@ describe("POST /management-api/receipt-preview", () => {
     ["too long a subtitle", { headerSubtitle: "x".repeat(201) }],
     ["too long a footer", { footerMessage: "x".repeat(201) }],
     ["a field that is not text", { footerMessage: 5 }],
-    ["a field the receipt does not have", { unknownDecoration: "Venta" }],
-    ["a receipt that is not an object", ["Venta"]],
+    ["a field the receipt does not have", { unknownDecoration: "Sale" }],
+    ["a receipt that is not an object", ["Sale"]],
   ])("refuses %s with the code and params a save would refuse it with", async (_, body) => {
     let saveRefusal: unknown;
     try {
@@ -1217,16 +1217,16 @@ describe("a deleted receipt printer in the receipt preview", () => {
     };
     await withPrinters(
       [
-        { device: "Barra", paperWidth: "58mm", resolution: "180dpi" },
-        { device: "Caja 1", paperWidth: "58mm", resolution: "180dpi" },
-        { device: "Caja 2", paperWidth: "80mm", resolution: "203dpi" },
+        { device: "Bar", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Till 1", paperWidth: "58mm", resolution: "180dpi" },
+        { device: "Till 2", paperWidth: "80mm", resolution: "203dpi" },
       ],
       async () => {
         expect(await widths()).toEqual([["58mm", "80mm"], "58mm"]);
         const narrow = await suite.db
           .select({ id: printers.id })
           .from(printers)
-          .where(inArray(printers.name, ["Printer Barra", "Printer Caja 1"]));
+          .where(inArray(printers.name, ["Printer Bar", "Printer Till 1"]));
         await withTransaction(suite.db, async (tx) => {
           for (const { id } of narrow)
             await deletePrinter(tx, { locationId: venue.cfg.locationId }, id);
