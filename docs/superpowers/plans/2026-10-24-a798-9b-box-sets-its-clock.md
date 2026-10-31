@@ -1155,6 +1155,12 @@ EDITED to pass and is not on this list is a STOP, unless the spec changes what i
 **Whole-shape lists gaining entries** (the owner's standing exception of 2026-09-27):
 2. `packages/fiscal-verifactu/src/alerts.test.ts:10-11` (`FISCAL_ALERTS` `toEqual`) gains the
    `clock.corrected` claim. Task 8.
+2a. *(Added while building Task 8, 2026-10-31.)* `apps/dashboard/src/i18n/alerts.test.ts:267-271`
+   ("names only registered word lists in its word-list slots…"): its hand list of the formatter's
+   built-in kinds (`money`, `date`, `bytes`, `minute`) gains `duration`, the kind Task 8 adds to
+   `packages/dashboard-kit/src/alert-messages.ts` so `clock.corrected` can write its step in
+   words from the browser's own locale data (`Intl.NumberFormat` units, `Intl.ListFormat`), with
+   no Spanish in the kit. The `toEqual([])` is unchanged. Task 8.
 3. `scripts/ongoing-alert-codes.test.ts`'s hand list of source files gains
    `apps/server/src/clock-sync-alert.ts`. Task 7.
 4. `packages/fiscal-none/src/backend.test.ts:74-81` and
@@ -3089,3 +3095,32 @@ every other finding folded as the review proposed (the revision note at the top)
 
 Revision 4 changes none of these rulings. It carries out the owner's answer of 2026-10-31 07:00 and
 07:05; where the owner left a point open, the default is an owner FYI (8–15), not a lead's ruling.
+
+### Ruling R3 and Task 8's departures (2026-10-31, while building Task 8)
+
+- **R3: the till is named `device`, never `till`, in fiscal code.** `scripts/no-till-as-issuer.test.ts`
+  refuses any identifier matching `/till/i` under the fiscal packages
+  (`scripts/no-till-as-issuer.mjs:74`), and decision 16's `till` key and `ClockAdminConfirm.till`
+  are identifiers there. So `ClockAdminConfirm.device = { deviceId, deviceLabel, address }`, and an
+  administrator's reading on a till is stored with a `device = { deviceId, address }` key beside
+  `admin` (written only when set, as decision 16 says of `till`). Every later task that names
+  `admin.till` or `proof.till` reads `admin.device` and `proof.device`. Code outside the fiscal
+  packages may still say till.
+- **The step in words** is a new formatter kind, `{stepMs:duration}`
+  (`packages/dashboard-kit/src/alert-messages.ts`): the two largest whole units from days to
+  seconds, worded by the browser's own `Intl.NumberFormat` units joined by `Intl.ListFormat`
+  ("2 days and 3 hours" / "2 días y 3 horas"), so no Spanish enters the kit (its source is scanned
+  by `scripts/english-only.test.ts`). The direction is a `direction` param, `"forward"` or
+  `"back"`, worded by the dashboard's `clock_step_direction` list. Changed test check 2a.
+- **`unverified`** is a param beside `verified` (always `!verified`): a variant is chosen only by a
+  param being `true` (`packages/dashboard-kit/src/alert-messages.ts`, `chooseTemplate`). The
+  unverified words name no person, because a `replace` variant cannot combine with another.
+- **Times in the bell** use `{name:minute}`, the browser's zone, as every other clock alert does;
+  no formatter kind writes an instant in a stored offset. The email (Task 9) writes each time in its
+  own offset.
+- **`clock.behind_chain_restarted`** gains `confirmedBy: "staff"`, `byStaff?: true` and
+  `device?: string | null` in Task 8 (each key only when set), because Task 8's seat records it;
+  Task 8a's bell and email words use them. `scripts/personal-log-params.test.ts` approves both
+  `byStaff` keys as naming no one.
+- **No stop, but a check open**: the step closes that check (decision 7), and names the latest
+  record when the after reading is still more than a minute behind it, as during a stop.
