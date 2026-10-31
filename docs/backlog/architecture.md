@@ -628,9 +628,13 @@ until A977).
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) still names its location "Sala
-  principal", its administrator "Administradora", one category "Bebidas" and one section
-  "Bebidas (sección)" in Spanish.
+  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  category, product and section English names, and keeps its `es-ES` locale, its Spanish street
+  address and the operation description "Venta en establecimiento". The setup API suite
+  (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
+  series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
+  the administrator's personal names "Ana Maria" and "Lopez Garcia", and the operation
+  description "Venta en establecimiento" its venue-defaults case reads from the fiscal package.
   Other helpers and screen fixtures remain.
   Keep existing behavioral assertions. Low priority.
 - **Cloud cost-test fixture wording.** The separate Cloud repository's
@@ -932,9 +936,13 @@ variables" instead (measured on Homebrew's v26.11.1, 2026-10-30).
   product, variant, kitchen, options-list, label and extras-list names to what it creates; it
   keeps the customer names and descriptions it gives under `es`, `fr` and other language keys,
   its `es-ES` locale and the operation description "Venta". The full-manifest suite
-  (`apps/server/src/catalogue-api.full-manifest.test.ts`) still names its location "Sala
-  principal", its administrator "Administradora", one category "Bebidas" and one section
-  "Bebidas (sección)" in Spanish.
+  (`apps/server/src/catalogue-api.full-manifest.test.ts`) gives its location, administrator,
+  category, product and section English names, and keeps its `es-ES` locale, its Spanish street
+  address and the operation description "Venta en establecimiento". The setup API suite
+  (`apps/server/src/setup-api.test.ts`) uses English location, administrator, product,
+  series-code, zone and department samples, and keeps its `es-ES` locale, its Spanish addresses,
+  the administrator's personal names "Ana Maria" and "Lopez Garcia", and the operation
+  description "Venta en establecimiento" its venue-defaults case reads from the fiscal package.
   Other helpers and screen expectations remain.
   Continue package by package from A977's list; keep accent-sensitive
   combobox searches and filename samples, deliberate multilingual metadata and printing’s accented
